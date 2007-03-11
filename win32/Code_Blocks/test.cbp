@@ -16,6 +16,7 @@
 		</Build>
 		<Compiler>
 			<Add option="-DURI_ENABLE_BOTH" />
+			<Add directory="..\..\lib\include" />
 		</Compiler>
 		<Linker>
 			<Add library="..\liburiparser.a" />
