@@ -36,5 +36,10 @@
 (11) Use CppTest for unit testing. 
      http://sourceforge.net/projects/cpptest
 
+(12) Implement algorithm for reference resolution
+
+(13) Implement algorithm for normalization and
+     comparison
+
 == Optional goals ==
  (A) C++ Wrapper classes (uriparser++?)
