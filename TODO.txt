@@ -1,7 +1,9 @@
 == SOON ==
  * Debug checker code
  * Add parsing part
+ * Add IPv4 code
 
 == LATER ==
  * Add GNU build files, liburiparser-0.3.0.tar.gz
  * Add Visual Studio 2003 Project Files
+ * Add IPv6 gramar part and code
