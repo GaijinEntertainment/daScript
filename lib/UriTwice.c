@@ -53,8 +53,13 @@
 # include <uriparser/UriUnicode.h>
 #endif
 
+
+
 /* For NULL */
 #include <stdio.h>
+
+/* For strlen */
+#include <string.h>
 
 
 
