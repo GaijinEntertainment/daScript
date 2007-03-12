@@ -632,7 +632,7 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(struct UriParser * parser, const URI_CH
  */
 const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast; /* TODO check */
+		return NULL;
 	}
 
 	switch (*first) {
@@ -759,13 +759,13 @@ const URI_CHAR * URI_FUNC(ParseIPv6address)(struct UriParser * parser, const URI
  * [mustBeSegmentNzNc]->[pctEncoded][mustBeSegmentNzNc]
  * [mustBeSegmentNzNc]->[subDelims][mustBeSegmentNzNc]
  * [mustBeSegmentNzNc]->[unreserved][mustBeSegmentNzNc]
- * [mustBeSegmentNzNc]->[uriTail]
+ * [mustBeSegmentNzNc]->[uriTail] // can take <NULL>
  * [mustBeSegmentNzNc]-></>[segment][zeroMoreSlashSegs][uriTail]
  * [mustBeSegmentNzNc]-><@>[mustBeSegmentNzNc]
  */
 const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast; /* TODO check */
+		return afterLast;
 	}
 
 	switch (*first) {
@@ -884,11 +884,11 @@ const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(struct UriParser * parser, con
 
 /*
  * [ownHost]->[ipLiteral][authorityTwo]
- * [ownHost]->[ownHost2]
+ * [ownHost]->[ownHost2] // can take <NULL>
  */
 const URI_CHAR * URI_FUNC(ParseOwnHost)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast; /* TODO check */
+		return afterLast;
 	}
 
 	switch (*first) {
@@ -910,12 +910,12 @@ const URI_CHAR * URI_FUNC(ParseOwnHost)(struct UriParser * parser, const URI_CHA
 
 
 /*
- * [ownHost2]->[authorityTwo]
+ * [ownHost2]->[authorityTwo] // can take <NULL>
  * [ownHost2]->[pctSubUnres][ownHost2]
  */
 const URI_CHAR * URI_FUNC(ParseOwnHost2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast; /* TODO check*/
+		return afterLast;
 	}
 
 	switch (*first) {
@@ -1427,12 +1427,12 @@ const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(struct UriParser * parser, const URI
 
 
 /*
- * [partHelperTwo]->[pathAbsNoLeadSlash]
+ * [partHelperTwo]->[pathAbsNoLeadSlash] // can take <NULL>
  * [partHelperTwo]-></>[authority][pathAbsEmpty]
  */
 const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast; /* TODO check */
+		return afterLast;
 	}
 
 	switch (*first) {
@@ -2151,7 +2151,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNz)(struct UriParser * parser, const URI_C
  * [segmentNzNcOrScheme2]->[ALPHA][segmentNzNcOrScheme2]
  * [segmentNzNcOrScheme2]->[DIGIT][segmentNzNcOrScheme2]
  * [segmentNzNcOrScheme2]->[pctEncoded][mustBeSegmentNzNc]
- * [segmentNzNcOrScheme2]->[uriTail]
+ * [segmentNzNcOrScheme2]->[uriTail] // can take <NULL>
  * [segmentNzNcOrScheme2]-><!>[mustBeSegmentNzNc]
  * [segmentNzNcOrScheme2]-><$>[mustBeSegmentNzNc]
  * [segmentNzNcOrScheme2]-><&>[mustBeSegmentNzNc]
@@ -2173,7 +2173,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNz)(struct UriParser * parser, const URI_C
  */
 const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast; /* TODO check */
+		return afterLast;
 	}
 
 	switch (*first) {
@@ -2312,7 +2312,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(struct UriParser * parser, 
  * [uriReference]->[DIGIT][mustBeSegmentNzNc]
  * [uriReference]->[pctEncoded][mustBeSegmentNzNc]
  * [uriReference]->[subDelims][mustBeSegmentNzNc]
- * [uriReference]->[uriTail]
+ * [uriReference]->[uriTail] // can take <NULL>
  * [uriReference]-><.>[mustBeSegmentNzNc]
  * [uriReference]-></>[partHelperTwo][uriTail]
  * [uriReference]-><@>[mustBeSegmentNzNc]
@@ -2322,7 +2322,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(struct UriParser * parser, 
  */
 const URI_CHAR * URI_FUNC(ParseUriReference)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast; /* TODO check */
+		return afterLast;
 	}
 
 	switch (*first) {
