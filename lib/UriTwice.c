@@ -386,16 +386,17 @@ const URI_CHAR * URI_FUNC(ParseIpFutLoop)(struct UriParser * parser, const URI_C
 	case _UT('&'):
 	case _UT('('):
 	case _UT(')'):
+	case _UT('-'):
 	case _UT('*'):
 	case _UT(','):
+	case _UT('.'):
+	case _UT(':'):
 	case _UT(';'):
 	case _UT('\''):
-	case _UT('+'):
-	case _UT('='):
-	case _UT('-'):
-	case _UT('.'):
 	case _UT('_'):
 	case _UT('~'):
+	case _UT('+'):
+	case _UT('='):
 	case _UT('0'):
 	case _UT('1'):
 	case _UT('2'):
@@ -458,7 +459,6 @@ const URI_CHAR * URI_FUNC(ParseIpFutLoop)(struct UriParser * parser, const URI_C
 	case _UT('Y'):
 	case _UT('z'):
 	case _UT('Z'):
-	case _UT(':'):
 		return URI_FUNC(ParseIpFutStopGo)(parser, first + 1, afterLast);
 
 	default:
@@ -605,10 +605,9 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(struct UriParser * parser, const URI_CH
 			{
 				const URI_CHAR * const afterHexZero
 						= URI_FUNC(ParseHexZero)(parser, first + 2, afterLast);
-				if (afterHexZero == NULL) {
-					return NULL;
-				}
-				if (*afterHexZero != _UT('.')) {
+				if ((afterHexZero == NULL)
+						|| (afterHexZero >= afterLast)
+						|| (*afterHexZero != _UT('.'))) {
 					return NULL;
 				}
 				return URI_FUNC(ParseIpFutLoop)(parser, afterHexZero + 1, afterLast);
@@ -639,10 +638,9 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR
 		{
 			const URI_CHAR * const afterIpFuture
 					= URI_FUNC(ParseIpFuture)(parser, first, afterLast);
-			if (afterIpFuture == NULL) {
-				return NULL;
-			}
-			if (*afterIpFuture != _UT(']')) {
+			if ((afterIpFuture == NULL)
+					|| (afterIpFuture >= afterLast)
+					|| (*afterIpFuture != _UT(']'))) {
 				return NULL;
 			}
 			return afterIpFuture + 1;
@@ -675,10 +673,9 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR
 		{
 			const URI_CHAR * const afterIPv6address
 					= URI_FUNC(ParseIPv6address)(parser, first, afterLast);
-			if (afterIPv6address == NULL) {
-				return NULL;
-			}
-			if (*afterIPv6address != _UT(']')) {
+			if ((afterIPv6address == NULL)
+					|| (afterIPv6address >= afterLast)
+					|| (*afterIPv6address != _UT(']'))) {
 				return NULL;
 			}
 			return afterIPv6address + 1;
@@ -842,7 +839,7 @@ const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(struct UriParser * parser, con
 		{
 			const URI_CHAR * afterZeroMoreSlashSegs;
 			const URI_CHAR * const afterSegment
-					= URI_FUNC(ParseSegment)(parser, first, afterLast);
+					= URI_FUNC(ParseSegment)(parser, first + 1, afterLast);
 			if (afterSegment == NULL) {
 				return NULL;
 			}
@@ -1217,6 +1214,10 @@ const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(struct UriParser * parser, const
 	}
 
 	switch (*first) {
+	case _UT('.'):
+	case _UT('_'):
+	case _UT('~'):
+	case _UT('-'):
 	case _UT('a'):
 	case _UT('A'):
 	case _UT('b'):
@@ -1269,10 +1270,6 @@ const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(struct UriParser * parser, const
 	case _UT('Y'):
 	case _UT('z'):
 	case _UT('Z'):
-	case _UT('.'):
-	case _UT('_'):
-	case _UT('~'):
-	case _UT('-'):
 		return URI_FUNC(ParseOwnUserInfo)(parser, first + 1, afterLast);
 
 	case _UT('0'):
@@ -1470,86 +1467,86 @@ const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(struct UriParser * parser, co
 	}
 
 	switch (*first) {
-	case _UT('k'):
-	case _UT('O'):
-	case _UT('+'):
-	case _UT('0'):
+	case _UT('!'):
+	case _UT('$'):
+	case _UT('%'):
+	case _UT('&'):
+	case _UT('('):
+	case _UT(')'):
+	case _UT('-'):
+	case _UT('*'):
+	case _UT(','):
+	case _UT('.'):
+	case _UT(':'):
+	case _UT(';'):
+	case _UT('@'):
+	case _UT('\''):
 	case _UT('_'):
+	case _UT('~'):
+	case _UT('+'):
+	case _UT('='):
+	case _UT('0'):
+	case _UT('1'):
+	case _UT('2'):
+	case _UT('3'):
+	case _UT('4'):
+	case _UT('5'):
+	case _UT('6'):
+	case _UT('7'):
+	case _UT('8'):
+	case _UT('9'):
+	case _UT('a'):
+	case _UT('A'):
+	case _UT('b'):
+	case _UT('B'):
+	case _UT('c'):
+	case _UT('C'):
+	case _UT('d'):
+	case _UT('D'):
+	case _UT('e'):
+	case _UT('E'):
+	case _UT('f'):
+	case _UT('F'):
+	case _UT('g'):
+	case _UT('G'):
+	case _UT('h'):
+	case _UT('H'):
+	case _UT('i'):
+	case _UT('I'):
+	case _UT('j'):
+	case _UT('J'):
+	case _UT('k'):
+	case _UT('K'):
+	case _UT('l'):
+	case _UT('L'):
+	case _UT('m'):
+	case _UT('M'):
+	case _UT('n'):
+	case _UT('N'):
+	case _UT('o'):
+	case _UT('O'):
 	case _UT('p'):
 	case _UT('P'):
 	case _UT('q'):
-	case _UT('V'):
-	case _UT('v'):
-	case _UT(';'):
-	case _UT('I'):
-	case _UT(')'):
-	case _UT('a'):
-	case _UT('F'):
+	case _UT('Q'):
+	case _UT('r'):
+	case _UT('R'):
+	case _UT('s'):
+	case _UT('S'):
+	case _UT('t'):
+	case _UT('T'):
 	case _UT('u'):
 	case _UT('U'):
-	case _UT('='):
-	case _UT('j'):
-	case _UT('d'):
-	case _UT('S'):
-	case _UT('z'):
-	case _UT('D'):
-	case _UT('K'):
+	case _UT('v'):
+	case _UT('V'):
 	case _UT('w'):
-	case _UT('R'):
-	case _UT(':'):
-	case _UT('g'):
-	case _UT('B'):
-	case _UT('b'):
-	case _UT('Q'):
-	case _UT(','):
-	case _UT('@'):
-	case _UT('M'):
-	case _UT('&'):
-	case _UT('f'):
-	case _UT('y'):
-	case _UT('T'):
-	case _UT('9'):
-	case _UT('%'):
-	case _UT('x'):
-	case _UT('e'):
-	case _UT('~'):
-	case _UT('3'):
-	case _UT('('):
-	case _UT('h'):
-	case _UT('c'):
 	case _UT('W'):
-	case _UT('H'):
-	case _UT('G'):
-	case _UT('6'):
-	case _UT('1'):
-	case _UT('i'):
-	case _UT('5'):
-	case _UT('A'):
-	case _UT('!'):
-	case _UT('t'):
-	case _UT('N'):
-	case _UT('4'):
-	case _UT('*'):
-	case _UT('s'):
+	case _UT('x'):
 	case _UT('X'):
-	case _UT('o'):
-	case _UT('Z'):
-	case _UT('$'):
-	case _UT('7'):
-	case _UT('r'):
-	case _UT('2'):
-	case _UT('C'):
-	case _UT('l'):
-	case _UT('\''):
-	case _UT('L'):
-	case _UT('-'):
-	case _UT('m'):
-	case _UT('J'):
+	case _UT('y'):
 	case _UT('Y'):
-	case _UT('.'):
-	case _UT('n'):
-	case _UT('8'):
-	case _UT('E'):
+	case _UT('z'):
+	case _UT('Z'):
 		{
 			const URI_CHAR * const afterSegmentNz
 					= URI_FUNC(ParseSegmentNz)(parser, first, afterLast);
@@ -2121,7 +2118,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNz)(struct UriParser * parser, const URI_C
 	if (afterPchar == NULL) {
 		return NULL;
 	}
-	return URI_FUNC(ParseMustBeSegmentNzNc)(parser, afterPchar, afterLast);
+	return URI_FUNC(ParseSegment)(parser, afterPchar, afterLast);
 }
 
 
@@ -2156,7 +2153,9 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(struct UriParser * parser, 
 	}
 
 	switch (*first) {
-	/* ALPHA */
+	case _UT('.'):
+	case _UT('+'):
+	case _UT('-'):
 	case _UT('a'):
 	case _UT('A'):
 	case _UT('b'):
@@ -2209,8 +2208,6 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(struct UriParser * parser, 
 	case _UT('Y'):
 	case _UT('z'):
 	case _UT('Z'):
-
-	/* DIGIT */
 	case _UT('0'):
 	case _UT('1'):
 	case _UT('2'):
@@ -2221,11 +2218,6 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(struct UriParser * parser, 
 	case _UT('7'):
 	case _UT('8'):
 	case _UT('9'):
-
-	/* ... */
-	case _UT('.'):
-	case _UT('+'):
-	case _UT('-'):
 		return URI_FUNC(ParseSegmentNzNcOrScheme2)(parser, first + 1, afterLast);
 
 	case _UT('%'):
@@ -2257,7 +2249,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(struct UriParser * parser, 
 		{
 			const URI_CHAR * afterZeroMoreSlashSegs;
 			const URI_CHAR * const afterSegment
-					= URI_FUNC(ParseSegment)(parser, first, afterLast);
+					= URI_FUNC(ParseSegment)(parser, first + 1, afterLast);
 			if (afterSegment == NULL) {
 				return NULL;
 			}
@@ -2359,7 +2351,6 @@ const URI_CHAR * URI_FUNC(ParseUriReference)(struct UriParser * parser, const UR
 	case _UT('Z'):
 		return URI_FUNC(ParseSegmentNzNcOrScheme2)(parser, first + 1, afterLast);
 
-	/* DIGIT */
 	case _UT('0'):
 	case _UT('1'):
 	case _UT('2'):
@@ -2370,8 +2361,6 @@ const URI_CHAR * URI_FUNC(ParseUriReference)(struct UriParser * parser, const UR
 	case _UT('7'):
 	case _UT('8'):
 	case _UT('9'):
-
-	/* subDelims */
 	case _UT('!'):
 	case _UT('$'):
 	case _UT('&'):
@@ -2383,8 +2372,6 @@ const URI_CHAR * URI_FUNC(ParseUriReference)(struct UriParser * parser, const UR
 	case _UT('\''):
 	case _UT('+'):
 	case _UT('='):
-
-	/* ... */
 	case _UT('.'):
 	case _UT('_'):
 	case _UT('~'):
