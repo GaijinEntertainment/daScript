@@ -71,7 +71,6 @@ const URI_CHAR * URI_FUNC(ParseHierPart)(struct UriParser * parser, const URI_CH
 const URI_CHAR * URI_FUNC(ParseIpFutLoop)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseIpFutStopGo)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
-const URI_CHAR * URI_FUNC(ParseIpLiteral)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseIPv6address)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseOwnHost)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -100,7 +99,7 @@ const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(struct UriParser * parser, con
 
 
 /*
- * [authority]->[ipLiteral][authorityTwo]
+ * [authority]-><[>[ipLit2][authorityTwo]
  * [authority]->[ownHostUserInfoNz]
  * [authority]-><NULL>
  */
@@ -112,12 +111,12 @@ const URI_CHAR * URI_FUNC(ParseAuthority)(struct UriParser * parser, const URI_C
 	switch (*first) {
 	case _UT('['):
 		{
-			const URI_CHAR * const afterIpLiteral
-					= URI_FUNC(ParseIpLiteral)(parser, first, afterLast);
-			if (afterIpLiteral == NULL) {
+			const URI_CHAR * const afterIpLit2
+					= URI_FUNC(ParseIpLit2)(parser, first + 1, afterLast);
+			if (afterIpLit2 == NULL) {
 				return NULL;
 			}
-			return URI_FUNC(ParseAuthorityTwo)(parser, afterIpLiteral, afterLast);
+			return URI_FUNC(ParseAuthorityTwo)(parser, afterIpLit2, afterLast);
 		}
 
 	case _UT('!'):
@@ -693,26 +692,6 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR
 
 
 /*
- * [ipLiteral]-><[>[ipLit2]
- */
-const URI_CHAR * URI_FUNC(ParseIpLiteral)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	/* TODO resolve rule*/
-	if (first >= afterLast) {
-		return NULL;
-	}
-
-	switch (*first) {
-	case _UT('['):
-		return URI_FUNC(ParseIpLit2)(parser, first + 1, afterLast);
-
-	default:
-		return NULL;
-	}
-}
-
-
-
-/*
  * [IPv6address]->[HEXDIG][IPv6address]
  * [IPv6address]-><:>[IPv6address]
  * [IPv6address]-><NULL>
@@ -883,7 +862,7 @@ const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(struct UriParser * parser, con
 
 
 /*
- * [ownHost]->[ipLiteral][authorityTwo]
+ * [ownHost]-><[>[ipLit2][authorityTwo]
  * [ownHost]->[ownHost2] // can take <NULL>
  */
 const URI_CHAR * URI_FUNC(ParseOwnHost)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
@@ -894,12 +873,12 @@ const URI_CHAR * URI_FUNC(ParseOwnHost)(struct UriParser * parser, const URI_CHA
 	switch (*first) {
 	case _UT('['):
 		{
-			const URI_CHAR * const afterIpLiteral
-					= URI_FUNC(ParseIpLiteral)(parser, first, afterLast);
-			if (afterIpLiteral == NULL) {
+			const URI_CHAR * const afterIpLit2
+					= URI_FUNC(ParseIpLit2)(parser, first + 1, afterLast);
+			if (afterIpLit2 == NULL) {
 				return NULL;
 			}
-			return URI_FUNC(ParseAuthorityTwo)(parser, afterIpLiteral, afterLast);
+			return URI_FUNC(ParseAuthorityTwo)(parser, afterIpLit2, afterLast);
 		}
 
 	default:
