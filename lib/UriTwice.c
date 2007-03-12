@@ -378,7 +378,7 @@ const URI_CHAR * URI_FUNC(ParseHierPart)(struct UriParser * parser, const URI_CH
  */
 const URI_CHAR * URI_FUNC(ParseIpFutLoop)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return NULL;
 	}
 
 	switch (*first) {
@@ -571,7 +571,7 @@ const URI_CHAR * URI_FUNC(ParseIpFutStopGo)(struct UriParser * parser, const URI
  */
 const URI_CHAR * URI_FUNC(ParseIpFuture)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return NULL;
 	}
 
 	switch (*first) {
@@ -632,7 +632,7 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(struct UriParser * parser, const URI_CH
  */
 const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return afterLast; /* TODO check */
 	}
 
 	switch (*first) {
@@ -696,8 +696,9 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR
  * [ipLiteral]-><[>[ipLit2]
  */
 const URI_CHAR * URI_FUNC(ParseIpLiteral)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	/* TODO resolve rule*/
 	if (first >= afterLast) {
-		return afterLast;
+		return NULL;
 	}
 
 	switch (*first) {
@@ -764,7 +765,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address)(struct UriParser * parser, const URI
  */
 const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return afterLast; /* TODO check */
 	}
 
 	switch (*first) {
@@ -887,7 +888,7 @@ const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(struct UriParser * parser, con
  */
 const URI_CHAR * URI_FUNC(ParseOwnHost)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return afterLast; /* TODO check */
 	}
 
 	switch (*first) {
@@ -914,7 +915,7 @@ const URI_CHAR * URI_FUNC(ParseOwnHost)(struct UriParser * parser, const URI_CHA
  */
 const URI_CHAR * URI_FUNC(ParseOwnHost2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return afterLast; /* TODO check*/
 	}
 
 	switch (*first) {
@@ -1118,7 +1119,7 @@ const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(struct UriParser * parser, const
  */
 const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return NULL;
 	}
 
 	switch (*first) {
@@ -1321,7 +1322,7 @@ const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(struct UriParser * parser, const
  */
 const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return NULL;
 	}
 
 	switch (*first) {
@@ -1431,7 +1432,7 @@ const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(struct UriParser * parser, const URI
  */
 const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return afterLast; /* TODO check */
 	}
 
 	switch (*first) {
@@ -1609,7 +1610,7 @@ const URI_CHAR * URI_FUNC(ParsePathRootless)(struct UriParser * parser, const UR
  */
 const URI_CHAR * URI_FUNC(ParsePchar)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return NULL;
 	}
 
 	switch (*first) {
@@ -1709,7 +1710,7 @@ const URI_CHAR * URI_FUNC(ParsePchar)(struct UriParser * parser, const URI_CHAR 
  */
 const URI_CHAR * URI_FUNC(ParsePctEncoded)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return NULL;
 	}
 
 	switch (*first) {
@@ -1792,7 +1793,7 @@ const URI_CHAR * URI_FUNC(ParsePctEncoded)(struct UriParser * parser, const URI_
  */
 const URI_CHAR * URI_FUNC(ParsePctSubUnres)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return NULL;
 	}
 
 	switch (*first) {
@@ -2172,7 +2173,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNz)(struct UriParser * parser, const URI_C
  */
 const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return afterLast; /* TODO check */
 	}
 
 	switch (*first) {
@@ -2321,7 +2322,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(struct UriParser * parser, 
  */
 const URI_CHAR * URI_FUNC(ParseUriReference)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return afterLast; /* TODO check */
 	}
 
 	switch (*first) {
