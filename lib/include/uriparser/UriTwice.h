@@ -49,6 +49,10 @@
 
 
 
+#ifdef URI_TESTING
+UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text);
+#endif
+
 UriBool URI_FUNC(ParseUriEx)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 UriBool URI_FUNC(ParseUri)(struct UriParser * parser, const URI_CHAR * text);
 

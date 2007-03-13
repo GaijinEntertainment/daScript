@@ -96,6 +96,9 @@ const URI_CHAR * URI_FUNC(ParseUriTail)(struct UriParser * parser, const URI_CHA
 const URI_CHAR * URI_FUNC(ParseUriTailTwo)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 
+/* TODO */
+const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
+
 
 
 /*
@@ -727,6 +730,185 @@ const URI_CHAR * URI_FUNC(ParseIPv6address)(struct UriParser * parser, const URI
 	default:
 		return first;
 	}
+}
+
+
+
+/* TODO
+ * [IPv6address2]->..<]>
+ */
+const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	int zipperEver = 0;
+	int quadsDone = 0;
+	int digitCount = 0;
+	int digitHistory[4];
+	int ip4OctetsDone = 0;
+
+	for (;;) {
+		if (first >= afterLast) {
+				return NULL;
+		}
+
+		/* Inside IPv4 part? */
+		if (ip4OctetsDone > 0) {
+			/* Eat rest of IPv4 address */
+			for (;;) {
+				switch (*first) {
+				case _UT('0'):
+				case _UT('1'):
+				case _UT('2'):
+				case _UT('3'):
+				case _UT('4'):
+				case _UT('5'):
+				case _UT('6'):
+				case _UT('7'):
+				case _UT('8'):
+				case _UT('9'):
+					if (digitCount == 4) {
+						return NULL;
+					}
+					digitHistory[digitCount++] = 9 + *first - _UT('9');
+					break;
+
+				case _UT('.'):
+					if ((ip4OctetsDone == 4)
+							|| (digitCount == 0)
+							|| (digitCount == 4)
+							|| ((digitCount == 3)
+							&& (100 * digitHistory[0]
+							+ 10 * digitHistory[1]
+							+ digitHistory[2] > 255))) {
+						return NULL;
+					}
+					digitCount = 0;
+					ip4OctetsDone++;
+					break;
+
+				case _UT(']'):
+					if ((ip4OctetsDone == 4)
+							|| (digitCount == 0)
+							|| (digitCount == 4)
+							|| ((digitCount == 3)
+								&& (100 * digitHistory[0]
+								+ 10 * digitHistory[1]
+								+ digitHistory[2] > 255))) {
+						return NULL;
+					}
+					return first + 1;
+
+				default:
+					return NULL;
+				}
+				first++;
+			}
+		} else {
+			/* Eat while no dot in sight */
+			int letterAmong = 0;
+			int walking = 1;
+			do {
+				switch (*first) {
+				case _UT('a'):
+				case _UT('A'):
+				case _UT('b'):
+				case _UT('B'):
+				case _UT('c'):
+				case _UT('C'):
+				case _UT('d'):
+				case _UT('D'):
+				case _UT('e'):
+				case _UT('E'):
+				case _UT('f'):
+				case _UT('F'):
+					letterAmong = 1;
+					if (digitCount == 4) {
+						return NULL;
+					}
+					digitCount++;
+					break;
+
+				case _UT('0'):
+				case _UT('1'):
+				case _UT('2'):
+				case _UT('3'):
+				case _UT('4'):
+				case _UT('5'):
+				case _UT('6'):
+				case _UT('7'):
+				case _UT('8'):
+				case _UT('9'):
+					if (digitCount == 4) {
+						return NULL;
+					}
+					digitHistory[digitCount++] = 9 + *first - _UT('9');
+					break;
+
+				case _UT(':'):
+					/* Too many quads? */
+					if (quadsDone > 8 - zipperEver) {
+						return NULL;
+					}
+
+					/* "::"? */
+					if (first + 1 >= afterLast) {
+						return NULL;
+					}
+					if (first[1] == _UT(':')) {
+						first++;
+						if (zipperEver) {
+							return NULL; /* "::.+::" */
+						}
+						zipperEver = 1;
+
+						/* ":::+"? */
+						if (first + 1 >= afterLast) {
+							return NULL; /* No ']' yet */
+						}
+						if (first[1] == _UT(':')) {
+							return NULL; /* ":::+ "*/
+						}
+					}
+					digitCount = 0;
+					break;
+
+				case _UT('.'):
+					if (!zipperEver
+							|| (quadsDone > 6)
+							|| letterAmong
+							|| (digitCount == 0)
+							|| (digitCount == 4)
+							|| ((digitCount == 3)
+								&& (100 * digitHistory[0]
+								+ 10 * digitHistory[1]
+								+ digitHistory[2] > 255))) {
+						return NULL;
+					}
+					digitCount = 0;
+
+					/* Switch over to IPv4 loop */
+					ip4OctetsDone = 1;
+					walking = 0;
+					break;
+
+				case _UT(']'):
+					/* Too little quads? */
+					if (!zipperEver && (quadsDone != 8)) {
+						return NULL;
+					}
+					return first + 1; /* Fine */
+
+				default:
+					return NULL;
+				}
+				first++;
+
+				if (first >= afterLast) {
+					return NULL; /* No ']' yet */
+				}
+			} while (walking);
+		}
+	}
+
+	return NULL; /* We should never get here */
 }
 
 
@@ -2498,6 +2680,15 @@ UriBool URI_FUNC(ParseUriEx)(struct UriParser * parser, const URI_CHAR * first, 
 
 UriBool URI_FUNC(ParseUri)(struct UriParser * parser, const URI_CHAR * text) {
 	return URI_FUNC(ParseUriEx)(parser, text, text + URI_STRLEN(text));
+}
+
+
+/* TODO */
+UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text) {
+	struct UriParser parser = { 0 };
+	const URI_CHAR * const after = text + URI_STRLEN(text);
+	const URI_CHAR * const res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
+	return res == NULL ? URI_FALSE : URI_TRUE;
 }
 
 

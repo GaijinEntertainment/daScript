@@ -16,6 +16,7 @@
 		</Build>
 		<Compiler>
 			<Add option="-DURI_ENABLE_BOTH" />
+			<Add option="-DURI_TESTING" />
 			<Add directory="..\..\lib\include" />
 		</Compiler>
 		<Linker>

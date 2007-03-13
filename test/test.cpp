@@ -35,11 +35,25 @@ class UriSuite : public Suite {
 
 public:
 	UriSuite() {
-		TEST_ADD(UriSuite::test)
+		TEST_ADD(UriSuite::testIpSix)
+		TEST_ADD(UriSuite::testUri)
 	}
 
 private:
-	void test() {
+	void testIpSix() {
+		/* Note the clsoing bracket! */
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::]"));
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::1]"));
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:0db8:0100:f101:0210:a4ff:fee3:9566]"));
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:db8:100:f101:210:a4ff:fee3:9566]"));
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:0db8:100:f101:0:0:0:1]"));
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:db8:100:f101::1]"));
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::ffff:1.2.3.4]"));
+
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("abcd::abcd::abcd]"));
+	}
+
+	void testUri() {
 		UriParser parser = { 0 };
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parser, "http://www.example.com/"));
 		TEST_ASSERT(URI_SUCCESS == uriParseUriW(&parser, L"http://www.example.com/"));
