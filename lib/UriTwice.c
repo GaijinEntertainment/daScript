@@ -722,10 +722,14 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const UR
 					if ((ip4OctetsDone == 4)
 							|| (digitCount == 0)
 							|| (digitCount == 4)
+							|| ((digitCount > 1)
+								&& (digitHistory[0] == 0))
+							|| ((digitCount > 2)
+								&& (digitHistory[1] == 0))
 							|| ((digitCount == 3)
-							&& (100 * digitHistory[0]
-							+ 10 * digitHistory[1]
-							+ digitHistory[2] > 255))) {
+								&& (100 * digitHistory[0]
+									+ 10 * digitHistory[1]
+									+ digitHistory[2] > 255))) {
 						return NULL;
 					}
 					digitCount = 0;
@@ -736,10 +740,14 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const UR
 					if ((ip4OctetsDone != 3)
 							|| (digitCount == 0)
 							|| (digitCount == 4)
+							|| ((digitCount > 1)
+								&& (digitHistory[0] == 0))
+							|| ((digitCount > 2)
+								&& (digitHistory[1] == 0))
 							|| ((digitCount == 3)
 								&& (100 * digitHistory[0]
-								+ 10 * digitHistory[1]
-								+ digitHistory[2] > 255))) {
+									+ 10 * digitHistory[1]
+									+ digitHistory[2] > 255))) {
 						return NULL;
 					}
 					return first + 1;
@@ -828,10 +836,14 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const UR
 							|| letterAmong
 							|| (digitCount == 0)
 							|| (digitCount == 4)
+							|| ((digitCount > 1)
+								&& (digitHistory[0] == 0))
+							|| ((digitCount > 2)
+								&& (digitHistory[1] == 0))
 							|| ((digitCount == 3)
 								&& (100 * digitHistory[0]
-								+ 10 * digitHistory[1]
-								+ digitHistory[2] > 255))) {
+									+ 10 * digitHistory[1]
+									+ digitHistory[2] > 255))) {
 						return NULL;
 					}
 					digitCount = 0;

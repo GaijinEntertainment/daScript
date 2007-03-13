@@ -89,6 +89,12 @@ private:
 		// Two zippers
 		URI_TEST_IP_SIX_FAIL("abcd::abcd::abcd");
 
+		// Triple-colon zipper
+		URI_TEST_IP_SIX_FAIL(":::1234");
+		URI_TEST_IP_SIX_FAIL("1234:::1234:1234");
+		URI_TEST_IP_SIX_FAIL("1234:1234:::1234");
+		URI_TEST_IP_SIX_FAIL("1234:::");
+
 		// No quads, just IPv4
 		URI_TEST_IP_SIX_FAIL("1.2.3.4");
 		URI_TEST_IP_SIX_FAIL("0001.0002.0003.0004");
@@ -111,8 +117,9 @@ private:
 		URI_TEST_IP_SIX_FAIL("::ffff:311.2.3.4"); // > 155
 		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3:4"); // Not a dot
 		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3"); // Missing octet
+		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3."); // Missing octet
 		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3a.4"); // Hex in octet
-		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3.4:123"); //
+		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3.4:123"); // Crap input
 
 		// Nonhex
 		URI_TEST_IP_SIX_FAIL("g:0:0:0:0:0:0");
