@@ -31,48 +31,91 @@ using namespace std;
 
 
 
+/* Note the closing brackets! TODO */
+#define URI_TEST_IP_SIX_FAIL(x) TEST_ASSERT(URI_FALSE == uriParseIpSixA(x "]"))
+#define URI_TEST_IP_SIX_PASS(x) TEST_ASSERT(URI_TRUE == uriParseIpSixA(x "]"))
+
+
+
 class UriSuite : public Suite {
 
 public:
 	UriSuite() {
-		TEST_ADD(UriSuite::testIpSix)
+		TEST_ADD(UriSuite::testIpSixPass)
+		TEST_ADD(UriSuite::testIpSixFail)
 		TEST_ADD(UriSuite::testUri)
 	}
 
 private:
-	void testIpSix() {
-		/* Note the closing brackets! TODO */
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::]"));
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::]"));
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::1:2]"));
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2:1::]"));
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:0db8:0100:f101:0210:a4ff:fee3:9566]"));
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:db8:100:f101:210:a4ff:fee3:9566]"));
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:0db8:100:f101:0:0:0:1]"));
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:db8:100:f101::1]"));
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::ffff:1.2.3.4]"));
+	void testIpSixPass() {
+		// Minimum
+		URI_TEST_IP_SIX_PASS("::"); // == all addresses
 
+		// Quad length
+		URI_TEST_IP_SIX_PASS("::1"); // == localhost
+		URI_TEST_IP_SIX_PASS("::12");
+		URI_TEST_IP_SIX_PASS("::123");
+		URI_TEST_IP_SIX_PASS("::1234");
+
+		// Ends and middle
+		URI_TEST_IP_SIX_PASS("::1:2");
+		URI_TEST_IP_SIX_PASS("2:1::");
+		URI_TEST_IP_SIX_PASS("1::");
+		URI_TEST_IP_SIX_PASS("1::2");
+
+		// Full length
+		URI_TEST_IP_SIX_PASS("2001:0db8:0100:f101:0210:a4ff:fee3:9566"); // lower hex
+		URI_TEST_IP_SIX_PASS("2001:0DB8:0100:F101:0210:A4FF:FEE3:9566"); // Upper hex
+		URI_TEST_IP_SIX_PASS("2001:db8:100:f101:210:a4ff:fee3:9566");
+		URI_TEST_IP_SIX_PASS("2001:0db8:100:f101:0:0:0:1");
+
+		// Legal IPv4
+		URI_TEST_IP_SIX_PASS("0::1.2.3.4");
+		URI_TEST_IP_SIX_PASS("::ffff:1.2.3.4");
+		URI_TEST_IP_SIX_PASS("::0.0.0.0"); // Min IPv4
+		URI_TEST_IP_SIX_PASS("::255.255.255.255"); // Max IPv4
+
+		// A few more variations
+		URI_TEST_IP_SIX_PASS("21ff:abcd::1");
+		URI_TEST_IP_SIX_PASS("2001:db8:100:f101::1");
+		URI_TEST_IP_SIX_PASS("a:b:c::0:1");
+		URI_TEST_IP_SIX_PASS("a:b::0:1:2:3");
+	}
+
+	void testIpSixFail() {
+		// 5 char quad
+		URI_TEST_IP_SIX_FAIL("::12345");
 
 		// Two zippers
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("abcd::abcd::abcd]"));
+		URI_TEST_IP_SIX_FAIL("abcd::abcd::abcd");
+
+		// No quads, just IPv4
+		URI_TEST_IP_SIX_FAIL("1.2.3.4");
+		URI_TEST_IP_SIX_FAIL("0001.0002.0003.0004");
+
+		// Five quads
+		URI_TEST_IP_SIX_FAIL("0000:0000:0000:0000:0000:1.2.3.4");
 
 		// Seven quads
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("0:0:0:0:0:0:0]"));
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("0:0:0:0:0:0:0:]"));
+		URI_TEST_IP_SIX_FAIL("0:0:0:0:0:0:0");
+		URI_TEST_IP_SIX_FAIL("0:0:0:0:0:0:0:");
+		URI_TEST_IP_SIX_FAIL("0:0:0:0:0:0:0:1.2.3.4");
 
 		// Nine quads
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("0:0:0:0:0:0:0:0:0]"));
+		URI_TEST_IP_SIX_FAIL("0:0:0:0:0:0:0:0:0");
 
-		// Invalid IPv4
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3.1111]"));
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3.256]"));
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:311.2.3.4]"));
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3:4]"));
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3]"));
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3.4:123]"));
+		// Invalid IPv4 part
+		URI_TEST_IP_SIX_FAIL("::ffff:001.02.03.004"); // Leading zeros
+		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3.1111"); // Four char octet
+		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3.256"); // > 255
+		URI_TEST_IP_SIX_FAIL("::ffff:311.2.3.4"); // > 155
+		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3:4"); // Not a dot
+		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3"); // Missing octet
+		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3a.4"); // Hex in octet
+		URI_TEST_IP_SIX_FAIL("::ffff:1.2.3.4:123"); //
 
 		// Nonhex
-		TEST_ASSERT(URI_FALSE == uriParseIpSixA("g:0:0:0:0:0:0]"));
+		URI_TEST_IP_SIX_FAIL("g:0:0:0:0:0:0");
 	}
 
 	void testUri() {
