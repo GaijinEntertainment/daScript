@@ -71,7 +71,7 @@ const URI_CHAR * URI_FUNC(ParseHierPart)(struct UriParser * parser, const URI_CH
 const URI_CHAR * URI_FUNC(ParseIpFutLoop)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseIpFutStopGo)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
-const URI_CHAR * URI_FUNC(ParseIPv6address)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
+const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseOwnHost)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseOwnHost2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -95,9 +95,6 @@ const URI_CHAR * URI_FUNC(ParseUriReference)(struct UriParser * parser, const UR
 const URI_CHAR * URI_FUNC(ParseUriTail)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseUriTailTwo)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
-
-/* TODO */
-const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 
 
 
@@ -629,7 +626,7 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(struct UriParser * parser, const URI_CH
 
 /*
  * [ipLit2]->[ipFuture]<]>
- * [ipLit2]->[IPv6address]<]>
+ * [ipLit2]->[IPv6address2]
  */
 const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
@@ -673,16 +670,7 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR
 	case _UT('E'):
 	case _UT('f'):
 	case _UT('F'):
-		{
-			const URI_CHAR * const afterIPv6address
-					= URI_FUNC(ParseIPv6address)(parser, first, afterLast);
-			if ((afterIPv6address == NULL)
-					|| (afterIPv6address >= afterLast)
-					|| (*afterIPv6address != _UT(']'))) {
-				return NULL;
-			}
-			return afterIPv6address + 1;
-		}
+		return URI_FUNC(ParseIPv6address2)(parser, first, afterLast);
 
 	default:
 		return NULL;
@@ -692,52 +680,12 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(struct UriParser * parser, const URI_CHAR
 
 
 /*
- * [IPv6address]->[HEXDIG][IPv6address]
- * [IPv6address]-><:>[IPv6address]
- * [IPv6address]-><NULL>
- */
-const URI_CHAR * URI_FUNC(ParseIPv6address)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	if (first >= afterLast) {
-		return afterLast;
-	}
-
-	switch (*first) {
-	case _UT(':'):
-	case _UT('0'):
-	case _UT('1'):
-	case _UT('2'):
-	case _UT('3'):
-	case _UT('4'):
-	case _UT('5'):
-	case _UT('6'):
-	case _UT('7'):
-	case _UT('8'):
-	case _UT('9'):
-	case _UT('a'):
-	case _UT('A'):
-	case _UT('b'):
-	case _UT('B'):
-	case _UT('c'):
-	case _UT('C'):
-	case _UT('d'):
-	case _UT('D'):
-	case _UT('e'):
-	case _UT('E'):
-	case _UT('f'):
-	case _UT('F'):
-		return URI_FUNC(ParseIPv6address)(parser, first + 1, afterLast);
-
-	default:
-		return first;
-	}
-}
-
-
-
-/* TODO
  * [IPv6address2]->..<]>
  */
 const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
+#ifdef _DEBUG
+	const URI_CHAR * const firstBackupForDebug = first;
+#endif
 	int zipperEver = 0;
 	int quadsDone = 0;
 	int digitCount = 0;
@@ -785,7 +733,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const UR
 					break;
 
 				case _UT(']'):
-					if ((ip4OctetsDone == 4)
+					if ((ip4OctetsDone != 3)
 							|| (digitCount == 0)
 							|| (digitCount == 4)
 							|| ((digitCount == 3)
@@ -867,7 +815,11 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const UR
 							return NULL; /* ":::+ "*/
 						}
 					}
-					digitCount = 0;
+					if (digitCount > 0) {
+						quadsDone++;
+						digitCount = 0;
+					}
+					letterAmong = 0;
 					break;
 
 				case _UT('.'):
@@ -891,7 +843,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(struct UriParser * parser, const UR
 
 				case _UT(']'):
 					/* Too little quads? */
-					if (!zipperEver && (quadsDone != 8)) {
+					if (!zipperEver && !((quadsDone == 7) && (digitCount > 0))) {
 						return NULL;
 					}
 					return first + 1; /* Fine */
@@ -2686,9 +2638,9 @@ UriBool URI_FUNC(ParseUri)(struct UriParser * parser, const URI_CHAR * text) {
 /* TODO */
 UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text) {
 	struct UriParser parser = { 0 };
-	const URI_CHAR * const after = text + URI_STRLEN(text);
+	const URI_CHAR * const afterIpSix = text + URI_STRLEN(text);
 	const URI_CHAR * const res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
-	return res == NULL ? URI_FALSE : URI_TRUE;
+	return res == afterIpSix ? URI_TRUE : URI_FALSE;
 }
 
 

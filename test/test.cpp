@@ -41,16 +41,38 @@ public:
 
 private:
 	void testIpSix() {
-		/* Note the clsoing bracket! */
+		/* Note the closing brackets! TODO */
 		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::]"));
-		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::1]"));
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::]"));
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::1:2]"));
+		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2:1::]"));
 		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:0db8:0100:f101:0210:a4ff:fee3:9566]"));
 		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:db8:100:f101:210:a4ff:fee3:9566]"));
 		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:0db8:100:f101:0:0:0:1]"));
 		TEST_ASSERT(URI_TRUE == uriParseIpSixA("2001:db8:100:f101::1]"));
 		TEST_ASSERT(URI_TRUE == uriParseIpSixA("::ffff:1.2.3.4]"));
 
+
+		// Two zippers
 		TEST_ASSERT(URI_FALSE == uriParseIpSixA("abcd::abcd::abcd]"));
+
+		// Seven quads
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("0:0:0:0:0:0:0]"));
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("0:0:0:0:0:0:0:]"));
+
+		// Nine quads
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("0:0:0:0:0:0:0:0:0]"));
+
+		// Invalid IPv4
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3.1111]"));
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3.256]"));
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:311.2.3.4]"));
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3:4]"));
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3]"));
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("::ffff:1.2.3.4:123]"));
+
+		// Nonhex
+		TEST_ASSERT(URI_FALSE == uriParseIpSixA("g:0:0:0:0:0:0]"));
 	}
 
 	void testUri() {
