@@ -58,8 +58,11 @@
 /* For NULL */
 #include <stdio.h>
 
-/* For strlen */
+/* For strlen, memset */
 #include <string.h>
+
+/* For malloc */
+#include <malloc.h>
 
 
 
@@ -96,6 +99,10 @@ const URI_CHAR * URI_FUNC(ParseUriTail)(URI_TYPE(Parser) * parser, const URI_CHA
 const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 
+
+void URI_FUNC(Reset)(URI_TYPE(Parser) * parser);
+
+void URI_FUNC(PushPathSegment)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 
 
 /*
@@ -217,7 +224,15 @@ const URI_CHAR * URI_FUNC(ParseAuthorityTwo)(URI_TYPE(Parser) * parser, const UR
 
 	switch (*first) {
 	case _UT(':'):
-		return URI_FUNC(ParsePort)(parser, first + 1, afterLast);
+		{
+			const URI_CHAR * const afterPort = URI_FUNC(ParsePort)(parser, first + 1, afterLast);
+			if (afterPort == NULL) {
+				return NULL;
+			}
+			parser->portFirst = first + 1; /* PORT BEGIN */
+			parser->portAfterLast = afterPort; /* PORT END */
+			return afterPort;
+		}
 
 	default:
 		return first;
@@ -989,6 +1004,7 @@ const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(Parser) * parser, con
 			if (afterSegment == NULL) {
 				return NULL;
 			}
+			URI_FUNC(PushPathSegment)(parser, first + 1, afterSegment); /* SEGMENT BOTH */
 			afterZeroMoreSlashSegs
 					= URI_FUNC(ParseZeroMoreSlashSegs)(parser, afterSegment, afterLast);
 			if (afterZeroMoreSlashSegs == NULL) {
@@ -1699,6 +1715,7 @@ const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(URI_TYPE(Parser) * parser, co
 			if (afterSegmentNz == NULL) {
 				return NULL;
 			}
+			URI_FUNC(PushPathSegment)(parser, first, afterSegmentNz); /* SEGMENT BOTH */
 			return URI_FUNC(ParseZeroMoreSlashSegs)(parser, afterSegmentNz, afterLast);
 		}
 
@@ -2399,6 +2416,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(Parser) * parser, 
 			if (afterSegment == NULL) {
 				return NULL;
 			}
+			URI_FUNC(PushPathSegment)(parser, first + 1, afterSegment); /* SEGMENT BOTH */
 			afterZeroMoreSlashSegs
 					= URI_FUNC(ParseZeroMoreSlashSegs)(parser, afterSegment, afterLast);
 			if (afterZeroMoreSlashSegs == NULL) {
@@ -2411,6 +2429,7 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(Parser) * parser, 
 		{
 			const URI_CHAR * const afterHierPart
 					= URI_FUNC(ParseHierPart)(parser, first + 1, afterLast);
+			parser->schemeAfterLast = first; /* SCHEME END */
 			if (afterHierPart == NULL) {
 				return NULL;
 			}
@@ -2564,7 +2583,15 @@ const URI_CHAR * URI_FUNC(ParseUriTail)(URI_TYPE(Parser) * parser, const URI_CHA
 
 	switch (*first) {
 	case _UT('#'):
-		return URI_FUNC(ParseQueryFrag)(parser, first + 1, afterLast);
+		{
+			const URI_CHAR * const afterQueryFrag = URI_FUNC(ParseQueryFrag)(parser, first + 1, afterLast);
+			if (afterQueryFrag == NULL) {
+				return NULL;
+			}
+			parser->fragmentFirst = first + 1; /* FRAGMENT BEGIN */
+			parser->fragmentAfterLast = afterQueryFrag; /* FRAGMENT END */
+			return afterQueryFrag;
+		}
 
 	case _UT('?'):
 		{
@@ -2573,6 +2600,8 @@ const URI_CHAR * URI_FUNC(ParseUriTail)(URI_TYPE(Parser) * parser, const URI_CHA
 			if (afterQueryFrag == NULL) {
 				return NULL;
 			}
+			parser->queryFirst = first + 1; /* QUERY BEGIN */
+			parser->queryAfterLast = afterQueryFrag; /* QUERY END */
 			return URI_FUNC(ParseUriTailTwo)(parser, afterQueryFrag, afterLast);
 		}
 
@@ -2594,7 +2623,15 @@ const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(Parser) * parser, const URI_
 
 	switch (*first) {
 	case _UT('#'):
-		return URI_FUNC(ParseQueryFrag)(parser, first + 1, afterLast);
+		{
+			const URI_CHAR * const afterQueryFrag = URI_FUNC(ParseQueryFrag)(parser, first + 1, afterLast);
+			if (afterQueryFrag == NULL) {
+				return NULL;
+			}
+			parser->fragmentFirst = first + 1; /* FRAGMENT BEGIN */
+			parser->fragmentAfterLast = afterQueryFrag; /* FRAGMENT END */
+			return afterQueryFrag;
+		}
 
 	default:
 		return first;
@@ -2620,6 +2657,7 @@ const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * parser, con
 			if (afterSegment == NULL) {
 				return NULL;
 			}
+			URI_FUNC(PushPathSegment)(parser, first + 1, afterSegment); /* SEGMENT BOTH */
 			return URI_FUNC(ParseZeroMoreSlashSegs)(parser, afterSegment, afterLast);
 		}
 
@@ -2630,9 +2668,34 @@ const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * parser, con
 
 
 
+void URI_FUNC(Reset)(URI_TYPE(Parser) * parser) {
+	/* TODO Free path list here? Extra function? */
+	memset(parser, 0, sizeof(URI_TYPE(Parser)));
+}
+
+
+
+void URI_FUNC(PushPathSegment)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	URI_TYPE(PathSegment) * segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+	memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
+	segment->first = first;
+	segment->afterLast = afterLast;
+
+	if (parser->pathHead == NULL) {
+		parser->pathHead = segment;
+		parser->pathTail = segment;
+	} else {
+		parser->pathTail->next = segment;
+		parser->pathTail = segment;
+	}
+}
+
+
+
 UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	const URI_CHAR * const afterUriReference
 			= URI_FUNC(ParseUriReference)(parser, first, afterLast);
+	URI_FUNC(Reset)(parser);
 	if (afterUriReference == NULL) {
 		return URI_ERROR;
 	}

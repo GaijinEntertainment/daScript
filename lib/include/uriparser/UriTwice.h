@@ -71,7 +71,8 @@ URI_TYPE(Parser) {
 	const URI_CHAR * portFirst;
 	const URI_CHAR * portAfterLast;
 
-	URI_TYPE(PathSegment) * pathList;
+	URI_TYPE(PathSegment) * pathHead;
+	URI_TYPE(PathSegment) * pathTail;
 
 	const URI_CHAR * queryFirst;
 	const URI_CHAR * queryAfterLast;
