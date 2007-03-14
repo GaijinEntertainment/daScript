@@ -123,6 +123,7 @@ const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(Parser) * parser, const URI_C
 			if (afterIpLit2 == NULL) {
 				return NULL;
 			}
+			parser->hostFirst = first + 1; /* HOST BEGIN */
 			return URI_FUNC(ParseAuthorityTwo)(parser, afterIpLit2, afterLast);
 		}
 
@@ -618,6 +619,7 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const URI_CH
 		case _UT('f'):
 		case _UT('F'):
 			{
+				const URI_CHAR * afterIpFutLoop;
 				const URI_CHAR * const afterHexZero
 						= URI_FUNC(ParseHexZero)(parser, first + 2, afterLast);
 				if ((afterHexZero == NULL)
@@ -625,7 +627,13 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const URI_CH
 						|| (*afterHexZero != _UT('.'))) {
 					return NULL;
 				}
-				return URI_FUNC(ParseIpFutLoop)(parser, afterHexZero + 1, afterLast);
+				parser->hostFirst = first; /* HOST BEGIN */
+				afterIpFutLoop = URI_FUNC(ParseIpFutLoop)(parser, afterHexZero + 1, afterLast);
+				if (afterIpFutLoop == NULL) {
+					return NULL;
+				}
+				parser->hostAfterLast = afterIpFutLoop; /* HOST END */
+				return afterIpFutLoop;
 			}
 
 		default:
@@ -765,6 +773,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 									+ digitHistory[2] > 255))) {
 						return NULL;
 					}
+					parser->hostAfterLast = first; /* HOST END */
 					return first + 1;
 
 				default:
@@ -873,6 +882,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 					if (!zipperEver && !((quadsDone == 7) && (digitCount > 0))) {
 						return NULL;
 					}
+					parser->hostAfterLast = first; /* HOST END */
 					return first + 1; /* Fine */
 
 				default:
@@ -1037,6 +1047,7 @@ const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(Parser) * parser, const URI_CHA
 			if (afterIpLit2 == NULL) {
 				return NULL;
 			}
+			parser->hostFirst = first + 1; /* HOST BEGIN */
 			return URI_FUNC(ParseAuthorityTwo)(parser, afterIpLit2, afterLast);
 		}
 
@@ -1608,6 +1619,7 @@ const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(Parser) * parser, const UR
 			if (afterSegment == NULL) {
 				return NULL;
 			}
+			URI_FUNC(PushPathSegment)(parser, first + 1, afterSegment); /* SEGMENT BOTH */
 			return URI_FUNC(ParsePathAbsEmpty)(parser, afterSegment, afterLast);
 		}
 
@@ -2416,6 +2428,8 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(Parser) * parser, 
 			if (afterSegment == NULL) {
 				return NULL;
 			}
+			URI_FUNC(PushPathSegment)(parser, parser->schemeFirst, first); /* SEGMENT BOTH */
+			parser->schemeFirst = NULL; /* Not a scheme, reset */
 			URI_FUNC(PushPathSegment)(parser, first + 1, afterSegment); /* SEGMENT BOTH */
 			afterZeroMoreSlashSegs
 					= URI_FUNC(ParseZeroMoreSlashSegs)(parser, afterSegment, afterLast);
@@ -2437,6 +2451,8 @@ const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(Parser) * parser, 
 		}
 
 	default:
+		URI_FUNC(PushPathSegment)(parser, parser->schemeFirst, first); /* SEGMENT BOTH */
+		parser->schemeFirst = NULL; /* Not a scheme, reset */
 		return URI_FUNC(ParseUriTail)(parser, first, afterLast);
 	}
 }
@@ -2514,6 +2530,7 @@ const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(Parser) * parser, const UR
 	case _UT('Y'):
 	case _UT('z'):
 	case _UT('Z'):
+		parser->schemeFirst = first; /* SCHEME BEGIN */
 		return URI_FUNC(ParseSegmentNzNcOrScheme2)(parser, first + 1, afterLast);
 
 	case _UT('0'):
@@ -2542,6 +2559,7 @@ const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(Parser) * parser, const UR
 	case _UT('~'):
 	case _UT('-'):
 	case _UT('@'):
+		parser->schemeFirst = first; /* SCHEME BEGIN */
 		return URI_FUNC(ParseMustBeSegmentNzNc)(parser, first + 1, afterLast);
 
 	case _UT('%'):
@@ -2551,6 +2569,7 @@ const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(Parser) * parser, const UR
 			if (afterPctEncoded == NULL) {
 				return NULL;
 			}
+			parser->schemeFirst = first; /* SCHEME BEGIN */
 			return URI_FUNC(ParseMustBeSegmentNzNc)(parser, afterPctEncoded, afterLast);
 		}
 
@@ -2693,9 +2712,9 @@ void URI_FUNC(PushPathSegment)(URI_TYPE(Parser) * parser, const URI_CHAR * first
 
 
 UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	const URI_CHAR * const afterUriReference
-			= URI_FUNC(ParseUriReference)(parser, first, afterLast);
+	const URI_CHAR * afterUriReference;
 	URI_FUNC(Reset)(parser);
+	afterUriReference = URI_FUNC(ParseUriReference)(parser, first, afterLast);
 	if (afterUriReference == NULL) {
 		return URI_ERROR;
 	}

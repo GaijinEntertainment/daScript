@@ -128,6 +128,18 @@ private:
 	void testUri() {
 		UriParserA parserA = { 0 };
 		UriParserW parserW = { 0 };
+
+		// Schema, port, one segment
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "ftp://host:21/gnu/"));
+/*
+		// Relative
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "one/two/three"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "/one/two/three"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "//user:pass@localhost/one/two/three"));
+
+		// IPv6
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]:80/segment/index.html?query#frag"));
+
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/"));
 		TEST_ASSERT(URI_SUCCESS == uriParseUriW(&parserW, L"http://www.example.com/"));
 
@@ -139,7 +151,7 @@ private:
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/name%20with%20spaces/"));
 
 		TEST_ASSERT(URI_ERROR == uriParseUriA(&parserA, "http://www.example.com/name with spaces/"));
-	}
+*/	}
 
 };
 
