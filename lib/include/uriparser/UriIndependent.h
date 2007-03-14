@@ -47,12 +47,6 @@
 
 
 
-struct UriParser {
-	int dummy;
-};
-
-
-
 #define UriBool      int
 
 #define URI_TRUE     1

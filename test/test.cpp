@@ -126,18 +126,19 @@ private:
 	}
 
 	void testUri() {
-		UriParser parser = { 0 };
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parser, "http://www.example.com/"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriW(&parser, L"http://www.example.com/"));
+		UriParserA parserA = { 0 };
+		UriParserW parserW = { 0 };
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriW(&parserW, L"http://www.example.com/"));
 
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parser, "http://sourceforge.net/projects/uriparser/"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parser, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parser, "mailto:test@example.com"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parser, "../../"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parser, "file:///bin/bash"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parser, "http://www.example.com/name%20with%20spaces/"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://sourceforge.net/projects/uriparser/"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "mailto:test@example.com"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "../../"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "file:///bin/bash"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/name%20with%20spaces/"));
 
-		TEST_ASSERT(URI_ERROR == uriParseUriA(&parser, "http://www.example.com/name with spaces/"));
+		TEST_ASSERT(URI_ERROR == uriParseUriA(&parserA, "http://www.example.com/name with spaces/"));
 	}
 
 };

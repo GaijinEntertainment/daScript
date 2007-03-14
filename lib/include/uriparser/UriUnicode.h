@@ -56,9 +56,9 @@
 
 #undef URI_TYPE
 #ifdef URI_ENABLE_BOTH
-# define URI_TYPE(x) Uri##x##W
+# define URI_TYPE(x) struct Uri##x##W
 #else
-# define URI_TYPE(x) Uri##x
+# define URI_TYPE(x) struct Uri##x
 #endif
 
 

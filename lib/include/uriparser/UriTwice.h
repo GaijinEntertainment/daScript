@@ -49,12 +49,46 @@
 
 
 
+URI_TYPE(PathSegment) {
+	const URI_CHAR * first;
+	const URI_CHAR * afterLast;
+
+	URI_TYPE(PathSegment) * next;
+
+	void * reserved;
+};
+
+
+
+URI_TYPE(Parser) {
+	const URI_CHAR * schemeFirst;
+	const URI_CHAR * schemeAfterLast;
+
+	const URI_CHAR * userInfoFirst;
+	const URI_CHAR * userInfoAfterLast;
+	const URI_CHAR * hostFirst;
+	const URI_CHAR * hostAfterLast;
+	const URI_CHAR * portFirst;
+	const URI_CHAR * portAfterLast;
+
+	URI_TYPE(PathSegment) * pathList;
+
+	const URI_CHAR * queryFirst;
+	const URI_CHAR * queryAfterLast;
+	const URI_CHAR * fragmentFirst;
+	const URI_CHAR * fragmentAfterLast;
+
+	void * reserved;
+};
+
+
+
 #ifdef URI_TESTING
 UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text);
 #endif
 
-UriBool URI_FUNC(ParseUriEx)(struct UriParser * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
-UriBool URI_FUNC(ParseUri)(struct UriParser * parser, const URI_CHAR * text);
+UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
+UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text);
 
 
 
