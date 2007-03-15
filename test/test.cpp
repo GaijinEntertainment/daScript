@@ -48,20 +48,12 @@ public:
 
 private:
 	void testIpSixPass() {
-		// Minimum
-		URI_TEST_IP_SIX_PASS("::"); // == all addresses
-
 		// Quad length
-		URI_TEST_IP_SIX_PASS("::1"); // == localhost
-		URI_TEST_IP_SIX_PASS("::12");
-		URI_TEST_IP_SIX_PASS("::123");
-		URI_TEST_IP_SIX_PASS("::1234");
-
-		// Ends and middle
-		URI_TEST_IP_SIX_PASS("::1:2");
-		URI_TEST_IP_SIX_PASS("2:1::");
-		URI_TEST_IP_SIX_PASS("1::");
-		URI_TEST_IP_SIX_PASS("1::2");
+		URI_TEST_IP_SIX_PASS("abcd::");
+		URI_TEST_IP_SIX_PASS("abcd::1");
+		URI_TEST_IP_SIX_PASS("abcd::12");
+		URI_TEST_IP_SIX_PASS("abcd::123");
+		URI_TEST_IP_SIX_PASS("abcd::1234");
 
 		// Full length
 		URI_TEST_IP_SIX_PASS("2001:0db8:0100:f101:0210:a4ff:fee3:9566"); // lower hex
@@ -74,6 +66,26 @@ private:
 		URI_TEST_IP_SIX_PASS("::ffff:1.2.3.4");
 		URI_TEST_IP_SIX_PASS("::0.0.0.0"); // Min IPv4
 		URI_TEST_IP_SIX_PASS("::255.255.255.255"); // Max IPv4
+
+		// Zipper position
+		URI_TEST_IP_SIX_PASS("::1:1:1:1:1:1:1");
+		URI_TEST_IP_SIX_PASS("1::1:1:1:1:1:1");
+		URI_TEST_IP_SIX_PASS("1:1::1:1:1:1:1");
+		URI_TEST_IP_SIX_PASS("1:1:1::1:1:1:1");
+		URI_TEST_IP_SIX_PASS("1:1:1:1::1:1:1");
+		URI_TEST_IP_SIX_PASS("1:1:1:1:1::1:1");
+		URI_TEST_IP_SIX_PASS("1:1:1:1:1:1::1");
+		URI_TEST_IP_SIX_PASS("1:1:1:1:1:1:1::");
+
+		// Zipper length
+		URI_TEST_IP_SIX_PASS("1:1:1::1:1:1:1");
+		URI_TEST_IP_SIX_PASS("1:1:1::1:1:1");
+		URI_TEST_IP_SIX_PASS("1:1:1::1:1");
+		URI_TEST_IP_SIX_PASS("1:1::1:1");
+		URI_TEST_IP_SIX_PASS("1:1::1");
+		URI_TEST_IP_SIX_PASS("1::1");
+		URI_TEST_IP_SIX_PASS("::1"); // == localhost
+		URI_TEST_IP_SIX_PASS("::"); // == all addresses
 
 		// A few more variations
 		URI_TEST_IP_SIX_PASS("21ff:abcd::1");
@@ -129,8 +141,13 @@ private:
 		UriParserA parserA = { 0 };
 		UriParserW parserW = { 0 };
 
-		// IPv6
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]:80/segment/index.html?query#frag"));
+		// On/off for each
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "//user:pass@[::1]:80/segment/index.html?query#frag"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://[::1]:80/segment/index.html?query#frag"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]/segment/index.html?query#frag"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]:80?query#frag"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]:80/segment/index.html#frag"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]:80/segment/index.html?query"));
 
 		// Schema, port, one segment
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "ftp://host:21/gnu/"));
@@ -143,13 +160,17 @@ private:
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/"));
 		TEST_ASSERT(URI_SUCCESS == uriParseUriW(&parserW, L"http://www.example.com/"));
 
+		// Real life examples
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://sourceforge.net/projects/uriparser/"));
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "mailto:test@example.com"));
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "../../"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "/"));
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, ""));
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "file:///bin/bash"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/name%20with%20spaces/"));
 
+		// Percent encoding
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/name%20with%20spaces/"));
 		TEST_ASSERT(URI_ERROR == uriParseUriA(&parserA, "http://www.example.com/name with spaces/"));
 	}
 

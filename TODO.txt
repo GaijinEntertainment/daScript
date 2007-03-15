@@ -1,9 +1,14 @@
 == SOON ==
- * Debug checker code
- * Add parsing part
  * Add IPv4 code
+ * Extract IP from string
+ * Check backward compatibility with 0.2
+   * Add function and mark as deprecated
+     with removal note for versions >= 0.4?
+ * Re-think encoding auto selection
+ * Make grammer graph with Graphviz
+ * Add documentation on semantic actions?
+ * Add code documentation
+ * Extract Uri struct from UriParser
 
 == LATER ==
  * Add GNU build files, liburiparser-0.3.0.tar.gz
- * Add Visual Studio 2003 Project Files
- * Add IPv6 gramar part and code
