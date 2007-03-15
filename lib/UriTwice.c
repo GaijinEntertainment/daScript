@@ -207,6 +207,7 @@ const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(Parser) * parser, const URI_C
 	case _UT('Y'):
 	case _UT('z'):
 	case _UT('Z'):
+		parser->userInfoFirst = first; /* USERINFO BEGIN */
 		return URI_FUNC(ParseOwnHostUserInfoNz)(parser, first, afterLast);
 
 	default:
@@ -1156,6 +1157,7 @@ const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(Parser) * parser, const URI_CH
 		}
 
 	default:
+		parser->hostAfterLast = first; /* HOST END */
 		return URI_FUNC(ParseAuthorityTwo)(parser, first, afterLast);
 	}
 }
@@ -1360,9 +1362,13 @@ const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(Parser) * parser, con
 		}
 
 	case _UT(':'):
+		parser->hostAfterLast = first; /* HOST END */
+		parser->portFirst = first + 1; /* PORT BEGIN */
 		return URI_FUNC(ParseOwnPortUserInfo)(parser, first + 1, afterLast);
 
 	case _UT('@'):
+		parser->userInfoAfterLast = first; /* USERINFO END */
+		parser->hostFirst = first + 1; /* HOST BEGIN */
 		return URI_FUNC(ParseOwnHost)(parser, first + 1, afterLast);
 
 	default:
@@ -1383,6 +1389,9 @@ const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(Parser) * parser, con
  */
 const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		parser->hostFirst = parser->userInfoFirst; /* Host instead of userInfo, update */
+		parser->userInfoFirst = NULL; /* Not a userInfo, reset */
+		parser->portAfterLast = first; /* PORT END */
 		return afterLast;
 	}
 
@@ -1443,6 +1452,8 @@ const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(Parser) * parser, const
 	case _UT('Y'):
 	case _UT('z'):
 	case _UT('Z'):
+		parser->hostAfterLast = NULL; /* Not a host, reset */
+		parser->portFirst = NULL; /* Not a port, reset */
 		return URI_FUNC(ParseOwnUserInfo)(parser, first + 1, afterLast);
 
 	case _UT('0'):
@@ -1458,6 +1469,9 @@ const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(Parser) * parser, const
 		return URI_FUNC(ParseOwnPortUserInfo)(parser, first + 1, afterLast);
 
 	default:
+		parser->hostFirst = parser->userInfoFirst; /* Host instead of userInfo, update */
+		parser->userInfoFirst = NULL; /* Not a userInfo, reset */
+		parser->portAfterLast = first; /* PORT END */
 		return first;
 	}
 }
@@ -1566,6 +1580,8 @@ const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(Parser) * parser, const URI
 		return URI_FUNC(ParseOwnUserInfo)(parser, first + 1, afterLast);
 
 	case _UT('@'):
+		parser->userInfoAfterLast = first; /* USERINFO END */
+		parser->hostFirst = first + 1; /* HOST BEGIN */
 		return URI_FUNC(ParseOwnHost)(parser, first + 1, afterLast);
 
 	default:
