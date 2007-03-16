@@ -20,7 +20,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="..\..\lib\include"
-				PreprocessorDefinitions="URI_ENABLE_BOTH;URI_TESTING"
+				PreprocessorDefinitions="URI_TESTING"
 				MinimalRebuild="TRUE"
 				ExceptionHandling="FALSE"
 				BasicRuntimeChecks="3"
@@ -63,7 +63,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="..\..\lib\include"
-				PreprocessorDefinitions="URI_ENABLE_BOTH;URI_TESTING"
+				PreprocessorDefinitions="URI_TESTING"
 				ExceptionHandling="FALSE"
 				RuntimeLibrary="4"
 				UsePrecompiledHeader="0"
