@@ -42,36 +42,28 @@
 
 
 
-/* Deny overriding from outside */
+/* Deny external overriding */
 #undef URI_ENABLE_ANSI
 #undef URI_ENABLE_UNICODE
 
 
 
-#ifdef URI_ENABLE_BOTH
-/* Any OS, ANSI and UNICODE */
-# define URI_ENABLE_ANSI 1
-# define URI_ENABLE_UNICODE 1
-#else
-# if (defined(__WIN32__) || defined(WIN32))
-#  ifdef UNICODE
-#   ifndef _UNICODE
-#    error _UNICODE not defined
-#   else
-/* Windows, UNICODE only */
-#    define URI_ENABLE_UNICODE 1
-#   endif
-#  else
-#   ifdef _UNICODE
-#    error UNICODE not defined
-#   else
-/* Windows, ANSI only */
-#    define URI_ENABLE_ANSI 1
-#   endif
-#  endif
+#ifdef URI_NO_ANSI
+# ifdef URI_NO_UNICODE
+/* No encoding at all */
+#  error You cannot define URI_NO_ANSI and URI_NO_UNICODE at the same time.
 # else
-/* Unix, ANSI only */
-#  define URI_ENABLE_ANSI 1
+/* ANSI only */
+#  define URI_ENABLE_ANSI      1
+# endif
+#else
+# ifdef URI_NO_UNICODE
+/* Unicode only */
+#  define URI_ENABLE_UNICODE   1
+# else
+/* Both ANSI and Unicode */
+#  define URI_ENABLE_ANSI      1
+#  define URI_ENABLE_UNICODE   1
 # endif
 #endif
 

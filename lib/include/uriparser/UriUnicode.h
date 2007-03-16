@@ -41,25 +41,22 @@
 #include "UriConfig.h"
 #include "UriIndependent.h"
 
+
+
 #undef URI_CHAR
 #define URI_CHAR wchar_t
 
 #undef _UT
 #define _UT(x) L##x
 
+
+
 #undef URI_FUNC
-#ifdef URI_ENABLE_BOTH
-# define URI_FUNC(x) uri##x##W
-#else
-# define URI_FUNC(x) uri##x
-#endif
+#define URI_FUNC(x) uri##x##W
 
 #undef URI_TYPE
-#ifdef URI_ENABLE_BOTH
-# define URI_TYPE(x) struct Uri##x##W
-#else
-# define URI_TYPE(x) struct Uri##x
-#endif
+#define URI_TYPE(x) struct Uri##x##W
+
 
 
 #undef URI_STRLEN

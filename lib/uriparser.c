@@ -37,6 +37,10 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef URI_NO_LEGACY
+
+
+
 #include <uriparser.h>
 #include <uriparser/Uri.h>
 #include <malloc.h>
@@ -69,3 +73,7 @@ int URIParseString(URI * uri, const char * str) {
 void URIFree(URI * uri) {
 	free(uri);
 }
+
+
+
+#endif /* URI_NO_LEGACY */

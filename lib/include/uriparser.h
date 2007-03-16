@@ -37,6 +37,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef URI_NO_LEGACY
+
 #ifndef URI_URIPARSER_H
 #define URI_URIPARSER_H
 
@@ -101,3 +103,5 @@ void URIFree(URI * uri);
 
 
 #endif /* URI_URIPARSER_H */
+
+#endif /* URI_NO_LEGACY */
