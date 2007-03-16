@@ -30,6 +30,12 @@
 			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
+		<Unit filename="..\..\lib\include\uriparser.h">
+			<Option compilerVar="CPP" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="default" />
+		</Unit>
 		<Unit filename="..\..\lib\include\uriparser\Uri.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
@@ -64,6 +70,10 @@
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\uriparser.c">
+			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
 	</Project>

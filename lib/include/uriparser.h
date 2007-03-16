@@ -37,38 +37,67 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef URI_INDEPENDENT
-#define URI_INDEPENDENT 1
+#ifndef URI_URIPARSER_H
+#define URI_URIPARSER_H
 
 
 
-/* For wchar_t */
-#include <ctype.h>
+#define	DEFAULT_MAX_LEN    64
+#define	MAX_URI_SCHEME     DEFAULT_MAX_LEN
+#define	MAX_URI_USERINFO   256
+#define	MAX_URI_HOST       256
+#define	MAX_URI_PATH       1024
+#define MAX_URI_QUERY      4096
+#define	MAX_URI_FRAGMENT   DEFAULT_MAX_LEN
 
 
 
-/* Unused parameter macro */
-#ifdef __GNUC__
-# define URI_UNUSED(x) unused_##s __attribute__((unused))
-#else
-# define URI_UNUSED(x) x
-#endif
+enum URIType{
+	URIURI,
+	URIRelativeRef
+};
 
 
 
-#define URI_OKAY	0
-#define URI_ERROR	1
+enum HOSTType{
+	IPv4Address,
+	IPv6Address,
+	IPvFuture,
+	RegName
+};
 
 
 
-#define UriBool      int
-
-#define URI_TRUE     1
-#define URI_FALSE    0
-
-#define URI_SUCCESS  0
-#define URI_ERROR    1
-
+enum PathType{
+	PathNoScheme,
+	PathAbsolute,
+	PathRootless,
+	PathAbEmpty
+};
 
 
-#endif /* URI_INDEPENDENT */
+
+typedef struct uri_struct {
+    enum URIType utype;
+    enum HOSTType htype;
+    enum PathType ptype;
+    int hasPort;
+    char * scheme;
+    char * userinfo;
+    char * host;
+    unsigned short port;
+    char * path;
+    char * query;
+    char * fragment;
+} URI;
+
+
+
+int URIParserInit();
+void URIParserCleanup();
+int URIParseString(URI * uri, const char * str);
+void URIFree(URI * uri);
+
+
+
+#endif /* URI_URIPARSER_H */

@@ -15,6 +15,9 @@
 			</Target>
 		</Build>
 		<Compiler>
+			<Add option="-pedantic" />
+			<Add option="-W" />
+			<Add option="-Wall" />
 			<Add option="-DURI_ENABLE_BOTH" />
 			<Add option="-DURI_TESTING" />
 			<Add directory="..\..\lib\include" />

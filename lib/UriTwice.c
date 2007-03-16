@@ -1875,7 +1875,7 @@ const URI_CHAR * URI_FUNC(ParsePchar)(URI_TYPE(Parser) * parser, const URI_CHAR 
 /*
  * [pctEncoded]-><%>[HEXDIG][HEXDIG]
  */
-const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
+const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * URI_UNUSED(parser), const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
 		return NULL;
 	}
@@ -2747,7 +2747,7 @@ UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text) {
 
 /* TODO */
 UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text) {
-	URI_TYPE(Parser) parser = { 0 };
+	URI_TYPE(Parser) parser;
 	const URI_CHAR * const afterIpSix = text + URI_STRLEN(text);
 	const URI_CHAR * const res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
 	return res == afterIpSix ? URI_TRUE : URI_FALSE;

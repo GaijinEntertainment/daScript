@@ -138,8 +138,8 @@ private:
 	}
 
 	void testUri() {
-		UriParserA parserA = { 0 };
-		UriParserW parserW = { 0 };
+		UriParserA parserA;
+		UriParserW parserW;
 
 		// On/off for each
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "//user:pass@[::1]:80/segment/index.html?query#frag"));

@@ -37,38 +37,35 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef URI_INDEPENDENT
-#define URI_INDEPENDENT 1
+#include <uriparser.h>
+#include <uriparser/Uri.h>
+#include <malloc.h>
 
 
 
-/* For wchar_t */
-#include <ctype.h>
+int URIParserInit() {
+	/* Nothing to do */
+	return 0;
+}
 
 
 
-/* Unused parameter macro */
-#ifdef __GNUC__
-# define URI_UNUSED(x) unused_##s __attribute__((unused))
-#else
-# define URI_UNUSED(x) x
-#endif
+void URIParserCleanup() {
+	/* Nothing to do */
+}
 
 
 
-#define URI_OKAY	0
-#define URI_ERROR	1
+int URIParseString(URI * uri, const char * str) {
+	struct UriParserA parser;
+	uriParseUriA(&parser, str);
+
+	/* TODO */
+	return 0;
+}
 
 
 
-#define UriBool      int
-
-#define URI_TRUE     1
-#define URI_FALSE    0
-
-#define URI_SUCCESS  0
-#define URI_ERROR    1
-
-
-
-#endif /* URI_INDEPENDENT */
+void URIFree(URI * uri) {
+	free(uri);
+}
