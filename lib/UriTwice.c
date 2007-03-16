@@ -694,7 +694,7 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(Parser) * parser, const URI_CHAR
 	case _UT('E'):
 	case _UT('f'):
 	case _UT('F'):
-		/* parser->ip6 = malloc(1 * sizeof(UriIp6)); */
+		parser->ip6 = malloc(1 * sizeof(UriIp6)); /* TODO Where do we free this? */
 		return URI_FUNC(ParseIPv6address2)(parser, first, afterLast);
 
 	default:
@@ -716,6 +716,10 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 	int digitCount = 0;
 	int digitHistory[4];
 	int ip4OctetsDone = 0;
+
+	unsigned char quadsAfterZipper[14];
+	int quadsAfterZipperCount = 0;
+
 
 	for (;;) {
 		if (first >= afterLast) {
@@ -757,6 +761,9 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 									+ digitHistory[2] > 255))) {
 						return NULL;
 					}
+
+					/* Copy IPv4 octet */
+					parser->ip6->data[16 - 4 + ip4OctetsDone] = uriGetOctetValue(digitHistory, digitCount);
 					digitCount = 0;
 					ip4OctetsDone++;
 					break;
@@ -776,6 +783,14 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 						return NULL;
 					}
 					parser->hostAfterLast = first; /* HOST END */
+
+					/* Copy missing quads right before IPv4 */
+					memcpy(parser->ip6->data + 16 - 4 - 2 * quadsAfterZipperCount,
+								quadsAfterZipper, 2 * quadsAfterZipperCount);
+
+					/* Copy last IPv4 octet */
+					parser->ip6->data[16 - 4 + 3] = uriGetOctetValue(digitHistory, digitCount);
+
 					return first + 1;
 
 				default:
@@ -790,21 +805,30 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 			do {
 				switch (*first) {
 				case _UT('a'):
-				case _UT('A'):
 				case _UT('b'):
-				case _UT('B'):
 				case _UT('c'):
-				case _UT('C'):
 				case _UT('d'):
-				case _UT('D'):
 				case _UT('e'):
-				case _UT('E'):
 				case _UT('f'):
+					letterAmong = 1;
+					if (digitCount == 4) {
+						return NULL;
+					}
+					digitHistory[digitCount] = 15 + *first - _UT('f');
+					digitCount++;
+					break;
+
+				case _UT('A'):
+				case _UT('B'):
+				case _UT('C'):
+				case _UT('D'):
+				case _UT('E'):
 				case _UT('F'):
 					letterAmong = 1;
 					if (digitCount == 4) {
 						return NULL;
 					}
+					digitHistory[digitCount] = 15 + *first - _UT('F');
 					digitCount++;
 					break;
 
@@ -821,39 +845,59 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 					if (digitCount == 4) {
 						return NULL;
 					}
-					digitHistory[digitCount++] = 9 + *first - _UT('9');
+					digitHistory[digitCount] = 9 + *first - _UT('9');
+					digitCount++;
 					break;
 
 				case _UT(':'):
-					/* Too many quads? */
-					if (quadsDone > 8 - zipperEver) {
-						return NULL;
-					}
+					{
+						int setZipper = 0;
 
-					/* "::"? */
-					if (first + 1 >= afterLast) {
-						return NULL;
-					}
-					if (first[1] == _UT(':')) {
-						first++;
-						if (zipperEver) {
-							return NULL; /* "::.+::" */
+						/* Too many quads? */
+						if (quadsDone > 8 - zipperEver) {
+							return NULL;
 						}
-						zipperEver = 1;
 
-						/* ":::+"? */
+						/* "::"? */
 						if (first + 1 >= afterLast) {
-							return NULL; /* No ']' yet */
+							return NULL;
 						}
 						if (first[1] == _UT(':')) {
-							return NULL; /* ":::+ "*/
+							const int resetOffset = 2 * (quadsDone + (digitCount > 0));
+
+							first++;
+							if (zipperEver) {
+								return NULL; /* "::.+::" */
+							}
+
+							/* Zero everything after zipper */
+							memset(parser->ip6->data + resetOffset, 0, 16 - resetOffset);
+							setZipper = 1;
+
+							/* ":::+"? */
+							if (first + 1 >= afterLast) {
+								return NULL; /* No ']' yet */
+							}
+							if (first[1] == _UT(':')) {
+								return NULL; /* ":::+ "*/
+							}
+						}
+						if (digitCount > 0) {
+							if (zipperEver) {
+								uriWriteQuadToDoubleByte(digitHistory, digitCount, quadsAfterZipper + 2 * quadsAfterZipperCount);
+								quadsAfterZipperCount++;
+							} else {
+								uriWriteQuadToDoubleByte(digitHistory, digitCount, parser->ip6->data + 2 * quadsDone);
+							}
+							quadsDone++;
+							digitCount = 0;
+						}
+						letterAmong = 0;
+
+						if (setZipper) {
+							zipperEver = 1;
 						}
 					}
-					if (digitCount > 0) {
-						quadsDone++;
-						digitCount = 0;
-					}
-					letterAmong = 0;
 					break;
 
 				case _UT('.'):
@@ -872,6 +916,9 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 									+ digitHistory[2] > 255))) {
 						return NULL;
 					}
+
+					/* Copy first IPv4 octet */
+					parser->ip6->data[16 - 4] = uriGetOctetValue(digitHistory, digitCount);
 					digitCount = 0;
 
 					/* Switch over to IPv4 loop */
@@ -884,6 +931,24 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 					if (!zipperEver && !((quadsDone == 7) && (digitCount > 0))) {
 						return NULL;
 					}
+
+					if (digitCount > 0) {
+						if (zipperEver) {
+							uriWriteQuadToDoubleByte(digitHistory, digitCount, quadsAfterZipper + 2 * quadsAfterZipperCount);
+							quadsAfterZipperCount++;
+						} else {
+							uriWriteQuadToDoubleByte(digitHistory, digitCount, parser->ip6->data + 2 * quadsDone);
+						}
+						/*
+						quadsDone++;
+						digitCount = 0;
+						*/
+					}
+
+					/* Copy missing quads to the end */
+					memcpy(parser->ip6->data + 16 - 2 * quadsAfterZipperCount,
+								quadsAfterZipper, 2 * quadsAfterZipperCount);
+
 					parser->hostAfterLast = first; /* HOST END */
 					return first + 1; /* Fine */
 
@@ -2750,7 +2815,10 @@ UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text) {
 UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text) {
 	URI_TYPE(Parser) parser;
 	const URI_CHAR * const afterIpSix = text + URI_STRLEN(text);
-	const URI_CHAR * const res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
+	const URI_CHAR * res;
+
+	parser.ip6 = malloc(1 * sizeof(UriIp6));
+	res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
 	return res == afterIpSix ? URI_TRUE : URI_FALSE;
 }
 

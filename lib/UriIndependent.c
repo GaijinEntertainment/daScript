@@ -37,53 +37,52 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef URI_INDEPENDENT
-#define URI_INDEPENDENT 1
+#include <uriparser/UriIndependent.h>
 
 
 
-/* For wchar_t */
-#include <ctype.h>
+void uriWriteQuadToDoubleByte(const int * hexDigits, int digitCount, unsigned char * output) {
+	switch (digitCount) {
+	case 1:
+		/* 0x___? -> \x00 \x0? */
+		output[0] = 0;
+		output[1] = hexDigits[0];
+		break;
+
+	case 2:
+		/* 0x__?? -> \0xx \x?? */
+		output[0] = 0;
+		output[1] = 16 * hexDigits[0] + hexDigits[1];
+		break;
+
+	case 3:
+		/* 0x_??? -> \0x? \x?? */
+		output[0] = hexDigits[0];
+		output[1] = 16 * hexDigits[1] + hexDigits[2];
+		break;
+
+	case 4:
+		/* 0x???? -> \0?? \x?? */
+		output[0] = 16 * hexDigits[0] + hexDigits[1];
+		output[1] = 16 * hexDigits[2] + hexDigits[3];
+		break;
+
+	}
+}
 
 
 
-/* Unused parameter macro */
-#ifdef __GNUC__
-# define URI_UNUSED(x) unused_##x __attribute__((unused))
-#else
-# define URI_UNUSED(x) x
-#endif
+unsigned char uriGetOctetValue(const int * digits, int digitCount) {
+	switch (digitCount) {
+	case 1:
+		return digits[0];
 
+	case 2:
+		return 10 * digits[0] + digits[1];
 
+	case 3:
+	default:
+		return 100 * digits[0] + 10 * digits[1] + digits[2];
 
-#define URI_OKAY	0
-#define URI_ERROR	1
-
-
-
-#define UriBool      int
-
-#define URI_TRUE     1
-#define URI_FALSE    0
-
-#define URI_SUCCESS  0
-#define URI_ERROR    1
-
-
-
-typedef struct UriIp4Struct {
-	unsigned char data[4];
-} UriIp4;
-
-typedef struct UriIp6Struct {
-	unsigned char data[16];
-} UriIp6;
-
-
-
-void uriWriteQuadToDoubleByte(const int * hexDigits, int digitCount, unsigned char * output);
-unsigned char uriGetOctetValue(const int * digits, int digitCount);
-
-
-
-#endif /* URI_INDEPENDENT */
+	}
+}

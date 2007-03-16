@@ -107,6 +107,9 @@
 				RelativePath="..\..\lib\Uri.c">
 			</File>
 			<File
+				RelativePath="..\..\lib\UriIndependent.c">
+			</File>
+			<File
 				RelativePath="..\..\lib\uriparser.c">
 			</File>
 			<File

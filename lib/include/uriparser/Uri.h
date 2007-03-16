@@ -41,16 +41,21 @@
 #define URI_H 1
 
 
-#define URI_VER_MAJOR     0
-#define URI_VER_MINOR     3
-#define URI_VER_RELEASE   0
-#define URI_VER_SUFFIX    "rc1"
 
-
-
-/* Version string helper macros */
+/* Version helper macro */
 #define URI_ANSI_TO_UNICODE(x) L##x
 
+
+
+#define URI_VER_MAJOR           0
+#define URI_VER_MINOR           3
+#define URI_VER_RELEASE         0
+#define URI_VER_SUFFIX_ANSI     "rc1"
+#define URI_VER_SUFFIX_UNICODE  URI_ANSI_TO_UNICODE(URI_VER_SUFFIX_ANSI)
+
+
+
+/* More version helper macros */
 #define URI_INT_TO_ANSI_HELPER(x) #x
 #define URI_INT_TO_ANSI(x) URI_INT_TO_ANSI_HELPER(x)
 
@@ -67,12 +72,13 @@
 	URI_INT_TO_UNICODE(ma) L"." \
 	URI_INT_TO_UNICODE(mi) L"." \
 	URI_INT_TO_UNICODE(r) \
-	URI_ANSI_TO_UNICODE(s)
+	s
 
 
 
-#define URI_VER_ANSI     URI_VER_ANSI_HELPER(URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX)
-#define URI_VER_UNICODE  URI_VER_UNICODE_HELPER(URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX)
+/* Full version strings */
+#define URI_VER_ANSI     URI_VER_ANSI_HELPER(URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX_ANSI)
+#define URI_VER_UNICODE  URI_VER_UNICODE_HELPER(URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX_UNICODE)
 
 
 
