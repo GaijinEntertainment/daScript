@@ -49,18 +49,18 @@
 
 
 
-URI_TYPE(PathSegment) {
+typedef struct URI_TYPE(PathSegmentStruct) {
 	const URI_CHAR * first;
 	const URI_CHAR * afterLast;
 
-	URI_TYPE(PathSegment) * next;
+	struct URI_TYPE(PathSegmentStruct) * next;
 
 	void * reserved;
-};
+} URI_TYPE(PathSegment);
 
 
 
-URI_TYPE(Parser) {
+typedef struct URI_TYPE(ParserStruct) {
 	const URI_CHAR * schemeFirst;
 	const URI_CHAR * schemeAfterLast;
 
@@ -89,8 +89,10 @@ URI_TYPE(Parser) {
 	const URI_CHAR * fragmentFirst;
 	const URI_CHAR * fragmentAfterLast;
 
+	const URI_CHAR * errorPos;
+
 	void * reserved;
-};
+} URI_TYPE(Parser);
 
 
 

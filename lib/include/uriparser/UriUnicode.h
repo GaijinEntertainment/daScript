@@ -55,7 +55,7 @@
 #define URI_FUNC(x) uri##x##W
 
 #undef URI_TYPE
-#define URI_TYPE(x) struct Uri##x##W
+#define URI_TYPE(x) Uri##x##W
 
 
 

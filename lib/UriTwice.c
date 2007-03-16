@@ -101,8 +101,21 @@ const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * parser, con
 
 
 void URI_FUNC(Reset)(URI_TYPE(Parser) * parser);
-
 void URI_FUNC(PushPathSegment)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
+void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos);
+
+
+
+/* TODO integrate for all return NULL */
+void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos) {
+	if (parser->ip6 != NULL) {
+		free(parser->ip6);
+		parser->ip6 = NULL;
+	}
+
+	parser->errorPos = errorPos;
+}
+
 
 
 /*

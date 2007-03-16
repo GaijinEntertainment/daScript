@@ -61,7 +61,7 @@ void URIParserCleanup() {
 
 
 int URIParseString(URI * uri, const char * str) {
-	struct UriParserA parser;
+	UriParserA parser;
 	uriParseUriA(&parser, str);
 
 	/* TODO */
