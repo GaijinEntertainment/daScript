@@ -66,8 +66,16 @@ URI_TYPE(Parser) {
 
 	const URI_CHAR * userInfoFirst;
 	const URI_CHAR * userInfoAfterLast;
+
 	const URI_CHAR * hostFirst;
 	const URI_CHAR * hostAfterLast;
+	/* TODO BEGIN */
+	UriIp4 * ip4;
+	UriIp6 * ip6;
+	const URI_CHAR * ipFutureFirst;
+	const URI_CHAR * ipFutureAfterLast;
+	/* TODO END */
+
 	const URI_CHAR * portFirst;
 	const URI_CHAR * portAfterLast;
 

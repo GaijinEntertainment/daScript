@@ -694,6 +694,7 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(Parser) * parser, const URI_CHAR
 	case _UT('E'):
 	case _UT('f'):
 	case _UT('F'):
+		/* parser->ip6 = malloc(1 * sizeof(UriIp6)); */
 		return URI_FUNC(ParseIPv6address2)(parser, first, afterLast);
 
 	default:

@@ -49,7 +49,7 @@
 
 /* Unused parameter macro */
 #ifdef __GNUC__
-# define URI_UNUSED(x) unused_##s __attribute__((unused))
+# define URI_UNUSED(x) unused_##x __attribute__((unused))
 #else
 # define URI_UNUSED(x) x
 #endif
@@ -68,6 +68,16 @@
 
 #define URI_SUCCESS  0
 #define URI_ERROR    1
+
+
+
+typedef struct UriIp4Struct {
+	unsigned char data[4];
+} UriIp4;
+
+typedef struct UriIp6Struct {
+	unsigned char data[16];
+} UriIp6;
 
 
 
