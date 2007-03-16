@@ -106,7 +106,6 @@ void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos);
 
 
 
-/* TODO integrate for all return NULL */
 void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos) {
 	if (parser->ip6 != NULL) {
 		free(parser->ip6);
@@ -407,6 +406,7 @@ const URI_CHAR * URI_FUNC(ParseHierPart)(URI_TYPE(Parser) * parser, const URI_CH
  */
 const URI_CHAR * URI_FUNC(ParseIpFutLoop)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 
@@ -492,6 +492,7 @@ const URI_CHAR * URI_FUNC(ParseIpFutLoop)(URI_TYPE(Parser) * parser, const URI_C
 		return URI_FUNC(ParseIpFutStopGo)(parser, first + 1, afterLast);
 
 	default:
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 }
@@ -600,12 +601,14 @@ const URI_CHAR * URI_FUNC(ParseIpFutStopGo)(URI_TYPE(Parser) * parser, const URI
  */
 const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 
 	switch (*first) {
 	case _UT('v'):
 		if (first + 1 >= afterLast) {
+			URI_FUNC(Stop)(parser, first + 1);
 			return NULL;
 		}
 
@@ -636,9 +639,12 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const URI_CH
 				const URI_CHAR * afterIpFutLoop;
 				const URI_CHAR * const afterHexZero
 						= URI_FUNC(ParseHexZero)(parser, first + 2, afterLast);
-				if ((afterHexZero == NULL)
-						|| (afterHexZero >= afterLast)
+				if (afterHexZero == NULL) {
+					return NULL;
+				}
+				if ((afterHexZero >= afterLast)
 						|| (*afterHexZero != _UT('.'))) {
+					URI_FUNC(Stop)(parser, afterHexZero);
 					return NULL;
 				}
 				parser->hostFirst = first; /* HOST BEGIN */
@@ -651,10 +657,12 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const URI_CH
 			}
 
 		default:
+			URI_FUNC(Stop)(parser, first + 1);
 			return NULL;
 		}
 
 	default:
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 }
@@ -667,6 +675,7 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const URI_CH
  */
 const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 
@@ -675,9 +684,12 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(Parser) * parser, const URI_CHAR
 		{
 			const URI_CHAR * const afterIpFuture
 					= URI_FUNC(ParseIpFuture)(parser, first, afterLast);
-			if ((afterIpFuture == NULL)
-					|| (afterIpFuture >= afterLast)
+			if (afterIpFuture == NULL) {
+				return NULL;
+			}
+			if ((afterIpFuture >= afterLast)
 					|| (*afterIpFuture != _UT(']'))) {
+				URI_FUNC(Stop)(parser, first);
 				return NULL;
 			}
 			return afterIpFuture + 1;
@@ -707,10 +719,11 @@ const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(Parser) * parser, const URI_CHAR
 	case _UT('E'):
 	case _UT('f'):
 	case _UT('F'):
-		parser->ip6 = malloc(1 * sizeof(UriIp6)); /* TODO Where do we free this? */
+		parser->ip6 = malloc(1 * sizeof(UriIp6)); /* Freed when stopping on parse error */
 		return URI_FUNC(ParseIPv6address2)(parser, first, afterLast);
 
 	default:
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 }
@@ -736,7 +749,8 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 
 	for (;;) {
 		if (first >= afterLast) {
-				return NULL;
+			URI_FUNC(Stop)(parser, first);
+			return NULL;
 		}
 
 		/* Inside IPv4 part? */
@@ -755,23 +769,41 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 				case _UT('8'):
 				case _UT('9'):
 					if (digitCount == 4) {
+						URI_FUNC(Stop)(parser, first);
 						return NULL;
 					}
 					digitHistory[digitCount++] = 9 + *first - _UT('9');
 					break;
 
 				case _UT('.'):
-					if ((ip4OctetsDone == 4)
+					if ((ip4OctetsDone == 4) /* NOTE! */
 							|| (digitCount == 0)
-							|| (digitCount == 4)
-							|| ((digitCount > 1)
-								&& (digitHistory[0] == 0))
-							|| ((digitCount > 2)
-								&& (digitHistory[1] == 0))
-							|| ((digitCount == 3)
-								&& (100 * digitHistory[0]
-									+ 10 * digitHistory[1]
-									+ digitHistory[2] > 255))) {
+							|| (digitCount == 4)) {
+						/* Invalid digit or octet count */
+						URI_FUNC(Stop)(parser, first);
+						return NULL;
+					} else if ((digitCount > 1)
+							&& (digitHistory[0] == 0)) {
+						/* Leading zero */
+						URI_FUNC(Stop)(parser, first - digitCount);
+						return NULL;
+					} else if ((digitCount > 2)
+							&& (digitHistory[1] == 0)) {
+						/* Leading zero */
+						URI_FUNC(Stop)(parser, first - digitCount + 1);
+						return NULL;
+					} else if ((digitCount == 3)
+							&& (100 * digitHistory[0]
+								+ 10 * digitHistory[1]
+								+ digitHistory[2] > 255)) {
+						/* Octet value too large */
+						if (digitHistory[0] > 2) {
+							URI_FUNC(Stop)(parser, first - 3);
+						} else if (digitHistory[1] > 5) {
+							URI_FUNC(Stop)(parser, first - 2);
+						} else {
+							URI_FUNC(Stop)(parser, first - 1);
+						}
 						return NULL;
 					}
 
@@ -782,19 +814,37 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 					break;
 
 				case _UT(']'):
-					if ((ip4OctetsDone != 3)
+					if ((ip4OctetsDone != 3) /* NOTE! */
 							|| (digitCount == 0)
-							|| (digitCount == 4)
-							|| ((digitCount > 1)
-								&& (digitHistory[0] == 0))
-							|| ((digitCount > 2)
-								&& (digitHistory[1] == 0))
-							|| ((digitCount == 3)
-								&& (100 * digitHistory[0]
-									+ 10 * digitHistory[1]
-									+ digitHistory[2] > 255))) {
+							|| (digitCount == 4)) {
+						/* Invalid digit or octet count */
+						URI_FUNC(Stop)(parser, first);
+						return NULL;
+					} else if ((digitCount > 1)
+							&& (digitHistory[0] == 0)) {
+						/* Leading zero */
+						URI_FUNC(Stop)(parser, first - digitCount);
+						return NULL;
+					} else if ((digitCount > 2)
+							&& (digitHistory[1] == 0)) {
+						/* Leading zero */
+						URI_FUNC(Stop)(parser, first - digitCount + 1);
+						return NULL;
+					} else if ((digitCount == 3)
+							&& (100 * digitHistory[0]
+								+ 10 * digitHistory[1]
+								+ digitHistory[2] > 255)) {
+						/* Octet value too large */
+						if (digitHistory[0] > 2) {
+							URI_FUNC(Stop)(parser, first - 3);
+						} else if (digitHistory[1] > 5) {
+							URI_FUNC(Stop)(parser, first - 2);
+						} else {
+							URI_FUNC(Stop)(parser, first - 1);
+						}
 						return NULL;
 					}
+
 					parser->hostAfterLast = first; /* HOST END */
 
 					/* Copy missing quads right before IPv4 */
@@ -807,6 +857,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 					return first + 1;
 
 				default:
+					URI_FUNC(Stop)(parser, first);
 					return NULL;
 				}
 				first++;
@@ -825,6 +876,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 				case _UT('f'):
 					letterAmong = 1;
 					if (digitCount == 4) {
+						URI_FUNC(Stop)(parser, first);
 						return NULL;
 					}
 					digitHistory[digitCount] = 15 + *first - _UT('f');
@@ -839,6 +891,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 				case _UT('F'):
 					letterAmong = 1;
 					if (digitCount == 4) {
+						URI_FUNC(Stop)(parser, first);
 						return NULL;
 					}
 					digitHistory[digitCount] = 15 + *first - _UT('F');
@@ -856,6 +909,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 				case _UT('8'):
 				case _UT('9'):
 					if (digitCount == 4) {
+						URI_FUNC(Stop)(parser, first);
 						return NULL;
 					}
 					digitHistory[digitCount] = 9 + *first - _UT('9');
@@ -868,11 +922,13 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 
 						/* Too many quads? */
 						if (quadsDone > 8 - zipperEver) {
+							URI_FUNC(Stop)(parser, first);
 							return NULL;
 						}
 
 						/* "::"? */
 						if (first + 1 >= afterLast) {
+							URI_FUNC(Stop)(parser, first + 1);
 							return NULL;
 						}
 						if (first[1] == _UT(':')) {
@@ -880,6 +936,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 
 							first++;
 							if (zipperEver) {
+								URI_FUNC(Stop)(parser, first);
 								return NULL; /* "::.+::" */
 							}
 
@@ -889,9 +946,11 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 
 							/* ":::+"? */
 							if (first + 1 >= afterLast) {
+								URI_FUNC(Stop)(parser, first + 1);
 								return NULL; /* No ']' yet */
 							}
 							if (first[1] == _UT(':')) {
+								URI_FUNC(Stop)(parser, first + 1);
 								return NULL; /* ":::+ "*/
 							}
 						}
@@ -914,19 +973,35 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 					break;
 
 				case _UT('.'):
-					if (!zipperEver
-							|| (quadsDone > 6)
+					if ((quadsDone > 6) /* NOTE */
 							|| letterAmong
 							|| (digitCount == 0)
-							|| (digitCount == 4)
-							|| ((digitCount > 1)
-								&& (digitHistory[0] == 0))
-							|| ((digitCount > 2)
-								&& (digitHistory[1] == 0))
-							|| ((digitCount == 3)
-								&& (100 * digitHistory[0]
-									+ 10 * digitHistory[1]
-									+ digitHistory[2] > 255))) {
+							|| (digitCount == 4)) {
+						/* Invalid octet before */
+						URI_FUNC(Stop)(parser, first);
+						return NULL;
+					} else if ((digitCount > 1)
+							&& (digitHistory[0] == 0)) {
+						/* Leading zero */
+						URI_FUNC(Stop)(parser, first - digitCount);
+						return NULL;
+					} else if ((digitCount > 2)
+							&& (digitHistory[1] == 0)) {
+						/* Leading zero */
+						URI_FUNC(Stop)(parser, first - digitCount + 1);
+						return NULL;
+					} else if ((digitCount == 3)
+							&& (100 * digitHistory[0]
+								+ 10 * digitHistory[1]
+								+ digitHistory[2] > 255)) {
+						/* Octet value too large */
+						if (digitHistory[0] > 2) {
+							URI_FUNC(Stop)(parser, first - 3);
+						} else if (digitHistory[1] > 5) {
+							URI_FUNC(Stop)(parser, first - 2);
+						} else {
+							URI_FUNC(Stop)(parser, first - 1);
+						}
 						return NULL;
 					}
 
@@ -942,6 +1017,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 				case _UT(']'):
 					/* Too little quads? */
 					if (!zipperEver && !((quadsDone == 7) && (digitCount > 0))) {
+						URI_FUNC(Stop)(parser, first);
 						return NULL;
 					}
 
@@ -966,18 +1042,22 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 					return first + 1; /* Fine */
 
 				default:
+					URI_FUNC(Stop)(parser, first);
 					return NULL;
 				}
 				first++;
 
 				if (first >= afterLast) {
+					URI_FUNC(Stop)(parser, first);
 					return NULL; /* No ']' yet */
 				}
 			} while (walking);
 		}
 	}
 
-	return NULL; /* We should never get here */
+	/* We should never get here */
+	URI_FUNC(Stop)(parser, first);
+	return NULL; 
 }
 
 
@@ -1349,6 +1429,7 @@ const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(Parser) * parser, const
  */
 const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 
@@ -1451,6 +1532,7 @@ const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(Parser) * parser, con
 		return URI_FUNC(ParseOwnHost)(parser, first + 1, afterLast);
 
 	default:
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 }
@@ -1564,6 +1646,7 @@ const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(Parser) * parser, const
  */
 const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 
@@ -1664,6 +1747,7 @@ const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(Parser) * parser, const URI
 		return URI_FUNC(ParseOwnHost)(parser, first + 1, afterLast);
 
 	default:
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 }
@@ -1856,6 +1940,7 @@ const URI_CHAR * URI_FUNC(ParsePathRootless)(URI_TYPE(Parser) * parser, const UR
  */
 const URI_CHAR * URI_FUNC(ParsePchar)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 
@@ -1945,6 +2030,7 @@ const URI_CHAR * URI_FUNC(ParsePchar)(URI_TYPE(Parser) * parser, const URI_CHAR 
 		return first + 1;
 
 	default:
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 }
@@ -1956,12 +2042,14 @@ const URI_CHAR * URI_FUNC(ParsePchar)(URI_TYPE(Parser) * parser, const URI_CHAR 
  */
 const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * URI_UNUSED(parser), const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 
 	switch (*first) {
 	case _UT('%'):
 		if (first + 1 >= afterLast) {
+			URI_FUNC(Stop)(parser, first + 1);
 			return NULL;
 		}
 
@@ -1989,6 +2077,7 @@ const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * URI_UNUSED(parser)
 		case _UT('f'):
 		case _UT('F'):
 			if (first + 2 >= afterLast) {
+				URI_FUNC(Stop)(parser, first + 2);
 				return NULL;
 			}
 
@@ -2018,14 +2107,17 @@ const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * URI_UNUSED(parser)
 				return first + 3;
 
 			default:
+				URI_FUNC(Stop)(parser, first + 2);
 				return NULL;
 			}
 
 		default:
+			URI_FUNC(Stop)(parser, first + 1);
 			return NULL;
 		}
 
 	default:
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 }
@@ -2039,6 +2131,7 @@ const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * URI_UNUSED(parser)
  */
 const URI_CHAR * URI_FUNC(ParsePctSubUnres)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 
@@ -2126,6 +2219,7 @@ const URI_CHAR * URI_FUNC(ParsePctSubUnres)(URI_TYPE(Parser) * parser, const URI
 		return first + 1;
 
 	default:
+		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
 }
