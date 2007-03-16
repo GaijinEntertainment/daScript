@@ -18,11 +18,14 @@
 			<Add option="-pedantic" />
 			<Add option="-W" />
 			<Add option="-Wall" />
-			<Add option="-DURI_ENABLE_BOTH" />
 			<Add option="-DURI_TESTING" />
 			<Add directory="..\..\lib\include" />
 		</Compiler>
 		<Unit filename="..\..\lib\Uri.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriIndependent.c">
 			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
