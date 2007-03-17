@@ -1,4 +1,6 @@
 == SOON ==
+ * Make all "non-public" functions "static inline"
+   http://www.cs.cmu.edu/cgi-bin/info2www?(gcc.info)Inline
  * Check backward compatibility with 0.2
    * Add function and mark as deprecated
      with removal note for versions >= 0.4?
