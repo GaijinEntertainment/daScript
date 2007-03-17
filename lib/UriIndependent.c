@@ -41,7 +41,7 @@
 
 
 
-void uriWriteQuadToDoubleByte(const int * hexDigits, int digitCount, unsigned char * output) {
+void uriWriteQuadToDoubleByte(const unsigned char * hexDigits, int digitCount, unsigned char * output) {
 	switch (digitCount) {
 	case 1:
 		/* 0x___? -> \x00 \x0? */
@@ -72,7 +72,7 @@ void uriWriteQuadToDoubleByte(const int * hexDigits, int digitCount, unsigned ch
 
 
 
-unsigned char uriGetOctetValue(const int * digits, int digitCount) {
+unsigned char uriGetOctetValue(const unsigned char * digits, int digitCount) {
 	switch (digitCount) {
 	case 1:
 		return digits[0];

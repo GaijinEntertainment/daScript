@@ -726,7 +726,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 	int zipperEver = 0;
 	int quadsDone = 0;
 	int digitCount = 0;
-	int digitHistory[4];
+	unsigned char digitHistory[4];
 	int ip4OctetsDone = 0;
 
 	unsigned char quadsAfterZipper[14];
@@ -758,7 +758,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 						URI_FUNC(Stop)(parser, first);
 						return NULL;
 					}
-					digitHistory[digitCount++] = 9 + *first - _UT('9');
+					digitHistory[digitCount++] = (unsigned char)(9 + *first - _UT('9'));
 					break;
 
 				case _UT('.'):
@@ -865,7 +865,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 						URI_FUNC(Stop)(parser, first);
 						return NULL;
 					}
-					digitHistory[digitCount] = 15 + *first - _UT('f');
+					digitHistory[digitCount] = (unsigned char)(15 + *first - _UT('f'));
 					digitCount++;
 					break;
 
@@ -880,7 +880,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 						URI_FUNC(Stop)(parser, first);
 						return NULL;
 					}
-					digitHistory[digitCount] = 15 + *first - _UT('F');
+					digitHistory[digitCount] = (unsigned char)(15 + *first - _UT('F'));
 					digitCount++;
 					break;
 
@@ -898,7 +898,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 						URI_FUNC(Stop)(parser, first);
 						return NULL;
 					}
-					digitHistory[digitCount] = 9 + *first - _UT('9');
+					digitHistory[digitCount] = (unsigned char)(9 + *first - _UT('9'));
 					digitCount++;
 					break;
 
@@ -2931,6 +2931,7 @@ UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text) {
 	const URI_CHAR * const afterIpSix = text + URI_STRLEN(text);
 	const URI_CHAR * res;
 
+	URI_FUNC(Reset)(&parser);
 	parser.ip6 = malloc(1 * sizeof(UriIp6));
 	res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
 	return res == afterIpSix ? URI_TRUE : URI_FALSE;

@@ -141,6 +141,18 @@
 				RelativePath="..\..\lib\include\uriparser\UriIndependent.h">
 			</File>
 			<File
+				RelativePath="..\..\lib\include\uriparser\UriIp4.h">
+			</File>
+			<File
+				RelativePath="..\..\lib\include\uriparser\UriIp4Independent.h">
+			</File>
+			<File
+				RelativePath="..\..\lib\include\uriparser\UriIp4Twice.h">
+			</File>
+			<File
+				RelativePath="..\..\lib\include\uriparser.h">
+			</File>
+			<File
 				RelativePath="..\..\lib\include\uriparser\UriTwice.h">
 			</File>
 			<File

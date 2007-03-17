@@ -147,7 +147,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctet)(UriIp4Parser * parser,
 	case _UT('7'):
 	case _UT('8'):
 	case _UT('9'):
-		uriPushToStack(parser, 9 + *first - _UT('9'));
+		uriPushToStack(parser, (unsigned char)(9 + *first - _UT('9')));
 		return (const URI_CHAR *)URI_FUNC(ParseDecOctetThree)(parser, first + 1, afterLast);
 
 	default:
@@ -178,7 +178,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctetOne)(UriIp4Parser * parser,
 	case _UT('7'):
 	case _UT('8'):
 	case _UT('9'):
-		uriPushToStack(parser, 9 + *first - _UT('9'));
+		uriPushToStack(parser, (unsigned char)(9 + *first - _UT('9')));
 		return (const URI_CHAR *)URI_FUNC(ParseDecOctetThree)(parser, first + 1, afterLast);
 
 	default:
@@ -212,7 +212,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctetTwo)(UriIp4Parser * parser,
 	case _UT('2'):
 	case _UT('3'):
 	case _UT('4'):
-		uriPushToStack(parser, 9 + *first - _UT('9'));
+		uriPushToStack(parser, (unsigned char)(9 + *first - _UT('9')));
 		return (const URI_CHAR *)URI_FUNC(ParseDecOctetThree)(parser, first + 1, afterLast);
 
 	case _UT('5'):
@@ -223,7 +223,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctetTwo)(UriIp4Parser * parser,
 	case _UT('7'):
 	case _UT('8'):
 	case _UT('9'):
-		uriPushToStack(parser, 9 + *first - _UT('9'));
+		uriPushToStack(parser, (unsigned char)(9 + *first - _UT('9')));
 		return first + 1;
 
 	default:
@@ -254,7 +254,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctetThree)(UriIp4Parser * parser,
 	case _UT('7'):
 	case _UT('8'):
 	case _UT('9'):
-		uriPushToStack(parser, 9 + *first - _UT('9'));
+		uriPushToStack(parser, (unsigned char)(9 + *first - _UT('9')));
 		return first + 1;
 
 	default:
@@ -286,7 +286,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctetFour)(UriIp4Parser * parser,
 	case _UT('3'):
 	case _UT('4'):
 	case _UT('5'):
-		uriPushToStack(parser, 9 + *first - _UT('9'));
+		uriPushToStack(parser, (unsigned char)(9 + *first - _UT('9')));
 		return first + 1;
 
 	default:
