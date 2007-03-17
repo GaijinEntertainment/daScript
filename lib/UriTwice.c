@@ -645,11 +645,13 @@ const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const URI_CH
 					return NULL;
 				}
 				parser->hostFirst = first; /* HOST BEGIN */
+				parser->ipFutureFirst = first; /* IPFUTURE BEGIN */
 				afterIpFutLoop = URI_FUNC(ParseIpFutLoop)(parser, afterHexZero + 1, afterLast);
 				if (afterIpFutLoop == NULL) {
 					return NULL;
 				}
 				parser->hostAfterLast = afterIpFutLoop; /* HOST END */
+				parser->ipFutureAfterLast = afterIpFutLoop; /* IPFUTURE END */
 				return afterIpFutLoop;
 			}
 
@@ -1313,6 +1315,7 @@ const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(Parser) * parser, const URI_CH
 		}
 
 	default:
+		/* TODO IPv4 or regname? */
 		parser->hostAfterLast = first; /* HOST END */
 		return URI_FUNC(ParseAuthorityTwo)(parser, first, afterLast);
 	}
@@ -1630,6 +1633,9 @@ const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(Parser) * parser, const
 		parser->hostFirst = parser->userInfoFirst; /* Host instead of userInfo, update */
 		parser->userInfoFirst = NULL; /* Not a userInfo, reset */
 		parser->portAfterLast = first; /* PORT END */
+
+		/* TODO IPv4 or rename? */
+
 		return first;
 	}
 }

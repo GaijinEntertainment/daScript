@@ -74,8 +74,15 @@ void uriMallocCopyHelper(char ** dest, const char * first, const char * afterLas
 
 
 int URIParseString(URI * uri, const char * str) {
+	int res;
 	UriParserA parser;
-	uriParseUriA(&parser, str);
+
+	if (uriParseUriA(&parser, str) != URI_SUCCESS) {
+		return 1;
+	}
+	if (uri == NULL) {
+		return 0;
+	}
 
 	uri->utype = (parser.schemeFirst == NULL) ? URIRelativeRef : URIURI;
 
@@ -105,6 +112,10 @@ int URIParseString(URI * uri, const char * str) {
 
 
 void URIFree(URI * uri) {
+	if (uri == NULL) {
+		return;
+	}
+
 	if (uri->scheme != NULL) {
 		free(uri->scheme);
 		uri->scheme = NULL;
