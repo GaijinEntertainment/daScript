@@ -37,11 +37,17 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef URI_TWICE_H_ENABLE
+#if (defined(URI_PASS_ANSI) && !defined(URI_TWICE_H_ANSI)) \
+	|| (defined(URI_PASS_UNICODE) && !defined(URI_TWICE_H_UNICODE))
+#ifdef URI_PASS_ANSI
+# define URI_TWICE_H_ANSI 1
+#else
+# define URI_TWICE_H_UNICODE 1
+#endif
 
 
 
-#ifdef URI_ANSI
+#ifdef URI_PASS_ANSI
 # include "UriAnsi.h"
 #else
 # include "UriUnicode.h"
@@ -67,23 +73,18 @@ typedef struct URI_TYPE(ParserStruct) {
 	const URI_CHAR * userInfoFirst;
 	const URI_CHAR * userInfoAfterLast;
 
-	const URI_CHAR * hostFirst;
-	const URI_CHAR * hostAfterLast;
-	/* TODO BEGIN */
-	const URI_CHAR * renameFirst;
-	const URI_CHAR * renameAfterLast;
+	/* TODO Make struct/union combo of this? */
+	const URI_CHAR * hostFirst; /* Set for all host types, */
+	const URI_CHAR * hostAfterLast; /* not just regname */
 	UriIp4 * ip4;
 	UriIp6 * ip6;
 	const URI_CHAR * ipFutureFirst;
 	const URI_CHAR * ipFutureAfterLast;
-	/* TODO END */
 
 	const URI_CHAR * portFirst;
 	const URI_CHAR * portAfterLast;
-
 	URI_TYPE(PathSegment) * pathHead;
 	URI_TYPE(PathSegment) * pathTail;
-
 	const URI_CHAR * queryFirst;
 	const URI_CHAR * queryAfterLast;
 	const URI_CHAR * fragmentFirst;
@@ -105,4 +106,4 @@ UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text);
 
 
 
-#endif /* URI_TWICE_H_ENABLE */
+#endif /* URI_TWICE_H_ANSI and URI_TWICE_H_UNICODE */

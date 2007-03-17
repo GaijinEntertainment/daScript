@@ -29,6 +29,18 @@
 			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
+		<Unit filename="..\..\lib\UriIp4.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriIp4Independent.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriIp4Twice.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
 		<Unit filename="..\..\lib\UriTwice.c">
 			<Option compilerVar="CC" />
 			<Option target="default" />
@@ -58,6 +70,24 @@
 			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\include\uriparser\UriIndependent.h">
+			<Option compilerVar="CPP" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\include\uriparser\UriIp4.h">
+			<Option compilerVar="CPP" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\include\uriparser\UriIp4Independent.h">
+			<Option compilerVar="CPP" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\include\uriparser\UriIp4Twice.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />

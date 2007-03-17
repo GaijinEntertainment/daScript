@@ -37,13 +37,14 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef URI_NO_LEGACY
+#include <uriparser/UriConfig.h>
+
+#ifdef URI_ENABLE_LEGACY
 
 
 
 #include <uriparser.h>
 #include <uriparser/Uri.h>
-#include <malloc.h>
 
 
 
@@ -74,7 +75,6 @@ void uriMallocCopyHelper(char ** dest, const char * first, const char * afterLas
 
 
 int URIParseString(URI * uri, const char * str) {
-	int res;
 	UriParserA parser;
 
 	if (uriParseUriA(&parser, str) != URI_SUCCESS) {
@@ -101,7 +101,7 @@ int URIParseString(URI * uri, const char * str) {
 	uriMallocCopyHelper(&uri->scheme, parser.schemeFirst, parser.schemeAfterLast);
 	uriMallocCopyHelper(&uri->userinfo, parser.userInfoFirst, parser.userInfoAfterLast);
 	uriMallocCopyHelper(&uri->host, parser.hostFirst, parser.hostAfterLast);
-	uriMallocCopyHelper(&uri->port, parser.portFirst, parser.portAfterLast);
+	/* uri->port = XXX; */
 	/* uri->path = XXX; */
 	uriMallocCopyHelper(&uri->query, parser.queryFirst, parser.queryAfterLast);
 	uriMallocCopyHelper(&uri->fragment, parser.fragmentFirst, parser.fragmentAfterLast);
@@ -144,4 +144,4 @@ void URIFree(URI * uri) {
 
 
 
-#endif /* URI_NO_LEGACY */
+#endif /* URI_ENABLE_LEGACY */

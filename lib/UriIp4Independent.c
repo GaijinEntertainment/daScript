@@ -37,26 +37,53 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <uriparser/UriConfig.h>
+#include <uriparser/UriIp4Independent.h>
 
 
 
-/* Start ANSI pass */
-#ifdef URI_ENABLE_ANSI
-# define URI_TWICE_C_ENABLE
-# define URI_PASS_ANSI
-# include "UriTwice.c"
-# undef URI_PASS_ANSI
-# undef URI_TWICE_C_ENABLE
-#endif /* URI_ENABLE_ANSI */
+void uriStackToOctet(UriIp4Parser * parser, unsigned char * octet) {
+	switch (parser->stackCount) {
+	case 1:
+		*octet = parser->stackOne;
+		break;
+
+	case 2:
+		*octet = parser->stackOne * 10
+				+ parser->stackTwo;
+		break;
+
+	case 3:
+		*octet = parser->stackOne * 100
+				+ parser->stackTwo * 10
+				+ parser->stackThree;
+		break;
+
+	default:
+		;
+	}
+	parser->stackCount = 0;
+}
 
 
 
-/* Start Unicode pass */
-#ifdef URI_ENABLE_UNICODE
-# define URI_TWICE_C_ENABLE
-# define URI_PASS_UNICODE
-# include "UriTwice.c"
-# undef URI_PASS_UNICODE
-# undef URI_TWICE_C_ENABLE
-#endif /* URI_ENABLE_UNICODE */
+void uriPushToStack(UriIp4Parser * parser, unsigned char digit) {
+	switch (parser->stackCount) {
+	case 0:
+		parser->stackOne = digit;
+		parser->stackCount = 1;
+		break;
+
+	case 1:
+		parser->stackTwo = digit;
+		parser->stackCount = 2;
+		break;
+
+	case 2:
+		parser->stackThree = digit;
+		parser->stackCount = 3;
+		break;
+
+	default:
+		;
+	}
+}

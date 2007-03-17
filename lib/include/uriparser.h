@@ -37,10 +37,14 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef URI_NO_LEGACY
-
 #ifndef URI_URIPARSER_H
 #define URI_URIPARSER_H
+
+
+
+#include <uriparser/UriConfig.h>
+
+#ifdef URI_ENABLE_LEGACY
 
 
 
@@ -137,6 +141,6 @@ void URIFree(URI * uri);
 
 
 
-#endif /* URI_URIPARSER_H */
+#endif /* URI_ENABLE_LEGACY */
 
-#endif /* URI_NO_LEGACY */
+#endif /* URI_URIPARSER_H */

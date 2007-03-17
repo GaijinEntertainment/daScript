@@ -42,8 +42,8 @@ class UriSuite : public Suite {
 public:
 	UriSuite() {
 		TEST_ADD(UriSuite::testIpSixPass)
-		// TEST_ADD(UriSuite::testIpSixFail)
-		// TEST_ADD(UriSuite::testUri)
+		TEST_ADD(UriSuite::testIpSixFail)
+		TEST_ADD(UriSuite::testUri)
 	}
 
 private:

@@ -37,26 +37,23 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <uriparser/UriConfig.h>
+#ifndef URI_IP4_INDEPENDENT_H
+#define URI_IP4_INDEPENDENT_H 1
 
 
 
-/* Start ANSI pass */
-#ifdef URI_ENABLE_ANSI
-# define URI_TWICE_C_ENABLE
-# define URI_PASS_ANSI
-# include "UriTwice.c"
-# undef URI_PASS_ANSI
-# undef URI_TWICE_C_ENABLE
-#endif /* URI_ENABLE_ANSI */
+typedef struct UriIp4ParserStruct {
+	unsigned char stackCount;
+	unsigned char stackOne;
+	unsigned char stackTwo;
+	unsigned char stackThree;
+} UriIp4Parser;
 
 
 
-/* Start Unicode pass */
-#ifdef URI_ENABLE_UNICODE
-# define URI_TWICE_C_ENABLE
-# define URI_PASS_UNICODE
-# include "UriTwice.c"
-# undef URI_PASS_UNICODE
-# undef URI_TWICE_C_ENABLE
-#endif /* URI_ENABLE_UNICODE */
+void uriPushToStack(UriIp4Parser * parser, unsigned char digit);
+void uriStackToOctet(UriIp4Parser * parser, unsigned char * octet);
+
+
+
+#endif /* URI_IP4_INDEPENDENT_H */

@@ -41,25 +41,8 @@
 
 
 
-/* For prototypes */
-#define URI_TWICE_H_ENABLE
-#include <uriparser/UriTwice.h>
-#undef  URI_TWICE_H_ENABLE
-
-
-#ifdef URI_ANSI
-# include <uriparser/UriAnsi.h>
-#else
-# include <uriparser/UriUnicode.h>
-#endif
-
-
-
-/* For strlen, memset */
-#include <string.h>
-
-/* For malloc */
-#include <malloc.h>
+#include <uriparser/Uri.h>
+#include <uriparser/UriIp4.h>
 
 
 
@@ -104,6 +87,10 @@ void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos);
 
 
 void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos) {
+	if (parser->ip4 != NULL) {
+		free(parser->ip4);
+		parser->ip4 = NULL;
+	}
 	if (parser->ip6 != NULL) {
 		free(parser->ip6);
 		parser->ip6 = NULL;
@@ -973,6 +960,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 
 				case _UT('.'):
 					if ((quadsDone > 6) /* NOTE */
+							|| (!zipperEver && (quadsDone < 6))
 							|| letterAmong
 							|| (digitCount == 0)
 							|| (digitCount == 4)) {
@@ -1056,7 +1044,7 @@ const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const UR
 
 	/* We should never get here */
 	URI_FUNC(Stop)(parser, first);
-	return NULL; 
+	return NULL;
 }
 
 
@@ -1315,8 +1303,17 @@ const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(Parser) * parser, const URI_CH
 		}
 
 	default:
-		/* TODO IPv4 or regname? */
 		parser->hostAfterLast = first; /* HOST END */
+
+		/* Valid IPv4 or just a regname? */
+		parser->ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->ip4->data,
+				parser->hostFirst, parser->hostAfterLast)) {
+			/* Not IPv4 */
+			free(parser->ip4);
+			parser->ip4 = NULL;
+		}
+
 		return URI_FUNC(ParseAuthorityTwo)(parser, first, afterLast);
 	}
 }
@@ -1634,7 +1631,14 @@ const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(Parser) * parser, const
 		parser->userInfoFirst = NULL; /* Not a userInfo, reset */
 		parser->portAfterLast = first; /* PORT END */
 
-		/* TODO IPv4 or rename? */
+		/* Valid IPv4 or just a regname? */
+		parser->ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->ip4->data,
+				parser->hostFirst, parser->hostAfterLast)) {
+			/* Not IPv4 */
+			free(parser->ip4);
+			parser->ip4 = NULL;
+		}
 
 		return first;
 	}
@@ -2043,7 +2047,7 @@ const URI_CHAR * URI_FUNC(ParsePchar)(URI_TYPE(Parser) * parser, const URI_CHAR 
 /*
  * [pctEncoded]-><%>[HEXDIG][HEXDIG]
  */
-const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * URI_UNUSED(parser), const URI_CHAR * first, const URI_CHAR * afterLast) {
+const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
 		URI_FUNC(Stop)(parser, first);
 		return NULL;

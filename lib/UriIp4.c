@@ -41,22 +41,22 @@
 
 
 
-/* Start ANSI pass */
+/* ANSI pass */
 #ifdef URI_ENABLE_ANSI
-# define URI_TWICE_C_ENABLE
+# define URI_IP4_TWICE_C_ENABLE
 # define URI_PASS_ANSI
-# include "UriTwice.c"
+# include "UriIp4Twice.c"
 # undef URI_PASS_ANSI
-# undef URI_TWICE_C_ENABLE
+# undef URI_IP4_TWICE_C_ENABLE
 #endif /* URI_ENABLE_ANSI */
 
 
 
-/* Start Unicode pass */
+/* Unicode pass */
 #ifdef URI_ENABLE_UNICODE
-# define URI_TWICE_C_ENABLE
+# define URI_IP4_TWICE_C_ENABLE
 # define URI_PASS_UNICODE
-# include "UriTwice.c"
+# include "UriIp4Twice.c"
 # undef URI_PASS_UNICODE
-# undef URI_TWICE_C_ENABLE
+# undef URI_IP4_TWICE_C_ENABLE
 #endif /* URI_ENABLE_UNICODE */

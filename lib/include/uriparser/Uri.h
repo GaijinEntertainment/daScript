@@ -37,48 +37,14 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef URI_H
-#define URI_H 1
-
-
-
-/* Version helper macro */
-#define URI_ANSI_TO_UNICODE(x) L##x
-
-
-
-#define URI_VER_MAJOR           0
-#define URI_VER_MINOR           3
-#define URI_VER_RELEASE         0
-#define URI_VER_SUFFIX_ANSI     "rc1"
-#define URI_VER_SUFFIX_UNICODE  URI_ANSI_TO_UNICODE(URI_VER_SUFFIX_ANSI)
-
-
-
-/* More version helper macros */
-#define URI_INT_TO_ANSI_HELPER(x) #x
-#define URI_INT_TO_ANSI(x) URI_INT_TO_ANSI_HELPER(x)
-
-#define URI_INT_TO_UNICODE_HELPER(x) URI_ANSI_TO_UNICODE(#x)
-#define URI_INT_TO_UNICODE(x) URI_INT_TO_UNICODE_HELPER(x)
-
-#define URI_VER_ANSI_HELPER(ma, mi, r, s) \
-	URI_INT_TO_ANSI(ma) "." \
-	URI_INT_TO_ANSI(mi) "." \
-	URI_INT_TO_ANSI(r) \
-	s
-
-#define URI_VER_UNICODE_HELPER(ma, mi, r, s) \
-	URI_INT_TO_UNICODE(ma) L"." \
-	URI_INT_TO_UNICODE(mi) L"." \
-	URI_INT_TO_UNICODE(r) \
-	s
-
-
-
-/* Full version strings */
-#define URI_VER_ANSI     URI_VER_ANSI_HELPER(URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX_ANSI)
-#define URI_VER_UNICODE  URI_VER_UNICODE_HELPER(URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX_UNICODE)
+#if ((!defined(URI_PASS_ANSI) && !(defined(URI_PASS_UNICODE))) \
+	|| (defined(URI_PASS_ANSI) && !defined(URI_H_ANSI)) \
+	|| (defined(URI_PASS_UNICODE) && !defined(URI_H_UNICODE)))
+#ifdef URI_PASS_ANSI
+# define URI_H_ANSI 1
+#else
+# define URI_H_UNICODE 1
+#endif
 
 
 
@@ -86,26 +52,24 @@
 
 
 
-/* ANSI pass */
-#ifdef URI_ENABLE_ANSI
-# define URI_TWICE_H_ENABLE
-# define URI_ANSI
+#if defined(URI_PASS_ANSI) || defined(URI_PASS_UNICODE)
+/* Continue running pass */
 # include "UriTwice.h"
-# undef URI_ANSI
-# undef URI_TWICE_H_ENABLE
-#endif /* URI_ENABLE_ANSI */
+#else
+/* Start ANSI pass */
+# ifdef URI_ENABLE_ANSI
+#  define URI_PASS_ANSI 1
+#  include "UriTwice.h"
+#  undef URI_PASS_ANSI
+# endif /* URI_ENABLE_ANSI */
+/* Start Unicode pass */
+# ifdef URI_ENABLE_UNICODE
+#  define URI_PASS_UNICODE
+#  include "UriTwice.h"
+#  undef URI_PASS_UNICODE
+# endif /* URI_ENABLE_UNICODE */
+#endif
 
 
 
-/* Unicode pass */
-#ifdef URI_ENABLE_UNICODE
-# define URI_TWICE_H_ENABLE
-# define URI_UNICODE
-# include "UriTwice.h"
-# undef URI_UNICODE
-# undef URI_TWICE_H_ENABLE
-#endif /* URI_ENABLE_UNICODE */
-
-
-
-#endif /* URI_H */
+#endif /* URI_H_ANSI and URI_H_UNICODE */

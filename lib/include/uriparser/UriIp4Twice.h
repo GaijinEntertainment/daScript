@@ -37,26 +37,29 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <uriparser/UriConfig.h>
+#if (defined(URI_PASS_ANSI) && !defined(URI_IP4_TWICE_H_ANSI)) \
+	|| (defined(URI_PASS_UNICODE) && !defined(URI_IP4_TWICE_H_UNICODE))
+#ifdef URI_PASS_ANSI
+# define URI_IP4_TWICE_H_ANSI 1
+#else
+# define URI_IP4_TWICE_H_UNICODE 1
+#endif
 
 
 
-/* Start ANSI pass */
-#ifdef URI_ENABLE_ANSI
-# define URI_TWICE_C_ENABLE
-# define URI_PASS_ANSI
-# include "UriTwice.c"
-# undef URI_PASS_ANSI
-# undef URI_TWICE_C_ENABLE
-#endif /* URI_ENABLE_ANSI */
+#ifdef URI_PASS_ANSI
+# include "UriAnsi.h"
+#else
+# include "UriUnicode.h"
+#endif
+
+#include "UriIp4Independent.h"
 
 
 
-/* Start Unicode pass */
-#ifdef URI_ENABLE_UNICODE
-# define URI_TWICE_C_ENABLE
-# define URI_PASS_UNICODE
-# include "UriTwice.c"
-# undef URI_PASS_UNICODE
-# undef URI_TWICE_C_ENABLE
-#endif /* URI_ENABLE_UNICODE */
+int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
+		const URI_CHAR * first, const URI_CHAR * afterLast);
+
+
+
+#endif /* URI_IP4_TWICE_H_ANSI and URI_IP4_TWICE_H_UNICODE */

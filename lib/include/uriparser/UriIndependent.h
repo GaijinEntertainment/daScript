@@ -37,16 +37,49 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef URI_INDEPENDENT
-#define URI_INDEPENDENT 1
+#ifndef URI_INDEPENDENT_H
+#define URI_INDEPENDENT_H 1
 
 
 
-/* For NULL */
-#include <stdio.h>
+/* Version helper macro */
+#define URI_ANSI_TO_UNICODE(x) L##x
 
-/* For wchar_t */
-#include <ctype.h>
+
+
+/* Version */
+#define URI_VER_MAJOR           0
+#define URI_VER_MINOR           3
+#define URI_VER_RELEASE         0
+#define URI_VER_SUFFIX_ANSI     "rc1"
+#define URI_VER_SUFFIX_UNICODE  URI_ANSI_TO_UNICODE(URI_VER_SUFFIX_ANSI)
+
+
+
+/* More version helper macros */
+#define URI_INT_TO_ANSI_HELPER(x) #x
+#define URI_INT_TO_ANSI(x) URI_INT_TO_ANSI_HELPER(x)
+
+#define URI_INT_TO_UNICODE_HELPER(x) URI_ANSI_TO_UNICODE(#x)
+#define URI_INT_TO_UNICODE(x) URI_INT_TO_UNICODE_HELPER(x)
+
+#define URI_VER_ANSI_HELPER(ma, mi, r, s) \
+	URI_INT_TO_ANSI(ma) "." \
+	URI_INT_TO_ANSI(mi) "." \
+	URI_INT_TO_ANSI(r) \
+	s
+
+#define URI_VER_UNICODE_HELPER(ma, mi, r, s) \
+	URI_INT_TO_UNICODE(ma) L"." \
+	URI_INT_TO_UNICODE(mi) L"." \
+	URI_INT_TO_UNICODE(r) \
+	s
+
+
+
+/* Full version strings */
+#define URI_VER_ANSI     URI_VER_ANSI_HELPER(URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX_ANSI)
+#define URI_VER_UNICODE  URI_VER_UNICODE_HELPER(URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX_UNICODE)
 
 
 
@@ -59,11 +92,6 @@
 
 
 
-#define URI_OKAY	0
-#define URI_ERROR	1
-
-
-
 #define UriBool      int
 
 #define URI_TRUE     1
@@ -71,6 +99,20 @@
 
 #define URI_SUCCESS  0
 #define URI_ERROR    1
+
+
+
+/* For NULL */
+#include <stdio.h>
+
+/* For wchar_t */
+#include <ctype.h>
+
+/* For strlen, memset, memcpy */
+#include <string.h>
+
+/* For malloc */
+#include <malloc.h>
 
 
 
@@ -89,4 +131,4 @@ unsigned char uriGetOctetValue(const int * digits, int digitCount);
 
 
 
-#endif /* URI_INDEPENDENT */
+#endif /* URI_INDEPENDENT_H */
