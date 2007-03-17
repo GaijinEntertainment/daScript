@@ -60,18 +60,75 @@ void URIParserCleanup() {
 
 
 
+void uriMallocCopyHelper(char ** dest, const char * first, const char * afterLast) {
+	if ((first != NULL) && (afterLast != NULL)) {
+		const int len = (int)(afterLast - first);
+		*dest = malloc((len + 1) * sizeof(char));
+		memcpy(*dest, first, len);
+		*dest[len] = '\0';
+	} else {
+		*dest = NULL;
+	}
+}
+
+
+
 int URIParseString(URI * uri, const char * str) {
 	UriParserA parser;
 	uriParseUriA(&parser, str);
 
-	/* TODO */
+	uri->utype = (parser.schemeFirst == NULL) ? URIRelativeRef : URIURI;
+
+	if (parser.ip4 != NULL) {
+		uri->htype = IPv4Address;
+	} else if (parser.ip6 != NULL) {
+		uri->htype = IPv6Address;
+	} else if (parser.ipFutureFirst != NULL) {
+		uri->htype = IPvFuture;
+	} else {
+		uri->htype = RegName;
+	}
+
+	/* uri->ptype = XXX; */
+	uri->hasPort = (parser.portFirst != NULL);
+	uriMallocCopyHelper(&uri->scheme, parser.schemeFirst, parser.schemeAfterLast);
+	uriMallocCopyHelper(&uri->userinfo, parser.userInfoFirst, parser.userInfoAfterLast);
+	uriMallocCopyHelper(&uri->host, parser.hostFirst, parser.hostAfterLast);
+	uriMallocCopyHelper(&uri->port, parser.portFirst, parser.portAfterLast);
+	/* uri->path = XXX; */
+	uriMallocCopyHelper(&uri->query, parser.queryFirst, parser.queryAfterLast);
+	uriMallocCopyHelper(&uri->fragment, parser.fragmentFirst, parser.fragmentAfterLast);
+
 	return 0;
 }
 
 
 
 void URIFree(URI * uri) {
-	free(uri);
+	if (uri->scheme != NULL) {
+		free(uri->scheme);
+		uri->scheme = NULL;
+	}
+	if (uri->userinfo != NULL) {
+		free(uri->userinfo);
+		uri->userinfo = NULL;
+	}
+	if (uri->host != NULL) {
+		free(uri->host);
+		uri->host = NULL;
+	}
+	if (uri->path != NULL) {
+		free(uri->path);
+		uri->path = NULL;
+	}
+	if (uri->query != NULL) {
+		free(uri->query);
+		uri->query = NULL;
+	}
+	if (uri->fragment != NULL) {
+		free(uri->fragment);
+		uri->fragment = NULL;
+	}
 }
 
 

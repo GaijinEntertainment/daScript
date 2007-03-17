@@ -95,9 +95,44 @@ typedef struct uri_struct {
 
 
 
+/**
+ * Initializes uriparser.
+ * Call before any call of URIParseString.
+ *
+ * @return	0 for success, other number else
+ */
 int URIParserInit();
+
+
+
+/**
+ * Cleans up after uriparser.
+ * Call when no more parsing will be done.
+ */
 void URIParserCleanup();
+
+
+
+/**
+ * Parses a string and builds an URI structure
+ * of that in possible. All non-NULL string
+ * members of that URI have to be manually
+ * freed later.
+ *
+ * @param uri	Output destination
+ * @param str	Input string to parse
+ * @return		0 for success, other number else
+ */
 int URIParseString(URI * uri, const char * str);
+
+
+
+/**
+ * Frees the memory occupied by the members of a URI struct.
+ * Call when when a URI instance is no longer needed.
+ *
+ * @param uri	URI struct to "empty"
+ */
 void URIFree(URI * uri);
 
 

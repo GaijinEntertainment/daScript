@@ -55,9 +55,6 @@
 
 
 
-/* For NULL */
-#include <stdio.h>
-
 /* For strlen, memset */
 #include <string.h>
 

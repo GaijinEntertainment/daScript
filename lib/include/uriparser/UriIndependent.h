@@ -42,6 +42,9 @@
 
 
 
+/* For NULL */
+#include <stdio.h>
+
 /* For wchar_t */
 #include <ctype.h>
 
