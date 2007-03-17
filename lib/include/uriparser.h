@@ -103,7 +103,8 @@ typedef struct uri_struct {
  * Initializes uriparser.
  * Call before any call of URIParseString.
  *
- * @return	0 for success, other number else
+ * @return		0 for success, other number else
+ * @deprecated	Will be removed for version 0.5.0
  */
 int URIParserInit();
 
@@ -112,6 +113,8 @@ int URIParserInit();
 /**
  * Cleans up after uriparser.
  * Call when no more parsing will be done.
+ *
+ * @deprecated	Will be removed for version 0.5.0
  */
 void URIParserCleanup();
 
@@ -126,6 +129,7 @@ void URIParserCleanup();
  * @param uri	Output destination
  * @param str	Input string to parse
  * @return		0 for success, other number else
+ * @deprecated	Will be removed for version 0.5.0
  */
 int URIParseString(URI * uri, const char * str);
 
@@ -136,6 +140,7 @@ int URIParseString(URI * uri, const char * str);
  * Call when when a URI instance is no longer needed.
  *
  * @param uri	URI struct to "empty"
+ * @deprecated	Will be removed for version 0.5.0
  */
 void URIFree(URI * uri);
 

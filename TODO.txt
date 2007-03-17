@@ -1,6 +1,4 @@
 == SOON ==
- * Add IPv4 code
- * Extract IP from string
  * Check backward compatibility with 0.2
    * Add function and mark as deprecated
      with removal note for versions >= 0.4?
@@ -10,4 +8,4 @@
  * Extract Uri struct from UriParser
 
 == LATER ==
- * Add GNU build files, liburiparser-0.3.0.tar.gz
+ * Add GNU build files, liburiparser-0.3.0rc1.tar.gz
