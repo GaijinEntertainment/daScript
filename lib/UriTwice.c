@@ -581,8 +581,13 @@ static const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const
 		return NULL;
 	}
 
+	/*
+	First character has already been
+	checked before entering this rule.
+
 	switch (*first) {
 	case _UT('v'):
+	*/
 		if (first + 1 >= afterLast) {
 			URI_FUNC(Stop)(parser, first + 1);
 			return NULL;
@@ -639,10 +644,12 @@ static const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const
 			return NULL;
 		}
 
+	/*
 	default:
 		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
+	*/
 }
 
 
@@ -1405,7 +1412,6 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(Parse
 		return URI_FUNC(ParseOwnHostUserInfoNz)(parser, first, afterLast);
 
 	default:
-		/* XXX */
 		parser->hostFirst = parser->userInfoFirst; /* Host instead of userInfo, update */
 		parser->userInfoFirst = NULL; /* Not a userInfo, reset */
 		parser->hostAfterLast = first; /* HOST END */
@@ -2059,8 +2065,13 @@ static const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * parser, con
 		return NULL;
 	}
 
+	/*
+	First character has already been
+	checked before entering this rule.
+
 	switch (*first) {
 	case _UT('%'):
+	*/
 		if (first + 1 >= afterLast) {
 			URI_FUNC(Stop)(parser, first + 1);
 			return NULL;
@@ -2129,10 +2140,12 @@ static const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(Parser) * parser, con
 			return NULL;
 		}
 
+	/*
 	default:
 		URI_FUNC(Stop)(parser, first);
 		return NULL;
 	}
+	*/
 }
 
 
