@@ -2890,7 +2890,6 @@ const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * parser, con
 
 
 void URI_FUNC(Reset)(URI_TYPE(Parser) * parser) {
-	/* TODO Free path list here? Extra function? */
 	memset(parser, 0, sizeof(URI_TYPE(Parser)));
 }
 
@@ -2925,6 +2924,8 @@ UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first, 
 	}
 	return URI_SUCCESS;
 }
+
+
 
 UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text) {
 	return URI_FUNC(ParseUriEx)(parser, text, text + URI_STRLEN(text));
