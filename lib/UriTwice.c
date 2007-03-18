@@ -1405,6 +1405,19 @@ const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(Parser) * parser, const
 		return URI_FUNC(ParseOwnHostUserInfoNz)(parser, first, afterLast);
 
 	default:
+		/* XXX */
+		parser->hostFirst = parser->userInfoFirst; /* Host instead of userInfo, update */
+		parser->userInfoFirst = NULL; /* Not a userInfo, reset */
+		parser->hostAfterLast = first; /* HOST END */
+
+		/* Valid IPv4 or just a regname? */
+		parser->ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->ip4->data,
+				parser->hostFirst, parser->hostAfterLast)) {
+			/* Not IPv4 */
+			free(parser->ip4);
+			parser->ip4 = NULL;
+		}
 		return first;
 	}
 }

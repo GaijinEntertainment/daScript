@@ -202,13 +202,13 @@ private:
 		TEST_ASSERT(0 == URIParseString(&uri, "//255.255.255.255/one"));
 		TEST_ASSERT(uri.utype == URIRelativeRef);
 		TEST_ASSERT(uri.htype == IPv4Address);
-		TEST_ASSERT(uri.ptype == PathAbsolute);
+		TEST_ASSERT(uri.ptype == PathAbEmpty);
 		TEST_ASSERT(uri.hasPort == 0);
 		TEST_ASSERT(!strcmp(uri.scheme, ""));
 		TEST_ASSERT(!strcmp(uri.userinfo, ""));
-		TEST_ASSERT(!strcmp(uri.host, ""));
+		TEST_ASSERT(!strcmp(uri.host, "255.255.255.255"));
 
-		TEST_ASSERT(!strcmp(uri.path, "/one")); /* Bug in 0.2.1: is "/" */
+		TEST_ASSERT(!strcmp(uri.path, "/one")); /* Bug in 0.2.1: was "/" */
 		TEST_ASSERT(!strcmp(uri.query, ""));
 		TEST_ASSERT(!strcmp(uri.fragment, ""));
 		URIFree(&uri);
