@@ -87,15 +87,7 @@ void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos);
 
 
 void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos) {
-	if (parser->ip4 != NULL) {
-		free(parser->ip4);
-		parser->ip4 = NULL;
-	}
-	if (parser->ip6 != NULL) {
-		free(parser->ip6);
-		parser->ip6 = NULL;
-	}
-
+	URI_FUNC(FreeMembers)(parser);
 	parser->errorPos = errorPos;
 }
 
@@ -1782,6 +1774,7 @@ const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(Parser) * parser, const U
 		}
 
 	default:
+		parser->absolutePath = URI_TRUE;
 		return URI_FUNC(ParsePathAbsNoLeadSlash)(parser, first, afterLast);
 	}
 }
@@ -2923,6 +2916,33 @@ UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first, 
 UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text) {
 	return URI_FUNC(ParseUriEx)(parser, text, text + URI_STRLEN(text));
 }
+
+
+
+void URI_FUNC(FreeMembers)(URI_TYPE(Parser) * parser) {
+	if (parser == NULL) {
+		return;
+	}
+	if (parser->ip4 != NULL) {
+		free(parser->ip4);
+		parser->ip4 = NULL;
+	}
+	if (parser->ip6 != NULL) {
+		free(parser->ip6);
+		parser->ip6 = NULL;
+	}
+	if (parser->pathHead != NULL) {
+		URI_TYPE(PathSegment) * segWalk = parser->pathHead;
+		while (segWalk != NULL) {
+			URI_TYPE(PathSegment) * const next = segWalk->next;
+			free(segWalk);
+			segWalk = next;
+		}
+		parser->pathHead = NULL;
+		parser->pathTail = NULL;
+	}
+}
+
 
 
 /* TODO */

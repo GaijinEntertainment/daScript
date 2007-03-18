@@ -46,6 +46,9 @@
 #include <uriparser.h>
 #include <uriparser/Uri.h>
 
+/* For atoi */
+#include <stdlib.h>
+
 
 
 int URIParserInit() {
@@ -61,51 +64,169 @@ void URIParserCleanup() {
 
 
 
-void uriMallocCopyHelper(char ** dest, const char * first, const char * afterLast) {
+static URI_INLINE void uriMallocCopy(char ** dest, const char * first, const char * afterLast) {
 	if ((first != NULL) && (afterLast != NULL)) {
 		const int len = (int)(afterLast - first);
 		*dest = malloc((len + 1) * sizeof(char));
 		memcpy(*dest, first, len);
 		*dest[len] = '\0';
 	} else {
-		*dest = NULL;
+		*dest = malloc(1 * sizeof(char));
+		*dest[0] = '\0';
 	}
+}
+
+
+
+static URI_INLINE void uriMallocCopyPrepend(char ** dest, const char * first, const char * afterLast, char prefix) {
+	if ((first != NULL) && (afterLast != NULL)) {
+		const int len = (int)(afterLast - first);
+		*dest = malloc((len + 2) * sizeof(char));
+		*dest[0] = prefix;
+		memcpy((*dest) + 1, first, len);
+		*dest[len + 1] = '\0';
+	} else {
+		*dest = malloc(1 * sizeof(char));
+		*dest[0] = '\0';
+	}
+}
+
+
+
+static URI_INLINE void uriMallocCopyAppend(char ** dest, const char * first, const char * afterLast, char suffix) {
+	if ((first != NULL) && (afterLast != NULL)) {
+		const int len = (int)(afterLast - first);
+		*dest = malloc((len + 2) * sizeof(char));
+		memcpy(*dest, first, len);
+		*dest[len] = suffix;
+		*dest[len + 1] = '\0';
+	} else {
+		*dest = malloc(1 * sizeof(char));
+		*dest[0] = '\0';
+	}
+}
+
+
+
+static URI_INLINE int atoiEx(const char * first, const char * afterLast) {
+	const int len = afterLast - first;
+	char * text = malloc((len + 1) * sizeof(char));
+	int res;
+	memcpy(text, first, len);
+	text[len] = '\0';
+	res = atoi(text);
+	free(text);
+	return res;
+}
+
+
+
+static URI_INLINE void uriMakePathString(char ** destPath,
+		const UriPathSegmentA * pathHead, UriBool prependSlash) {
+	int strLenSum = 0;
+	int segCount = 0;
+	const UriPathSegmentA * segWalk = pathHead;
+	char * pathWalk = *destPath;
+	int fullPathLen; /* Init later */
+
+	while (segWalk != NULL) {
+		strLenSum += (segWalk->afterLast - segWalk->first);
+		segCount++;
+		segWalk = segWalk->next;
+	}
+	fullPathLen = prependSlash + strLenSum + (segCount - 1);
+	*destPath = malloc((fullPathLen + 1) * sizeof(char));
+	segWalk = pathHead;
+	if (prependSlash) {
+		pathWalk[0]= '/';
+		pathWalk++;
+	}
+	while (segWalk != NULL) {
+		const int len = segWalk->afterLast - segWalk->first;
+		memcpy(pathWalk, segWalk->first, len);
+		segWalk = segWalk->next;
+		if (segWalk == NULL) {
+			pathWalk[len] = '0';
+		} else {
+			pathWalk[len] = '/';
+			pathWalk += (len + 1);
+		}
+	}
+
 }
 
 
 
 int URIParseString(URI * uri, const char * str) {
 	UriParserA parser;
-
-	if (uriParseUriA(&parser, str) != URI_SUCCESS) {
+	if (URI_SUCCESS != uriParseUriA(&parser, str)) {
 		return 1;
 	}
 	if (uri == NULL) {
+		/* No output needed */
+		uriFreeMembersA(&parser);
 		return 0;
 	}
 
+	/* URI type */
 	uri->utype = (parser.schemeFirst == NULL) ? URIRelativeRef : URIURI;
 
-	if (parser.ip4 != NULL) {
+	/* Host type */
+	if (parser.hostFirst == NULL) {
+		/* Just to clone 0.2.1 behavior */
 		uri->htype = IPv4Address;
-	} else if (parser.ip6 != NULL) {
-		uri->htype = IPv6Address;
-	} else if (parser.ipFutureFirst != NULL) {
-		uri->htype = IPvFuture;
 	} else {
-		uri->htype = RegName;
+		if (parser.ip4 != NULL) {
+			uri->htype = IPv4Address;
+		} else if (parser.ip6 != NULL) {
+			uri->htype = IPv6Address;
+		} else if (parser.ipFutureFirst != NULL) {
+			uri->htype = IPvFuture;
+		} else {
+			uri->htype = RegName;
+		}
 	}
 
-	/* uri->ptype = XXX; */
-	uri->hasPort = (parser.portFirst != NULL);
-	uriMallocCopyHelper(&uri->scheme, parser.schemeFirst, parser.schemeAfterLast);
-	uriMallocCopyHelper(&uri->userinfo, parser.userInfoFirst, parser.userInfoAfterLast);
-	uriMallocCopyHelper(&uri->host, parser.hostFirst, parser.hostAfterLast);
-	/* uri->port = XXX; */
-	/* uri->path = XXX; */
-	uriMallocCopyHelper(&uri->query, parser.queryFirst, parser.queryAfterLast);
-	uriMallocCopyHelper(&uri->fragment, parser.fragmentFirst, parser.fragmentAfterLast);
+	/* Path type */
+	if (parser.hostFirst != NULL) {
+		uri->ptype = PathAbEmpty;
+	} else if (parser.absolutePath) {
+		uri->ptype = PathAbsolute;
+	} else {
+		if (parser.schemeFirst != NULL) {
+			uri->ptype = PathRootless;
+		} else {
+			uri->ptype = PathNoScheme;
+		}
+	}
 
+	/* Port presence */
+	uri->hasPort = (parser.portFirst != NULL);
+
+	/* Scheme */
+	uriMallocCopyAppend(&uri->scheme, parser.schemeFirst, parser.schemeAfterLast, ':');
+
+	/* User info */
+	uriMallocCopy(&uri->userinfo, parser.userInfoFirst, parser.userInfoAfterLast);
+
+	/* Host */
+	uriMallocCopy(&uri->host, parser.hostFirst, parser.hostAfterLast);
+
+	/* Port */
+	if (parser.portFirst != NULL) {
+		uri->port = atoiEx(parser.portFirst, parser.portAfterLast);
+	}
+
+	/* Path */
+	uriMakePathString(&uri->path, parser.pathHead, parser.absolutePath);
+
+	/* Query */
+	uriMallocCopyPrepend(&uri->query, parser.queryFirst, parser.queryAfterLast, '?');
+
+	/* Fragment */
+	uriMallocCopyPrepend(&uri->fragment, parser.fragmentFirst, parser.fragmentAfterLast, '#');
+
+	uriFreeMembersA(&parser);
 	return 0;
 }
 

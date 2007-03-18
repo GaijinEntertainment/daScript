@@ -49,6 +49,7 @@
 
 
 #define	DEFAULT_MAX_LEN    64
+
 #define	MAX_URI_SCHEME     DEFAULT_MAX_LEN
 #define	MAX_URI_USERINFO   256
 #define	MAX_URI_HOST       256

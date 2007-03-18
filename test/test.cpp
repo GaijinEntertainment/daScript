@@ -21,6 +21,7 @@
 
 extern "C" {
 	// Including C header from C++
+	#include <uriparser.h>
 	#include <uriparser/Uri.h>
 }
 
@@ -44,6 +45,8 @@ public:
 		TEST_ADD(UriSuite::testIpSixPass)
 		TEST_ADD(UriSuite::testIpSixFail)
 		TEST_ADD(UriSuite::testUri)
+		TEST_ADD(UriSuite::testLegacy1)
+		TEST_ADD(UriSuite::testLegacy2)
 	}
 
 private:
@@ -175,6 +178,40 @@ private:
 		// Percent encoding
 		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/name%20with%20spaces/"));
 		TEST_ASSERT(URI_ERROR == uriParseUriA(&parserA, "http://www.example.com/name with spaces/"));
+	}
+
+	void testLegacy1() {
+		URI uri;
+		TEST_ASSERT(0 == URIParseString(&uri, "http://user:pass@host:80/one/two?query#frag"));
+		TEST_ASSERT(uri.utype == URIURI);
+		TEST_ASSERT(uri.htype == RegName);
+		TEST_ASSERT(uri.ptype == PathAbEmpty);
+		TEST_ASSERT(uri.hasPort == 1);
+		TEST_ASSERT(!strcmp(uri.scheme, "http:"));
+		TEST_ASSERT(!strcmp(uri.userinfo, "user:pass"));
+		TEST_ASSERT(!strcmp(uri.host, "host"));
+		TEST_ASSERT(uri.port == 80);
+		TEST_ASSERT(!strcmp(uri.path, "/one/two"));
+		TEST_ASSERT(!strcmp(uri.query, "?query"));
+		TEST_ASSERT(!strcmp(uri.fragment, "#frag"));
+		URIFree(&uri);
+	}
+
+	void testLegacy2() {
+		URI uri;
+		TEST_ASSERT(0 == URIParseString(&uri, "//255.255.255.255/one"));
+		TEST_ASSERT(uri.utype == URIRelativeRef);
+		TEST_ASSERT(uri.htype == IPv4Address);
+		TEST_ASSERT(uri.ptype == PathAbsolute);
+		TEST_ASSERT(uri.hasPort == 0);
+		TEST_ASSERT(!strcmp(uri.scheme, ""));
+		TEST_ASSERT(!strcmp(uri.userinfo, ""));
+		TEST_ASSERT(!strcmp(uri.host, ""));
+
+		TEST_ASSERT(!strcmp(uri.path, "/one")); /* Bug in 0.2.1: is "/" */
+		TEST_ASSERT(!strcmp(uri.query, ""));
+		TEST_ASSERT(!strcmp(uri.fragment, ""));
+		URIFree(&uri);
 	}
 
 };

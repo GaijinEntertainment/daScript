@@ -91,6 +91,7 @@ typedef struct URI_TYPE(ParserStruct) {
 	const URI_CHAR * fragmentAfterLast;
 
 	const URI_CHAR * errorPos;
+	UriBool absolutePath;
 
 	void * reserved;
 } URI_TYPE(Parser);
@@ -103,6 +104,8 @@ UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text);
 
 UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text);
+
+void URI_FUNC(FreeMembers)(URI_TYPE(Parser) * parser);
 
 
 
