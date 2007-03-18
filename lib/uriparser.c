@@ -46,8 +46,10 @@
 #include <uriparser.h>
 #include <uriparser/Uri.h>
 
+#ifndef URI_DOXYGEN
 /* For atoi */
 #include <stdlib.h>
+#endif
 
 
 

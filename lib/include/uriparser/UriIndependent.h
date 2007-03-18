@@ -127,17 +127,19 @@
 
 
 
+#ifndef URI_DOXYGEN
 /* For NULL */
-#include <stdio.h>
+# include <stdio.h>
 
 /* For wchar_t */
-#include <ctype.h>
+# include <ctype.h>
 
 /* For strlen, memset, memcpy */
-#include <string.h>
+# include <string.h>
 
 /* For malloc */
-#include <malloc.h>
+# include <malloc.h>
+#endif /* URI_DOXYGEN */
 
 
 

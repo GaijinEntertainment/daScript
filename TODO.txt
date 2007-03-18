@@ -1,10 +1,6 @@
 == SOON ==
  * Extract Uri struct from UriParser
  * Justify license header with ParaDJ
- * Find a way to make Doxygen eat our code?
- * Make all "non-public" functions "static inline"
-   http://www.cs.cmu.edu/cgi-bin/info2www?(gcc.info)Inline
-   * Do grammar graph first since it reveals recursion
  * Add documentation on semantic actions?
  * Add code documentation
    * also to structures
