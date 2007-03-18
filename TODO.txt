@@ -1,13 +1,14 @@
 == SOON ==
+ * Extract Uri struct from UriParser
+ * Justify license header with ParaDJ
+ * Find a way to make Doxygen eat our code?
+ * Make grammer graph with Graphviz
  * Make all "non-public" functions "static inline"
    http://www.cs.cmu.edu/cgi-bin/info2www?(gcc.info)Inline
- * Check backward compatibility with 0.2
-   * Add function and mark as deprecated
-     with removal note for versions >= 0.4?
- * Make grammer graph with Graphviz
+   * Do grammar graph first since it reveals recursion
  * Add documentation on semantic actions?
  * Add code documentation
- * Extract Uri struct from UriParser
+   * also to structures
 
 == LATER ==
  * Add GNU build files, liburiparser-0.3.0rc1.tar.gz

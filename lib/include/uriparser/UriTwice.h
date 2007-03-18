@@ -102,9 +102,39 @@ typedef struct URI_TYPE(ParserStruct) {
 UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text);
 #endif
 
-UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
+
+
+/**
+ * Parses a RFC 3986 URI.
+ *
+ * @param parser	Parser state data
+ * @param first		Pointer to the first character to parse
+ * @param afterLast	Pointer to the character after the last to parse
+ * @return			URI_SUCCESS on success, URI_ERROR otherwise
+ */
+UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first,
+		const URI_CHAR * afterLast);
+
+
+
+/**
+ * Parses a RFC 3986 URI.
+ *
+ * @param parser	Parser state data
+ * @param text		Text to parse
+ * @return			URI_SUCCESS on success, URI_ERROR otherwise
+ */
 UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text);
 
+
+
+/**
+ * Frees the the memory associated with all members
+ * of the parse state structure. Note that the parser
+ * itself is not freed, only its members.
+ *
+ * @param parser	Parser whose members should be freed
+ */
 void URI_FUNC(FreeMembers)(URI_TYPE(Parser) * parser);
 
 

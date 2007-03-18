@@ -151,7 +151,8 @@ typedef struct UriIp6Struct {
 
 
 
-void uriWriteQuadToDoubleByte(const unsigned char * hexDigits, int digitCount, unsigned char * output);
+void uriWriteQuadToDoubleByte(const unsigned char * hexDigits, int digitCount,
+		unsigned char * output);
 unsigned char uriGetOctetValue(const unsigned char * digits, int digitCount);
 
 
