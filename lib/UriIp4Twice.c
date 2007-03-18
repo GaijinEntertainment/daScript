@@ -46,15 +46,15 @@
 
 
 /* Prototypes */
-const URI_CHAR * URI_FUNC(ParseDecOctet)(UriIp4Parser * parser,
+static const URI_CHAR * URI_FUNC(ParseDecOctet)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
-const URI_CHAR * URI_FUNC(ParseDecOctetOne)(UriIp4Parser * parser,
+static const URI_CHAR * URI_FUNC(ParseDecOctetOne)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
-const URI_CHAR * URI_FUNC(ParseDecOctetTwo)(UriIp4Parser * parser,
+static const URI_CHAR * URI_FUNC(ParseDecOctetTwo)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
-const URI_CHAR * URI_FUNC(ParseDecOctetThree)(UriIp4Parser * parser,
+static const URI_CHAR * URI_FUNC(ParseDecOctetThree)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
-const URI_CHAR * URI_FUNC(ParseDecOctetFour)(UriIp4Parser * parser,
+static const URI_CHAR * URI_FUNC(ParseDecOctetFour)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
 
 
@@ -121,7 +121,7 @@ int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
  * [decOctet]-><8>[decOctetThree]
  * [decOctet]-><9>[decOctetThree]
  */
-const URI_CHAR * URI_FUNC(ParseDecOctet)(UriIp4Parser * parser,
+static URI_INLINE const URI_CHAR * URI_FUNC(ParseDecOctet)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
 		return afterLast;
@@ -161,7 +161,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctet)(UriIp4Parser * parser,
  * [decOctetOne]-><NULL>
  * [decOctetOne]->[DIGIT][decOctetThree]
  */
-const URI_CHAR * URI_FUNC(ParseDecOctetOne)(UriIp4Parser * parser,
+static URI_INLINE const URI_CHAR * URI_FUNC(ParseDecOctetOne)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
 		return afterLast;
@@ -200,7 +200,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctetOne)(UriIp4Parser * parser,
  * [decOctetTwo]-><8>
  * [decOctetTwo]-><9>
 */
-const URI_CHAR * URI_FUNC(ParseDecOctetTwo)(UriIp4Parser * parser,
+static URI_INLINE const URI_CHAR * URI_FUNC(ParseDecOctetTwo)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
 		return afterLast;
@@ -237,7 +237,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctetTwo)(UriIp4Parser * parser,
  * [decOctetThree]-><NULL>
  * [decOctetThree]->[DIGIT]
  */
-const URI_CHAR * URI_FUNC(ParseDecOctetThree)(UriIp4Parser * parser,
+static URI_INLINE const URI_CHAR * URI_FUNC(ParseDecOctetThree)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
 		return afterLast;
@@ -273,7 +273,7 @@ const URI_CHAR * URI_FUNC(ParseDecOctetThree)(UriIp4Parser * parser,
  * [decOctetFour]-><4>
  * [decOctetFour]-><5>
  */
-const URI_CHAR * URI_FUNC(ParseDecOctetFour)(UriIp4Parser * parser,
+static URI_INLINE const URI_CHAR * URI_FUNC(ParseDecOctetFour)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
 		return afterLast;
