@@ -10,8 +10,6 @@ digraph whoCallsWhom {
 	"hierPart" -> "partHelperTwo";
 	"hierPart" -> "pathRootless";
 	"ipFutLoop" -> "ipFutStopGo";
-	"ipFutLoop" -> "subDelims";
-	"ipFutLoop" -> "unreserved";
 	"ipFutStopGo" -> "ipFutLoop";
 	"ipFuture" -> "hexZero";
 	"ipFuture" -> "ipFutLoop";
