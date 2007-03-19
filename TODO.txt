@@ -1,11 +1,12 @@
 == SOON ==
- * mv lib/include include
  * Extract Uri struct from UriParser
  * Justify license header with ParaDJ
- * Add documentation on semantic actions?
- * Add code documentation
-   * also to struct members
-   * until no more Doxygen warnings
+ * Make struct/union thing of host part in parser?
 
 == LATER ==
  * Add GNU build files, liburiparser-0.3.0rc1.tar.gz
+ * add #define structure to get everything once for Doxygen
+ * Add code documentation
+   * until no more Doxygen warnings
+   * Is there a way to mark the public API part?
+ * Add documentation on semantic actions?
