@@ -137,7 +137,7 @@ static URI_INLINE void uriMakePathString(char ** destPath,
 	int fullPathLen; /* Init later */
 
 	while (segWalk != NULL) {
-		strLenSum += (int)(segWalk->afterLast - segWalk->first);
+		strLenSum += (int)(segWalk->text.afterLast - segWalk->text.first);
 		segCount++;
 		segWalk = segWalk->next;
 	}
@@ -151,8 +151,8 @@ static URI_INLINE void uriMakePathString(char ** destPath,
 	}
 	if (segWalk != NULL) {
 		for (;;) {
-			const int len = (int)(segWalk->afterLast - segWalk->first);
-			memcpy(pathWalk, segWalk->first, len);
+			const int len = (int)(segWalk->text.afterLast - segWalk->text.first);
+			memcpy(pathWalk, segWalk->text.first, len);
 			segWalk = segWalk->next;
 			if (segWalk == NULL) {
 				pathWalk[len] = '\0';
@@ -179,18 +179,18 @@ int URIParseString(URI * uri, const char * str) {
 	}
 
 	/* URI type */
-	uri->utype = (parser.schemeFirst == NULL) ? URIRelativeRef : URIURI;
+	uri->utype = (parser.scheme.first == NULL) ? URIRelativeRef : URIURI;
 
 	/* Host type */
-	if (parser.hostFirst == NULL) {
+	if (parser.hostText.first == NULL) {
 		/* Just to clone 0.2.1 behavior */
 		uri->htype = IPv4Address;
 	} else {
-		if (parser.ip4 != NULL) {
+		if (parser.hostData.ip4 != NULL) {
 			uri->htype = IPv4Address;
-		} else if (parser.ip6 != NULL) {
+		} else if (parser.hostData.ip6 != NULL) {
 			uri->htype = IPv6Address;
-		} else if (parser.ipFutureFirst != NULL) {
+		} else if (parser.hostData.ipFuture.first != NULL) {
 			uri->htype = IPvFuture;
 		} else {
 			uri->htype = RegName;
@@ -198,12 +198,12 @@ int URIParseString(URI * uri, const char * str) {
 	}
 
 	/* Path type */
-	if (parser.hostFirst != NULL) {
+	if (parser.hostText.first != NULL) {
 		uri->ptype = PathAbEmpty;
 	} else if (parser.absolutePath) {
 		uri->ptype = PathAbsolute;
 	} else {
-		if (parser.schemeFirst != NULL) {
+		if (parser.scheme.first != NULL) {
 			uri->ptype = PathRootless;
 		} else {
 			uri->ptype = PathNoScheme;
@@ -211,31 +211,31 @@ int URIParseString(URI * uri, const char * str) {
 	}
 
 	/* Port presence */
-	uri->hasPort = (parser.portFirst != NULL);
+	uri->hasPort = (parser.portText.first != NULL);
 
 	/* Scheme */
-	uriMallocCopyAppend(&uri->scheme, parser.schemeFirst, parser.schemeAfterLast, ':');
+	uriMallocCopyAppend(&uri->scheme, parser.scheme.first, parser.scheme.afterLast, ':');
 
 	/* User info */
-	uriMallocCopy(&uri->userinfo, parser.userInfoFirst, parser.userInfoAfterLast);
+	uriMallocCopy(&uri->userinfo, parser.userInfo.first, parser.userInfo.afterLast);
 
 	/* Host */
-	uriMallocCopy(&uri->host, parser.hostFirst, parser.hostAfterLast);
+	uriMallocCopy(&uri->host, parser.hostText.first, parser.hostText.afterLast);
 
 	/* Port */
-	if (parser.portFirst != NULL) {
-		uri->port = uriMakePort(parser.portFirst, parser.portAfterLast);
+	if (parser.portText.first != NULL) {
+		uri->port = uriMakePort(parser.portText.first, parser.portText.afterLast);
 	}
 
 	/* Path */
 	uriMakePathString(&uri->path, parser.pathHead,
-			(parser.hostFirst != NULL) || parser.absolutePath);
+			(parser.hostText.first != NULL) || parser.absolutePath);
 
 	/* Query */
-	uriMallocCopyPrepend(&uri->query, parser.queryFirst, parser.queryAfterLast, '?');
+	uriMallocCopyPrepend(&uri->query, parser.query.first, parser.query.afterLast, '?');
 
 	/* Fragment */
-	uriMallocCopyPrepend(&uri->fragment, parser.fragmentFirst, parser.fragmentAfterLast, '#');
+	uriMallocCopyPrepend(&uri->fragment, parser.fragment.first, parser.fragment.afterLast, '#');
 
 	uriFreeMembersA(&parser);
 	return 0;

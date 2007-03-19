@@ -61,18 +61,43 @@
 
 
 /**
+ * Specifies a range of characters within a string.
+ * The range includes all characters from <code>first<code>
+ * to one before <code>afterLast</code>. So if both are
+ * non-NULL the difference is the length of the text range.
+ */
+typedef struct URI_TYPE(TextRangeStruct) {
+	const URI_CHAR * first; /**< Pointer to first character */
+	const URI_CHAR * afterLast; /**< Pointer to character after the last one still in */
+} URI_TYPE(TextRange);
+
+
+
+/**
  * Represents a segment within a %URI path.
  * More precisely it is a node in a linked
  * list of path segments.
  */
 typedef struct URI_TYPE(PathSegmentStruct) {
-	const URI_CHAR * first; /**< Pointer to first character */
-	const URI_CHAR * afterLast; /**< Pointer to character after the last one still in */
-
+	URI_TYPE(TextRange) text; /**< Path segment name */
 	struct URI_TYPE(PathSegmentStruct) * next; /**< Pointer to the next path segment in the list, can be NULL if last already */
 
 	void * reserved; /**< Not used */
 } URI_TYPE(PathSegment);
+
+
+
+/**
+ * Holds strcutured host information.
+ * This is either a IPv4, IPv6, plain
+ * text for IPvFutere or all zero for
+ * a registered name.
+ */
+typedef union URI_TYPE(HostDataUnion) {
+	UriIp4 * ip4; /**< IPv4 address */
+	UriIp6 * ip6; /**< IPv6 address */
+	URI_TYPE(TextRange) ipFuture; /**< IPvFuture address */
+} URI_TYPE(HostData);
 
 
 
@@ -82,28 +107,15 @@ typedef struct URI_TYPE(PathSegmentStruct) {
  * a components absence.
  */
 typedef struct URI_TYPE(ParserStruct) {
-	const URI_CHAR * schemeFirst; /**< First scheme character */
-	const URI_CHAR * schemeAfterLast; /**< After last scheme character */
-
-	const URI_CHAR * userInfoFirst; /**< First user info character */
-	const URI_CHAR * userInfoAfterLast; /**< After last user info character */
-
-	/* TODO Make struct/union combo of this? */
-	const URI_CHAR * hostFirst; /**< First host character (not only set for regnames but also IPs) */
-	const URI_CHAR * hostAfterLast; /**< After last host character (not only set for regnames but also IPs) */
-	UriIp4 * ip4; /**< IPv4 address */
-	UriIp6 * ip6; /**< IPv6 address */
-	const URI_CHAR * ipFutureFirst; /**< First IPvFuture character */
-	const URI_CHAR * ipFutureAfterLast; /**< After last IPvFuture character */
-
-	const URI_CHAR * portFirst; /**< First port character */
-	const URI_CHAR * portAfterLast; /**< After last port character */
+	URI_TYPE(TextRange) scheme; /**< Scheme (e.g. "http") */
+	URI_TYPE(TextRange) userInfo; /**< User info (e.g. "user:pass") */
+	URI_TYPE(TextRange) hostText; /**< Host text (set for all hosts) */
+	URI_TYPE(HostData) hostData; /**< Structured host type specific data */
+	URI_TYPE(TextRange) portText; /**< Port (e.g. "80") */
 	URI_TYPE(PathSegment) * pathHead; /**< Head of a linked list of path segments */
 	URI_TYPE(PathSegment) * pathTail; /**< Tail of the list behind pathHead */
-	const URI_CHAR * queryFirst; /**< First query character */
-	const URI_CHAR * queryAfterLast; /**< After last query character */
-	const URI_CHAR * fragmentFirst; /**< First fragment character */
-	const URI_CHAR * fragmentAfterLast; /**< After last fragment character */
+	URI_TYPE(TextRange) query; /**< Query without leading "?" */
+	URI_TYPE(TextRange) fragment; /**< Query without leading "#" */
 
 	const URI_CHAR * errorPos; /**< Pointer to position in case of a parsing error */
 	UriBool absolutePath; /**< Absolute path flag, meaningless if absolute %URI */
