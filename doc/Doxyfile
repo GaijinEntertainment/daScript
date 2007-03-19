@@ -751,7 +751,7 @@ SEARCH_INCLUDES = YES
 # If the SEARCH_INCLUDES tag is set to YES (the default) the includes files in the INCLUDE_PATH (see below) will be searched if a #include is found.
 
 
-INCLUDE_PATH = ../lib/include
+INCLUDE_PATH = ../include
 # The INCLUDE_PATH tag can be used to specify one or more directories that contain include files that are not input files but should be processed by the preprocessor.
 
 

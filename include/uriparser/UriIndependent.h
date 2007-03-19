@@ -152,7 +152,7 @@
  * Holds an IPv4 address.
  */
 typedef struct UriIp4Struct {
-	unsigned char data[4];
+	unsigned char data[4]; /**< Each octet in one byte */
 } UriIp4;
 
 
@@ -161,7 +161,7 @@ typedef struct UriIp4Struct {
  * Holds an IPv6 address.
  */
 typedef struct UriIp6Struct {
-	unsigned char data[16];
+	unsigned char data[16]; /**< Each quad in two bytes */
 } UriIp6;
 
 

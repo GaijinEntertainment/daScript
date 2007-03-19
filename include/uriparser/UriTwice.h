@@ -66,47 +66,49 @@
  * list of path segments.
  */
 typedef struct URI_TYPE(PathSegmentStruct) {
-	const URI_CHAR * first;
-	const URI_CHAR * afterLast;
+	const URI_CHAR * first; /**< Pointer to first character */
+	const URI_CHAR * afterLast; /**< Pointer to character after the last one still in */
 
-	struct URI_TYPE(PathSegmentStruct) * next;
+	struct URI_TYPE(PathSegmentStruct) * next; /**< Pointer to the next path segment in the list, can be NULL if last already */
 
-	void * reserved;
+	void * reserved; /**< Not used */
 } URI_TYPE(PathSegment);
 
 
 
 /**
  * Represents a state of the %URI parser.
+ * Missing components can be NULL to reflect
+ * a components absence.
  */
 typedef struct URI_TYPE(ParserStruct) {
-	const URI_CHAR * schemeFirst;
-	const URI_CHAR * schemeAfterLast;
+	const URI_CHAR * schemeFirst; /**< First scheme character */
+	const URI_CHAR * schemeAfterLast; /**< After last scheme character */
 
-	const URI_CHAR * userInfoFirst;
-	const URI_CHAR * userInfoAfterLast;
+	const URI_CHAR * userInfoFirst; /**< First user info character */
+	const URI_CHAR * userInfoAfterLast; /**< After last user info character */
 
 	/* TODO Make struct/union combo of this? */
-	const URI_CHAR * hostFirst; /* Set for all host types, */
-	const URI_CHAR * hostAfterLast; /* not just regname */
-	UriIp4 * ip4;
-	UriIp6 * ip6;
-	const URI_CHAR * ipFutureFirst;
-	const URI_CHAR * ipFutureAfterLast;
+	const URI_CHAR * hostFirst; /**< First host character (not only set for regnames but also IPs) */
+	const URI_CHAR * hostAfterLast; /**< After last host character (not only set for regnames but also IPs) */
+	UriIp4 * ip4; /**< IPv4 address */
+	UriIp6 * ip6; /**< IPv6 address */
+	const URI_CHAR * ipFutureFirst; /**< First IPvFuture character */
+	const URI_CHAR * ipFutureAfterLast; /**< After last IPvFuture character */
 
-	const URI_CHAR * portFirst;
-	const URI_CHAR * portAfterLast;
-	URI_TYPE(PathSegment) * pathHead;
-	URI_TYPE(PathSegment) * pathTail;
-	const URI_CHAR * queryFirst;
-	const URI_CHAR * queryAfterLast;
-	const URI_CHAR * fragmentFirst;
-	const URI_CHAR * fragmentAfterLast;
+	const URI_CHAR * portFirst; /**< First port character */
+	const URI_CHAR * portAfterLast; /**< After last port character */
+	URI_TYPE(PathSegment) * pathHead; /**< Head of a linked list of path segments */
+	URI_TYPE(PathSegment) * pathTail; /**< Tail of the list behind pathHead */
+	const URI_CHAR * queryFirst; /**< First query character */
+	const URI_CHAR * queryAfterLast; /**< After last query character */
+	const URI_CHAR * fragmentFirst; /**< First fragment character */
+	const URI_CHAR * fragmentAfterLast; /**< After last fragment character */
 
-	const URI_CHAR * errorPos;
-	UriBool absolutePath;
+	const URI_CHAR * errorPos; /**< Pointer to position in case of a parsing error */
+	UriBool absolutePath; /**< Absolute path flag, meaningless if absolute %URI */
 
-	void * reserved;
+	void * reserved; /**< Not used */
 } URI_TYPE(Parser);
 
 

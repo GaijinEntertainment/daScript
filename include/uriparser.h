@@ -71,8 +71,8 @@
  * @deprecated	Will be removed for version 0.5.0
  */
 enum URIType {
-	URIURI,
-	URIRelativeRef
+	URIURI, /**< Absolute %URI */
+	URIRelativeRef /**< Relative %URI */
 };
 
 
@@ -85,10 +85,10 @@ enum URIType {
  * @deprecated	Will be removed for version 0.5.0
  */
 enum HOSTType {
-	IPv4Address,
-	IPv6Address,
-	IPvFuture,
-	RegName
+	IPv4Address, /**< IPv4 address */
+	IPv6Address, /**< IPv6 address */
+	IPvFuture, /**< Future IP version address */
+	RegName /**< Registered name */
 };
 
 
@@ -99,31 +99,33 @@ enum HOSTType {
  * @deprecated	Will be removed for version 0.5.0
  */
 enum PathType {
-	PathNoScheme,
-	PathAbsolute,
-	PathRootless,
-	PathAbEmpty
+	PathNoScheme, /**< Non-root path of a relative URI */
+	PathAbsolute, /**< Relative path starting at root level */
+	PathRootless, /**< Non-root path directly starting after the scheme of an absolute %URI */
+	PathAbEmpty /**< Possibly empty path after authority part */
 };
 
 
 
 /**
  * Holds a complete RFC 3986 %URI.
+ * Components must not be non NULL. Use ""
+ * (the empty string) to flag a component as missing.
  *
  * @deprecated	Will be removed for version 0.5.0
  */
 typedef struct uri_struct {
-    enum URIType utype;
-    enum HOSTType htype;
-    enum PathType ptype;
-    int hasPort;
-    char * scheme;
-    char * userinfo;
-    char * host;
-    unsigned short port;
-    char * path;
-    char * query;
-    char * fragment;
+    enum URIType utype; /**< Type of the %URI */
+    enum HOSTType htype; /**< Type of the host, meaningless if host missing */
+    enum PathType ptype; /**< Type of the path */
+    int hasPort; /**< Port presence flag */
+    char * scheme; /**< Scheme if present (e.g. "http:") */
+    char * userinfo; /**< User info if present (e.g. "user:pass") */
+    char * host; /**< Host if present (also set for IPs) */
+    unsigned short port; /**< Port number, meaningless if hasPort == 0 */
+    char * path; /**< Path (e.g. "/one/two/") */
+    char * query; /**< Query if present (e.g. "?test") */
+    char * fragment; /**< Fragment if present (e.g. "#about") */
 } URI;
 
 
