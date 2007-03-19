@@ -168,29 +168,29 @@ static URI_INLINE void uriMakePathString(char ** destPath,
 
 
 int URIParseString(URI * uri, const char * str) {
-	UriParserA parser;
-	if (URI_SUCCESS != uriParseUriA(&parser, str)) {
+	UriUriA internalUri;
+	if (NULL != uriParseUriA(&internalUri, str)) {
 		return 1;
 	}
 	if (uri == NULL) {
 		/* No output needed */
-		uriFreeMembersA(&parser);
+		uriFreeUriMembersA(&internalUri);
 		return 0;
 	}
 
 	/* URI type */
-	uri->utype = (parser.scheme.first == NULL) ? URIRelativeRef : URIURI;
+	uri->utype = (internalUri.scheme.first == NULL) ? URIRelativeRef : URIURI;
 
 	/* Host type */
-	if (parser.hostText.first == NULL) {
+	if (internalUri.hostText.first == NULL) {
 		/* Just to clone 0.2.1 behavior */
 		uri->htype = IPv4Address;
 	} else {
-		if (parser.hostData.ip4 != NULL) {
+		if (internalUri.hostData.ip4 != NULL) {
 			uri->htype = IPv4Address;
-		} else if (parser.hostData.ip6 != NULL) {
+		} else if (internalUri.hostData.ip6 != NULL) {
 			uri->htype = IPv6Address;
-		} else if (parser.hostData.ipFuture.first != NULL) {
+		} else if (internalUri.hostData.ipFuture.first != NULL) {
 			uri->htype = IPvFuture;
 		} else {
 			uri->htype = RegName;
@@ -198,12 +198,12 @@ int URIParseString(URI * uri, const char * str) {
 	}
 
 	/* Path type */
-	if (parser.hostText.first != NULL) {
+	if (internalUri.hostText.first != NULL) {
 		uri->ptype = PathAbEmpty;
-	} else if (parser.absolutePath) {
+	} else if (internalUri.absolutePath) {
 		uri->ptype = PathAbsolute;
 	} else {
-		if (parser.scheme.first != NULL) {
+		if (internalUri.scheme.first != NULL) {
 			uri->ptype = PathRootless;
 		} else {
 			uri->ptype = PathNoScheme;
@@ -211,33 +211,33 @@ int URIParseString(URI * uri, const char * str) {
 	}
 
 	/* Port presence */
-	uri->hasPort = (parser.portText.first != NULL);
+	uri->hasPort = (internalUri.portText.first != NULL);
 
 	/* Scheme */
-	uriMallocCopyAppend(&uri->scheme, parser.scheme.first, parser.scheme.afterLast, ':');
+	uriMallocCopyAppend(&uri->scheme, internalUri.scheme.first, internalUri.scheme.afterLast, ':');
 
 	/* User info */
-	uriMallocCopy(&uri->userinfo, parser.userInfo.first, parser.userInfo.afterLast);
+	uriMallocCopy(&uri->userinfo, internalUri.userInfo.first, internalUri.userInfo.afterLast);
 
 	/* Host */
-	uriMallocCopy(&uri->host, parser.hostText.first, parser.hostText.afterLast);
+	uriMallocCopy(&uri->host, internalUri.hostText.first, internalUri.hostText.afterLast);
 
 	/* Port */
-	if (parser.portText.first != NULL) {
-		uri->port = uriMakePort(parser.portText.first, parser.portText.afterLast);
+	if (internalUri.portText.first != NULL) {
+		uri->port = uriMakePort(internalUri.portText.first, internalUri.portText.afterLast);
 	}
 
 	/* Path */
-	uriMakePathString(&uri->path, parser.pathHead,
-			(parser.hostText.first != NULL) || parser.absolutePath);
+	uriMakePathString(&uri->path, internalUri.pathHead,
+			(internalUri.hostText.first != NULL) || internalUri.absolutePath);
 
 	/* Query */
-	uriMallocCopyPrepend(&uri->query, parser.query.first, parser.query.afterLast, '?');
+	uriMallocCopyPrepend(&uri->query, internalUri.query.first, internalUri.query.afterLast, '?');
 
 	/* Fragment */
-	uriMallocCopyPrepend(&uri->fragment, parser.fragment.first, parser.fragment.afterLast, '#');
+	uriMallocCopyPrepend(&uri->fragment, internalUri.fragment.first, internalUri.fragment.afterLast, '#');
 
-	uriFreeMembersA(&parser);
+	uriFreeUriMembersA(&internalUri);
 	return 0;
 }
 

@@ -85,14 +85,15 @@ static const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(Parser) * parser, con
 static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 
 
-static void URI_FUNC(Reset)(URI_TYPE(Parser) * parser);
+static void URI_FUNC(ResetParser)(URI_TYPE(Parser) * parser);
+static void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri);
 static void URI_FUNC(PushPathSegment)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 static void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos);
 
 
 
 static URI_INLINE void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos) {
-	URI_FUNC(FreeMembers)(parser);
+	URI_FUNC(FreeUriMembers)(parser->uri);
 	parser->errorPos = errorPos;
 }
 
@@ -116,7 +117,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(Parser) * p
 			if (afterIpLit2 == NULL) {
 				return NULL;
 			}
-			parser->hostText.first = first + 1; /* HOST BEGIN */
+			parser->uri->hostText.first = first + 1; /* HOST BEGIN */
 			return URI_FUNC(ParseAuthorityTwo)(parser, afterIpLit2, afterLast);
 		}
 
@@ -200,7 +201,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(Parser) * p
 	case _UT('Y'):
 	case _UT('z'):
 	case _UT('Z'):
-		parser->userInfo.first = first; /* USERINFO BEGIN */
+		parser->uri->userInfo.first = first; /* USERINFO BEGIN */
 		return URI_FUNC(ParseOwnHostUserInfoNz)(parser, first, afterLast);
 
 	default:
@@ -224,8 +225,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthorityTwo)(URI_TYPE(Parser) 
 			if (afterPort == NULL) {
 				return NULL;
 			}
-			parser->portText.first = first + 1; /* PORT BEGIN */
-			parser->portText.afterLast = afterPort; /* PORT END */
+			parser->uri->portText.first = first + 1; /* PORT BEGIN */
+			parser->uri->portText.afterLast = afterPort; /* PORT END */
 			return afterPort;
 		}
 
@@ -633,14 +634,14 @@ static const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(Parser) * parser, const
 					URI_FUNC(Stop)(parser, afterHexZero);
 					return NULL;
 				}
-				parser->hostText.first = first; /* HOST BEGIN */
-				parser->hostData.ipFuture.first = first; /* IPFUTURE BEGIN */
+				parser->uri->hostText.first = first; /* HOST BEGIN */
+				parser->uri->hostData.ipFuture.first = first; /* IPFUTURE BEGIN */
 				afterIpFutLoop = URI_FUNC(ParseIpFutLoop)(parser, afterHexZero + 1, afterLast);
 				if (afterIpFutLoop == NULL) {
 					return NULL;
 				}
-				parser->hostText.afterLast = afterIpFutLoop; /* HOST END */
-				parser->hostData.ipFuture.afterLast = afterIpFutLoop; /* IPFUTURE END */
+				parser->uri->hostText.afterLast = afterIpFutLoop; /* HOST END */
+				parser->uri->hostData.ipFuture.afterLast = afterIpFutLoop; /* IPFUTURE END */
 				return afterIpFutLoop;
 			}
 
@@ -709,7 +710,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(Parser) * pars
 	case _UT('E'):
 	case _UT('f'):
 	case _UT('F'):
-		parser->hostData.ip6 = malloc(1 * sizeof(UriIp6)); /* Freed when stopping on parse error */
+		parser->uri->hostData.ip6 = malloc(1 * sizeof(UriIp6)); /* Freed when stopping on parse error */
 		return URI_FUNC(ParseIPv6address2)(parser, first, afterLast);
 
 	default:
@@ -798,7 +799,7 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, c
 					}
 
 					/* Copy IPv4 octet */
-					parser->hostData.ip6->data[16 - 4 + ip4OctetsDone] = uriGetOctetValue(digitHistory, digitCount);
+					parser->uri->hostData.ip6->data[16 - 4 + ip4OctetsDone] = uriGetOctetValue(digitHistory, digitCount);
 					digitCount = 0;
 					ip4OctetsDone++;
 					break;
@@ -835,14 +836,14 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, c
 						return NULL;
 					}
 
-					parser->hostText.afterLast = first; /* HOST END */
+					parser->uri->hostText.afterLast = first; /* HOST END */
 
 					/* Copy missing quads right before IPv4 */
-					memcpy(parser->hostData.ip6->data + 16 - 4 - 2 * quadsAfterZipperCount,
+					memcpy(parser->uri->hostData.ip6->data + 16 - 4 - 2 * quadsAfterZipperCount,
 								quadsAfterZipper, 2 * quadsAfterZipperCount);
 
 					/* Copy last IPv4 octet */
-					parser->hostData.ip6->data[16 - 4 + 3] = uriGetOctetValue(digitHistory, digitCount);
+					parser->uri->hostData.ip6->data[16 - 4 + 3] = uriGetOctetValue(digitHistory, digitCount);
 
 					return first + 1;
 
@@ -931,7 +932,7 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, c
 							}
 
 							/* Zero everything after zipper */
-							memset(parser->hostData.ip6->data + resetOffset, 0, 16 - resetOffset);
+							memset(parser->uri->hostData.ip6->data + resetOffset, 0, 16 - resetOffset);
 							setZipper = 1;
 
 							/* ":::+"? */
@@ -949,7 +950,7 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, c
 								uriWriteQuadToDoubleByte(digitHistory, digitCount, quadsAfterZipper + 2 * quadsAfterZipperCount);
 								quadsAfterZipperCount++;
 							} else {
-								uriWriteQuadToDoubleByte(digitHistory, digitCount, parser->hostData.ip6->data + 2 * quadsDone);
+								uriWriteQuadToDoubleByte(digitHistory, digitCount, parser->uri->hostData.ip6->data + 2 * quadsDone);
 							}
 							quadsDone++;
 							digitCount = 0;
@@ -997,7 +998,7 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, c
 					}
 
 					/* Copy first IPv4 octet */
-					parser->hostData.ip6->data[16 - 4] = uriGetOctetValue(digitHistory, digitCount);
+					parser->uri->hostData.ip6->data[16 - 4] = uriGetOctetValue(digitHistory, digitCount);
 					digitCount = 0;
 
 					/* Switch over to IPv4 loop */
@@ -1017,7 +1018,7 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, c
 							uriWriteQuadToDoubleByte(digitHistory, digitCount, quadsAfterZipper + 2 * quadsAfterZipperCount);
 							quadsAfterZipperCount++;
 						} else {
-							uriWriteQuadToDoubleByte(digitHistory, digitCount, parser->hostData.ip6->data + 2 * quadsDone);
+							uriWriteQuadToDoubleByte(digitHistory, digitCount, parser->uri->hostData.ip6->data + 2 * quadsDone);
 						}
 						/*
 						quadsDone++;
@@ -1026,10 +1027,10 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, c
 					}
 
 					/* Copy missing quads to the end */
-					memcpy(parser->hostData.ip6->data + 16 - 2 * quadsAfterZipperCount,
+					memcpy(parser->uri->hostData.ip6->data + 16 - 2 * quadsAfterZipperCount,
 								quadsAfterZipper, 2 * quadsAfterZipperCount);
 
-					parser->hostText.afterLast = first; /* HOST END */
+					parser->uri->hostText.afterLast = first; /* HOST END */
 					return first + 1; /* Fine */
 
 				default:
@@ -1198,7 +1199,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(Parser) * par
 			if (afterIpLit2 == NULL) {
 				return NULL;
 			}
-			parser->hostText.first = first + 1; /* HOST BEGIN */
+			parser->uri->hostText.first = first + 1; /* HOST BEGIN */
 			return URI_FUNC(ParseAuthorityTwo)(parser, afterIpLit2, afterLast);
 		}
 
@@ -1307,15 +1308,15 @@ static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(Parser) * parser, const
 		}
 
 	default:
-		parser->hostText.afterLast = first; /* HOST END */
+		parser->uri->hostText.afterLast = first; /* HOST END */
 
 		/* Valid IPv4 or just a regname? */
-		parser->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
-		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->hostData.ip4->data,
-				parser->hostText.first, parser->hostText.afterLast)) {
+		parser->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->uri->hostData.ip4->data,
+				parser->uri->hostText.first, parser->uri->hostText.afterLast)) {
 			/* Not IPv4 */
-			free(parser->hostData.ip4);
-			parser->hostData.ip4 = NULL;
+			free(parser->uri->hostData.ip4);
+			parser->uri->hostData.ip4 = NULL;
 		}
 
 		return URI_FUNC(ParseAuthorityTwo)(parser, first, afterLast);
@@ -1417,17 +1418,17 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(Parse
 		return URI_FUNC(ParseOwnHostUserInfoNz)(parser, first, afterLast);
 
 	default:
-		parser->hostText.first = parser->userInfo.first; /* Host instead of userInfo, update */
-		parser->userInfo.first = NULL; /* Not a userInfo, reset */
-		parser->hostText.afterLast = first; /* HOST END */
+		parser->uri->hostText.first = parser->uri->userInfo.first; /* Host instead of userInfo, update */
+		parser->uri->userInfo.first = NULL; /* Not a userInfo, reset */
+		parser->uri->hostText.afterLast = first; /* HOST END */
 
 		/* Valid IPv4 or just a regname? */
-		parser->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
-		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->hostData.ip4->data,
-				parser->hostText.first, parser->hostText.afterLast)) {
+		parser->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->uri->hostData.ip4->data,
+				parser->uri->hostText.first, parser->uri->hostText.afterLast)) {
 			/* Not IPv4 */
-			free(parser->hostData.ip4);
-			parser->hostData.ip4 = NULL;
+			free(parser->uri->hostData.ip4);
+			parser->uri->hostData.ip4 = NULL;
 		}
 		return first;
 	}
@@ -1535,13 +1536,13 @@ static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(Parser) * pars
 		}
 
 	case _UT(':'):
-		parser->hostText.afterLast = first; /* HOST END */
-		parser->portText.first = first + 1; /* PORT BEGIN */
+		parser->uri->hostText.afterLast = first; /* HOST END */
+		parser->uri->portText.first = first + 1; /* PORT BEGIN */
 		return URI_FUNC(ParseOwnPortUserInfo)(parser, first + 1, afterLast);
 
 	case _UT('@'):
-		parser->userInfo.afterLast = first; /* USERINFO END */
-		parser->hostText.first = first + 1; /* HOST BEGIN */
+		parser->uri->userInfo.afterLast = first; /* USERINFO END */
+		parser->uri->hostText.first = first + 1; /* HOST BEGIN */
 		return URI_FUNC(ParseOwnHost)(parser, first + 1, afterLast);
 
 	default:
@@ -1563,9 +1564,9 @@ static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(Parser) * pars
  */
 static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		parser->hostText.first = parser->userInfo.first; /* Host instead of userInfo, update */
-		parser->userInfo.first = NULL; /* Not a userInfo, reset */
-		parser->portText.afterLast = first; /* PORT END */
+		parser->uri->hostText.first = parser->uri->userInfo.first; /* Host instead of userInfo, update */
+		parser->uri->userInfo.first = NULL; /* Not a userInfo, reset */
+		parser->uri->portText.afterLast = first; /* PORT END */
 		return afterLast;
 	}
 
@@ -1626,8 +1627,8 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(Parser) * parser
 	case _UT('Y'):
 	case _UT('z'):
 	case _UT('Z'):
-		parser->hostText.afterLast = NULL; /* Not a host, reset */
-		parser->portText.first = NULL; /* Not a port, reset */
+		parser->uri->hostText.afterLast = NULL; /* Not a host, reset */
+		parser->uri->portText.first = NULL; /* Not a port, reset */
 		return URI_FUNC(ParseOwnUserInfo)(parser, first + 1, afterLast);
 
 	case _UT('0'):
@@ -1643,17 +1644,17 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(Parser) * parser
 		return URI_FUNC(ParseOwnPortUserInfo)(parser, first + 1, afterLast);
 
 	default:
-		parser->hostText.first = parser->userInfo.first; /* Host instead of userInfo, update */
-		parser->userInfo.first = NULL; /* Not a userInfo, reset */
-		parser->portText.afterLast = first; /* PORT END */
+		parser->uri->hostText.first = parser->uri->userInfo.first; /* Host instead of userInfo, update */
+		parser->uri->userInfo.first = NULL; /* Not a userInfo, reset */
+		parser->uri->portText.afterLast = first; /* PORT END */
 
 		/* Valid IPv4 or just a regname? */
-		parser->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
-		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->hostData.ip4->data,
-				parser->hostText.first, parser->hostText.afterLast)) {
+		parser->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->uri->hostData.ip4->data,
+				parser->uri->hostText.first, parser->uri->hostText.afterLast)) {
 			/* Not IPv4 */
-			free(parser->hostData.ip4);
-			parser->hostData.ip4 = NULL;
+			free(parser->uri->hostData.ip4);
+			parser->uri->hostData.ip4 = NULL;
 		}
 
 		return first;
@@ -1765,8 +1766,8 @@ static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(Parser) * parser, co
 		return URI_FUNC(ParseOwnUserInfo)(parser, first + 1, afterLast);
 
 	case _UT('@'):
-		parser->userInfo.afterLast = first; /* USERINFO END */
-		parser->hostText.first = first + 1; /* HOST BEGIN */
+		parser->uri->userInfo.afterLast = first; /* USERINFO END */
+		parser->uri->hostText.first = first + 1; /* HOST BEGIN */
 		return URI_FUNC(ParseOwnHost)(parser, first + 1, afterLast);
 
 	default:
@@ -1798,7 +1799,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(Parser)
 		}
 
 	default:
-		parser->absolutePath = URI_TRUE;
+		parser->uri->absolutePath = URI_TRUE;
 		return URI_FUNC(ParsePathAbsNoLeadSlash)(parser, first, afterLast);
 	}
 }
@@ -2648,8 +2649,8 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(Parser) * p
 			if (afterSegment == NULL) {
 				return NULL;
 			}
-			URI_FUNC(PushPathSegment)(parser, parser->scheme.first, first); /* SEGMENT BOTH */
-			parser->scheme.first = NULL; /* Not a scheme, reset */
+			URI_FUNC(PushPathSegment)(parser, parser->uri->scheme.first, first); /* SEGMENT BOTH */
+			parser->uri->scheme.first = NULL; /* Not a scheme, reset */
 			URI_FUNC(PushPathSegment)(parser, first + 1, afterSegment); /* SEGMENT BOTH */
 			afterZeroMoreSlashSegs
 					= URI_FUNC(ParseZeroMoreSlashSegs)(parser, afterSegment, afterLast);
@@ -2663,7 +2664,7 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(Parser) * p
 		{
 			const URI_CHAR * const afterHierPart
 					= URI_FUNC(ParseHierPart)(parser, first + 1, afterLast);
-			parser->scheme.afterLast = first; /* SCHEME END */
+			parser->uri->scheme.afterLast = first; /* SCHEME END */
 			if (afterHierPart == NULL) {
 				return NULL;
 			}
@@ -2671,8 +2672,8 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(Parser) * p
 		}
 
 	default:
-		URI_FUNC(PushPathSegment)(parser, parser->scheme.first, first); /* SEGMENT BOTH */
-		parser->scheme.first = NULL; /* Not a scheme, reset */
+		URI_FUNC(PushPathSegment)(parser, parser->uri->scheme.first, first); /* SEGMENT BOTH */
+		parser->uri->scheme.first = NULL; /* Not a scheme, reset */
 		return URI_FUNC(ParseUriTail)(parser, first, afterLast);
 	}
 }
@@ -2750,7 +2751,7 @@ static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(Parser) * parser, c
 	case _UT('Y'):
 	case _UT('z'):
 	case _UT('Z'):
-		parser->scheme.first = first; /* SCHEME BEGIN */
+		parser->uri->scheme.first = first; /* SCHEME BEGIN */
 		return URI_FUNC(ParseSegmentNzNcOrScheme2)(parser, first + 1, afterLast);
 
 	case _UT('0'):
@@ -2779,7 +2780,7 @@ static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(Parser) * parser, c
 	case _UT('~'):
 	case _UT('-'):
 	case _UT('@'):
-		parser->scheme.first = first; /* SCHEME BEGIN */
+		parser->uri->scheme.first = first; /* SCHEME BEGIN */
 		return URI_FUNC(ParseMustBeSegmentNzNc)(parser, first + 1, afterLast);
 
 	case _UT('%'):
@@ -2789,7 +2790,7 @@ static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(Parser) * parser, c
 			if (afterPctEncoded == NULL) {
 				return NULL;
 			}
-			parser->scheme.first = first; /* SCHEME BEGIN */
+			parser->uri->scheme.first = first; /* SCHEME BEGIN */
 			return URI_FUNC(ParseMustBeSegmentNzNc)(parser, afterPctEncoded, afterLast);
 		}
 
@@ -2827,8 +2828,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseUriTail)(URI_TYPE(Parser) * par
 			if (afterQueryFrag == NULL) {
 				return NULL;
 			}
-			parser->fragment.first = first + 1; /* FRAGMENT BEGIN */
-			parser->fragment.afterLast = afterQueryFrag; /* FRAGMENT END */
+			parser->uri->fragment.first = first + 1; /* FRAGMENT BEGIN */
+			parser->uri->fragment.afterLast = afterQueryFrag; /* FRAGMENT END */
 			return afterQueryFrag;
 		}
 
@@ -2839,8 +2840,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseUriTail)(URI_TYPE(Parser) * par
 			if (afterQueryFrag == NULL) {
 				return NULL;
 			}
-			parser->query.first = first + 1; /* QUERY BEGIN */
-			parser->query.afterLast = afterQueryFrag; /* QUERY END */
+			parser->uri->query.first = first + 1; /* QUERY BEGIN */
+			parser->uri->query.afterLast = afterQueryFrag; /* QUERY END */
 			return URI_FUNC(ParseUriTailTwo)(parser, afterQueryFrag, afterLast);
 		}
 
@@ -2867,8 +2868,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(Parser) * 
 			if (afterQueryFrag == NULL) {
 				return NULL;
 			}
-			parser->fragment.first = first + 1; /* FRAGMENT BEGIN */
-			parser->fragment.afterLast = afterQueryFrag; /* FRAGMENT END */
+			parser->uri->fragment.first = first + 1; /* FRAGMENT BEGIN */
+			parser->uri->fragment.afterLast = afterQueryFrag; /* FRAGMENT END */
 			return afterQueryFrag;
 		}
 
@@ -2907,8 +2908,14 @@ static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * pars
 
 
 
-static URI_INLINE void URI_FUNC(Reset)(URI_TYPE(Parser) * parser) {
+static URI_INLINE void URI_FUNC(ResetParser)(URI_TYPE(Parser) * parser) {
 	memset(parser, 0, sizeof(URI_TYPE(Parser)));
+}
+
+
+
+static URI_INLINE void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri) {
+	memset(uri, 0, sizeof(URI_TYPE(Uri)));
 }
 
 
@@ -2919,59 +2926,65 @@ static URI_INLINE void URI_FUNC(PushPathSegment)(URI_TYPE(Parser) * parser, cons
 	segment->text.first = first;
 	segment->text.afterLast = afterLast;
 
-	if (parser->pathHead == NULL) {
-		parser->pathHead = segment;
-		parser->pathTail = segment;
+	if (parser->uri->pathHead == NULL) {
+		parser->uri->pathHead = segment;
+		parser->uri->pathTail = segment;
 	} else {
-		parser->pathTail->next = segment;
-		parser->pathTail = segment;
+		parser->uri->pathTail->next = segment;
+		parser->uri->pathTail = segment;
 	}
 }
 
 
 
-UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
+const URI_CHAR * URI_FUNC(ParseUriEx)(URI_TYPE(Uri) * uri, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	const URI_CHAR * afterUriReference;
-	URI_FUNC(Reset)(parser);
-	afterUriReference = URI_FUNC(ParseUriReference)(parser, first, afterLast);
+	URI_TYPE(Parser) parser;
+
+	/* Init parser */
+	URI_FUNC(ResetParser)(&parser);
+	URI_FUNC(ResetUri)(uri);
+	parser.uri = uri;
+
+	afterUriReference = URI_FUNC(ParseUriReference)(&parser, first, afterLast);
 	if (afterUriReference == NULL) {
-		return URI_ERROR;
+		return parser.errorPos;
 	}
 	if (afterUriReference != afterLast) {
-		return URI_ERROR;
+		return afterUriReference;
 	}
-	return URI_SUCCESS;
+	return NULL;
 }
 
 
 
-UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text) {
-	return URI_FUNC(ParseUriEx)(parser, text, text + URI_STRLEN(text));
+const URI_CHAR * URI_FUNC(ParseUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text) {
+	return URI_FUNC(ParseUriEx)(uri, text, text + URI_STRLEN(text));
 }
 
 
 
-void URI_FUNC(FreeMembers)(URI_TYPE(Parser) * parser) {
-	if (parser == NULL) {
+void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
+	if (uri == NULL) {
 		return;
 	}
-	if (parser->hostData.ip4 != NULL) {
-		free(parser->hostData.ip4);
-		parser->hostData.ip4 = NULL;
+	if (uri->hostData.ip4 != NULL) {
+		free(uri->hostData.ip4);
+		uri->hostData.ip4 = NULL;
 	}
-	if (parser->hostData.ip6 != NULL) {
-		free(parser->hostData.ip6);
-		parser->hostData.ip6 = NULL;
+	if (uri->hostData.ip6 != NULL) {
+		free(uri->hostData.ip6);
+		uri->hostData.ip6 = NULL;
 	}
-	if (parser->pathHead != NULL) {
-		URI_TYPE(PathSegment) * segWalk = parser->pathHead;
+	if (uri->pathHead != NULL) {
+		URI_TYPE(PathSegment) * segWalk = uri->pathHead;
 		while (segWalk != NULL) {
 			URI_TYPE(PathSegment) * const next = segWalk->next;
 			free(segWalk);
 			segWalk = next;
 		}
-		parser->pathHead = NULL;
-		parser->pathTail = NULL;
+		uri->pathHead = NULL;
+		uri->pathTail = NULL;
 	}
 }
 
@@ -2979,13 +2992,17 @@ void URI_FUNC(FreeMembers)(URI_TYPE(Parser) * parser) {
 
 /* TODO */
 UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text) {
+	URI_TYPE(Uri) uri;
 	URI_TYPE(Parser) parser;
 	const URI_CHAR * const afterIpSix = text + URI_STRLEN(text);
 	const URI_CHAR * res;
 
-	URI_FUNC(Reset)(&parser);
-	parser.hostData.ip6 = malloc(1 * sizeof(UriIp6));
+	URI_FUNC(ResetParser)(&parser);
+	URI_FUNC(ResetUri)(&uri);
+	parser.uri = &uri;
+	parser.uri->hostData.ip6 = malloc(1 * sizeof(UriIp6));
 	res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
+	URI_FUNC(FreeUriMembers)(&uri);
 	return res == afterIpSix ? URI_TRUE : URI_FALSE;
 }
 

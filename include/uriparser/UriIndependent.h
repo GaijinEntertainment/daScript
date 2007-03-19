@@ -122,7 +122,7 @@
 
 
 
-#define UriBool      int
+typedef int UriBool;
 
 #define URI_TRUE     1
 #define URI_FALSE    0

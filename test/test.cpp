@@ -144,40 +144,40 @@ private:
 	}
 
 	void testUri() {
-		UriParserA parserA;
-		UriParserW parserW;
+		UriUriA uriA;
+		UriUriW uriW;
 
 		// On/off for each
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "//user:pass@[::1]:80/segment/index.html?query#frag"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://[::1]:80/segment/index.html?query#frag"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]/segment/index.html?query#frag"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]:80?query#frag"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]:80/segment/index.html#frag"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://user:pass@[::1]:80/segment/index.html?query"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "//user:pass@[::1]:80/segment/index.html?query#frag"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://[::1]:80/segment/index.html?query#frag"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]/segment/index.html?query#frag"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]:80?query#frag"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]:80/segment/index.html#frag"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]:80/segment/index.html?query"));
 
 		// Schema, port, one segment
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "ftp://host:21/gnu/"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "ftp://host:21/gnu/"));
 
 		// Relative
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "one/two/three"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "/one/two/three"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "//user:pass@localhost/one/two/three"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "one/two/three"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "/one/two/three"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "//user:pass@localhost/one/two/three"));
 
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriW(&parserW, L"http://www.example.com/"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://www.example.com/"));
+		TEST_ASSERT(NULL == uriParseUriW(&uriW, L"http://www.example.com/"));
 
 		// Real life examples
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://sourceforge.net/projects/uriparser/"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "mailto:test@example.com"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "../../"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "/"));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, ""));
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "file:///bin/bash"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://sourceforge.net/projects/uriparser/"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "mailto:test@example.com"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "../../"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "/"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, ""));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "file:///bin/bash"));
 
 		// Percent encoding
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&parserA, "http://www.example.com/name%20with%20spaces/"));
-		TEST_ASSERT(URI_ERROR == uriParseUriA(&parserA, "http://www.example.com/name with spaces/"));
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://www.example.com/name%20with%20spaces/"));
+		TEST_ASSERT(NULL != uriParseUriA(&uriA, "http://www.example.com/name with spaces/"));
 	}
 
 	void testLegacy1() {

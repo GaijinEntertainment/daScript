@@ -1,7 +1,5 @@
 == SOON ==
- * Extract Uri struct from UriParser
  * Justify license header with ParaDJ
- * Make struct/union thing of host part in parser?
 
 == LATER ==
  * Add GNU build files, liburiparser-0.3.0rc1.tar.gz

@@ -102,11 +102,10 @@ typedef union URI_TYPE(HostDataUnion) {
 
 
 /**
- * Represents a state of the %URI parser.
- * Missing components can be NULL to reflect
- * a components absence.
+ * Represents an RFC 3986 %URI.
+ * Missing components can be {NULL, NULL} ranges.
  */
-typedef struct URI_TYPE(ParserStruct) {
+typedef struct URI_TYPE(UriStruct) {
 	URI_TYPE(TextRange) scheme; /**< Scheme (e.g. "http") */
 	URI_TYPE(TextRange) userInfo; /**< User info (e.g. "user:pass") */
 	URI_TYPE(TextRange) hostText; /**< Host text (set for all hosts) */
@@ -116,9 +115,19 @@ typedef struct URI_TYPE(ParserStruct) {
 	URI_TYPE(PathSegment) * pathTail; /**< Tail of the list behind pathHead */
 	URI_TYPE(TextRange) query; /**< Query without leading "?" */
 	URI_TYPE(TextRange) fragment; /**< Query without leading "#" */
+	UriBool absolutePath; /**< Absolute path flag, meaningless if %URI is absolute */
+} URI_TYPE(Uri);
 
+
+
+/**
+ * Represents a state of the %URI parser.
+ * Missing components can be NULL to reflect
+ * a components absence.
+ */
+typedef struct URI_TYPE(ParserStruct) {
+	URI_TYPE(Uri) * uri; /**< %URI structure filled while parsing */
 	const URI_CHAR * errorPos; /**< Pointer to position in case of a parsing error */
-	UriBool absolutePath; /**< Absolute path flag, meaningless if absolute %URI */
 
 	void * reserved; /**< Not used */
 } URI_TYPE(Parser);
@@ -134,35 +143,35 @@ UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text);
 /**
  * Parses a RFC 3986 URI.
  *
- * @param parser	Parser state data
- * @param first		Pointer to the first character to parse
- * @param afterLast	Pointer to the character after the last to parse
- * @return			URI_SUCCESS on success, URI_ERROR otherwise
+ * @param uri		Output %URI, must not be NULL
+ * @param first		Pointer to the first character to parse, must not be NULL
+ * @param afterLast	Pointer to the character after the last to parse, must not be NULL
+ * @return			NULL on success, error position otherwise
  */
-UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first,
-		const URI_CHAR * afterLast);
+const URI_CHAR * URI_FUNC(ParseUriEx)(URI_TYPE(Uri) * uri,
+		const URI_CHAR * first, const URI_CHAR * afterLast);
 
 
 
 /**
  * Parses a RFC 3986 %URI.
  *
- * @param parser	Parser state data
- * @param text		Text to parse
- * @return			URI_SUCCESS on success, URI_ERROR otherwise
+ * @param uri		Output %URI, must not be NULL
+ * @param text		Text to parse, must not be NULL
+ * @return			NULL on success, error position otherwise
  */
-UriBool URI_FUNC(ParseUri)(URI_TYPE(Parser) * parser, const URI_CHAR * text);
+const URI_CHAR * URI_FUNC(ParseUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text);
 
 
 
 /**
- * Frees the the memory associated with all members
- * of the parse state structure. Note that the parser
+ * Frees all memory associated with the members
+ * of the %URI structure. Note that the structure
  * itself is not freed, only its members.
  *
- * @param parser	Parser whose members should be freed
+ * @param uri	%URI structure whose members should be freed
  */
-void URI_FUNC(FreeMembers)(URI_TYPE(Parser) * parser);
+void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 
 
 

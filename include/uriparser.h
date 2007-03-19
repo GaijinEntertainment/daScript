@@ -108,9 +108,9 @@ enum PathType {
 
 
 /**
- * Holds a complete RFC 3986 %URI.
- * Components must not be non NULL. Use ""
- * (the empty string) to flag a component as missing.
+ * Represents an RFC 3986 %URI.
+ * Components must not be NULL. Use a malloced
+ * empty string to flag a component as missing.
  *
  * @deprecated	Will be removed for version 0.5.0
  */
