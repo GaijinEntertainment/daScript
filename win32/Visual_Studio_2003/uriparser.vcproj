@@ -19,7 +19,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\..\lib\include"
+				AdditionalIncludeDirectories="..\..\include"
 				PreprocessorDefinitions="URI_TESTING"
 				MinimalRebuild="TRUE"
 				ExceptionHandling="FALSE"
@@ -62,7 +62,7 @@
 			CharacterSet="2">
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="..\..\lib\include"
+				AdditionalIncludeDirectories="..\..\include"
 				PreprocessorDefinitions="URI_TESTING"
 				ExceptionHandling="FALSE"
 				RuntimeLibrary="4"
@@ -130,34 +130,34 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}">
 			<File
-				RelativePath="..\..\lib\include\uriparser\Uri.h">
+				RelativePath="..\..\include\uriparser\Uri.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\include\uriparser\UriAnsi.h">
+				RelativePath="..\..\include\uriparser\UriAnsi.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\include\uriparser\UriConfig.h">
+				RelativePath="..\..\include\uriparser\UriConfig.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\include\uriparser\UriIndependent.h">
+				RelativePath="..\..\include\uriparser\UriIndependent.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\include\uriparser\UriIp4.h">
+				RelativePath="..\..\include\uriparser\UriIp4.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\include\uriparser\UriIp4Independent.h">
+				RelativePath="..\..\include\uriparser\UriIp4Independent.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\include\uriparser\UriIp4Twice.h">
+				RelativePath="..\..\include\uriparser\UriIp4Twice.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\include\uriparser.h">
+				RelativePath="..\..\include\uriparser.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\include\uriparser\UriTwice.h">
+				RelativePath="..\..\include\uriparser\UriTwice.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\include\uriparser\UriUnicode.h">
+				RelativePath="..\..\include\uriparser\UriUnicode.h">
 			</File>
 		</Filter>
 	</Files>
