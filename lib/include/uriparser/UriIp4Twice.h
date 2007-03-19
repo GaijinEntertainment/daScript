@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriIp4Twice.h
+ * Holds the IPv4 parser interface.
+ */
+
 #if (defined(URI_PASS_ANSI) && !defined(URI_IP4_TWICE_H_ANSI)) \
 	|| (defined(URI_PASS_UNICODE) && !defined(URI_IP4_TWICE_H_UNICODE))
 #ifdef URI_PASS_ANSI

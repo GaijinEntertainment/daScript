@@ -138,7 +138,7 @@ OPTIMIZE_OUTPUT_FOR_C = YES
 ###############################################################
 
 
-EXTRACT_ALL = YES
+EXTRACT_ALL = NO
 # If the EXTRACT_ALL tag is set to YES doxygen will assume all entities in documentation are documented, even if no documentation was available. Private class members and static file members will be hidden unless the EXTRACT_PRIVATE and EXTRACT_STATIC tags are set to YES
 #
 # Note:
@@ -343,7 +343,7 @@ RECURSIVE = YES
 # The IMAGE_PATH tag can be used to specify one or more files or directories that contain images that are to be included in the documentation (see the \image command).
 
 
-INPUT_FILTER = "cpp -D URI_DOXYGEN -I ../lib/include"
+INPUT_FILTER = "cpp -C -D URI_DOXYGEN -I ../lib/include"
 # The INPUT_FILTER tag can be used to specify a program that doxygen should invoke to filter for each input file. Doxygen will invoke the filter program by executing (via popen()) the command:
 #
 # <filter> <input-file>
@@ -828,7 +828,7 @@ CLASS_GRAPH = NO
 # If the CLASS_GRAPH and HAVE_DOT tags are set to YES then doxygen will generate a graph for each documented class showing the direct and indirect inheritance relations. Setting this tag to YES will force the the CLASS_DIAGRAMS tag to NO.
 
 
-COLLABORATION_GRAPH = YES
+COLLABORATION_GRAPH = NO
 # If the COLLABORATION_GRAPH and HAVE_DOT tags are set to YES then doxygen will generate a graph for each documented class showing the direct and indirect implementation dependencies (inheritance, containment, and class references variables) of the class with other documented classes.
 
 
@@ -856,11 +856,11 @@ INCLUDED_BY_GRAPH = YES
 # If the ENABLE_PREPROCESSING, SEARCH_INCLUDES, INCLUDED_BY_GRAPH, and HAVE_DOT tags are set to YES then doxygen will generate a graph for each documented header file showing the documented files that directly or indirectly include this file.
 
 
-CALL_GRAPH = YES
+CALL_GRAPH = NO
 # If the CALL_GRAPH and HAVE_DOT tags are set to YES then doxygen will generate a call dependency graph for every global function or class method. Note that enabling this option will significantly increase the time of a run. So in most cases it will be better to enable call graphs for selected functions only using the \callgraph command.
 
 
-CALLER_GRAPH = YES
+CALLER_GRAPH = NO
 # If the CALLER_GRAPH and HAVE_DOT tags are set to YES then doxygen will generate a caller dependency graph for every global function or class method. Note that enabling this option will significantly increase the time of a run. So in most cases it will be better to enable caller graphs for selected functions only using the \callergraph command.
 
 

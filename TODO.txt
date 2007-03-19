@@ -1,9 +1,11 @@
 == SOON ==
+ * mv lib/include include
  * Extract Uri struct from UriParser
  * Justify license header with ParaDJ
  * Add documentation on semantic actions?
  * Add code documentation
-   * also to structures
+   * also to struct members
+   * until no more Doxygen warnings
 
 == LATER ==
  * Add GNU build files, liburiparser-0.3.0rc1.tar.gz

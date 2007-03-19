@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file Uri.h
+ * Runs two passes over the UriTwice header.
+ */
+
 #if ((!defined(URI_PASS_ANSI) && !(defined(URI_PASS_UNICODE))) \
 	|| (defined(URI_PASS_ANSI) && !defined(URI_H_ANSI)) \
 	|| (defined(URI_PASS_UNICODE) && !defined(URI_H_UNICODE)))

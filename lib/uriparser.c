@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file uriparser.c
+ * Holds the legacy code implementation.
+ */
+
 #include <uriparser/UriConfig.h>
 
 #ifdef URI_ENABLE_LEGACY

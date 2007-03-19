@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriConfig.h
+ * Adjusts the internal configuration after processing external definitions.
+ */
+
 #ifndef URI_CONFIG_H
 #define URI_CONFIG_H 1
 

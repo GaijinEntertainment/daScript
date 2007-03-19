@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriUnicode.h
+ * Holds definitions for the Unicode pass.
+ */
+
 /* Allow multi inclusion */
 #include "UriConfig.h"
 #include "UriIndependent.h"

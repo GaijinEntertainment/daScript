@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriIndependent.h
+ * Holds definitions independent of the encoding pass.
+ */
+
 #ifndef URI_INDEPENDENT_H
 #define URI_INDEPENDENT_H 1
 

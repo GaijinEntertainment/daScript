@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriAnsi.h
+ * Holds definitions for the ANSI pass.
+ */
+
 /* Allow multi inclusion */
 #include "UriConfig.h"
 #include "UriIndependent.h"

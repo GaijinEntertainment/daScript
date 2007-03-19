@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriIndependent.c
+ * Holds code independent of the encoding pass.
+ */
+
 #include <uriparser/UriIndependent.h>
 
 

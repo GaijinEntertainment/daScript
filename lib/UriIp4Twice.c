@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriIp4Twice.c
+ * Holds the IPv4 parser implementation.
+ */
+
 #ifdef URI_IP4_TWICE_C_ENABLE
 
 

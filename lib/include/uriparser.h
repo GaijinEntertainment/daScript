@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file uriparser.h
+ * Holds the legacy code interface.
+ */
+
 #ifndef URI_URIPARSER_H
 #define URI_URIPARSER_H
 
@@ -59,14 +64,27 @@
 
 
 
-enum URIType{
+/**
+ * Specifies a URI's type.
+ * A %URI can either be absolute or relative.
+ *
+ * @deprecated	Will be removed for version 0.5.0
+ */
+enum URIType {
 	URIURI,
 	URIRelativeRef
 };
 
 
 
-enum HOSTType{
+/**
+ * Specifies a URI's host type.
+ * The host in a %URI can be one of iPv4, IPv6,
+ * IPvFuture or a registered name.
+ *
+ * @deprecated	Will be removed for version 0.5.0
+ */
+enum HOSTType {
 	IPv4Address,
 	IPv6Address,
 	IPvFuture,
@@ -75,7 +93,12 @@ enum HOSTType{
 
 
 
-enum PathType{
+/**
+ * Specifies the type of a URI's path.
+ *
+ * @deprecated	Will be removed for version 0.5.0
+ */
+enum PathType {
 	PathNoScheme,
 	PathAbsolute,
 	PathRootless,
@@ -84,6 +107,11 @@ enum PathType{
 
 
 
+/**
+ * Holds a complete RFC 3986 %URI.
+ *
+ * @deprecated	Will be removed for version 0.5.0
+ */
 typedef struct uri_struct {
     enum URIType utype;
     enum HOSTType htype;
@@ -124,7 +152,7 @@ void URIParserCleanup();
 /**
  * Parses a string and builds an URI structure
  * of that in possible. All non-NULL string
- * members of that URI have to be manually
+ * members of that %URI have to be manually
  * freed later.
  *
  * @param uri	Output destination

@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriTwice.h
+ * Holds the RFC 3986 %URI parser interface.
+ */
+
 #if (defined(URI_PASS_ANSI) && !defined(URI_TWICE_H_ANSI)) \
 	|| (defined(URI_PASS_UNICODE) && !defined(URI_TWICE_H_UNICODE))
 #ifdef URI_PASS_ANSI
@@ -55,6 +60,11 @@
 
 
 
+/**
+ * Represents a segment within a %URI path.
+ * More precisely it is a node in a linked
+ * list of path segments.
+ */
 typedef struct URI_TYPE(PathSegmentStruct) {
 	const URI_CHAR * first;
 	const URI_CHAR * afterLast;
@@ -66,6 +76,9 @@ typedef struct URI_TYPE(PathSegmentStruct) {
 
 
 
+/**
+ * Represents a state of the %URI parser.
+ */
 typedef struct URI_TYPE(ParserStruct) {
 	const URI_CHAR * schemeFirst;
 	const URI_CHAR * schemeAfterLast;
@@ -118,7 +131,7 @@ UriBool URI_FUNC(ParseUriEx)(URI_TYPE(Parser) * parser, const URI_CHAR * first,
 
 
 /**
- * Parses a RFC 3986 URI.
+ * Parses a RFC 3986 %URI.
  *
  * @param parser	Parser state data
  * @param text		Text to parse

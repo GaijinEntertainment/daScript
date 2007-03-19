@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriIp4Independent.h
+ * Holds definitions independent of the encoding pass.
+ */
+
 #ifndef URI_IP4_INDEPENDENT_H
 #define URI_IP4_INDEPENDENT_H 1
 

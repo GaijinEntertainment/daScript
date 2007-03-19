@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file Uri.c
+ * Runs two passes over the UriTwice code.
+ */
+
 #include <uriparser/UriConfig.h>
 
 

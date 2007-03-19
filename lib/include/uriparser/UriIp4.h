@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriIp4.h
+ * Runs two passes over the UriIP4Twice header.
+ */
+
 #if ((!defined(URI_PASS_ANSI) && !(defined(URI_PASS_UNICODE))) \
 	|| (defined(URI_PASS_ANSI) && !defined(URI_IP4_H_ANSI)) \
 	|| (defined(URI_PASS_UNICODE) && !defined(URI_IP4_H_UNICODE)))

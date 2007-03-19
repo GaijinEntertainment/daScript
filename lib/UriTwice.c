@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file UriTwice.c
+ * Holds the RFC 3986 %URI parser implementation.
+ */
+
 #ifdef URI_TWICE_C_ENABLE
 
 
