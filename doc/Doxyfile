@@ -12,7 +12,7 @@ PROJECT_NAME = uriparser
 # The PROJECT_NAME tag is a single word (or a sequence of words surrounded by double-quotes) that should identify the project for which the documentation is generated. This name is used in the title of most generated pages and in a few other places.
 
 
-# PROJECT_NUMBER = 
+PROJECT_NUMBER = 0.3.0rc1
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This could be handy for archiving the generated documentation or if some version control system is used.
 
 
@@ -240,7 +240,7 @@ SHOW_DIRECTORIES = NO
 ###############################################################
 
 
-# QUIET = 
+QUIET = YES
 # The QUIET tag can be used to turn on/off the messages that are generated to standard output by doxygen. Possible values are YES and NO, where YES implies that the messages are off. If left blank NO is used.
 
 
@@ -258,11 +258,11 @@ WARN_IF_DOC_ERROR = YES
 # If WARN_IF_DOC_ERROR is set to YES, doxygen will generate warnings for potential errors in the documentation, such as not documenting some parameters in a documented function, or documenting parameters that don't exist or using markup commands wrongly.
 
 
-# WARN_NO_PARAMDOC = 
+WARN_NO_PARAMDOC = YES
 # This WARN_NO_PARAMDOC option can be abled to get warnings for functions that are documented, but have no documentation for their parameters or return value. If set to NO (the default) doxygen will only warn about wrong or incomplete parameter documentation, but not about the absence of documentation.
 
 
-# WARN_FORMAT = 
+WARN_FORMAT = "WARNING: $text ($line, $file)"
 # The WARN_FORMAT tag determines the format of the warning messages that doxygen can produce. The string should contain the $file, $line, and $text tags, which will be replaced by the file and line number from which the warning originated and the warning text.
 
 

@@ -1,9 +1,9 @@
 == SOON ==
+ * Rename "Twice" files to normal
  * Add GNU build files, liburiparser-0.3.0rc1.tar.gz
    * add flags to also generate tar.bz2 and zip
 
 == LATER ==
- * add #define structure to get everything once for Doxygen
  * Add code documentation
    * until no more Doxygen warnings
    * Is there a way to mark the public API part?

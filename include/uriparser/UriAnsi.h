@@ -44,7 +44,9 @@
 
 /* Allow multi inclusion */
 #include "UriConfig.h"
+#ifndef URI_DOXYGEN
 #include "UriIndependent.h"
+#endif /* URI_DOXYGEN */
 
 
 

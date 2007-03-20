@@ -42,12 +42,29 @@
  * Holds the RFC 3986 %URI parser implementation.
  */
 
-#ifdef URI_TWICE_C_ENABLE
+/* What encodings are enabled? */
+#include <uriparser/UriConfig.h>
+#if (!defined(URI_PASS_ANSI) && !defined(URI_PASS_UNICODE))
+/* Include SELF twice */
+# define URI_PASS_ANSI 1
+# include "UriTwice.c"
+# undef URI_PASS_ANSI
+# define URI_PASS_UNICODE 1
+# include "UriTwice.c"
+# undef URI_PASS_UNICODE
+#else
+# ifdef URI_PASS_ANSI
+#  include <uriparser/UriAnsi.h>
+# else
+#  include <uriparser/UriUnicode.h>
+# endif
 
 
 
-#include <uriparser/Uri.h>
-#include <uriparser/UriIp4.h>
+#ifndef URI_DOXYGEN
+# include <uriparser/UriTwice.h>
+# include <uriparser/UriIp4Twice.h>
+#endif
 
 
 
@@ -3008,4 +3025,4 @@ UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text) {
 
 
 
-#endif /* URI_TWICE_C_ENABLE */
+#endif

@@ -22,7 +22,7 @@
 extern "C" {
 	// Including C header from C++
 	#include <uriparser.h>
-	#include <uriparser/Uri.h>
+	#include <uriparser/UriTwice.h>
 }
 
 #include "CppTest/cpptest.h"

@@ -31,12 +31,6 @@
 			<Option link="0" />
 			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\include\uriparser\Uri.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
 		<Unit filename="..\..\include\uriparser\UriAnsi.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
@@ -50,12 +44,6 @@
 			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\include\uriparser\UriIndependent.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriIp4.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />

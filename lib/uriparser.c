@@ -48,12 +48,12 @@
 
 
 
-#include <uriparser.h>
-#include <uriparser/Uri.h>
-
 #ifndef URI_DOXYGEN
+# include <uriparser.h>
+# include <uriparser/UriTwice.h>
+
 /* For atoi */
-#include <stdlib.h>
+# include <stdlib.h>
 #endif
 
 

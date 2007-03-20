@@ -97,31 +97,6 @@
 
 
 
-/* Function inlining, not ANSI/ISO C! */
-#if defined(__INTEL_COMPILER)
-/* Intel C/C++ */
-/* http://predef.sourceforge.net/precomp.html#sec20 */
-/* http://www.intel.com/support/performancetools/c/windows/sb/CS-007751.htm#2 */
-# define URI_INLINE __force_inline
-#elif defined(_MSC_VER)
-/* Microsoft Visual C++ */
-/* http://predef.sourceforge.net/precomp.html#sec32 */
-/* http://msdn2.microsoft.com/en-us/library/ms882281.aspx */
-# define URI_INLINE __forceinline
-#elif (__GNUC__ >= 4)
-/* GCC C/C++ 4.x.x */
-/* http://predef.sourceforge.net/precomp.html#sec13 */
-# define URI_INLINE __attribute__((always_inline))
-#elif (__STDC_VERSION__ >= 199901L)
-/* C99, "inline" is a keyword */
-# define URI_INLINE inline
-#else
-/* No inlining */
-# define URI_INLINE
-#endif
-
-
-
 typedef int UriBool;
 
 #define URI_TRUE     1

@@ -42,11 +42,28 @@
  * Holds the IPv4 parser implementation.
  */
 
-#ifdef URI_IP4_TWICE_C_ENABLE
+/* What encodings are enabled? */
+#include <uriparser/UriConfig.h>
+#if (!defined(URI_PASS_ANSI) && !defined(URI_PASS_UNICODE))
+/* Include SELF twice */
+# define URI_PASS_ANSI 1
+# include "UriIp4Twice.c"
+# undef URI_PASS_ANSI
+# define URI_PASS_UNICODE 1
+# include "UriIp4Twice.c"
+# undef URI_PASS_UNICODE
+#else
+# ifdef URI_PASS_ANSI
+#  include <uriparser/UriAnsi.h>
+# else
+#  include <uriparser/UriUnicode.h>
+# endif
 
 
 
-#include <uriparser/UriIp4.h>
+#ifndef URI_DOXYGEN
+# include <uriparser/UriIp4Twice.h>
+#endif
 
 
 
@@ -301,4 +318,4 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseDecOctetFour)(UriIp4Parser * pa
 
 
 
-#endif /* URI_IP4_TWICE_C_ENABLE */
+#endif

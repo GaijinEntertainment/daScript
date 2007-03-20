@@ -21,37 +21,7 @@
 			<Add option="-DURI_TESTING" />
 			<Add directory="..\..\include" />
 		</Compiler>
-		<Unit filename="..\..\lib\Uri.c">
-			<Option compilerVar="CC" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\lib\UriIndependent.c">
-			<Option compilerVar="CC" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\lib\UriIp4.c">
-			<Option compilerVar="CC" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\lib\UriIp4Independent.c">
-			<Option compilerVar="CC" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\lib\UriIp4Twice.c">
-			<Option compilerVar="CC" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\lib\UriTwice.c">
-			<Option compilerVar="CC" />
-			<Option target="default" />
-		</Unit>
 		<Unit filename="..\..\include\uriparser.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\Uri.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />
@@ -70,12 +40,6 @@
 			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\include\uriparser\UriIndependent.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriIp4.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />
@@ -103,6 +67,22 @@
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriIndependent.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriIp4Independent.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriIp4Twice.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriTwice.c">
+			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\uriparser.c">

@@ -43,20 +43,29 @@
  */
 
 #if (defined(URI_PASS_ANSI) && !defined(URI_TWICE_H_ANSI)) \
-	|| (defined(URI_PASS_UNICODE) && !defined(URI_TWICE_H_UNICODE))
-#ifdef URI_PASS_ANSI
-# define URI_TWICE_H_ANSI 1
-#else
-# define URI_TWICE_H_UNICODE 1
-#endif
-
-
-
-#ifdef URI_PASS_ANSI
-# include "UriAnsi.h"
-#else
-# include "UriUnicode.h"
-#endif
+	|| (defined(URI_PASS_UNICODE) && !defined(URI_TWICE_H_UNICODE)) \
+	|| (!defined(URI_PASS_ANSI) && !defined(URI_PASS_UNICODE))
+/* What encodings are enabled? */
+#include "UriConfig.h"
+#if (!defined(URI_PASS_ANSI) && !defined(URI_PASS_UNICODE))
+/* Include SELF twice */
+# define URI_PASS_ANSI 1
+# include "UriTwice.h"
+# undef URI_PASS_ANSI
+# define URI_PASS_UNICODE 1
+# include "UriTwice.h"
+# undef URI_PASS_UNICODE
+/* Only one pass for each encoding */
+#elif (defined(URI_PASS_ANSI) && !defined(URI_TWICE_H_ANSI) \
+	&& defined(URI_ENABLE_ANSI)) || (defined(URI_PASS_UNICODE) \
+	&& !defined(URI_TWICE_H_UNICODE) && defined(URI_ENABLE_UNICODE))
+# ifdef URI_PASS_ANSI
+#  define URI_TWICE_H_ANSI 1
+#  include "UriAnsi.h"
+# else
+#  define URI_TWICE_H_UNICODE 1
+#  include "UriUnicode.h"
+# endif
 
 
 
@@ -175,4 +184,5 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 
 
 
+#endif
 #endif /* URI_TWICE_H_ANSI and URI_TWICE_H_UNICODE */

@@ -42,7 +42,9 @@
  * Holds code independent of the encoding pass.
  */
 
-#include <uriparser/UriIp4Independent.h>
+#ifndef URI_DOXYGEN
+# include <uriparser/UriIp4Independent.h>
+#endif
 
 
 
