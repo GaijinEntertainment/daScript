@@ -107,22 +107,16 @@
 				RelativePath="..\..\lib\Uri.c">
 			</File>
 			<File
-				RelativePath="..\..\lib\UriIndependent.c">
+				RelativePath="..\..\lib\UriBase.c">
 			</File>
 			<File
 				RelativePath="..\..\lib\UriIp4.c">
 			</File>
 			<File
-				RelativePath="..\..\lib\UriIp4Independent.c">
-			</File>
-			<File
-				RelativePath="..\..\lib\UriIp4Twice.c">
+				RelativePath="..\..\lib\UriIp4Base.c">
 			</File>
 			<File
 				RelativePath="..\..\lib\uriparser.c">
-			</File>
-			<File
-				RelativePath="..\..\lib\UriTwice.c">
 			</File>
 		</Filter>
 		<Filter
@@ -133,31 +127,25 @@
 				RelativePath="..\..\include\uriparser\Uri.h">
 			</File>
 			<File
-				RelativePath="..\..\include\uriparser\UriAnsi.h">
+				RelativePath="..\..\include\uriparser\UriBase.h">
 			</File>
 			<File
-				RelativePath="..\..\include\uriparser\UriConfig.h">
+				RelativePath="..\..\include\uriparser\UriDefsAnsi.h">
 			</File>
 			<File
-				RelativePath="..\..\include\uriparser\UriIndependent.h">
+				RelativePath="..\..\include\uriparser\UriDefsConfig.h">
+			</File>
+			<File
+				RelativePath="..\..\include\uriparser\UriDefsUnicode.h">
 			</File>
 			<File
 				RelativePath="..\..\include\uriparser\UriIp4.h">
 			</File>
 			<File
-				RelativePath="..\..\include\uriparser\UriIp4Independent.h">
-			</File>
-			<File
-				RelativePath="..\..\include\uriparser\UriIp4Twice.h">
+				RelativePath="..\..\include\uriparser\UriIp4Base.h">
 			</File>
 			<File
 				RelativePath="..\..\include\uriparser.h">
-			</File>
-			<File
-				RelativePath="..\..\include\uriparser\UriTwice.h">
-			</File>
-			<File
-				RelativePath="..\..\include\uriparser\UriUnicode.h">
 			</File>
 		</Filter>
 	</Files>

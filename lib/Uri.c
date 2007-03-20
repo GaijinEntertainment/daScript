@@ -742,9 +742,6 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(Parser) * pars
  * [IPv6address2]->..<]>
  */
 static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
-#ifdef _DEBUG
-	const URI_CHAR * const firstBackupForDebug = first;
-#endif
 	int zipperEver = 0;
 	int quadsDone = 0;
 	int digitCount = 0;
