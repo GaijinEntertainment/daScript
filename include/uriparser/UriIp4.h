@@ -40,6 +40,7 @@
 /**
  * @file UriIp4.h
  * Holds the IPv4 parser interface.
+ * NOTE: This header includes itself twice.
  */
 
 #if (defined(URI_PASS_ANSI) && !defined(URI_IP4_TWICE_H_ANSI)) \

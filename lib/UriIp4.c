@@ -40,6 +40,7 @@
 /**
  * @file UriIp4.c
  * Holds the IPv4 parser implementation.
+ * NOTE: This source file includes itself twice.
  */
 
 /* What encodings are enabled? */

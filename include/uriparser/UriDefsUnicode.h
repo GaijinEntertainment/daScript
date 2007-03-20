@@ -40,6 +40,7 @@
 /**
  * @file UriDefsUnicode.h
  * Holds definitions for the Unicode pass.
+ * NOTE: This header is included N times, not once.
  */
 
 /* Allow multi inclusion */

@@ -40,6 +40,7 @@
 /**
  * @file UriDefsAnsi.h
  * Holds definitions for the ANSI pass.
+ * NOTE: This header is included N times, not once.
  */
 
 /* Allow multi inclusion */

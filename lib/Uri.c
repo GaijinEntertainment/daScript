@@ -40,6 +40,7 @@
 /**
  * @file Uri.c
  * Holds the RFC 3986 %URI parser implementation.
+ * NOTE: This source file includes itself twice.
  */
 
 /* What encodings are enabled? */

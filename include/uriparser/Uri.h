@@ -40,6 +40,7 @@
 /**
  * @file Uri.h
  * Holds the RFC 3986 %URI parser interface.
+ * NOTE: This header includes itself twice.
  */
 
 #if (defined(URI_PASS_ANSI) && !defined(URI_TWICE_H_ANSI)) \
