@@ -38,7 +38,7 @@
  */
 
 /**
- * @file UriConfig.h
+ * @file UriDefsConfig.h
  * Adjusts the internal configuration after processing external definitions.
  */
 

@@ -47,7 +47,7 @@
 
 
 
-#include <uriparser/UriConfig.h>
+#include <uriparser/UriDefsConfig.h>
 
 #ifdef URI_ENABLE_LEGACY
 

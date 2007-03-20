@@ -38,32 +38,32 @@
  */
 
 /**
- * @file UriTwice.c
+ * @file Uri.c
  * Holds the RFC 3986 %URI parser implementation.
  */
 
 /* What encodings are enabled? */
-#include <uriparser/UriConfig.h>
+#include <uriparser/UriDefsConfig.h>
 #if (!defined(URI_PASS_ANSI) && !defined(URI_PASS_UNICODE))
 /* Include SELF twice */
 # define URI_PASS_ANSI 1
-# include "UriTwice.c"
+# include "Uri.c"
 # undef URI_PASS_ANSI
 # define URI_PASS_UNICODE 1
-# include "UriTwice.c"
+# include "Uri.c"
 # undef URI_PASS_UNICODE
 #else
 # ifdef URI_PASS_ANSI
-#  include <uriparser/UriAnsi.h>
+#  include <uriparser/UriDefsAnsi.h>
 # else
-#  include <uriparser/UriUnicode.h>
+#  include <uriparser/UriDefsUnicode.h>
 # endif
 
 
 
 #ifndef URI_DOXYGEN
-# include <uriparser/UriTwice.h>
-# include <uriparser/UriIp4Twice.h>
+# include <uriparser/Uri.h>
+# include <uriparser/UriIp4.h>
 #endif
 
 

@@ -38,31 +38,32 @@
  */
 
 /**
- * @file UriIp4Twice.c
+ * @file UriIp4.c
  * Holds the IPv4 parser implementation.
  */
 
 /* What encodings are enabled? */
-#include <uriparser/UriConfig.h>
+#include <uriparser/UriDefsConfig.h>
 #if (!defined(URI_PASS_ANSI) && !defined(URI_PASS_UNICODE))
 /* Include SELF twice */
 # define URI_PASS_ANSI 1
-# include "UriIp4Twice.c"
+# include "UriIp4.c"
 # undef URI_PASS_ANSI
 # define URI_PASS_UNICODE 1
-# include "UriIp4Twice.c"
+# include "UriIp4.c"
 # undef URI_PASS_UNICODE
 #else
 # ifdef URI_PASS_ANSI
-#  include <uriparser/UriAnsi.h>
+#  include <uriparser/UriDefsAnsi.h>
 # else
-#  include <uriparser/UriUnicode.h>
+#  include <uriparser/UriDefsUnicode.h>
 # endif
 
 
 
 #ifndef URI_DOXYGEN
-# include <uriparser/UriIp4Twice.h>
+# include <uriparser/UriIp4.h>
+# include <uriparser/UriIndependent.h>
 #endif
 
 

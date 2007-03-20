@@ -38,15 +38,12 @@
  */
 
 /**
- * @file UriAnsi.h
+ * @file UriDefsAnsi.h
  * Holds definitions for the ANSI pass.
  */
 
 /* Allow multi inclusion */
-#include "UriConfig.h"
-#ifndef URI_DOXYGEN
-#include "UriIndependent.h"
-#endif /* URI_DOXYGEN */
+#include "UriDefsConfig.h"
 
 
 

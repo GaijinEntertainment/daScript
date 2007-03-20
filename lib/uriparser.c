@@ -42,7 +42,7 @@
  * Holds the legacy code implementation.
  */
 
-#include <uriparser/UriConfig.h>
+#include <uriparser/UriDefsConfig.h>
 
 #ifdef URI_ENABLE_LEGACY
 
@@ -50,7 +50,7 @@
 
 #ifndef URI_DOXYGEN
 # include <uriparser.h>
-# include <uriparser/UriTwice.h>
+# include <uriparser/Uri.h>
 
 /* For atoi */
 # include <stdlib.h>
