@@ -70,7 +70,7 @@
 
 
 #ifndef URI_DOXYGEN
-# include "UriIp4Independent.h"
+# include "UriIp4Base.h"
 #endif
 
 

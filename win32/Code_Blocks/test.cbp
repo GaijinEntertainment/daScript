@@ -55,7 +55,7 @@
 			<Option link="0" />
 			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\include\uriparser\UriIndependent.h">
+		<Unit filename="..\..\include\uriparser\UriBase.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />
@@ -67,7 +67,7 @@
 			<Option link="0" />
 			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\include\uriparser\UriIp4Independent.h">
+		<Unit filename="..\..\include\uriparser\UriIp4Base.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />

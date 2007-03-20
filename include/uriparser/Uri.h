@@ -68,7 +68,7 @@
 # endif
 
 #ifndef URI_DOXYGEN
-# include "UriIndependent.h"
+# include "UriBase.h"
 #endif
 
 

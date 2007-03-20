@@ -38,12 +38,12 @@
  */
 
 /**
- * @file UriIp4Independent.c
+ * @file UriIp4Base.c
  * Holds code independent of the encoding pass.
  */
 
 #ifndef URI_DOXYGEN
-# include <uriparser/UriIp4Independent.h>
+# include <uriparser/UriIp4Base.h>
 #endif
 
 

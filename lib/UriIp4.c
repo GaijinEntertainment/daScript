@@ -63,7 +63,7 @@
 
 #ifndef URI_DOXYGEN
 # include <uriparser/UriIp4.h>
-# include <uriparser/UriIndependent.h>
+# include <uriparser/UriBase.h>
 #endif
 
 

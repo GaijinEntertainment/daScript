@@ -38,7 +38,7 @@
  */
 
 /**
- * @file UriIp4Independent.h
+ * @file UriIp4Base.h
  * Holds definitions independent of the encoding pass.
  */
 

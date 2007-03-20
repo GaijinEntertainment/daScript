@@ -38,7 +38,7 @@
  */
 
 /**
- * @file UriIndependent.h
+ * @file UriBase.h
  * Holds definitions independent of the encoding pass.
  */
 
