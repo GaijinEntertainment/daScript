@@ -228,6 +228,9 @@ private:
 		TEST_ASSERT(testUnescapingHelper(L"abc%20%41BC", L"abc ABC"));
 		TEST_ASSERT(testUnescapingHelper(L"%20", L" "));
 
+		/* Incomplete */
+		TEST_ASSERT(testUnescapingHelper(L"%0", L"%0"));
+
 		/* Nonhex */
 		TEST_ASSERT(testUnescapingHelper(L"%0g", L"%0g"));
 		TEST_ASSERT(testUnescapingHelper(L"%G0", L"%G0"));
