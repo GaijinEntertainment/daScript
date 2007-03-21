@@ -1,6 +1,11 @@
 == Requirements ==
  (1) URI parser fully conforming to RFC 3986
      http://tools.ietf.org/html/rfc3986
+/* by weijia:
+ *  Though rfc3986 is the latest URI spec, I 
+ *  prefer "latest RFC" to RFC3986 for we attempt
+ *  to be updated.
+ */
 
  (2) Based on an LL(1) grammar, at least mainly.
      Not using a jump table but one function per

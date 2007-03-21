@@ -1,0 +1,12 @@
+AC_PREREQ(2.59)
+
+AC_INIT([uriparser], [0.3.0], [songweijia@gmail.com])
+
+AM_INIT_AUTOMAKE([1.9 foreign])
+
+AC_PROG_CC
+AC_PROG_RANLIB
+
+AC_CONFIG_HEADERS([config.h])
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
