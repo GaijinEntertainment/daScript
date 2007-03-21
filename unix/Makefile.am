@@ -1,7 +1,7 @@
 ## Makefile.am
 lib_LIBRARIES = liburiparser.a
 ## man_MANS = uriparser.3
-include_HEADERS = ../include/uriparser.h \
+nobase_include_HEADERS = ../include/uriparser.h \
                   ../include/uriparser/Uri.h \
                   ../include/uriparser/UriBase.h \
                   ../include/uriparser/UriDefsAnsi.h \
