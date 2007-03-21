@@ -1,4 +1,6 @@
 ## Makefile.am
+AUTOMAKE_OPTIONS = dist-zip dist-bzip2
+
 lib_LIBRARIES = liburiparser.a
 ## man_MANS = uriparser.3
 nobase_include_HEADERS = ../include/uriparser.h \
