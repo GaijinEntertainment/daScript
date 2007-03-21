@@ -103,10 +103,12 @@ static const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(Parser) * parser, con
 static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 
 
+
 static void URI_FUNC(ResetParser)(URI_TYPE(Parser) * parser);
 static void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri);
 static void URI_FUNC(PushPathSegment)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 static void URI_FUNC(Stop)(URI_TYPE(Parser) * parser, const URI_CHAR * errorPos);
+unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig);
 
 
 
@@ -3000,6 +3002,152 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 		}
 		uri->pathHead = NULL;
 		uri->pathTail = NULL;
+	}
+}
+
+
+
+unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig) {
+	switch (hexdig) {
+	case _UT('0'):
+	case _UT('1'):
+	case _UT('2'):
+	case _UT('3'):
+	case _UT('4'):
+	case _UT('5'):
+	case _UT('6'):
+	case _UT('7'):
+	case _UT('8'):
+	case _UT('9'):
+		return (unsigned char)(9 + hexdig - _UT('9'));
+
+	case _UT('a'):
+	case _UT('b'):
+	case _UT('c'):
+	case _UT('d'):
+	case _UT('e'):
+	case _UT('f'):
+		return (unsigned char)(15 + hexdig - _UT('f'));
+
+	case _UT('A'):
+	case _UT('B'):
+	case _UT('C'):
+	case _UT('D'):
+	case _UT('E'):
+	case _UT('F'):
+		return (unsigned char)(15 + hexdig - _UT('F'));
+
+	default:
+		return 0;
+	}
+}
+
+
+
+const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout) {
+	URI_CHAR * read = inout;
+	URI_CHAR * write = inout;
+
+	if (inout == NULL) {
+		return NULL;
+	}
+
+	for (;;) {
+		switch (read[0]) {
+		case _UT('\0'):
+			if (read > write) {
+				write[0] = _UT('\0');
+				write++;
+			}
+			return write;
+
+		case _UT('%'):
+			switch (read[1]) {
+			case _UT('0'):
+			case _UT('1'):
+			case _UT('2'):
+			case _UT('3'):
+			case _UT('4'):
+			case _UT('5'):
+			case _UT('6'):
+			case _UT('7'):
+			case _UT('8'):
+			case _UT('9'):
+			case _UT('a'):
+			case _UT('b'):
+			case _UT('c'):
+			case _UT('d'):
+			case _UT('e'):
+			case _UT('f'):
+			case _UT('A'):
+			case _UT('B'):
+			case _UT('C'):
+			case _UT('D'):
+			case _UT('E'):
+			case _UT('F'):
+				switch (read[2]) {
+				case _UT('0'):
+				case _UT('1'):
+				case _UT('2'):
+				case _UT('3'):
+				case _UT('4'):
+				case _UT('5'):
+				case _UT('6'):
+				case _UT('7'):
+				case _UT('8'):
+				case _UT('9'):
+				case _UT('a'):
+				case _UT('b'):
+				case _UT('c'):
+				case _UT('d'):
+				case _UT('e'):
+				case _UT('f'):
+				case _UT('A'):
+				case _UT('B'):
+				case _UT('C'):
+				case _UT('D'):
+				case _UT('E'):
+				case _UT('F'):
+					{
+						/* Percent group found, make single char of that */
+						const unsigned char left = URI_FUNC(HexdigToInt)(read[1]);
+						const unsigned char right = URI_FUNC(HexdigToInt)(read[2]);
+						write[0] = (URI_CHAR)(16 * left + right);
+						read += 3;
+						write++;
+					}
+					break;
+
+				default:
+					/* Copy two chars unmodified and */
+					/* look at this char again */
+					if (read > write) {
+						write[0] = read[0];
+						write[1] = read[1];
+					}
+					read += 2;
+					write += 2;
+				}
+
+			default:
+				/* Copy one char unmodified and */
+				/* look at this char again */
+				if (read > write) {
+					write[0] = read[0];
+				}
+				read++;
+				write++;
+			}
+			break;
+
+		default:
+			/* Copy one char unmodified */
+			if (read > write) {
+				write[0] = read[0];
+			}
+			read++;
+			write++;
+		}
 	}
 }
 

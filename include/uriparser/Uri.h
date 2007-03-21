@@ -189,5 +189,20 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 
 
 
+/**
+ * Unescapes percent-encoded groups in a given string.
+ * E.g. "%20" will become " ". Unescaping is done in place.
+ * The return value will be point to the new position
+ * of the terminating zero. Use this value to get the new
+ * length of the string. NULL is only returned if <code>inout</code>
+ * is NULL.
+ *
+ * @param inout	Text to unescape
+ * @return		Pointer to new position of the terminating zero
+ */
+const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
+
+
+
 #endif
-#endif /* URI_TWICE_H_ANSI and URI_TWICE_H_UNICODE */
+#endif

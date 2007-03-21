@@ -66,3 +66,7 @@
 
 #undef URI_STRLEN
 #define URI_STRLEN wcslen
+#undef URI_STRCPY
+#define URI_STRCPY wcscpy
+#undef URI_STRCMP
+#define URI_STRCMP wcscmp

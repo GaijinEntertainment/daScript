@@ -82,4 +82,4 @@ int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
 
 
 #endif
-#endif /* URI_IP4_TWICE_H_ANSI and URI_IP4_TWICE_H_UNICODE */
+#endif
