@@ -216,16 +216,17 @@ private:
 	}
 
 	bool testUnescapingHelper(const wchar_t * input, const wchar_t * output) {
-		wchar_t * inputCopy = static_cast<URI_CHAR *>(malloc((URI_STRLEN(input) + 1) * sizeof(URI_CHAR)));
-		wcscpy(inputCopy, input);
-		const wchar_t * newTermZero = uriUnescapeInPlaceW(inputCopy);
-		return ((newTermZero == inputCopy + wcslen(output))
-				&& !wcscmp(input, output));
+		wchar_t * working = static_cast<URI_CHAR *>(malloc((URI_STRLEN(input) + 1) * sizeof(URI_CHAR)));
+		wcscpy(working, input);
+		const wchar_t * newTermZero = uriUnescapeInPlaceW(working);
+		return ((newTermZero == working + wcslen(output))
+				&& !wcscmp(working, output));
 	}
 
 	void testUnescaping() {
 		/* Proper */
-		TEST_ASSERT(testUnescapingHelper(L"abc%20def%30ghi", L"abc def ghi"));
+		TEST_ASSERT(testUnescapingHelper(L"abc%20%41BC", L"abc ABC"));
+		TEST_ASSERT(testUnescapingHelper(L"%20", L" "));
 
 		/* Nonhex */
 		TEST_ASSERT(testUnescapingHelper(L"%0g", L"%0g"));

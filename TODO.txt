@@ -1,5 +1,5 @@
 == SOON ==
- * Add (un)escape function
+ * Add escape function
  * Add GNU build files, liburiparser-0.3.0rc1.tar.gz
    * add flags to also generate tar.bz2 and zip
 

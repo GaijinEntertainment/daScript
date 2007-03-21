@@ -3057,7 +3057,6 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout) {
 		case _UT('\0'):
 			if (read > write) {
 				write[0] = _UT('\0');
-				write++;
 			}
 			return write;
 
@@ -3128,6 +3127,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout) {
 					read += 2;
 					write += 2;
 				}
+				break;
 
 			default:
 				/* Copy one char unmodified and */
