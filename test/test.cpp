@@ -47,6 +47,7 @@ public:
 		TEST_ADD(UriSuite::testUri)
 		TEST_ADD(UriSuite::testLegacy1)
 		TEST_ADD(UriSuite::testLegacy2)
+		TEST_ADD(UriSuite::testUriComponents)
 		TEST_ADD(UriSuite::testUnescaping)
 	}
 
@@ -150,35 +151,90 @@ private:
 
 		// On/off for each
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "//user:pass@[::1]:80/segment/index.html?query#frag"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://[::1]:80/segment/index.html?query#frag"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]/segment/index.html?query#frag"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]:80?query#frag"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]:80/segment/index.html#frag"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]:80/segment/index.html?query"));
+		uriFreeUriMembersA(&uriA);
 
 		// Schema, port, one segment
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "ftp://host:21/gnu/"));
+		uriFreeUriMembersA(&uriA);
 
 		// Relative
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "one/two/three"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "/one/two/three"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "//user:pass@localhost/one/two/three"));
+		uriFreeUriMembersA(&uriA);
 
+		// ANSI and Unicode
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://www.example.com/"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriW(&uriW, L"http://www.example.com/"));
+		uriFreeUriMembersW(&uriW);
 
 		// Real life examples
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://sourceforge.net/projects/uriparser/"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "mailto:test@example.com"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "../../"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "/"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, ""));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "file:///bin/bash"));
+		uriFreeUriMembersA(&uriA);
 
 		// Percent encoding
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://www.example.com/name%20with%20spaces/"));
+		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(NULL != uriParseUriA(&uriA, "http://www.example.com/name with spaces/"));
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriComponents() {
+		UriUriA uriA;
+		//                          0   4  0  3  0              15 01  0      7  01
+		const char * const input = "http" "://" "sourceforge.net" "/" "project" "/"
+		//		 0                   20 01  0              15
+				"platformdownload.php" "?" "group_id=182840";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.scheme.first == input);
+		TEST_ASSERT(uriA.scheme.afterLast == input + 4);
+		TEST_ASSERT(uriA.userInfo.first == NULL);
+		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 15);
+		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+
+		TEST_ASSERT(uriA.pathHead->text.first == input + 4 + 3 + 15 + 1);
+		TEST_ASSERT(uriA.pathHead->text.afterLast == input + 4 + 3 + 15 + 1 + 7);
+		TEST_ASSERT(uriA.pathHead->next->text.first == input + 4 + 3 + 15 + 1 + 7 + 1);
+		TEST_ASSERT(uriA.pathHead->next->text.afterLast == input + 4 + 3 + 15 + 1 + 7 + 1 + 20);
+		TEST_ASSERT(uriA.pathHead->next->next == NULL);
+		TEST_ASSERT(uriA.pathTail == uriA.pathHead->next);
+
+		TEST_ASSERT(uriA.query.first == input + 4 + 3 + 15 + 1 + 7 + 1 + 20 + 1);
+		TEST_ASSERT(uriA.query.afterLast == input + 4 + 3 + 15 + 1 + 7 + 1 + 20 + 1 + 15);
+		TEST_ASSERT(uriA.fragment.first == NULL);
+		TEST_ASSERT(uriA.fragment.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
 	}
 
 	void testLegacy1() {
