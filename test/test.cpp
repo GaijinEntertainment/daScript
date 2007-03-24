@@ -154,71 +154,78 @@ private:
 	}
 
 	void testUri() {
+		UriParserStateA stateA;
+		UriParserStateW stateW;
 		UriUriA uriA;
 		UriUriW uriW;
 
+		stateA.uri = &uriA;
+		stateW.uri = &uriW;
+
 		// On/off for each
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "//user:pass@[::1]:80/segment/index.html?query#frag"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "//user:pass@[::1]:80/segment/index.html?query#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://[::1]:80/segment/index.html?query#frag"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://[::1]:80/segment/index.html?query#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]/segment/index.html?query#frag"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://user:pass@[::1]/segment/index.html?query#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]:80?query#frag"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://user:pass@[::1]:80?query#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]:80/segment/index.html#frag"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://user:pass@[::1]:80/segment/index.html#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://user:pass@[::1]:80/segment/index.html?query"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://user:pass@[::1]:80/segment/index.html?query"));
 		uriFreeUriMembersA(&uriA);
 
 		// Schema, port, one segment
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "ftp://host:21/gnu/"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "ftp://host:21/gnu/"));
 		uriFreeUriMembersA(&uriA);
 
 		// Relative
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "one/two/three"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "one/two/three"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "/one/two/three"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "/one/two/three"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "//user:pass@localhost/one/two/three"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "//user:pass@localhost/one/two/three"));
 		uriFreeUriMembersA(&uriA);
 
 		// ANSI and Unicode
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://www.example.com/"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://www.example.com/"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriW(&uriW, L"http://www.example.com/"));
+		TEST_ASSERT(0 == uriParseUriW(&stateW, L"http://www.example.com/"));
 		uriFreeUriMembersW(&uriW);
 
 		// Real life examples
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://sourceforge.net/projects/uriparser/"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://sourceforge.net/projects/uriparser/"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "mailto:test@example.com"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "mailto:test@example.com"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "../../"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "../../"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "/"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "/"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, ""));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, ""));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "file:///bin/bash"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "file:///bin/bash"));
 		uriFreeUriMembersA(&uriA);
 
 		// Percent encoding
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, "http://www.example.com/name%20with%20spaces/"));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://www.example.com/name%20with%20spaces/"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL != uriParseUriA(&uriA, "http://www.example.com/name with spaces/"));
+		TEST_ASSERT(NULL != uriParseUriA(&stateA, "http://www.example.com/name with spaces/"));
 		uriFreeUriMembersA(&uriA);
 	}
 
 	void testUriComponents() {
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0              15 01  0      7  01
 		const char * const input = "http" "://" "sourceforge.net" "/" "project" "/"
 		//		 0                   20 01  0              15
 				"platformdownload.php" "?" "group_id=182840";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.scheme.first == input);
 		TEST_ASSERT(uriA.scheme.afterLast == input + 4);
@@ -247,10 +254,12 @@ private:
 
 	void testUriUserInfoHostPort1() {
 		// User info with ":", no port
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7  01  0        9
 		const char * const input = "http" "://" "abc:def" "@" "localhost";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
 		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
@@ -263,12 +272,14 @@ private:
 
 	void testUriUserInfoHostPort2() {
 		// User info with ":", with port
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7  01  0        9
 		const char * const input = "http" "://" "abc:def" "@" "localhost"
 		//		01   0  3
 				":" "123";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
 		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
@@ -281,10 +292,12 @@ private:
 
 	void testUriUserInfoHostPort3() {
 		// User info without ":", no port
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7  01  0        9
 		const char * const input = "http" "://" "abcdefg" "@" "localhost";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
 		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
@@ -297,12 +310,14 @@ private:
 
 	void testUriUserInfoHostPort4() {
 		// User info without ":", with port
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7  01  0        9
 		const char * const input = "http" "://" "abcdefg" "@" "localhost"
 		//		01   0  3
 				":" "123";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
 		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
@@ -315,10 +330,12 @@ private:
 
 	void testUriUserInfoHostPort5() {
 		// No user info, no port
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0        9
 		const char * const input = "http" "://" "localhost";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.userInfo.first == NULL);
 		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
@@ -331,10 +348,12 @@ private:
 
 	void testUriUserInfoHostPort6() {
 		// No user info, with port
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0        9  01  0  3
 		const char * const input = "http" "://" "localhost" ":" "123";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.userInfo.first == NULL);
 		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
@@ -346,10 +365,12 @@ private:
 	}
 
 	void testUriHostRegname() {
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0          11
 		const char * const input = "http" "://" "example.com";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
 		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 11);
@@ -361,10 +382,12 @@ private:
 	}
 
 	void testUriHostIpFour1() {
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7  01  0 2
 		const char * const input = "http" "://" "1.2.3.4" ":" "80";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
 		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7);
@@ -376,10 +399,12 @@ private:
 	}
 
 	void testUriHostIpFour2() {
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7
 		const char * const input = "http" "://" "1.2.3.4";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
 		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7);
@@ -391,10 +416,12 @@ private:
 	}
 
 	void testUriHostIpSix1() {
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  01  45  01  0 2
 		const char * const input = "http" "://" "[::1]" ":" "80";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 1);
 		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 4);
@@ -406,10 +433,12 @@ private:
 	}
 
 	void testUriHostIpSix2() {
+		UriParserStateA stateA;
 		UriUriA uriA;
+		stateA.uri = &uriA;
 		//                          0   4  0  3  01  45
 		const char * const input = "http" "://" "[::1]";
-		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
 
 		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 1);
 		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 4);

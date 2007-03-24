@@ -169,7 +169,9 @@ static URI_INLINE void uriMakePathString(char ** destPath,
 
 int URIParseString(URI * uri, const char * str) {
 	UriUriA internalUri;
-	if (NULL != uriParseUriA(&internalUri, str)) {
+	UriParserStateA state;
+	state.uri = &internalUri;
+	if (uriParseUriA(&state, str)) {
 		return 1;
 	}
 	if (uri == NULL) {

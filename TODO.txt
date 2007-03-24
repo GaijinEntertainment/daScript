@@ -1,6 +1,4 @@
 == SOON ==
- * Return error code instead of error position
-   * Move parser struct back outside
  * Option to turn off segment extraction if
    validating only?
  * Add escape function

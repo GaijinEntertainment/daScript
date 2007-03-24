@@ -104,7 +104,7 @@ typedef struct URI_TYPE(PathSegmentStruct) {
 	URI_TYPE(TextRange) text; /**< Path segment name */
 	struct URI_TYPE(PathSegmentStruct) * next; /**< Pointer to the next path segment in the list, can be NULL if last already */
 
-	void * reserved; /**< Not used */
+	void * reserved; /**< Reserved to the parser */
 } URI_TYPE(PathSegment);
 
 
@@ -147,12 +147,13 @@ typedef struct URI_TYPE(UriStruct) {
  * Missing components can be NULL to reflect
  * a components absence.
  */
-typedef struct URI_TYPE(ParserStruct) {
+typedef struct URI_TYPE(ParserStateStruct) {
 	URI_TYPE(Uri) * uri; /**< %URI structure filled while parsing */
-	const URI_CHAR * errorPos; /**< Pointer to position in case of a parsing error */
+	int errorCode; /**< Code identifying the occured error */
+	const URI_CHAR * errorPos; /**< Pointer to position in case of a syntax error */
 
-	void * reserved; /**< Not used */
-} URI_TYPE(Parser);
+	void * reserved; /**< Reserved to the parser */
+} URI_TYPE(ParserState);
 
 
 
@@ -165,12 +166,12 @@ UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text);
 /**
  * Parses a RFC 3986 URI.
  *
- * @param uri		Output %URI, must not be NULL
+ * @param state		Parser state with set output %URI, must not be NULL
  * @param first		Pointer to the first character to parse, must not be NULL
  * @param afterLast	Pointer to the character after the last to parse, must not be NULL
- * @return			NULL on success, error position otherwise
+ * @return			0 on success, error code otherwise
  */
-const URI_CHAR * URI_FUNC(ParseUriEx)(URI_TYPE(Uri) * uri,
+int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
 
 
@@ -178,11 +179,12 @@ const URI_CHAR * URI_FUNC(ParseUriEx)(URI_TYPE(Uri) * uri,
 /**
  * Parses a RFC 3986 %URI.
  *
- * @param uri		Output %URI, must not be NULL
+ * @param state		Parser state with set output %URI, must not be NULL
  * @param text		Text to parse, must not be NULL
- * @return			NULL on success, error position otherwise
+ * @return			0 on success, error code otherwise
  */
-const URI_CHAR * URI_FUNC(ParseUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text);
+int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
+		const URI_CHAR * text);
 
 
 
