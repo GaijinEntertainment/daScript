@@ -102,12 +102,12 @@ typedef struct URI_TYPE(PathSegmentStruct) {
 
 
 /**
- * Holds strcutured host information.
+ * Holds structured host information.
  * This is either a IPv4, IPv6, plain
  * text for IPvFutere or all zero for
  * a registered name.
  */
-typedef union URI_TYPE(HostDataUnion) {
+typedef struct URI_TYPE(HostDataStruct) {
 	UriIp4 * ip4; /**< IPv4 address */
 	UriIp6 * ip6; /**< IPv6 address */
 	URI_TYPE(TextRange) ipFuture; /**< IPvFuture address */
@@ -122,7 +122,7 @@ typedef union URI_TYPE(HostDataUnion) {
 typedef struct URI_TYPE(UriStruct) {
 	URI_TYPE(TextRange) scheme; /**< Scheme (e.g. "http") */
 	URI_TYPE(TextRange) userInfo; /**< User info (e.g. "user:pass") */
-	URI_TYPE(TextRange) hostText; /**< Host text (set for all hosts) */
+	URI_TYPE(TextRange) hostText; /**< Host text (set for all hosts, excluding square brackets) */
 	URI_TYPE(HostData) hostData; /**< Structured host type specific data */
 	URI_TYPE(TextRange) portText; /**< Port (e.g. "80") */
 	URI_TYPE(PathSegment) * pathHead; /**< Head of a linked list of path segments */

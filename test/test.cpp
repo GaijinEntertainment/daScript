@@ -342,8 +342,8 @@ private:
 		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
 		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
 		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 9);
-		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 9 + 1 + 1);
-		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 9 + 1 + 1 + 3);
+		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 9 + 1);
+		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 9 + 1 + 3);
 		uriFreeUriMembersA(&uriA);
 	}
 
@@ -355,6 +355,8 @@ private:
 
 		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
 		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 11);
+		TEST_ASSERT(uriA.hostData.ip4 == NULL);
+		TEST_ASSERT(uriA.hostData.ip6 == NULL);
 		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
 		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
@@ -369,19 +371,23 @@ private:
 		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
 		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7);
 		TEST_ASSERT(uriA.hostData.ip4 != NULL);
+		TEST_ASSERT(uriA.hostData.ip6 == NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
 		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
 	}
 
 	void testUriHostIpSix() {
 		UriUriA uriA;
-		//                          0   4  0  3  0    5
+		//                          0   4  0  3  01  45
 		const char * const input = "http" "://" "[::1]";
 		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
 
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 5);
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 1);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 4);
+		TEST_ASSERT(uriA.hostData.ip4 == NULL);
 		TEST_ASSERT(uriA.hostData.ip6 != NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
 		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
 	}

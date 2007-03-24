@@ -1,7 +1,5 @@
 == SOON ==
  * Check all "first >= afterLast" of NULL cases
- * Bring back ip4/ip6 distinction
- * Fix bug reveiled by testsuite
  * Return error code instead of error position
    * Move parser struct back outside
  * Option to turn off segment extraction if
