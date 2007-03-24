@@ -53,6 +53,12 @@
 
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+
 #define	DEFAULT_MAX_LEN    64
 
 #define	MAX_URI_SCHEME     DEFAULT_MAX_LEN
@@ -177,6 +183,11 @@ void URIFree(URI * uri);
 
 
 
-#endif /* URI_ENABLE_LEGACY */
+#ifdef __cplusplus
+}
+#endif
 
+
+
+#endif /* URI_ENABLE_LEGACY */
 #endif /* URI_URIPARSER_H */

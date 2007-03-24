@@ -19,12 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-extern "C" {
-	// Including C header from C++
-	#include <uriparser.h>
-	#include <uriparser/Uri.h>
-}
-
+#include <uriparser.h>
+#include <uriparser/Uri.h>
 #include "CppTest/cpptest.h"
 #include <memory>
 using namespace Test;

@@ -68,6 +68,14 @@
 #  include "UriDefsUnicode.h"
 # endif
 
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+
 #ifndef URI_DOXYGEN
 # include "UriBase.h"
 #endif
@@ -201,6 +209,12 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * @return		Pointer to new position of the terminating zero
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
+
+
+
+#ifdef __cplusplus
+}
+#endif
 
 
 
