@@ -52,8 +52,10 @@ public:
 		TEST_ADD(UriSuite::testUriUserInfoHostPort5)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort6)
 		TEST_ADD(UriSuite::testUriHostRegname)
-		TEST_ADD(UriSuite::testUriHostIpFour)
-		TEST_ADD(UriSuite::testUriHostIpSix)
+		TEST_ADD(UriSuite::testUriHostIpFour1)
+		TEST_ADD(UriSuite::testUriHostIpFour2)
+		TEST_ADD(UriSuite::testUriHostIpSix1)
+		TEST_ADD(UriSuite::testUriHostIpSix2)
 		TEST_ADD(UriSuite::testUriHostIpFuture)
 		TEST_ADD(UriSuite::testLegacy1)
 		TEST_ADD(UriSuite::testLegacy2)
@@ -362,7 +364,22 @@ private:
 		uriFreeUriMembersA(&uriA);
 	}
 
-	void testUriHostIpFour() {
+	void testUriHostIpFour1() {
+		UriUriA uriA;
+		//                          0   4  0  3  0      7  01  0 2
+		const char * const input = "http" "://" "1.2.3.4" ":" "80";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7);
+		TEST_ASSERT(uriA.hostData.ip4 != NULL);
+		TEST_ASSERT(uriA.hostData.ip6 == NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriHostIpFour2() {
 		UriUriA uriA;
 		//                          0   4  0  3  0      7
 		const char * const input = "http" "://" "1.2.3.4";
@@ -377,7 +394,22 @@ private:
 		uriFreeUriMembersA(&uriA);
 	}
 
-	void testUriHostIpSix() {
+	void testUriHostIpSix1() {
+		UriUriA uriA;
+		//                          0   4  0  3  01  45  01  0 2
+		const char * const input = "http" "://" "[::1]" ":" "80";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 1);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 4);
+		TEST_ASSERT(uriA.hostData.ip4 == NULL);
+		TEST_ASSERT(uriA.hostData.ip6 != NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriHostIpSix2() {
 		UriUriA uriA;
 		//                          0   4  0  3  01  45
 		const char * const input = "http" "://" "[::1]";
