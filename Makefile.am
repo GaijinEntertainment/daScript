@@ -3,30 +3,29 @@ AUTOMAKE_OPTIONS = dist-zip dist-bzip2
 
 lib_LIBRARIES = liburiparser.a
 ## man_MANS = uriparser.3
-nobase_include_HEADERS = ../include/uriparser.h \
-                  ../include/uriparser/Uri.h \
-                  ../include/uriparser/UriBase.h \
-                  ../include/uriparser/UriDefsAnsi.h \
-                  ../include/uriparser/UriDefsConfig.h \
-                  ../include/uriparser/UriDefsUnicode.h \
-                  ../include/uriparser/UriIp4.h \
-                  ../include/uriparser/UriIp4Base.h
+
+include_uriparserdir = $(prefix)/include/uriparser
+include_uriparser_HEADERS = \
+	include/uriparser/Uri.h \
+	include/uriparser/UriBase.h \
+	include/uriparser/UriDefsAnsi.h \
+	include/uriparser/UriDefsConfig.h \
+	include/uriparser/UriDefsUnicode.h \
+	include/uriparser/UriIp4.h \
+	include/uriparser/UriIp4Base.h
+
+includedir = $(prefix)/include
+include_HEADERS = \
+	include/uriparser.h
+
 liburiparser_a_SOURCES = \
-                         ../include/uriparser/Uri.h \
-                         ../include/uriparser/UriBase.h \
-                         ../include/uriparser/UriDefsAnsi.h \
-                         ../include/uriparser/UriDefsConfig.h \
-                         ../include/uriparser/UriDefsUnicode.h \
-                         ../include/uriparser/UriIp4.h \
-                         ../include/uriparser/UriIp4Base.h \
-                         ../lib/Uri.c \
-                         ../lib/UriIp4.c \
-                         ../lib/uriparser.c \
-                         ../lib/UriIp4Base.c  \
-                         ../include/uriparser.h 
+	lib/Uri.c \
+	lib/UriIp4.c \
+	lib/UriIp4Base.c
+	lib/uriparser.c
 
 ## TESTPROG=test
 
-CFLAGS+=-I../include
+CFLAGS+=-Iinclude
 
 ## test=${TESTPROG}

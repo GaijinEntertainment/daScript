@@ -1,5 +1,5 @@
-#!/bin/sh
+#!/bin/bash
 aclocal \
 && autoheader \
 && autoconf \
-&& automake --gnu --add-missing
+&& automake --gnu --add-missing --copy
