@@ -102,6 +102,8 @@ static const URI_CHAR * URI_FUNC(ParseUriTail)(URI_TYPE(Parser) * parser, const 
 static const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 
+void URI_FUNC(OnExitOwnHost2)(URI_TYPE(Parser) * parser, const URI_CHAR * first);
+
 
 
 static void URI_FUNC(ResetParser)(URI_TYPE(Parser) * parser);
@@ -1227,12 +1229,28 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(Parser) * par
 
 
 
+void URI_FUNC(OnExitOwnHost2)(URI_TYPE(Parser) * parser, const URI_CHAR * first) {
+	parser->uri->hostText.afterLast = first; /* HOST END */
+
+	/* Valid IPv4 or just a regname? */
+	parser->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+	if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->uri->hostData.ip4->data,
+			parser->uri->hostText.first, parser->uri->hostText.afterLast)) {
+		/* Not IPv4 */
+		free(parser->uri->hostData.ip4);
+		parser->uri->hostData.ip4 = NULL;
+	}
+}
+
+
+
 /*
  * [ownHost2]->[authorityTwo] // can take <NULL>
  * [ownHost2]->[pctSubUnres][ownHost2]
  */
 static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(OnExitOwnHost2)(parser, first);
 		return afterLast;
 	}
 
@@ -1325,17 +1343,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(Parser) * parser, const
 		}
 
 	default:
-		parser->uri->hostText.afterLast = first; /* HOST END */
-
-		/* Valid IPv4 or just a regname? */
-		parser->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
-		if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(parser->uri->hostData.ip4->data,
-				parser->uri->hostText.first, parser->uri->hostText.afterLast)) {
-			/* Not IPv4 */
-			free(parser->uri->hostData.ip4);
-			parser->uri->hostData.ip4 = NULL;
-		}
-
+		URI_FUNC(OnExitOwnHost2)(parser, first);
 		return URI_FUNC(ParseAuthorityTwo)(parser, first, afterLast);
 	}
 }
@@ -1783,6 +1791,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(Parser) * parser, co
 		return URI_FUNC(ParseOwnUserInfo)(parser, first + 1, afterLast);
 
 	case _UT('@'):
+		/* SURE */
 		parser->uri->userInfo.afterLast = first; /* USERINFO END */
 		parser->uri->hostText.first = first + 1; /* HOST BEGIN */
 		return URI_FUNC(ParseOwnHost)(parser, first + 1, afterLast);
