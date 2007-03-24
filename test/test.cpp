@@ -45,6 +45,16 @@ public:
 		TEST_ADD(UriSuite::testIpSixPass)
 		TEST_ADD(UriSuite::testIpSixFail)
 		TEST_ADD(UriSuite::testUri)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort1)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort2)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort3)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort4)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort5)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort6)
+		TEST_ADD(UriSuite::testUriHostRegname)
+		TEST_ADD(UriSuite::testUriHostIpFour)
+		TEST_ADD(UriSuite::testUriHostIpSix)
+		TEST_ADD(UriSuite::testUriHostIpFuture)
 		TEST_ADD(UriSuite::testLegacy1)
 		TEST_ADD(UriSuite::testLegacy2)
 		TEST_ADD(UriSuite::testUriComponents)
@@ -235,6 +245,149 @@ private:
 		TEST_ASSERT(uriA.fragment.first == NULL);
 		TEST_ASSERT(uriA.fragment.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort1() {
+		// User info with ":", no port
+		UriUriA uriA;
+		//                          0   4  0  3  0      7  01  0        9
+		const char * const input = "http" "://" "abc:def" "@" "localhost";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
+		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 7 + 1);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort2() {
+		// User info with ":", with port
+		UriUriA uriA;
+		//                          0   4  0  3  0      7  01  0        9
+		const char * const input = "http" "://" "abc:def" "@" "localhost"
+		//		01   0  3
+				":" "123";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
+		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 7 + 1);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
+		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 7 + 1 + 9 + 1);
+		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 7 + 1 + 9 + 1 + 3);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort3() {
+		// User info without ":", no port
+		UriUriA uriA;
+		//                          0   4  0  3  0      7  01  0        9
+		const char * const input = "http" "://" "abcdefg" "@" "localhost";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
+		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 7 + 1);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort4() {
+		// User info without ":", with port
+		UriUriA uriA;
+		//                          0   4  0  3  0      7  01  0        9
+		const char * const input = "http" "://" "abcdefg" "@" "localhost"
+		//		01   0  3
+				":" "123";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
+		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 7 + 1);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
+		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 7 + 1 + 9 + 1);
+		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 7 + 1 + 9 + 1 + 3);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort5() {
+		// No user info, no port
+		UriUriA uriA;
+		//                          0   4  0  3  0        9
+		const char * const input = "http" "://" "localhost";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.userInfo.first == NULL);
+		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 9);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort6() {
+		// No user info, with port
+		UriUriA uriA;
+		//                          0   4  0  3  0        9  01  0  3
+		const char * const input = "http" "://" "localhost" ":" "123";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.userInfo.first == NULL);
+		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 9);
+		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 9 + 1 + 1);
+		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 9 + 1 + 1 + 3);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriHostRegname() {
+		UriUriA uriA;
+		//                          0   4  0  3  0          11
+		const char * const input = "http" "://" "example.com";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 11);
+		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriHostIpFour() {
+		UriUriA uriA;
+		//                          0   4  0  3  0      7
+		const char * const input = "http" "://" "1.2.3.4";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7);
+		TEST_ASSERT(uriA.hostData.ip4 != NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriHostIpSix() {
+		UriUriA uriA;
+		//                          0   4  0  3  0    5
+		const char * const input = "http" "://" "[::1]";
+		TEST_ASSERT(NULL == uriParseUriA(&uriA, input));
+
+		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
+		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 5);
+		TEST_ASSERT(uriA.hostData.ip6 != NULL);
+		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriHostIpFuture() {
+		// TODO
 	}
 
 	void testLegacy1() {
