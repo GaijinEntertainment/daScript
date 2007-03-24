@@ -213,6 +213,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseDecOctetOne)(UriIp4Parser * par
 
 
 /*
+ * [decOctetTwo]-><NULL>
  * [decOctetTwo]-><0>[decOctetThree]
  * [decOctetTwo]-><1>[decOctetThree]
  * [decOctetTwo]-><2>[decOctetThree]
@@ -251,7 +252,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseDecOctetTwo)(UriIp4Parser * par
 		return first + 1;
 
 	default:
-		return NULL;
+		return first;
 	}
 }
 

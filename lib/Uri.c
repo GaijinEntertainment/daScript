@@ -103,6 +103,7 @@ static const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(Parser) * parser, con
 static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(Parser) * parser, const URI_CHAR * first, const URI_CHAR * afterLast);
 
 static void URI_FUNC(OnExitOwnHost2)(URI_TYPE(Parser) * parser, const URI_CHAR * first);
+static void URI_FUNC(OnExitOwnHostUserInfo)(URI_TYPE(Parser) * parser, const URI_CHAR * first);
 
 
 
