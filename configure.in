@@ -4,8 +4,28 @@ AC_INIT([uriparser], [0.3.0rc1], [songweijia@gmail.com])
 
 AM_INIT_AUTOMAKE([1.9 foreign])
 
+AM_CONFIG_HEADER(test/CppTest/config.h)
+
 AC_PROG_CC
+AC_PROG_CXX
 AC_PROG_RANLIB
+AC_HEADER_STDC
+
+
+dnl // These are for and from CppTest
+AC_CHECK_HEADERS(sys/time.h)
+AC_CHECK_FUNCS([gettimeofday])
+AC_MSG_CHECKING(for round)
+AC_TRY_COMPILE(
+	[ #include <math.h> ],
+	[ double d = round(1.0); ],
+	[ round=yes ],[ round=no ])
+AC_MSG_RESULT($round)
+if test "$round" = "yes"; then
+	AC_DEFINE([HAVE_ROUND],,[Defined if the function exists])
+fi
+
+
 
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile])
