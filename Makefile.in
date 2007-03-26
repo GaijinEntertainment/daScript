@@ -38,8 +38,8 @@ subdir = .
 DIST_COMMON = $(am__configure_deps) $(include_HEADERS) \
 	$(include_uriparser_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(top_srcdir)/configure \
-	$(top_srcdir)/test/CppTest/config.h.in AUTHORS COPYING depcomp \
-	install-sh missing
+	$(top_srcdir)/test/CppTest/config.h.in AUTHORS COPYING \
+	ChangeLog depcomp install-sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
