@@ -84,7 +84,7 @@ extern "C" {
 
 /**
  * Specifies a range of characters within a string.
- * The range includes all characters from <code>first<code>
+ * The range includes all characters from <code>first</code>
  * to one before <code>afterLast</code>. So if both are
  * non-NULL the difference is the length of the text range.
  */
