@@ -157,12 +157,6 @@ typedef struct URI_TYPE(ParserStateStruct) {
 
 
 
-#ifdef URI_TESTING
-UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text);
-#endif
-
-
-
 /**
  * Parses a RFC 3986 URI.
  *

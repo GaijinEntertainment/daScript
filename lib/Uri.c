@@ -3213,8 +3213,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout) {
 
 
 
-/* TODO */
-UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text) {
+UriBool URI_FUNC(_TESTING_ONLY_ParseIpSix)(const URI_CHAR * text) {
 	URI_TYPE(Uri) uri;
 	URI_TYPE(ParserState) parser;
 	const URI_CHAR * const afterIpSix = text + URI_STRLEN(text);
@@ -3227,6 +3226,14 @@ UriBool URI_FUNC(ParseIpSix)(const URI_CHAR * text) {
 	res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
 	URI_FUNC(FreeUriMembers)(&uri);
 	return res == afterIpSix ? URI_TRUE : URI_FALSE;
+}
+
+
+
+UriBool URI_FUNC(_TESTING_ONLY_ParseIpFour)(const URI_CHAR * text) {
+	unsigned char octets[4];
+	int res = URI_FUNC(ParseIpFourAddress)(octets, text, text + URI_STRLEN(text));
+	return (res == URI_SUCCESS) ? URI_TRUE : URI_FALSE;
 }
 
 

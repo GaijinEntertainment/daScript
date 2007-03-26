@@ -40,7 +40,6 @@ liburiparser_a_SOURCES = \
 
 
 test_uriparser_test_CPPFLAGS = -Iinclude
-test_uriparser_test_CXXFLAGS = -DURI_TESTING
 test_uriparser_test_LDADD = -luriparser
 test_uriparser_test_LDFLAGS = -L.
 

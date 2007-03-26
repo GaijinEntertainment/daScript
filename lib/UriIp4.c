@@ -148,7 +148,7 @@ int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
 static URI_INLINE const URI_CHAR * URI_FUNC(ParseDecOctet)(UriIp4Parser * parser,
 		const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
-		return afterLast;
+		return NULL;
 	}
 
 	switch (*first) {

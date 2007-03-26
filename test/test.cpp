@@ -28,9 +28,19 @@ using namespace std;
 
 
 
+extern "C" {
+UriBool uri_TESTING_ONLY_ParseIpSixA(const char * text);
+UriBool uri_TESTING_ONLY_ParseIpFourA(const char * text);
+}
+
+
+
+#define URI_TEST_IP_FOUR_FAIL(x) TEST_ASSERT(URI_FALSE == uri_TESTING_ONLY_ParseIpFourA(x))
+#define URI_TEST_IP_FOUR_PASS(x) TEST_ASSERT(URI_TRUE == uri_TESTING_ONLY_ParseIpFourA(x))
+
 /* Note the closing brackets! TODO */
-#define URI_TEST_IP_SIX_FAIL(x) TEST_ASSERT(URI_FALSE == uriParseIpSixA(x "]"))
-#define URI_TEST_IP_SIX_PASS(x) TEST_ASSERT(URI_TRUE == uriParseIpSixA(x "]"))
+#define URI_TEST_IP_SIX_FAIL(x) TEST_ASSERT(URI_FALSE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
+#define URI_TEST_IP_SIX_PASS(x) TEST_ASSERT(URI_TRUE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
 
 
 
@@ -38,6 +48,7 @@ class UriSuite : public Suite {
 
 public:
 	UriSuite() {
+		TEST_ADD(UriSuite::testIpFour)
 		TEST_ADD(UriSuite::testIpSixPass)
 		TEST_ADD(UriSuite::testIpSixFail)
 		TEST_ADD(UriSuite::testUri)
@@ -60,6 +71,30 @@ public:
 	}
 
 private:
+	void testIpFour() {
+		URI_TEST_IP_FOUR_FAIL("01.0.0.0");
+		URI_TEST_IP_FOUR_FAIL("001.0.0.0");
+		URI_TEST_IP_FOUR_FAIL("00.0.0.0");
+		URI_TEST_IP_FOUR_FAIL("000.0.0.0");
+		URI_TEST_IP_FOUR_FAIL("256.0.0.0");
+		URI_TEST_IP_FOUR_FAIL("300.0.0.0");
+		URI_TEST_IP_FOUR_FAIL("1111.0.0.0");
+		URI_TEST_IP_FOUR_FAIL("-1.0.0.0");
+		URI_TEST_IP_FOUR_FAIL("0.0.0");
+		URI_TEST_IP_FOUR_FAIL("0.0.0.");
+		URI_TEST_IP_FOUR_FAIL("0.0.0.0.");
+		URI_TEST_IP_FOUR_FAIL("0.0.0.0.0");
+		URI_TEST_IP_FOUR_FAIL("0.0..0");
+		URI_TEST_IP_FOUR_FAIL(".0.0.0");
+
+		URI_TEST_IP_FOUR_PASS("255.0.0.0");
+		URI_TEST_IP_FOUR_PASS("0.0.0.0");
+		URI_TEST_IP_FOUR_PASS("1.0.0.0");
+		URI_TEST_IP_FOUR_PASS("2.0.0.0");
+		URI_TEST_IP_FOUR_PASS("3.0.0.0");
+		URI_TEST_IP_FOUR_PASS("30.0.0.0");
+	}
+	
 	void testIpSixPass() {
 		// Quad length
 		URI_TEST_IP_SIX_PASS("abcd::");
@@ -518,6 +553,6 @@ private:
 int main() {
 	Suite suite;
 	suite.add(auto_ptr<Suite>(new UriSuite()));
-    TextOutput output(TextOutput::Verbose);
-    return suite.run(output, false) ? 0 : 1;
+	TextOutput output(TextOutput::Verbose);
+	return suite.run(output, false) ? 0 : 1;
 }
