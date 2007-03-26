@@ -102,13 +102,10 @@ typedef int UriBool;
 #define URI_TRUE     1
 #define URI_FALSE    0
 
-#define URI_SUCCESS  0
-#define URI_ERROR    1
-
 
 
 /* Error codes */
-#define URI_ERROR_SUCCESS   0
+#define URI_SUCCESS         0
 #define URI_ERROR_SYNTAX    1
 #define URI_ERROR_NULL      2 /* One of the params passed was NULL although it mustn't be */
 #define URI_ERROR_MALLOC    3 /* Not used yet, TODO */

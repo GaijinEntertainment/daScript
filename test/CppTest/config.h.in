@@ -1,16 +1,10 @@
-/* CppTest/config.h.in.  Generated from configure.in by autoheader.  */
+/* test/CppTest/config.h.in.  Generated from configure.in by autoheader.  */
 
 /* Define to 1 if you have the `gettimeofday' function. */
 #undef HAVE_GETTIMEOFDAY
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
-
-/* Define to 1 if you have the `expat' library (-lexpat). */
-#undef HAVE_LIBEXPAT
-
-/* Define to 1 if you have the `spiff' library (-lspiff). */
-#undef HAVE_LIBSPIFF
 
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H

@@ -1250,7 +1250,7 @@ static URI_INLINE void URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state, c
 
 	/* Valid IPv4 or just a regname? */
 	state->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
-	if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
+	if (URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
 			state->uri->hostText.first, state->uri->hostText.afterLast)) {
 		/* Not IPv4 */
 		free(state->uri->hostData.ip4);
@@ -1373,7 +1373,7 @@ static URI_INLINE void URI_FUNC(OnExitOwnHostUserInfo)(URI_TYPE(ParserState) * s
 
 	/* Valid IPv4 or just a regname? */
 	state->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
-	if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
+	if (URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
 			state->uri->hostText.first, state->uri->hostText.afterLast)) {
 		/* Not IPv4 */
 		free(state->uri->hostData.ip4);
@@ -1608,7 +1608,7 @@ static URI_INLINE void URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) * s
 
 	/* Valid IPv4 or just a regname? */
 	state->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
-	if (URI_ERROR == URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
+	if (URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
 			state->uri->hostText.first, state->uri->hostText.afterLast)) {
 		/* Not IPv4 */
 		free(state->uri->hostData.ip4);
@@ -3027,7 +3027,7 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state, const URI_CHAR * first, 
 	if (afterUriReference != afterLast) {
 		return URI_ERROR_SYNTAX;
 	}
-	return URI_ERROR_SUCCESS;
+	return URI_SUCCESS;
 }
 
 

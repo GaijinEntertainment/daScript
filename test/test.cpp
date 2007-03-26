@@ -213,7 +213,7 @@ private:
 		// Percent encoding
 		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://www.example.com/name%20with%20spaces/"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(NULL != uriParseUriA(&stateA, "http://www.example.com/name with spaces/"));
+		TEST_ASSERT(0 != uriParseUriA(&stateA, "http://www.example.com/name with spaces/"));
 		uriFreeUriMembersA(&uriA);
 	}
 

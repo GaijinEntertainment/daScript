@@ -94,7 +94,7 @@ int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
 	/* Essential checks */
 	if ((octetOutput == NULL) || (first == NULL)
 			|| (afterLast <= first)) {
-		return URI_ERROR;
+		return URI_ERROR_SYNTAX;
 	}
 
 	/* Reset parser */
@@ -103,28 +103,28 @@ int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
 	/* Octet #1 */
 	after = URI_FUNC(ParseDecOctet)(&parser, first, afterLast);
 	if ((after == NULL) || (after >= afterLast) || (*after != _UT('.'))) {
-		return URI_ERROR;
+		return URI_ERROR_SYNTAX;
 	}
 	uriStackToOctet(&parser, octetOutput);
 
 	/* Octet #2 */
 	after = URI_FUNC(ParseDecOctet)(&parser, after + 1, afterLast);
 	if ((after == NULL) || (after >= afterLast) || (*after != _UT('.'))) {
-		return URI_ERROR;
+		return URI_ERROR_SYNTAX;
 	}
 	uriStackToOctet(&parser, octetOutput + 1);
 
 	/* Octet #3 */
 	after = URI_FUNC(ParseDecOctet)(&parser, after + 1, afterLast);
 	if ((after == NULL) || (after >= afterLast) || (*after != _UT('.'))) {
-		return URI_ERROR;
+		return URI_ERROR_SYNTAX;
 	}
 	uriStackToOctet(&parser, octetOutput + 2);
 
 	/* Octet #4 */
 	after = URI_FUNC(ParseDecOctet)(&parser, after + 1, afterLast);
 	if (after != afterLast) {
-		return URI_ERROR;
+		return URI_ERROR_SYNTAX;
 	}
 	uriStackToOctet(&parser, octetOutput + 3);
 
