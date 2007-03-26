@@ -1,0 +1,10 @@
+???
+
+  * Added: New API, old marked deprecated
+  * Added: Unicode support (think wchar_t)
+  * Added: Doxygen code documentation
+  * Added: Test suite using CppTest
+  * Changed: Library code is now licensed under the new BSD license.
+      The test suite code is licensed under LGPL.
+
+2006-12-08 -- 0.2.1
