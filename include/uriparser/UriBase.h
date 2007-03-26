@@ -116,7 +116,11 @@ typedef int UriBool;
 # include <stdio.h> /* For NULL */
 # include <ctype.h> /* For wchar_t */
 # include <string.h> /* For strlen, memset, memcpy */
-# include <malloc.h> /* For malloc */
+# if defined(__APPLE__) && defined(__MACH__)
+#  include <malloc/malloc.h> /* For malloc, Mac OS X */
+# else
+#  include <malloc.h> /* For malloc */
+# endif
 #endif /* URI_DOXYGEN */
 
 
