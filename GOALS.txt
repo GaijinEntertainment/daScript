@@ -1,11 +1,7 @@
 == Requirements ==
- (1) URI parser fully conforming to RFC 3986
+ (1) URI parser fully conforming to the
+     latest URI RFC. Currently this is RFC 3986:
      http://tools.ietf.org/html/rfc3986
-/* by weijia:
- *  Though rfc3986 is the latest URI spec, I 
- *  prefer "latest RFC" to RFC3986 for we attempt
- *  to be updated.
- */
 
  (2) Based on an LL(1) grammar, at least mainly.
      Not using a jump table but one function per
@@ -16,7 +12,7 @@
      Test suite code licensed under LGPL.
      http://www.opensource.org/licenses/lgpl-license.php
 
- (4) Written in ANSI C.
+ (4) Written in ANSI/ISO C.
 
  (5) Portable. Must compile with GCC, MinGW,
      Visual Studio 200[35].

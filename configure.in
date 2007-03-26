@@ -1,5 +1,5 @@
 AC_PREREQ(2.59)
-AC_INIT([uriparser], [0.3.0rc1], [songweijia@gmail.com])
+AC_INIT([uriparser], [0.3.0], [songweijia@gmail.com])
 AM_INIT_AUTOMAKE([1.9 foreign])
 AM_CONFIG_HEADER(test/CppTest/config.h)
 

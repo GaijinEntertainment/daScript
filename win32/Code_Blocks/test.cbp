@@ -18,7 +18,6 @@
 			<Add option="-pedantic" />
 			<Add option="-W" />
 			<Add option="-Wall" />
-			<Add option="-DURI_TESTING" />
 			<Add directory="..\..\include" />
 		</Compiler>
 		<Linker>
@@ -37,6 +36,12 @@
 			<Option link="0" />
 			<Option target="default" />
 		</Unit>
+		<Unit filename="..\..\include\uriparser\UriBase.h">
+			<Option compilerVar="CPP" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="default" />
+		</Unit>
 		<Unit filename="..\..\include\uriparser\UriDefsAnsi.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
@@ -50,12 +55,6 @@
 			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\include\uriparser\UriDefsUnicode.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriBase.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />
