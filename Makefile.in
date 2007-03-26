@@ -245,7 +245,20 @@ test_uriparser_test_SOURCES = \
 	test/test.cpp
 
 EXTRA_DIST = \
-	test/CppTest/COPYING
+	test/CppTest/COPYING \
+	test/CppTest/cpptest-assert.h \
+	test/CppTest/cpptest-collectoroutput.h \
+	test/CppTest/cpptest-compileroutput.h \
+	test/CppTest/cpptest.h \
+	test/CppTest/cpptest-htmloutput.h \
+	test/CppTest/cpptest-output.h \
+	test/CppTest/cpptest-source.h \
+	test/CppTest/cpptest-suite.h \
+	test/CppTest/cpptest-textoutput.h \
+	test/CppTest/cpptest-time.h \
+	test/CppTest/missing.h \
+	test/CppTest/utils.h \
+	test/CppTest/winconfig.h
 
 all: all-am
 
@@ -1001,19 +1014,6 @@ uninstall-am: uninstall-includeHEADERS \
 	uninstall-am uninstall-includeHEADERS \
 	uninstall-include_uriparserHEADERS uninstall-libLIBRARIES
 
-	test/CppTest/cpptest-assert.h \
-	test/CppTest/cpptest-collectoroutput.h \
-	test/CppTest/cpptest-compileroutput.h \
-	test/CppTest/cpptest.h \
-	test/CppTest/cpptest-htmloutput.h \
-	test/CppTest/cpptest-output.h \
-	test/CppTest/cpptest-source.h \
-	test/CppTest/cpptest-suite.h \
-	test/CppTest/cpptest-textoutput.h \
-	test/CppTest/cpptest-time.h \
-	test/CppTest/missing.h \
-	test/CppTest/utils.h \
-	test/CppTest/winconfig.h
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

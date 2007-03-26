@@ -58,7 +58,7 @@ test_uriparser_test_SOURCES = \
 
 
 EXTRA_DIST = \
-	test/CppTest/COPYING
+	test/CppTest/COPYING \
 	test/CppTest/cpptest-assert.h \
 	test/CppTest/cpptest-collectoroutput.h \
 	test/CppTest/cpptest-compileroutput.h \
