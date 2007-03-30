@@ -1,4 +1,5 @@
 == SOON ==
+ * ranlib -> libtool
  * Option to turn off segment extraction if
    validating only?
  * Add escape function
