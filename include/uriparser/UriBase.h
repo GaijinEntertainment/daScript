@@ -55,7 +55,7 @@
 /* Version */
 #define URI_VER_MAJOR           0
 #define URI_VER_MINOR           3
-#define URI_VER_RELEASE         1
+#define URI_VER_RELEASE         2
 #define URI_VER_SUFFIX_ANSI     ""
 #define URI_VER_SUFFIX_UNICODE  URI_ANSI_TO_UNICODE(URI_VER_SUFFIX_ANSI)
 
@@ -117,11 +117,6 @@ typedef int UriBool;
 # include <ctype.h> /* For wchar_t */
 # include <string.h> /* For strlen, memset, memcpy */
 # include <stdlib.h> /* For malloc */
-# if defined(__APPLE__) && defined(__MACH__)
-#  include <malloc/malloc.h> /* For malloc, Mac OS X */
-# else
-#  include <malloc.h> /* For malloc */
-# endif
 #endif /* URI_DOXYGEN */
 
 
