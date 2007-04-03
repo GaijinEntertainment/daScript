@@ -58,6 +58,13 @@ test_uriparser_test_SOURCES = \
 
 
 EXTRA_DIST = \
+	doc/Doxyfile \
+	doc/rfc3513.htm \
+	doc/rfc3986.htm \
+	doc/rfc3986_grammar_only.txt \
+	doc/rule_dependencies.dot \
+	doc/rule_dependencies.sh \
+	\
 	test/CppTest/COPYING \
 	test/CppTest/cpptest-assert.h \
 	test/CppTest/cpptest-collectoroutput.h \
@@ -71,4 +78,12 @@ EXTRA_DIST = \
 	test/CppTest/cpptest-time.h \
 	test/CppTest/missing.h \
 	test/CppTest/utils.h \
-	test/CppTest/winconfig.h
+	test/CppTest/winconfig.h \
+	\
+	win32/Code_Blocks/test.cbp \
+	win32/Code_Blocks/uriparser.cbp \
+	\
+	win32/Visual_Studio_2003/test.sln \
+	win32/Visual_Studio_2003/test.vcproj \
+	win32/Visual_Studio_2003/uriparser.sln \
+	win32/Visual_Studio_2003/uriparser.vcproj
