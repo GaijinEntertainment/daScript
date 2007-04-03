@@ -1,5 +1,6 @@
-???
+2007-04-03 -- 0.3.3
 
+  * Fixed: Now unix EOLs constantly
   * Fixed: Added forgotten files to release package
 
 2007-03-31 -- 0.3.2
