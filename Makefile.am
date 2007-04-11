@@ -1,7 +1,7 @@
 ## Makefile.am
 AUTOMAKE_OPTIONS = dist-zip dist-bzip2
 
-lib_LIBRARIES = liburiparser.a
+lib_LTLIBRARIES = liburiparser.la
 noinst_PROGRAMS = test/uriparser_test
 TESTS = test/uriparser_test
 
@@ -10,6 +10,7 @@ TESTS = test/uriparser_test
 
 
 include_uriparserdir = $(prefix)/include/uriparser
+
 include_uriparser_HEADERS = \
 	include/uriparser/Uri.h \
 	include/uriparser/UriBase.h \
@@ -28,9 +29,9 @@ include_HEADERS = \
 
 
 
-liburiparser_a_CFLAGS = -Iinclude
+liburiparser_la_CFLAGS = -Iinclude
 
-liburiparser_a_SOURCES = \
+liburiparser_la_SOURCES = \
 	lib/Uri.c \
 	lib/UriBase.c \
 	lib/UriIp4.c \
@@ -41,7 +42,7 @@ liburiparser_a_SOURCES = \
 
 test_uriparser_test_CPPFLAGS = -Iinclude
 test_uriparser_test_LDADD = -luriparser
-test_uriparser_test_LDFLAGS = -L.
+test_uriparser_test_LDFLAGS = -L./.libs
 
 test_uriparser_test_SOURCES = \
 	test/CppTest/collectoroutput.cpp \

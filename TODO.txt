@@ -1,5 +1,4 @@
 == SOON ==
- * ranlib -> libtool
  * reduce recursion, replace some by loops
  * Option to turn off segment extraction if
    validating only?

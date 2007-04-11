@@ -1,12 +1,12 @@
 AC_PREREQ(2.59)
-AC_INIT([uriparser], [0.3.3])
+AC_INIT([uriparser], [0.3.4])
 AM_INIT_AUTOMAKE([1.9 foreign])
 AM_CONFIG_HEADER(test/CppTest/config.h)
 
 
 AC_PROG_CC
 AC_PROG_CXX
-AC_PROG_RANLIB
+AC_PROG_LIBTOOL
 AC_HEADER_STDC
 
 

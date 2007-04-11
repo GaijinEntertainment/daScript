@@ -32,6 +32,8 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
+build_triplet = @build@
+host_triplet = @host@
 noinst_PROGRAMS = test/uriparser_test$(EXEEXT)
 TESTS = test/uriparser_test$(EXEEXT)
 subdir = .
@@ -39,7 +41,8 @@ DIST_COMMON = $(am__configure_deps) $(include_HEADERS) \
 	$(include_uriparser_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(top_srcdir)/configure \
 	$(top_srcdir)/test/CppTest/config.h.in AUTHORS COPYING \
-	ChangeLog depcomp install-sh missing
+	ChangeLog config.guess config.sub depcomp install-sh ltmain.sh \
+	missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -57,18 +60,16 @@ am__vpath_adj = case $$p in \
 am__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)" \
 	"$(DESTDIR)$(include_uriparserdir)"
-libLIBRARIES_INSTALL = $(INSTALL_DATA)
-LIBRARIES = $(lib_LIBRARIES)
-AR = ar
-ARFLAGS = cru
-liburiparser_a_AR = $(AR) $(ARFLAGS)
-liburiparser_a_LIBADD =
-am_liburiparser_a_OBJECTS = liburiparser_a-Uri.$(OBJEXT) \
-	liburiparser_a-UriBase.$(OBJEXT) \
-	liburiparser_a-UriIp4.$(OBJEXT) \
-	liburiparser_a-UriIp4Base.$(OBJEXT) \
-	liburiparser_a-uriparser.$(OBJEXT)
-liburiparser_a_OBJECTS = $(am_liburiparser_a_OBJECTS)
+libLTLIBRARIES_INSTALL = $(INSTALL)
+LTLIBRARIES = $(lib_LTLIBRARIES)
+liburiparser_la_LIBADD =
+am_liburiparser_la_OBJECTS = liburiparser_la-Uri.lo \
+	liburiparser_la-UriBase.lo liburiparser_la-UriIp4.lo \
+	liburiparser_la-UriIp4Base.lo liburiparser_la-uriparser.lo
+liburiparser_la_OBJECTS = $(am_liburiparser_la_OBJECTS)
+liburiparser_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(liburiparser_la_CFLAGS) \
+	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_uriparser_test_OBJECTS =  \
 	test_uriparser_test-collectoroutput.$(OBJEXT) \
@@ -83,23 +84,33 @@ am_test_uriparser_test_OBJECTS =  \
 	test_uriparser_test-test.$(OBJEXT)
 test_uriparser_test_OBJECTS = $(am_test_uriparser_test_OBJECTS)
 test_uriparser_test_DEPENDENCIES =
-test_uriparser_test_LINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) \
-	$(test_uriparser_test_LDFLAGS) $(LDFLAGS) -o $@
+test_uriparser_test_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(test_uriparser_test_LDFLAGS) $(LDFLAGS) -o $@
 am__dirstamp = $(am__leading_dot)dirstamp
 DEFAULT_INCLUDES = -I. -I$(top_builddir)/test/CppTest@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+LTCOMPILE = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+	--mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
-LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+LTCXXCOMPILE = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+	--mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
 CXXLD = $(CXX)
-CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
-	-o $@
-SOURCES = $(liburiparser_a_SOURCES) $(test_uriparser_test_SOURCES)
-DIST_SOURCES = $(liburiparser_a_SOURCES) \
+CXXLINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+	--mode=link $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+SOURCES = $(liburiparser_la_SOURCES) $(test_uriparser_test_SOURCES)
+DIST_SOURCES = $(liburiparser_la_SOURCES) \
 	$(test_uriparser_test_SOURCES)
 includeHEADERS_INSTALL = $(INSTALL_HEADER)
 include_uriparserHEADERS_INSTALL = $(INSTALL_HEADER)
@@ -119,6 +130,7 @@ distuninstallcheck_listfiles = find . -type f -print
 distcleancheck_listfiles = find . -type f -print
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
+AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
@@ -129,16 +141,20 @@ CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
+CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
+ECHO = @ECHO@
 ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
+F77 = @F77@
+FFLAGS = @FFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -148,6 +164,8 @@ INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LDFLAGS = @LDFLAGS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBTOOL = @LIBTOOL@
+LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 MAKEINFO = @MAKEINFO@
 MKDIR_P = @MKDIR_P@
@@ -160,6 +178,7 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 RANLIB = @RANLIB@
+SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
@@ -170,20 +189,29 @@ abs_top_builddir = @abs_top_builddir@
 abs_top_srcdir = @abs_top_srcdir@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
+ac_ct_F77 = @ac_ct_F77@
 am__include = @am__include@
 am__leading_dot = @am__leading_dot@
 am__quote = @am__quote@
 am__tar = @am__tar@
 am__untar = @am__untar@
 bindir = @bindir@
+build = @build@
 build_alias = @build_alias@
+build_cpu = @build_cpu@
+build_os = @build_os@
+build_vendor = @build_vendor@
 builddir = @builddir@
 datadir = @datadir@
 datarootdir = @datarootdir@
 docdir = @docdir@
 dvidir = @dvidir@
 exec_prefix = @exec_prefix@
+host = @host@
 host_alias = @host_alias@
+host_cpu = @host_cpu@
+host_os = @host_os@
+host_vendor = @host_vendor@
 htmldir = @htmldir@
 includedir = $(prefix)/include
 infodir = @infodir@
@@ -207,7 +235,7 @@ target_alias = @target_alias@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = dist-zip dist-bzip2
-lib_LIBRARIES = liburiparser.a
+lib_LTLIBRARIES = liburiparser.la
 include_uriparserdir = $(prefix)/include/uriparser
 include_uriparser_HEADERS = \
 	include/uriparser/Uri.h \
@@ -221,8 +249,8 @@ include_uriparser_HEADERS = \
 include_HEADERS = \
 	include/uriparser.h
 
-liburiparser_a_CFLAGS = -Iinclude
-liburiparser_a_SOURCES = \
+liburiparser_la_CFLAGS = -Iinclude
+liburiparser_la_SOURCES = \
 	lib/Uri.c \
 	lib/UriBase.c \
 	lib/UriIp4.c \
@@ -231,7 +259,7 @@ liburiparser_a_SOURCES = \
 
 test_uriparser_test_CPPFLAGS = -Iinclude
 test_uriparser_test_LDADD = -luriparser
-test_uriparser_test_LDFLAGS = -L.
+test_uriparser_test_LDFLAGS = -L./.libs
 test_uriparser_test_SOURCES = \
 	test/CppTest/collectoroutput.cpp \
 	test/CppTest/compileroutput.cpp \
@@ -278,7 +306,7 @@ EXTRA_DIST = \
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .cpp .o .obj
+.SUFFIXES: .c .cpp .lo .o .obj
 am--refresh:
 	@:
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
@@ -329,42 +357,42 @@ $(top_srcdir)/test/CppTest/config.h.in:  $(am__configure_deps)
 
 distclean-hdr:
 	-rm -f test/CppTest/config.h test/CppTest/stamp-h1
-install-libLIBRARIES: $(lib_LIBRARIES)
+install-libLTLIBRARIES: $(lib_LTLIBRARIES)
 	@$(NORMAL_INSTALL)
 	test -z "$(libdir)" || $(MKDIR_P) "$(DESTDIR)$(libdir)"
-	@list='$(lib_LIBRARIES)'; for p in $$list; do \
+	@list='$(lib_LTLIBRARIES)'; for p in $$list; do \
 	  if test -f $$p; then \
 	    f=$(am__strip_dir) \
-	    echo " $(libLIBRARIES_INSTALL) '$$p' '$(DESTDIR)$(libdir)/$$f'"; \
-	    $(libLIBRARIES_INSTALL) "$$p" "$(DESTDIR)$(libdir)/$$f"; \
-	  else :; fi; \
-	done
-	@$(POST_INSTALL)
-	@list='$(lib_LIBRARIES)'; for p in $$list; do \
-	  if test -f $$p; then \
-	    p=$(am__strip_dir) \
-	    echo " $(RANLIB) '$(DESTDIR)$(libdir)/$$p'"; \
-	    $(RANLIB) "$(DESTDIR)$(libdir)/$$p"; \
+	    echo " $(LIBTOOL) --mode=install $(libLTLIBRARIES_INSTALL) $(INSTALL_STRIP_FLAG) '$$p' '$(DESTDIR)$(libdir)/$$f'"; \
+	    $(LIBTOOL) --mode=install $(libLTLIBRARIES_INSTALL) $(INSTALL_STRIP_FLAG) "$$p" "$(DESTDIR)$(libdir)/$$f"; \
 	  else :; fi; \
 	done
 
-uninstall-libLIBRARIES:
+uninstall-libLTLIBRARIES:
 	@$(NORMAL_UNINSTALL)
-	@list='$(lib_LIBRARIES)'; for p in $$list; do \
+	@list='$(lib_LTLIBRARIES)'; for p in $$list; do \
 	  p=$(am__strip_dir) \
-	  echo " rm -f '$(DESTDIR)$(libdir)/$$p'"; \
-	  rm -f "$(DESTDIR)$(libdir)/$$p"; \
+	  echo " $(LIBTOOL) --mode=uninstall rm -f '$(DESTDIR)$(libdir)/$$p'"; \
+	  $(LIBTOOL) --mode=uninstall rm -f "$(DESTDIR)$(libdir)/$$p"; \
 	done
 
-clean-libLIBRARIES:
-	-test -z "$(lib_LIBRARIES)" || rm -f $(lib_LIBRARIES)
-liburiparser.a: $(liburiparser_a_OBJECTS) $(liburiparser_a_DEPENDENCIES) 
-	-rm -f liburiparser.a
-	$(liburiparser_a_AR) liburiparser.a $(liburiparser_a_OBJECTS) $(liburiparser_a_LIBADD)
-	$(RANLIB) liburiparser.a
+clean-libLTLIBRARIES:
+	-test -z "$(lib_LTLIBRARIES)" || rm -f $(lib_LTLIBRARIES)
+	@list='$(lib_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" != "$$p" || dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
+liburiparser.la: $(liburiparser_la_OBJECTS) $(liburiparser_la_DEPENDENCIES) 
+	$(liburiparser_la_LINK) -rpath $(libdir) $(liburiparser_la_OBJECTS) $(liburiparser_la_LIBADD) $(LIBS)
 
 clean-noinstPROGRAMS:
-	-test -z "$(noinst_PROGRAMS)" || rm -f $(noinst_PROGRAMS)
+	@list='$(noinst_PROGRAMS)'; for p in $$list; do \
+	  f=`echo $$p|sed 's/$(EXEEXT)$$//'`; \
+	  echo " rm -f $$p $$f"; \
+	  rm -f $$p $$f ; \
+	done
 test/$(am__dirstamp):
 	@$(MKDIR_P) test
 	@: > test/$(am__dirstamp)
@@ -378,11 +406,11 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_a-Uri.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_a-UriBase.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_a-UriIp4.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_a-UriIp4Base.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_a-uriparser.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-Uri.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-UriBase.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-UriIp4.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-UriIp4Base.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-uriparser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-collectoroutput.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-compileroutput.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-htmloutput.Po@am__quote@
@@ -408,75 +436,47 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(COMPILE) -c `$(CYGPATH_W) '$<'`
 
-liburiparser_a-Uri.o: lib/Uri.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-Uri.o -MD -MP -MF $(DEPDIR)/liburiparser_a-Uri.Tpo -c -o liburiparser_a-Uri.o `test -f 'lib/Uri.c' || echo '$(srcdir)/'`lib/Uri.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-Uri.Tpo $(DEPDIR)/liburiparser_a-Uri.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/Uri.c' object='liburiparser_a-Uri.o' libtool=no @AMDEPBACKSLASH@
+.c.lo:
+@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-Uri.o `test -f 'lib/Uri.c' || echo '$(srcdir)/'`lib/Uri.c
+@am__fastdepCC_FALSE@	$(LTCOMPILE) -c -o $@ $<
 
-liburiparser_a-Uri.obj: lib/Uri.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-Uri.obj -MD -MP -MF $(DEPDIR)/liburiparser_a-Uri.Tpo -c -o liburiparser_a-Uri.obj `if test -f 'lib/Uri.c'; then $(CYGPATH_W) 'lib/Uri.c'; else $(CYGPATH_W) '$(srcdir)/lib/Uri.c'; fi`
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-Uri.Tpo $(DEPDIR)/liburiparser_a-Uri.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/Uri.c' object='liburiparser_a-Uri.obj' libtool=no @AMDEPBACKSLASH@
+liburiparser_la-Uri.lo: lib/Uri.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-Uri.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-Uri.Tpo -c -o liburiparser_la-Uri.lo `test -f 'lib/Uri.c' || echo '$(srcdir)/'`lib/Uri.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-Uri.Tpo $(DEPDIR)/liburiparser_la-Uri.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/Uri.c' object='liburiparser_la-Uri.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-Uri.obj `if test -f 'lib/Uri.c'; then $(CYGPATH_W) 'lib/Uri.c'; else $(CYGPATH_W) '$(srcdir)/lib/Uri.c'; fi`
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-Uri.lo `test -f 'lib/Uri.c' || echo '$(srcdir)/'`lib/Uri.c
 
-liburiparser_a-UriBase.o: lib/UriBase.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-UriBase.o -MD -MP -MF $(DEPDIR)/liburiparser_a-UriBase.Tpo -c -o liburiparser_a-UriBase.o `test -f 'lib/UriBase.c' || echo '$(srcdir)/'`lib/UriBase.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-UriBase.Tpo $(DEPDIR)/liburiparser_a-UriBase.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriBase.c' object='liburiparser_a-UriBase.o' libtool=no @AMDEPBACKSLASH@
+liburiparser_la-UriBase.lo: lib/UriBase.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-UriBase.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-UriBase.Tpo -c -o liburiparser_la-UriBase.lo `test -f 'lib/UriBase.c' || echo '$(srcdir)/'`lib/UriBase.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-UriBase.Tpo $(DEPDIR)/liburiparser_la-UriBase.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriBase.c' object='liburiparser_la-UriBase.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-UriBase.o `test -f 'lib/UriBase.c' || echo '$(srcdir)/'`lib/UriBase.c
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-UriBase.lo `test -f 'lib/UriBase.c' || echo '$(srcdir)/'`lib/UriBase.c
 
-liburiparser_a-UriBase.obj: lib/UriBase.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-UriBase.obj -MD -MP -MF $(DEPDIR)/liburiparser_a-UriBase.Tpo -c -o liburiparser_a-UriBase.obj `if test -f 'lib/UriBase.c'; then $(CYGPATH_W) 'lib/UriBase.c'; else $(CYGPATH_W) '$(srcdir)/lib/UriBase.c'; fi`
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-UriBase.Tpo $(DEPDIR)/liburiparser_a-UriBase.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriBase.c' object='liburiparser_a-UriBase.obj' libtool=no @AMDEPBACKSLASH@
+liburiparser_la-UriIp4.lo: lib/UriIp4.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-UriIp4.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-UriIp4.Tpo -c -o liburiparser_la-UriIp4.lo `test -f 'lib/UriIp4.c' || echo '$(srcdir)/'`lib/UriIp4.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-UriIp4.Tpo $(DEPDIR)/liburiparser_la-UriIp4.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4.c' object='liburiparser_la-UriIp4.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-UriBase.obj `if test -f 'lib/UriBase.c'; then $(CYGPATH_W) 'lib/UriBase.c'; else $(CYGPATH_W) '$(srcdir)/lib/UriBase.c'; fi`
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-UriIp4.lo `test -f 'lib/UriIp4.c' || echo '$(srcdir)/'`lib/UriIp4.c
 
-liburiparser_a-UriIp4.o: lib/UriIp4.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-UriIp4.o -MD -MP -MF $(DEPDIR)/liburiparser_a-UriIp4.Tpo -c -o liburiparser_a-UriIp4.o `test -f 'lib/UriIp4.c' || echo '$(srcdir)/'`lib/UriIp4.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-UriIp4.Tpo $(DEPDIR)/liburiparser_a-UriIp4.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4.c' object='liburiparser_a-UriIp4.o' libtool=no @AMDEPBACKSLASH@
+liburiparser_la-UriIp4Base.lo: lib/UriIp4Base.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-UriIp4Base.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-UriIp4Base.Tpo -c -o liburiparser_la-UriIp4Base.lo `test -f 'lib/UriIp4Base.c' || echo '$(srcdir)/'`lib/UriIp4Base.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-UriIp4Base.Tpo $(DEPDIR)/liburiparser_la-UriIp4Base.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4Base.c' object='liburiparser_la-UriIp4Base.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-UriIp4.o `test -f 'lib/UriIp4.c' || echo '$(srcdir)/'`lib/UriIp4.c
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-UriIp4Base.lo `test -f 'lib/UriIp4Base.c' || echo '$(srcdir)/'`lib/UriIp4Base.c
 
-liburiparser_a-UriIp4.obj: lib/UriIp4.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-UriIp4.obj -MD -MP -MF $(DEPDIR)/liburiparser_a-UriIp4.Tpo -c -o liburiparser_a-UriIp4.obj `if test -f 'lib/UriIp4.c'; then $(CYGPATH_W) 'lib/UriIp4.c'; else $(CYGPATH_W) '$(srcdir)/lib/UriIp4.c'; fi`
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-UriIp4.Tpo $(DEPDIR)/liburiparser_a-UriIp4.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4.c' object='liburiparser_a-UriIp4.obj' libtool=no @AMDEPBACKSLASH@
+liburiparser_la-uriparser.lo: lib/uriparser.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-uriparser.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-uriparser.Tpo -c -o liburiparser_la-uriparser.lo `test -f 'lib/uriparser.c' || echo '$(srcdir)/'`lib/uriparser.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-uriparser.Tpo $(DEPDIR)/liburiparser_la-uriparser.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/uriparser.c' object='liburiparser_la-uriparser.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-UriIp4.obj `if test -f 'lib/UriIp4.c'; then $(CYGPATH_W) 'lib/UriIp4.c'; else $(CYGPATH_W) '$(srcdir)/lib/UriIp4.c'; fi`
-
-liburiparser_a-UriIp4Base.o: lib/UriIp4Base.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-UriIp4Base.o -MD -MP -MF $(DEPDIR)/liburiparser_a-UriIp4Base.Tpo -c -o liburiparser_a-UriIp4Base.o `test -f 'lib/UriIp4Base.c' || echo '$(srcdir)/'`lib/UriIp4Base.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-UriIp4Base.Tpo $(DEPDIR)/liburiparser_a-UriIp4Base.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4Base.c' object='liburiparser_a-UriIp4Base.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-UriIp4Base.o `test -f 'lib/UriIp4Base.c' || echo '$(srcdir)/'`lib/UriIp4Base.c
-
-liburiparser_a-UriIp4Base.obj: lib/UriIp4Base.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-UriIp4Base.obj -MD -MP -MF $(DEPDIR)/liburiparser_a-UriIp4Base.Tpo -c -o liburiparser_a-UriIp4Base.obj `if test -f 'lib/UriIp4Base.c'; then $(CYGPATH_W) 'lib/UriIp4Base.c'; else $(CYGPATH_W) '$(srcdir)/lib/UriIp4Base.c'; fi`
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-UriIp4Base.Tpo $(DEPDIR)/liburiparser_a-UriIp4Base.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4Base.c' object='liburiparser_a-UriIp4Base.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-UriIp4Base.obj `if test -f 'lib/UriIp4Base.c'; then $(CYGPATH_W) 'lib/UriIp4Base.c'; else $(CYGPATH_W) '$(srcdir)/lib/UriIp4Base.c'; fi`
-
-liburiparser_a-uriparser.o: lib/uriparser.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-uriparser.o -MD -MP -MF $(DEPDIR)/liburiparser_a-uriparser.Tpo -c -o liburiparser_a-uriparser.o `test -f 'lib/uriparser.c' || echo '$(srcdir)/'`lib/uriparser.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-uriparser.Tpo $(DEPDIR)/liburiparser_a-uriparser.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/uriparser.c' object='liburiparser_a-uriparser.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-uriparser.o `test -f 'lib/uriparser.c' || echo '$(srcdir)/'`lib/uriparser.c
-
-liburiparser_a-uriparser.obj: lib/uriparser.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -MT liburiparser_a-uriparser.obj -MD -MP -MF $(DEPDIR)/liburiparser_a-uriparser.Tpo -c -o liburiparser_a-uriparser.obj `if test -f 'lib/uriparser.c'; then $(CYGPATH_W) 'lib/uriparser.c'; else $(CYGPATH_W) '$(srcdir)/lib/uriparser.c'; fi`
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_a-uriparser.Tpo $(DEPDIR)/liburiparser_a-uriparser.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/uriparser.c' object='liburiparser_a-uriparser.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_a_CFLAGS) $(CFLAGS) -c -o liburiparser_a-uriparser.obj `if test -f 'lib/uriparser.c'; then $(CYGPATH_W) 'lib/uriparser.c'; else $(CYGPATH_W) '$(srcdir)/lib/uriparser.c'; fi`
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-uriparser.lo `test -f 'lib/uriparser.c' || echo '$(srcdir)/'`lib/uriparser.c
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -491,6 +491,13 @@ liburiparser_a-uriparser.obj: lib/uriparser.c
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.cpp.lo:
+@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(LTCXXCOMPILE) -c -o $@ $<
 
 test_uriparser_test-collectoroutput.o: test/CppTest/collectoroutput.cpp
 @am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-collectoroutput.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-collectoroutput.Tpo -c -o test_uriparser_test-collectoroutput.o `test -f 'test/CppTest/collectoroutput.cpp' || echo '$(srcdir)/'`test/CppTest/collectoroutput.cpp
@@ -631,6 +638,15 @@ test_uriparser_test-test.obj: test/test.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/test.cpp' object='test_uriparser_test-test.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-test.obj `if test -f 'test/test.cpp'; then $(CYGPATH_W) 'test/test.cpp'; else $(CYGPATH_W) '$(srcdir)/test/test.cpp'; fi`
+
+mostlyclean-libtool:
+	-rm -f *.lo
+
+clean-libtool:
+	-rm -rf .libs _libs
+
+distclean-libtool:
+	-rm -f libtool
 install-includeHEADERS: $(include_HEADERS)
 	@$(NORMAL_INSTALL)
 	test -z "$(includedir)" || $(MKDIR_P) "$(DESTDIR)$(includedir)"
@@ -916,7 +932,7 @@ distcleancheck: distclean
 check-am: all-am
 	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
 check: check-am
-all-am: Makefile $(LIBRARIES) $(PROGRAMS) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)" "$(DESTDIR)$(include_uriparserdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -948,15 +964,15 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-libLIBRARIES clean-noinstPROGRAMS \
-	mostlyclean-am
+clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
 	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
-	distclean-hdr distclean-tags
+	distclean-hdr distclean-libtool distclean-tags
 
 dvi: dvi-am
 
@@ -973,7 +989,7 @@ install-data-am: install-includeHEADERS \
 
 install-dvi: install-dvi-am
 
-install-exec-am: install-libLIBRARIES
+install-exec-am: install-libLTLIBRARIES
 
 install-html: install-html-am
 
@@ -996,7 +1012,8 @@ maintainer-clean-am: distclean-am maintainer-clean-generic
 
 mostlyclean: mostlyclean-am
 
-mostlyclean-am: mostlyclean-compile mostlyclean-generic
+mostlyclean-am: mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool
 
 pdf: pdf-am
 
@@ -1007,27 +1024,28 @@ ps: ps-am
 ps-am:
 
 uninstall-am: uninstall-includeHEADERS \
-	uninstall-include_uriparserHEADERS uninstall-libLIBRARIES
+	uninstall-include_uriparserHEADERS uninstall-libLTLIBRARIES
 
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS all all-am am--refresh check check-TESTS check-am \
-	clean clean-generic clean-libLIBRARIES clean-noinstPROGRAMS \
-	ctags dist dist-all dist-bzip2 dist-gzip dist-shar dist-tarZ \
-	dist-zip distcheck distclean distclean-compile \
-	distclean-generic distclean-hdr distclean-tags distcleancheck \
-	distdir distuninstallcheck dvi dvi-am html html-am info \
-	info-am install install-am install-data install-data-am \
-	install-dvi install-dvi-am install-exec install-exec-am \
-	install-html install-html-am install-includeHEADERS \
+	clean clean-generic clean-libLTLIBRARIES clean-libtool \
+	clean-noinstPROGRAMS ctags dist dist-all dist-bzip2 dist-gzip \
+	dist-shar dist-tarZ dist-zip distcheck distclean \
+	distclean-compile distclean-generic distclean-hdr \
+	distclean-libtool distclean-tags distcleancheck distdir \
+	distuninstallcheck dvi dvi-am html html-am info info-am \
+	install install-am install-data install-data-am install-dvi \
+	install-dvi-am install-exec install-exec-am install-html \
+	install-html-am install-includeHEADERS \
 	install-include_uriparserHEADERS install-info install-info-am \
-	install-libLIBRARIES install-man install-pdf install-pdf-am \
+	install-libLTLIBRARIES install-man install-pdf install-pdf-am \
 	install-ps install-ps-am install-strip installcheck \
 	installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic pdf pdf-am ps ps-am tags uninstall \
-	uninstall-am uninstall-includeHEADERS \
-	uninstall-include_uriparserHEADERS uninstall-libLIBRARIES
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags uninstall uninstall-am uninstall-includeHEADERS \
+	uninstall-include_uriparserHEADERS uninstall-libLTLIBRARIES
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
