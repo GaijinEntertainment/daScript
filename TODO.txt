@@ -4,6 +4,7 @@
  * Option to turn off segment extraction if
    validating only?
  * Add escape function
+ * Unescape '+' to ' '?
  * Add specific URI support (callbacks?)
 
 == LATER ==
