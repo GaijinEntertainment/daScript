@@ -1,5 +1,5 @@
 ## Makefile.am
-AUTOMAKE_OPTIONS = dist-zip dist-bzip2
+AUTOMAKE_OPTIONS = dist-zip dist-bzip2 subdir-objects
 
 lib_LTLIBRARIES = liburiparser.la
 noinst_PROGRAMS = test/uriparser_test

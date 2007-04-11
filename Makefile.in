@@ -63,31 +63,32 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)" \
 libLTLIBRARIES_INSTALL = $(INSTALL)
 LTLIBRARIES = $(lib_LTLIBRARIES)
 liburiparser_la_LIBADD =
-am_liburiparser_la_OBJECTS = liburiparser_la-Uri.lo \
-	liburiparser_la-UriBase.lo liburiparser_la-UriIp4.lo \
-	liburiparser_la-UriIp4Base.lo liburiparser_la-uriparser.lo
+am__dirstamp = $(am__leading_dot)dirstamp
+am_liburiparser_la_OBJECTS = lib/liburiparser_la-Uri.lo \
+	lib/liburiparser_la-UriBase.lo lib/liburiparser_la-UriIp4.lo \
+	lib/liburiparser_la-UriIp4Base.lo \
+	lib/liburiparser_la-uriparser.lo
 liburiparser_la_OBJECTS = $(am_liburiparser_la_OBJECTS)
 liburiparser_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(liburiparser_la_CFLAGS) \
 	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_uriparser_test_OBJECTS =  \
-	test_uriparser_test-collectoroutput.$(OBJEXT) \
-	test_uriparser_test-compileroutput.$(OBJEXT) \
-	test_uriparser_test-htmloutput.$(OBJEXT) \
-	test_uriparser_test-missing.$(OBJEXT) \
-	test_uriparser_test-source.$(OBJEXT) \
-	test_uriparser_test-suite.$(OBJEXT) \
-	test_uriparser_test-textoutput.$(OBJEXT) \
-	test_uriparser_test-time.$(OBJEXT) \
-	test_uriparser_test-utils.$(OBJEXT) \
-	test_uriparser_test-test.$(OBJEXT)
+	test/CppTest/test_uriparser_test-collectoroutput.$(OBJEXT) \
+	test/CppTest/test_uriparser_test-compileroutput.$(OBJEXT) \
+	test/CppTest/test_uriparser_test-htmloutput.$(OBJEXT) \
+	test/CppTest/test_uriparser_test-missing.$(OBJEXT) \
+	test/CppTest/test_uriparser_test-source.$(OBJEXT) \
+	test/CppTest/test_uriparser_test-suite.$(OBJEXT) \
+	test/CppTest/test_uriparser_test-textoutput.$(OBJEXT) \
+	test/CppTest/test_uriparser_test-time.$(OBJEXT) \
+	test/CppTest/test_uriparser_test-utils.$(OBJEXT) \
+	test/test_uriparser_test-test.$(OBJEXT)
 test_uriparser_test_OBJECTS = $(am_test_uriparser_test_OBJECTS)
 test_uriparser_test_DEPENDENCIES =
 test_uriparser_test_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
 	$(CXXFLAGS) $(test_uriparser_test_LDFLAGS) $(LDFLAGS) -o $@
-am__dirstamp = $(am__leading_dot)dirstamp
 DEFAULT_INCLUDES = -I. -I$(top_builddir)/test/CppTest@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -234,7 +235,7 @@ sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-AUTOMAKE_OPTIONS = dist-zip dist-bzip2
+AUTOMAKE_OPTIONS = dist-zip dist-bzip2 subdir-objects
 lib_LTLIBRARIES = liburiparser.la
 include_uriparserdir = $(prefix)/include/uriparser
 include_uriparser_HEADERS = \
@@ -384,6 +385,22 @@ clean-libLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
+lib/$(am__dirstamp):
+	@$(MKDIR_P) lib
+	@: > lib/$(am__dirstamp)
+lib/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) lib/$(DEPDIR)
+	@: > lib/$(DEPDIR)/$(am__dirstamp)
+lib/liburiparser_la-Uri.lo: lib/$(am__dirstamp) \
+	lib/$(DEPDIR)/$(am__dirstamp)
+lib/liburiparser_la-UriBase.lo: lib/$(am__dirstamp) \
+	lib/$(DEPDIR)/$(am__dirstamp)
+lib/liburiparser_la-UriIp4.lo: lib/$(am__dirstamp) \
+	lib/$(DEPDIR)/$(am__dirstamp)
+lib/liburiparser_la-UriIp4Base.lo: lib/$(am__dirstamp) \
+	lib/$(DEPDIR)/$(am__dirstamp)
+lib/liburiparser_la-uriparser.lo: lib/$(am__dirstamp) \
+	lib/$(DEPDIR)/$(am__dirstamp)
 liburiparser.la: $(liburiparser_la_OBJECTS) $(liburiparser_la_DEPENDENCIES) 
 	$(liburiparser_la_LINK) -rpath $(libdir) $(liburiparser_la_OBJECTS) $(liburiparser_la_LIBADD) $(LIBS)
 
@@ -393,257 +410,322 @@ clean-noinstPROGRAMS:
 	  echo " rm -f $$p $$f"; \
 	  rm -f $$p $$f ; \
 	done
+test/CppTest/$(am__dirstamp):
+	@$(MKDIR_P) test/CppTest
+	@: > test/CppTest/$(am__dirstamp)
+test/CppTest/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) test/CppTest/$(DEPDIR)
+	@: > test/CppTest/$(DEPDIR)/$(am__dirstamp)
+test/CppTest/test_uriparser_test-collectoroutput.$(OBJEXT):  \
+	test/CppTest/$(am__dirstamp) \
+	test/CppTest/$(DEPDIR)/$(am__dirstamp)
+test/CppTest/test_uriparser_test-compileroutput.$(OBJEXT):  \
+	test/CppTest/$(am__dirstamp) \
+	test/CppTest/$(DEPDIR)/$(am__dirstamp)
+test/CppTest/test_uriparser_test-htmloutput.$(OBJEXT):  \
+	test/CppTest/$(am__dirstamp) \
+	test/CppTest/$(DEPDIR)/$(am__dirstamp)
+test/CppTest/test_uriparser_test-missing.$(OBJEXT):  \
+	test/CppTest/$(am__dirstamp) \
+	test/CppTest/$(DEPDIR)/$(am__dirstamp)
+test/CppTest/test_uriparser_test-source.$(OBJEXT):  \
+	test/CppTest/$(am__dirstamp) \
+	test/CppTest/$(DEPDIR)/$(am__dirstamp)
+test/CppTest/test_uriparser_test-suite.$(OBJEXT):  \
+	test/CppTest/$(am__dirstamp) \
+	test/CppTest/$(DEPDIR)/$(am__dirstamp)
+test/CppTest/test_uriparser_test-textoutput.$(OBJEXT):  \
+	test/CppTest/$(am__dirstamp) \
+	test/CppTest/$(DEPDIR)/$(am__dirstamp)
+test/CppTest/test_uriparser_test-time.$(OBJEXT):  \
+	test/CppTest/$(am__dirstamp) \
+	test/CppTest/$(DEPDIR)/$(am__dirstamp)
+test/CppTest/test_uriparser_test-utils.$(OBJEXT):  \
+	test/CppTest/$(am__dirstamp) \
+	test/CppTest/$(DEPDIR)/$(am__dirstamp)
 test/$(am__dirstamp):
 	@$(MKDIR_P) test
 	@: > test/$(am__dirstamp)
+test/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) test/$(DEPDIR)
+	@: > test/$(DEPDIR)/$(am__dirstamp)
+test/test_uriparser_test-test.$(OBJEXT): test/$(am__dirstamp) \
+	test/$(DEPDIR)/$(am__dirstamp)
 test/uriparser_test$(EXEEXT): $(test_uriparser_test_OBJECTS) $(test_uriparser_test_DEPENDENCIES) test/$(am__dirstamp)
 	@rm -f test/uriparser_test$(EXEEXT)
 	$(test_uriparser_test_LINK) $(test_uriparser_test_OBJECTS) $(test_uriparser_test_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f lib/liburiparser_la-Uri.$(OBJEXT)
+	-rm -f lib/liburiparser_la-Uri.lo
+	-rm -f lib/liburiparser_la-UriBase.$(OBJEXT)
+	-rm -f lib/liburiparser_la-UriBase.lo
+	-rm -f lib/liburiparser_la-UriIp4.$(OBJEXT)
+	-rm -f lib/liburiparser_la-UriIp4.lo
+	-rm -f lib/liburiparser_la-UriIp4Base.$(OBJEXT)
+	-rm -f lib/liburiparser_la-UriIp4Base.lo
+	-rm -f lib/liburiparser_la-uriparser.$(OBJEXT)
+	-rm -f lib/liburiparser_la-uriparser.lo
+	-rm -f test/CppTest/test_uriparser_test-collectoroutput.$(OBJEXT)
+	-rm -f test/CppTest/test_uriparser_test-compileroutput.$(OBJEXT)
+	-rm -f test/CppTest/test_uriparser_test-htmloutput.$(OBJEXT)
+	-rm -f test/CppTest/test_uriparser_test-missing.$(OBJEXT)
+	-rm -f test/CppTest/test_uriparser_test-source.$(OBJEXT)
+	-rm -f test/CppTest/test_uriparser_test-suite.$(OBJEXT)
+	-rm -f test/CppTest/test_uriparser_test-textoutput.$(OBJEXT)
+	-rm -f test/CppTest/test_uriparser_test-time.$(OBJEXT)
+	-rm -f test/CppTest/test_uriparser_test-utils.$(OBJEXT)
+	-rm -f test/test_uriparser_test-test.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-Uri.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-UriBase.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-UriIp4.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-UriIp4Base.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liburiparser_la-uriparser.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-collectoroutput.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-compileroutput.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-htmloutput.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-missing.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-source.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-suite.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-test.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-textoutput.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-time.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_uriparser_test-utils.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@lib/$(DEPDIR)/liburiparser_la-Uri.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@lib/$(DEPDIR)/liburiparser_la-UriBase.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@lib/$(DEPDIR)/liburiparser_la-UriIp4.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@lib/$(DEPDIR)/liburiparser_la-UriIp4Base.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@lib/$(DEPDIR)/liburiparser_la-uriparser.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/$(DEPDIR)/test_uriparser_test-test.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/CppTest/$(DEPDIR)/test_uriparser_test-collectoroutput.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/CppTest/$(DEPDIR)/test_uriparser_test-compileroutput.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/CppTest/$(DEPDIR)/test_uriparser_test-htmloutput.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/CppTest/$(DEPDIR)/test_uriparser_test-missing.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/CppTest/$(DEPDIR)/test_uriparser_test-source.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/CppTest/$(DEPDIR)/test_uriparser_test-suite.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/CppTest/$(DEPDIR)/test_uriparser_test-textoutput.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/CppTest/$(DEPDIR)/test_uriparser_test-time.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/CppTest/$(DEPDIR)/test_uriparser_test-utils.Po@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCC_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCC_TRUE@	mv -f $$depbase.Tpo $$depbase.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(COMPILE) -c $<
+@am__fastdepCC_FALSE@	$(COMPILE) -c -o $@ $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCC_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCC_TRUE@	mv -f $$depbase.Tpo $$depbase.Po
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(COMPILE) -c `$(CYGPATH_W) '$<'`
+@am__fastdepCC_FALSE@	$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .c.lo:
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@am__fastdepCC_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCC_TRUE@	mv -f $$depbase.Tpo $$depbase.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LTCOMPILE) -c -o $@ $<
 
-liburiparser_la-Uri.lo: lib/Uri.c
-@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-Uri.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-Uri.Tpo -c -o liburiparser_la-Uri.lo `test -f 'lib/Uri.c' || echo '$(srcdir)/'`lib/Uri.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-Uri.Tpo $(DEPDIR)/liburiparser_la-Uri.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/Uri.c' object='liburiparser_la-Uri.lo' libtool=yes @AMDEPBACKSLASH@
+lib/liburiparser_la-Uri.lo: lib/Uri.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT lib/liburiparser_la-Uri.lo -MD -MP -MF lib/$(DEPDIR)/liburiparser_la-Uri.Tpo -c -o lib/liburiparser_la-Uri.lo `test -f 'lib/Uri.c' || echo '$(srcdir)/'`lib/Uri.c
+@am__fastdepCC_TRUE@	mv -f lib/$(DEPDIR)/liburiparser_la-Uri.Tpo lib/$(DEPDIR)/liburiparser_la-Uri.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/Uri.c' object='lib/liburiparser_la-Uri.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-Uri.lo `test -f 'lib/Uri.c' || echo '$(srcdir)/'`lib/Uri.c
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o lib/liburiparser_la-Uri.lo `test -f 'lib/Uri.c' || echo '$(srcdir)/'`lib/Uri.c
 
-liburiparser_la-UriBase.lo: lib/UriBase.c
-@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-UriBase.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-UriBase.Tpo -c -o liburiparser_la-UriBase.lo `test -f 'lib/UriBase.c' || echo '$(srcdir)/'`lib/UriBase.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-UriBase.Tpo $(DEPDIR)/liburiparser_la-UriBase.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriBase.c' object='liburiparser_la-UriBase.lo' libtool=yes @AMDEPBACKSLASH@
+lib/liburiparser_la-UriBase.lo: lib/UriBase.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT lib/liburiparser_la-UriBase.lo -MD -MP -MF lib/$(DEPDIR)/liburiparser_la-UriBase.Tpo -c -o lib/liburiparser_la-UriBase.lo `test -f 'lib/UriBase.c' || echo '$(srcdir)/'`lib/UriBase.c
+@am__fastdepCC_TRUE@	mv -f lib/$(DEPDIR)/liburiparser_la-UriBase.Tpo lib/$(DEPDIR)/liburiparser_la-UriBase.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriBase.c' object='lib/liburiparser_la-UriBase.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-UriBase.lo `test -f 'lib/UriBase.c' || echo '$(srcdir)/'`lib/UriBase.c
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o lib/liburiparser_la-UriBase.lo `test -f 'lib/UriBase.c' || echo '$(srcdir)/'`lib/UriBase.c
 
-liburiparser_la-UriIp4.lo: lib/UriIp4.c
-@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-UriIp4.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-UriIp4.Tpo -c -o liburiparser_la-UriIp4.lo `test -f 'lib/UriIp4.c' || echo '$(srcdir)/'`lib/UriIp4.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-UriIp4.Tpo $(DEPDIR)/liburiparser_la-UriIp4.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4.c' object='liburiparser_la-UriIp4.lo' libtool=yes @AMDEPBACKSLASH@
+lib/liburiparser_la-UriIp4.lo: lib/UriIp4.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT lib/liburiparser_la-UriIp4.lo -MD -MP -MF lib/$(DEPDIR)/liburiparser_la-UriIp4.Tpo -c -o lib/liburiparser_la-UriIp4.lo `test -f 'lib/UriIp4.c' || echo '$(srcdir)/'`lib/UriIp4.c
+@am__fastdepCC_TRUE@	mv -f lib/$(DEPDIR)/liburiparser_la-UriIp4.Tpo lib/$(DEPDIR)/liburiparser_la-UriIp4.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4.c' object='lib/liburiparser_la-UriIp4.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-UriIp4.lo `test -f 'lib/UriIp4.c' || echo '$(srcdir)/'`lib/UriIp4.c
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o lib/liburiparser_la-UriIp4.lo `test -f 'lib/UriIp4.c' || echo '$(srcdir)/'`lib/UriIp4.c
 
-liburiparser_la-UriIp4Base.lo: lib/UriIp4Base.c
-@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-UriIp4Base.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-UriIp4Base.Tpo -c -o liburiparser_la-UriIp4Base.lo `test -f 'lib/UriIp4Base.c' || echo '$(srcdir)/'`lib/UriIp4Base.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-UriIp4Base.Tpo $(DEPDIR)/liburiparser_la-UriIp4Base.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4Base.c' object='liburiparser_la-UriIp4Base.lo' libtool=yes @AMDEPBACKSLASH@
+lib/liburiparser_la-UriIp4Base.lo: lib/UriIp4Base.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT lib/liburiparser_la-UriIp4Base.lo -MD -MP -MF lib/$(DEPDIR)/liburiparser_la-UriIp4Base.Tpo -c -o lib/liburiparser_la-UriIp4Base.lo `test -f 'lib/UriIp4Base.c' || echo '$(srcdir)/'`lib/UriIp4Base.c
+@am__fastdepCC_TRUE@	mv -f lib/$(DEPDIR)/liburiparser_la-UriIp4Base.Tpo lib/$(DEPDIR)/liburiparser_la-UriIp4Base.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/UriIp4Base.c' object='lib/liburiparser_la-UriIp4Base.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-UriIp4Base.lo `test -f 'lib/UriIp4Base.c' || echo '$(srcdir)/'`lib/UriIp4Base.c
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o lib/liburiparser_la-UriIp4Base.lo `test -f 'lib/UriIp4Base.c' || echo '$(srcdir)/'`lib/UriIp4Base.c
 
-liburiparser_la-uriparser.lo: lib/uriparser.c
-@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT liburiparser_la-uriparser.lo -MD -MP -MF $(DEPDIR)/liburiparser_la-uriparser.Tpo -c -o liburiparser_la-uriparser.lo `test -f 'lib/uriparser.c' || echo '$(srcdir)/'`lib/uriparser.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/liburiparser_la-uriparser.Tpo $(DEPDIR)/liburiparser_la-uriparser.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/uriparser.c' object='liburiparser_la-uriparser.lo' libtool=yes @AMDEPBACKSLASH@
+lib/liburiparser_la-uriparser.lo: lib/uriparser.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -MT lib/liburiparser_la-uriparser.lo -MD -MP -MF lib/$(DEPDIR)/liburiparser_la-uriparser.Tpo -c -o lib/liburiparser_la-uriparser.lo `test -f 'lib/uriparser.c' || echo '$(srcdir)/'`lib/uriparser.c
+@am__fastdepCC_TRUE@	mv -f lib/$(DEPDIR)/liburiparser_la-uriparser.Tpo lib/$(DEPDIR)/liburiparser_la-uriparser.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='lib/uriparser.c' object='lib/liburiparser_la-uriparser.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o liburiparser_la-uriparser.lo `test -f 'lib/uriparser.c' || echo '$(srcdir)/'`lib/uriparser.c
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liburiparser_la_CFLAGS) $(CFLAGS) -c -o lib/liburiparser_la-uriparser.lo `test -f 'lib/uriparser.c' || echo '$(srcdir)/'`lib/uriparser.c
 
 .cpp.o:
-@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCXX_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	mv -f $$depbase.Tpo $$depbase.Po
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(CXXCOMPILE) -c -o $@ $<
 
 .cpp.obj:
-@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCXX_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCXX_TRUE@	mv -f $$depbase.Tpo $$depbase.Po
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .cpp.lo:
-@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@am__fastdepCXX_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	mv -f $$depbase.Tpo $$depbase.Plo
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(LTCXXCOMPILE) -c -o $@ $<
 
-test_uriparser_test-collectoroutput.o: test/CppTest/collectoroutput.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-collectoroutput.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-collectoroutput.Tpo -c -o test_uriparser_test-collectoroutput.o `test -f 'test/CppTest/collectoroutput.cpp' || echo '$(srcdir)/'`test/CppTest/collectoroutput.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-collectoroutput.Tpo $(DEPDIR)/test_uriparser_test-collectoroutput.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/collectoroutput.cpp' object='test_uriparser_test-collectoroutput.o' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-collectoroutput.o: test/CppTest/collectoroutput.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-collectoroutput.o -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-collectoroutput.Tpo -c -o test/CppTest/test_uriparser_test-collectoroutput.o `test -f 'test/CppTest/collectoroutput.cpp' || echo '$(srcdir)/'`test/CppTest/collectoroutput.cpp
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-collectoroutput.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-collectoroutput.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/collectoroutput.cpp' object='test/CppTest/test_uriparser_test-collectoroutput.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-collectoroutput.o `test -f 'test/CppTest/collectoroutput.cpp' || echo '$(srcdir)/'`test/CppTest/collectoroutput.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-collectoroutput.o `test -f 'test/CppTest/collectoroutput.cpp' || echo '$(srcdir)/'`test/CppTest/collectoroutput.cpp
 
-test_uriparser_test-collectoroutput.obj: test/CppTest/collectoroutput.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-collectoroutput.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-collectoroutput.Tpo -c -o test_uriparser_test-collectoroutput.obj `if test -f 'test/CppTest/collectoroutput.cpp'; then $(CYGPATH_W) 'test/CppTest/collectoroutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/collectoroutput.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-collectoroutput.Tpo $(DEPDIR)/test_uriparser_test-collectoroutput.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/collectoroutput.cpp' object='test_uriparser_test-collectoroutput.obj' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-collectoroutput.obj: test/CppTest/collectoroutput.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-collectoroutput.obj -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-collectoroutput.Tpo -c -o test/CppTest/test_uriparser_test-collectoroutput.obj `if test -f 'test/CppTest/collectoroutput.cpp'; then $(CYGPATH_W) 'test/CppTest/collectoroutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/collectoroutput.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-collectoroutput.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-collectoroutput.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/collectoroutput.cpp' object='test/CppTest/test_uriparser_test-collectoroutput.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-collectoroutput.obj `if test -f 'test/CppTest/collectoroutput.cpp'; then $(CYGPATH_W) 'test/CppTest/collectoroutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/collectoroutput.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-collectoroutput.obj `if test -f 'test/CppTest/collectoroutput.cpp'; then $(CYGPATH_W) 'test/CppTest/collectoroutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/collectoroutput.cpp'; fi`
 
-test_uriparser_test-compileroutput.o: test/CppTest/compileroutput.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-compileroutput.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-compileroutput.Tpo -c -o test_uriparser_test-compileroutput.o `test -f 'test/CppTest/compileroutput.cpp' || echo '$(srcdir)/'`test/CppTest/compileroutput.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-compileroutput.Tpo $(DEPDIR)/test_uriparser_test-compileroutput.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/compileroutput.cpp' object='test_uriparser_test-compileroutput.o' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-compileroutput.o: test/CppTest/compileroutput.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-compileroutput.o -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-compileroutput.Tpo -c -o test/CppTest/test_uriparser_test-compileroutput.o `test -f 'test/CppTest/compileroutput.cpp' || echo '$(srcdir)/'`test/CppTest/compileroutput.cpp
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-compileroutput.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-compileroutput.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/compileroutput.cpp' object='test/CppTest/test_uriparser_test-compileroutput.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-compileroutput.o `test -f 'test/CppTest/compileroutput.cpp' || echo '$(srcdir)/'`test/CppTest/compileroutput.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-compileroutput.o `test -f 'test/CppTest/compileroutput.cpp' || echo '$(srcdir)/'`test/CppTest/compileroutput.cpp
 
-test_uriparser_test-compileroutput.obj: test/CppTest/compileroutput.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-compileroutput.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-compileroutput.Tpo -c -o test_uriparser_test-compileroutput.obj `if test -f 'test/CppTest/compileroutput.cpp'; then $(CYGPATH_W) 'test/CppTest/compileroutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/compileroutput.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-compileroutput.Tpo $(DEPDIR)/test_uriparser_test-compileroutput.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/compileroutput.cpp' object='test_uriparser_test-compileroutput.obj' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-compileroutput.obj: test/CppTest/compileroutput.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-compileroutput.obj -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-compileroutput.Tpo -c -o test/CppTest/test_uriparser_test-compileroutput.obj `if test -f 'test/CppTest/compileroutput.cpp'; then $(CYGPATH_W) 'test/CppTest/compileroutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/compileroutput.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-compileroutput.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-compileroutput.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/compileroutput.cpp' object='test/CppTest/test_uriparser_test-compileroutput.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-compileroutput.obj `if test -f 'test/CppTest/compileroutput.cpp'; then $(CYGPATH_W) 'test/CppTest/compileroutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/compileroutput.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-compileroutput.obj `if test -f 'test/CppTest/compileroutput.cpp'; then $(CYGPATH_W) 'test/CppTest/compileroutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/compileroutput.cpp'; fi`
 
-test_uriparser_test-htmloutput.o: test/CppTest/htmloutput.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-htmloutput.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-htmloutput.Tpo -c -o test_uriparser_test-htmloutput.o `test -f 'test/CppTest/htmloutput.cpp' || echo '$(srcdir)/'`test/CppTest/htmloutput.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-htmloutput.Tpo $(DEPDIR)/test_uriparser_test-htmloutput.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/htmloutput.cpp' object='test_uriparser_test-htmloutput.o' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-htmloutput.o: test/CppTest/htmloutput.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-htmloutput.o -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-htmloutput.Tpo -c -o test/CppTest/test_uriparser_test-htmloutput.o `test -f 'test/CppTest/htmloutput.cpp' || echo '$(srcdir)/'`test/CppTest/htmloutput.cpp
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-htmloutput.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-htmloutput.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/htmloutput.cpp' object='test/CppTest/test_uriparser_test-htmloutput.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-htmloutput.o `test -f 'test/CppTest/htmloutput.cpp' || echo '$(srcdir)/'`test/CppTest/htmloutput.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-htmloutput.o `test -f 'test/CppTest/htmloutput.cpp' || echo '$(srcdir)/'`test/CppTest/htmloutput.cpp
 
-test_uriparser_test-htmloutput.obj: test/CppTest/htmloutput.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-htmloutput.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-htmloutput.Tpo -c -o test_uriparser_test-htmloutput.obj `if test -f 'test/CppTest/htmloutput.cpp'; then $(CYGPATH_W) 'test/CppTest/htmloutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/htmloutput.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-htmloutput.Tpo $(DEPDIR)/test_uriparser_test-htmloutput.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/htmloutput.cpp' object='test_uriparser_test-htmloutput.obj' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-htmloutput.obj: test/CppTest/htmloutput.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-htmloutput.obj -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-htmloutput.Tpo -c -o test/CppTest/test_uriparser_test-htmloutput.obj `if test -f 'test/CppTest/htmloutput.cpp'; then $(CYGPATH_W) 'test/CppTest/htmloutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/htmloutput.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-htmloutput.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-htmloutput.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/htmloutput.cpp' object='test/CppTest/test_uriparser_test-htmloutput.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-htmloutput.obj `if test -f 'test/CppTest/htmloutput.cpp'; then $(CYGPATH_W) 'test/CppTest/htmloutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/htmloutput.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-htmloutput.obj `if test -f 'test/CppTest/htmloutput.cpp'; then $(CYGPATH_W) 'test/CppTest/htmloutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/htmloutput.cpp'; fi`
 
-test_uriparser_test-missing.o: test/CppTest/missing.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-missing.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-missing.Tpo -c -o test_uriparser_test-missing.o `test -f 'test/CppTest/missing.cpp' || echo '$(srcdir)/'`test/CppTest/missing.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-missing.Tpo $(DEPDIR)/test_uriparser_test-missing.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/missing.cpp' object='test_uriparser_test-missing.o' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-missing.o: test/CppTest/missing.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-missing.o -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-missing.Tpo -c -o test/CppTest/test_uriparser_test-missing.o `test -f 'test/CppTest/missing.cpp' || echo '$(srcdir)/'`test/CppTest/missing.cpp
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-missing.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-missing.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/missing.cpp' object='test/CppTest/test_uriparser_test-missing.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-missing.o `test -f 'test/CppTest/missing.cpp' || echo '$(srcdir)/'`test/CppTest/missing.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-missing.o `test -f 'test/CppTest/missing.cpp' || echo '$(srcdir)/'`test/CppTest/missing.cpp
 
-test_uriparser_test-missing.obj: test/CppTest/missing.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-missing.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-missing.Tpo -c -o test_uriparser_test-missing.obj `if test -f 'test/CppTest/missing.cpp'; then $(CYGPATH_W) 'test/CppTest/missing.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/missing.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-missing.Tpo $(DEPDIR)/test_uriparser_test-missing.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/missing.cpp' object='test_uriparser_test-missing.obj' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-missing.obj: test/CppTest/missing.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-missing.obj -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-missing.Tpo -c -o test/CppTest/test_uriparser_test-missing.obj `if test -f 'test/CppTest/missing.cpp'; then $(CYGPATH_W) 'test/CppTest/missing.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/missing.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-missing.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-missing.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/missing.cpp' object='test/CppTest/test_uriparser_test-missing.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-missing.obj `if test -f 'test/CppTest/missing.cpp'; then $(CYGPATH_W) 'test/CppTest/missing.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/missing.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-missing.obj `if test -f 'test/CppTest/missing.cpp'; then $(CYGPATH_W) 'test/CppTest/missing.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/missing.cpp'; fi`
 
-test_uriparser_test-source.o: test/CppTest/source.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-source.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-source.Tpo -c -o test_uriparser_test-source.o `test -f 'test/CppTest/source.cpp' || echo '$(srcdir)/'`test/CppTest/source.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-source.Tpo $(DEPDIR)/test_uriparser_test-source.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/source.cpp' object='test_uriparser_test-source.o' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-source.o: test/CppTest/source.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-source.o -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-source.Tpo -c -o test/CppTest/test_uriparser_test-source.o `test -f 'test/CppTest/source.cpp' || echo '$(srcdir)/'`test/CppTest/source.cpp
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-source.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-source.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/source.cpp' object='test/CppTest/test_uriparser_test-source.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-source.o `test -f 'test/CppTest/source.cpp' || echo '$(srcdir)/'`test/CppTest/source.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-source.o `test -f 'test/CppTest/source.cpp' || echo '$(srcdir)/'`test/CppTest/source.cpp
 
-test_uriparser_test-source.obj: test/CppTest/source.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-source.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-source.Tpo -c -o test_uriparser_test-source.obj `if test -f 'test/CppTest/source.cpp'; then $(CYGPATH_W) 'test/CppTest/source.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/source.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-source.Tpo $(DEPDIR)/test_uriparser_test-source.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/source.cpp' object='test_uriparser_test-source.obj' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-source.obj: test/CppTest/source.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-source.obj -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-source.Tpo -c -o test/CppTest/test_uriparser_test-source.obj `if test -f 'test/CppTest/source.cpp'; then $(CYGPATH_W) 'test/CppTest/source.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/source.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-source.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-source.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/source.cpp' object='test/CppTest/test_uriparser_test-source.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-source.obj `if test -f 'test/CppTest/source.cpp'; then $(CYGPATH_W) 'test/CppTest/source.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/source.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-source.obj `if test -f 'test/CppTest/source.cpp'; then $(CYGPATH_W) 'test/CppTest/source.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/source.cpp'; fi`
 
-test_uriparser_test-suite.o: test/CppTest/suite.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-suite.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-suite.Tpo -c -o test_uriparser_test-suite.o `test -f 'test/CppTest/suite.cpp' || echo '$(srcdir)/'`test/CppTest/suite.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-suite.Tpo $(DEPDIR)/test_uriparser_test-suite.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/suite.cpp' object='test_uriparser_test-suite.o' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-suite.o: test/CppTest/suite.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-suite.o -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-suite.Tpo -c -o test/CppTest/test_uriparser_test-suite.o `test -f 'test/CppTest/suite.cpp' || echo '$(srcdir)/'`test/CppTest/suite.cpp
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-suite.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-suite.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/suite.cpp' object='test/CppTest/test_uriparser_test-suite.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-suite.o `test -f 'test/CppTest/suite.cpp' || echo '$(srcdir)/'`test/CppTest/suite.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-suite.o `test -f 'test/CppTest/suite.cpp' || echo '$(srcdir)/'`test/CppTest/suite.cpp
 
-test_uriparser_test-suite.obj: test/CppTest/suite.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-suite.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-suite.Tpo -c -o test_uriparser_test-suite.obj `if test -f 'test/CppTest/suite.cpp'; then $(CYGPATH_W) 'test/CppTest/suite.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/suite.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-suite.Tpo $(DEPDIR)/test_uriparser_test-suite.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/suite.cpp' object='test_uriparser_test-suite.obj' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-suite.obj: test/CppTest/suite.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-suite.obj -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-suite.Tpo -c -o test/CppTest/test_uriparser_test-suite.obj `if test -f 'test/CppTest/suite.cpp'; then $(CYGPATH_W) 'test/CppTest/suite.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/suite.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-suite.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-suite.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/suite.cpp' object='test/CppTest/test_uriparser_test-suite.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-suite.obj `if test -f 'test/CppTest/suite.cpp'; then $(CYGPATH_W) 'test/CppTest/suite.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/suite.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-suite.obj `if test -f 'test/CppTest/suite.cpp'; then $(CYGPATH_W) 'test/CppTest/suite.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/suite.cpp'; fi`
 
-test_uriparser_test-textoutput.o: test/CppTest/textoutput.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-textoutput.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-textoutput.Tpo -c -o test_uriparser_test-textoutput.o `test -f 'test/CppTest/textoutput.cpp' || echo '$(srcdir)/'`test/CppTest/textoutput.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-textoutput.Tpo $(DEPDIR)/test_uriparser_test-textoutput.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/textoutput.cpp' object='test_uriparser_test-textoutput.o' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-textoutput.o: test/CppTest/textoutput.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-textoutput.o -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-textoutput.Tpo -c -o test/CppTest/test_uriparser_test-textoutput.o `test -f 'test/CppTest/textoutput.cpp' || echo '$(srcdir)/'`test/CppTest/textoutput.cpp
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-textoutput.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-textoutput.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/textoutput.cpp' object='test/CppTest/test_uriparser_test-textoutput.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-textoutput.o `test -f 'test/CppTest/textoutput.cpp' || echo '$(srcdir)/'`test/CppTest/textoutput.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-textoutput.o `test -f 'test/CppTest/textoutput.cpp' || echo '$(srcdir)/'`test/CppTest/textoutput.cpp
 
-test_uriparser_test-textoutput.obj: test/CppTest/textoutput.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-textoutput.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-textoutput.Tpo -c -o test_uriparser_test-textoutput.obj `if test -f 'test/CppTest/textoutput.cpp'; then $(CYGPATH_W) 'test/CppTest/textoutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/textoutput.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-textoutput.Tpo $(DEPDIR)/test_uriparser_test-textoutput.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/textoutput.cpp' object='test_uriparser_test-textoutput.obj' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-textoutput.obj: test/CppTest/textoutput.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-textoutput.obj -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-textoutput.Tpo -c -o test/CppTest/test_uriparser_test-textoutput.obj `if test -f 'test/CppTest/textoutput.cpp'; then $(CYGPATH_W) 'test/CppTest/textoutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/textoutput.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-textoutput.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-textoutput.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/textoutput.cpp' object='test/CppTest/test_uriparser_test-textoutput.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-textoutput.obj `if test -f 'test/CppTest/textoutput.cpp'; then $(CYGPATH_W) 'test/CppTest/textoutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/textoutput.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-textoutput.obj `if test -f 'test/CppTest/textoutput.cpp'; then $(CYGPATH_W) 'test/CppTest/textoutput.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/textoutput.cpp'; fi`
 
-test_uriparser_test-time.o: test/CppTest/time.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-time.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-time.Tpo -c -o test_uriparser_test-time.o `test -f 'test/CppTest/time.cpp' || echo '$(srcdir)/'`test/CppTest/time.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-time.Tpo $(DEPDIR)/test_uriparser_test-time.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/time.cpp' object='test_uriparser_test-time.o' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-time.o: test/CppTest/time.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-time.o -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-time.Tpo -c -o test/CppTest/test_uriparser_test-time.o `test -f 'test/CppTest/time.cpp' || echo '$(srcdir)/'`test/CppTest/time.cpp
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-time.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-time.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/time.cpp' object='test/CppTest/test_uriparser_test-time.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-time.o `test -f 'test/CppTest/time.cpp' || echo '$(srcdir)/'`test/CppTest/time.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-time.o `test -f 'test/CppTest/time.cpp' || echo '$(srcdir)/'`test/CppTest/time.cpp
 
-test_uriparser_test-time.obj: test/CppTest/time.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-time.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-time.Tpo -c -o test_uriparser_test-time.obj `if test -f 'test/CppTest/time.cpp'; then $(CYGPATH_W) 'test/CppTest/time.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/time.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-time.Tpo $(DEPDIR)/test_uriparser_test-time.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/time.cpp' object='test_uriparser_test-time.obj' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-time.obj: test/CppTest/time.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-time.obj -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-time.Tpo -c -o test/CppTest/test_uriparser_test-time.obj `if test -f 'test/CppTest/time.cpp'; then $(CYGPATH_W) 'test/CppTest/time.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/time.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-time.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-time.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/time.cpp' object='test/CppTest/test_uriparser_test-time.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-time.obj `if test -f 'test/CppTest/time.cpp'; then $(CYGPATH_W) 'test/CppTest/time.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/time.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-time.obj `if test -f 'test/CppTest/time.cpp'; then $(CYGPATH_W) 'test/CppTest/time.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/time.cpp'; fi`
 
-test_uriparser_test-utils.o: test/CppTest/utils.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-utils.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-utils.Tpo -c -o test_uriparser_test-utils.o `test -f 'test/CppTest/utils.cpp' || echo '$(srcdir)/'`test/CppTest/utils.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-utils.Tpo $(DEPDIR)/test_uriparser_test-utils.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/utils.cpp' object='test_uriparser_test-utils.o' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-utils.o: test/CppTest/utils.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-utils.o -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-utils.Tpo -c -o test/CppTest/test_uriparser_test-utils.o `test -f 'test/CppTest/utils.cpp' || echo '$(srcdir)/'`test/CppTest/utils.cpp
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-utils.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-utils.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/utils.cpp' object='test/CppTest/test_uriparser_test-utils.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-utils.o `test -f 'test/CppTest/utils.cpp' || echo '$(srcdir)/'`test/CppTest/utils.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-utils.o `test -f 'test/CppTest/utils.cpp' || echo '$(srcdir)/'`test/CppTest/utils.cpp
 
-test_uriparser_test-utils.obj: test/CppTest/utils.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-utils.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-utils.Tpo -c -o test_uriparser_test-utils.obj `if test -f 'test/CppTest/utils.cpp'; then $(CYGPATH_W) 'test/CppTest/utils.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/utils.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-utils.Tpo $(DEPDIR)/test_uriparser_test-utils.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/utils.cpp' object='test_uriparser_test-utils.obj' libtool=no @AMDEPBACKSLASH@
+test/CppTest/test_uriparser_test-utils.obj: test/CppTest/utils.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/CppTest/test_uriparser_test-utils.obj -MD -MP -MF test/CppTest/$(DEPDIR)/test_uriparser_test-utils.Tpo -c -o test/CppTest/test_uriparser_test-utils.obj `if test -f 'test/CppTest/utils.cpp'; then $(CYGPATH_W) 'test/CppTest/utils.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/utils.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/CppTest/$(DEPDIR)/test_uriparser_test-utils.Tpo test/CppTest/$(DEPDIR)/test_uriparser_test-utils.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/CppTest/utils.cpp' object='test/CppTest/test_uriparser_test-utils.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-utils.obj `if test -f 'test/CppTest/utils.cpp'; then $(CYGPATH_W) 'test/CppTest/utils.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/utils.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/CppTest/test_uriparser_test-utils.obj `if test -f 'test/CppTest/utils.cpp'; then $(CYGPATH_W) 'test/CppTest/utils.cpp'; else $(CYGPATH_W) '$(srcdir)/test/CppTest/utils.cpp'; fi`
 
-test_uriparser_test-test.o: test/test.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-test.o -MD -MP -MF $(DEPDIR)/test_uriparser_test-test.Tpo -c -o test_uriparser_test-test.o `test -f 'test/test.cpp' || echo '$(srcdir)/'`test/test.cpp
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-test.Tpo $(DEPDIR)/test_uriparser_test-test.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/test.cpp' object='test_uriparser_test-test.o' libtool=no @AMDEPBACKSLASH@
+test/test_uriparser_test-test.o: test/test.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/test_uriparser_test-test.o -MD -MP -MF test/$(DEPDIR)/test_uriparser_test-test.Tpo -c -o test/test_uriparser_test-test.o `test -f 'test/test.cpp' || echo '$(srcdir)/'`test/test.cpp
+@am__fastdepCXX_TRUE@	mv -f test/$(DEPDIR)/test_uriparser_test-test.Tpo test/$(DEPDIR)/test_uriparser_test-test.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/test.cpp' object='test/test_uriparser_test-test.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-test.o `test -f 'test/test.cpp' || echo '$(srcdir)/'`test/test.cpp
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/test_uriparser_test-test.o `test -f 'test/test.cpp' || echo '$(srcdir)/'`test/test.cpp
 
-test_uriparser_test-test.obj: test/test.cpp
-@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test_uriparser_test-test.obj -MD -MP -MF $(DEPDIR)/test_uriparser_test-test.Tpo -c -o test_uriparser_test-test.obj `if test -f 'test/test.cpp'; then $(CYGPATH_W) 'test/test.cpp'; else $(CYGPATH_W) '$(srcdir)/test/test.cpp'; fi`
-@am__fastdepCXX_TRUE@	mv -f $(DEPDIR)/test_uriparser_test-test.Tpo $(DEPDIR)/test_uriparser_test-test.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/test.cpp' object='test_uriparser_test-test.obj' libtool=no @AMDEPBACKSLASH@
+test/test_uriparser_test-test.obj: test/test.cpp
+@am__fastdepCXX_TRUE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/test_uriparser_test-test.obj -MD -MP -MF test/$(DEPDIR)/test_uriparser_test-test.Tpo -c -o test/test_uriparser_test-test.obj `if test -f 'test/test.cpp'; then $(CYGPATH_W) 'test/test.cpp'; else $(CYGPATH_W) '$(srcdir)/test/test.cpp'; fi`
+@am__fastdepCXX_TRUE@	mv -f test/$(DEPDIR)/test_uriparser_test-test.Tpo test/$(DEPDIR)/test_uriparser_test-test.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='test/test.cpp' object='test/test_uriparser_test-test.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test_uriparser_test-test.obj `if test -f 'test/test.cpp'; then $(CYGPATH_W) 'test/test.cpp'; else $(CYGPATH_W) '$(srcdir)/test/test.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_uriparser_test_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/test_uriparser_test-test.obj `if test -f 'test/test.cpp'; then $(CYGPATH_W) 'test/test.cpp'; else $(CYGPATH_W) '$(srcdir)/test/test.cpp'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf lib/.libs lib/_libs
 
 distclean-libtool:
 	-rm -f libtool
@@ -957,7 +1039,12 @@ clean-generic:
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
+	-rm -f lib/$(DEPDIR)/$(am__dirstamp)
+	-rm -f lib/$(am__dirstamp)
+	-rm -f test/$(DEPDIR)/$(am__dirstamp)
 	-rm -f test/$(am__dirstamp)
+	-rm -f test/CppTest/$(DEPDIR)/$(am__dirstamp)
+	-rm -f test/CppTest/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -969,7 +1056,7 @@ clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
 
 distclean: distclean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
-	-rm -rf ./$(DEPDIR)
+	-rm -rf lib/$(DEPDIR) test/$(DEPDIR) test/CppTest/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-libtool distclean-tags
@@ -1006,7 +1093,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
 	-rm -rf $(top_srcdir)/autom4te.cache
-	-rm -rf ./$(DEPDIR)
+	-rm -rf lib/$(DEPDIR) test/$(DEPDIR) test/CppTest/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
