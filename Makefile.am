@@ -42,7 +42,7 @@ liburiparser_la_SOURCES = \
 
 test_uriparser_test_CPPFLAGS = -Iinclude
 test_uriparser_test_LDADD = -luriparser
-test_uriparser_test_LDFLAGS = -L./.libs
+test_uriparser_test_LDFLAGS = -L.libs
 
 test_uriparser_test_SOURCES = \
 	test/CppTest/collectoroutput.cpp \
