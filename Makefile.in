@@ -85,10 +85,7 @@ am_test_uriparser_test_OBJECTS =  \
 	test/CppTest/test_uriparser_test-utils.$(OBJEXT) \
 	test/test_uriparser_test-test.$(OBJEXT)
 test_uriparser_test_OBJECTS = $(am_test_uriparser_test_OBJECTS)
-test_uriparser_test_DEPENDENCIES =
-test_uriparser_test_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
-	$(CXXFLAGS) $(test_uriparser_test_LDFLAGS) $(LDFLAGS) -o $@
+test_uriparser_test_DEPENDENCIES = liburiparser.la
 DEFAULT_INCLUDES = -I. -I$(top_builddir)/test/CppTest@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -259,8 +256,7 @@ liburiparser_la_SOURCES = \
 	lib/uriparser.c
 
 test_uriparser_test_CPPFLAGS = -Iinclude
-test_uriparser_test_LDADD = -luriparser
-test_uriparser_test_LDFLAGS = -L./.libs
+test_uriparser_test_LDADD = liburiparser.la
 test_uriparser_test_SOURCES = \
 	test/CppTest/collectoroutput.cpp \
 	test/CppTest/compileroutput.cpp \
@@ -453,7 +449,7 @@ test/test_uriparser_test-test.$(OBJEXT): test/$(am__dirstamp) \
 	test/$(DEPDIR)/$(am__dirstamp)
 test/uriparser_test$(EXEEXT): $(test_uriparser_test_OBJECTS) $(test_uriparser_test_DEPENDENCIES) test/$(am__dirstamp)
 	@rm -f test/uriparser_test$(EXEEXT)
-	$(test_uriparser_test_LINK) $(test_uriparser_test_OBJECTS) $(test_uriparser_test_LDADD) $(LIBS)
+	$(CXXLINK) $(test_uriparser_test_OBJECTS) $(test_uriparser_test_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
