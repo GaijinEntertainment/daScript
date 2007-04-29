@@ -2,7 +2,7 @@
 AUTOMAKE_OPTIONS = dist-zip dist-bzip2 subdir-objects
 
 lib_LTLIBRARIES = liburiparser.la
-noinst_PROGRAMS = test/uriparser_test
+check_PROGRAMS = test/uriparser_test
 TESTS = test/uriparser_test
 
 ## man_MANS = uriparser.3

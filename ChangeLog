@@ -1,3 +1,7 @@
+???
+
+  * Improved: Test suite now built on "make check", not before
+
 2007-04-23 -- 0.3.4
 
   * Added: Shared library support (moved to libtool)
