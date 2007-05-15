@@ -205,6 +205,19 @@ namespace Test
 		_output->suite_end(_tests.size(), _name, total_time(false));
 
 		for_each(_suites.begin(), _suites.end(), DoRun(_output, _continue));
+
+		// BEGIN workaround
+		Suites::const_iterator iter = _suites.begin();
+		while (iter != _suites.end())
+		{
+				if (!(*iter)->_success)
+				{
+						_success = false;
+						break;
+				}
+				iter++;
+		}
+		// END
 	}
 	
 	// Functor to count all tests in a suite.

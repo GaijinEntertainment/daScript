@@ -1,6 +1,7 @@
 ???
 
   * Improved: Test suite now built on "make check", not before
+  * Fixed: Test suite always returned 0 (success)
 
 2007-04-23 -- 0.3.4
 
