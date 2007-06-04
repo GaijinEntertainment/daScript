@@ -58,6 +58,7 @@
 #  include <uriparser/UriDefsAnsi.h>
 # else
 #  include <uriparser/UriDefsUnicode.h>
+#  include <wchar.h>
 # endif
 
 
