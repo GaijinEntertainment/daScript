@@ -3214,6 +3214,153 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout) {
 
 
 
+/* TODO shallow or deep copy? */
+static void URI_FUNC(CopyTextRange)(URI_TYPE(TextRange) * dest,
+		const URI_TYPE(TextRange) * source) {
+	int charsToCopy;
+	int bytesToCopy;
+	URI_CHAR * dup;
+	if ((source == NULL) || (dest == NULL)) {
+		return;
+	}
+	charsToCopy = (source->afterLast - source->first);
+	bytesToCopy = charsToCopy * sizeof(URI_CHAR);
+	dup = malloc(bytesToCopy);
+	memcpy(dup, source->first, bytesToCopy);
+	dest->first = dup;
+	dest->afterLast = dup + charsToCopy;
+}
+
+
+
+/* TODO */
+static UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri) {
+	return (uri != NULL)
+			&& ((uri->hostText.first != NULL)
+				|| (uri->hostData.ip4 != NULL)
+				|| (uri->hostData.ip6 != NULL)
+				|| (uri->hostData.ipFuture.first != NULL)
+			);
+}
+
+
+
+/* TODO */
+static void URI_FUNC(CopyPathRemoveDotSegments)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * source) {
+	/* TODO */
+}
+
+/* TODO */
+static void URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * source) {
+	/* TODO */
+}
+
+/* TODO */
+static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
+	/* TODO */
+}
+
+/* TODO */
+static void URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * source) {
+	/* TODO */
+}
+
+/* TODO */
+static void URI_FUNC(CopyPathMerge)(URI_TYPE(Uri) * absDest,
+		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase) {
+	/* TODO */
+}
+
+
+
+/* TODO */
+int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
+		const URI_TYPE(Uri) * relSource,
+		const URI_TYPE(Uri) * absBase) {
+	if ((absDest == NULL) || (relSource == NULL) || (absBase == NULL)) {
+		return 1; /* TODO */
+	}
+	/*
+	TODO
+	relSource relative
+	absBase absolute
+
+	SHALLOW wherever possible!
+	*/
+
+	/* [01/32]	if defined(R.scheme) then */
+				if (relSource->scheme.first != NULL) {
+	/* [02/32]		T.scheme = R.scheme; */
+					absDest->scheme = relSource->scheme;
+	/* [03/32]		T.authority = R.authority; */
+					URI_FUNC(CopyAuthority)(absDest, relSource);
+	/* [04/32]		T.path = remove_dot_segments(R.path); */
+					URI_FUNC(CopyPathRemoveDotSegments)(absDest, relSource);
+	/* [05/32]		T.query = R.query; */
+					absDest->query = relSource->query;
+	/* [06/32]	else */
+				} else {
+	/* [07/32]		if defined(R.authority) then */
+					if (1) { /* TODO XXX */
+	/* [08/32]			T.authority = R.authority; */
+						URI_FUNC(CopyAuthority)(absDest, relSource);
+	/* [09/32]			T.path = remove_dot_segments(R.path); */
+						URI_FUNC(CopyPathRemoveDotSegments)(absDest, relSource);
+	/* [10/32]			T.query = R.query; */
+						absDest->query = relSource->query;
+	/* [11/32]		else */
+					} else {
+	/* [12/32]			if (R.path == "") then */
+						if (1) { /* TODO XXX */
+	/* [13/32]				T.path = Base.path; */
+							URI_FUNC(CopyPath)(absDest, absBase);
+	/* [14/32]				if defined(R.query) then */
+							if (1) { /* TODO XXX */
+	/* [15/32]					T.query = R.query; */
+								absDest->query = relSource->query;
+	/* [16/32]				else */
+							} else {
+	/* [17/32]					T.query = Base.query; */
+								absDest->query = absBase->query;
+	/* [18/32]				endif; */
+							}
+	/* [19/32]			else */
+						} else {
+	/* [20/32]				if (R.path starts-with "/") then */
+							if (1) { /* TODO XXX */
+	/* [21/32]					T.path = remove_dot_segments(R.path); */
+								URI_FUNC(CopyPathRemoveDotSegments)(absDest, relSource);
+	/* [22/32]				else */
+							} else {
+	/* [23/32]					T.path = merge(Base.path, R.path); */
+								URI_FUNC(CopyPathMerge)(absDest, relSource, absBase);
+	/* [24/32]					T.path = remove_dot_segments(T.path); */
+								URI_FUNC(RemoveDotSegments)(absDest);
+	/* [25/32]				endif; */
+							}
+	/* [26/32]				T.query = R.query; */
+							absDest->query = relSource->query;
+	/* [27/32]			endif; */
+						}
+	/* [28/32]			T.authority = Base.authority; */
+					URI_FUNC(CopyAuthority)(absDest, absBase);
+	/* [29/32]		endif; */
+					}
+	/* [30/32]		T.scheme = Base.scheme; */
+					absDest->scheme = absBase->scheme;
+	/* [31/32]	endif; */
+				}
+	/* [32/32]	T.fragment = R.fragment; */
+				absDest->fragment = relSource->fragment;
+
+	return 0;
+}
+
+
+
 UriBool URI_FUNC(_TESTING_ONLY_ParseIpSix)(const URI_CHAR * text) {
 	URI_TYPE(Uri) uri;
 	URI_TYPE(ParserState) parser;

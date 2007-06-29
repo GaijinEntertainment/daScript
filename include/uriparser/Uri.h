@@ -207,6 +207,15 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 
 
+/* TODO Substract base: removes an absolte base from an absolute path */
+
+
+/* TODO Add absolute base to relative path */
+int URI_FUNC(AddBase)(URI_TYPE(Uri) * absoluteDest,
+		const URI_TYPE(Uri) * relativeSource,
+		const URI_TYPE(Uri) * absoluteBase);
+
+
 
 #ifdef __cplusplus
 }

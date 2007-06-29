@@ -1,3 +1,7 @@
+== BEFORE NEXT RELEASE ==
+ * Take care of uriAddBase!
+ * Take care of deep/shallow distinction
+
 == SOON ==
  * input length restriction option
  * recursion depth restriction option
