@@ -1,6 +1,7 @@
 == BEFORE NEXT RELEASE ==
  * Take care of uriAddBase!
  * Take care of deep/shallow distinction
+ * Add external documentation
 
 == SOON ==
  * input length restriction option

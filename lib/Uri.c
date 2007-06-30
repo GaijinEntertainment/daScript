@@ -750,6 +750,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(ParserState) *
 	case _UT('f'):
 	case _UT('F'):
 		state->uri->hostData.ip6 = malloc(1 * sizeof(UriIp6)); /* Freed when stopping on parse error */
+		/* TODO NULL check */
 		return URI_FUNC(ParseIPv6address2)(state, first, afterLast);
 
 	default:
@@ -1251,6 +1252,7 @@ static URI_INLINE void URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state, c
 
 	/* Valid IPv4 or just a regname? */
 	state->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+	/* TODO NULL check */
 	if (URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
 			state->uri->hostText.first, state->uri->hostText.afterLast)) {
 		/* Not IPv4 */
@@ -1374,6 +1376,7 @@ static URI_INLINE void URI_FUNC(OnExitOwnHostUserInfo)(URI_TYPE(ParserState) * s
 
 	/* Valid IPv4 or just a regname? */
 	state->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+	/* TODO NULL check */
 	if (URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
 			state->uri->hostText.first, state->uri->hostText.afterLast)) {
 		/* Not IPv4 */
@@ -1609,6 +1612,7 @@ static URI_INLINE void URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) * s
 
 	/* Valid IPv4 or just a regname? */
 	state->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+	/* TODO NULL check */
 	if (URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
 			state->uri->hostText.first, state->uri->hostText.afterLast)) {
 		/* Not IPv4 */
@@ -2991,6 +2995,7 @@ static URI_INLINE void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri) {
 
 static URI_INLINE void URI_FUNC(PushPathSegment)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	URI_TYPE(PathSegment) * segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+	/* TODO NULL check */
 	memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
 	segment->text.first = first;
 	segment->text.afterLast = afterLast;
@@ -3226,6 +3231,7 @@ static void URI_FUNC(CopyTextRange)(URI_TYPE(TextRange) * dest,
 	charsToCopy = (source->afterLast - source->first);
 	bytesToCopy = charsToCopy * sizeof(URI_CHAR);
 	dup = malloc(bytesToCopy);
+	/* TODO NULL check */
 	memcpy(dup, source->first, bytesToCopy);
 	dest->first = dup;
 	dest->afterLast = dup + charsToCopy;
@@ -3243,35 +3249,201 @@ static UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri) {
 			);
 }
 
-
-
-/* TODO */
-static void URI_FUNC(CopyPathRemoveDotSegments)(URI_TYPE(Uri) * dest,
-		const URI_TYPE(Uri) * source) {
-	/* TODO */
-}
-
 /* TODO */
 static void URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * source) {
-	/* TODO */
+	if (source->pathHead == NULL) {
+		/* No path component */
+		dest->pathHead = NULL;
+		dest->pathTail = NULL;
+	} else {
+		/* Copy list but not the text contained */
+		URI_TYPE(PathSegment) * walker = source->pathHead;
+		URI_TYPE(PathSegment) * prev = NULL;
+		do {
+			URI_TYPE(PathSegment) * cur = malloc(sizeof(URI_TYPE(PathSegment)));
+			/* TODO NULL check */
+			cur->text = walker->text;
+			if (prev != NULL) {
+				/* First segment ever */
+				dest->pathHead = cur;
+				prev->next = cur;
+			}
+			prev = cur;
+			walker = walker->next;
+		} while (walker != NULL);
+		dest->pathTail = prev;
+	}
 }
 
 /* TODO */
 static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
-	/* TODO */
+	URI_TYPE(PathSegment) * walker;
+	if ((uri == NULL) || (uri->pathHead == NULL)) {
+		return;
+	}
+
+	walker = uri->pathHead;
+	walker->reserved = NULL; /* Prev pointer */
+	do {
+		int len = (walker->text.afterLast - walker->text.first);
+		switch (len) {
+		case 1:
+			if ((walker->text.first)[0] == _UT('.')) {
+				/* Path "." -> remove this segement */
+				URI_TYPE(PathSegment) * const prev = walker->reserved;
+				URI_TYPE(PathSegment) * const nextBackup = walker->next;
+				if (prev != NULL) {
+					/* Not first segment */
+					prev->next = walker->next;
+				} else {
+					/* First segment -> update head pointer */
+					uri->pathHead = walker->next;
+					/* TODO tail? */
+				}
+				if (walker->next != NULL) {
+					walker->next->reserved = prev;
+				}
+				free(walker); /* TODO Free text in deep copy mode */
+				walker = nextBackup;
+			} else {
+				if (walker->next != NULL) {
+					walker->next->reserved = walker;
+				}
+				walker = walker->next;
+			}
+			break;
+
+		case 2:
+			if (((walker->text.first)[0] == _UT('.'))
+					&& ((walker->text.first)[1] == _UT('.'))) {
+				/* Path ".." -> remove this and the previous segment */
+				URI_TYPE(PathSegment) * const prev = walker->reserved;
+				URI_TYPE(PathSegment) * prevPrev;
+				URI_TYPE(PathSegment) * const nextBackup = walker->next;
+				if (prev != NULL) {
+					/* Not first segment */
+					prevPrev = prev->reserved;
+					if (prevPrev != NULL) {
+						/* Not even prev is the first one */
+						prevPrev->next = walker->next;
+						if (walker->next != NULL) {
+							walker->next->reserved = prevPrev;
+						}
+						free(walker); /* TODO Free text in deep copy mode */
+						free(prev); /* TODO Free text in deep copy mode */
+						walker = nextBackup;
+					} else {
+						/* Prev is the first segment */
+						uri->pathHead = walker->next;
+						/* TODO tail? */
+						if (walker->next != NULL) {
+							walker->next->reserved = NULL;
+						}
+						free(walker); /* TODO Free text in deep copy mode */
+						free(prev); /* TODO Free text in deep copy mode */
+						walker = nextBackup;
+					}
+				} else {
+					URI_TYPE(PathSegment) * const nextBackup = walker->next;
+					/* First segment -> update head pointer */
+					uri->pathHead = walker->next;
+					/* TODO tail? */
+					if (walker->next != NULL) {
+						walker->next->reserved = prev;
+					}
+					free(walker); /* TODO Free text in deep copy mode */
+					walker = nextBackup;
+				}
+			} else {
+				if (walker->next != NULL) {
+					walker->next->reserved = walker;
+				}
+				walker = walker->next;
+			}
+			break;
+
+		default:
+			if (walker->next != NULL) {
+				walker->next->reserved = walker;
+			}
+			walker = walker->next;
+			break;
+
+		}
+	} while (walker != NULL);
 }
 
 /* TODO */
 static void URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * source) {
-	/* TODO */
+	/* TODO shallow or deep? */
+
+	/* Copy userInfo */
+	dest->userInfo = source->userInfo;
+
+	/* Copy hostText */
+	dest->hostText = source->hostText;
+
+	/* Copy hostData */
+	if (source->hostData.ip4 != NULL) {
+		dest->hostData.ip4 = malloc(sizeof(UriIp4));
+		/* TODO NULL check */
+		*(dest->hostData.ip4) = *(source->hostData.ip4);
+		dest->hostData.ip6 = NULL;
+		dest->hostData.ipFuture.first = NULL;
+		dest->hostData.ipFuture.afterLast = NULL;
+	} else if (source->hostData.ip6 != NULL) {
+		dest->hostData.ip4 = NULL;
+		dest->hostData.ip6 = malloc(sizeof(UriIp6));
+		/* TODO NULL check */
+		*(dest->hostData.ip6) = *(source->hostData.ip6);
+		dest->hostData.ipFuture.first = NULL;
+		dest->hostData.ipFuture.afterLast = NULL;
+	} else {
+		dest->hostData.ip4 = NULL;
+		dest->hostData.ip6 = NULL;
+		dest->hostData.ipFuture = source->hostData.ipFuture;
+	}
+
+	/* Copy portText */
+	dest->portText = source->portText;
 }
 
+static const URI_CHAR * const URI_FUNC(Dot) = _UT(".");
+
 /* TODO */
-static void URI_FUNC(CopyPathMerge)(URI_TYPE(Uri) * absDest,
-		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase) {
-	/* TODO */
+static void URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
+		const URI_TYPE(Uri) * relAppend) {
+	URI_TYPE(PathSegment) * walker;
+	URI_TYPE(PathSegment) * prev;
+	if (absWork->pathHead == NULL) {
+		return;
+	}
+
+	/* Replace last entry with "." because dots are removed */
+	/* TODO Can this cause trouble? */
+	absWork->pathTail->text.first = URI_FUNC(Dot);
+	absWork->pathTail->text.afterLast = URI_FUNC(Dot) + 1;
+
+	if (relAppend->pathHead == NULL) {
+		return;
+	}
+	walker = relAppend->pathHead;
+	prev = absWork->pathTail;
+	for (;;) {
+		URI_TYPE(PathSegment) * const dup = malloc(sizeof(URI_TYPE(PathSegment)));
+		/* TODO NULL check */
+		dup->text = walker->text;
+		prev->next = dup;
+
+		if (walker->next == NULL) {
+			absWork->pathTail = dup;
+			break;
+		}
+		prev = dup;
+		walker = walker->next;
+	}
 }
 
 
@@ -3298,7 +3470,8 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	/* [03/32]		T.authority = R.authority; */
 					URI_FUNC(CopyAuthority)(absDest, relSource);
 	/* [04/32]		T.path = remove_dot_segments(R.path); */
-					URI_FUNC(CopyPathRemoveDotSegments)(absDest, relSource);
+					URI_FUNC(CopyPath)(absDest, relSource);
+					URI_FUNC(RemoveDotSegments)(absDest);
 	/* [05/32]		T.query = R.query; */
 					absDest->query = relSource->query;
 	/* [06/32]	else */
@@ -3308,7 +3481,8 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	/* [08/32]			T.authority = R.authority; */
 						URI_FUNC(CopyAuthority)(absDest, relSource);
 	/* [09/32]			T.path = remove_dot_segments(R.path); */
-						URI_FUNC(CopyPathRemoveDotSegments)(absDest, relSource);
+						URI_FUNC(CopyPath)(absDest, relSource);
+						URI_FUNC(RemoveDotSegments)(absDest);
 	/* [10/32]			T.query = R.query; */
 						absDest->query = relSource->query;
 	/* [11/32]		else */
@@ -3332,11 +3506,13 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	/* [20/32]				if (R.path starts-with "/") then */
 							if (1) { /* TODO XXX */
 	/* [21/32]					T.path = remove_dot_segments(R.path); */
-								URI_FUNC(CopyPathRemoveDotSegments)(absDest, relSource);
+								URI_FUNC(CopyPath)(absDest, relSource);
+								URI_FUNC(RemoveDotSegments)(absDest);
 	/* [22/32]				else */
 							} else {
 	/* [23/32]					T.path = merge(Base.path, R.path); */
-								URI_FUNC(CopyPathMerge)(absDest, relSource, absBase);
+								URI_FUNC(CopyPath)(absDest, absBase);
+								URI_FUNC(MergePath)(absDest, relSource);
 	/* [24/32]					T.path = remove_dot_segments(T.path); */
 								URI_FUNC(RemoveDotSegments)(absDest);
 	/* [25/32]				endif; */
@@ -3371,6 +3547,7 @@ UriBool URI_FUNC(_TESTING_ONLY_ParseIpSix)(const URI_CHAR * text) {
 	URI_FUNC(ResetUri)(&uri);
 	parser.uri = &uri;
 	parser.uri->hostData.ip6 = malloc(1 * sizeof(UriIp6));
+	/* TODO NULL check */
 	res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
 	URI_FUNC(FreeUriMembers)(&uri);
 	return res == afterIpSix ? URI_TRUE : URI_FALSE;

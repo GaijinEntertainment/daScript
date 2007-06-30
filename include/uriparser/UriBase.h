@@ -42,8 +42,8 @@
  * Holds definitions independent of the encoding pass.
  */
 
-#ifndef URI_INDEPENDENT_H
-#define URI_INDEPENDENT_H 1
+#ifndef URI_BASE_H
+#define URI_BASE_H 1
 
 
 
@@ -145,4 +145,4 @@ unsigned char uriGetOctetValue(const unsigned char * digits, int digitCount);
 
 
 
-#endif /* URI_INDEPENDENT_H */
+#endif /* URI_BASE_H */
