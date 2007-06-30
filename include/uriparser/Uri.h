@@ -150,7 +150,7 @@ typedef struct URI_TYPE(UriStruct) {
  * a components absence.
  */
 typedef struct URI_TYPE(ParserStateStruct) {
-	URI_TYPE(Uri) * uri; /**< %URI structure filled while parsing */
+	URI_TYPE(Uri) * uri; /**< Plug in the %URI structure to be filled while parsing here */
 	int errorCode; /**< Code identifying the occured error */
 	const URI_CHAR * errorPos; /**< Pointer to position in case of a syntax error */
 
@@ -216,6 +216,19 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 int URI_FUNC(AddBase)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
 		const URI_TYPE(Uri) * absoluteBase);
+
+
+/* TODO note: string equivalence, not minimized before! */
+UriBool URI_FUNC(Equals)(URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
+
+
+int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri);
+
+int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars);
+
+
+/* TODO */
+void URI_FUNC(Print)(FILE * stream, const URI_TYPE(Uri) * uri);
 
 
 

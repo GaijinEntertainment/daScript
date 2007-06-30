@@ -548,8 +548,50 @@ private:
 	}
 
 	bool testAddBaseHelper(const wchar_t * base, const wchar_t * rel, const wchar_t * expectedResult) {
-		// TODO
-		return false;
+		UriParserStateW stateW;
+
+		// Base
+		UriUriW baseUri;
+		stateW.uri = &baseUri;
+		int res = uriParseUriW(&stateW, base);
+		if (res != 0) {
+			return false;
+		}
+
+		// Rel
+		UriUriW relUri;
+		stateW.uri = &relUri;
+		res = uriParseUriW(&stateW, rel);
+		if (res != 0) {
+			uriFreeUriMembersW(&baseUri);
+			return false;
+		}
+
+		// Expected result
+		UriUriW expectedUri;
+		stateW.uri = &expectedUri;
+		res = uriParseUriW(&stateW, expectedResult);
+		if (res != 0) {
+			uriFreeUriMembersW(&baseUri);
+			uriFreeUriMembersW(&relUri);
+			return false;
+		}
+
+		// Transform
+		UriUriW transformedUri;
+		res = uriAddBaseW(&transformedUri, &relUri, &baseUri);
+		if (res != 0) {
+			uriFreeUriMembersW(&baseUri);
+			uriFreeUriMembersW(&relUri);
+			return false;
+		}
+
+		const bool equal = uriEqualsW(&transformedUri, &expectedUri);
+
+		uriFreeUriMembersW(&baseUri);
+		uriFreeUriMembersW(&relUri);
+		uriFreeUriMembersW(&expectedUri);
+		return equal;
 	}
 
 	void testAddBase() {

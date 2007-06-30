@@ -1,4 +1,6 @@
 == BEFORE NEXT RELEASE ==
+ * Code "/* TODO */"s
+ * Test ToString, ...
  * Take care of uriAddBase!
  * Take care of deep/shallow distinction
  * Add external documentation

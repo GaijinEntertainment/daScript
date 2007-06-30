@@ -113,7 +113,7 @@ typedef int UriBool;
 
 
 #ifndef URI_DOXYGEN
-# include <stdio.h> /* For NULL */
+# include <stdio.h> /* For NULL, fprintf */
 # include <ctype.h> /* For wchar_t */
 # include <string.h> /* For strlen, memset, memcpy */
 # include <stdlib.h> /* For malloc */

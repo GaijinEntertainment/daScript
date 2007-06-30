@@ -70,3 +70,7 @@
 #define URI_STRCPY strcpy
 #undef URI_STRCMP
 #define URI_STRCMP strcmp
+#undef URI_STRNCMP
+#define URI_STRNCMP strncmp
+#undef URI_ITOA
+#define URI_ITOA itoa

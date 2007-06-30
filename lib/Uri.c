@@ -3477,7 +3477,7 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	/* [06/32]	else */
 				} else {
 	/* [07/32]		if defined(R.authority) then */
-					if (1) { /* TODO XXX */
+					if (URI_FUNC(IsHostSet)(relSource)) {
 	/* [08/32]			T.authority = R.authority; */
 						URI_FUNC(CopyAuthority)(absDest, relSource);
 	/* [09/32]			T.path = remove_dot_segments(R.path); */
@@ -3488,11 +3488,11 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	/* [11/32]		else */
 					} else {
 	/* [12/32]			if (R.path == "") then */
-						if (1) { /* TODO XXX */
+						if (relSource->pathHead == NULL) {
 	/* [13/32]				T.path = Base.path; */
 							URI_FUNC(CopyPath)(absDest, absBase);
 	/* [14/32]				if defined(R.query) then */
-							if (1) { /* TODO XXX */
+							if (relSource->query.first == NULL) {
 	/* [15/32]					T.query = R.query; */
 								absDest->query = relSource->query;
 	/* [16/32]				else */
@@ -3504,7 +3504,7 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	/* [19/32]			else */
 						} else {
 	/* [20/32]				if (R.path starts-with "/") then */
-							if (1) { /* TODO XXX */
+							if (relSource->absolutePath) {
 	/* [21/32]					T.path = remove_dot_segments(R.path); */
 								URI_FUNC(CopyPath)(absDest, relSource);
 								URI_FUNC(RemoveDotSegments)(absDest);
@@ -3532,7 +3532,307 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	/* [32/32]	T.fragment = R.fragment; */
 				absDest->fragment = relSource->fragment;
 
-	return 0;
+	return 0; /* TODO */
+}
+
+
+/* TODO */
+static int URI_FUNC(CompareRange)(const URI_TYPE(TextRange) * a,
+		const URI_TYPE(TextRange) * b) {
+	int diff;
+
+	/* NOTE: Both NULL means equal! */
+	if ((a == NULL) || (b == NULL)) {
+		return ((a == NULL) && (b == NULL)) ? URI_TRUE : URI_FALSE;
+	}
+
+	diff = ((a->afterLast - a->first) - (b->afterLast - b->first));
+	if (diff > 0) {
+		return 1;
+	} else if (diff < 0) {
+		return -1;
+	}
+
+	return URI_STRNCMP(a->first, b->first, (a->afterLast - a->first));
+}
+
+
+/* TODO */
+UriBool URI_FUNC(Equals)(URI_TYPE(Uri) * a,
+		const URI_TYPE(Uri) * b) {
+	/* NOTE: Both NULL means equal! */
+	if ((a == NULL) || (b == NULL)) {
+		return ((a == NULL) && (b == NULL)) ? URI_TRUE : URI_FALSE;
+	}
+
+	/* absolutePath */
+	if (a->absolutePath != b->absolutePath) {
+		return URI_FALSE;
+	}
+
+	/* scheme */
+	if (URI_FUNC(CompareRange)(&(a->scheme), &(b->scheme))) {
+		return URI_FALSE;
+	}
+
+	/* userInfo */
+	if (URI_FUNC(CompareRange)(&(a->userInfo), &(b->userInfo))) {
+		return URI_FALSE;
+	}
+
+	/* hostText */
+	/* TODO */
+
+	/* hostData */
+	/* TODO */
+
+	/* portText */
+	if (URI_FUNC(CompareRange)(&(a->portText), &(b->portText))) {
+		return URI_FALSE;
+	}
+
+	/* Path */
+	if ((a->pathHead == NULL) != (b->pathHead == NULL)) {
+		return URI_FALSE;
+	}
+	if (a->pathHead != NULL) {
+		URI_TYPE(PathSegment) * walkA = a->pathHead;
+		URI_TYPE(PathSegment) * walkB = b->pathHead;
+		do {
+			if (URI_FUNC(CompareRange)(&(walkA->text), &(walkB->text))) {
+				return URI_FALSE;
+			}
+			if ((walkA->next == NULL) != (walkB->next == NULL)) {
+				return URI_FALSE;
+			}
+			walkA = walkA->next;
+			walkB = walkB->next;
+		} while (walkA != NULL);
+	}
+
+	/* query */
+	if (URI_FUNC(CompareRange)(&(a->query), &(b->query))) {
+		return URI_FALSE;
+	}
+
+	/* fragment */
+	if (URI_FUNC(CompareRange)(&(a->fragment), &(b->fragment))) {
+		return URI_FALSE;
+	}
+
+	return URI_TRUE; /* Equal*/
+}
+
+
+
+int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri) {
+	return 0; /* TODO */
+}
+
+int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars) {
+	int charsWritten = 0;
+	if ((dest == NULL) || (uri == NULL) || (maxChars < 1)) {
+		return 0;
+	}
+	maxChars--; /* So we don't have to substract '\0' all the time */
+
+	/* [01/19]	result = "" */
+				dest[0] = _UT('\0');
+	/* [02/19]	if defined(scheme) then */
+				if (uri->scheme.first != NULL) {
+	/* [03/19]		append scheme to result; */
+					const int charsToWrite
+							= uri->scheme.afterLast - uri->scheme.first;
+					if (charsWritten + charsToWrite < maxChars) {
+						memcpy(dest + charsWritten, uri->scheme.first,
+								charsToWrite * sizeof(URI_CHAR));
+						charsWritten += charsToWrite;
+					}
+	/* [04/19]		append ":" to result; */
+					if (charsWritten + 1 < maxChars) {
+						memcpy(dest + charsWritten, _UT(":"),
+								1 * sizeof(URI_CHAR));
+						charsWritten += 1;
+					}
+	/* [05/19]	endif; */
+				}
+	/* [06/19]	if defined(authority) then */
+				if (URI_FUNC(IsHostSet)(uri)) {
+	/* [07/19]		append "//" to result; */
+					if (charsWritten + 2 < maxChars) {
+						memcpy(dest + charsWritten, _UT("//"),
+								2 * sizeof(URI_CHAR));
+						charsWritten += 2;
+					}
+	/* [08/19]		append authority to result; */
+					/* TODO username */
+
+					if (uri->hostData.ip4 != NULL) {
+						/* IPv4 */
+						int i = 0;
+						for (; i < 4; i++) {
+							const unsigned char value = uri->hostData.ip4->data[i];
+							const int charsToWrite = (value > 99) ? 3 : ((value > 9) ? 2 : 1);
+							if (charsWritten + charsToWrite < maxChars) {
+								URI_CHAR text[4];
+								URI_ITOA(value, text, 10);
+								memcpy(dest + charsWritten, text, charsToWrite * sizeof(URI_CHAR));
+								charsWritten += charsToWrite;
+							}
+							if (i < 3) {
+								if (charsWritten + 1 < maxChars) {
+									memcpy(dest + charsWritten, _UT("."),
+											1 * sizeof(URI_CHAR));
+									charsWritten += 1;
+								}
+							}
+						}
+					} else if (uri->hostData.ip6 != NULL) {
+						/* IPv6 */
+						int i = 0;
+						if (charsWritten + 1 < maxChars) {
+							memcpy(dest + charsWritten, _UT("["),
+									1 * sizeof(URI_CHAR));
+							charsWritten += 1;
+						}
+						for (; i < 16; i++) {
+							const unsigned char value = uri->hostData.ip6->data[i];
+							if (charsWritten + 2 < maxChars) {
+								URI_CHAR text[3];
+								URI_ITOA(value, text, 16);
+								memcpy(dest + charsWritten, text, 2 * sizeof(URI_CHAR));
+								charsWritten += 2;
+							}
+							if (((i & 1) == 1) && (i < 15)) {
+								if (charsWritten + 1 < maxChars) {
+									memcpy(dest + charsWritten, _UT(":"),
+											1 * sizeof(URI_CHAR));
+									charsWritten += 1;
+								}
+							}
+						}
+						if (charsWritten + 1 < maxChars) {
+							memcpy(dest + charsWritten, _UT("]"),
+									1 * sizeof(URI_CHAR));
+							charsWritten += 1;
+						}
+					} else if (uri->hostData.ipFuture.first != NULL) {
+						/* IPvFuture */
+						const int charsToWrite = (uri->hostData.ipFuture.afterLast
+								- uri->hostData.ipFuture.first);
+						if (charsWritten + 1 < maxChars) {
+							memcpy(dest + charsWritten, _UT("["),
+									1 * sizeof(URI_CHAR));
+							charsWritten += 1;
+						}
+						if (charsWritten + charsToWrite < maxChars) {
+							memcpy(dest + charsWritten, uri->hostData.ipFuture.first, charsToWrite * sizeof(URI_CHAR));
+							charsWritten += charsToWrite;
+						}
+						if (charsWritten + 1 < maxChars) {
+							memcpy(dest + charsWritten, _UT("]"),
+									1 * sizeof(URI_CHAR));
+							charsWritten += 1;
+						}
+					} else if (uri->hostText.first != NULL) {
+						/* Regname */
+						const int charsToWrite = (uri->hostText.afterLast - uri->hostText.first);
+						if (charsWritten + charsToWrite < maxChars) {
+							memcpy(dest + charsWritten, uri->hostText.first,
+									charsToWrite * sizeof(URI_CHAR));
+							charsWritten += charsToWrite;
+						}
+					}
+
+					/* Port */
+					if (uri->portText.first != NULL) {
+						const int charsToWrite = (uri->portText.afterLast - uri->portText.first);
+						if (charsWritten + 1 < maxChars) {
+								memcpy(dest + charsWritten, _UT(":"),
+										1 * sizeof(URI_CHAR));
+								charsWritten += 1;
+						}
+						if (charsWritten + charsToWrite < maxChars) {
+							memcpy(dest + charsWritten, uri->portText.first,
+									charsToWrite * sizeof(URI_CHAR));
+							charsWritten += charsToWrite;
+						}
+					}
+
+					/* Slash between authority and path */
+					if (charsWritten + 1 < maxChars) {
+							memcpy(dest + charsWritten, _UT("/"),
+									1 * sizeof(URI_CHAR));
+							charsWritten += 1;
+					}
+	/* [09/19]	endif; */
+				}
+	/* [10/19]	append path to result; */
+				if (uri->pathHead != NULL) {
+					URI_TYPE(PathSegment) * walker = uri->pathHead;
+					do {
+						const int charsToWrite = (walker->text.afterLast - walker->text.first);
+						if (charsWritten + charsToWrite < maxChars) {
+							memcpy(dest + charsWritten, walker->text.first,
+									charsToWrite * sizeof(URI_CHAR));
+							charsWritten += charsToWrite;
+						}
+
+						if (walker->next != NULL) {
+							/* Not last segment -> append slash */
+							if (charsWritten + 1 < maxChars) {
+								memcpy(dest + charsWritten, _UT("/"),
+										1 * sizeof(URI_CHAR));
+								charsWritten += 1;
+							}
+						}
+
+						walker = walker->next;
+					} while (walker != NULL);
+				}
+	/* [11/19]	if defined(query) then */
+				if (uri->query.first != NULL) {
+	/* [12/19]		append "?" to result; */
+					if (charsWritten + 1 < maxChars) {
+						memcpy(dest + charsWritten, _UT("?"),
+								1 * sizeof(URI_CHAR));
+						charsWritten += 1;
+					}
+	/* [13/19]		append query to result; */
+					{
+						const int charsToWrite
+								= uri->query.afterLast - uri->query.first;
+						if (charsWritten + charsToWrite < maxChars) {
+							memcpy(dest + charsWritten, uri->query.first,
+									charsToWrite * sizeof(URI_CHAR));
+							charsWritten += charsToWrite;
+						}
+					}
+	/* [14/19]	endif; */
+				}
+	/* [15/19]	if defined(fragment) then */
+				if (uri->fragment.first != NULL) {
+	/* [16/19]		append "#" to result; */
+					if (charsWritten + 1 < maxChars) {
+						memcpy(dest + charsWritten, _UT("#"),
+								1 * sizeof(URI_CHAR));
+						charsWritten += 1;
+					}
+	/* [17/19]		append fragment to result; */
+					{
+						const int charsToWrite
+								= uri->fragment.afterLast - uri->fragment.first;
+						if (charsWritten + charsToWrite < maxChars) {
+							memcpy(dest + charsWritten, uri->fragment.first,
+									charsToWrite * sizeof(URI_CHAR));
+							charsWritten += charsToWrite;
+						}
+					}
+	/* [18/19]	endif; */
+				}
+	/* [19/19]	return result; */
+				dest[charsWritten] = _UT('\0');
+				return charsWritten + 1;
 }
 
 
