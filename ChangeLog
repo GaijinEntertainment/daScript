@@ -1,5 +1,6 @@
 ???
 
+  * Fixed: Bug in ParseSegmentNz ate the first path segment of a relative URI
   * Improved: Test suite now built on "make check", not before
   * Fixed: Test suite always returned 0 (success)
 
