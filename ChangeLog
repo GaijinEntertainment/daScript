@@ -1,6 +1,7 @@
 ???
 
   * Fixed: Bug in ParseSegmentNz ate the first path segment of a relative URI
+  * Fixed: Bug in ParseMustBeSegmentNzNc did not unset uri->scheme.first
   * Improved: Test suite now built on "make check", not before
   * Fixed: Test suite always returned 0 (success)
 

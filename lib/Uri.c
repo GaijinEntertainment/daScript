@@ -1198,8 +1198,9 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
 	case _UT('/'):
 		{
 			const URI_CHAR * afterZeroMoreSlashSegs;
-			const URI_CHAR * const afterSegment
-					= URI_FUNC(ParseSegment)(state, first + 1, afterLast);
+			const URI_CHAR * afterSegment;
+			state->uri->scheme.first = NULL; /* Not a scheme, reset */
+			afterSegment = URI_FUNC(ParseSegment)(state, first + 1, afterLast);
 			if (afterSegment == NULL) {
 				return NULL;
 			}
