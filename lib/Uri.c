@@ -3258,21 +3258,22 @@ static void URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 		dest->pathTail = NULL;
 	} else {
 		/* Copy list but not the text contained */
-		URI_TYPE(PathSegment) * walker = source->pathHead;
-		URI_TYPE(PathSegment) * prev = NULL;
+		URI_TYPE(PathSegment) * sourceWalker = source->pathHead;
+		URI_TYPE(PathSegment) * destPrev = NULL;
 		do {
 			URI_TYPE(PathSegment) * cur = malloc(sizeof(URI_TYPE(PathSegment)));
 			/* TODO NULL check */
-			cur->text = walker->text;
-			if (prev != NULL) {
+			cur->text = sourceWalker->text;
+			if (destPrev == NULL) {
 				/* First segment ever */
 				dest->pathHead = cur;
-				prev->next = cur;
+			} else {
+				destPrev->next = cur;
 			}
-			prev = cur;
-			walker = walker->next;
-		} while (walker != NULL);
-		dest->pathTail = prev;
+			destPrev = cur;
+			sourceWalker = sourceWalker->next;
+		} while (sourceWalker != NULL);
+		dest->pathTail = destPrev;
 	}
 }
 
@@ -3299,16 +3300,22 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 				} else {
 					/* First segment -> update head pointer */
 					uri->pathHead = walker->next;
-					/* TODO tail? */
 				}
 				if (walker->next != NULL) {
 					walker->next->reserved = prev;
+				} else {
+					/* Last segment -> update tail */
+					uri->pathTail = prev;
 				}
 				free(walker); /* TODO Free text in deep copy mode */
 				walker = nextBackup;
 			} else {
 				if (walker->next != NULL) {
 					walker->next->reserved = walker;
+				} else {
+					/* Last segment -> update tail */
+					URI_TYPE(PathSegment) * const prev = walker->reserved;
+					uri->pathTail = prev;
 				}
 				walker = walker->next;
 			}
@@ -3329,6 +3336,9 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						prevPrev->next = walker->next;
 						if (walker->next != NULL) {
 							walker->next->reserved = prevPrev;
+						} else {
+							/* Last segment -> update tail */
+							uri->pathTail = prevPrev;
 						}
 						free(walker); /* TODO Free text in deep copy mode */
 						free(prev); /* TODO Free text in deep copy mode */
@@ -3339,6 +3349,9 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						/* TODO tail? */
 						if (walker->next != NULL) {
 							walker->next->reserved = NULL;
+						} else {
+							/* Last segment -> update tail */
+							uri->pathTail = prevPrev;
 						}
 						free(walker); /* TODO Free text in deep copy mode */
 						free(prev); /* TODO Free text in deep copy mode */
@@ -3350,7 +3363,10 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					uri->pathHead = walker->next;
 					/* TODO tail? */
 					if (walker->next != NULL) {
-						walker->next->reserved = prev;
+						walker->next->reserved = NULL;
+					} else {
+						/* Last segment -> update tail */
+						uri->pathTail = NULL;
 					}
 					free(walker); /* TODO Free text in deep copy mode */
 					walker = nextBackup;
@@ -3358,6 +3374,10 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 			} else {
 				if (walker->next != NULL) {
 					walker->next->reserved = walker;
+				} else {
+					/* Last segment -> update tail */
+					URI_TYPE(PathSegment) * const prev = walker->reserved;
+					uri->pathTail = prev;
 				}
 				walker = walker->next;
 			}
@@ -3366,6 +3386,10 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 		default:
 			if (walker->next != NULL) {
 				walker->next->reserved = walker;
+			} else {
+				/* Last segment -> update tail */
+				URI_TYPE(PathSegment) * const prev = walker->reserved;
+				uri->pathTail = prev;
 			}
 			walker = walker->next;
 			break;
@@ -3807,6 +3831,13 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 	/* [09/19]	endif; */
 				}
 	/* [10/19]	append path to result; */
+				if ((uri->scheme.first == NULL) && uri->absolutePath) {
+					if (charsWritten + 1 < maxChars) {
+							memcpy(dest + charsWritten, _UT("/"),
+									1 * sizeof(URI_CHAR));
+							charsWritten += 1;
+					}
+				}
 				if (uri->pathHead != NULL) {
 					URI_TYPE(PathSegment) * walker = uri->pathHead;
 					do {

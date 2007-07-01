@@ -1,6 +1,7 @@
 == BEFORE NEXT RELEASE ==
  * Code "/* TODO */"s
- * Test ToString, ...
+ * Test Equals
+ * ToString testcases with TODO
  * Take care of uriAddBase!
  * Take care of deep/shallow distinction
  * Make hostText from hostData?
