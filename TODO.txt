@@ -1,4 +1,5 @@
 == BEFORE NEXT RELEASE ==
+ * Fix bug: Parsing relative URI "./g" sets scheme.first!?
  * Code "/* TODO */"s
  * Test Equals
  * ToString testcases with TODO

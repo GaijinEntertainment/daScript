@@ -2014,6 +2014,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathRootless)(URI_TYPE(ParserSt
 			= URI_FUNC(ParseSegmentNz)(state, first, afterLast);
 	if (afterSegmentNz == NULL) {
 		return NULL;
+	} else {
+		URI_FUNC(PushPathSegment)(state, first, afterSegmentNz); /* SEGMENT BOTH */
 	}
 	return URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegmentNz, afterLast);
 }
@@ -3274,6 +3276,7 @@ static void URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 			sourceWalker = sourceWalker->next;
 		} while (sourceWalker != NULL);
 		dest->pathTail = destPrev;
+		dest->pathTail->next = NULL;
 	}
 }
 
@@ -3315,7 +3318,7 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 				} else {
 					/* Last segment -> update tail */
 					URI_TYPE(PathSegment) * const prev = walker->reserved;
-					uri->pathTail = prev;
+					uri->pathTail = walker;
 				}
 				walker = walker->next;
 			}
@@ -3377,7 +3380,7 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 				} else {
 					/* Last segment -> update tail */
 					URI_TYPE(PathSegment) * const prev = walker->reserved;
-					uri->pathTail = prev;
+					uri->pathTail = walker;
 				}
 				walker = walker->next;
 			}
@@ -3389,7 +3392,7 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 			} else {
 				/* Last segment -> update tail */
 				URI_TYPE(PathSegment) * const prev = walker->reserved;
-				uri->pathTail = prev;
+				uri->pathTail = walker;
 			}
 			walker = walker->next;
 			break;
@@ -3463,6 +3466,7 @@ static void URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 
 		if (walker->next == NULL) {
 			absWork->pathTail = dup;
+			absWork->pathTail->next = NULL;
 			break;
 		}
 		prev = dup;
@@ -3479,6 +3483,8 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	if ((absDest == NULL) || (relSource == NULL) || (absBase == NULL)) {
 		return 1; /* TODO */
 	}
+	URI_FUNC(ResetUri)(absDest);
+
 	/*
 	TODO
 	relSource relative
@@ -3589,13 +3595,13 @@ UriBool URI_FUNC(Equals)(URI_TYPE(Uri) * a,
 		return ((a == NULL) && (b == NULL)) ? URI_TRUE : URI_FALSE;
 	}
 
-	/* absolutePath */
-	if (a->absolutePath != b->absolutePath) {
+	/* scheme */
+	if (URI_FUNC(CompareRange)(&(a->scheme), &(b->scheme))) {
 		return URI_FALSE;
 	}
 
-	/* scheme */
-	if (URI_FUNC(CompareRange)(&(a->scheme), &(b->scheme))) {
+	/* absolutePath */
+	if ((a->scheme.first == NULL)&& (a->absolutePath != b->absolutePath)) {
 		return URI_FALSE;
 	}
 
