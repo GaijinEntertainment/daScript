@@ -3580,11 +3580,35 @@ UriBool URI_FUNC(Equals)(URI_TYPE(Uri) * a,
 		return URI_FALSE;
 	}
 
-	/* hostText */
-	/* TODO */
-
-	/* hostData */
-	/* TODO */
+	/* Host */
+	if (((a->hostData.ip4 == NULL) != (b->hostData.ip4 == NULL))
+			|| ((a->hostData.ip6 == NULL) != (b->hostData.ip6 == NULL))
+			|| ((a->hostData.ipFuture.first == NULL)
+				!= (b->hostData.ipFuture.first == NULL))) {
+		return URI_FALSE;
+	}
+	if (a->hostData.ip4 != NULL) {
+		if (memcmp(a->hostData.ip4->data, b->hostData.ip4->data, 4)) {
+			return URI_FALSE;
+		}
+	}
+	if (a->hostData.ip6 != NULL) {
+		if (memcmp(a->hostData.ip6->data, b->hostData.ip6->data, 16)) {
+			return URI_FALSE;
+		}
+	}
+	if (a->hostData.ipFuture.first != NULL) {
+		if (URI_FUNC(CompareRange)(&(a->hostData.ipFuture), &(b->hostData.ipFuture))) {
+			return URI_FALSE;
+		}
+	}
+	if ((a->hostData.ip4 == NULL)
+			&& (a->hostData.ip6 == NULL)
+			&& (a->hostData.ipFuture.first == NULL)) {
+		if (URI_FUNC(CompareRange)(&(a->hostText), &(b->hostText))) {
+			return URI_FALSE;
+		}
+	}
 
 	/* portText */
 	if (URI_FUNC(CompareRange)(&(a->portText), &(b->portText))) {
@@ -3634,7 +3658,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 	if ((dest == NULL) || (uri == NULL) || (maxChars < 1)) {
 		return 0;
 	}
-	maxChars--; /* So we don't have to substract '\0' all the time */
+	maxChars--; /* So we don't have to substract 1 for '\0' all the time */
 
 	/* [01/19]	result = "" */
 				dest[0] = _UT('\0');
@@ -3665,8 +3689,23 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 						charsWritten += 2;
 					}
 	/* [08/19]		append authority to result; */
-					/* TODO username */
+					/* UserInfo */
+					if (uri->userInfo.first != NULL) {
+						const int charsToWrite = (uri->userInfo.afterLast - uri->userInfo.first);
+						if (charsWritten + charsToWrite < maxChars) {
+							memcpy(dest + charsWritten, uri->userInfo.first,
+									charsToWrite * sizeof(URI_CHAR));
+							charsWritten += charsToWrite;
+						}
 
+						if (charsWritten + 1 < maxChars) {
+							memcpy(dest + charsWritten, _UT("@"),
+									1 * sizeof(URI_CHAR));
+							charsWritten += 1;
+						}
+					}
+
+					/* Host */
 					if (uri->hostData.ip4 != NULL) {
 						/* IPv4 */
 						int i = 0;

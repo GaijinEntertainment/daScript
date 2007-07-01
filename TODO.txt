@@ -3,6 +3,8 @@
  * Test ToString, ...
  * Take care of uriAddBase!
  * Take care of deep/shallow distinction
+ * Make hostText from hostData?
+ * Check slashes in path components end and beginning?
  * Add external documentation
 
 == SOON ==
