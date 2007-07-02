@@ -755,12 +755,33 @@ private:
 		TEST_ASSERT(testToStringHelper(L"http://example.com/?def#abc"));
 
 		// Relative
+		TEST_ASSERT(testToStringHelper(L"a"));
+		TEST_ASSERT(testToStringHelper(L"a/"));
+		TEST_ASSERT(testToStringHelper(L"/a"));
+		TEST_ASSERT(testToStringHelper(L"/a/"));
+		TEST_ASSERT(testToStringHelper(L"abc"));
+		TEST_ASSERT(testToStringHelper(L"abc/"));
+		TEST_ASSERT(testToStringHelper(L"/abc"));
+		TEST_ASSERT(testToStringHelper(L"/abc/"));
+		TEST_ASSERT(testToStringHelper(L"a/def"));
+		TEST_ASSERT(testToStringHelper(L"a/def/"));
+		TEST_ASSERT(testToStringHelper(L"/a/def"));
+		TEST_ASSERT(testToStringHelper(L"/a/def/"));
 		TEST_ASSERT(testToStringHelper(L"abc/def"));
+		TEST_ASSERT(testToStringHelper(L"abc/def/"));
 		TEST_ASSERT(testToStringHelper(L"/abc/def"));
+		TEST_ASSERT(testToStringHelper(L"/abc/def/"));
 		TEST_ASSERT(testToStringHelper(L"/"));
-		// TODO TEST_ASSERT(testToStringHelper(L"///"));
-		// TODO TEST_ASSERT(testToStringHelper(L"."));
-		// TODO TEST_ASSERT(testToStringHelper(L"./abc/def"));
+		TEST_ASSERT(testToStringHelper(L"//a/"));
+		TEST_ASSERT(testToStringHelper(L"."));
+		TEST_ASSERT(testToStringHelper(L"./"));
+		TEST_ASSERT(testToStringHelper(L"/."));
+		TEST_ASSERT(testToStringHelper(L"/./"));
+		TEST_ASSERT(testToStringHelper(L""));
+		TEST_ASSERT(testToStringHelper(L"./abc/def"));
+		TEST_ASSERT(testToStringHelper(L"?query"));
+		TEST_ASSERT(testToStringHelper(L"#fragment"));
+		TEST_ASSERT(testToStringHelper(L"?query#fragment"));
 	}
 
 };

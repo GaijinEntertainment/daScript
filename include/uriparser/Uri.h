@@ -209,26 +209,45 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 
 
-/* TODO Substract base: removes an absolte base from an absolute path */
 
-
-/* TODO Add absolute base to relative path */
+/**
+ * Performs reference resolution as described in
+ * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
+ *
+ * @param absoluteDest		Result %URI
+ * @param relativeSource	Reference to resolve
+ * @param absoluteBase		Base %URI to apply
+ * @return					Error code or0 on success
+ */
 int URI_FUNC(AddBase)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
 		const URI_TYPE(Uri) * absoluteBase);
 
 
-/* TODO note: string equivalence, not minimized before! */
+
+/**
+ * Checks two URIs for equivalence. Comparison is done
+ * the naive way, without prior normalization.
+ * NOTE: Two <code>NULL</code> URIs are equal as well.
+ *
+ * @param a		First %URI
+ * @param b		Second %URI
+ * @return		<code>URI_TRUE</code> when equal, <code>URI_FAlSE</code> else
+ */
 UriBool URI_FUNC(Equals)(URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
 
 
-int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri);
 
+/**
+ * Converts a %URI structure back to text as described in
+ * <a href="http://tools.ietf.org/html/rfc3986#section-5.3">section 5.3 of RFC 3986</a>.
+ *
+ * @param dest		Output destination
+ * @param uri		%URI to convert
+ * @param maxChars	Maximum number of characters to copy including terminator
+ * @return			Actual number of characters copied, can be lower than maxChars even if not the full %URI was copied!
+ */
 int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars);
-
-
-/* TODO */
-void URI_FUNC(Print)(FILE * stream, const URI_TYPE(Uri) * uri);
 
 
 

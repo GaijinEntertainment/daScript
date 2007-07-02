@@ -120,6 +120,12 @@ unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig);
 
 
 
+/* Used to point to from empty path segments.
+ * X.first and X.afterLast must be the same non-NULL value then. */
+static const URI_CHAR URI_FUNC(SafeToPointTo) = _UT('X');
+
+
+
 static URI_INLINE void URI_FUNC(Stop)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * errorPos) {
 	URI_FUNC(FreeUriMembers)(state->uri);
@@ -3240,7 +3246,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout) {
 
 
 
-/* TODO shallow or deep copy? */
+/* TODO remove
 static void URI_FUNC(CopyTextRange)(URI_TYPE(TextRange) * dest,
 		const URI_TYPE(TextRange) * source) {
 	int charsToCopy;
@@ -3252,15 +3258,16 @@ static void URI_FUNC(CopyTextRange)(URI_TYPE(TextRange) * dest,
 	charsToCopy = (source->afterLast - source->first);
 	bytesToCopy = charsToCopy * sizeof(URI_CHAR);
 	dup = malloc(bytesToCopy);
-	/* TODO NULL check */
+	/ TODO NULL check /
 	memcpy(dup, source->first, bytesToCopy);
 	dest->first = dup;
 	dest->afterLast = dup + charsToCopy;
 }
+*/
 
 
 
-/* TODO */
+/* Checks if a URI has the host component set. */
 static UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri) {
 	return (uri != NULL)
 			&& ((uri->hostText.first != NULL)
@@ -3270,7 +3277,9 @@ static UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri) {
 			);
 }
 
-/* TODO */
+
+
+/* Copies the path segment list from one URI to another. */
 static void URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * source) {
 	if (source->pathHead == NULL) {
@@ -3299,10 +3308,9 @@ static void URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 	}
 }
 
-/* TODO */
-static const URI_CHAR URI_FUNC(SafeToPointTo);
 
-/* TODO */
+
+/* Properly removes "." and ".." path segments */
 static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 	URI_TYPE(PathSegment) * walker;
 	if ((uri == NULL) || (uri->pathHead == NULL)) {
@@ -3312,7 +3320,7 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 	walker = uri->pathHead;
 	walker->reserved = NULL; /* Prev pointer */
 	do {
-		int len = (walker->text.afterLast - walker->text.first);
+		int len = (int)(walker->text.afterLast - walker->text.first);
 		switch (len) {
 		case 1:
 			if ((walker->text.first)[0] == _UT('.')) {
@@ -3333,8 +3341,8 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
 					/* TODO NULL check */
 					memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
-					segment->text.first = URI_FUNC(SafeToPointTo);
-					segment->text.afterLast = URI_FUNC(SafeToPointTo);
+					segment->text.first = &URI_FUNC(SafeToPointTo);
+					segment->text.afterLast = &URI_FUNC(SafeToPointTo);
 					prev->next = segment;
 					uri->pathTail = segment;
 				}
@@ -3345,7 +3353,6 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					walker->next->reserved = walker;
 				} else {
 					/* Last segment -> update tail */
-					URI_TYPE(PathSegment) * const prev = walker->reserved;
 					uri->pathTail = walker;
 				}
 				walker = walker->next;
@@ -3372,8 +3379,8 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 							URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
 							/* TODO NULL check */
 							memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
-							segment->text.first = URI_FUNC(SafeToPointTo);
-							segment->text.afterLast = URI_FUNC(SafeToPointTo);
+							segment->text.first = &URI_FUNC(SafeToPointTo);
+							segment->text.afterLast = &URI_FUNC(SafeToPointTo);
 							prevPrev->next = segment;
 							uri->pathTail = segment;
 						}
@@ -3383,7 +3390,6 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					} else {
 						/* Prev is the first segment */
 						uri->pathHead = walker->next;
-						/* TODO tail? */
 						if (walker->next != NULL) {
 							walker->next->reserved = NULL;
 						} else {
@@ -3398,7 +3404,6 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					URI_TYPE(PathSegment) * const nextBackup = walker->next;
 					/* First segment -> update head pointer */
 					uri->pathHead = walker->next;
-					/* TODO tail? */
 					if (walker->next != NULL) {
 						walker->next->reserved = NULL;
 					} else {
@@ -3413,7 +3418,6 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					walker->next->reserved = walker;
 				} else {
 					/* Last segment -> update tail */
-					URI_TYPE(PathSegment) * const prev = walker->reserved;
 					uri->pathTail = walker;
 				}
 				walker = walker->next;
@@ -3425,7 +3429,6 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 				walker->next->reserved = walker;
 			} else {
 				/* Last segment -> update tail */
-				URI_TYPE(PathSegment) * const prev = walker->reserved;
 				uri->pathTail = walker;
 			}
 			walker = walker->next;
@@ -3445,7 +3448,9 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 	}
 }
 
-/* TODO */
+
+
+/* Copies the authority part of an URI over to another. */
 static void URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * source) {
 	/* TODO shallow or deep? */
@@ -3481,9 +3486,10 @@ static void URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 	dest->portText = source->portText;
 }
 
-/* static const URI_CHAR * const URI_FUNC(Dot) = _UT("."); */
 
-/* TODO */
+
+/* Appends a relative URI to an absolute. The last path segement of
+ * the absolute URI is replaced. */
 static void URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 		const URI_TYPE(Uri) * relAppend) {
 	URI_TYPE(PathSegment) * sourceWalker;
@@ -3520,18 +3526,16 @@ static void URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 
 
 
-/* TODO */
 int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource,
 		const URI_TYPE(Uri) * absBase) {
 	if ((absDest == NULL) || (relSource == NULL) || (absBase == NULL)) {
-		return 1; /* TODO */
+		return URI_ERROR_NULL;
 	}
 	URI_FUNC(ResetUri)(absDest);
 
 	/*
 	TODO
-	relSource relative
 	absBase absolute
 
 	SHALLOW wherever possible!
@@ -3606,11 +3610,12 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	/* [32/32]	T.fragment = R.fragment; */
 				absDest->fragment = relSource->fragment;
 
-	return 0; /* TODO */
+	return URI_SUCCESS;
 }
 
 
-/* TODO */
+
+/* Compares two text ranges for equal text content */
 static int URI_FUNC(CompareRange)(const URI_TYPE(TextRange) * a,
 		const URI_TYPE(TextRange) * b) {
 	int diff;
@@ -3620,7 +3625,7 @@ static int URI_FUNC(CompareRange)(const URI_TYPE(TextRange) * a,
 		return ((a == NULL) && (b == NULL)) ? URI_TRUE : URI_FALSE;
 	}
 
-	diff = ((a->afterLast - a->first) - (b->afterLast - b->first));
+	diff = ((int)(a->afterLast - a->first) - (int)(b->afterLast - b->first));
 	if (diff > 0) {
 		return 1;
 	} else if (diff < 0) {
@@ -3631,7 +3636,7 @@ static int URI_FUNC(CompareRange)(const URI_TYPE(TextRange) * a,
 }
 
 
-/* TODO */
+
 UriBool URI_FUNC(Equals)(URI_TYPE(Uri) * a,
 		const URI_TYPE(Uri) * b) {
 	/* NOTE: Both NULL means equal! */
@@ -3723,10 +3728,6 @@ UriBool URI_FUNC(Equals)(URI_TYPE(Uri) * a,
 
 
 
-int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri) {
-	return 0; /* TODO */
-}
-
 int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars) {
 	int charsWritten = 0;
 	if ((dest == NULL) || (uri == NULL) || (maxChars < 1)) {
@@ -3740,7 +3741,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 				if (uri->scheme.first != NULL) {
 	/* [03/19]		append scheme to result; */
 					const int charsToWrite
-							= uri->scheme.afterLast - uri->scheme.first;
+							= (int)(uri->scheme.afterLast - uri->scheme.first);
 					if (charsWritten + charsToWrite < maxChars) {
 						memcpy(dest + charsWritten, uri->scheme.first,
 								charsToWrite * sizeof(URI_CHAR));
@@ -3765,7 +3766,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 	/* [08/19]		append authority to result; */
 					/* UserInfo */
 					if (uri->userInfo.first != NULL) {
-						const int charsToWrite = (uri->userInfo.afterLast - uri->userInfo.first);
+						const int charsToWrite = (int)(uri->userInfo.afterLast - uri->userInfo.first);
 						if (charsWritten + charsToWrite < maxChars) {
 							memcpy(dest + charsWritten, uri->userInfo.first,
 									charsToWrite * sizeof(URI_CHAR));
@@ -3831,7 +3832,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 						}
 					} else if (uri->hostData.ipFuture.first != NULL) {
 						/* IPvFuture */
-						const int charsToWrite = (uri->hostData.ipFuture.afterLast
+						const int charsToWrite = (int)(uri->hostData.ipFuture.afterLast
 								- uri->hostData.ipFuture.first);
 						if (charsWritten + 1 < maxChars) {
 							memcpy(dest + charsWritten, _UT("["),
@@ -3849,7 +3850,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 						}
 					} else if (uri->hostText.first != NULL) {
 						/* Regname */
-						const int charsToWrite = (uri->hostText.afterLast - uri->hostText.first);
+						const int charsToWrite = (int)(uri->hostText.afterLast - uri->hostText.first);
 						if (charsWritten + charsToWrite < maxChars) {
 							memcpy(dest + charsWritten, uri->hostText.first,
 									charsToWrite * sizeof(URI_CHAR));
@@ -3859,7 +3860,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 
 					/* Port */
 					if (uri->portText.first != NULL) {
-						const int charsToWrite = (uri->portText.afterLast - uri->portText.first);
+						const int charsToWrite = (int)(uri->portText.afterLast - uri->portText.first);
 						if (charsWritten + 1 < maxChars) {
 								memcpy(dest + charsWritten, _UT(":"),
 										1 * sizeof(URI_CHAR));
@@ -3891,7 +3892,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 				if (uri->pathHead != NULL) {
 					URI_TYPE(PathSegment) * walker = uri->pathHead;
 					do {
-						const int charsToWrite = (walker->text.afterLast - walker->text.first);
+						const int charsToWrite = (int)(walker->text.afterLast - walker->text.first);
 						if (charsWritten + charsToWrite < maxChars) {
 							memcpy(dest + charsWritten, walker->text.first,
 									charsToWrite * sizeof(URI_CHAR));
@@ -3921,7 +3922,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 	/* [13/19]		append query to result; */
 					{
 						const int charsToWrite
-								= uri->query.afterLast - uri->query.first;
+								= (int)(uri->query.afterLast - uri->query.first);
 						if (charsWritten + charsToWrite < maxChars) {
 							memcpy(dest + charsWritten, uri->query.first,
 									charsToWrite * sizeof(URI_CHAR));
@@ -3941,7 +3942,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars)
 	/* [17/19]		append fragment to result; */
 					{
 						const int charsToWrite
-								= uri->fragment.afterLast - uri->fragment.first;
+								= (int)(uri->fragment.afterLast - uri->fragment.first);
 						if (charsWritten + charsToWrite < maxChars) {
 							memcpy(dest + charsWritten, uri->fragment.first,
 									charsToWrite * sizeof(URI_CHAR));

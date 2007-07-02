@@ -1,18 +1,19 @@
 == BEFORE NEXT RELEASE ==
- * Code "/* TODO */"s
- * Test Equals
- * ToString testcases with TODO
- * Take care of deep/shallow distinction
- * Make hostText from hostData?
- * Check slashes in path components end and beginning?
- * Add external documentation
- * Document feature set:
-   * Parsing
-   * Reference resolution (5.2)
-   * Recomposition (5.3)
-   * Normalization (6) - TODO
 
 == SOON ==
+ * Solve unreachable code warning
+ * Silence itoa deprecated warnings
+ * Code TODOs
+ * Check slashes in path components end and beginning?
+ * Add external documentation
+ * Implement SubstractBase
+ * Implement ToStringCharsRequired
+   * int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri);
+ * Make hostText from hostData?
+ * Smarter IPv6 stringification
+ * Take care of deep/shallow distinction
+ * Test Equals
+ * URI_ERROR_SYNTAX -> URI_ERROR_PARSER_SYNTAX
  * input length restriction option
  * recursion depth restriction option
  * reduce recursion, replace some by loops

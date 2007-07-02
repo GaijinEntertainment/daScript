@@ -1,9 +1,11 @@
 ???
 
+  * Added: References resolution (think relative to absolute)
+  * Added: URIs can now be converted back to strings
   * Fixed: The first path segment of a relative URI was eaten
-      (Functions ParseSegmentNz and ParseMustBeSegmentNzNc)
+      (functions ParseSegmentNz and ParseMustBeSegmentNzNc)
   * Fixed: uri->scheme.first was not reset in some cases
-      (Function ParseMustBeSegmentNzNc)
+      (function ParseMustBeSegmentNzNc)
   * Improved: Test suite now built on "make check", not before
   * Fixed: Test suite always returned 0 (success)
 
