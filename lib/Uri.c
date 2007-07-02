@@ -3286,6 +3286,9 @@ static void URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 }
 
 /* TODO */
+static const URI_CHAR URI_FUNC(SafeToPointTo);
+
+/* TODO */
 static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 	URI_TYPE(PathSegment) * walker;
 	if ((uri == NULL) || (uri->pathHead == NULL)) {
@@ -3312,8 +3315,14 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 				if (walker->next != NULL) {
 					walker->next->reserved = prev;
 				} else {
-					/* Last segment -> update tail */
-					uri->pathTail = prev;
+					/* Last segment -> insert "" segment to represent trailing slash, update tail */
+					URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+					/* TODO NULL check */
+					memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
+					segment->text.first = URI_FUNC(SafeToPointTo);
+					segment->text.afterLast = URI_FUNC(SafeToPointTo);
+					prev->next = segment;
+					uri->pathTail = segment;
 				}
 				free(walker); /* TODO Free text in deep copy mode */
 				walker = nextBackup;
@@ -3345,8 +3354,14 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						if (walker->next != NULL) {
 							walker->next->reserved = prevPrev;
 						} else {
-							/* Last segment -> update tail */
-							uri->pathTail = prevPrev;
+							/* Last segment -> insert "" segment to represent trailing slash, update tail */
+							URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+							/* TODO NULL check */
+							memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
+							segment->text.first = URI_FUNC(SafeToPointTo);
+							segment->text.afterLast = URI_FUNC(SafeToPointTo);
+							prevPrev->next = segment;
+							uri->pathTail = segment;
 						}
 						free(walker); /* TODO Free text in deep copy mode */
 						free(prev); /* TODO Free text in deep copy mode */
@@ -3358,8 +3373,14 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						if (walker->next != NULL) {
 							walker->next->reserved = NULL;
 						} else {
-							/* Last segment -> update tail */
-							uri->pathTail = prevPrev;
+							/* Last segment -> insert "" segment to represent trailing slash, update tail */
+							URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+							/* TODO NULL check */
+							memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
+							segment->text.first = URI_FUNC(SafeToPointTo);
+							segment->text.afterLast = URI_FUNC(SafeToPointTo);
+							prevPrev->next = segment;
+							uri->pathTail = segment;
 						}
 						free(walker); /* TODO Free text in deep copy mode */
 						free(prev); /* TODO Free text in deep copy mode */
@@ -3442,40 +3463,40 @@ static void URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 	dest->portText = source->portText;
 }
 
-static const URI_CHAR * const URI_FUNC(Dot) = _UT(".");
+/* static const URI_CHAR * const URI_FUNC(Dot) = _UT("."); */
 
 /* TODO */
 static void URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 		const URI_TYPE(Uri) * relAppend) {
-	URI_TYPE(PathSegment) * walker;
-	URI_TYPE(PathSegment) * prev;
-	if (absWork->pathHead == NULL) {
+	URI_TYPE(PathSegment) * sourceWalker;
+	URI_TYPE(PathSegment) * destPrev;
+	if ((absWork->pathHead == NULL) || (relAppend->pathHead == NULL)) {
 		return;
 	}
 
-	/* Replace last entry with "." because dots are removed */
-	/* TODO Can this cause trouble? */
-	absWork->pathTail->text.first = URI_FUNC(Dot);
-	absWork->pathTail->text.afterLast = URI_FUNC(Dot) + 1;
+	/* Replace last segment ("" if trailing slash) with first of append chain */
+	absWork->pathTail->text.first = relAppend->pathHead->text.first;
+	absWork->pathTail->text.afterLast = relAppend->pathHead->text.afterLast;
 
-	if (relAppend->pathHead == NULL) {
+	sourceWalker = relAppend->pathHead->next;
+	if (sourceWalker == NULL) {
 		return;
 	}
-	walker = relAppend->pathHead;
-	prev = absWork->pathTail;
+	destPrev = absWork->pathTail;
+
 	for (;;) {
 		URI_TYPE(PathSegment) * const dup = malloc(sizeof(URI_TYPE(PathSegment)));
 		/* TODO NULL check */
-		dup->text = walker->text;
-		prev->next = dup;
+		dup->text = sourceWalker->text;
+		destPrev->next = dup;
 
-		if (walker->next == NULL) {
+		if (sourceWalker->next == NULL) {
 			absWork->pathTail = dup;
 			absWork->pathTail->next = NULL;
 			break;
 		}
-		prev = dup;
-		walker = walker->next;
+		destPrev = dup;
+		sourceWalker = sourceWalker->next;
 	}
 }
 
