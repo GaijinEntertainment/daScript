@@ -1,6 +1,7 @@
 ???
 
   * Added: References resolution (think relative to absolute)
+  * Added: Naive URI equality check
   * Added: URIs can now be converted back to strings
   * Fixed: The first path segment of a relative URI was eaten
       (functions ParseSegmentNz and ParseMustBeSegmentNzNc)

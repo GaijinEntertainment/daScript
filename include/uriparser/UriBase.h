@@ -110,6 +110,7 @@ typedef int UriBool;
 #define URI_ERROR_NULL      2 /* One of the params passed was NULL although it mustn't be */
 #define URI_ERROR_MALLOC    3 /* Not used yet, TODO */
 
+#define URI_ERROR_TOSTRING_TOO_LONG    4 /* URI too long for target buffer */
 
 
 #ifndef URI_DOXYGEN

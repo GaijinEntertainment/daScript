@@ -112,7 +112,7 @@ typedef struct URI_TYPE(PathSegmentStruct) {
 /**
  * Holds structured host information.
  * This is either a IPv4, IPv6, plain
- * text for IPvFutere or all zero for
+ * text for IPvFuture or all zero for
  * a registered name.
  */
 typedef struct URI_TYPE(HostDataStruct) {
@@ -217,9 +217,9 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
  * @param absoluteDest		Result %URI
  * @param relativeSource	Reference to resolve
  * @param absoluteBase		Base %URI to apply
- * @return					Error code or0 on success
+ * @return					Error code or 0 on success
  */
-int URI_FUNC(AddBase)(URI_TYPE(Uri) * absoluteDest,
+int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
 		const URI_TYPE(Uri) * absoluteBase);
 
@@ -234,7 +234,7 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absoluteDest,
  * @param b		Second %URI
  * @return		<code>URI_TRUE</code> when equal, <code>URI_FAlSE</code> else
  */
-UriBool URI_FUNC(Equals)(URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
+UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
 
 
 
@@ -242,12 +242,13 @@ UriBool URI_FUNC(Equals)(URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
  * Converts a %URI structure back to text as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.3">section 5.3 of RFC 3986</a>.
  *
- * @param dest		Output destination
- * @param uri		%URI to convert
- * @param maxChars	Maximum number of characters to copy including terminator
- * @return			Actual number of characters copied, can be lower than maxChars even if not the full %URI was copied!
+ * @param dest			Output destination
+ * @param uri			%URI to convert
+ * @param maxChars		Maximum number of characters to copy including terminator
+ * @param charsWritten	Number of characters written, can be lower than maxChars even if the %URI is too long!
+ * @return				Error code or 0 on success
  */
-int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars);
+int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars, int * charsWritten);
 
 
 

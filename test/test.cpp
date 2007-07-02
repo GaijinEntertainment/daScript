@@ -613,19 +613,19 @@ private:
 
 		// Transform
 		UriUriW transformedUri;
-		res = uriAddBaseW(&transformedUri, &relUri, &baseUri);
+		res = uriAddBaseUriW(&transformedUri, &relUri, &baseUri);
 		if (res != 0) {
 			uriFreeUriMembersW(&baseUri);
 			uriFreeUriMembersW(&relUri);
 			return false;
 		}
 
-		const bool equal = uriEqualsW(&transformedUri, &expectedUri);
+		const bool equal = (URI_TRUE == uriEqualsUriW(&transformedUri, &expectedUri));
 		if (!equal) {
 			wchar_t transformedUriText[1024 * 8];
 			wchar_t expectedUriText[1024 * 8];
-			uriToStringW(transformedUriText, &transformedUri, 1024 * 8);
-			uriToStringW(expectedUriText, &expectedUri, 1024 * 8);
+			uriToStringW(transformedUriText, &transformedUri, 1024 * 8, NULL);
+			uriToStringW(expectedUriText, &expectedUri, 1024 * 8, NULL);
 			wprintf(L"\n\n\nExpected: \"%s\"\nReceived: \"%s\"\n\n\n", expectedUriText, transformedUriText);
 		}
 
@@ -713,8 +713,8 @@ private:
 
 		// Back to string
 		wchar_t shouldbeTheSame[1024 * 8];
-		res = uriToStringW(shouldbeTheSame, &uri, 1024 * 8);
-		if (res == 0) {
+		res = uriToStringW(shouldbeTheSame, &uri, 1024 * 8, NULL);
+		if (res != 0) {
 			uriFreeUriMembersW(&uri);
 			return false;
 		}
