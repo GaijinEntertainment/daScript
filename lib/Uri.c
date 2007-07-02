@@ -3732,9 +3732,15 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 		int maxChars, int * charsWritten) {
 	int written = 0;
 	if ((dest == NULL) || (uri == NULL)) {
+		if (charsWritten != NULL) {
+			*charsWritten = 0;
+		}
 		return URI_ERROR_NULL;
 	}
 	if (maxChars < 1) {
+		if (charsWritten != NULL) {
+			*charsWritten = 0;
+		}
 		return URI_ERROR_TOSTRING_TOO_LONG;
 	}
 	maxChars--; /* So we don't have to substract 1 for '\0' all the time */
@@ -3746,7 +3752,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 	/* [03/19]		append scheme to result; */
 					const int charsToWrite
 							= (int)(uri->scheme.afterLast - uri->scheme.first);
-					if (written + charsToWrite < maxChars) {
+					if (written + charsToWrite <= maxChars) {
 						memcpy(dest + written, uri->scheme.first,
 								charsToWrite * sizeof(URI_CHAR));
 						written += charsToWrite;
@@ -3758,7 +3764,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 						return URI_ERROR_TOSTRING_TOO_LONG;
 					}
 	/* [04/19]		append ":" to result; */
-					if (written + 1 < maxChars) {
+					if (written + 1 <= maxChars) {
 						memcpy(dest + written, _UT(":"),
 								1 * sizeof(URI_CHAR));
 						written += 1;
@@ -3774,7 +3780,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 	/* [06/19]	if defined(authority) then */
 				if (URI_FUNC(IsHostSet)(uri)) {
 	/* [07/19]		append "//" to result; */
-					if (written + 2 < maxChars) {
+					if (written + 2 <= maxChars) {
 						memcpy(dest + written, _UT("//"),
 								2 * sizeof(URI_CHAR));
 						written += 2;
@@ -3789,7 +3795,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 					/* UserInfo */
 					if (uri->userInfo.first != NULL) {
 						const int charsToWrite = (int)(uri->userInfo.afterLast - uri->userInfo.first);
-						if (written + charsToWrite < maxChars) {
+						if (written + charsToWrite <= maxChars) {
 							memcpy(dest + written, uri->userInfo.first,
 									charsToWrite * sizeof(URI_CHAR));
 							written += charsToWrite;
@@ -3801,7 +3807,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 							return URI_ERROR_TOSTRING_TOO_LONG;
 						}
 
-						if (written + 1 < maxChars) {
+						if (written + 1 <= maxChars) {
 							memcpy(dest + written, _UT("@"),
 									1 * sizeof(URI_CHAR));
 							written += 1;
@@ -3821,7 +3827,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 						for (; i < 4; i++) {
 							const unsigned char value = uri->hostData.ip4->data[i];
 							const int charsToWrite = (value > 99) ? 3 : ((value > 9) ? 2 : 1);
-							if (written + charsToWrite < maxChars) {
+							if (written + charsToWrite <= maxChars) {
 								URI_CHAR text[4];
 								URI_ITOA(value, text, 10);
 								memcpy(dest + written, text, charsToWrite * sizeof(URI_CHAR));
@@ -3834,7 +3840,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 								return URI_ERROR_TOSTRING_TOO_LONG;
 							}
 							if (i < 3) {
-								if (written + 1 < maxChars) {
+								if (written + 1 <= maxChars) {
 									memcpy(dest + written, _UT("."),
 											1 * sizeof(URI_CHAR));
 									written += 1;
@@ -3850,7 +3856,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 					} else if (uri->hostData.ip6 != NULL) {
 						/* IPv6 */
 						int i = 0;
-						if (written + 1 < maxChars) {
+						if (written + 1 <= maxChars) {
 							memcpy(dest + written, _UT("["),
 									1 * sizeof(URI_CHAR));
 							written += 1;
@@ -3863,7 +3869,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 						}
 						for (; i < 16; i++) {
 							const unsigned char value = uri->hostData.ip6->data[i];
-							if (written + 2 < maxChars) {
+							if (written + 2 <= maxChars) {
 								URI_CHAR text[3];
 								URI_ITOA(value, text, 16);
 								memcpy(dest + written, text, 2 * sizeof(URI_CHAR));
@@ -3876,7 +3882,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 								return URI_ERROR_TOSTRING_TOO_LONG;
 							}
 							if (((i & 1) == 1) && (i < 15)) {
-								if (written + 1 < maxChars) {
+								if (written + 1 <= maxChars) {
 									memcpy(dest + written, _UT(":"),
 											1 * sizeof(URI_CHAR));
 									written += 1;
@@ -3889,7 +3895,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 								}
 							}
 						}
-						if (written + 1 < maxChars) {
+						if (written + 1 <= maxChars) {
 							memcpy(dest + written, _UT("]"),
 									1 * sizeof(URI_CHAR));
 							written += 1;
@@ -3904,7 +3910,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 						/* IPvFuture */
 						const int charsToWrite = (int)(uri->hostData.ipFuture.afterLast
 								- uri->hostData.ipFuture.first);
-						if (written + 1 < maxChars) {
+						if (written + 1 <= maxChars) {
 							memcpy(dest + written, _UT("["),
 									1 * sizeof(URI_CHAR));
 							written += 1;
@@ -3915,7 +3921,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 							}
 							return URI_ERROR_TOSTRING_TOO_LONG;
 						}
-						if (written + charsToWrite < maxChars) {
+						if (written + charsToWrite <= maxChars) {
 							memcpy(dest + written, uri->hostData.ipFuture.first, charsToWrite * sizeof(URI_CHAR));
 							written += charsToWrite;
 						} else {
@@ -3925,7 +3931,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 							}
 							return URI_ERROR_TOSTRING_TOO_LONG;
 						}
-						if (written + 1 < maxChars) {
+						if (written + 1 <= maxChars) {
 							memcpy(dest + written, _UT("]"),
 									1 * sizeof(URI_CHAR));
 							written += 1;
@@ -3939,7 +3945,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 					} else if (uri->hostText.first != NULL) {
 						/* Regname */
 						const int charsToWrite = (int)(uri->hostText.afterLast - uri->hostText.first);
-						if (written + charsToWrite < maxChars) {
+						if (written + charsToWrite <= maxChars) {
 							memcpy(dest + written, uri->hostText.first,
 									charsToWrite * sizeof(URI_CHAR));
 							written += charsToWrite;
@@ -3955,7 +3961,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 					/* Port */
 					if (uri->portText.first != NULL) {
 						const int charsToWrite = (int)(uri->portText.afterLast - uri->portText.first);
-						if (written + 1 < maxChars) {
+						if (written + 1 <= maxChars) {
 								memcpy(dest + written, _UT(":"),
 										1 * sizeof(URI_CHAR));
 								written += 1;
@@ -3966,7 +3972,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 							}
 							return URI_ERROR_TOSTRING_TOO_LONG;
 						}
-						if (written + charsToWrite < maxChars) {
+						if (written + charsToWrite <= maxChars) {
 							memcpy(dest + written, uri->portText.first,
 									charsToWrite * sizeof(URI_CHAR));
 							written += charsToWrite;
@@ -3980,7 +3986,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 					}
 
 					/* Slash between authority and path */
-					if (written + 1 < maxChars) {
+					if (written + 1 <= maxChars) {
 							memcpy(dest + written, _UT("/"),
 									1 * sizeof(URI_CHAR));
 							written += 1;
@@ -3995,7 +4001,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 				}
 	/* [10/19]	append path to result; */
 				if ((uri->scheme.first == NULL) && uri->absolutePath) {
-					if (written + 1 < maxChars) {
+					if (written + 1 <= maxChars) {
 							memcpy(dest + written, _UT("/"),
 									1 * sizeof(URI_CHAR));
 							written += 1;
@@ -4011,7 +4017,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 					URI_TYPE(PathSegment) * walker = uri->pathHead;
 					do {
 						const int charsToWrite = (int)(walker->text.afterLast - walker->text.first);
-						if (written + charsToWrite < maxChars) {
+						if (written + charsToWrite <= maxChars) {
 							memcpy(dest + written, walker->text.first,
 									charsToWrite * sizeof(URI_CHAR));
 							written += charsToWrite;
@@ -4025,7 +4031,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 
 						if (walker->next != NULL) {
 							/* Not last segment -> append slash */
-							if (written + 1 < maxChars) {
+							if (written + 1 <= maxChars) {
 								memcpy(dest + written, _UT("/"),
 										1 * sizeof(URI_CHAR));
 								written += 1;
@@ -4044,7 +4050,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 	/* [11/19]	if defined(query) then */
 				if (uri->query.first != NULL) {
 	/* [12/19]		append "?" to result; */
-					if (written + 1 < maxChars) {
+					if (written + 1 <= maxChars) {
 						memcpy(dest + written, _UT("?"),
 								1 * sizeof(URI_CHAR));
 						written += 1;
@@ -4059,7 +4065,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 					{
 						const int charsToWrite
 								= (int)(uri->query.afterLast - uri->query.first);
-						if (written + charsToWrite < maxChars) {
+						if (written + charsToWrite <= maxChars) {
 							memcpy(dest + written, uri->query.first,
 									charsToWrite * sizeof(URI_CHAR));
 							written += charsToWrite;
@@ -4076,7 +4082,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 	/* [15/19]	if defined(fragment) then */
 				if (uri->fragment.first != NULL) {
 	/* [16/19]		append "#" to result; */
-					if (written + 1 < maxChars) {
+					if (written + 1 <= maxChars) {
 						memcpy(dest + written, _UT("#"),
 								1 * sizeof(URI_CHAR));
 						written += 1;
@@ -4091,7 +4097,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 					{
 						const int charsToWrite
 								= (int)(uri->fragment.afterLast - uri->fragment.first);
-						if (written + charsToWrite < maxChars) {
+						if (written + charsToWrite <= maxChars) {
 							memcpy(dest + written, uri->fragment.first,
 									charsToWrite * sizeof(URI_CHAR));
 							written += charsToWrite;

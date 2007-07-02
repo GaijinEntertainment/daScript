@@ -1,9 +1,4 @@
 == BEFORE NEXT RELEASE ==
- * ToString length tests!
- * Release text:
-	This release mainly adds reference resolution besides fixing
-	a few parsing bugs. Updating is highly recommended.
-	Please see changelog for details.
 
 == SOON ==
  * Solve unreachable code warning
