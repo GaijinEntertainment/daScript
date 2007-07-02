@@ -1201,6 +1201,7 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
 		{
 			const URI_CHAR * afterZeroMoreSlashSegs;
 			const URI_CHAR * afterSegment;
+			URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first); /* SEGMENT BOTH */
 			state->uri->scheme.first = NULL; /* Not a scheme, reset */
 			afterSegment = URI_FUNC(ParseSegment)(state, first + 1, afterLast);
 			if (afterSegment == NULL) {
@@ -1861,10 +1862,23 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserS
 		{
 			const URI_CHAR * const afterAuthority
 					= URI_FUNC(ParseAuthority)(state, first + 1, afterLast);
+			const URI_CHAR * afterPathAbsEmpty;
 			if (afterAuthority == NULL) {
 				return NULL;
 			}
-			return URI_FUNC(ParsePathAbsEmpty)(state, afterAuthority, afterLast);
+			afterPathAbsEmpty = URI_FUNC(ParsePathAbsEmpty)(state, afterAuthority, afterLast);
+
+			/* Fix path if only one empty segment */
+			if ((state->uri->pathHead != NULL)
+					&& (state->uri->pathHead->next == NULL)
+					&& (state->uri->pathHead->text.first == state->uri->pathHead->text.afterLast)) {
+				free(state->uri->pathHead);
+				/* TODO deep copy mode? */
+				state->uri->pathHead = NULL;
+				state->uri->pathTail = NULL;
+			}
+
+			return afterPathAbsEmpty;
 		}
 
 	default:
@@ -3373,14 +3387,8 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						if (walker->next != NULL) {
 							walker->next->reserved = NULL;
 						} else {
-							/* Last segment -> insert "" segment to represent trailing slash, update tail */
-							URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
-							/* TODO NULL check */
-							memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
-							segment->text.first = URI_FUNC(SafeToPointTo);
-							segment->text.afterLast = URI_FUNC(SafeToPointTo);
-							prevPrev->next = segment;
-							uri->pathTail = segment;
+							/* Last segment -> update tail */
+							uri->pathTail = NULL;
 						}
 						free(walker); /* TODO Free text in deep copy mode */
 						free(prev); /* TODO Free text in deep copy mode */
@@ -3425,6 +3433,16 @@ static void URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 
 		}
 	} while (walker != NULL);
+
+	/* Fix path if only one empty segment */
+	if ((uri->pathHead != NULL)
+			&& (uri->pathHead->next == NULL)
+			&& (uri->pathHead->text.first == uri->pathHead->text.afterLast)) {
+		free(uri->pathHead);
+		/* TODO deep copy mode? */
+		uri->pathHead = NULL;
+		uri->pathTail = NULL;
+	}
 }
 
 /* TODO */

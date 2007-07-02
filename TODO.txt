@@ -2,11 +2,15 @@
  * Code "/* TODO */"s
  * Test Equals
  * ToString testcases with TODO
- * Take care of uriAddBase!
  * Take care of deep/shallow distinction
  * Make hostText from hostData?
  * Check slashes in path components end and beginning?
  * Add external documentation
+ * Document feature set:
+   * Parsing
+   * Reference resolution (5.2)
+   * Recomposition (5.3)
+   * Normalization (6) - TODO
 
 == SOON ==
  * input length restriction option

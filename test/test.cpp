@@ -69,6 +69,7 @@ public:
 		TEST_ADD(UriSuite::testUriComponents)
 		TEST_ADD(UriSuite::testUriComponentsBug20070701)
 		TEST_ADD(UriSuite::testUnescaping)
+		TEST_ADD(UriSuite::testTrailingSlash)
 		TEST_ADD(UriSuite::testAddBase)
 		TEST_ADD(UriSuite::testToString)
 	}
@@ -632,6 +633,23 @@ private:
 		uriFreeUriMembersW(&relUri);
 		uriFreeUriMembersW(&expectedUri);
 		return equal;
+	}
+
+	void testTrailingSlash() {
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+		//                          0  3  01
+		const char * const input = "abc" "/";
+		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+
+		TEST_ASSERT(uriA.pathHead->text.first == input);
+		TEST_ASSERT(uriA.pathHead->text.afterLast == input + 3);
+		TEST_ASSERT(uriA.pathHead->next->text.first == input + 3 + 1);
+		TEST_ASSERT(uriA.pathHead->next->text.afterLast == input + 3 + 1);
+		TEST_ASSERT(uriA.pathHead->next->next == NULL);
+		TEST_ASSERT(uriA.pathTail == uriA.pathHead->next);
+		uriFreeUriMembersA(&uriA);
 	}
 
 	void testAddBase() {
