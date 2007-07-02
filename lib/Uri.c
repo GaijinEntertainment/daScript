@@ -1101,6 +1101,8 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(ParserState) * stat
  */
 static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first); /* SEGMENT BOTH */
+		state->uri->scheme.first = NULL; /* Not a scheme, reset */
 		return afterLast;
 	}
 
@@ -1214,6 +1216,8 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
 		}
 
 	default:
+		URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first); /* SEGMENT BOTH */
+		state->uri->scheme.first = NULL; /* Not a scheme, reset */
 		return URI_FUNC(ParseUriTail)(state, first, afterLast);
 	}
 }
@@ -3523,7 +3527,7 @@ int URI_FUNC(AddBase)(URI_TYPE(Uri) * absDest,
 	/* [13/32]				T.path = Base.path; */
 							URI_FUNC(CopyPath)(absDest, absBase);
 	/* [14/32]				if defined(R.query) then */
-							if (relSource->query.first == NULL) {
+							if (relSource->query.first != NULL) {
 	/* [15/32]					T.query = R.query; */
 								absDest->query = relSource->query;
 	/* [16/32]				else */
