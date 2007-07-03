@@ -1,4 +1,4 @@
-???
+2007-07-03 -- 0.4.0
 
   * Added: References resolution (think relative to absolute)
   * Added: Naive URI equality check
@@ -37,3 +37,4 @@
       The test suite code is licensed under LGPL.
 
 2006-12-08 -- 0.2.1
+
