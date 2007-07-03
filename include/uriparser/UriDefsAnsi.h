@@ -72,5 +72,5 @@
 #define URI_STRCMP strcmp
 #undef URI_STRNCMP
 #define URI_STRNCMP strncmp
-#undef URI_ITOA
-#define URI_ITOA itoa
+#undef URI_PRINTF
+#define URI_PRINTF printf

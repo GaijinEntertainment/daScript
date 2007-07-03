@@ -3829,7 +3829,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 							const int charsToWrite = (value > 99) ? 3 : ((value > 9) ? 2 : 1);
 							if (written + charsToWrite <= maxChars) {
 								URI_CHAR text[4];
-								URI_ITOA(value, text, 10);
+								URI_PRINTF(_UT("%i"), value);
 								memcpy(dest + written, text, charsToWrite * sizeof(URI_CHAR));
 								written += charsToWrite;
 							} else {
@@ -3871,7 +3871,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 							const unsigned char value = uri->hostData.ip6->data[i];
 							if (written + 2 <= maxChars) {
 								URI_CHAR text[3];
-								URI_ITOA(value, text, 16);
+								URI_PRINTF(_UT("%x"), value);
 								memcpy(dest + written, text, 2 * sizeof(URI_CHAR));
 								written += 2;
 							} else {
