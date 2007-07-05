@@ -72,5 +72,6 @@
 #define URI_STRCMP wcscmp
 #undef URI_STRNCMP
 #define URI_STRNCMP wcsncmp
-#undef URI_PRINTF
-#define URI_PRINTF wprintf
+#undef URI_SPRINTF
+#define URI_SPRINTF swprintf
+

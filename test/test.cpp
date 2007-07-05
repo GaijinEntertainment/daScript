@@ -566,18 +566,18 @@ private:
 	}
 
 	void testUnescaping() {
-		/* Proper */
+		// Proper
 		TEST_ASSERT(testUnescapingHelper(L"abc%20%41BC", L"abc ABC"));
 		TEST_ASSERT(testUnescapingHelper(L"%20", L" "));
 
-		/* Incomplete */
+		// Incomplete
 		TEST_ASSERT(testUnescapingHelper(L"%0", L"%0"));
 
-		/* Nonhex */
+		// Nonhex
 		TEST_ASSERT(testUnescapingHelper(L"%0g", L"%0g"));
 		TEST_ASSERT(testUnescapingHelper(L"%G0", L"%G0"));
 
-		/* No double decoding */
+		// No double decoding
 		TEST_ASSERT(testUnescapingHelper(L"%2520", L"%20"));
 	}
 
@@ -745,7 +745,7 @@ private:
 		return equals;
 	}
 
-	void testToString() {/*
+	void testToString() {
 		// Scheme
 		TEST_ASSERT(testToStringHelper(L"ftp://localhost/"));
 		// UserInfo
@@ -793,7 +793,7 @@ private:
 		TEST_ASSERT(testToStringHelper(L"."));
 		TEST_ASSERT(testToStringHelper(L"./"));
 		TEST_ASSERT(testToStringHelper(L"/."));
-		TEST_ASSERT(testToStringHelper(L"/./"));*/
+		TEST_ASSERT(testToStringHelper(L"/./"));
 		TEST_ASSERT(testToStringHelper(L""));
 		TEST_ASSERT(testToStringHelper(L"./abc/def"));
 		TEST_ASSERT(testToStringHelper(L"?query"));

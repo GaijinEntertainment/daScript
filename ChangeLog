@@ -1,3 +1,7 @@
+2007-07-06 -- 0.4.1
+
+  * Fixed: ToString did not work for IPv4 and IPv6 hosts
+
 2007-07-03 -- 0.4.0
 
   * Added: References resolution (think relative to absolute)
