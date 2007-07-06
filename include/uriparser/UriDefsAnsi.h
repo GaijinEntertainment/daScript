@@ -72,5 +72,6 @@
 #define URI_STRCMP strcmp
 #undef URI_STRNCMP
 #define URI_STRNCMP strncmp
-#undef URI_SPRINTF
-#define URI_SPRINTF sprintf
+
+#undef URI_SNPRINTF
+#define URI_SNPRINTF snprintf
