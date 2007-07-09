@@ -3,9 +3,7 @@
 
 == SOON ==
  * Solve unreachable code warning
- * Silence itoa deprecated warnings
  * Code TODOs
- * Check slashes in path components end and beginning?
  * Add external documentation
  * Implement SubstractBase
  * Implement ToStringCharsRequired
