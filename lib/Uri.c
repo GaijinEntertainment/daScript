@@ -3385,7 +3385,7 @@ static UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 				if (destPrev != NULL) {
 					destPrev->next = NULL;
 				}
-				return URI_FALSE;
+				return URI_FALSE; /* Raises malloc error */
 			}
 			cur->text = sourceWalker->text;
 			if (destPrev == NULL) {
@@ -3436,7 +3436,7 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
 					if (segment == NULL) {
 						free(walker); /* TODO Free text in deep copy mode */
-						return URI_FALSE;
+						return URI_FALSE; /* Raises malloc error */
 					}
 					memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
 					segment->text.first = &URI_FUNC(SafeToPointTo);
@@ -3478,7 +3478,7 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 							if (segment == NULL) {
 								free(walker); /* TODO Free text in deep copy mode */
 								free(prev); /* TODO Free text in deep copy mode */
-								return URI_FALSE;
+								return URI_FALSE; /* Raises malloc error */
 							}
 							memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
 							segment->text.first = &URI_FUNC(SafeToPointTo);
@@ -3569,7 +3569,7 @@ static UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 	if (source->hostData.ip4 != NULL) {
 		dest->hostData.ip4 = malloc(sizeof(UriIp4));
 		if (dest->hostData.ip4 == NULL) {
-			return URI_FALSE;
+			return URI_FALSE; /* Raises malloc error */
 		}
 		*(dest->hostData.ip4) = *(source->hostData.ip4);
 		dest->hostData.ip6 = NULL;
@@ -3579,7 +3579,7 @@ static UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 		dest->hostData.ip4 = NULL;
 		dest->hostData.ip6 = malloc(sizeof(UriIp6));
 		if (dest->hostData.ip6 == NULL) {
-			return URI_FALSE;
+			return URI_FALSE; /* Raises malloc error */
 		}
 		*(dest->hostData.ip6) = *(source->hostData.ip6);
 		dest->hostData.ipFuture.first = NULL;
@@ -3623,7 +3623,7 @@ static UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 		if (dup == NULL) {
 			destPrev->next = NULL;
 			absWork->pathTail = destPrev;
-			return URI_FALSE;
+			return URI_FALSE; /* Raises malloc error */
 		}
 		dup->text = sourceWalker->text;
 		destPrev->next = dup;

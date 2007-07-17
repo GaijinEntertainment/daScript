@@ -74,4 +74,8 @@
 #define URI_STRNCMP strncmp
 
 #undef URI_SNPRINTF
-#define URI_SNPRINTF snprintf
+#if (defined(_MSC_VER) && (_MSC_VER >= 1400))
+# define URI_SNPRINTF _snprintf_s
+#else
+# define URI_SNPRINTF snprintf
+#endif
