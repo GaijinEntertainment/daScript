@@ -74,8 +74,8 @@
 #define URI_STRNCMP strncmp
 
 #undef URI_SNPRINTF
-#if (defined(_MSC_VER) && (_MSC_VER >= 1400))
-# define URI_SNPRINTF _snprintf_s
+#if (defined(__WIN32__) || defined(WIN32))
+# define URI_SNPRINTF _snprintf
 #else
 # define URI_SNPRINTF snprintf
 #endif

@@ -3409,7 +3409,7 @@ static UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 	URI_TYPE(PathSegment) * walker;
 	if ((uri == NULL) || (uri->pathHead == NULL)) {
-		return URI_FALSE;
+		return URI_TRUE;
 	}
 
 	walker = uri->pathHead;
@@ -3614,7 +3614,7 @@ static UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 
 	sourceWalker = relAppend->pathHead->next;
 	if (sourceWalker == NULL) {
-		return URI_FALSE;
+		return URI_TRUE;
 	}
 	destPrev = absWork->pathTail;
 

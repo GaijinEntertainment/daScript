@@ -1,5 +1,4 @@
 == BEFORE NEXT RELEASE ==
- * Fix/debug Malloc/NULL checks
 
 == SOON ==
  * Solve unreachable code warning

@@ -86,4 +86,9 @@ EXTRA_DIST = \
 	win32/Visual_Studio_2003/test.sln \
 	win32/Visual_Studio_2003/test.vcproj \
 	win32/Visual_Studio_2003/uriparser.sln \
-	win32/Visual_Studio_2003/uriparser.vcproj
+	win32/Visual_Studio_2003/uriparser.vcproj \
+	\
+	win32/Visual_Studio_2005/test.sln \
+	win32/Visual_Studio_2005/test.vcproj \
+	win32/Visual_Studio_2005/uriparser.sln \
+	win32/Visual_Studio_2005/uriparser.vcproj

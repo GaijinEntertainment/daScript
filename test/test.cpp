@@ -38,7 +38,7 @@ UriBool uri_TESTING_ONLY_ParseIpFourA(const char * text);
 #define URI_TEST_IP_FOUR_FAIL(x) TEST_ASSERT(URI_FALSE == uri_TESTING_ONLY_ParseIpFourA(x))
 #define URI_TEST_IP_FOUR_PASS(x) TEST_ASSERT(URI_TRUE == uri_TESTING_ONLY_ParseIpFourA(x))
 
-/* Note the closing brackets! TODO */
+// Note the closing brackets! TODO
 #define URI_TEST_IP_SIX_FAIL(x) TEST_ASSERT(URI_FALSE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
 #define URI_TEST_IP_SIX_PASS(x) TEST_ASSERT(URI_TRUE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
 
@@ -551,7 +551,7 @@ private:
 		TEST_ASSERT(!strcmp(uri.userinfo, ""));
 		TEST_ASSERT(!strcmp(uri.host, "255.255.255.255"));
 
-		TEST_ASSERT(!strcmp(uri.path, "/one")); /* Bug in 0.2.1: was "/" */
+		TEST_ASSERT(!strcmp(uri.path, "/one")); // Bug in 0.2.1: was "/"
 		TEST_ASSERT(!strcmp(uri.query, ""));
 		TEST_ASSERT(!strcmp(uri.fragment, ""));
 		URIFree(&uri);
@@ -726,7 +726,7 @@ private:
 		}
 
 		// Back to string, _exact_ limit
-		const int len = wcslen(text);
+		const int len = static_cast<int>(wcslen(text));
 		int charsWritten;
 		res = uriToStringW(shouldbeTheSame, &uri, len + 1, &charsWritten);
 		if ((res != 0) || (charsWritten != len + 1)) {
