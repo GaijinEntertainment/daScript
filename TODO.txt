@@ -2,21 +2,19 @@
  * Test ToStringCharsRequired
 
 == SOON ==
- * Solve unreachable code warning
+ * More features:
+   * Implement SubstractBase
+   * Pretty/smarter IPv6 stringification
+   * Add escape function
+ * Testing
+   * Test Equals
+ * Security
+   * input length restriction option?
+   * recursion depth restriction option
  * Code TODOs
  * Add external documentation
- * Implement SubstractBase
  * Make hostText from hostData?
- * Smarter IPv6 stringification
  * Take care of deep/shallow distinction
- * Test Equals
- * URI_ERROR_SYNTAX -> URI_ERROR_PARSER_SYNTAX
- * input length restriction option
- * recursion depth restriction option
- * reduce recursion, replace some by loops
- * Option to turn off segment extraction if
-   validating only?
- * Add escape function
  * Unescape '+' to ' '?
  * Add specific URI support (callbacks?)
 
@@ -25,3 +23,6 @@
    * until no more Doxygen warnings
    * Is there a way to mark the public API part?
  * Add documentation on semantic actions?
+ * Option to turn off segment extraction if
+   validating only?
+ * reduce recursion, replace some by loops

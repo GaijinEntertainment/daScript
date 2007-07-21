@@ -104,17 +104,20 @@ typedef int UriBool;
 
 
 
-/* Error codes */
-#define URI_SUCCESS         0
-#define URI_ERROR_SYNTAX    1
-#define URI_ERROR_NULL      2 /* One of the params passed was NULL although it mustn't be */
-#define URI_ERROR_MALLOC    3 /* Not used yet, TODO */
+/* Shared errors */
+#define URI_SUCCESS                  0
+#define URI_ERROR_SYNTAX             1 /* Parsed text violates expected format */
+#define URI_ERROR_NULL               2 /* One of the params passed was NULL
+                                          although it mustn't be */
+#define URI_ERROR_MALLOC             3 /* Requested memory could not be allocated */
 
-#define URI_ERROR_TOSTRING_TOO_LONG    4 /* URI too long for target buffer */
+/* Errors specific to ToSting */
+#define URI_ERROR_TOSTRING_TOO_LONG  4 /* URI too long for target buffer */
+
 
 
 #ifndef URI_DOXYGEN
-# include <stdio.h> /* For NULL, fprintf */
+# include <stdio.h> /* For NULL, snprintf */
 # include <ctype.h> /* For wchar_t */
 # include <string.h> /* For strlen, memset, memcpy */
 # include <stdlib.h> /* For malloc */

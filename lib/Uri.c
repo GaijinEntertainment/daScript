@@ -1108,10 +1108,6 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(ParserState) * stat
 			} while (walking);
 		}
 	}
-
-	/* We should never get here */
-	URI_FUNC(StopSyntax)(state, first);
-	return NULL;
 }
 
 
