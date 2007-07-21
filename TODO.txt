@@ -1,12 +1,11 @@
 == BEFORE NEXT RELEASE ==
+ * Test ToStringCharsRequired
 
 == SOON ==
  * Solve unreachable code warning
  * Code TODOs
  * Add external documentation
  * Implement SubstractBase
- * Implement ToStringCharsRequired
-   * int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri);
  * Make hostText from hostData?
  * Smarter IPv6 stringification
  * Take care of deep/shallow distinction

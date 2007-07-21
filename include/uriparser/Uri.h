@@ -239,6 +239,20 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
 
 
 /**
+ * Calculates the number of characters needed to store the
+ * string representation of the given %URI excluding the
+ * terminator.
+ *
+ * @param uri				%URI to measure
+ * @param charsRequired		Length of the string representation in characters
+ * @return					Error code or 0 on success
+ */
+int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
+		int * charsRequired);
+
+
+
+/**
  * Converts a %URI structure back to text as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.3">section 5.3 of RFC 3986</a>.
  *

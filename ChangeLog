@@ -1,6 +1,7 @@
 ???
 
   * Improved: Malloc/NULL checks added (non-deprecated code only)
+  * Added: Exact space computation for ToString, see ToStringCharsRequired
   * Added: Visual Studio 2005 project files
 
 2007-07-06 -- 0.4.1

@@ -120,6 +120,9 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri);
 static UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest, const URI_TYPE(Uri) * source);
 static UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork, const URI_TYPE(Uri) * relAppend);
 
+static int URI_FUNC(ToStringEngine)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
+		int maxChars, int * charsWritten, int * charsRequired);
+
 /*
 static void URI_FUNC(StopEx)(URI_TYPE(ParserState) * state, const URI_CHAR * errorPos, int errorCode);
 */
@@ -3870,15 +3873,31 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a,
 
 
 
+int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
+		int * charsRequired) {
+	const int MAX_CHARS = ((unsigned int)-1) >> 1;
+	return URI_FUNC(ToStringEngine)(NULL, uri, MAX_CHARS, NULL, charsRequired);
+}
+
+
+
 int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 		int maxChars, int * charsWritten) {
+	return URI_FUNC(ToStringEngine)(dest, uri, maxChars, charsWritten, NULL);
+}
+
+
+
+static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
+		int maxChars, int * charsWritten, int * charsRequired) {
 	int written = 0;
-	if ((dest == NULL) || (uri == NULL)) {
+	if ((uri == NULL) || ((dest == NULL) && (charsRequired = NULL))) {
 		if (charsWritten != NULL) {
 			*charsWritten = 0;
 		}
 		return URI_ERROR_NULL;
 	}
+
 	if (maxChars < 1) {
 		if (charsWritten != NULL) {
 			*charsWritten = 0;
@@ -3888,57 +3907,17 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 	maxChars--; /* So we don't have to substract 1 for '\0' all the time */
 
 	/* [01/19]	result = "" */
-				dest[0] = _UT('\0');
+				if (dest != NULL) {
+					dest[0] = _UT('\0');
+				}
 	/* [02/19]	if defined(scheme) then */
 				if (uri->scheme.first != NULL) {
 	/* [03/19]		append scheme to result; */
 					const int charsToWrite
 							= (int)(uri->scheme.afterLast - uri->scheme.first);
-					if (written + charsToWrite <= maxChars) {
-						memcpy(dest + written, uri->scheme.first,
-								charsToWrite * sizeof(URI_CHAR));
-						written += charsToWrite;
-					} else {
-						dest[0] = _UT('\0');
-						if (charsWritten != NULL) {
-							*charsWritten = 0;
-						}
-						return URI_ERROR_TOSTRING_TOO_LONG;
-					}
-	/* [04/19]		append ":" to result; */
-					if (written + 1 <= maxChars) {
-						memcpy(dest + written, _UT(":"),
-								1 * sizeof(URI_CHAR));
-						written += 1;
-					} else {
-						dest[0] = _UT('\0');
-						if (charsWritten != NULL) {
-							*charsWritten = 0;
-						}
-						return URI_ERROR_TOSTRING_TOO_LONG;
-					}
-	/* [05/19]	endif; */
-				}
-	/* [06/19]	if defined(authority) then */
-				if (URI_FUNC(IsHostSet)(uri)) {
-	/* [07/19]		append "//" to result; */
-					if (written + 2 <= maxChars) {
-						memcpy(dest + written, _UT("//"),
-								2 * sizeof(URI_CHAR));
-						written += 2;
-					} else {
-						dest[0] = _UT('\0');
-						if (charsWritten != NULL) {
-							*charsWritten = 0;
-						}
-						return URI_ERROR_TOSTRING_TOO_LONG;
-					}
-	/* [08/19]		append authority to result; */
-					/* UserInfo */
-					if (uri->userInfo.first != NULL) {
-						const int charsToWrite = (int)(uri->userInfo.afterLast - uri->userInfo.first);
+					if (dest != NULL) {
 						if (written + charsToWrite <= maxChars) {
-							memcpy(dest + written, uri->userInfo.first,
+							memcpy(dest + written, uri->scheme.first,
 									charsToWrite * sizeof(URI_CHAR));
 							written += charsToWrite;
 						} else {
@@ -3948,9 +3927,13 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 							}
 							return URI_ERROR_TOSTRING_TOO_LONG;
 						}
-
+					} else {
+						(*charsRequired) += charsToWrite;
+					}
+	/* [04/19]		append ":" to result; */
+					if (dest != NULL) {
 						if (written + 1 <= maxChars) {
-							memcpy(dest + written, _UT("@"),
+							memcpy(dest + written, _UT(":"),
 									1 * sizeof(URI_CHAR));
 							written += 1;
 						} else {
@@ -3959,6 +3942,60 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 								*charsWritten = 0;
 							}
 							return URI_ERROR_TOSTRING_TOO_LONG;
+						}
+					} else {
+						(*charsRequired) += 1;
+					}
+	/* [05/19]	endif; */
+				}
+	/* [06/19]	if defined(authority) then */
+				if (URI_FUNC(IsHostSet)(uri)) {
+	/* [07/19]		append "//" to result; */
+					if (dest != NULL) {
+						if (written + 2 <= maxChars) {
+							memcpy(dest + written, _UT("//"),
+									2 * sizeof(URI_CHAR));
+							written += 2;
+						} else {
+							dest[0] = _UT('\0');
+							if (charsWritten != NULL) {
+								*charsWritten = 0;
+							}
+							return URI_ERROR_TOSTRING_TOO_LONG;
+						}
+					} else {
+						(*charsRequired) += 2;
+					}
+	/* [08/19]		append authority to result; */
+					/* UserInfo */
+					if (uri->userInfo.first != NULL) {
+						const int charsToWrite = (int)(uri->userInfo.afterLast - uri->userInfo.first);
+						if (dest != NULL) {
+							if (written + charsToWrite <= maxChars) {
+								memcpy(dest + written, uri->userInfo.first,
+										charsToWrite * sizeof(URI_CHAR));
+								written += charsToWrite;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+
+							if (written + 1 <= maxChars) {
+								memcpy(dest + written, _UT("@"),
+										1 * sizeof(URI_CHAR));
+								written += 1;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+						} else {
+							(*charsRequired) += charsToWrite + 1;
 						}
 					}
 
@@ -3969,10 +4006,126 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 						for (; i < 4; i++) {
 							const unsigned char value = uri->hostData.ip4->data[i];
 							const int charsToWrite = (value > 99) ? 3 : ((value > 9) ? 2 : 1);
+							if (dest != NULL) {
+								if (written + charsToWrite <= maxChars) {
+									URI_CHAR text[4];
+									URI_SNPRINTF(text, charsToWrite + 1, _UT("%i"), value);
+									memcpy(dest + written, text, charsToWrite * sizeof(URI_CHAR));
+									written += charsToWrite;
+								} else {
+									dest[0] = _UT('\0');
+									if (charsWritten != NULL) {
+										*charsWritten = 0;
+									}
+									return URI_ERROR_TOSTRING_TOO_LONG;
+								}
+								if (i < 3) {
+									if (written + 1 <= maxChars) {
+										memcpy(dest + written, _UT("."),
+												1 * sizeof(URI_CHAR));
+										written += 1;
+									} else {
+										dest[0] = _UT('\0');
+										if (charsWritten != NULL) {
+											*charsWritten = 0;
+										}
+										return URI_ERROR_TOSTRING_TOO_LONG;
+									}
+								}
+							} else {
+								(*charsRequired) += charsToWrite + 1;
+							}
+						}
+					} else if (uri->hostData.ip6 != NULL) {
+						/* IPv6 */
+						int i = 0;
+						if (dest != NULL) {
+							if (written + 1 <= maxChars) {
+								memcpy(dest + written, _UT("["),
+										1 * sizeof(URI_CHAR));
+								written += 1;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+						} else {
+							(*charsRequired) += 1;
+						}
+
+						for (; i < 16; i++) {
+							const unsigned char value = uri->hostData.ip6->data[i];
+							if (dest != NULL) {
+								if (written + 2 <= maxChars) {
+									URI_CHAR text[3];
+									URI_SNPRINTF(text, 2 + 1, _UT("%x"), value);
+									memcpy(dest + written, text, 2 * sizeof(URI_CHAR));
+									written += 2;
+								} else {
+									dest[0] = _UT('\0');
+									if (charsWritten != NULL) {
+										*charsWritten = 0;
+									}
+									return URI_ERROR_TOSTRING_TOO_LONG;
+								}
+							} else {
+								(*charsRequired) += 2;
+							}
+							if (((i & 1) == 1) && (i < 15)) {
+								if (dest != NULL) {
+									if (written + 1 <= maxChars) {
+										memcpy(dest + written, _UT(":"),
+												1 * sizeof(URI_CHAR));
+										written += 1;
+									} else {
+										dest[0] = _UT('\0');
+										if (charsWritten != NULL) {
+											*charsWritten = 0;
+										}
+										return URI_ERROR_TOSTRING_TOO_LONG;
+									}
+								} else {
+									(*charsRequired) += 1;
+								}
+							}
+						}
+
+						if (dest != NULL) {
+							if (written + 1 <= maxChars) {
+								memcpy(dest + written, _UT("]"),
+										1 * sizeof(URI_CHAR));
+								written += 1;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+						} else {
+							(*charsRequired) += 1;
+						}
+					} else if (uri->hostData.ipFuture.first != NULL) {
+						/* IPvFuture */
+						const int charsToWrite = (int)(uri->hostData.ipFuture.afterLast
+								- uri->hostData.ipFuture.first);
+						if (dest != NULL) {
+							if (written + 1 <= maxChars) {
+								memcpy(dest + written, _UT("["),
+										1 * sizeof(URI_CHAR));
+								written += 1;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+
 							if (written + charsToWrite <= maxChars) {
-								URI_CHAR text[4];
-								URI_SNPRINTF(text, charsToWrite + 1, _UT("%i"), value);
-								memcpy(dest + written, text, charsToWrite * sizeof(URI_CHAR));
+								memcpy(dest + written, uri->hostData.ipFuture.first, charsToWrite * sizeof(URI_CHAR));
 								written += charsToWrite;
 							} else {
 								dest[0] = _UT('\0');
@@ -3981,41 +4134,11 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 								}
 								return URI_ERROR_TOSTRING_TOO_LONG;
 							}
-							if (i < 3) {
-								if (written + 1 <= maxChars) {
-									memcpy(dest + written, _UT("."),
-											1 * sizeof(URI_CHAR));
-									written += 1;
-								} else {
-									dest[0] = _UT('\0');
-									if (charsWritten != NULL) {
-										*charsWritten = 0;
-									}
-									return URI_ERROR_TOSTRING_TOO_LONG;
-								}
-							}
-						}
-					} else if (uri->hostData.ip6 != NULL) {
-						/* IPv6 */
-						int i = 0;
-						if (written + 1 <= maxChars) {
-							memcpy(dest + written, _UT("["),
-									1 * sizeof(URI_CHAR));
-							written += 1;
-						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
-							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
-						}
-						for (; i < 16; i++) {
-							const unsigned char value = uri->hostData.ip6->data[i];
-							if (written + 2 <= maxChars) {
-								URI_CHAR text[3];
-								URI_SNPRINTF(text, 2 + 1, _UT("%x"), value);
-								memcpy(dest + written, text, 2 * sizeof(URI_CHAR));
-								written += 2;
+
+							if (written + 1 <= maxChars) {
+								memcpy(dest + written, _UT("]"),
+										1 * sizeof(URI_CHAR));
+								written += 1;
 							} else {
 								dest[0] = _UT('\0');
 								if (charsWritten != NULL) {
@@ -4023,166 +4146,136 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 								}
 								return URI_ERROR_TOSTRING_TOO_LONG;
 							}
-							if (((i & 1) == 1) && (i < 15)) {
-								if (written + 1 <= maxChars) {
-									memcpy(dest + written, _UT(":"),
-											1 * sizeof(URI_CHAR));
-									written += 1;
-								} else {
-									dest[0] = _UT('\0');
-									if (charsWritten != NULL) {
-										*charsWritten = 0;
-									}
-									return URI_ERROR_TOSTRING_TOO_LONG;
-								}
-							}
-						}
-						if (written + 1 <= maxChars) {
-							memcpy(dest + written, _UT("]"),
-									1 * sizeof(URI_CHAR));
-							written += 1;
 						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
-							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
-						}
-					} else if (uri->hostData.ipFuture.first != NULL) {
-						/* IPvFuture */
-						const int charsToWrite = (int)(uri->hostData.ipFuture.afterLast
-								- uri->hostData.ipFuture.first);
-						if (written + 1 <= maxChars) {
-							memcpy(dest + written, _UT("["),
-									1 * sizeof(URI_CHAR));
-							written += 1;
-						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
-							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
-						}
-						if (written + charsToWrite <= maxChars) {
-							memcpy(dest + written, uri->hostData.ipFuture.first, charsToWrite * sizeof(URI_CHAR));
-							written += charsToWrite;
-						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
-							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
-						}
-						if (written + 1 <= maxChars) {
-							memcpy(dest + written, _UT("]"),
-									1 * sizeof(URI_CHAR));
-							written += 1;
-						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
-							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
+							(*charsRequired) += 1 + charsToWrite + 1;
 						}
 					} else if (uri->hostText.first != NULL) {
 						/* Regname */
 						const int charsToWrite = (int)(uri->hostText.afterLast - uri->hostText.first);
-						if (written + charsToWrite <= maxChars) {
-							memcpy(dest + written, uri->hostText.first,
-									charsToWrite * sizeof(URI_CHAR));
-							written += charsToWrite;
-						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
+						if (dest != NULL) {
+							if (written + charsToWrite <= maxChars) {
+								memcpy(dest + written, uri->hostText.first,
+										charsToWrite * sizeof(URI_CHAR));
+								written += charsToWrite;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
 							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
+						} else {
+							(*charsRequired) += charsToWrite;
 						}
 					}
 
 					/* Port */
 					if (uri->portText.first != NULL) {
 						const int charsToWrite = (int)(uri->portText.afterLast - uri->portText.first);
-						if (written + 1 <= maxChars) {
-								memcpy(dest + written, _UT(":"),
-										1 * sizeof(URI_CHAR));
-								written += 1;
-						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
-							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
-						}
-						if (written + charsToWrite <= maxChars) {
-							memcpy(dest + written, uri->portText.first,
-									charsToWrite * sizeof(URI_CHAR));
-							written += charsToWrite;
-						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
-							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
-						}
-					}
-
-					/* Slash between authority and path */
-					if (written + 1 <= maxChars) {
-							memcpy(dest + written, _UT("/"),
-									1 * sizeof(URI_CHAR));
-							written += 1;
-					} else {
-						dest[0] = _UT('\0');
-						if (charsWritten != NULL) {
-							*charsWritten = 0;
-						}
-						return URI_ERROR_TOSTRING_TOO_LONG;
-					}
-	/* [09/19]	endif; */
-				}
-	/* [10/19]	append path to result; */
-				if ((uri->scheme.first == NULL) && uri->absolutePath) {
-					if (written + 1 <= maxChars) {
-							memcpy(dest + written, _UT("/"),
-									1 * sizeof(URI_CHAR));
-							written += 1;
-					} else {
-						dest[0] = _UT('\0');
-						if (charsWritten != NULL) {
-							*charsWritten = 0;
-						}
-						return URI_ERROR_TOSTRING_TOO_LONG;
-					}
-				}
-				if (uri->pathHead != NULL) {
-					URI_TYPE(PathSegment) * walker = uri->pathHead;
-					do {
-						const int charsToWrite = (int)(walker->text.afterLast - walker->text.first);
-						if (written + charsToWrite <= maxChars) {
-							memcpy(dest + written, walker->text.first,
-									charsToWrite * sizeof(URI_CHAR));
-							written += charsToWrite;
-						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
-							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
-						}
-
-						if (walker->next != NULL) {
-							/* Not last segment -> append slash */
+						if (dest != NULL) {
+							/* Leading ':' */
 							if (written + 1 <= maxChars) {
-								memcpy(dest + written, _UT("/"),
-										1 * sizeof(URI_CHAR));
-								written += 1;
+									memcpy(dest + written, _UT(":"),
+											1 * sizeof(URI_CHAR));
+									written += 1;
 							} else {
 								dest[0] = _UT('\0');
 								if (charsWritten != NULL) {
 									*charsWritten = 0;
 								}
 								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+
+							/* Port number */
+							if (written + charsToWrite <= maxChars) {
+								memcpy(dest + written, uri->portText.first,
+										charsToWrite * sizeof(URI_CHAR));
+								written += charsToWrite;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+						} else {
+							(*charsRequired) += 1 + charsToWrite;
+						}
+					}
+
+					/* Slash between authority and path */
+					if (dest != NULL) {
+						if (written + 1 <= maxChars) {
+								memcpy(dest + written, _UT("/"),
+										1 * sizeof(URI_CHAR));
+								written += 1;
+						} else {
+							dest[0] = _UT('\0');
+							if (charsWritten != NULL) {
+								*charsWritten = 0;
+							}
+							return URI_ERROR_TOSTRING_TOO_LONG;
+						}
+					} else {
+						(*charsRequired) += 1;
+					}
+	/* [09/19]	endif; */
+				}
+	/* [10/19]	append path to result; */
+				if ((uri->scheme.first == NULL) && uri->absolutePath) {
+					if (dest != NULL) {
+						if (written + 1 <= maxChars) {
+								memcpy(dest + written, _UT("/"),
+										1 * sizeof(URI_CHAR));
+								written += 1;
+						} else {
+							dest[0] = _UT('\0');
+							if (charsWritten != NULL) {
+								*charsWritten = 0;
+							}
+							return URI_ERROR_TOSTRING_TOO_LONG;
+						}
+					} else {
+						(*charsRequired) += 1;
+					}
+				}
+
+				if (uri->pathHead != NULL) {
+					URI_TYPE(PathSegment) * walker = uri->pathHead;
+					do {
+						const int charsToWrite = (int)(walker->text.afterLast - walker->text.first);
+						if (dest != NULL) {
+							if (written + charsToWrite <= maxChars) {
+								memcpy(dest + written, walker->text.first,
+										charsToWrite * sizeof(URI_CHAR));
+								written += charsToWrite;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+						} else {
+							(*charsRequired) += charsToWrite;
+						}
+
+						/* Not last segment -> append slash */
+						if (walker->next != NULL) {
+							if (dest != NULL) {
+								if (written + 1 <= maxChars) {
+									memcpy(dest + written, _UT("/"),
+											1 * sizeof(URI_CHAR));
+									written += 1;
+								} else {
+									dest[0] = _UT('\0');
+									if (charsWritten != NULL) {
+										*charsWritten = 0;
+									}
+									return URI_ERROR_TOSTRING_TOO_LONG;
+								}
+							} else {
+								(*charsRequired) += 1;
 							}
 						}
 
@@ -4192,31 +4285,39 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 	/* [11/19]	if defined(query) then */
 				if (uri->query.first != NULL) {
 	/* [12/19]		append "?" to result; */
-					if (written + 1 <= maxChars) {
-						memcpy(dest + written, _UT("?"),
-								1 * sizeof(URI_CHAR));
-						written += 1;
-					} else {
-						dest[0] = _UT('\0');
-						if (charsWritten != NULL) {
-							*charsWritten = 0;
-						}
-						return URI_ERROR_TOSTRING_TOO_LONG;
-					}
-	/* [13/19]		append query to result; */
-					{
-						const int charsToWrite
-								= (int)(uri->query.afterLast - uri->query.first);
-						if (written + charsToWrite <= maxChars) {
-							memcpy(dest + written, uri->query.first,
-									charsToWrite * sizeof(URI_CHAR));
-							written += charsToWrite;
+					if (dest != NULL) {
+						if (written + 1 <= maxChars) {
+							memcpy(dest + written, _UT("?"),
+									1 * sizeof(URI_CHAR));
+							written += 1;
 						} else {
 							dest[0] = _UT('\0');
 							if (charsWritten != NULL) {
 								*charsWritten = 0;
 							}
 							return URI_ERROR_TOSTRING_TOO_LONG;
+						}
+					} else {
+						(*charsRequired) += 1;
+					}
+	/* [13/19]		append query to result; */
+					{
+						const int charsToWrite
+								= (int)(uri->query.afterLast - uri->query.first);
+						if (dest != NULL) {
+							if (written + charsToWrite <= maxChars) {
+								memcpy(dest + written, uri->query.first,
+										charsToWrite * sizeof(URI_CHAR));
+								written += charsToWrite;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+						} else {
+							(*charsRequired) += charsToWrite;
 						}
 					}
 	/* [14/19]	endif; */
@@ -4224,25 +4325,11 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 	/* [15/19]	if defined(fragment) then */
 				if (uri->fragment.first != NULL) {
 	/* [16/19]		append "#" to result; */
-					if (written + 1 <= maxChars) {
-						memcpy(dest + written, _UT("#"),
-								1 * sizeof(URI_CHAR));
-						written += 1;
-					} else {
-						dest[0] = _UT('\0');
-						if (charsWritten != NULL) {
-							*charsWritten = 0;
-						}
-						return URI_ERROR_TOSTRING_TOO_LONG;
-					}
-	/* [17/19]		append fragment to result; */
-					{
-						const int charsToWrite
-								= (int)(uri->fragment.afterLast - uri->fragment.first);
-						if (written + charsToWrite <= maxChars) {
-							memcpy(dest + written, uri->fragment.first,
-									charsToWrite * sizeof(URI_CHAR));
-							written += charsToWrite;
+					if (dest != NULL) {
+						if (written + 1 <= maxChars) {
+							memcpy(dest + written, _UT("#"),
+									1 * sizeof(URI_CHAR));
+							written += 1;
 						} else {
 							dest[0] = _UT('\0');
 							if (charsWritten != NULL) {
@@ -4250,13 +4337,37 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 							}
 							return URI_ERROR_TOSTRING_TOO_LONG;
 						}
+					} else {
+						(*charsRequired) += 1;
+					}
+	/* [17/19]		append fragment to result; */
+					{
+						const int charsToWrite
+								= (int)(uri->fragment.afterLast - uri->fragment.first);
+						if (dest != NULL) {
+							if (written + charsToWrite <= maxChars) {
+								memcpy(dest + written, uri->fragment.first,
+										charsToWrite * sizeof(URI_CHAR));
+								written += charsToWrite;
+							} else {
+								dest[0] = _UT('\0');
+								if (charsWritten != NULL) {
+									*charsWritten = 0;
+								}
+								return URI_ERROR_TOSTRING_TOO_LONG;
+							}
+						} else {
+							(*charsRequired) += charsToWrite;
+						}
 					}
 	/* [18/19]	endif; */
 				}
 	/* [19/19]	return result; */
-				dest[written++] = _UT('\0');
-				if (charsWritten != NULL) {
-					*charsWritten = written;
+				if (dest != NULL) {
+					dest[written++] = _UT('\0');
+					if (charsWritten != NULL) {
+						*charsWritten = written;
+					}
 				}
 				return URI_SUCCESS;
 }
