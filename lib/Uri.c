@@ -3891,7 +3891,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 		int maxChars, int * charsWritten, int * charsRequired) {
 	int written = 0;
-	if ((uri == NULL) || ((dest == NULL) && (charsRequired = NULL))) {
+	if ((uri == NULL) || ((dest == NULL) && (charsRequired == NULL))) {
 		if (charsWritten != NULL) {
 			*charsWritten = 0;
 		}
