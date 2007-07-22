@@ -203,8 +203,26 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * length of the string. NULL is only returned if <code>inout</code>
  * is NULL.
  *
- * @param inout	Text to unescape
- * @return		Pointer to new position of the terminating zero
+ * @param inout			Text to unescape/decode
+ * @param plusToSpace	Whether to convert '+' to ' ' or not
+ * @return				Pointer to new position of the terminating zero
+ */
+const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
+		UriBool plusToSpace);
+
+
+
+/**
+ * Unescapes percent-encoded groups in a given string.
+ * E.g. "%20" will become " ". Unescaping is done in place.
+ * The return value will be point to the new position
+ * of the terminating zero. Use this value to get the new
+ * length of the string. NULL is only returned if <code>inout</code>
+ * is NULL.
+ * NOTE: '+' is not decoded to ' '. Use UnescapeInPlaceEx for that instead.
+ *
+ * @param inout			Text to unescape/decode
+ * @return				Pointer to new position of the terminating zero
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 

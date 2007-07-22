@@ -15,7 +15,6 @@
  * Add external documentation
  * Make hostText from hostData?
  * Take care of deep/shallow distinction
- * Unescape '+' to ' '?
  * Add specific URI support (callbacks?)
 
 == LATER ==

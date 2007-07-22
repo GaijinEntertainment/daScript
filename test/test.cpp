@@ -557,10 +557,12 @@ private:
 		URIFree(&uri);
 	}
 
-	bool testUnescapingHelper(const wchar_t * input, const wchar_t * output) {
+	bool testUnescapingHelper(const wchar_t * input, const wchar_t * output,
+			bool plusToSpace = false) {
 		wchar_t * working = static_cast<URI_CHAR *>(malloc((URI_STRLEN(input) + 1) * sizeof(URI_CHAR)));
 		wcscpy(working, input);
-		const wchar_t * newTermZero = uriUnescapeInPlaceW(working);
+		const wchar_t * newTermZero = uriUnescapeInPlaceExW(working,
+				plusToSpace ? URI_TRUE : URI_FALSE);
 		return ((newTermZero == working + wcslen(output))
 				&& !wcscmp(working, output));
 	}
@@ -579,6 +581,10 @@ private:
 
 		// No double decoding
 		TEST_ASSERT(testUnescapingHelper(L"%2520", L"%20"));
+
+		// Decoding of '+'
+		TEST_ASSERT(testUnescapingHelper(L"abc+def", L"abc+def", false));
+		TEST_ASSERT(testUnescapingHelper(L"abc+def", L"abc def", true));
 	}
 
 	bool testAddBaseHelper(const wchar_t * base, const wchar_t * rel, const wchar_t * expectedResult) {

@@ -3225,6 +3225,13 @@ unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig) {
 
 
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout) {
+	return URI_FUNC(UnescapeInPlaceEx)(inout, URI_FALSE);
+}
+
+
+
+const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
+		UriBool plusToSpace) {
 	URI_CHAR * read = inout;
 	URI_CHAR * write = inout;
 
@@ -3318,6 +3325,20 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout) {
 				read++;
 				write++;
 			}
+			break;
+
+		case _UT('+'):
+			if (plusToSpace) {
+				/* Convert '+' to ' ' */
+				write[0] = _UT(' ');
+			} else {
+				/* Copy one char unmodified */
+				if (read > write) {
+					write[0] = read[0];
+				}
+			}
+			read++;
+			write++;
 			break;
 
 		default:
