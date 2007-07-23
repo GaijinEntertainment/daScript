@@ -72,6 +72,7 @@ public:
 		TEST_ADD(UriSuite::testTrailingSlash)
 		TEST_ADD(UriSuite::testAddBase)
 		TEST_ADD(UriSuite::testToString)
+		TEST_ADD(UriSuite::testToStringCharsRequired)
 	}
 
 private:
@@ -805,6 +806,56 @@ private:
 		TEST_ASSERT(testToStringHelper(L"?query"));
 		TEST_ASSERT(testToStringHelper(L"#fragment"));
 		TEST_ASSERT(testToStringHelper(L"?query#fragment"));
+	}
+
+	bool testToStringCharsRequiredHelper(wchar_t * text) {
+		// Parse
+		UriParserStateW state;
+		UriUriW uri;
+		state.uri = &uri;
+		int res = uriParseUriW(&state, text);
+		if (res != 0) {
+			uriFreeUriMembersW(&uri);
+			return false;
+		}
+
+		// Required space?
+		int charsRequired;
+		if (uriToStringCharsRequiredW(&uri, &charsRequired) != 0) {
+			uriFreeUriMembersW(&uri);
+			return false;
+		}
+
+		// Minimum
+		wchar_t * buffer = new wchar_t[charsRequired + 1];
+		if (uriToStringW(buffer, &uri, charsRequired + 1, NULL) != 0) {
+			uriFreeUriMembersW(&uri);
+			delete [] buffer;
+			return false;
+		}
+
+		// One less than minimum
+		if (uriToStringW(buffer, &uri, charsRequired, NULL) == 0) {
+			uriFreeUriMembersW(&uri);
+			delete [] buffer;
+			return false;
+		}
+
+		uriFreeUriMembersW(&uri);
+		delete [] buffer;
+		return true;
+	}
+
+	void testToStringCharsRequired() {
+		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/"));
+		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com:80/"));
+		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://user:pass@www.example.com/"));
+		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/index.html"));
+		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/?abc"));
+		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/#def"));
+		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/?abc#def"));
+		TEST_ASSERT(testToStringCharsRequiredHelper(L"/test"));
+		TEST_ASSERT(testToStringCharsRequiredHelper(L"test"));
 	}
 
 };

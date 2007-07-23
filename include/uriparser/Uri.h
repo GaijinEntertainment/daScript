@@ -262,7 +262,7 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
  * terminator.
  *
  * @param uri				%URI to measure
- * @param charsRequired		Length of the string representation in characters
+ * @param charsRequired		Length of the string representation in characters <u>excluding</u> terminator
  * @return					Error code or 0 on success
  */
 int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
@@ -276,7 +276,7 @@ int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
  *
  * @param dest			Output destination
  * @param uri			%URI to convert
- * @param maxChars		Maximum number of characters to copy including terminator
+ * @param maxChars		Maximum number of characters to copy <u>including</u> terminator
  * @param charsWritten	Number of characters written, can be lower than maxChars even if the %URI is too long!
  * @return				Error code or 0 on success
  */

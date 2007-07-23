@@ -3926,6 +3926,8 @@ static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest, const URI_TYPE(U
 	/* [01/19]	result = "" */
 				if (dest != NULL) {
 					dest[0] = _UT('\0');
+				} else {
+					(*charsRequired) = 0;
 				}
 	/* [02/19]	if defined(scheme) then */
 				if (uri->scheme.first != NULL) {
