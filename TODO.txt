@@ -4,12 +4,8 @@
  * More features:
    * Implement SubstractBase
    * Pretty/smarter IPv6 stringification
-   * Add escape function
  * Testing
    * Test Equals
- * Security
-   * input length restriction option?
-   * recursion depth restriction option
  * Code TODOs
  * Add external documentation
  * Make hostText from hostData?

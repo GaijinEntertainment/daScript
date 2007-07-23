@@ -123,6 +123,8 @@ static UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork, const URI_TYPE(Uri) 
 static int URI_FUNC(ToStringEngine)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 		int maxChars, int * charsWritten, int * charsRequired);
 
+static URI_CHAR URI_FUNC(HexToLetter)(unsigned int value);
+
 /*
 static void URI_FUNC(StopEx)(URI_TYPE(ParserState) * state, const URI_CHAR * errorPos, int errorCode);
 */
@@ -3219,6 +3221,152 @@ unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig) {
 
 	default:
 		return 0;
+	}
+}
+
+
+
+static URI_INLINE URI_CHAR URI_FUNC(HexToLetter)(unsigned int value) {
+	switch (value) {
+	case  0: return _UT('0');
+	case  1: return _UT('1');
+	case  2: return _UT('2');
+	case  3: return _UT('3');
+	case  4: return _UT('4');
+	case  5: return _UT('5');
+	case  6: return _UT('6');
+	case  7: return _UT('7');
+	case  8: return _UT('8');
+	case  9: return _UT('9');
+
+	/* Uppercase recommended in section 2.1. of RFC 3986 *
+	 * http://tools.ietf.org/html/rfc3986#section-2.1    */
+	case 10: return _UT('A');
+	case 11: return _UT('B');
+	case 12: return _UT('C');
+	case 13: return _UT('D');
+	case 14: return _UT('E');
+	default: return _UT('F');
+	}
+}
+
+
+
+const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
+		UriBool spaceToPlus) {
+	const URI_CHAR * read = in;
+	URI_CHAR * write = out;
+	if ((out == NULL) || (in == out)) {
+		return NULL;
+	} else if (in == NULL) {
+		if (out != NULL) {
+			out[0] = _UT('\0');
+		}
+		return out;
+	}
+
+	for (;;) {
+		switch (read[0]) {
+		case _UT('\0'):
+			write[0] = _UT('\0');
+			return write;
+
+		case _UT(' '):
+			if (spaceToPlus) {
+				write[0] = _UT('+');
+				write++;
+			} else {
+				write[0] = _UT('%');
+				write[1] = _UT('2');
+				write[2] = _UT('0');
+				write += 3;
+			}
+			break;
+
+		case _UT('a'): /* ALPHA */
+		case _UT('A'):
+		case _UT('b'):
+		case _UT('B'):
+		case _UT('c'):
+		case _UT('C'):
+		case _UT('d'):
+		case _UT('D'):
+		case _UT('e'):
+		case _UT('E'):
+		case _UT('f'):
+		case _UT('F'):
+		case _UT('g'):
+		case _UT('G'):
+		case _UT('h'):
+		case _UT('H'):
+		case _UT('i'):
+		case _UT('I'):
+		case _UT('j'):
+		case _UT('J'):
+		case _UT('k'):
+		case _UT('K'):
+		case _UT('l'):
+		case _UT('L'):
+		case _UT('m'):
+		case _UT('M'):
+		case _UT('n'):
+		case _UT('N'):
+		case _UT('o'):
+		case _UT('O'):
+		case _UT('p'):
+		case _UT('P'):
+		case _UT('q'):
+		case _UT('Q'):
+		case _UT('r'):
+		case _UT('R'):
+		case _UT('s'):
+		case _UT('S'):
+		case _UT('t'):
+		case _UT('T'):
+		case _UT('u'):
+		case _UT('U'):
+		case _UT('v'):
+		case _UT('V'):
+		case _UT('w'):
+		case _UT('W'):
+		case _UT('x'):
+		case _UT('X'):
+		case _UT('y'):
+		case _UT('Y'):
+		case _UT('z'):
+		case _UT('Z'):
+		case _UT('0'): /* DIGIT */
+		case _UT('1'):
+		case _UT('2'):
+		case _UT('3'):
+		case _UT('4'):
+		case _UT('5'):
+		case _UT('6'):
+		case _UT('7'):
+		case _UT('8'):
+		case _UT('9'):
+		case _UT('-'): /* "-" / "." / "_" / "~" */
+		case _UT('.'):
+		case _UT('_'):
+		case _UT('~'):
+			/* Copy unmodified */
+			write[0] = read[0];
+			write++;
+			break;
+
+		default:
+			/* Percent encode */
+			{
+				const unsigned char code = (unsigned char)read[0];
+				write[0] = _UT('%');
+				write[1] = URI_FUNC(HexToLetter)(code >> 4);
+				write[2] = URI_FUNC(HexToLetter)(code & 0x0f);
+				write += 3;
+			}
+			break;
+		}
+
+		read++;
 	}
 }
 

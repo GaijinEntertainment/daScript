@@ -68,6 +68,7 @@ public:
 		TEST_ADD(UriSuite::testLegacy2)
 		TEST_ADD(UriSuite::testUriComponents)
 		TEST_ADD(UriSuite::testUriComponentsBug20070701)
+		TEST_ADD(UriSuite::testEscaping)
 		TEST_ADD(UriSuite::testUnescaping)
 		TEST_ADD(UriSuite::testTrailingSlash)
 		TEST_ADD(UriSuite::testAddBase)
@@ -556,6 +557,26 @@ private:
 		TEST_ASSERT(!strcmp(uri.query, ""));
 		TEST_ASSERT(!strcmp(uri.fragment, ""));
 		URIFree(&uri);
+	}
+
+	bool testEscapingHelper(const wchar_t * in, const wchar_t * expectedOut,
+			bool spaceToPlus = false) {
+		wchar_t * buffer = new wchar_t[3 * wcslen(in) + 1];
+		if (URI_FUNC(Escape)(in, buffer, spaceToPlus)
+			!= buffer + wcslen(expectedOut)) {
+			delete [] buffer;
+			return false;
+		}
+
+		const bool equal = !wcscmp(buffer, expectedOut);
+		delete [] buffer;
+		return equal;
+	}
+
+	void testEscaping() {
+		TEST_ASSERT(testEscapingHelper(L"abc def", L"abc+def", true));
+		TEST_ASSERT(testEscapingHelper(L"abc def", L"abc%20def", false));
+		TEST_ASSERT(testEscapingHelper(L"\x0d", L"%0D"));
 	}
 
 	bool testUnescapingHelper(const wchar_t * input, const wchar_t * output,

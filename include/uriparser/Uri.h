@@ -196,6 +196,21 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 
 
 /**
+ * Percent-encodes all unreserved characters from the input string and
+ * writes the encoded version to the output string.
+ * Be sure to allocate 3 times the space of the input buffer for the outut buffer.
+ *
+ * @param in			Text source
+ * @param out			Encoded text destination
+ * @param spaceToPlus	Wether to convert ' ' to '+' or not
+ * @return				Position of terminator in output string
+ */
+const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
+		UriBool spaceToPlus);
+
+
+
+/**
  * Unescapes percent-encoded groups in a given string.
  * E.g. "%20" will become " ". Unescaping is done in place.
  * The return value will be point to the new position
