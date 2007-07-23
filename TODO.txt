@@ -1,4 +1,15 @@
 == BEFORE NEXT RELEASE ==
+ * Normalization:
+
+6.2.2.1 Case Normalization
+* percent-encoding to uppercase
+* scheme and host to lowercase
+
+6.2.2.2 Percent-Encoding Normalization
+* decoding of unreserved characters
+
+6.2.2.3 Path Segment Normalization
+* ...
 
 == SOON ==
  * More features:
