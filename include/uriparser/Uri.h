@@ -198,15 +198,19 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 /**
  * Percent-encodes all unreserved characters from the input string and
  * writes the encoded version to the output string.
- * Be sure to allocate 3 times the space of the input buffer for the outut buffer.
+ * Be sure to allocate <u>3 times</u> the space of the input buffer for
+ * the output buffer for <c>normalizeBreaks == URI_FALSE</c> and <u>6 times</u>
+ * the space for <c>normalizeBreaks == URI_FALSE</c>
+ * (since e.g. "\x0d" becomes "%0D%0A" in that case)
  *
- * @param in			Text source
- * @param out			Encoded text destination
- * @param spaceToPlus	Wether to convert ' ' to '+' or not
- * @return				Position of terminator in output string
+ * @param in				Text source
+ * @param out				Encoded text destination
+ * @param spaceToPlus		Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks	Wether to convert CR and LF to CR-LF or not.
+ * @return					Position of terminator in output string
  */
 const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
-		UriBool spaceToPlus);
+		UriBool spaceToPlus, UriBool normalizeBreaks);
 
 
 

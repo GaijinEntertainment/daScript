@@ -3253,9 +3253,10 @@ static URI_INLINE URI_CHAR URI_FUNC(HexToLetter)(unsigned int value) {
 
 
 const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
-		UriBool spaceToPlus) {
+		UriBool spaceToPlus, UriBool normalizeBreaks) {
 	const URI_CHAR * read = in;
 	URI_CHAR * write = out;
+	UriBool prevWasCr = URI_FALSE;
 	if ((out == NULL) || (in == out)) {
 		return NULL;
 	} else if (in == NULL) {
@@ -3281,6 +3282,7 @@ const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 				write[2] = _UT('0');
 				write += 3;
 			}
+			prevWasCr = URI_FALSE;
 			break;
 
 		case _UT('a'): /* ALPHA */
@@ -3352,6 +3354,46 @@ const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 			/* Copy unmodified */
 			write[0] = read[0];
 			write++;
+
+			prevWasCr = URI_FALSE;
+			break;
+
+		case _UT('\x0a'):
+			if (normalizeBreaks) {
+				if (!prevWasCr) {
+					write[0] = _UT('%');
+					write[1] = _UT('0');
+					write[2] = _UT('D');
+					write[3] = _UT('%');
+					write[4] = _UT('0');
+					write[5] = _UT('A');
+					write += 6;
+				}
+			} else {
+				write[0] = _UT('%');
+				write[1] = _UT('0');
+				write[2] = _UT('A');
+				write += 3;
+			}
+			prevWasCr = URI_FALSE;
+			break;
+
+		case _UT('\x0d'):
+			if (normalizeBreaks) {
+				write[0] = _UT('%');
+				write[1] = _UT('0');
+				write[2] = _UT('D');
+				write[3] = _UT('%');
+				write[4] = _UT('0');
+				write[5] = _UT('A');
+				write += 6;
+			} else {
+				write[0] = _UT('%');
+				write[1] = _UT('0');
+				write[2] = _UT('D');
+				write += 3;
+			}
+			prevWasCr = URI_TRUE;
 			break;
 
 		default:
@@ -3363,6 +3405,7 @@ const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 				write[2] = URI_FUNC(HexToLetter)(code & 0x0f);
 				write += 3;
 			}
+			prevWasCr = URI_FALSE;
 			break;
 		}
 
