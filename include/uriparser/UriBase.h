@@ -143,6 +143,21 @@ typedef struct UriIp6Struct {
 
 
 
+/**
+ * Specifies a line break conversion mode
+ */
+typedef enum UriBreakConversionEnum {
+	URI_BR_TO_LF,
+	URI_BR_TO_CRLF,
+	URI_BR_TO_CR,
+	URI_BR_TO_UNIX = URI_BR_TO_LF,
+	URI_BR_TO_WINDOWS = URI_BR_TO_CRLF,
+	URI_BR_TO_MAC = URI_BR_TO_CR,
+	URI_BR_DONT_TOUCH
+} UriBreakConversion;
+
+
+
 void uriWriteQuadToDoubleByte(const unsigned char * hexDigits, int digitCount,
 		unsigned char * output);
 unsigned char uriGetOctetValue(const unsigned char * digits, int digitCount);

@@ -3416,15 +3416,16 @@ const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 
 
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout) {
-	return URI_FUNC(UnescapeInPlaceEx)(inout, URI_FALSE);
+	return URI_FUNC(UnescapeInPlaceEx)(inout, URI_FALSE, URI_BR_DONT_TOUCH);
 }
 
 
 
 const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
-		UriBool plusToSpace) {
+		UriBool plusToSpace, UriBreakConversion breakConversion) {
 	URI_CHAR * read = inout;
 	URI_CHAR * write = inout;
+	UriBool prevWasCr = URI_FALSE;
 
 	if (inout == NULL) {
 		return NULL;
@@ -3486,12 +3487,79 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 				case _UT('E'):
 				case _UT('F'):
 					{
-						/* Percent group found, make single char of that */
+						/* Percent group found */
 						const unsigned char left = URI_FUNC(HexdigToInt)(read[1]);
 						const unsigned char right = URI_FUNC(HexdigToInt)(read[2]);
-						write[0] = (URI_CHAR)(16 * left + right);
+						const int code = 16 * left + right;
+						switch (code) {
+						case 10:
+							switch (breakConversion) {
+							case URI_BR_TO_LF:
+								if (!prevWasCr) {
+									write[0] = (URI_CHAR)10;
+									write++;
+								}
+								break;
+
+							case URI_BR_TO_CRLF:
+								if (!prevWasCr) {
+									write[0] = (URI_CHAR)13;
+									write[1] = (URI_CHAR)10;
+									write += 2;
+								}
+								break;
+
+							case URI_BR_TO_CR:
+								if (!prevWasCr) {
+									write[0] = (URI_CHAR)13;
+									write++;
+								}
+								break;
+
+							case URI_BR_DONT_TOUCH:
+							default:
+								write[0] = (URI_CHAR)10;
+								write++;
+
+							}
+							prevWasCr = URI_FALSE;
+							break;
+
+						case 13:
+							switch (breakConversion) {
+							case URI_BR_TO_LF:
+								write[0] = (URI_CHAR)10;
+								write++;
+								break;
+
+							case URI_BR_TO_CRLF:
+								write[0] = (URI_CHAR)13;
+								write[1] = (URI_CHAR)10;
+								write += 2;
+								break;
+
+							case URI_BR_TO_CR:
+								write[0] = (URI_CHAR)13;
+								write++;
+								break;
+
+							case URI_BR_DONT_TOUCH:
+							default:
+								write[0] = (URI_CHAR)13;
+								write++;
+
+							}
+							prevWasCr = URI_TRUE;
+							break;
+
+						default:
+							write[0] = (URI_CHAR)(code);
+							write++;
+
+							prevWasCr = URI_FALSE;
+
+						}
 						read += 3;
-						write++;
 					}
 					break;
 
@@ -3504,6 +3572,8 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 					}
 					read += 2;
 					write += 2;
+
+					prevWasCr = URI_FALSE;
 				}
 				break;
 
@@ -3515,6 +3585,8 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 				}
 				read++;
 				write++;
+
+				prevWasCr = URI_FALSE;
 			}
 			break;
 
@@ -3530,6 +3602,8 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 			}
 			read++;
 			write++;
+
+			prevWasCr = URI_FALSE;
 			break;
 
 		default:
@@ -3539,6 +3613,8 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 			}
 			read++;
 			write++;
+
+			prevWasCr = URI_FALSE;
 		}
 	}
 }

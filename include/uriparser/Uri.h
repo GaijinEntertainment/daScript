@@ -222,12 +222,13 @@ const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
  * length of the string. NULL is only returned if <code>inout</code>
  * is NULL.
  *
- * @param inout			Text to unescape/decode
- * @param plusToSpace	Whether to convert '+' to ' ' or not
- * @return				Pointer to new position of the terminating zero
+ * @param inout				Text to unescape/decode
+ * @param plusToSpace		Whether to convert '+' to ' ' or not
+ * @param breakConversion	Line break conversion mode
+ * @return					Pointer to new position of the terminating zero
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
-		UriBool plusToSpace);
+		UriBool plusToSpace, UriBreakConversion breakConversion);
 
 
 
@@ -238,7 +239,9 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
  * of the terminating zero. Use this value to get the new
  * length of the string. NULL is only returned if <code>inout</code>
  * is NULL.
- * NOTE: '+' is not decoded to ' '. Use UnescapeInPlaceEx for that instead.
+ *
+ * NOTE: '+' is not decoded to ' ' and line breaks are not converted.
+ * Use the more advanced UnescapeInPlaceEx for that features instead.
  *
  * @param inout			Text to unescape/decode
  * @return				Pointer to new position of the terminating zero
