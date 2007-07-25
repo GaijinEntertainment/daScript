@@ -122,13 +122,19 @@ static UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork, const URI_TYPE(Uri) 
 
 static int URI_FUNC(ToStringEngine)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 		int maxChars, int * charsWritten, int * charsRequired);
+static int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsigned int inMask,
+		unsigned int * outMask);
 
 static URI_CHAR URI_FUNC(HexToLetter)(unsigned int value);
 
 /*
 static void URI_FUNC(StopEx)(URI_TYPE(ParserState) * state, const URI_CHAR * errorPos, int errorCode);
 */
-unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig);
+static unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig);
+static UriBool URI_FUNC(ContainsUppercaseLetters)(const URI_CHAR * first,
+		const URI_CHAR * afterLast);
+static UriBool URI_FUNC(ContainsUglyPercentEncoding)(const URI_CHAR * first,
+		const URI_CHAR * afterLast);
 
 
 
@@ -3189,7 +3195,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 
 
 
-unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig) {
+static URI_INLINE unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig) {
 	switch (hexdig) {
 	case _UT('0'):
 	case _UT('1'):
@@ -4656,6 +4662,236 @@ static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest, const URI_TYPE(U
 					}
 				}
 				return URI_SUCCESS;
+}
+
+
+
+unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri) {
+	unsigned int res;
+	URI_FUNC(NormalizeSyntaxEngine)((URI_TYPE(Uri) *)uri, 0, &res);
+	return res;
+}
+
+
+
+int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask) {
+	return URI_FUNC(NormalizeSyntaxEngine)(uri, mask, NULL);
+}
+
+
+
+int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri) {
+	return URI_FUNC(NormalizeSyntaxEx)(uri, (unsigned int)-1);
+}
+
+
+
+static URI_INLINE UriBool URI_FUNC(ContainsUppercaseLetters)(const URI_CHAR * first,
+		const URI_CHAR * afterLast) {
+	if ((first != NULL) && (afterLast != NULL) && (afterLast > first)) {
+		const URI_CHAR * i = first;
+		for (; i < afterLast; i++) {
+			/* 6.2.2.1 Case Normalization: uppercase letters in scheme or host */
+			if ((*i >= _UT('A')) && (*i <= _UT('Z'))) {
+				return URI_TRUE;
+			}
+		}
+	}
+	return URI_FALSE;
+}
+
+
+
+static URI_INLINE UriBool URI_FUNC(ContainsUglyPercentEncoding)(const URI_CHAR * first,
+		const URI_CHAR * afterLast) {
+	if ((first != NULL) && (afterLast != NULL) && (afterLast > first)) {
+		const URI_CHAR * i = first;
+		for (; i + 2 < afterLast; i++) {
+			if (i[0] == _UT('%')) {
+				/* 6.2.2.1 Case Normalization: *
+				 * lowercase percent-encodings */
+				if (((i[1] >= _UT('a')) && (i[1] <= _UT('f')))
+						|| ((i[2] >= _UT('a')) && (i[2] <= _UT('f')))) {
+					return URI_TRUE;
+				} else {
+					/* 6.2.2.2 Percent-Encoding Normalization: *
+					 * percent-encoded unreserved characters   */
+					const unsigned char left = URI_FUNC(HexdigToInt)(i[1]);
+					const unsigned char right = URI_FUNC(HexdigToInt)(i[2]);
+					const int code = 16 * left + right;
+					switch (code) {
+					case _UT('a'): /* ALPHA */
+					case _UT('A'):
+					case _UT('b'):
+					case _UT('B'):
+					case _UT('c'):
+					case _UT('C'):
+					case _UT('d'):
+					case _UT('D'):
+					case _UT('e'):
+					case _UT('E'):
+					case _UT('f'):
+					case _UT('F'):
+					case _UT('g'):
+					case _UT('G'):
+					case _UT('h'):
+					case _UT('H'):
+					case _UT('i'):
+					case _UT('I'):
+					case _UT('j'):
+					case _UT('J'):
+					case _UT('k'):
+					case _UT('K'):
+					case _UT('l'):
+					case _UT('L'):
+					case _UT('m'):
+					case _UT('M'):
+					case _UT('n'):
+					case _UT('N'):
+					case _UT('o'):
+					case _UT('O'):
+					case _UT('p'):
+					case _UT('P'):
+					case _UT('q'):
+					case _UT('Q'):
+					case _UT('r'):
+					case _UT('R'):
+					case _UT('s'):
+					case _UT('S'):
+					case _UT('t'):
+					case _UT('T'):
+					case _UT('u'):
+					case _UT('U'):
+					case _UT('v'):
+					case _UT('V'):
+					case _UT('w'):
+					case _UT('W'):
+					case _UT('x'):
+					case _UT('X'):
+					case _UT('y'):
+					case _UT('Y'):
+					case _UT('z'):
+					case _UT('Z'):
+					case _UT('0'): /* DIGIT */
+					case _UT('1'):
+					case _UT('2'):
+					case _UT('3'):
+					case _UT('4'):
+					case _UT('5'):
+					case _UT('6'):
+					case _UT('7'):
+					case _UT('8'):
+					case _UT('9'):
+					case _UT('-'): /* "-" / "." / "_" / "~" */
+					case _UT('.'):
+					case _UT('_'):
+					case _UT('~'):
+						return URI_TRUE;
+
+					default:
+						/* NOOP */
+						;
+					}
+				}
+			}
+		}
+	}
+	return URI_FALSE;
+}
+
+
+
+static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsigned int inMask, unsigned int * outMask) {
+	if (uri == NULL) {
+		if (outMask != NULL) {
+			*outMask = URI_NORMALIZED;
+			return URI_SUCCESS;
+		} else {
+			return URI_ERROR_NULL;
+		}
+	}
+
+	/* Reset mask */
+	if (outMask != NULL) {
+		*outMask = URI_NORMALIZED;
+	}
+
+	/* Scheme, host */	
+	if (outMask != NULL) {
+		const UriBool normalizeScheme = URI_FUNC(ContainsUppercaseLetters)(
+				uri->scheme.first, uri->scheme.afterLast);
+		const UriBool normalizeHost = URI_FUNC(ContainsUppercaseLetters)(
+			uri->hostText.first, uri->hostText.afterLast);
+		if (normalizeScheme) {
+			*outMask |= URI_NORMALIZE_SCHEME;
+		}
+
+		if (normalizeHost) {
+			*outMask |= URI_NORMALIZE_HOST;
+		}
+	} else {
+		/* TODO */
+	}
+
+	/* User info */
+	if (outMask != NULL) {
+		const UriBool normalizeUserInfo = URI_FUNC(ContainsUglyPercentEncoding)(
+			uri->userInfo.first, uri->userInfo.afterLast);
+		if (normalizeUserInfo) {
+			*outMask |= URI_NORMALIZE_USER_INFO;
+		}
+	} else {
+		/* TODO */
+	}
+
+	/* Path */
+	if (outMask != NULL) {
+		const URI_TYPE(PathSegment) * walker = uri->pathHead;
+		while (walker != NULL) {
+			const URI_CHAR * const first = walker->text.first;
+			const URI_CHAR * const afterLast = walker->text.afterLast;
+			if ((first != NULL)
+					&& (afterLast != NULL)
+					&& (afterLast > first)
+					&& (
+						(((afterLast - first) == 1)
+							&& (first[0] == _UT('.')))	
+						||
+						(((afterLast - first) == 2)
+							&& (first[0] == _UT('.'))
+							&& (first[1] == _UT('.')))
+						||
+						URI_FUNC(ContainsUglyPercentEncoding)(first, afterLast)
+					)) {
+				*outMask |= URI_NORMALIZE_PATH;
+				break;
+			}
+			walker = walker->next;
+		}
+	} else {
+		/* 6.2.2.3 Path Segment Normalization */
+		/* TODO */
+	}
+
+	/* Query, fragment */
+	if (outMask != NULL) {
+		const UriBool normalizeQuery = URI_FUNC(ContainsUglyPercentEncoding)(
+				uri->query.first, uri->query.afterLast);
+		const UriBool normalizeFragment = URI_FUNC(ContainsUglyPercentEncoding)(
+				uri->fragment.first, uri->fragment.afterLast);
+		if (normalizeQuery) {
+			*outMask |= URI_NORMALIZE_QUERY;
+		}
+
+		if (normalizeFragment) {
+			*outMask |= URI_NORMALIZE_FRAGMENT;
+		}
+	} else {
+		/* TODO */
+	}
+	
+	/* TODO */
+	return URI_SUCCESS;
 }
 
 

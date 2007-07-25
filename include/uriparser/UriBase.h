@@ -158,6 +158,21 @@ typedef enum UriBreakConversionEnum {
 
 
 
+/**
+ * Specifies which component of a %URI has to be normalized.
+ */
+typedef enum UriNormalizationMaskEnum {
+	URI_NORMALIZED = 0,
+	URI_NORMALIZE_SCHEME = 1 << 0, /* Because of uppercase letters */
+	URI_NORMALIZE_USER_INFO = 1 << 1, /* .. uppercase percent-encodings */
+	URI_NORMALIZE_HOST = 1 << 2, /* .. uppercase letters */
+	URI_NORMALIZE_PATH = 1 << 3, /* .. uppercase percent-encodings or dot segments */
+	URI_NORMALIZE_QUERY = 1 << 4, /* .. uppercase percent-encodings */
+	URI_NORMALIZE_FRAGMENT = 1 << 5 /* .. uppercase percent-encodings */
+} UriNormalizationMask;
+
+
+
 void uriWriteQuadToDoubleByte(const unsigned char * hexDigits, int digitCount,
 		unsigned char * output);
 unsigned char uriGetOctetValue(const unsigned char * digits, int digitCount);

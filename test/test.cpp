@@ -74,6 +74,8 @@ public:
 		TEST_ADD(UriSuite::testAddBase)
 		TEST_ADD(UriSuite::testToString)
 		TEST_ADD(UriSuite::testToStringCharsRequired)
+		TEST_ADD(UriSuite::testToStringCharsRequired)
+		TEST_ADD(UriSuite::testNormalizeSyntaxMaskRequired)
 	}
 
 private:
@@ -985,6 +987,32 @@ private:
 		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/?abc#def"));
 		TEST_ASSERT(testToStringCharsRequiredHelper(L"/test"));
 		TEST_ASSERT(testToStringCharsRequiredHelper(L"test"));
+	}
+
+	bool testNormalizeMaskHelper(wchar_t * uriText, unsigned int expectedMask) {
+		UriParserStateW state;
+		UriUriW uri;
+		state.uri = &uri;
+		int res = uriParseUriW(&state, uriText);
+		if (res != 0) {
+			uriFreeUriMembersW(&uri);
+			return false;
+		}
+
+		const unsigned int mask = uriNormalizeSyntaxMaskRequiredW(&uri);
+
+		uriFreeUriMembersW(&uri);
+		return (mask == expectedMask);
+	}
+
+	void testNormalizeSyntaxMaskRequired() {
+		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/", URI_NORMALIZED));
+		TEST_ASSERT(testNormalizeMaskHelper(L"httP://localhost/", URI_NORMALIZE_SCHEME));
+		TEST_ASSERT(testNormalizeMaskHelper(L"http://%0d@localhost/", URI_NORMALIZE_USER_INFO));
+		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhosT/", URI_NORMALIZE_HOST));
+		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/./abc", URI_NORMALIZE_PATH));
+		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/?AB%43", URI_NORMALIZE_QUERY));
+		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/#AB%43", URI_NORMALIZE_FRAGMENT));
 	}
 
 };

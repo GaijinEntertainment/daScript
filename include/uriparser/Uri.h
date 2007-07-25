@@ -306,11 +306,10 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
 
 
 
-/* TODO
-int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
-int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, int mask);
+/* TODO write comments */
+unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
+int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
 int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
-*/
 
 
 
