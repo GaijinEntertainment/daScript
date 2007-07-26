@@ -173,6 +173,7 @@ typedef enum UriNormalizationMaskEnum {
 
 
 
+/* TODO please don't use! i will move them out of here */
 void uriWriteQuadToDoubleByte(const unsigned char * hexDigits, int digitCount,
 		unsigned char * output);
 unsigned char uriGetOctetValue(const unsigned char * digits, int digitCount);

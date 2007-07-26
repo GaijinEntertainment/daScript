@@ -149,6 +149,13 @@ static void URI_FUNC(FixPercentEncodingEngine)(
 		const URI_CHAR * inFirst, const URI_CHAR * inAfterLast,
 		const URI_CHAR * outFirst, const URI_CHAR ** outAfterLast);
 
+static void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
+		unsigned int revertMask);
+static UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
+		unsigned int maskTest, URI_TYPE(TextRange) * range);
+static UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
+		unsigned int * doneMask);
+
 
 /* Used to point to from empty path segments.
  * X.first and X.afterLast must be the same non-NULL value then. */
@@ -1955,7 +1962,6 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserS
 					&& (state->uri->pathHead->next == NULL)
 					&& (state->uri->pathHead->text.first == state->uri->pathHead->text.afterLast)) {
 				free(state->uri->pathHead);
-				/* TODO deep copy mode? */
 				state->uri->pathHead = NULL;
 				state->uri->pathTail = NULL;
 			}
@@ -3188,25 +3194,91 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 		return;
 	}
 
+	if (uri->owner) {
+		/* Scheme */
+		if (uri->scheme.first != NULL) {
+			free((URI_CHAR *)uri->scheme.first);
+			uri->scheme.first = NULL;
+			uri->scheme.afterLast = NULL;
+		}
+
+		/* User info */
+		if (uri->userInfo.first != NULL) {
+			free((URI_CHAR *)uri->userInfo.first);
+			uri->userInfo.first = NULL;
+			uri->userInfo.afterLast = NULL;
+		}
+
+		/* Host data - IPvFuture */
+		if (uri->hostData.ipFuture.first != NULL) {
+			free((URI_CHAR *)uri->hostData.ipFuture.first);
+			uri->hostData.ipFuture.first = NULL;
+			uri->hostData.ipFuture.afterLast = NULL;
+			uri->hostText.first = NULL;
+			uri->hostText.afterLast = NULL;
+		}
+
+		/* Host text (if regname, after IPvFuture!) */
+		if ((uri->hostText.first != NULL)
+				&& (uri->hostData.ip4 == NULL)
+				&& (uri->hostData.ip6 == NULL)) {
+			/* Real regname */
+			free((URI_CHAR *)uri->hostText.first);
+			uri->hostText.first = NULL;
+			uri->hostText.afterLast = NULL;
+		}
+	}
+
+	/* Host data - IPv4 */
 	if (uri->hostData.ip4 != NULL) {
 		free(uri->hostData.ip4);
 		uri->hostData.ip4 = NULL;
 	}
 
+	/* Host data - IPv6 */
 	if (uri->hostData.ip6 != NULL) {
 		free(uri->hostData.ip6);
 		uri->hostData.ip6 = NULL;
 	}
 
+	/* Port text */
+	if (uri->owner && (uri->portText.first != NULL)) {
+		free((URI_CHAR *)uri->portText.first);
+		uri->portText.first = NULL;
+		uri->portText.afterLast = NULL;
+	}
+
+	/* Path */
 	if (uri->pathHead != NULL) {
 		URI_TYPE(PathSegment) * segWalk = uri->pathHead;
 		while (segWalk != NULL) {
 			URI_TYPE(PathSegment) * const next = segWalk->next;
+			if (uri->owner && (segWalk->text.first != NULL)
+					&& (segWalk->text.afterLast != NULL)
+					&& (segWalk->text.afterLast > segWalk->text.first)) {
+				free((URI_CHAR *)segWalk->text.first);
+			}
 			free(segWalk);
 			segWalk = next;
 		}
 		uri->pathHead = NULL;
 		uri->pathTail = NULL;
+	}
+
+	if (uri->owner) {
+		/* Query */
+		if (uri->query.first != NULL) {
+			free((URI_CHAR *)uri->query.first);
+			uri->query.first = NULL;
+			uri->query.afterLast = NULL;
+		}
+
+		/* Fragment */
+		if (uri->fragment.first != NULL) {
+			free((URI_CHAR *)uri->fragment.first);
+			uri->fragment.first = NULL;
+			uri->fragment.afterLast = NULL;
+		}
 	}
 }
 
@@ -3644,27 +3716,6 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 
 
 
-/* TODO remove
-static void URI_FUNC(CopyTextRange)(URI_TYPE(TextRange) * dest,
-		const URI_TYPE(TextRange) * source) {
-	int charsToCopy;
-	int bytesToCopy;
-	URI_CHAR * dup;
-	if ((source == NULL) || (dest == NULL)) {
-		return;
-	}
-	charsToCopy = (source->afterLast - source->first);
-	bytesToCopy = charsToCopy * sizeof(URI_CHAR);
-	dup = malloc(bytesToCopy);
-	/ TODO NULL check /
-	memcpy(dup, source->first, bytesToCopy);
-	dest->first = dup;
-	dest->afterLast = dup + charsToCopy;
-}
-*/
-
-
-
 /* Checks if a URI has the host component set. */
 static UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri) {
 	return (uri != NULL)
@@ -3745,7 +3796,10 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					/* Last segment -> insert "" segment to represent trailing slash, update tail */
 					URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
 					if (segment == NULL) {
-						free(walker); /* TODO Free text in deep copy mode */
+						if (uri->owner) {
+							free(walker->text.first);
+						}
+						free(walker);
 						return URI_FALSE; /* Raises malloc error */
 					}
 					memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
@@ -3754,7 +3808,11 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					prev->next = segment;
 					uri->pathTail = segment;
 				}
-				free(walker); /* TODO Free text in deep copy mode */
+
+				if (uri->owner) {
+					free(walker->text.first);
+				}
+				free(walker);
 				walker = nextBackup;
 			} else {
 				if (walker->next != NULL) {
@@ -3786,8 +3844,16 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 							/* Last segment -> insert "" segment to represent trailing slash, update tail */
 							URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
 							if (segment == NULL) {
-								free(walker); /* TODO Free text in deep copy mode */
-								free(prev); /* TODO Free text in deep copy mode */
+								if (uri->owner) {
+									free(walker->text.first);
+								}
+								free(walker);
+
+								if (uri->owner) {
+									free(prev->text.first);
+								}
+								free(prev);
+
 								return URI_FALSE; /* Raises malloc error */
 							}
 							memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
@@ -3796,8 +3862,17 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 							prevPrev->next = segment;
 							uri->pathTail = segment;
 						}
-						free(walker); /* TODO Free text in deep copy mode */
-						free(prev); /* TODO Free text in deep copy mode */
+
+						if (uri->owner) {
+							free(walker->text.first);
+						}
+						free(walker);
+
+						if (uri->owner) {
+							free(prev->text.first);
+						}
+						free(prev);
+
 						walker = nextBackup;
 					} else {
 						/* Prev is the first segment */
@@ -3808,8 +3883,17 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 							/* Last segment -> update tail */
 							uri->pathTail = NULL;
 						}
-						free(walker); /* TODO Free text in deep copy mode */
-						free(prev); /* TODO Free text in deep copy mode */
+
+						if (uri->owner) {
+							free(walker->text.first);
+						}
+						free(walker);
+
+						if (uri->owner) {
+							free(prev->text.first);
+						}
+						free(prev);
+
 						walker = nextBackup;
 					}
 				} else {
@@ -3822,7 +3906,12 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						/* Last segment -> update tail */
 						uri->pathTail = NULL;
 					}
-					free(walker); /* TODO Free text in deep copy mode */
+
+					if (uri->owner) {
+						free(walker->text.first);
+					}
+					free(walker);
+
 					walker = nextBackup;
 				}
 			} else {
@@ -3854,7 +3943,6 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 			&& (uri->pathHead->next == NULL)
 			&& (uri->pathHead->text.first == uri->pathHead->text.afterLast)) {
 		free(uri->pathHead);
-		/* TODO deep copy mode? */
 		uri->pathHead = NULL;
 		uri->pathTail = NULL;
 	}
@@ -3867,7 +3955,7 @@ static UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 /* Copies the authority part of an URI over to another. */
 static UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * source) {
-	/* TODO shallow or deep? */
+	/* TODO dest shallow or deep? */
 
 	/* Copy userInfo */
 	dest->userInfo = source->userInfo;
@@ -4980,6 +5068,170 @@ static URI_INLINE UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** f
 
 
 
+static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
+		unsigned int revertMask) {
+	if (revertMask & URI_NORMALIZE_SCHEME) {
+		free(uri->scheme.first);
+		uri->scheme.first = NULL;
+		uri->scheme.afterLast = NULL;
+	}
+
+	if (revertMask & URI_NORMALIZE_USER_INFO) {
+		free(uri->userInfo.first);
+		uri->userInfo.first = NULL;
+		uri->userInfo.afterLast = NULL;
+	}
+
+	if (revertMask & URI_NORMALIZE_HOST) {
+		if (uri->hostData.ipFuture.first != NULL) {
+			/* IPvFuture */
+			free(uri->hostData.ipFuture.first);
+			uri->hostData.ipFuture.first = NULL;
+			uri->hostData.ipFuture.afterLast = NULL;
+			uri->hostText.first = NULL;
+			uri->hostText.afterLast = NULL;
+		} else if ((uri->hostText.first != NULL)
+				&& (uri->hostData.ip4 == NULL)
+				&& (uri->hostData.ip6 == NULL)) {
+			/* Regname */
+			free(uri->hostText.first);
+			uri->hostText.first = NULL;
+			uri->hostText.afterLast = NULL;
+		}
+	}
+
+	/* NOTE: Port cannot happen! */
+
+	if (revertMask & URI_NORMALIZE_PATH) {
+		URI_TYPE(PathSegment) * walker = uri->pathHead;
+		while (walker != NULL) {
+			URI_TYPE(PathSegment) * const next = walker->next;
+			if (walker->text.afterLast > walker->text.first) {
+				free(walker->text.first);
+			}
+			free(walker);
+			walker = next;
+		}
+		uri->pathHead = NULL;
+		uri->pathTail = NULL;
+	}
+
+	if (revertMask & URI_NORMALIZE_QUERY) {
+		free(uri->query.first);
+		uri->query.first = NULL;
+		uri->query.afterLast = NULL;
+	}
+
+	if (revertMask & URI_NORMALIZE_FRAGMENT) {
+		free(uri->fragment.first);
+		uri->fragment.first = NULL;
+		uri->fragment.afterLast = NULL;
+	}
+}
+
+
+
+static URI_INLINE UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
+		unsigned int maskTest, URI_TYPE(TextRange) * range) {
+	if (((*doneMask & maskTest) == 0)
+			&& (range->first != NULL)
+			&& (range->afterLast != NULL)
+			&& (range->afterLast > range->first)) {
+		const int lenInChars = range->afterLast - range->first;
+		const int lenInBytes = lenInChars * sizeof(URI_CHAR);
+		URI_CHAR * dup = malloc(lenInBytes);
+		if (dup == NULL) {
+			return URI_FALSE; /* Raises malloc error */
+		}
+		memcpy(dup, range->afterLast, lenInBytes);
+		range->first = dup;
+		range->afterLast = dup + lenInChars;
+		*doneMask |= maskTest;
+	}
+	return URI_TRUE;
+}
+
+
+
+static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
+		unsigned int * doneMask) {
+	URI_TYPE(PathSegment) * walker = uri->pathHead;
+	if (!URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_SCHEME,
+				&(uri->scheme))
+			|| !URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_USER_INFO,
+				&(uri->userInfo))
+			|| !URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_QUERY,
+				&(uri->query))
+			|| !URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_FRAGMENT,
+				&(uri->fragment))) {
+		return URI_FALSE; /* Raises malloc error */
+	}
+
+	/* Host */
+	if ((*doneMask & URI_NORMALIZE_HOST) == 0) {
+		if ((uri->hostData.ip4 == NULL)
+				&& (uri->hostData.ip6 == NULL)) {
+			if (uri->hostData.ipFuture.first != NULL) {
+				/* IPvFuture */
+				if (!URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_HOST,
+						&(uri->hostData.ipFuture))) {
+					return URI_FALSE; /* Raises malloc error */
+				}
+				uri->hostText.first = uri->hostData.ipFuture.first;
+				uri->hostText.afterLast = uri->hostData.ipFuture.afterLast;
+			} else if (uri->hostText.first != NULL) {
+				/* Regname */
+				if (!URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_HOST,
+						&(uri->hostText))) {
+					return URI_FALSE; /* Raises malloc error */
+				}
+			}
+		}
+	}
+
+	/* Path */
+	if ((*doneMask & URI_NORMALIZE_PATH) == 0) {
+		while (walker != NULL) {
+			if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(walker->text))) {
+				/* Kill path to one before walker */
+				URI_TYPE(PathSegment) * ranger = uri->pathHead;
+				while (ranger->next != walker) {
+					URI_TYPE(PathSegment) * const next = ranger->next;
+					if ((ranger->text.first != NULL)
+							&& (ranger->text.afterLast != NULL)
+							&& (ranger->text.afterLast > ranger->text.first)) {
+						free(ranger->text.first);
+						free(ranger);
+					}
+					ranger = next;
+				}
+
+				/* Kill path from walker */
+				while (walker != NULL) {
+					URI_TYPE(PathSegment) * const next = walker->next;
+					free(walker);
+					walker = next;
+				}
+
+				uri->pathHead = NULL;
+				uri->pathTail = NULL;
+				return URI_FALSE; /* Raises malloc error */
+			}
+			walker = walker->next;
+		}
+		*doneMask |= URI_NORMALIZE_PATH;
+	}
+
+	/* Port text, must come last so we don't have to undo that one if it fails. *
+	 * Otherwise we would need and extra enum flag for it althoug the port      *
+	 * cannot go unnormalized...                                                */
+	if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(uri->userInfo))) {
+		return URI_FALSE; /* Raises malloc error */
+	}
+}
+
+
+
 static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsigned int inMask, unsigned int * outMask) {
 	unsigned int doneMask = URI_NORMALIZED;
 	if (uri == NULL) {
@@ -5019,24 +5271,45 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 				URI_FUNC(LowercaseInplace)(uri->scheme.first, uri->scheme.afterLast);
 			} else {
 				if (!URI_FUNC(LowercaseMalloc)(&(uri->scheme.first), &(uri->scheme.afterLast))) {
-					/* TODO fix uri object? */
+					URI_FUNC(PreventLeakage)(uri, doneMask);
 					return URI_ERROR_MALLOC;
 				}
 				doneMask |= URI_NORMALIZE_SCHEME;
 			}
 		}
 
-		/* TODO fix ipvFuture and stuff? */
 		/* Host */
-		if ((inMask & URI_NORMALIZE_HOST) && (uri->hostText.first != NULL)) {
-			if (uri->owner) {
-				URI_FUNC(LowercaseInplace)(uri->hostText.first, uri->hostText.afterLast);
-			} else {
-				if (!URI_FUNC(LowercaseMalloc)(&(uri->hostText.first), &(uri->hostText.afterLast))) {
-					/* TODO fix uri object? */
-					return URI_ERROR_MALLOC;
+		if (inMask & URI_NORMALIZE_HOST) {
+			if (uri->hostData.ipFuture.first != NULL) {
+				/* IPvFuture */
+				if (uri->owner) {
+					URI_FUNC(LowercaseInplace)(uri->hostData.ipFuture.first,
+							uri->hostData.ipFuture.afterLast);
+				} else {
+					if (!URI_FUNC(LowercaseMalloc)(&(uri->hostData.ipFuture.first),
+							&(uri->hostData.ipFuture.afterLast))) {
+						URI_FUNC(PreventLeakage)(uri, doneMask);
+						return URI_ERROR_MALLOC;
+					}
+					doneMask |= URI_NORMALIZE_HOST;
 				}
-				doneMask |= URI_NORMALIZE_HOST;
+				uri->hostText.first = uri->hostData.ipFuture.first;
+				uri->hostText.afterLast = uri->hostData.ipFuture.afterLast;
+			} else if ((uri->hostText.first != NULL)
+					&& (uri->hostData.ip4 == NULL)
+					&& (uri->hostData.ip6 == NULL)) {
+				/* Regname */
+				if (uri->owner) {
+					URI_FUNC(LowercaseInplace)(uri->hostText.first,
+							uri->hostText.afterLast);
+				} else {
+					if (!URI_FUNC(LowercaseMalloc)(&(uri->hostText.first),
+							&(uri->hostText.afterLast))) {
+						URI_FUNC(PreventLeakage)(uri, doneMask);
+						return URI_ERROR_MALLOC;
+					}
+					doneMask |= URI_NORMALIZE_HOST;
+				}
 			}
 		}
 	}
@@ -5055,7 +5328,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			} else {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->userInfo.first),
 						&(uri->userInfo.afterLast))) {
-					/* TODO fix uri object? */
+					URI_FUNC(PreventLeakage)(uri, doneMask);
 					return URI_ERROR_MALLOC;
 				}
 				doneMask |= URI_NORMALIZE_USER_INFO;
@@ -5092,7 +5365,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 
 		/* 6.2.2.3 Path Segment Normalization */
 		if (!URI_FUNC(RemoveDotSegments)(uri)) {
-			/* TODO fix uri object? */
+			URI_FUNC(PreventLeakage)(uri, doneMask);
 			return URI_ERROR_MALLOC;
 		}
 
@@ -5107,7 +5380,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			while (walker != NULL) {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(walker->text.first),
 						&(walker->text.afterLast))) {
-					/* TODO fix uri object? */
+					URI_FUNC(PreventLeakage)(uri, doneMask);
 					return URI_ERROR_MALLOC;
 				}
 				walker = walker->next;
@@ -5137,7 +5410,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			} else {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->query.first),
 						&(uri->query.afterLast))) {
-					/* TODO fix uri object? */
+					URI_FUNC(PreventLeakage)(uri, doneMask);
 					return URI_ERROR_MALLOC;
 				}
 				doneMask |= URI_NORMALIZE_QUERY;
@@ -5151,7 +5424,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			} else {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->fragment.first),
 						&(uri->fragment.afterLast))) {
-					/* TODO fix uri object? */
+					URI_FUNC(PreventLeakage)(uri, doneMask);
 					return URI_ERROR_MALLOC;
 				}
 				doneMask |= URI_NORMALIZE_FRAGMENT;
@@ -5159,9 +5432,15 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 		}
 	}
 
-	/* TODO malloc/copy all but those in doneMask */
+	/* Dup all not duped yet */
+	if ((outMask == NULL) && !uri->owner) {
+		if (!URI_FUNC(MakeOwner)(uri, &doneMask)) {
+			URI_FUNC(PreventLeakage)(uri, doneMask);
+			return URI_ERROR_MALLOC;
+		}
+		uri->owner = URI_TRUE;
+	}
 
-	/* TODO */
 	return URI_SUCCESS;
 }
 
