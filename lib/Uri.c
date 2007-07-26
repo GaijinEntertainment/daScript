@@ -136,6 +136,11 @@ static UriBool URI_FUNC(ContainsUppercaseLetters)(const URI_CHAR * first,
 static UriBool URI_FUNC(ContainsUglyPercentEncoding)(const URI_CHAR * first,
 		const URI_CHAR * afterLast);
 
+static void URI_FUNC(LowercaseInplace)(const URI_CHAR * first,
+		const URI_CHAR * afterLast);
+static UriBool URI_FUNC(LowercaseMalloc)(const URI_CHAR ** first,
+		const URI_CHAR ** afterLast);
+
 static void URI_FUNC(FixPercentEncodingInplace)(const URI_CHAR * first,
 		const URI_CHAR ** afterLast);
 static UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** first,
@@ -284,6 +289,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(ParserState
 		return first;
 	}
 }
+
+
 
 /*
  * [authorityTwo]-><:>[port]
@@ -3180,14 +3187,17 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 	if (uri == NULL) {
 		return;
 	}
+
 	if (uri->hostData.ip4 != NULL) {
 		free(uri->hostData.ip4);
 		uri->hostData.ip4 = NULL;
 	}
+
 	if (uri->hostData.ip6 != NULL) {
 		free(uri->hostData.ip6);
 		uri->hostData.ip6 = NULL;
 	}
+
 	if (uri->pathHead != NULL) {
 		URI_TYPE(PathSegment) * segWalk = uri->pathHead;
 		while (segWalk != NULL) {
@@ -4108,21 +4118,25 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a,
 				!= (b->hostData.ipFuture.first == NULL))) {
 		return URI_FALSE;
 	}
+
 	if (a->hostData.ip4 != NULL) {
 		if (memcmp(a->hostData.ip4->data, b->hostData.ip4->data, 4)) {
 			return URI_FALSE;
 		}
 	}
+
 	if (a->hostData.ip6 != NULL) {
 		if (memcmp(a->hostData.ip6->data, b->hostData.ip6->data, 16)) {
 			return URI_FALSE;
 		}
 	}
+
 	if (a->hostData.ipFuture.first != NULL) {
 		if (URI_FUNC(CompareRange)(&(a->hostData.ipFuture), &(b->hostData.ipFuture))) {
 			return URI_FALSE;
 		}
 	}
+
 	if ((a->hostData.ip4 == NULL)
 			&& (a->hostData.ip6 == NULL)
 			&& (a->hostData.ipFuture.first == NULL)) {
@@ -4140,6 +4154,7 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a,
 	if ((a->pathHead == NULL) != (b->pathHead == NULL)) {
 		return URI_FALSE;
 	}
+
 	if (a->pathHead != NULL) {
 		URI_TYPE(PathSegment) * walkA = a->pathHead;
 		URI_TYPE(PathSegment) * walkB = b->pathHead;
@@ -4185,8 +4200,9 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
 
 
 
-static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
-		int maxChars, int * charsWritten, int * charsRequired) {
+static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest,
+		const URI_TYPE(Uri) * uri, int maxChars, int * charsWritten,
+		int * charsRequired) {
 	int written = 0;
 	if ((uri == NULL) || ((dest == NULL) && (charsRequired == NULL))) {
 		if (charsWritten != NULL) {
@@ -4693,7 +4709,7 @@ int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri) {
 
 
 
-/* ONE TIME IS ENOUGH, move out of here */
+/* TODO ONE TIME IS ENOUGH, move out of here */
 static URI_INLINE UriBool URI_FUNC(IsUnreserved)(int code) {
 	switch (code) {
 	case _UT('a'): /* ALPHA */
@@ -4926,7 +4942,7 @@ static URI_INLINE void URI_FUNC(FixPercentEncodingInplace)(const URI_CHAR * firs
 	}
 
 	/* Fix inplace */
-	URI_FUNC(FixPercentEncodingEngine)(*first, *afterLast, *first, afterLast);
+	URI_FUNC(FixPercentEncodingEngine)(first, *afterLast, first, afterLast);
 }
 
 
