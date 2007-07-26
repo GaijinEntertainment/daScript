@@ -76,6 +76,7 @@ public:
 		TEST_ADD(UriSuite::testToStringCharsRequired)
 		TEST_ADD(UriSuite::testToStringCharsRequired)
 		TEST_ADD(UriSuite::testNormalizeSyntaxMaskRequired)
+		TEST_ADD(UriSuite::testNormalizeSyntax)
 	}
 
 private:
@@ -1013,6 +1014,54 @@ private:
 		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/./abc", URI_NORMALIZE_PATH));
 		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/?AB%43", URI_NORMALIZE_QUERY));
 		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/#AB%43", URI_NORMALIZE_FRAGMENT));
+	}
+
+	bool testNormalizeSyntaxHelper(wchar_t * uriText, wchar_t * expectedNormalized) {
+		UriParserStateW stateW;
+		int res;
+
+		UriUriW testUri;
+		stateW.uri = &testUri;
+		res = uriParseUriW(&stateW, uriText);
+		if (res != 0) {
+			uriFreeUriMembersW(&testUri);
+			return false;
+		}
+
+		// Expected result
+		UriUriW expectedUri;
+		stateW.uri = &expectedUri;
+		res = uriParseUriW(&stateW, expectedNormalized);
+		if (res != 0) {
+			uriFreeUriMembersW(&testUri);
+			uriFreeUriMembersW(&expectedUri);
+			return false;
+		}
+
+		const bool equalBefore = (URI_TRUE == uriEqualsUriW(&testUri, &expectedUri));
+		if (equalBefore) {
+			uriFreeUriMembersW(&testUri);
+			uriFreeUriMembersW(&expectedUri);
+			return false;
+		}
+
+		res = URI_FUNC(NormalizeSyntax)(&testUri);
+		if (res != 0) {
+			uriFreeUriMembersW(&testUri);
+			uriFreeUriMembersW(&expectedUri);
+			return false;
+		}
+
+		const bool equalAfter = (URI_TRUE == uriEqualsUriW(&testUri, &expectedUri));
+		uriFreeUriMembersW(&testUri);
+		uriFreeUriMembersW(&expectedUri);
+		return equalAfter;
+	}
+
+	void testNormalizeSyntax() {
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"eXAMPLE://a/./b/../b/%63/%7bfoo%7d",
+				L"example://a/b/c/%7Bfoo%7D"));
 	}
 
 };

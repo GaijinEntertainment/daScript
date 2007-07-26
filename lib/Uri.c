@@ -136,6 +136,13 @@ static UriBool URI_FUNC(ContainsUppercaseLetters)(const URI_CHAR * first,
 static UriBool URI_FUNC(ContainsUglyPercentEncoding)(const URI_CHAR * first,
 		const URI_CHAR * afterLast);
 
+static void URI_FUNC(FixPercentEncodingInplace)(const URI_CHAR * first,
+		const URI_CHAR ** afterLast);
+static UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** first,
+		const URI_CHAR ** afterLast);
+static void URI_FUNC(FixPercentEncodingEngine)(
+		const URI_CHAR * inFirst, const URI_CHAR * inAfterLast,
+		const URI_CHAR * outFirst, const URI_CHAR ** outAfterLast);
 
 
 /* Used to point to from empty path segments.
@@ -4686,6 +4693,84 @@ int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri) {
 
 
 
+/* ONE TIME IS ENOUGH, move out of here */
+static URI_INLINE UriBool URI_FUNC(IsUnreserved)(int code) {
+	switch (code) {
+	case _UT('a'): /* ALPHA */
+	case _UT('A'):
+	case _UT('b'):
+	case _UT('B'):
+	case _UT('c'):
+	case _UT('C'):
+	case _UT('d'):
+	case _UT('D'):
+	case _UT('e'):
+	case _UT('E'):
+	case _UT('f'):
+	case _UT('F'):
+	case _UT('g'):
+	case _UT('G'):
+	case _UT('h'):
+	case _UT('H'):
+	case _UT('i'):
+	case _UT('I'):
+	case _UT('j'):
+	case _UT('J'):
+	case _UT('k'):
+	case _UT('K'):
+	case _UT('l'):
+	case _UT('L'):
+	case _UT('m'):
+	case _UT('M'):
+	case _UT('n'):
+	case _UT('N'):
+	case _UT('o'):
+	case _UT('O'):
+	case _UT('p'):
+	case _UT('P'):
+	case _UT('q'):
+	case _UT('Q'):
+	case _UT('r'):
+	case _UT('R'):
+	case _UT('s'):
+	case _UT('S'):
+	case _UT('t'):
+	case _UT('T'):
+	case _UT('u'):
+	case _UT('U'):
+	case _UT('v'):
+	case _UT('V'):
+	case _UT('w'):
+	case _UT('W'):
+	case _UT('x'):
+	case _UT('X'):
+	case _UT('y'):
+	case _UT('Y'):
+	case _UT('z'):
+	case _UT('Z'):
+	case _UT('0'): /* DIGIT */
+	case _UT('1'):
+	case _UT('2'):
+	case _UT('3'):
+	case _UT('4'):
+	case _UT('5'):
+	case _UT('6'):
+	case _UT('7'):
+	case _UT('8'):
+	case _UT('9'):
+	case _UT('-'): /* "-" / "." / "_" / "~" */
+	case _UT('.'):
+	case _UT('_'):
+	case _UT('~'):
+		return URI_TRUE;
+
+	default:
+		return URI_FALSE;
+	}
+}
+
+
+
 static URI_INLINE UriBool URI_FUNC(ContainsUppercaseLetters)(const URI_CHAR * first,
 		const URI_CHAR * afterLast) {
 	if ((first != NULL) && (afterLast != NULL) && (afterLast > first)) {
@@ -4719,78 +4804,8 @@ static URI_INLINE UriBool URI_FUNC(ContainsUglyPercentEncoding)(const URI_CHAR *
 					const unsigned char left = URI_FUNC(HexdigToInt)(i[1]);
 					const unsigned char right = URI_FUNC(HexdigToInt)(i[2]);
 					const int code = 16 * left + right;
-					switch (code) {
-					case _UT('a'): /* ALPHA */
-					case _UT('A'):
-					case _UT('b'):
-					case _UT('B'):
-					case _UT('c'):
-					case _UT('C'):
-					case _UT('d'):
-					case _UT('D'):
-					case _UT('e'):
-					case _UT('E'):
-					case _UT('f'):
-					case _UT('F'):
-					case _UT('g'):
-					case _UT('G'):
-					case _UT('h'):
-					case _UT('H'):
-					case _UT('i'):
-					case _UT('I'):
-					case _UT('j'):
-					case _UT('J'):
-					case _UT('k'):
-					case _UT('K'):
-					case _UT('l'):
-					case _UT('L'):
-					case _UT('m'):
-					case _UT('M'):
-					case _UT('n'):
-					case _UT('N'):
-					case _UT('o'):
-					case _UT('O'):
-					case _UT('p'):
-					case _UT('P'):
-					case _UT('q'):
-					case _UT('Q'):
-					case _UT('r'):
-					case _UT('R'):
-					case _UT('s'):
-					case _UT('S'):
-					case _UT('t'):
-					case _UT('T'):
-					case _UT('u'):
-					case _UT('U'):
-					case _UT('v'):
-					case _UT('V'):
-					case _UT('w'):
-					case _UT('W'):
-					case _UT('x'):
-					case _UT('X'):
-					case _UT('y'):
-					case _UT('Y'):
-					case _UT('z'):
-					case _UT('Z'):
-					case _UT('0'): /* DIGIT */
-					case _UT('1'):
-					case _UT('2'):
-					case _UT('3'):
-					case _UT('4'):
-					case _UT('5'):
-					case _UT('6'):
-					case _UT('7'):
-					case _UT('8'):
-					case _UT('9'):
-					case _UT('-'): /* "-" / "." / "_" / "~" */
-					case _UT('.'):
-					case _UT('_'):
-					case _UT('~'):
+					if (URI_FUNC(IsUnreserved)(code)) {
 						return URI_TRUE;
-
-					default:
-						/* NOOP */
-						;
 					}
 				}
 			}
@@ -4801,7 +4816,156 @@ static URI_INLINE UriBool URI_FUNC(ContainsUglyPercentEncoding)(const URI_CHAR *
 
 
 
+static URI_INLINE void URI_FUNC(LowercaseInplace)(const URI_CHAR * first,
+		const URI_CHAR * afterLast) {
+	if ((first != NULL) && (afterLast != NULL) && (afterLast > first)) {
+		URI_CHAR * i = (URI_CHAR *)first;
+		const int lowerUpperDiff = (_UT('a') - _UT('A'));
+		for (; i < afterLast; i++) {
+			if ((*i >= _UT('A')) && (*i <=_UT('Z'))) {
+				*i = (URI_CHAR)(*i + lowerUpperDiff);
+			}
+		}
+	}
+}
+
+
+
+static URI_INLINE UriBool URI_FUNC(LowercaseMalloc)(const URI_CHAR ** first,
+		const URI_CHAR ** afterLast) {
+	int lenInChars;
+	const int lowerUpperDiff = (_UT('a') - _UT('A'));
+	URI_CHAR * buffer;
+	int i = 0;
+
+	if ((first == NULL) || (afterLast == NULL) || (*first == NULL)
+			|| (*afterLast == NULL)) {
+		return URI_FALSE;
+	}
+
+	lenInChars = (int)(*afterLast - *first);
+	if (lenInChars == 0) {
+		return URI_TRUE;
+	} else if (lenInChars < 0) {
+		return URI_FALSE;
+	}
+
+	buffer = malloc(lenInChars * sizeof(URI_CHAR));
+	if (buffer == NULL) {
+		return URI_FALSE;
+	}
+
+	for (; i < lenInChars; i++) {
+		if (((*first)[i] >= _UT('A')) && ((*first)[i] <=_UT('Z'))) {
+			buffer[i] = (URI_CHAR)((*first)[i] + lowerUpperDiff);
+		} else {
+			buffer[i] = (*first)[i];
+		}
+	}
+
+	*first = buffer;
+	*afterLast = buffer + lenInChars;
+	return URI_TRUE;
+}
+
+
+
+/* NOTE: Implementation must stay inplace-compatible */
+static URI_INLINE void URI_FUNC(FixPercentEncodingEngine)(
+		const URI_CHAR * inFirst, const URI_CHAR * inAfterLast,
+		const URI_CHAR * outFirst, const URI_CHAR ** outAfterLast) {
+	URI_CHAR * write = (URI_CHAR *)outFirst;
+	const int lenInChars = (int)(inAfterLast - inFirst);
+	int i = 0;
+
+	/* All but last two */
+	for (; i + 2 < lenInChars; i++) {
+		if (inFirst[i] != _UT('%')) {
+			write[0] = inFirst[i];
+			write++;
+		} else {
+			/* 6.2.2.2 Percent-Encoding Normalization: *
+			 * percent-encoded unreserved characters   */
+			const URI_CHAR one = inFirst[i + 1];
+			const URI_CHAR two = inFirst[i + 2];
+			const unsigned char left = URI_FUNC(HexdigToInt)(one);
+			const unsigned char right = URI_FUNC(HexdigToInt)(two);
+			const int code = 16 * left + right;
+			if (URI_FUNC(IsUnreserved)(code)) {
+				write[0] = (URI_CHAR)(code);
+				write++;
+			} else {
+				/* 6.2.2.1 Case Normalization: *
+				 * lowercase percent-encodings */
+				write[0] = _UT('%');
+				write[1] = URI_FUNC(HexToLetter)(left);
+				write[2] = URI_FUNC(HexToLetter)(right);
+				write += 3;
+			}
+
+			i += 2; /* For the two chars of the percent group we just ate */
+		}
+	}
+
+	/* Last two */
+	for (; i < lenInChars; i++) {
+		write[0] = inFirst[i];
+		write++;
+	}
+
+	*outAfterLast = write;
+}
+
+
+
+static URI_INLINE void URI_FUNC(FixPercentEncodingInplace)(const URI_CHAR * first,
+		const URI_CHAR ** afterLast) {
+	/* Death checks */
+	if ((first == NULL) || (afterLast == NULL) || (*afterLast == NULL)) {
+		return;
+	}
+
+	/* Fix inplace */
+	URI_FUNC(FixPercentEncodingEngine)(*first, *afterLast, *first, afterLast);
+}
+
+
+
+static URI_INLINE UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** first,
+		const URI_CHAR ** afterLast) {
+	int lenInChars;
+	URI_CHAR * buffer;
+
+	/* Death checks */
+	if ((first == NULL) || (afterLast == NULL) || (*first == NULL)
+		|| (*afterLast == NULL)) {
+		return URI_FALSE;
+	}
+
+	/* Old text length */
+	lenInChars = (int)(*afterLast - *first);
+	if (lenInChars == 0) {
+		return URI_TRUE;
+	} else if (lenInChars < 0) {
+		return URI_FALSE;
+	}
+
+	/* New buffer */
+	buffer = malloc(lenInChars * sizeof(URI_CHAR));
+	if (buffer == NULL) {
+		return URI_FALSE;
+	}
+
+	/* Fix on copy */
+	URI_FUNC(FixPercentEncodingEngine)(*first, *afterLast, buffer, afterLast);
+	*first = buffer;
+	return URI_TRUE;
+}
+
+
+
 static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsigned int inMask, unsigned int * outMask) {
+	unsigned int doneMask = URI_NORMALIZED;
 	if (uri == NULL) {
 		if (outMask != NULL) {
 			*outMask = URI_NORMALIZED;
@@ -4811,9 +4975,12 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 		}
 	}
 
-	/* Reset mask */
 	if (outMask != NULL) {
+		/* Reset mask */
 		*outMask = URI_NORMALIZED;
+	} else if (inMask == URI_NORMALIZED) {
+		/* Nothing to do */
+		return URI_SUCCESS;
 	}
 
 	/* Scheme, host */	
@@ -4830,7 +4997,32 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			*outMask |= URI_NORMALIZE_HOST;
 		}
 	} else {
-		/* TODO */
+		/* Scheme */
+		if ((inMask & URI_NORMALIZE_SCHEME) && (uri->scheme.first != NULL)) {
+			if (uri->owner) {
+				URI_FUNC(LowercaseInplace)(uri->scheme.first, uri->scheme.afterLast);
+			} else {
+				if (!URI_FUNC(LowercaseMalloc)(&(uri->scheme.first), &(uri->scheme.afterLast))) {
+					/* TODO fix uri object? */
+					return URI_ERROR_MALLOC;
+				}
+				doneMask |= URI_NORMALIZE_SCHEME;
+			}
+		}
+
+		/* TODO fix ipvFuture and stuff? */
+		/* Host */
+		if ((inMask & URI_NORMALIZE_HOST) && (uri->hostText.first != NULL)) {
+			if (uri->owner) {
+				URI_FUNC(LowercaseInplace)(uri->hostText.first, uri->hostText.afterLast);
+			} else {
+				if (!URI_FUNC(LowercaseMalloc)(&(uri->hostText.first), &(uri->hostText.afterLast))) {
+					/* TODO fix uri object? */
+					return URI_ERROR_MALLOC;
+				}
+				doneMask |= URI_NORMALIZE_HOST;
+			}
+		}
 	}
 
 	/* User info */
@@ -4841,7 +5033,18 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			*outMask |= URI_NORMALIZE_USER_INFO;
 		}
 	} else {
-		/* TODO */
+		if ((inMask & URI_NORMALIZE_USER_INFO) && (uri->userInfo.first != NULL)) {
+			if (uri->owner) {
+				URI_FUNC(FixPercentEncodingInplace)(uri->userInfo.first, &(uri->userInfo.afterLast));
+			} else {
+				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->userInfo.first),
+						&(uri->userInfo.afterLast))) {
+					/* TODO fix uri object? */
+					return URI_ERROR_MALLOC;
+				}
+				doneMask |= URI_NORMALIZE_USER_INFO;
+			}
+		}
 	}
 
 	/* Path */
@@ -4869,8 +5072,32 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			walker = walker->next;
 		}
 	} else {
+		const URI_TYPE(PathSegment) * walker;
+
 		/* 6.2.2.3 Path Segment Normalization */
-		/* TODO */
+		if (!URI_FUNC(RemoveDotSegments)(uri)) {
+			/* TODO fix uri object? */
+			return URI_ERROR_MALLOC;
+		}
+
+		/* Fix percent-encoding for each segment */
+		walker = uri->pathHead;
+		if (uri->owner) {
+			while (walker != NULL) {
+				URI_FUNC(FixPercentEncodingInplace)(walker->text.first, &(walker->text.afterLast));
+				walker = walker->next;
+			}
+		} else {
+			while (walker != NULL) {
+				if (!URI_FUNC(FixPercentEncodingMalloc)(&(walker->text.first),
+						&(walker->text.afterLast))) {
+					/* TODO fix uri object? */
+					return URI_ERROR_MALLOC;
+				}
+				walker = walker->next;
+			}
+			doneMask |= URI_NORMALIZE_PATH;
+		}
 	}
 
 	/* Query, fragment */
@@ -4887,9 +5114,37 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			*outMask |= URI_NORMALIZE_FRAGMENT;
 		}
 	} else {
-		/* TODO */
+		/* Query */
+		if ((inMask & URI_NORMALIZE_QUERY) && (uri->query.first != NULL)) {
+			if (uri->owner) {
+				URI_FUNC(FixPercentEncodingInplace)(uri->query.first, &(uri->query.afterLast));
+			} else {
+				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->query.first),
+						&(uri->query.afterLast))) {
+					/* TODO fix uri object? */
+					return URI_ERROR_MALLOC;
+				}
+				doneMask |= URI_NORMALIZE_QUERY;
+			}
+		}
+
+		/* Fragment */
+		if ((inMask & URI_NORMALIZE_FRAGMENT) && (uri->fragment.first != NULL)) {
+			if (uri->owner) {
+				URI_FUNC(FixPercentEncodingInplace)(uri->fragment.first, &(uri->fragment.afterLast));
+			} else {
+				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->fragment.first),
+						&(uri->fragment.afterLast))) {
+					/* TODO fix uri object? */
+					return URI_ERROR_MALLOC;
+				}
+				doneMask |= URI_NORMALIZE_FRAGMENT;
+			}
+		}
 	}
-	
+
+	/* TODO malloc/copy all but those in doneMask */
+
 	/* TODO */
 	return URI_SUCCESS;
 }

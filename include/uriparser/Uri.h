@@ -138,8 +138,10 @@ typedef struct URI_TYPE(UriStruct) {
 	URI_TYPE(TextRange) query; /**< Query without leading "?" */
 	URI_TYPE(TextRange) fragment; /**< Query without leading "#" */
 	UriBool absolutePath; /**< Absolute path flag, meaningless if %URI is absolute */
-
-	/* TODO reserved deep copy flag? */
+/* TODO */
+	UriBool owner; /**< Memory owner flag */
+	
+	void * reserved; /**< Reserved to the parser */
 } URI_TYPE(Uri);
 
 
