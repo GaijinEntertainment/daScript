@@ -189,10 +189,6 @@
 			Name="lib"
 			>
 			<File
-				RelativePath="..\..\lib\UriBase.c"
-				>
-			</File>
-			<File
 				RelativePath="..\..\lib\UriCommon.c"
 				>
 			</File>
@@ -230,6 +226,14 @@
 			</File>
 			<File
 				RelativePath="..\..\lib\UriParse.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriParseBase.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriParseBase.h"
 				>
 			</File>
 			<File

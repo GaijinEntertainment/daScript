@@ -7,6 +7,7 @@
       and convert line breaks
   * Added: Exact space computation for ToString, see ToStringCharsRequired
   * Added: Visual Studio 2005 project files
+  * Improved: Better code modularization
 
 2007-07-06 -- 0.4.1
 

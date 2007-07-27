@@ -67,6 +67,7 @@
 # include <uriparser/Uri.h>
 # include <uriparser/UriIp4.h>
 # include "UriCommon.h"
+# include "UriParseBase.h"
 #endif
 
 
