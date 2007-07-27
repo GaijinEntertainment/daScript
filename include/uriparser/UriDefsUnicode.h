@@ -74,7 +74,7 @@
 #define URI_STRNCMP wcsncmp
 
 #undef URI_SNPRINTF
-#if (defined(__WIN32__) || defined(WIN32))
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32))
 # define URI_SNPRINTF _snwprintf
 #else
 # define URI_SNPRINTF swprintf

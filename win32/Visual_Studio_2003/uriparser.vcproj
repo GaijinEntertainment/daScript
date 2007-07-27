@@ -98,14 +98,19 @@
 	</References>
 	<Files>
 		<Filter
-			Name="Source Files"
-			Filter="cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx"
-			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}">
+			Name="lib"
+			Filter="">
 			<File
-				RelativePath="..\..\lib\Uri.c">
+				RelativePath="..\..\lib\UriCommon.c">
 			</File>
 			<File
-				RelativePath="..\..\lib\UriBase.c">
+				RelativePath="..\..\lib\UriCommon.h">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriCompare.c">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriEscape.c">
 			</File>
 			<File
 				RelativePath="..\..\lib\UriIp4.c">
@@ -114,37 +119,64 @@
 				RelativePath="..\..\lib\UriIp4Base.c">
 			</File>
 			<File
+				RelativePath="..\..\lib\UriIp4Base.h">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriNormalize.c">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriNormalizeBase.c">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriNormalizeBase.h">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriParse.c">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriParseBase.c">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriParseBase.h">
+			</File>
+			<File
 				RelativePath="..\..\lib\uriparser.c">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriRecompose.c">
+			</File>
+			<File
+				RelativePath="..\..\lib\UriResolve.c">
 			</File>
 		</Filter>
 		<Filter
-			Name="Header Files"
-			Filter="h;hpp;hxx;hm;inl;inc;xsd"
-			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}">
-			<File
-				RelativePath="..\..\include\uriparser\Uri.h">
-			</File>
-			<File
-				RelativePath="..\..\include\uriparser\UriBase.h">
-			</File>
-			<File
-				RelativePath="..\..\include\uriparser\UriDefsAnsi.h">
-			</File>
-			<File
-				RelativePath="..\..\include\uriparser\UriDefsConfig.h">
-			</File>
-			<File
-				RelativePath="..\..\include\uriparser\UriDefsUnicode.h">
-			</File>
-			<File
-				RelativePath="..\..\include\uriparser\UriIp4.h">
-			</File>
-			<File
-				RelativePath="..\..\include\uriparser\UriIp4Base.h">
-			</File>
+			Name="include"
+			Filter="">
 			<File
 				RelativePath="..\..\include\uriparser.h">
 			</File>
+			<Filter
+				Name="uriparser"
+				Filter="">
+				<File
+					RelativePath="..\..\include\uriparser\Uri.h">
+				</File>
+				<File
+					RelativePath="..\..\include\uriparser\UriBase.h">
+				</File>
+				<File
+					RelativePath="..\..\include\uriparser\UriDefsAnsi.h">
+				</File>
+				<File
+					RelativePath="..\..\include\uriparser\UriDefsConfig.h">
+				</File>
+				<File
+					RelativePath="..\..\include\uriparser\UriDefsUnicode.h">
+				</File>
+				<File
+					RelativePath="..\..\include\uriparser\UriIp4.h">
+				</File>
+			</Filter>
 		</Filter>
 	</Files>
 	<Globals>
