@@ -1,12 +1,11 @@
 == BEFORE NEXT RELEASE ==
- * Merge cases lists to sets using the preprocessor
  * Prevent inlining for "less space" compile mode?
  * Fix vs2k5/c::b warnings
  * Test owner code
+ * Implement SubstractBase
 
 == SOON ==
  * More features:
-   * Implement SubstractBase
    * Pretty/smarter IPv6 stringification
  * Testing
    * Test Equals
