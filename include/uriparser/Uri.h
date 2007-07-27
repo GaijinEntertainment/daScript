@@ -138,7 +138,6 @@ typedef struct URI_TYPE(UriStruct) {
 	URI_TYPE(TextRange) query; /**< Query without leading "?" */
 	URI_TYPE(TextRange) fragment; /**< Query without leading "#" */
 	UriBool absolutePath; /**< Absolute path flag, meaningless if %URI is absolute */
-/* TODO */
 	UriBool owner; /**< Memory owner flag */
 	
 	void * reserved; /**< Reserved to the parser */
@@ -308,9 +307,40 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
 
 
 
-/* TODO write comments */
+/**
+ * Determines the components of a %URI that are not normalized.
+ *
+ * @param uri	%URI to check
+ * @return		Normalization job mask
+ */
 unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
+
+
+
+/**
+ * Normalizes a %URI using a normalization mask.
+ * The normalization mask decides what components are normalized.
+ *
+ * NOTE: If necessary the %URI becomes owner of all memory
+ * behind the text pointed to. Text is duplicated in that case.
+ *
+ * @param uri	%URI to normalize
+ * @param mask	Normalization mask
+ * @return		Error code or 0 on success
+ */
 int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
+
+
+
+/**
+ * Normalizes all components of a %URI.
+ *
+ * NOTE: If necessary the %URI becomes owner of all memory
+ * behind the text pointed to. Text is duplicated in that case.
+ *
+ * @param uri	%URI to normalize
+ * @return		Error code or 0 on success
+ */
 int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
 
 

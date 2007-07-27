@@ -3,7 +3,7 @@
  * Merge cases lists to sets using the preprocessor
  * Prevent inlining for "less space" compile mode?
  * Fix vs2k5 warnings
- * Finish owner thing
+ * Test owner code
 
 == SOON ==
  * More features:
@@ -14,7 +14,6 @@
  * Code TODOs
  * Add external documentation
  * Make hostText from hostData?
- * Take care of deep/shallow distinction
  * Add specific URI support (callbacks?)
 
 == LATER ==

@@ -17,8 +17,7 @@ include_uriparser_HEADERS = \
 	include/uriparser/UriDefsAnsi.h \
 	include/uriparser/UriDefsConfig.h \
 	include/uriparser/UriDefsUnicode.h \
-	include/uriparser/UriIp4.h \
-	include/uriparser/UriIp4Base.h
+	include/uriparser/UriIp4.h
 
 
 
@@ -32,10 +31,21 @@ include_HEADERS = \
 liburiparser_la_CFLAGS = -Iinclude
 
 liburiparser_la_SOURCES = \
-	lib/Uri.c \
-	lib/UriBase.c \
+	lib/UriCommon.c \
+	lib/UriCommon.h \
+	lib/UriCompare.c \
+	lib/UriEscape.c \
 	lib/UriIp4.c \
 	lib/UriIp4Base.c \
+	lib/UriIp4Base.h \
+	lib/UriNormalize.c \
+	lib/UriNormalizeBase.c \
+	lib/UriNormalizeBase.h \
+	lib/UriParse.c \
+	lib/UriParseBase.c \
+	lib/UriParseBase.h \
+	lib/UriRecompose.c \
+	lib/UriResolve.c \
 	lib/uriparser.c
 
 

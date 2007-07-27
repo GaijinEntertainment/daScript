@@ -1,4 +1,4 @@
-/*
+f/*
  * uriparser - RFC 3986 URI parsing library
  *
  * Copyright (C) 2007, Weijia Song <songweijia@gmail.com>
@@ -23,6 +23,8 @@
 #include <uriparser/Uri.h>
 #include "CppTest/cpptest.h"
 #include <memory>
+#include <stdio.h>
+#include <wchar.h>
 using namespace Test;
 using namespace std;
 

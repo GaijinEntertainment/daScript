@@ -90,6 +90,9 @@ static URI_INLINE UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 				}
 				return URI_FALSE; /* Raises malloc error */
 			}
+			
+			/* From this functions usage we know that *
+			 * the dest URI cannot be uri->owner      */
 			cur->text = sourceWalker->text;
 			if (destPrev == NULL) {
 				/* First segment ever */
@@ -111,7 +114,8 @@ static URI_INLINE UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 /* Copies the authority part of an URI over to another. */
 static URI_INLINE UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * source) {
-	/* TODO dest shallow or deep? */
+	/* From this functions usage we know that *
+	 * the dest URI cannot be uri->owner      */
 
 	/* Copy userInfo */
 	dest->userInfo = source->userInfo;
@@ -204,12 +208,7 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 	}
 	URI_FUNC(ResetUri)(absDest);
 
-	/*
-	TODO
-	absBase absolute
-
-	SHALLOW wherever possible!
-	*/
+	/* TODO check absBase absolute */
 
 	/* [01/32]	if defined(R.scheme) then */
 				if (relSource->scheme.first != NULL) {
