@@ -62,17 +62,21 @@
 			<Option link="0" />
 			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\include\uriparser\UriIp4Base.h">
+		<Unit filename="..\..\lib\UriCommon.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriCommon.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
 			<Option link="0" />
 			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\lib\Uri.c">
+		<Unit filename="..\..\lib\UriCompare.c">
 			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\lib\UriBase.c">
+		<Unit filename="..\..\lib\UriEscape.c">
 			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
@@ -81,6 +85,48 @@
 			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriIp4Base.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriIp4Base.h">
+			<Option compilerVar="CPP" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriNormalize.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriNormalizeBase.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriNormalizeBase.h">
+			<Option compilerVar="CPP" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriParse.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriParseBase.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriParseBase.h">
+			<Option compilerVar="CPP" />
+			<Option compile="0" />
+			<Option link="0" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriRecompose.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
+		<Unit filename="..\..\lib\UriResolve.c">
 			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
