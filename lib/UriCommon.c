@@ -64,11 +64,9 @@
 
 
 
-
 /* Used to point to from empty path segments.
  * X.first and X.afterLast must be the same non-NULL value then. */
 static const URI_CHAR URI_FUNC(SafeToPointTo) = _UT('X');
-
 
 
 

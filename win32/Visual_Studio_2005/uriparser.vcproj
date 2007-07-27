@@ -189,11 +189,23 @@
 			Name="lib"
 			>
 			<File
-				RelativePath="..\..\lib\Uri.c"
+				RelativePath="..\..\lib\UriBase.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriBase.c"
+				RelativePath="..\..\lib\UriCommon.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriCommon.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriCompare.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriEscape.c"
 				>
 			</File>
 			<File
@@ -205,7 +217,31 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\lib\UriNormalize.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriNormalizeBase.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriNormalizeBase.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriParse.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\lib\uriparser.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriRecompose.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\lib\UriResolve.c"
 				>
 			</File>
 		</Filter>

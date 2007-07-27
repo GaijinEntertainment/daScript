@@ -364,7 +364,7 @@ static URI_INLINE UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
 			&& (range->first != NULL)
 			&& (range->afterLast != NULL)
 			&& (range->afterLast > range->first)) {
-		const int lenInChars = range->afterLast - range->first;
+		const int lenInChars = (int)(range->afterLast - range->first);
 		const int lenInBytes = lenInChars * sizeof(URI_CHAR);
 		URI_CHAR * dup = malloc(lenInBytes);
 		if (dup == NULL) {
@@ -455,6 +455,8 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 	if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(uri->userInfo))) {
 		return URI_FALSE; /* Raises malloc error */
 	}
+
+	return URI_TRUE;
 }
 
 
