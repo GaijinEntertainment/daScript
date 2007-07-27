@@ -101,13 +101,13 @@
 	case _UT('f')
 
 #define URI_SET_HEXDIG \
-	URI_SET_DIGIT##: \
-	case URI_SET_HEX_LETTER_UPPER##: \
+	URI_SET_DIGIT: \
+	case URI_SET_HEX_LETTER_UPPER: \
 	case URI_SET_HEX_LETTER_LOWER
 
 #define URI_SET_ALPHA \
-	URI_SET_HEX_LETTER_UPPER##: \
-	case URI_SET_HEX_LETTER_LOWER##: \
+	URI_SET_HEX_LETTER_UPPER: \
+	case URI_SET_HEX_LETTER_LOWER: \
 	case _UT('g'): \
 	case _UT('G'): \
 	case _UT('h'): \

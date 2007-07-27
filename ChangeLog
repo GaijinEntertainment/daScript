@@ -8,6 +8,7 @@
   * Added: Exact space computation for ToString, see ToStringCharsRequired
   * Added: Visual Studio 2005 project files
   * Improved: Better code modularization
+  * Added: --enable-sizedown for saving space and slower code
 
 2007-07-06 -- 0.4.1
 
