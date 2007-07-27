@@ -206,9 +206,13 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 	if ((absDest == NULL) || (relSource == NULL) || (absBase == NULL)) {
 		return URI_ERROR_NULL;
 	}
-	URI_FUNC(ResetUri)(absDest);
 
-	/* TODO check absBase absolute */
+	/* absBase absolute? */
+	if (absBase->scheme.first == NULL) {
+		return URI_ERROR_ADDBASE_REL_BASE;
+	}
+
+	URI_FUNC(ResetUri)(absDest);
 
 	/* [01/32]	if defined(R.scheme) then */
 				if (relSource->scheme.first != NULL) {

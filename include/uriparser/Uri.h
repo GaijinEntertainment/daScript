@@ -163,10 +163,10 @@ typedef struct URI_TYPE(ParserStateStruct) {
 /**
  * Parses a RFC 3986 URI.
  *
- * @param state		Parser state with set output %URI, must not be NULL
- * @param first		Pointer to the first character to parse, must not be NULL
- * @param afterLast	Pointer to the character after the last to parse, must not be NULL
- * @return			0 on success, error code otherwise
+ * @param state       Parser state with set output %URI, must not be NULL
+ * @param first       Pointer to the first character to parse, must not be NULL
+ * @param afterLast   Pointer to the character after the last to parse, must not be NULL
+ * @return            0 on success, error code otherwise
  */
 int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -176,9 +176,9 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 /**
  * Parses a RFC 3986 %URI.
  *
- * @param state		Parser state with set output %URI, must not be NULL
- * @param text		Text to parse, must not be NULL
- * @return			0 on success, error code otherwise
+ * @param state   Parser state with set output %URI, must not be NULL
+ * @param text    Text to parse, must not be NULL
+ * @return        0 on success, error code otherwise
  */
 int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * text);
@@ -190,7 +190,7 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
  * of the %URI structure. Note that the structure
  * itself is not freed, only its members.
  *
- * @param uri	%URI structure whose members should be freed
+ * @param uri   %URI structure whose members should be freed
  */
 void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 
@@ -204,11 +204,11 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * the space for <c>normalizeBreaks == URI_FALSE</c>
  * (since e.g. "\x0d" becomes "%0D%0A" in that case)
  *
- * @param in				Text source
- * @param out				Encoded text destination
- * @param spaceToPlus		Wether to convert ' ' to '+' or not
- * @param normalizeBreaks	Wether to convert CR and LF to CR-LF or not.
- * @return					Position of terminator in output string
+ * @param in                Text source
+ * @param out               Encoded text destination
+ * @param spaceToPlus       Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks   Wether to convert CR and LF to CR-LF or not.
+ * @return                  Position of terminator in output string
  */
 const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
@@ -223,10 +223,10 @@ const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
  * length of the string. NULL is only returned if <code>inout</code>
  * is NULL.
  *
- * @param inout				Text to unescape/decode
- * @param plusToSpace		Whether to convert '+' to ' ' or not
- * @param breakConversion	Line break conversion mode
- * @return					Pointer to new position of the terminating zero
+ * @param inout             Text to unescape/decode
+ * @param plusToSpace       Whether to convert '+' to ' ' or not
+ * @param breakConversion   Line break conversion mode
+ * @return                  Pointer to new position of the terminating zero
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 		UriBool plusToSpace, UriBreakConversion breakConversion);
@@ -244,8 +244,8 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
  * NOTE: '+' is not decoded to ' ' and line breaks are not converted.
  * Use the more advanced UnescapeInPlaceEx for that features instead.
  *
- * @param inout			Text to unescape/decode
- * @return				Pointer to new position of the terminating zero
+ * @param inout   Text to unescape/decode
+ * @return        Pointer to new position of the terminating zero
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 
@@ -255,10 +255,10 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
  * Performs reference resolution as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
  *
- * @param absoluteDest		Result %URI
- * @param relativeSource	Reference to resolve
- * @param absoluteBase		Base %URI to apply
- * @return					Error code or 0 on success
+ * @param absoluteDest     Result %URI
+ * @param relativeSource   Reference to resolve
+ * @param absoluteBase     Base %URI to apply
+ * @return                 Error code or 0 on success
  */
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
@@ -271,9 +271,9 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
  * the naive way, without prior normalization.
  * NOTE: Two <code>NULL</code> URIs are equal as well.
  *
- * @param a		First %URI
- * @param b		Second %URI
- * @return		<code>URI_TRUE</code> when equal, <code>URI_FAlSE</code> else
+ * @param a   First %URI
+ * @param b   Second %URI
+ * @return    <code>URI_TRUE</code> when equal, <code>URI_FAlSE</code> else
  */
 UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
 
@@ -284,9 +284,9 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
  * string representation of the given %URI excluding the
  * terminator.
  *
- * @param uri				%URI to measure
- * @param charsRequired		Length of the string representation in characters <u>excluding</u> terminator
- * @return					Error code or 0 on success
+ * @param uri             %URI to measure
+ * @param charsRequired   Length of the string representation in characters <u>excluding</u> terminator
+ * @return                Error code or 0 on success
  */
 int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
 		int * charsRequired);
@@ -297,11 +297,11 @@ int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
  * Converts a %URI structure back to text as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.3">section 5.3 of RFC 3986</a>.
  *
- * @param dest			Output destination
- * @param uri			%URI to convert
- * @param maxChars		Maximum number of characters to copy <u>including</u> terminator
- * @param charsWritten	Number of characters written, can be lower than maxChars even if the %URI is too long!
- * @return				Error code or 0 on success
+ * @param dest           Output destination
+ * @param uri            %URI to convert
+ * @param maxChars       Maximum number of characters to copy <u>including</u> terminator
+ * @param charsWritten   Number of characters written, can be lower than maxChars even if the %URI is too long!
+ * @return               Error code or 0 on success
  */
 int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars, int * charsWritten);
 
@@ -310,8 +310,8 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
 /**
  * Determines the components of a %URI that are not normalized.
  *
- * @param uri	%URI to check
- * @return		Normalization job mask
+ * @param uri   %URI to check
+ * @return      Normalization job mask
  */
 unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
 
@@ -324,9 +324,9 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
  * NOTE: If necessary the %URI becomes owner of all memory
  * behind the text pointed to. Text is duplicated in that case.
  *
- * @param uri	%URI to normalize
- * @param mask	Normalization mask
- * @return		Error code or 0 on success
+ * @param uri    %URI to normalize
+ * @param mask   Normalization mask
+ * @return       Error code or 0 on success
  */
 int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
 
@@ -338,8 +338,8 @@ int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
  * NOTE: If necessary the %URI becomes owner of all memory
  * behind the text pointed to. Text is duplicated in that case.
  *
- * @param uri	%URI to normalize
- * @return		Error code or 0 on success
+ * @param uri   %URI to normalize
+ * @return      Error code or 0 on success
  */
 int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
 

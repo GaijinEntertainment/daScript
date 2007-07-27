@@ -114,6 +114,9 @@ typedef int UriBool;
 /* Errors specific to ToSting */
 #define URI_ERROR_TOSTRING_TOO_LONG  4 /* URI too long for target buffer */
 
+/* Errors specific to AddBaseUri */
+#define URI_ERROR_ADDBASE_REL_BASE   5 /* Given base is not absolute */
+
 
 
 #ifndef URI_DOXYGEN
