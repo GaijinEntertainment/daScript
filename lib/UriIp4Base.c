@@ -43,7 +43,7 @@
  */
 
 #ifndef URI_DOXYGEN
-# include <uriparser/UriIp4Base.h>
+# include "UriIp4Base.h"
 #endif
 
 

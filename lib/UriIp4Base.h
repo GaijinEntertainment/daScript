@@ -37,13 +37,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @file UriIp4Base.h
- * Holds definitions independent of the encoding pass.
- */
-
-#ifndef URI_IP4_INDEPENDENT_H
-#define URI_IP4_INDEPENDENT_H 1
+#ifndef URI_IP4_BASE_H
+#define URI_IP4_BASE_H 1
 
 
 
@@ -61,4 +56,4 @@ void uriStackToOctet(UriIp4Parser * parser, unsigned char * octet);
 
 
 
-#endif /* URI_IP4_INDEPENDENT_H */
+#endif /* URI_IP4_BASE_H */

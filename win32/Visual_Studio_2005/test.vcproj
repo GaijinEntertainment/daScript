@@ -207,10 +207,6 @@
 					RelativePath="..\..\include\uriparser\UriIp4.h"
 					>
 				</File>
-				<File
-					RelativePath="..\..\include\uriparser\UriIp4Base.h"
-					>
-				</File>
 			</Filter>
 		</Filter>
 		<Filter

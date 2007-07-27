@@ -70,12 +70,6 @@
 
 
 
-#ifndef URI_DOXYGEN
-# include "UriIp4Base.h"
-#endif
-
-
-
 int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
 
