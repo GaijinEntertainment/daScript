@@ -43,8 +43,8 @@
  * NOTE: This header includes itself twice.
  */
 
-#if (defined(URI_PASS_ANSI) && !defined(URI_TWICE_H_ANSI)) \
-	|| (defined(URI_PASS_UNICODE) && !defined(URI_TWICE_H_UNICODE)) \
+#if (defined(URI_PASS_ANSI) && !defined(URI_H_ANSI)) \
+	|| (defined(URI_PASS_UNICODE) && !defined(URI_H_UNICODE)) \
 	|| (!defined(URI_PASS_ANSI) && !defined(URI_PASS_UNICODE))
 /* What encodings are enabled? */
 #include "UriDefsConfig.h"
@@ -57,14 +57,14 @@
 # include "Uri.h"
 # undef URI_PASS_UNICODE
 /* Only one pass for each encoding */
-#elif (defined(URI_PASS_ANSI) && !defined(URI_TWICE_H_ANSI) \
+#elif (defined(URI_PASS_ANSI) && !defined(URI_H_ANSI) \
 	&& defined(URI_ENABLE_ANSI)) || (defined(URI_PASS_UNICODE) \
-	&& !defined(URI_TWICE_H_UNICODE) && defined(URI_ENABLE_UNICODE))
+	&& !defined(URI_H_UNICODE) && defined(URI_ENABLE_UNICODE))
 # ifdef URI_PASS_ANSI
-#  define URI_TWICE_H_ANSI 1
+#  define URI_H_ANSI 1
 #  include "UriDefsAnsi.h"
 # else
-#  define URI_TWICE_H_UNICODE 1
+#  define URI_H_UNICODE 1
 #  include "UriDefsUnicode.h"
 # endif
 

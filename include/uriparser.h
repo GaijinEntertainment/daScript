@@ -43,7 +43,7 @@
  */
 
 #ifndef URI_URIPARSER_H
-#define URI_URIPARSER_H
+#define URI_URIPARSER_H 1
 
 
 

@@ -1,8 +1,7 @@
 == BEFORE NEXT RELEASE ==
- * _Update file lists!_
  * Merge cases lists to sets using the preprocessor
  * Prevent inlining for "less space" compile mode?
- * Fix vs2k5 warnings
+ * Fix vs2k5/c::b warnings
  * Test owner code
 
 == SOON ==

@@ -42,8 +42,8 @@
  * Adjusts the internal configuration after processing external definitions.
  */
 
-#ifndef URI_CONFIG_H
-#define URI_CONFIG_H 1
+#ifndef URI_DEFS_CONFIG_H
+#define URI_DEFS_CONFIG_H 1
 
 
 
@@ -115,4 +115,4 @@
 
 
 
-#endif /* URI_CONFIG_H */
+#endif /* URI_DEFS_CONFIG_H */
