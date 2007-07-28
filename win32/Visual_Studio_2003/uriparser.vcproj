@@ -140,9 +140,6 @@
 				RelativePath="..\..\lib\UriParseBase.h">
 			</File>
 			<File
-				RelativePath="..\..\lib\uriparser.c">
-			</File>
-			<File
 				RelativePath="..\..\lib\UriRecompose.c">
 			</File>
 			<File

@@ -20,12 +20,6 @@
 			<Add option="-Wall" />
 			<Add directory="..\..\include" />
 		</Compiler>
-		<Unit filename="..\..\include\uriparser.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
 		<Unit filename="..\..\include\uriparser\Uri.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
@@ -127,10 +121,6 @@
 			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriResolve.c">
-			<Option compilerVar="CC" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\lib\uriparser.c">
 			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>

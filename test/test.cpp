@@ -19,7 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include <uriparser.h>
 #include <uriparser/Uri.h>
 #include "CppTest/cpptest.h"
 #include <memory>
@@ -66,8 +65,6 @@ public:
 		TEST_ADD(UriSuite::testUriHostIpSix1)
 		TEST_ADD(UriSuite::testUriHostIpSix2)
 		TEST_ADD(UriSuite::testUriHostIpFuture)
-		TEST_ADD(UriSuite::testLegacy1)
-		TEST_ADD(UriSuite::testLegacy2)
 		TEST_ADD(UriSuite::testUriComponents)
 		TEST_ADD(UriSuite::testUriComponentsBug20070701)
 		TEST_ADD(UriSuite::testEscaping)
@@ -528,40 +525,6 @@ private:
 
 	void testUriHostIpFuture() {
 		// TODO
-	}
-
-	void testLegacy1() {
-		URI uri;
-		TEST_ASSERT(0 == URIParseString(&uri, "http://user:pass@host:80/one/two?query#frag"));
-		TEST_ASSERT(uri.utype == URIURI);
-		TEST_ASSERT(uri.htype == RegName);
-		TEST_ASSERT(uri.ptype == PathAbEmpty);
-		TEST_ASSERT(uri.hasPort == 1);
-		TEST_ASSERT(!strcmp(uri.scheme, "http:"));
-		TEST_ASSERT(!strcmp(uri.userinfo, "user:pass"));
-		TEST_ASSERT(!strcmp(uri.host, "host"));
-		TEST_ASSERT(uri.port == 80);
-		TEST_ASSERT(!strcmp(uri.path, "/one/two"));
-		TEST_ASSERT(!strcmp(uri.query, "?query"));
-		TEST_ASSERT(!strcmp(uri.fragment, "#frag"));
-		URIFree(&uri);
-	}
-
-	void testLegacy2() {
-		URI uri;
-		TEST_ASSERT(0 == URIParseString(&uri, "//255.255.255.255/one"));
-		TEST_ASSERT(uri.utype == URIRelativeRef);
-		TEST_ASSERT(uri.htype == IPv4Address);
-		TEST_ASSERT(uri.ptype == PathAbEmpty);
-		TEST_ASSERT(uri.hasPort == 0);
-		TEST_ASSERT(!strcmp(uri.scheme, ""));
-		TEST_ASSERT(!strcmp(uri.userinfo, ""));
-		TEST_ASSERT(!strcmp(uri.host, "255.255.255.255"));
-
-		TEST_ASSERT(!strcmp(uri.path, "/one")); // Bug in 0.2.1: was "/"
-		TEST_ASSERT(!strcmp(uri.query, ""));
-		TEST_ASSERT(!strcmp(uri.fragment, ""));
-		URIFree(&uri);
 	}
 
 	bool testEscapingHelper(const wchar_t * in, const wchar_t * expectedOut,

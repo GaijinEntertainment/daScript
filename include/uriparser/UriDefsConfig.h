@@ -50,23 +50,17 @@
 /* Deny external overriding */
 #undef URI_ENABLE_ANSI      /* Internal for !URI_NO_ANSI */
 #undef URI_ENABLE_UNICODE   /* Internal for !URI_NO_UNICODE */
-#undef URI_ENABLE_LEGACY    /* Internal for !URI_NO_LEGACY */
 
 
 
 /* Encoding */
 #ifdef URI_NO_ANSI
-# ifndef URI_NO_LEGACY
-/* Deny legacy without ANSI */
-#  error URI_NO_ANSI cannot go without URI_NO_LEGACY.
-# else
-#  ifdef URI_NO_UNICODE
+# ifdef URI_NO_UNICODE
 /* No encoding at all */
-#   error URI_NO_ANSI and URI_NO_UNICODE cannot go together.
-#  else
+#  error URI_NO_ANSI and URI_NO_UNICODE cannot go together.
+# else
 /* Unicode only */
-#   define URI_ENABLE_UNICODE   1
-#  endif
+#  define URI_ENABLE_UNICODE   1
 # endif
 #else
 # ifdef URI_NO_UNICODE
@@ -77,13 +71,6 @@
 #  define URI_ENABLE_ANSI       1
 #  define URI_ENABLE_UNICODE    1
 # endif
-#endif
-
-
-
-/* Legacy */
-#ifndef URI_NO_LEGACY
-# define URI_ENABLE_LEGACY      1
 #endif
 
 

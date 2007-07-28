@@ -148,10 +148,6 @@
 		<Filter
 			Name="include"
 			>
-			<File
-				RelativePath="..\..\include\uriparser.h"
-				>
-			</File>
 			<Filter
 				Name="uriparser"
 				>
@@ -234,10 +230,6 @@
 			</File>
 			<File
 				RelativePath="..\..\lib\UriParseBase.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\lib\uriparser.c"
 				>
 			</File>
 			<File

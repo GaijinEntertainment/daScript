@@ -24,12 +24,6 @@
 			<Add library="..\liburiparser.a" />
 			<Add directory="..\" />
 		</Linker>
-		<Unit filename="..\..\include\uriparser.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
 		<Unit filename="..\..\include\uriparser\Uri.h">
 			<Option compilerVar="CPP" />
 			<Option compile="0" />
