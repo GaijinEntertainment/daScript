@@ -54,8 +54,8 @@
 
 /* Version */
 #define URI_VER_MAJOR           0
-#define URI_VER_MINOR           4
-#define URI_VER_RELEASE         1
+#define URI_VER_MINOR           5
+#define URI_VER_RELEASE         0
 #define URI_VER_SUFFIX_ANSI     ""
 #define URI_VER_SUFFIX_UNICODE  URI_ANSI_TO_UNICODE(URI_VER_SUFFIX_ANSI)
 
@@ -97,7 +97,7 @@
 
 
 
-typedef int UriBool;
+typedef int UriBool; /**< Boolean type */
 
 #define URI_TRUE     1
 #define URI_FALSE    0

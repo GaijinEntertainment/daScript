@@ -1,0 +1,22 @@
+## Process this file with automake to produce Makefile.in
+AUTOMAKE_OPTIONS = foreign dist-zip no-dist-gzip
+
+noinst_SCRIPTS = phony_html_doc
+
+phony_html_doc :
+	rm -f html/*.css
+	rm -f html/*.gif
+	rm -f html/*.html
+	rm -f html/*.png
+	rm -f html/*.map
+	rm -f html/*.md5
+	rm -f html/graph_legend.dot
+	doxygen Doxyfile
+
+EXTRA_DIST = \
+	Doxyfile \
+	\
+	html/*.css \
+	html/*.gif \
+	html/*.html \
+	html/*.png

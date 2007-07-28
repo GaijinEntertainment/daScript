@@ -199,8 +199,8 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 /**
  * Percent-encodes all unreserved characters from the input string and
  * writes the encoded version to the output string.
- * Be sure to allocate <u>3 times</u> the space of the input buffer for
- * the output buffer for <c>normalizeBreaks == URI_FALSE</c> and <u>6 times</u>
+ * Be sure to allocate <b>3 times</b> the space of the input buffer for
+ * the output buffer for <c>normalizeBreaks == URI_FALSE</c> and <b>6 times</b>
  * the space for <c>normalizeBreaks == URI_FALSE</c>
  * (since e.g. "\x0d" becomes "%0D%0A" in that case)
  *
@@ -285,7 +285,7 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
  * terminator.
  *
  * @param uri             %URI to measure
- * @param charsRequired   Length of the string representation in characters <u>excluding</u> terminator
+ * @param charsRequired   Length of the string representation in characters <b>excluding</b> terminator
  * @return                Error code or 0 on success
  */
 int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
@@ -299,7 +299,7 @@ int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
  *
  * @param dest           Output destination
  * @param uri            %URI to convert
- * @param maxChars       Maximum number of characters to copy <u>including</u> terminator
+ * @param maxChars       Maximum number of characters to copy <b>including</b> terminator
  * @param charsWritten   Number of characters written, can be lower than maxChars even if the %URI is too long!
  * @return               Error code or 0 on success
  */

@@ -1,15 +1,15 @@
-???
+2007-07-28 -- 0.5.0
 
-  * Improved: Malloc/NULL checks added (non-deprecated code only)
   * Added: Syntax-based normalization
   * Added: Percent-encoding function Escape
+  * Improved: Malloc/NULL checks added (non-deprecated code only)
   * Added: New function UnescapeInPlaceEx can also decode '+' to ' '
       and convert line breaks
   * Added: Exact space computation for ToString, see ToStringCharsRequired
-  * Added: Visual Studio 2005 project files
   * Added: --enable-sizedown for saving space and slower code
   * Fixed: Two internal functions were exposed in the API by mistake:
       uriPushToStack and uriStackToOctet
+  * Added: Visual Studio 2005 project files
   * Removed: Legacy code (removal was announced for 0.5.0)
 
 2007-07-06 -- 0.4.1
