@@ -21,13 +21,6 @@ include_uriparser_HEADERS = \
 
 
 
-includedir = $(prefix)/include
-
-include_HEADERS = \
-	include/uriparser.h
-
-
-
 liburiparser_la_CFLAGS = -Iinclude
 
 liburiparser_la_SOURCES = \
@@ -45,8 +38,7 @@ liburiparser_la_SOURCES = \
 	lib/UriParseBase.c \
 	lib/UriParseBase.h \
 	lib/UriRecompose.c \
-	lib/UriResolve.c \
-	lib/uriparser.c
+	lib/UriResolve.c
 
 
 
@@ -68,7 +60,15 @@ test_uriparser_test_SOURCES = \
 
 
 EXTRA_DIST = \
+	doc/aclocal.m4 \
+	doc/configure \
+	doc/configure.in \
 	doc/Doxyfile \
+	doc/install-sh \
+	doc/Makefile.am \
+	doc/Makefile.in \
+	doc/missing \
+	\
 	doc/rfc3513.htm \
 	doc/rfc3986.htm \
 	doc/rfc3986_grammar_only.txt \
@@ -102,3 +102,4 @@ EXTRA_DIST = \
 	win32/Visual_Studio_2005/test.vcproj \
 	win32/Visual_Studio_2005/uriparser.sln \
 	win32/Visual_Studio_2005/uriparser.vcproj
+
