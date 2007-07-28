@@ -107,7 +107,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
 					if (segment == NULL) {
 						if (uri->owner) {
-							free(walker->text.first);
+							free((URI_CHAR *)walker->text.first);
 						}
 						free(walker);
 						return URI_FALSE; /* Raises malloc error */
@@ -120,7 +120,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 				}
 
 				if (uri->owner) {
-					free(walker->text.first);
+					free((URI_CHAR *)walker->text.first);
 				}
 				free(walker);
 				walker = nextBackup;
@@ -155,12 +155,12 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 							URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
 							if (segment == NULL) {
 								if (uri->owner) {
-									free(walker->text.first);
+									free((URI_CHAR *)walker->text.first);
 								}
 								free(walker);
 
 								if (uri->owner) {
-									free(prev->text.first);
+									free((URI_CHAR *)prev->text.first);
 								}
 								free(prev);
 
@@ -174,12 +174,12 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						}
 
 						if (uri->owner) {
-							free(walker->text.first);
+							free((URI_CHAR *)walker->text.first);
 						}
 						free(walker);
 
 						if (uri->owner) {
-							free(prev->text.first);
+							free((URI_CHAR *)prev->text.first);
 						}
 						free(prev);
 
@@ -195,12 +195,12 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						}
 
 						if (uri->owner) {
-							free(walker->text.first);
+							free((URI_CHAR *)walker->text.first);
 						}
 						free(walker);
 
 						if (uri->owner) {
-							free(prev->text.first);
+							free((URI_CHAR *)prev->text.first);
 						}
 						free(prev);
 
@@ -218,7 +218,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					}
 
 					if (uri->owner) {
-						free(walker->text.first);
+						free((URI_CHAR *)walker->text.first);
 					}
 					free(walker);
 

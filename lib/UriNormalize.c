@@ -105,13 +105,13 @@ static void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 		unsigned int revertMask) {
 	if (revertMask & URI_NORMALIZE_SCHEME) {
-		free(uri->scheme.first);
+		free((URI_CHAR *)uri->scheme.first);
 		uri->scheme.first = NULL;
 		uri->scheme.afterLast = NULL;
 	}
 
 	if (revertMask & URI_NORMALIZE_USER_INFO) {
-		free(uri->userInfo.first);
+		free((URI_CHAR *)uri->userInfo.first);
 		uri->userInfo.first = NULL;
 		uri->userInfo.afterLast = NULL;
 	}
@@ -119,7 +119,7 @@ static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 	if (revertMask & URI_NORMALIZE_HOST) {
 		if (uri->hostData.ipFuture.first != NULL) {
 			/* IPvFuture */
-			free(uri->hostData.ipFuture.first);
+			free((URI_CHAR *)uri->hostData.ipFuture.first);
 			uri->hostData.ipFuture.first = NULL;
 			uri->hostData.ipFuture.afterLast = NULL;
 			uri->hostText.first = NULL;
@@ -128,7 +128,7 @@ static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 				&& (uri->hostData.ip4 == NULL)
 				&& (uri->hostData.ip6 == NULL)) {
 			/* Regname */
-			free(uri->hostText.first);
+			free((URI_CHAR *)uri->hostText.first);
 			uri->hostText.first = NULL;
 			uri->hostText.afterLast = NULL;
 		}
@@ -141,7 +141,7 @@ static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 		while (walker != NULL) {
 			URI_TYPE(PathSegment) * const next = walker->next;
 			if (walker->text.afterLast > walker->text.first) {
-				free(walker->text.first);
+				free((URI_CHAR *)walker->text.first);
 			}
 			free(walker);
 			walker = next;
@@ -151,13 +151,13 @@ static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 	}
 
 	if (revertMask & URI_NORMALIZE_QUERY) {
-		free(uri->query.first);
+		free((URI_CHAR *)uri->query.first);
 		uri->query.first = NULL;
 		uri->query.afterLast = NULL;
 	}
 
 	if (revertMask & URI_NORMALIZE_FRAGMENT) {
-		free(uri->fragment.first);
+		free((URI_CHAR *)uri->fragment.first);
 		uri->fragment.first = NULL;
 		uri->fragment.afterLast = NULL;
 	}
@@ -427,7 +427,7 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 					if ((ranger->text.first != NULL)
 							&& (ranger->text.afterLast != NULL)
 							&& (ranger->text.afterLast > ranger->text.first)) {
-						free(ranger->text.first);
+						free((URI_CHAR *)ranger->text.first);
 						free(ranger);
 					}
 					ranger = next;
@@ -500,7 +500,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 		return URI_SUCCESS;
 	}
 
-	/* Scheme, host */	
+	/* Scheme, host */
 	if (outMask != NULL) {
 		const UriBool normalizeScheme = URI_FUNC(ContainsUppercaseLetters)(
 				uri->scheme.first, uri->scheme.afterLast);
@@ -596,7 +596,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 					&& (afterLast > first)
 					&& (
 						(((afterLast - first) == 1)
-							&& (first[0] == _UT('.')))	
+							&& (first[0] == _UT('.')))
 						||
 						(((afterLast - first) == 2)
 							&& (first[0] == _UT('.'))

@@ -1,7 +1,10 @@
 == BEFORE NEXT RELEASE ==
+
+== REAL SOON ==
  * Fix vs2k5/c::b warnings
  * Test owner code
  * Implement SubstractBase
+ * Implement MakeBase (strips off last component, query and stuff)
 
 == SOON ==
  * Enable/disable single components?

@@ -1002,10 +1002,25 @@ private:
 			return false;
 		}
 
-		const unsigned int mask = uriNormalizeSyntaxMaskRequiredW(&uri);
+		const unsigned int maskBefore = uriNormalizeSyntaxMaskRequiredW(&uri);
+		if (maskBefore != expectedMask) {
+			uriFreeUriMembersW(&uri);
+			return false;
+		}
 
+		res = URI_FUNC(NormalizeSyntax)(&uri);
+		if (res != 0) {
+			uriFreeUriMembersW(&uri);
+			return false;
+		}
+
+		const unsigned int maskAfter = uriNormalizeSyntaxMaskRequiredW(&uri);
 		uriFreeUriMembersW(&uri);
-		return (mask == expectedMask);
+
+		// Second call should be no problem
+		uriFreeUriMembersW(&uri);
+
+		return (maskAfter == URI_NORMALIZED);
 	}
 
 	void testNormalizeSyntaxMaskRequired() {
