@@ -12,7 +12,7 @@ PROJECT_NAME = uriparser
 # The PROJECT_NAME tag is a single word (or a sequence of words surrounded by double-quotes) that should identify the project for which the documentation is generated. This name is used in the title of most generated pages and in a few other places.
 
 
-PROJECT_NUMBER = 0.4.1
+PROJECT_NUMBER = 0.5.0
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This could be handy for archiving the generated documentation or if some version control system is used.
 
 
@@ -277,7 +277,7 @@ WARN_FORMAT = "WARNING: $text ($line, $file)"
 ###############################################################
 
 
-INPUT = ../lib ../include
+INPUT = ../include
 # The INPUT tag is used to specify the files and/or directories that contain documented source files. You may enter file names like myfile.cpp or directories like /usr/src/myproject. Separate the files or directories with spaces.
 #
 # Note: If this tag is empty the current directory is searched.
