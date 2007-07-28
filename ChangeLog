@@ -10,6 +10,7 @@
   * Added: --enable-sizedown for saving space and slower code
   * Fixed: Two internal functions were exposed in the API by mistake:
       uriPushToStack and uriStackToOctet
+  * Removed: Legacy code (removal was announced for 0.5.0)
 
 2007-07-06 -- 0.4.1
 
