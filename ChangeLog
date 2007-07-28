@@ -2,7 +2,7 @@
 
   * Added: Syntax-based normalization
   * Added: Percent-encoding function Escape
-  * Improved: Malloc/NULL checks added (non-deprecated code only)
+  * Improved: Malloc/NULL checks added
   * Added: New function UnescapeInPlaceEx can also decode '+' to ' '
       and convert line breaks
   * Added: Exact space computation for ToString, see ToStringCharsRequired
