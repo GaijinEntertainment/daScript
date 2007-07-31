@@ -226,8 +226,10 @@ private:
 
 		// Relative
 		TEST_ASSERT(0 == uriParseUriA(&stateA, "one/two/three"));
+		TEST_ASSERT(!uriA.absolutePath);
 		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(0 == uriParseUriA(&stateA, "/one/two/three"));
+		TEST_ASSERT(uriA.absolutePath);
 		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(0 == uriParseUriA(&stateA, "//user:pass@localhost/one/two/three"));
 		uriFreeUriMembersA(&uriA);
@@ -248,8 +250,10 @@ private:
 		TEST_ASSERT(0 == uriParseUriA(&stateA, "../../"));
 		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(0 == uriParseUriA(&stateA, "/"));
+		TEST_ASSERT(uriA.absolutePath)
 		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(0 == uriParseUriA(&stateA, ""));
+		TEST_ASSERT(!uriA.absolutePath)
 		uriFreeUriMembersA(&uriA);
 		TEST_ASSERT(0 == uriParseUriA(&stateA, "file:///bin/bash"));
 		uriFreeUriMembersA(&uriA);
@@ -324,6 +328,8 @@ private:
 		TEST_ASSERT(uriA.query.afterLast == NULL);
 		TEST_ASSERT(uriA.fragment.first == NULL);
 		TEST_ASSERT(uriA.fragment.afterLast == NULL);
+
+		TEST_ASSERT(!uriA.absolutePath);
 		uriFreeUriMembersA(&uriA);
 	}
 
