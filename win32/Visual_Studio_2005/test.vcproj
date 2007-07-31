@@ -209,6 +209,14 @@
 			Name="test"
 			>
 			<File
+				RelativePath="..\..\test\FourSuite.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\test\FourSuite.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\test\test.cpp"
 				>
 			</File>

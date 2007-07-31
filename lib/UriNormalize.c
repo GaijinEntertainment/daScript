@@ -498,6 +498,9 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 	} else if (inMask == URI_NORMALIZED) {
 		/* Nothing to do */
 		return URI_SUCCESS;
+	} else if ((uri->scheme.first == NULL) && !uri->absolutePath) {
+		/* Normalization only fone for absolute paths */
+		return URI_SUCCESS;
 	}
 
 	/* Scheme, host */

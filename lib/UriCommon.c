@@ -90,39 +90,48 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 		switch (len) {
 		case 1:
 			if ((walker->text.first)[0] == _UT('.')) {
-				/* Path "." -> remove this segement */
+				/* Path "." -> remove this segment */
 				URI_TYPE(PathSegment) * const prev = walker->reserved;
 				URI_TYPE(PathSegment) * const nextBackup = walker->next;
-				if (prev != NULL) {
-					/* Not first segment */
-					prev->next = walker->next;
-				} else {
-					/* First segment -> update head pointer */
-					uri->pathHead = walker->next;
-				}
+				
+				/* Last segment? */
 				if (walker->next != NULL) {
+					/* Not last segment */
 					walker->next->reserved = prev;
+
+					if (prev == NULL) {
+						/* First but not last segment */
+						uri->pathHead = walker->next;
+					} else {
+						/* Middle segment */
+						prev->next = walker->next;
+					}
+
+					if (uri->owner) {
+						free((URI_CHAR *)walker->text.first);
+					}
+					free(walker);
 				} else {
-					/* Last segment -> insert "" segment to represent trailing slash, update tail */
-					URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
-					if (segment == NULL) {
+					/* Last segment */
+					if (prev == NULL) {
+						/* Last and first */
 						if (uri->owner) {
 							free((URI_CHAR *)walker->text.first);
 						}
 						free(walker);
-						return URI_FALSE; /* Raises malloc error */
+
+						uri->pathHead = NULL;
+						uri->pathTail = NULL;
+					} else {
+						/* Last but not first, replace "." with empty segment to represent trailing slash */
+						if (uri->owner) {
+							free((URI_CHAR *)walker->text.first);
+						}
+						walker->text.first = &URI_FUNC(SafeToPointTo);
+						walker->text.afterLast = &URI_FUNC(SafeToPointTo);
 					}
-					memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
-					segment->text.first = &URI_FUNC(SafeToPointTo);
-					segment->text.afterLast = &URI_FUNC(SafeToPointTo);
-					prev->next = segment;
-					uri->pathTail = segment;
 				}
 
-				if (uri->owner) {
-					free((URI_CHAR *)walker->text.first);
-				}
-				free(walker);
 				walker = nextBackup;
 			} else {
 				if (walker->next != NULL) {

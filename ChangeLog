@@ -1,3 +1,8 @@
+???
+
+  * Fixed: Bug with "." segments in AddBase
+      Revealed by a test case from 4Suite (http://4suite.org/)
+
 2007-07-28 -- 0.5.0
 
   * Added: Syntax-based normalization

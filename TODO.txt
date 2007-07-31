@@ -1,4 +1,6 @@
 == BEFORE NEXT RELEASE ==
+ * Fix remaing bugs for 4Suite
+ * Update file lists for 4Suite
 
 == REAL SOON ==
  * Fix vs2k5/c::b warnings

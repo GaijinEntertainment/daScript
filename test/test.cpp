@@ -21,6 +21,7 @@
 
 #include <uriparser/Uri.h>
 #include "CppTest/cpptest.h"
+#include "FourSuite.h"
 #include <memory>
 #include <stdio.h>
 #include <wchar.h>
@@ -531,7 +532,7 @@ private:
 			bool spaceToPlus = false, bool normalizeBreaks = false) {
 		wchar_t * const buffer = new wchar_t[(normalizeBreaks ? 6 : 3)
 				* wcslen(in) + 1];
-		if (URI_FUNC(Escape)(in, buffer, spaceToPlus, normalizeBreaks)
+		if (uriEscapeW(in, buffer, spaceToPlus, normalizeBreaks)
 			!= buffer + wcslen(expectedOut)) {
 			delete [] buffer;
 			return false;
@@ -971,7 +972,7 @@ private:
 			return false;
 		}
 
-		res = URI_FUNC(NormalizeSyntax)(&uri);
+		res = uriNormalizeSyntaxW(&uri);
 		if (res != 0) {
 			uriFreeUriMembersW(&uri);
 			return false;
@@ -1025,7 +1026,7 @@ private:
 			return false;
 		}
 
-		res = URI_FUNC(NormalizeSyntax)(&testUri);
+		res = uriNormalizeSyntaxW(&testUri);
 		if (res != 0) {
 			uriFreeUriMembersW(&testUri);
 			uriFreeUriMembersW(&expectedUri);
@@ -1051,6 +1052,7 @@ private:
 int main() {
 	Suite suite;
 	suite.add(auto_ptr<Suite>(new UriSuite()));
+	suite.add(auto_ptr<Suite>(new FourSuite()));
 	TextOutput output(TextOutput::Verbose);
 	return suite.run(output, false) ? 0 : 1;
 }
