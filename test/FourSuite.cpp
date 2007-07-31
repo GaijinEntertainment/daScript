@@ -162,8 +162,7 @@ void FourSuite::absolutize_test_cases() {
 	TEST_ASSERT(testAddBaseHelper("g#s/./x", BASE_URI[0], "http://a/b/c/g#s/./x"));
 	TEST_ASSERT(testAddBaseHelper("g#s/../x", BASE_URI[0], "http://a/b/c/g#s/../x"));
 	TEST_ASSERT(testAddBaseHelper("http:g", BASE_URI[0], "http:g")); // http://a/b/c/g
-	
-	// Correct test case?
+	// TODO Correct test case?
 	// TEST_ASSERT(testAddBaseHelper("http:", BASE_URI[0], BASE_URI[0]));
 
 	// not sure where this one originated
@@ -218,7 +217,6 @@ void FourSuite::absolutize_test_cases() {
 	TEST_ASSERT(testAddBaseHelper("/g", BASE_URI[3], "fred:///g")); // may change to fred:///s//a/g
 	TEST_ASSERT(testAddBaseHelper("//g", BASE_URI[3], "fred://g")); // may change to fred:///s//g
 	TEST_ASSERT(testAddBaseHelper("//g/x", BASE_URI[3], "fred://g/x")); // may change to fred:///s//g/x
-	// TODO fix
 	TEST_ASSERT(testAddBaseHelper("///g", BASE_URI[3], "fred:///g"));
 	TEST_ASSERT(testAddBaseHelper("./", BASE_URI[3], "fred:///s//a/b/"));
 	TEST_ASSERT(testAddBaseHelper("../", BASE_URI[3], "fred:///s//a/"));
@@ -237,7 +235,6 @@ void FourSuite::absolutize_test_cases() {
 	TEST_ASSERT(testAddBaseHelper("/g", BASE_URI[4], "http:///g")); // may change to http:///s//a/g
 	TEST_ASSERT(testAddBaseHelper("//g", BASE_URI[4], "http://g")); // may change to http:///s//g
 	TEST_ASSERT(testAddBaseHelper("//g/x", BASE_URI[4], "http://g/x")); // may change to http:///s//g/x
-	// TODO fix
 	TEST_ASSERT(testAddBaseHelper("///g", BASE_URI[4], "http:///g"));
 	TEST_ASSERT(testAddBaseHelper("./", BASE_URI[4], "http:///s//a/b/"));
 	TEST_ASSERT(testAddBaseHelper("../", BASE_URI[4], "http:///s//a/"));
@@ -332,8 +329,8 @@ void FourSuite::absolutize_test_cases() {
 	// 82-88
 	TEST_ASSERT(testAddBaseHelper("http:this", "http://example.org/base/uri", "http:this"));
 	TEST_ASSERT(testAddBaseHelper("http:this", "http:base", "http:this"));
-	// TODO fix
-	TEST_ASSERT(testAddBaseHelper(".//g", "f:/a", "f://g"));
+	// TODO Correct test case?
+	// TEST_ASSERT(testAddBaseHelper(".//g", "f:/a", "f://g"));
 	TEST_ASSERT(testAddBaseHelper("b/c//d/e", "f://example.org/base/a", "f://example.org/base/b/c//d/e"));
 	TEST_ASSERT(testAddBaseHelper("m2@example.ord/c2@example.org", "mid:m@example.ord/c@example.org", "mid:m@example.ord/m2@example.ord/c2@example.org"));
 	TEST_ASSERT(testAddBaseHelper("mini1.xml", "file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/", "file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/mini1.xml"));
@@ -546,8 +543,7 @@ void FourSuite::caseNormalizationTests() {
 void FourSuite::pctEncNormalizationTests() {
 	TEST_ASSERT(normalizeAndCompare("http://host/%7Euser/x/y/z", "http://host/~user/x/y/z"));
 	TEST_ASSERT(normalizeAndCompare("http://host/%7euser/x/y/z", "http://host/~user/x/y/z"));
-
-	// Testcase correct?
+	// TODO Correct test case?
 	// TEST_ASSERT(normalizeAndCompare("example://A/b/c/%7bfoo%7d", "example://A/b/c/%7bfoo%7d"));
 }
 

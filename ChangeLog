@@ -1,8 +1,10 @@
 ???
 
-  * Fixed: Bug with "." segments in AddBase
+  * Fixed: Empty host bug (URIs like "///g")
   * Fixed: Relative URIs are no longer touched by normalization
-      Both revealed by test cases from 4Suite (http://4suite.org/)
+  * Fixed: MergePath failed for empty paths
+  * Fixed: Bug with "." segments in AddBase
+      All of the above revealed by test cases from 4Suite (http://4suite.org/)
 
 2007-07-28 -- 0.5.0
 

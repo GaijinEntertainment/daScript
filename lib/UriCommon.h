@@ -64,6 +64,12 @@
 
 
 
+/* Used to point to from empty path segments.
+ * X.first and X.afterLast must be the same non-NULL value then. */
+extern const URI_CHAR URI_FUNC(SafeToPointTo);
+
+
+
 void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri);
 
 UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri);

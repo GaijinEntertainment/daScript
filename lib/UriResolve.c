@@ -162,14 +162,24 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 		const URI_TYPE(Uri) * relAppend) {
 	URI_TYPE(PathSegment) * sourceWalker;
 	URI_TYPE(PathSegment) * destPrev;
-	if ((absWork->pathHead == NULL) || (relAppend->pathHead == NULL)) {
-		return URI_FALSE;
+	if (relAppend->pathHead == NULL) {
+		return URI_TRUE;
 	}
 
 	/* Replace last segment ("" if trailing slash) with first of append chain */
+	if (absWork->pathHead == NULL) {
+		URI_TYPE(PathSegment) * const dup = malloc(sizeof(URI_TYPE(PathSegment)));
+		if (dup == NULL) {
+			return URI_FALSE; /* Raises malloc error */
+		}
+		dup->next = NULL;
+		absWork->pathHead = dup;
+		absWork->pathTail = dup;
+	}
 	absWork->pathTail->text.first = relAppend->pathHead->text.first;
 	absWork->pathTail->text.afterLast = relAppend->pathHead->text.afterLast;
 
+	/* Append all the others */
 	sourceWalker = relAppend->pathHead->next;
 	if (sourceWalker == NULL) {
 		return URI_TRUE;
