@@ -265,8 +265,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(ParserState
 
 	default:
 		/* "" regname host */
-		state->uri->hostText.first = URI_FUNC(SafeToPointTo);
-		state->uri->hostText.afterLast = URI_FUNC(SafeToPointTo);
+		state->uri->hostText.first = &URI_FUNC(SafeToPointTo);
+		state->uri->hostText.afterLast = &URI_FUNC(SafeToPointTo);
 		return first;
 	}
 }
@@ -2001,8 +2001,8 @@ static URI_INLINE UriBool URI_FUNC(PushPathSegment)(URI_TYPE(ParserState) * stat
 	}
 	memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
 	if (first == afterLast) {
-		segment->text.first = URI_FUNC(SafeToPointTo);
-		segment->text.afterLast = URI_FUNC(SafeToPointTo);
+		segment->text.first = &URI_FUNC(SafeToPointTo);
+		segment->text.afterLast = &URI_FUNC(SafeToPointTo);
 	} else {
 		segment->text.first = first;
 		segment->text.afterLast = afterLast;

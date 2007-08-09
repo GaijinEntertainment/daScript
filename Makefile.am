@@ -55,6 +55,9 @@ test_uriparser_test_SOURCES = \
 	test/CppTest/textoutput.cpp \
 	test/CppTest/time.cpp \
 	test/CppTest/utils.cpp \
+	\
+	test/FourSuite.cpp \
+	test/FourSuite.h \
 	test/test.cpp
 
 

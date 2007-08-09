@@ -319,7 +319,6 @@ void FourSuite::absolutize_test_cases() {
 	TEST_ASSERT(testAddBaseHelper("local2@domain2?query2", "mailto:local1@domain1", "mailto:local2@domain2?query2"));
 	TEST_ASSERT(testAddBaseHelper("local2@domain2?query2", "mailto:local1@domain1?query1", "mailto:local2@domain2?query2"));
 	TEST_ASSERT(testAddBaseHelper("?query2", "mailto:local@domain?query1", "mailto:local@domain?query2"));
-	// TODO fix
 	TEST_ASSERT(testAddBaseHelper("local@domain?query2", "mailto:?query1", "mailto:local@domain?query2"));
 	TEST_ASSERT(testAddBaseHelper("?query2", "mailto:local@domain?query1", "mailto:local@domain?query2"));
 	TEST_ASSERT(testAddBaseHelper("http://example/a/b?c/../d", "foo:bar", "http://example/a/b?c/../d"));
@@ -328,7 +327,7 @@ void FourSuite::absolutize_test_cases() {
 	// 82-88
 	TEST_ASSERT(testAddBaseHelper("http:this", "http://example.org/base/uri", "http:this"));
 	TEST_ASSERT(testAddBaseHelper("http:this", "http:base", "http:this"));
-	// TODO Correct test case?
+	// TODO Whole in the URI spec, see http://lists.w3.org/Archives/Public/uri/2007Aug/0003.html
 	// TEST_ASSERT(testAddBaseHelper(".//g", "f:/a", "f://g"));
 	TEST_ASSERT(testAddBaseHelper("b/c//d/e", "f://example.org/base/a", "f://example.org/base/b/c//d/e"));
 	TEST_ASSERT(testAddBaseHelper("m2@example.ord/c2@example.org", "mid:m@example.ord/c@example.org", "mid:m@example.ord/m2@example.ord/c2@example.org"));
