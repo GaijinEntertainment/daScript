@@ -162,8 +162,7 @@ void FourSuite::absolutize_test_cases() {
 	TEST_ASSERT(testAddBaseHelper("g#s/./x", BASE_URI[0], "http://a/b/c/g#s/./x"));
 	TEST_ASSERT(testAddBaseHelper("g#s/../x", BASE_URI[0], "http://a/b/c/g#s/../x"));
 	TEST_ASSERT(testAddBaseHelper("http:g", BASE_URI[0], "http:g")); // http://a/b/c/g
-	// TODO Correct test case?
-	// TEST_ASSERT(testAddBaseHelper("http:", BASE_URI[0], BASE_URI[0]));
+	TEST_ASSERT(testAddBaseHelper("http:", BASE_URI[0], "http:")); // BASE_URI[0]
 
 	// not sure where this one originated
 	TEST_ASSERT(testAddBaseHelper("/a/b/c/./../../g", BASE_URI[0], "http://a/a/g"));
@@ -543,8 +542,6 @@ void FourSuite::caseNormalizationTests() {
 void FourSuite::pctEncNormalizationTests() {
 	TEST_ASSERT(normalizeAndCompare("http://host/%7Euser/x/y/z", "http://host/~user/x/y/z"));
 	TEST_ASSERT(normalizeAndCompare("http://host/%7euser/x/y/z", "http://host/~user/x/y/z"));
-	// TODO Correct test case?
-	// TEST_ASSERT(normalizeAndCompare("example://A/b/c/%7bfoo%7d", "example://A/b/c/%7bfoo%7d"));
 }
 
 
