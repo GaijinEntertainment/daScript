@@ -909,6 +909,9 @@ private:
 		TEST_ASSERT(testToStringHelper(L"?query"));
 		TEST_ASSERT(testToStringHelper(L"#fragment"));
 		TEST_ASSERT(testToStringHelper(L"?query#fragment"));
+
+		// Tests for bugs from the past
+		TEST_ASSERT(testToStringHelper(L"f:/.//g"));
 	}
 
 	bool testToStringCharsRequiredHelper(wchar_t * text) {

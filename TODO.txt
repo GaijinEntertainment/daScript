@@ -1,4 +1,5 @@
 == BEFORE NEXT RELEASE ==
+ * Fix both bugs with "f:/.//g"
 
 == REAL SOON ==
  * Fix vs2k5/c::b warnings

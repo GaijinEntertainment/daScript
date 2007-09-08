@@ -116,7 +116,7 @@ void FourSuite::absolutize_test_cases() {
 	TEST_ASSERT(testAddBaseHelper("g/", BASE_URI[0], "http://a/b/c/g/"));
 	TEST_ASSERT(testAddBaseHelper("/g", BASE_URI[0], "http://a/g"));
 	TEST_ASSERT(testAddBaseHelper("//g", BASE_URI[0], "http://g"));
-	
+
 	// changed with RFC 2396bis
 	TEST_ASSERT(testAddBaseHelper("?y", BASE_URI[0], "http://a/b/c/d;p?y"));
 	TEST_ASSERT(testAddBaseHelper("g?y", BASE_URI[0], "http://a/b/c/g?y"));
@@ -328,7 +328,8 @@ void FourSuite::absolutize_test_cases() {
 	TEST_ASSERT(testAddBaseHelper("http:this", "http://example.org/base/uri", "http:this"));
 	TEST_ASSERT(testAddBaseHelper("http:this", "http:base", "http:this"));
 	// TODO Whole in the URI spec, see http://lists.w3.org/Archives/Public/uri/2007Aug/0003.html
-	// TEST_ASSERT(testAddBaseHelper(".//g", "f:/a", "f://g"));
+	// TEST_ASSERT(testAddBaseHelper(".//g", "f:/a", "f://g")); // ORIGINAL
+	TEST_ASSERT(testAddBaseHelper(".//g", "f:/a", "f:/.//g")); // FIXED ONE
 	TEST_ASSERT(testAddBaseHelper("b/c//d/e", "f://example.org/base/a", "f://example.org/base/b/c//d/e"));
 	TEST_ASSERT(testAddBaseHelper("m2@example.ord/c2@example.org", "mid:m@example.ord/c@example.org", "mid:m@example.ord/m2@example.ord/c2@example.org"));
 	TEST_ASSERT(testAddBaseHelper("mini1.xml", "file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/", "file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/mini1.xml"));
