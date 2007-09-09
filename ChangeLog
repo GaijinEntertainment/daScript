@@ -1,6 +1,7 @@
 ???
 
   * Added: Unix/Windows filename <-> URI string conversion helpers
+  * Added: EscapeEx to escape text blocks without zero termination
   * Fixed: Bug in ToString for URIs with scheme, path, but no host (e.g. "f:/.//g")
   * Fixed: AddBase now resolves ".//g" with base "f:/a" to "f:/.//g" instead of
       "f://g" which would result in "g" becoming the authority part when parsing

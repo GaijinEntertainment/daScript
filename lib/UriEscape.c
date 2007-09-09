@@ -66,12 +66,20 @@
 
 const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks) {
-	const URI_CHAR * read = in;
+	return URI_FUNC(EscapeEx)(in, NULL, out, spaceToPlus, normalizeBreaks);
+}
+
+
+
+const URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
+		const URI_CHAR * inAfterLast, URI_CHAR * out,
+		UriBool spaceToPlus, UriBool normalizeBreaks) {
+	const URI_CHAR * read = inFirst;
 	URI_CHAR * write = out;
 	UriBool prevWasCr = URI_FALSE;
-	if ((out == NULL) || (in == out)) {
+	if ((out == NULL) || (inFirst == out)) {
 		return NULL;
-	} else if (in == NULL) {
+	} else if (inFirst == NULL) {
 		if (out != NULL) {
 			out[0] = _UT('\0');
 		}
@@ -79,6 +87,11 @@ const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 	}
 
 	for (;;) {
+		if ((inAfterLast != NULL) && (read >= inAfterLast)) {
+			write[0] = _UT('\0');
+			return write;
+		}
+
 		switch (read[0]) {
 		case _UT('\0'):
 			write[0] = _UT('\0');

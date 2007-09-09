@@ -1,5 +1,4 @@
 == BEFORE NEXT RELEASE ==
- * Test all 4 filename functions
 
 == REAL SOON ==
  * Fix vs2k5/c::b warnings

@@ -204,6 +204,27 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * the space for <c>normalizeBreaks == URI_FALSE</c>
  * (since e.g. "\x0d" becomes "%0D%0A" in that case)
  *
+ * @param inFirst           Pointer to first character of the input text
+ * @param inAfterLast       Pointer after the last character of the input text
+ * @param out               Encoded text destination
+ * @param spaceToPlus       Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks   Wether to convert CR and LF to CR-LF or not.
+ * @return                  Position of terminator in output string
+ */
+const URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
+		const URI_CHAR * inAfterLast, URI_CHAR * out,
+		UriBool spaceToPlus, UriBool normalizeBreaks);
+
+
+
+/**
+ * Percent-encodes all unreserved characters from the input string and
+ * writes the encoded version to the output string.
+ * Be sure to allocate <b>3 times</b> the space of the input buffer for
+ * the output buffer for <c>normalizeBreaks == URI_FALSE</c> and <b>6 times</b>
+ * the space for <c>normalizeBreaks == URI_FALSE</c>
+ * (since e.g. "\x0d" becomes "%0D%0A" in that case)
+ *
  * @param in                Text source
  * @param out               Encoded text destination
  * @param spaceToPlus       Wether to convert ' ' to '+' or not
@@ -346,9 +367,9 @@ int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
 
 
 /**
- * Converts a Unix filename to a %URI string.
- * The destination buffer must be large enough to
- * hold 7 + 3 * len(filename) + 1 characters.
+ * Converts an absolute Unix filename to a %URI string.
+ * The destination buffer must be large enough to hold
+ * 7 + 3 * len(filename) + 1 characters.
  *
  * EXAMPLE
  *   Input:  "/bin/bash"
@@ -364,9 +385,9 @@ int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
 
 
 /**
- * Converts a Windows filename to a %URI string.
- * The destination buffer must be large enough to
- * hold 8 + 3 * len(filename) + 1 characters.
+ * Converts an absolute Windows filename to a %URI string.
+ * The destination buffer must be large enough to hold
+ * 8 + 3 * len(filename) + 1 characters.
  *
  * EXAMPLE
  *   Input:  "E:\\Documents and Settings"
@@ -382,9 +403,9 @@ int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
 
 
 /**
- * Extracts the Unix filename from a %URI string.
- * The destination buffer must be large enough to
- * hold len(uriString) + 1 - 7 characters.
+ * Extracts an absolute Unix filename from a %URI string.
+ * The destination buffer must be large enough to hold
+ * len(uriString) + 1 - 7 characters.
  *
  * @param uriString    %URI string to convert
  * @param filename     Destination to write filename to
@@ -396,9 +417,9 @@ int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
 
 
 /**
- * Extracts the Windows filename from a %URI string.
- * The destination buffer must be large enough to
- * hold len(uriString) + 1 - 8 characters.
+ * Extracts an absolute Windows filename from a %URI string.
+ * The destination buffer must be large enough to hold
+ * len(uriString) + 1 - 8 characters.
  *
  * @param uriString    %URI string to convert
  * @param filename     Destination to write filename to

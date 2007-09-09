@@ -77,6 +77,7 @@ public:
 		TEST_ADD(UriSuite::testToStringCharsRequired)
 		TEST_ADD(UriSuite::testNormalizeSyntaxMaskRequired)
 		TEST_ADD(UriSuite::testNormalizeSyntax)
+		TEST_ADD(UriSuite::testFilenameUriConversion)
 	}
 
 private:
@@ -1051,6 +1052,40 @@ private:
 		TEST_ASSERT(testNormalizeSyntaxHelper(
 				L"eXAMPLE://a/./b/../b/%63/%7bfoo%7d",
 				L"example://a/b/c/%7Bfoo%7D"));
+	}
+
+	void testFilenameUriConversionHelper(const wchar_t * filename,
+			const wchar_t * uriString, bool unix) {
+		const int prefixLen = unix ? 7 : 8;
+
+		// Filename to URI string
+		const int uriBufferLen = prefixLen + 3 * wcslen(filename) + 1;
+		wchar_t * uriBuffer = new wchar_t[uriBufferLen];
+		if (unix) {
+			uriUnixFilenameToUriStringW(filename, uriBuffer);
+		} else {
+			uriWindowsFilenameToUriStringW(filename, uriBuffer);
+		}
+		TEST_ASSERT(!wcscmp(uriBuffer, uriString));
+		delete [] uriBuffer;
+
+		// URI string to filename
+		const int filenameBufferLen = wcslen(uriString) + 1 - prefixLen;
+		wchar_t * filenameBuffer = new wchar_t[filenameBufferLen];
+		if (unix) {
+			uriUriStringToUnixFilenameW(uriString, filenameBuffer);
+		} else {
+			uriUriStringToWindowsFilenameW(uriString, filenameBuffer);
+		}
+		TEST_ASSERT(!wcscmp(filenameBuffer, filename));
+		delete [] filenameBuffer;
+	}
+
+	void testFilenameUriConversion() {
+		const bool UNIX = true;
+		const bool WINDOWS = false;
+		testFilenameUriConversionHelper(L"/bin/bash", L"file:///bin/bash", UNIX);
+		testFilenameUriConversionHelper(L"E:\\Documents and Settings", L"file:///E:/Documents%20and%20Settings", WINDOWS);
 	}
 
 };
