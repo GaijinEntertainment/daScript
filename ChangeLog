@@ -1,6 +1,10 @@
 ???
 
   * Fixed: Bug in ToString for URIs with scheme, path, but no host (e.g. "f:/.//g")
+  * Fixed: AddBase now resolves ".//g" with base "f:/a" to "f:/.//g" instead of
+      "f://g" which would result in "g" becoming the authority part when parsing
+      a recomposition (ToString) of that URI structure. This is a whole in RFC 3986,
+      see http://lists.w3.org/Archives/Public/uri/2007Aug/0003.html for details.
 
 2007-08-09 -- 0.5.1
 

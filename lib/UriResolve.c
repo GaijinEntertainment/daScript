@@ -67,6 +67,11 @@
 static UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest, const URI_TYPE(Uri) * source);
 static UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest, const URI_TYPE(Uri) * source);
 static UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork, const URI_TYPE(Uri) * relAppend);
+static UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri);
+
+
+
+static const URI_CHAR * const URI_FUNC(ConstDot) = _UT(".");
 
 
 
@@ -106,6 +111,8 @@ static URI_INLINE UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 		dest->pathTail = destPrev;
 		dest->pathTail->next = NULL;
 	}
+
+	dest->absolutePath = source->absolutePath;
 	return URI_TRUE;
 }
 
@@ -210,6 +217,30 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 
 
 
+UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri) {
+	URI_TYPE(PathSegment) * segment;
+
+	if ((!uri->absolutePath)
+			|| (uri->pathHead == NULL)
+			|| (uri->pathHead->text.afterLast != uri->pathHead->text.first)) {
+		return;
+	}
+
+	/* Insert "." segment in front */
+	segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+	if (segment == NULL) {
+		return URI_FALSE; /* Raises malloc error */
+	}
+	segment->next = uri->pathHead;
+	segment->text.first = URI_FUNC(ConstDot);
+	segment->text.afterLast = URI_FUNC(ConstDot) + 1;
+	uri->pathHead = segment;
+
+	return URI_TRUE;
+}
+
+
+
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource,
 		const URI_TYPE(Uri) * absBase) {
@@ -298,6 +329,10 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 								}
 	/* [24/32]					T.path = remove_dot_segments(T.path); */
 								if (!URI_FUNC(RemoveDotSegments)(absDest)) {
+									return URI_ERROR_MALLOC;
+								}
+
+								if (!URI_FUNC(FixAmbiguity)(absDest)) {
 									return URI_ERROR_MALLOC;
 								}
 	/* [25/32]				endif; */

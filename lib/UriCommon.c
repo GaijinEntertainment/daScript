@@ -64,7 +64,7 @@
 
 
 
-/*extern*/ const URI_CHAR URI_FUNC(SafeToPointTo) = _UT('X');
+/*extern*/ const URI_CHAR * const URI_FUNC(SafeToPointTo) = _UT("X");
 
 
 
@@ -125,8 +125,8 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						if (uri->owner) {
 							free((URI_CHAR *)walker->text.first);
 						}
-						walker->text.first = &URI_FUNC(SafeToPointTo);
-						walker->text.afterLast = &URI_FUNC(SafeToPointTo);
+						walker->text.first = URI_FUNC(SafeToPointTo);
+						walker->text.afterLast = URI_FUNC(SafeToPointTo);
 					}
 				}
 
@@ -174,8 +174,8 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 								return URI_FALSE; /* Raises malloc error */
 							}
 							memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
-							segment->text.first = &URI_FUNC(SafeToPointTo);
-							segment->text.afterLast = &URI_FUNC(SafeToPointTo);
+							segment->text.first = URI_FUNC(SafeToPointTo);
+							segment->text.afterLast = URI_FUNC(SafeToPointTo);
 							prevPrev->next = segment;
 							uri->pathTail = segment;
 						}
