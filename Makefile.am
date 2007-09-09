@@ -28,6 +28,7 @@ liburiparser_la_SOURCES = \
 	lib/UriCommon.h \
 	lib/UriCompare.c \
 	lib/UriEscape.c \
+	lib/UriFile.c \
 	lib/UriIp4.c \
 	lib/UriIp4Base.c \
 	lib/UriIp4Base.h \

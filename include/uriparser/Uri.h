@@ -345,6 +345,70 @@ int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
 
 
 
+/**
+ * Converts a Unix filename to a %URI string.
+ * The destination buffer must be large enough to
+ * hold 7 + 3 * len(filename) + 1 characters.
+ *
+ * EXAMPLE
+ *   Input:  "/bin/bash"
+ *   Output: "file:///bin/bash"
+ *
+ * @param filename     Unix filename to convert
+ * @param uriString    Destination to write %URI string to
+ * @return             Error code or 0 on success
+ */
+int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
+		URI_CHAR * uriString);
+
+
+
+/**
+ * Converts a Windows filename to a %URI string.
+ * The destination buffer must be large enough to
+ * hold 8 + 3 * len(filename) + 1 characters.
+ *
+ * EXAMPLE
+ *   Input:  "E:\\Documents and Settings"
+ *   Output: "file:///E:/Documents%20and%20Settings"
+ *
+ * @param filename     Windows filename to convert
+ * @param uriString    Destination to write %URI string to
+ * @return             Error code or 0 on success
+ */
+int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
+		URI_CHAR * uriString);
+
+
+
+/**
+ * Extracts the Unix filename from a %URI string.
+ * The destination buffer must be large enough to
+ * hold len(uriString) + 1 - 7 characters.
+ *
+ * @param uriString    %URI string to convert
+ * @param filename     Destination to write filename to
+ * @return             Error code or 0 on success
+ */
+int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
+		URI_CHAR * filename);
+
+
+
+/**
+ * Extracts the Windows filename from a %URI string.
+ * The destination buffer must be large enough to
+ * hold len(uriString) + 1 - 8 characters.
+ *
+ * @param uriString    %URI string to convert
+ * @param filename     Destination to write filename to
+ * @return             Error code or 0 on success
+ */
+int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
+		URI_CHAR * filename);
+
+
+
 #ifdef __cplusplus
 }
 #endif

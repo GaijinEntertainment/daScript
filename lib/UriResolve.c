@@ -217,13 +217,13 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 
 
 
-UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri) {
+static URI_INLINE UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri) {
 	URI_TYPE(PathSegment) * segment;
 
 	if ((!uri->absolutePath)
 			|| (uri->pathHead == NULL)
 			|| (uri->pathHead->text.afterLast != uri->pathHead->text.first)) {
-		return;
+		return URI_TRUE;
 	}
 
 	/* Insert "." segment in front */

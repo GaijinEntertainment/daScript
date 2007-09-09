@@ -113,6 +113,9 @@
 				RelativePath="..\..\lib\UriEscape.c">
 			</File>
 			<File
+				RelativePath="..\..\lib\UriFile.c">
+			</File>
+			<File
 				RelativePath="..\..\lib\UriIp4.c">
 			</File>
 			<File

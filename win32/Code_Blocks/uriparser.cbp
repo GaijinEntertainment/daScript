@@ -74,6 +74,10 @@
 			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
+		<Unit filename="..\..\lib\UriFile.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
 		<Unit filename="..\..\lib\UriIp4.c">
 			<Option compilerVar="CC" />
 			<Option target="default" />
