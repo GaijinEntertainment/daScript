@@ -421,7 +421,7 @@ static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest,
 	/* [09/19]	endif; */
 				}
 	/* [10/19]	append path to result; */
-				if ((uri->scheme.first == NULL) && uri->absolutePath) {
+				if (uri->absolutePath && ((uri->scheme.first == NULL) || !URI_FUNC(IsHostSet)(uri))) {
 					if (dest != NULL) {
 						if (written + 1 <= maxChars) {
 								memcpy(dest + written, _UT("/"),
