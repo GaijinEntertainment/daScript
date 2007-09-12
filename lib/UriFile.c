@@ -79,11 +79,11 @@ static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 	/* Copy and escape on the fly */
 	for (;;) {
 		if ((input[0] == _UT('\0'))
-				|| (unix && input[0] == _UT('/'))
-				|| (!unix && input[0] == _UT('\\'))) {
+				|| (fromUnix && input[0] == _UT('/'))
+				|| (!fromUnix && input[0] == _UT('\\'))) {
 			/* Copy text after last seperator */
 			if (lastSep + 1 < input) {
-				if (!unix && (firstSegment == URI_TRUE)) {
+				if (!fromUnix && (firstSegment == URI_TRUE)) {
 					/* Quick hack to not convert "C:" to "C%3A" */
 					const int charsToCopy = (int)(input - (lastSep + 1));
 					memcpy(output, lastSep + 1, charsToCopy * sizeof(URI_CHAR));
@@ -99,12 +99,12 @@ static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 		if (input[0] == _UT('\0')) {
 			output[0] = _UT('\0');
 			break;
-		} else if (unix && (input[0] == _UT('/'))) {
+		} else if (fromUnix && (input[0] == _UT('/'))) {
 			/* Copy separators unmodified */
 			output[0] = _UT('/');
 			output++;
 			lastSep = input;
-		} else if (!unix && (input[0] == _UT('\\'))) {
+		} else if (!fromUnix && (input[0] == _UT('\\'))) {
 			/* Convert backslashes to forward slashes */
 			output[0] = _UT('/');
 			output++;

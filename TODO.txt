@@ -7,11 +7,11 @@
    * pipe characters? C:/C|
  * Fix vs2k5/c::b warnings
  * Test owner code
- * Implement SubstractBase
  * Implement MakeBase (strips off last component, query and stuff)
+ * URI cloning/deep copy?
 
 == SOON ==
- * Enable/disable single components?
+ * Enable/disable single components/algorithms?
  * More features:
    * Pretty/smarter IPv6 stringification
  * Testing
