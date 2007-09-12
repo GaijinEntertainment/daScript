@@ -128,5 +128,9 @@
 			<Option compilerVar="CC" />
 			<Option target="default" />
 		</Unit>
+		<Unit filename="..\..\lib\UriShorten.c">
+			<Option compilerVar="CC" />
+			<Option target="default" />
+		</Unit>
 	</Project>
 </CodeBlocks_project_file>

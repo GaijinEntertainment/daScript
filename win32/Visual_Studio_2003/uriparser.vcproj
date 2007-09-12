@@ -148,6 +148,9 @@
 			<File
 				RelativePath="..\..\lib\UriResolve.c">
 			</File>
+			<File
+				RelativePath="..\..\lib\UriShorten.c">
+			</File>
 		</Filter>
 		<Filter
 			Name="include"

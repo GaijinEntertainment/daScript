@@ -139,7 +139,7 @@ typedef struct URI_TYPE(UriStruct) {
 	URI_TYPE(TextRange) fragment; /**< Query without leading "#" */
 	UriBool absolutePath; /**< Absolute path flag, meaningless if %URI is absolute */
 	UriBool owner; /**< Memory owner flag */
-	
+
 	void * reserved; /**< Reserved to the parser */
 } URI_TYPE(Uri);
 
@@ -211,7 +211,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * @param normalizeBreaks   Wether to convert CR and LF to CR-LF or not.
  * @return                  Position of terminator in output string
  */
-const URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
+URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
 		const URI_CHAR * inAfterLast, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
 
@@ -231,7 +231,7 @@ const URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
  * @param normalizeBreaks   Wether to convert CR and LF to CR-LF or not.
  * @return                  Position of terminator in output string
  */
-const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
+URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
 
 
@@ -284,6 +284,26 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
 		const URI_TYPE(Uri) * absoluteBase);
+
+
+
+/**
+ * Tries to make a relative %URI (a reference) from an
+ * absolute %URI and a given base %URI. This can only work if
+ * the absolute %URI shares scheme and authority with
+ * the base %URI. If it does not the result will still be
+ * an absolute URI (with scheme part if necessary).
+ *
+ * @param dest             Result %URI
+ * @param absoluteSource   Absolute %URI to make relative
+ * @param absoluteBase     Base %URI
+ * @param domainRootMode   Create %URI with path relative to domain root
+ * @return                 Error code or 0 on success
+ */
+int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * absoluteSource,
+		const URI_TYPE(Uri) * absoluteBase,
+		UriBool domainRootMode);
 
 
 

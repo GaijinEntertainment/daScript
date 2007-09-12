@@ -65,6 +65,8 @@
 
 
 /*extern*/ const URI_CHAR * const URI_FUNC(SafeToPointTo) = _UT("X");
+/*extern*/ const URI_CHAR * const URI_FUNC(ConstPwd) = _UT(".");
+/*extern*/ const URI_CHAR * const URI_FUNC(ConstParent) = _UT("..");
 
 
 
@@ -91,7 +93,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 				/* Path "." -> remove this segment */
 				URI_TYPE(PathSegment) * const prev = walker->reserved;
 				URI_TYPE(PathSegment) * const nextBackup = walker->next;
-				
+
 				/* Last segment? */
 				if (walker->next != NULL) {
 					/* Not last segment */
@@ -340,6 +342,128 @@ UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri) {
 				|| (uri->hostData.ip6 != NULL)
 				|| (uri->hostData.ipFuture.first != NULL)
 			);
+}
+
+
+
+/* Copies the path segment list from one URI to another. */
+UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * source) {
+	if (source->pathHead == NULL) {
+		/* No path component */
+		dest->pathHead = NULL;
+		dest->pathTail = NULL;
+	} else {
+		/* Copy list but not the text contained */
+		URI_TYPE(PathSegment) * sourceWalker = source->pathHead;
+		URI_TYPE(PathSegment) * destPrev = NULL;
+		do {
+			URI_TYPE(PathSegment) * cur = malloc(sizeof(URI_TYPE(PathSegment)));
+			if (cur == NULL) {
+				/* Fix broken list */
+				if (destPrev != NULL) {
+					destPrev->next = NULL;
+				}
+				return URI_FALSE; /* Raises malloc error */
+			}
+
+			/* From this functions usage we know that *
+			 * the dest URI cannot be uri->owner      */
+			cur->text = sourceWalker->text;
+			if (destPrev == NULL) {
+				/* First segment ever */
+				dest->pathHead = cur;
+			} else {
+				destPrev->next = cur;
+			}
+			destPrev = cur;
+			sourceWalker = sourceWalker->next;
+		} while (sourceWalker != NULL);
+		dest->pathTail = destPrev;
+		dest->pathTail->next = NULL;
+	}
+
+	dest->absolutePath = source->absolutePath;
+	return URI_TRUE;
+}
+
+
+
+/* Copies the authority part of an URI over to another. */
+UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * source) {
+	/* From this functions usage we know that *
+	 * the dest URI cannot be uri->owner      */
+
+	/* Copy userInfo */
+	dest->userInfo = source->userInfo;
+
+	/* Copy hostText */
+	dest->hostText = source->hostText;
+
+	/* Copy hostData */
+	if (source->hostData.ip4 != NULL) {
+		dest->hostData.ip4 = malloc(sizeof(UriIp4));
+		if (dest->hostData.ip4 == NULL) {
+			return URI_FALSE; /* Raises malloc error */
+		}
+		*(dest->hostData.ip4) = *(source->hostData.ip4);
+		dest->hostData.ip6 = NULL;
+		dest->hostData.ipFuture.first = NULL;
+		dest->hostData.ipFuture.afterLast = NULL;
+	} else if (source->hostData.ip6 != NULL) {
+		dest->hostData.ip4 = NULL;
+		dest->hostData.ip6 = malloc(sizeof(UriIp6));
+		if (dest->hostData.ip6 == NULL) {
+			return URI_FALSE; /* Raises malloc error */
+		}
+		*(dest->hostData.ip6) = *(source->hostData.ip6);
+		dest->hostData.ipFuture.first = NULL;
+		dest->hostData.ipFuture.afterLast = NULL;
+	} else {
+		dest->hostData.ip4 = NULL;
+		dest->hostData.ip6 = NULL;
+		dest->hostData.ipFuture = source->hostData.ipFuture;
+	}
+
+	/* Copy portText */
+	dest->portText = source->portText;
+
+	return URI_TRUE;
+}
+
+
+
+UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri) {
+	URI_TYPE(PathSegment) * segment;
+
+	if (	/* Case 1: absolute path, empty first segment */
+			(uri->absolutePath
+			&& (uri->pathHead != NULL)
+			&& (uri->pathHead->text.afterLast == uri->pathHead->text.first))
+
+			/* Case 2: relative path, empty first and second segment */
+			|| (!uri->absolutePath
+			&& (uri->pathHead != NULL)
+			&& (uri->pathHead->next != NULL)
+			&& (uri->pathHead->text.afterLast == uri->pathHead->text.first)
+			&& (uri->pathHead->next->text.afterLast == uri->pathHead->next->text.first))) {
+		/* NOOP */
+	} else {
+		return URI_TRUE;
+	}
+
+	segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+	if (segment == NULL) {
+		return URI_FALSE; /* Raises malloc error */
+	}
+
+	/* Insert "." segment in front */
+	segment->next = uri->pathHead;
+	segment->text.first = URI_FUNC(ConstPwd);
+	segment->text.afterLast = URI_FUNC(ConstPwd) + 1;
+	uri->pathHead = segment;
+	return URI_TRUE;
 }
 
 

@@ -1,4 +1,5 @@
 == BEFORE NEXT RELEASE ==
+ * Test RemoveBaseUri
 
 == REAL SOON ==
  * Fix vs2k5/c::b warnings

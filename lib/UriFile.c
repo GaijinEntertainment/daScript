@@ -68,9 +68,9 @@ static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 	const URI_CHAR * const prefix = unix ? _UT("file://") : _UT("file:///");
 	const int prefixLen = unix ? 7 : 8;
 
-	URI_CHAR * input = filename;
+	const URI_CHAR * input = filename;
 	URI_CHAR * output = uriString + prefixLen;
-	URI_CHAR * lastSep = input - 1;
+	const URI_CHAR * lastSep = input - 1;
 	UriBool firstSegment = URI_TRUE;
 
 	/* Copy prefix */
@@ -124,14 +124,14 @@ static URI_INLINE int URI_FUNC(UriStringToFilename)(const URI_CHAR * uriString,
 	const int prefixLen = unix ? 7 : 8;
 	URI_CHAR * walker = filename;
 	size_t charsToCopy;
-	
+
 	if (URI_STRNCMP(uriString, prefix, prefixLen)) {
 		return URI_ERROR_SYNTAX;
 	}
 	charsToCopy = URI_STRLEN(uriString + prefixLen) + 1;
 	memcpy(filename, uriString + prefixLen, charsToCopy * sizeof(URI_CHAR));
 	URI_FUNC(UnescapeInPlaceEx)(filename, URI_FALSE, URI_BR_DONT_TOUCH);
-	
+
 	/* Convert forward slashes to backslashes */
 	if (!unix) {
 		while (walker[0] != _UT('\0')) {
@@ -160,7 +160,7 @@ int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename, URI_CHAR * u
 
 
 int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString, URI_CHAR * filename) {
-	return URI_FUNC(UriStringToFilename)(uriString, filename, URI_TRUE);	
+	return URI_FUNC(UriStringToFilename)(uriString, filename, URI_TRUE);
 }
 
 

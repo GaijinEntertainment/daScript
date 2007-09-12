@@ -64,14 +64,14 @@
 
 
 
-const URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
+URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks) {
 	return URI_FUNC(EscapeEx)(in, NULL, out, spaceToPlus, normalizeBreaks);
 }
 
 
 
-const URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
+URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
 		const URI_CHAR * inAfterLast, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks) {
 	const URI_CHAR * read = inFirst;

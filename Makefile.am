@@ -39,7 +39,8 @@ liburiparser_la_SOURCES = \
 	lib/UriParseBase.c \
 	lib/UriParseBase.h \
 	lib/UriRecompose.c \
-	lib/UriResolve.c
+	lib/UriResolve.c \
+	lib/UriShorten.c
 
 
 
