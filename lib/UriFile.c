@@ -85,7 +85,7 @@ static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 			if (lastSep + 1 < input) {
 				if (!unix && (firstSegment == URI_TRUE)) {
 					/* Quick hack to not convert "C:" to "C%3A" */
-					const int charsToCopy = input - (lastSep + 1);
+					const int charsToCopy = (int)(input - (lastSep + 1));
 					memcpy(output, lastSep + 1, charsToCopy * sizeof(URI_CHAR));
 					output += charsToCopy;
 				} else {

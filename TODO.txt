@@ -1,7 +1,10 @@
 == BEFORE NEXT RELEASE ==
- * Test RemoveBaseUri
 
 == REAL SOON ==
+ * More cases for filename helpers
+   * relative filenames
+   * samba shares
+   * pipe characters? C:/C|
  * Fix vs2k5/c::b warnings
  * Test owner code
  * Implement SubstractBase

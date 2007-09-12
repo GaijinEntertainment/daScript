@@ -34,6 +34,7 @@ class FourSuite : public Suite {
 public:
 	FourSuite() {
 		TEST_ADD(FourSuite::absolutize_test_cases)
+		TEST_ADD(FourSuite::relativize_test_cases)
 		TEST_ADD(FourSuite::good_URI_references)
 		TEST_ADD(FourSuite::bad_URI_references)
 		TEST_ADD(FourSuite::caseNormalizationTests)
@@ -42,9 +43,12 @@ public:
 	}
 
 private:
-	bool testAddBaseHelper(const char * ref,
-			const char * base, const char * expected);
+	bool testAddOrRemoveBaseHelper(const char * ref,
+			const char * base, const char * expected, bool add = true,
+			bool domainRootMode = false);
+
 	void absolutize_test_cases();
+	void relativize_test_cases();
 
 	int testParseUri(const char * uriText);
 	bool testGoodUri(const char * uriText);
