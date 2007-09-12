@@ -1,7 +1,7 @@
-2007-09-12 -- 0.5.2
+2007-09-13 -- 0.5.2
 
   * Added: RemoveBaseUri function to create URI references
-  * Added: Unix/Windows filename <-> URI string conversion helpers
+  * Added: Unix/Windows filename <--> URI string conversion helpers
   * Added: EscapeEx function to escape text blocks without zero termination
   * Fixed: Bug in ToString for URIs with scheme, path, but no host (e.g. "f:/.//g")
   * Fixed: AddBase now resolves ".//g" with base "f:/a" to "f:/.//g" instead of
