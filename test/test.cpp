@@ -1055,13 +1055,13 @@ private:
 	}
 
 	void testFilenameUriConversionHelper(const wchar_t * filename,
-			const wchar_t * uriString, bool unix) {
-		const int prefixLen = unix ? 7 : 8;
+			const wchar_t * uriString, bool forUnix) {
+		const int prefixLen = forUnix ? 7 : 8;
 
 		// Filename to URI string
 		const int uriBufferLen = prefixLen + 3 * wcslen(filename) + 1;
 		wchar_t * uriBuffer = new wchar_t[uriBufferLen];
-		if (unix) {
+		if (forUnix) {
 			uriUnixFilenameToUriStringW(filename, uriBuffer);
 		} else {
 			uriWindowsFilenameToUriStringW(filename, uriBuffer);
@@ -1072,7 +1072,7 @@ private:
 		// URI string to filename
 		const int filenameBufferLen = wcslen(uriString) + 1 - prefixLen;
 		wchar_t * filenameBuffer = new wchar_t[filenameBufferLen];
-		if (unix) {
+		if (forUnix) {
 			uriUriStringToUnixFilenameW(uriString, filenameBuffer);
 		} else {
 			uriUriStringToWindowsFilenameW(uriString, filenameBuffer);
@@ -1082,10 +1082,10 @@ private:
 	}
 
 	void testFilenameUriConversion() {
-		const bool UNIX = true;
-		const bool WINDOWS = false;
-		testFilenameUriConversionHelper(L"/bin/bash", L"file:///bin/bash", UNIX);
-		testFilenameUriConversionHelper(L"E:\\Documents and Settings", L"file:///E:/Documents%20and%20Settings", WINDOWS);
+		const bool FOR_UNIX = true;
+		const bool FOR_WINDOWS = false;
+		testFilenameUriConversionHelper(L"/bin/bash", L"file:///bin/bash", FOR_UNIX);
+		testFilenameUriConversionHelper(L"E:\\Documents and Settings", L"file:///E:/Documents%20and%20Settings", FOR_WINDOWS);
 	}
 
 };
