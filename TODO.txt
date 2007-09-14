@@ -7,25 +7,20 @@
    * pipe characters? C:/C|
  * Fix vs2k5/c::b warnings
  * Test owner code
- * Implement MakeBase (strips off last component, query and stuff)
- * URI cloning/deep copy?
+ * Implement CleanBase (strips off last component, query and stuff)
+ * Implement Clone
 
 == SOON ==
  * Enable/disable single components/algorithms?
- * More features:
-   * Pretty/smarter IPv6 stringification
- * Testing
-   * Test Equals
+ * Pretty/smarter IPv6 stringification
+ * Test Equals
  * Code TODOs
  * Add external documentation
  * Make hostText from hostData?
  * Add specific URI support (callbacks?)
+ * Silence "File already doced" message from Doxygen
 
 == LATER ==
- * Add code documentation
-   * until no more Doxygen warnings
-   * Is there a way to mark the public API part?
- * Add documentation on semantic actions?
  * Option to turn off segment extraction if
    validating only?
- * reduce recursion, replace some by loops
+ * Reduce recursion, replace some by loops
