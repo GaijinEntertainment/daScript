@@ -171,6 +171,10 @@
 		</Configuration>
 	</Configurations>
 	<References>
+		<ProjectReference
+			ReferencedProjectIdentifier="{8E2F76A2-59B5-4DF7-8062-EBD6FCF0C8B3}"
+			RelativePathToProject=".\uriparser.vcproj"
+		/>
 	</References>
 	<Files>
 		<Filter

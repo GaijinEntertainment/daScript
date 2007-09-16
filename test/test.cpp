@@ -1059,7 +1059,7 @@ private:
 		const int prefixLen = forUnix ? 7 : 8;
 
 		// Filename to URI string
-		const int uriBufferLen = prefixLen + 3 * wcslen(filename) + 1;
+		const size_t uriBufferLen = prefixLen + 3 * wcslen(filename) + 1;
 		wchar_t * uriBuffer = new wchar_t[uriBufferLen];
 		if (forUnix) {
 			uriUnixFilenameToUriStringW(filename, uriBuffer);
@@ -1070,7 +1070,7 @@ private:
 		delete [] uriBuffer;
 
 		// URI string to filename
-		const int filenameBufferLen = wcslen(uriString) + 1 - prefixLen;
+		const size_t filenameBufferLen = wcslen(uriString) + 1 - prefixLen;
 		wchar_t * filenameBuffer = new wchar_t[filenameBufferLen];
 		if (forUnix) {
 			uriUriStringToUnixFilenameW(uriString, filenameBuffer);
