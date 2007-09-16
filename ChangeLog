@@ -1,3 +1,7 @@
+???
+
+  * Fixed: Proper soname updates from now on, starting at 1:0:0
+
 2007-09-13 -- 0.5.2
 
   * Added: RemoveBaseUri function to create URI references
