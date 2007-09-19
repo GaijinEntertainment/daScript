@@ -21,7 +21,7 @@ include_uriparser_HEADERS = \
 
 
 
-liburiparser_la_CFLAGS = -Iinclude
+liburiparser_la_CFLAGS = -I$(srcdir)/include
 liburiparser_la_LDFLAGS = -version-info 1:0:0
 
 liburiparser_la_SOURCES = \
@@ -45,7 +45,7 @@ liburiparser_la_SOURCES = \
 
 
 
-test_uriparser_test_CPPFLAGS = -Iinclude
+test_uriparser_test_CPPFLAGS = -I$(srcdir)/include
 test_uriparser_test_LDADD = liburiparser.la
 
 test_uriparser_test_SOURCES = \
@@ -102,3 +102,4 @@ EXTRA_DIST = \
 	win32/Visual_Studio_2005/test.vcproj \
 	win32/Visual_Studio_2005/uriparser.sln \
 	win32/Visual_Studio_2005/uriparser.vcproj
+
