@@ -54,8 +54,8 @@
 
 /* Version */
 #define URI_VER_MAJOR           0
-#define URI_VER_MINOR           5
-#define URI_VER_RELEASE         2
+#define URI_VER_MINOR           6
+#define URI_VER_RELEASE         0
 #define URI_VER_SUFFIX_ANSI     ""
 #define URI_VER_SUFFIX_UNICODE  URI_ANSI_TO_UNICODE(URI_VER_SUFFIX_ANSI)
 

@@ -1,4 +1,4 @@
-???
+2007-09-17 -- 0.6.0
 
   * Fixed: Proper soname updates from now on, starting at 1:0:0
   * Removed: Visual Studio 2003 project files
