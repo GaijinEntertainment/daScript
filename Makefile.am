@@ -21,7 +21,6 @@ include_uriparser_HEADERS = \
 
 
 
-liburiparser_la_CFLAGS = -I$(srcdir)/include
 liburiparser_la_LDFLAGS = -version-info 1:0:0
 
 liburiparser_la_SOURCES = \
@@ -45,7 +44,6 @@ liburiparser_la_SOURCES = \
 
 
 
-test_uriparser_test_CPPFLAGS = -I$(srcdir)/include
 test_uriparser_test_LDADD = liburiparser.la
 
 test_uriparser_test_SOURCES = \

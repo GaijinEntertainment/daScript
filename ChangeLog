@@ -1,5 +1,7 @@
 ???
 
+  * Fixed: Include path order bug
+      Thanks to Ed Schouten for reporting this!
   * Fixed: Shadow builds now possible
       Thanks to Adeodato Simó for the patch!
 

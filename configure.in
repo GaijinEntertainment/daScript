@@ -35,6 +35,12 @@ fi
 
 
 
+# Local headers must come very first. Otherwise we
+# risk including headers of an already installed
+# uriparser version if its path is in CPPFLAGS
+CPPFLAGS="-I${srcdir}/include ${CPPFLAGS}"
+
+
+
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
-
