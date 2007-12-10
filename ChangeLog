@@ -4,6 +4,8 @@
       Thanks to Ed Schouten for reporting this!
   * Fixed: Shadow builds now possible
       Thanks to Adeodato Simó for the patch!
+  * Added: Version guards for Autoconf/Automake
+      Thanks to Martin Michlmayr for reporting!
 
 2007-09-17 -- 0.6.0
 
