@@ -507,14 +507,20 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 	if (outMask != NULL) {
 		const UriBool normalizeScheme = URI_FUNC(ContainsUppercaseLetters)(
 				uri->scheme.first, uri->scheme.afterLast);
-		const UriBool normalizeHost = URI_FUNC(ContainsUppercaseLetters)(
+		const UriBool normalizeHostCase = URI_FUNC(ContainsUppercaseLetters)(
 			uri->hostText.first, uri->hostText.afterLast);
 		if (normalizeScheme) {
 			*outMask |= URI_NORMALIZE_SCHEME;
 		}
 
-		if (normalizeHost) {
+		if (normalizeHostCase) {
 			*outMask |= URI_NORMALIZE_HOST;
+		} else {
+			const UriBool normalizeHostPrecent = URI_FUNC(ContainsUglyPercentEncoding)(
+					uri->hostText.first, uri->hostText.afterLast);
+			if (normalizeHostPrecent) {
+				*outMask |= URI_NORMALIZE_HOST;
+			}
 		}
 	} else {
 		/* Scheme */
