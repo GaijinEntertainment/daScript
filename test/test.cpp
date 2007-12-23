@@ -1052,6 +1052,16 @@ private:
 		TEST_ASSERT(testNormalizeSyntaxHelper(
 				L"eXAMPLE://a/./b/../b/%63/%7bfoo%7d",
 				L"example://a/b/c/%7Bfoo%7D"));
+
+		// Testcase by Adrian Manrique
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"http://examp%4Ce.com/",
+				L"http://example.com/"));
+
+		// Testcase by Adrian Manrique
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"http://example.com/a/b/%2E%2E/",
+				L"http://example.com/a/"));
 	}
 
 	void testFilenameUriConversionHelper(const wchar_t * filename,

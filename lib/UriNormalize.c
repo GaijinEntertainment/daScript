@@ -552,16 +552,20 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 					&& (uri->hostData.ip6 == NULL)) {
 				/* Regname */
 				if (uri->owner) {
-					URI_FUNC(LowercaseInplace)(uri->hostText.first,
-							uri->hostText.afterLast);
+					URI_FUNC(FixPercentEncodingInplace)(uri->hostText.first,
+							&(uri->hostText.afterLast));
 				} else {
-					if (!URI_FUNC(LowercaseMalloc)(&(uri->hostText.first),
+					if (!URI_FUNC(FixPercentEncodingMalloc)(
+							&(uri->hostText.first),
 							&(uri->hostText.afterLast))) {
 						URI_FUNC(PreventLeakage)(uri, doneMask);
 						return URI_ERROR_MALLOC;
 					}
 					doneMask |= URI_NORMALIZE_HOST;
 				}
+
+				URI_FUNC(LowercaseInplace)(uri->hostText.first,
+						uri->hostText.afterLast);
 			}
 		}
 	}
