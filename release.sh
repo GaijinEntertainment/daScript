@@ -53,7 +53,8 @@ echo
 echo Fine.
 
 echo
-echo <<'CHECKLIST'
+cat <<'CHECKLIST'
+Have you
 * run ./edit_version.sh
 * updated the soname
 * updated file lists
@@ -61,6 +62,7 @@ echo <<'CHECKLIST'
   - Code::Blocks
   - Visual Studio 2005
 * searched for TODO inside code using
-  grep -R "TODO" include/* src/* test/*
+  grep -R 'TODO' include/* src/* test/*
 ?
 CHECKLIST
+

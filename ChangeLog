@@ -1,10 +1,9 @@
-???
+2007-12-23 -- 0.6.1
 
-  * Fixed: Percent-encodings in hostnames were not
-      repaired during normalization.
+  * Fixed: Percent-encodings in hostnames were not repaired during normalization.
       Thanks to Adrian Manrique for reporting!
-  * Fixed: Percent-encodings were fixed after
-      dot removal instead before during normalization.
+  * Fixed: Percent-encodings were fixed after dot removal not before during
+      normalization.
       Thanks to Adrian Manrique for reporting!
   * Fixed: Include path order bug
       Thanks to Ed Schouten for reporting this!
@@ -12,6 +11,7 @@
       Thanks to Adeodato Simó for the patch!
   * Added: Version guards for Autoconf/Automake
       Thanks to Martin Michlmayr for reporting!
+  * Changed: Soname set to 1:1:0
 
 2007-09-17 -- 0.6.0
 

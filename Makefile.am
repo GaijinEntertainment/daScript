@@ -21,7 +21,7 @@ include_uriparser_HEADERS = \
 
 
 
-liburiparser_la_LDFLAGS = -version-info 1:0:0
+liburiparser_la_LDFLAGS = -version-info 1:1:0
 
 liburiparser_la_SOURCES = \
 	lib/UriCommon.c \
