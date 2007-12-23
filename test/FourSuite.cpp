@@ -332,7 +332,7 @@ void FourSuite::absolutize_test_cases() {
 	// 82-88
 	TEST_ASSERT(testAddOrRemoveBaseHelper("http:this", "http://example.org/base/uri", "http:this"));
 	TEST_ASSERT(testAddOrRemoveBaseHelper("http:this", "http:base", "http:this"));
-	// TODO Whole in the URI spec, see http://lists.w3.org/Archives/Public/uri/2007Aug/0003.html
+	// Whole in the URI spec, see http://lists.w3.org/Archives/Public/uri/2007Aug/0003.html
 	// TEST_ASSERT(testAddOrRemoveBaseHelper(".//g", "f:/a", "f://g")); // ORIGINAL
 	TEST_ASSERT(testAddOrRemoveBaseHelper(".//g", "f:/a", "f:/.//g")); // FIXED ONE
 	TEST_ASSERT(testAddOrRemoveBaseHelper("b/c//d/e", "f://example.org/base/a", "f://example.org/base/b/c//d/e"));

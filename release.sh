@@ -62,7 +62,7 @@ Have you
   - Code::Blocks
   - Visual Studio 2005
 * searched for TODO inside code using
-  grep -R 'TODO' include/* src/* test/*
+  grep -R 'TODO' include/* lib/* test/*
 ?
 CHECKLIST
 
