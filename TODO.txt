@@ -17,21 +17,9 @@
  * Code TODOs
  * Add external documentation
  * Make hostText from hostData?
- * Add specific URI support (callbacks?)
  * Silence "File already doced" message from Doxygen
 
 == LATER ==
  * Option to turn off segment extraction if
    validating only?
  * Reduce recursion, replace some by loops
-
-== EACH RELEASE ==
- * update soname
- * make sure [version] is up to date
-   -> ./edit_version.sh
- * make sure [file lists] are up to date in
-   * Makefile.am
-   * Code::Blocks
-   * Visual Studio 2005
- * search for [TODO] inside code
-   -> grep -R "TODO" include/* lib/* test/*
