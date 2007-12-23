@@ -3,6 +3,9 @@
   * Fixed: Percent-encodings in hostnames were not
       repaired during normalization.
       Thanks to Adrian Manrique for reporting!
+  * Fixed: Percent-encodings were fixed after
+      dot removal instead before during normalization.
+      Thanks to Adrian Manrique for reporting!
   * Fixed: Include path order bug
       Thanks to Ed Schouten for reporting this!
   * Fixed: Shadow builds now possible

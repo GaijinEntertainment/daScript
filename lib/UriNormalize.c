@@ -625,12 +625,6 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 	} else {
 		const URI_TYPE(PathSegment) * walker;
 
-		/* 6.2.2.3 Path Segment Normalization */
-		if (!URI_FUNC(RemoveDotSegments)(uri)) {
-			URI_FUNC(PreventLeakage)(uri, doneMask);
-			return URI_ERROR_MALLOC;
-		}
-
 		/* Fix percent-encoding for each segment */
 		walker = uri->pathHead;
 		if (uri->owner) {
@@ -648,6 +642,12 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 				walker = walker->next;
 			}
 			doneMask |= URI_NORMALIZE_PATH;
+		}
+
+		/* 6.2.2.3 Path Segment Normalization */
+		if (!URI_FUNC(RemoveDotSegments)(uri)) {
+			URI_FUNC(PreventLeakage)(uri, doneMask);
+			return URI_ERROR_MALLOC;
 		}
 	}
 
