@@ -1,3 +1,9 @@
+???
+
+  * Fixed: Filename <--> URI string conversion helpers can
+      now handle relative URIs and filenames
+  * Changed: Soname set to 1:2:0
+
 2007-12-23 -- 0.6.1
 
   * Fixed: Percent-encodings in hostnames were not repaired during normalization.

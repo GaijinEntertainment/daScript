@@ -1076,17 +1076,19 @@ private:
 		} else {
 			uriWindowsFilenameToUriStringW(filename, uriBuffer);
 		}
+		// wprintf(L"1 [%s][%s]\n", uriBuffer, uriString);
 		TEST_ASSERT(!wcscmp(uriBuffer, uriString));
 		delete [] uriBuffer;
 
 		// URI string to filename
-		const size_t filenameBufferLen = wcslen(uriString) + 1 - prefixLen;
+		const size_t filenameBufferLen = wcslen(uriString) + 1;
 		wchar_t * filenameBuffer = new wchar_t[filenameBufferLen];
 		if (forUnix) {
 			uriUriStringToUnixFilenameW(uriString, filenameBuffer);
 		} else {
 			uriUriStringToWindowsFilenameW(uriString, filenameBuffer);
 		}
+		// wprintf(L"2 [%s][%s]\n", filenameBuffer, filename);
 		TEST_ASSERT(!wcscmp(filenameBuffer, filename));
 		delete [] filenameBuffer;
 	}
@@ -1095,7 +1097,16 @@ private:
 		const bool FOR_UNIX = true;
 		const bool FOR_WINDOWS = false;
 		testFilenameUriConversionHelper(L"/bin/bash", L"file:///bin/bash", FOR_UNIX);
+		testFilenameUriConversionHelper(L"./configure", L"./configure", FOR_UNIX);
+
 		testFilenameUriConversionHelper(L"E:\\Documents and Settings", L"file:///E:/Documents%20and%20Settings", FOR_WINDOWS);
+		testFilenameUriConversionHelper(L".\\Readme.txt", L"./Readme.txt", FOR_WINDOWS);
+
+		testFilenameUriConversionHelper(L"index.htm", L"index.htm", FOR_WINDOWS);
+		testFilenameUriConversionHelper(L"index.htm", L"index.htm", FOR_UNIX);
+
+		testFilenameUriConversionHelper(L"abc def", L"abc%20def", FOR_WINDOWS);
+		testFilenameUriConversionHelper(L"abc def", L"abc%20def", FOR_UNIX);
 	}
 
 };

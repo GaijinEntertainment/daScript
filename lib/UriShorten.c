@@ -147,48 +147,48 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 
 	URI_FUNC(ResetUri)(dest);
 
-	/* [XX/XX]	if (A.scheme != Base.scheme) then */
+	/* [01/50]	if (A.scheme != Base.scheme) then */
 				if (URI_STRNCMP(absSource->scheme.first, absBase->scheme.first,
 						absSource->scheme.afterLast - absSource->scheme.first)) {
-	/* [XX/XX]	   T.scheme    = A.scheme; */
+	/* [02/50]	   T.scheme    = A.scheme; */
 					dest->scheme = absSource->scheme;
-	/* [XX/XX]	   T.authority = A.authority; */
+	/* [03/50]	   T.authority = A.authority; */
 					if (!URI_FUNC(CopyAuthority)(dest, absSource)) {
 						return URI_ERROR_MALLOC;
 					}
-	/* [XX/XX]	   T.path      = A.path; */
+	/* [04/50]	   T.path      = A.path; */
 					if (!URI_FUNC(CopyPath)(dest, absSource)) {
 						return URI_ERROR_MALLOC;
 					}
-	/* [XX/XX]	else */
+	/* [05/50]	else */
 				} else {
-	/* [XX/XX]	   undef(T.scheme); */
+	/* [06/50]	   undef(T.scheme); */
 					/* NOOP */
-	/* [XX/XX]	   if (A.authority != Base.authority) then */
+	/* [07/50]	   if (A.authority != Base.authority) then */
 					if (!URI_FUNC(EqualsAuthority)(absSource, absBase)) {
-	/* [XX/XX]	      T.authority = A.authority; */
+	/* [08/50]	      T.authority = A.authority; */
 						if (!URI_FUNC(CopyAuthority)(dest, absSource)) {
 							return URI_ERROR_MALLOC;
 						}
-	/* [XX/XX]	      T.path      = A.path; */
+	/* [09/50]	      T.path      = A.path; */
 						if (!URI_FUNC(CopyPath)(dest, absSource)) {
 							return URI_ERROR_MALLOC;
 						}
-	/* [XX/XX]	   else */
+	/* [10/50]	   else */
 					} else {
-	/* [XX/XX]	      if domainRootMode then */
+	/* [11/50]	      if domainRootMode then */
 						if (domainRootMode == URI_TRUE) {
-	/* [XX/XX]	         undef(T.authority); */
+	/* [12/50]	         undef(T.authority); */
 							/* NOOP */
-	/* [XX/XX]	         if (first(A.path) == "") then */
+	/* [13/50]	         if (first(A.path) == "") then */
 							/* GROUPED */
-	/* [XX/XX]	            T.path   = "/." + A.path; */
+	/* [14/50]	            T.path   = "/." + A.path; */
 								/* GROUPED */
-	/* [XX/XX]	         else */
+	/* [15/50]	         else */
 								/* GROUPED */
-	/* [XX/XX]	            T.path   = A.path; */
+	/* [16/50]	            T.path   = A.path; */
 								/* GROUPED */
-	/* [XX/XX]	         endif; */
+	/* [17/50]	         endif; */
 							if (!URI_FUNC(CopyPath)(dest, absSource)) {
 								return URI_ERROR_MALLOC;
 							}
@@ -197,46 +197,46 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 							if (!URI_FUNC(FixAmbiguity)(dest)) {
 								return URI_ERROR_MALLOC;
 							}
-	/* [XX/XX]	      else */
+	/* [18/50]	      else */
 						} else {
 							const URI_TYPE(PathSegment) * sourceSeg = absSource->pathHead;
 							const URI_TYPE(PathSegment) * baseSeg = absBase->pathHead;
-	/* [XX/XX]	         bool pathNaked = true; */
+	/* [19/50]	         bool pathNaked = true; */
 							UriBool pathNaked = URI_TRUE;
-	/* [XX/XX]	         undef(last(Base.path)); */
+	/* [20/50]	         undef(last(Base.path)); */
 							/* NOOP */
-	/* [XX/XX]	         T.path = ""; */
+	/* [21/50]	         T.path = ""; */
 							dest->absolutePath = URI_FALSE;
-	/* [XX/XX]	         while (first(A.path) == first(Base.path)) do */
+	/* [22/50]	         while (first(A.path) == first(Base.path)) do */
 							while ((sourceSeg != NULL) && (baseSeg != NULL)
 									&& !URI_STRNCMP(sourceSeg->text.first, baseSeg->text.first,
 									sourceSeg->text.afterLast - sourceSeg->text.first)
 									&& !((sourceSeg->text.first == sourceSeg->text.afterLast)
 										&& ((sourceSeg->next == NULL) != (baseSeg->next == NULL)))) {
-	/* [XX/XX]	            A.path++; */
+	/* [23/50]	            A.path++; */
 								sourceSeg = sourceSeg->next;
-	/* [XX/XX]	            Base.path++; */
+	/* [24/50]	            Base.path++; */
 								baseSeg = baseSeg->next;
-	/* [XX/XX]	         endwhile; */
+	/* [25/50]	         endwhile; */
 							}
-	/* [XX/XX]	         while defined(first(Base.path)) do */
+	/* [26/50]	         while defined(first(Base.path)) do */
 							while ((baseSeg != NULL) && (baseSeg->next != NULL)) {
-	/* [XX/XX]	            Base.path++; */
+	/* [27/50]	            Base.path++; */
 								baseSeg = baseSeg->next;
-	/* [XX/XX]	            T.path += "../"; */
+	/* [28/50]	            T.path += "../"; */
 								if (!URI_FUNC(AppendSegment)(dest, URI_FUNC(ConstParent),
 										URI_FUNC(ConstParent) + 2)) {
 									return URI_ERROR_MALLOC;
 								}
-	/* [XX/XX]	            pathNaked = false; */
+	/* [29/50]	            pathNaked = false; */
 								pathNaked = URI_FALSE;
-	/* [XX/XX]	         endwhile; */
+	/* [30/50]	         endwhile; */
 							}
-	/* [XX/XX]	         while defined(first(A.path)) do */
+	/* [31/50]	         while defined(first(A.path)) do */
 							while (sourceSeg != NULL) {
-	/* [XX/XX]	            if pathNaked then */
+	/* [32/50]	            if pathNaked then */
 								if (pathNaked == URI_TRUE) {
-	/* [XX/XX]	               if (first(A.path) contains ":") then */
+	/* [33/50]	               if (first(A.path) contains ":") then */
 									UriBool containsColon = URI_FALSE;
 									const URI_CHAR * ch = sourceSeg->text.first;
 									for (; ch < sourceSeg->text.afterLast; ch++) {
@@ -247,48 +247,48 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 									}
 
 									if (containsColon) {
-	/* [XX/XX]	                  T.path += "./"; */
+	/* [34/50]	                  T.path += "./"; */
 										if (!URI_FUNC(AppendSegment)(dest, URI_FUNC(ConstPwd),
 												URI_FUNC(ConstPwd) + 1)) {
 											return URI_ERROR_MALLOC;
 										}
-	/* [XX/XX]	               elseif (first(A.path) == "") then */
+	/* [35/50]	               elseif (first(A.path) == "") then */
 									} else if (sourceSeg->text.first == sourceSeg->text.afterLast) {
-	/* [XX/XX]	                  T.path += "/."; */
+	/* [36/50]	                  T.path += "/."; */
 										if (!URI_FUNC(AppendSegment)(dest, URI_FUNC(ConstPwd),
 												URI_FUNC(ConstPwd) + 1)) {
 											return URI_ERROR_MALLOC;
 										}
-	/* [XX/XX]	               endif; */
+	/* [37/50]	               endif; */
 									}
-	/* [XX/XX]	            endif; */
+	/* [38/50]	            endif; */
 								}
-	/* [XX/XX]	            T.path += first(A.path); */
+	/* [39/50]	            T.path += first(A.path); */
 								if (!URI_FUNC(AppendSegment)(dest, sourceSeg->text.first,
 										sourceSeg->text.afterLast)) {
 									return URI_ERROR_MALLOC;
 								}
-	/* [XX/XX]	            pathNaked = false; */
+	/* [40/50]	            pathNaked = false; */
 								pathNaked = URI_FALSE;
-	/* [XX/XX]	            A.path++; */
+	/* [41/50]	            A.path++; */
 								sourceSeg = sourceSeg->next;
-	/* [XX/XX]	            if defined(first(A.path)) then */
+	/* [42/50]	            if defined(first(A.path)) then */
 								/* NOOP */
-	/* [XX/XX]	               T.path += + "/"; */
+	/* [43/50]	               T.path += + "/"; */
 								/* NOOP */
-	/* [XX/XX]	            endif; */
+	/* [44/50]	            endif; */
 								/* NOOP */
-	/* [XX/XX]	         endwhile; */
+	/* [45/50]	         endwhile; */
 							}
-	/* [XX/XX]	      endif; */
+	/* [46/50]	      endif; */
 						}
-	/* [XX/XX]	   endif; */
+	/* [47/50]	   endif; */
 					}
-	/* [XX/XX]	endif; */
+	/* [48/50]	endif; */
 				}
-	/* [XX/XX]	T.query     = A.query; */
+	/* [49/50]	T.query     = A.query; */
 				dest->query = absSource->query;
-	/* [XX/XX]	T.fragment  = A.fragment; */
+	/* [50/50]	T.fragment  = A.fragment; */
 				dest->fragment = absSource->fragment;
 
 	return URI_SUCCESS;

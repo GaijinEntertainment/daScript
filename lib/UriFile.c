@@ -65,16 +65,25 @@
 
 static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 		URI_CHAR * uriString, UriBool fromUnix) {
-	const URI_CHAR * const prefix = fromUnix ? _UT("file://") : _UT("file:///");
-	const int prefixLen = fromUnix ? 7 : 8;
-
 	const URI_CHAR * input = filename;
-	URI_CHAR * output = uriString + prefixLen;
 	const URI_CHAR * lastSep = input - 1;
 	UriBool firstSegment = URI_TRUE;
+	URI_CHAR * output = uriString;
+	const UriBool absolute = (filename != NULL) && ((fromUnix && (filename[0] == _UT('/')))
+			|| (!fromUnix && (filename[0] != _UT('\0')) && (filename[1] == _UT(':'))));
 
-	/* Copy prefix */
-	memcpy(uriString, prefix, prefixLen * sizeof(URI_CHAR));
+	if ((filename == NULL) || (uriString == NULL)) {
+		return URI_ERROR_NULL;
+	}
+
+	if (absolute) {
+		const URI_CHAR * const prefix = fromUnix ? _UT("file://") : _UT("file:///");
+		const int prefixLen = fromUnix ? 7 : 8;
+
+		/* Copy prefix */
+		memcpy(uriString, prefix, prefixLen * sizeof(URI_CHAR));
+		output += prefixLen;
+	}
 
 	/* Copy and escape on the fly */
 	for (;;) {
@@ -83,7 +92,7 @@ static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 				|| (!fromUnix && input[0] == _UT('\\'))) {
 			/* Copy text after last seperator */
 			if (lastSep + 1 < input) {
-				if (!fromUnix && (firstSegment == URI_TRUE)) {
+				if (!fromUnix && absolute && (firstSegment == URI_TRUE)) {
 					/* Quick hack to not convert "C:" to "C%3A" */
 					const int charsToCopy = (int)(input - (lastSep + 1));
 					memcpy(output, lastSep + 1, charsToCopy * sizeof(URI_CHAR));
@@ -124,12 +133,11 @@ static URI_INLINE int URI_FUNC(UriStringToFilename)(const URI_CHAR * uriString,
 	const int prefixLen = toUnix ? 7 : 8;
 	URI_CHAR * walker = filename;
 	size_t charsToCopy;
+	const UriBool absolute = (URI_STRNCMP(uriString, prefix, prefixLen) == 0);
+	const int charsToSkip = (absolute ? prefixLen : 0);
 
-	if (URI_STRNCMP(uriString, prefix, prefixLen)) {
-		return URI_ERROR_SYNTAX;
-	}
-	charsToCopy = URI_STRLEN(uriString + prefixLen) + 1;
-	memcpy(filename, uriString + prefixLen, charsToCopy * sizeof(URI_CHAR));
+	charsToCopy = URI_STRLEN(uriString + charsToSkip) + 1;
+	memcpy(filename, uriString + charsToSkip, charsToCopy * sizeof(URI_CHAR));
 	URI_FUNC(UnescapeInPlaceEx)(filename, URI_FALSE, URI_BR_DONT_TOUCH);
 
 	/* Convert forward slashes to backslashes */
