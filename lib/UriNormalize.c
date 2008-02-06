@@ -499,7 +499,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 		/* Nothing to do */
 		return URI_SUCCESS;
 	} else if ((uri->scheme.first == NULL) && !uri->absolutePath) {
-		/* Normalization only fone for absolute paths */
+		/* Normalization only done for absolute paths */
 		return URI_SUCCESS;
 	}
 

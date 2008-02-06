@@ -1134,6 +1134,9 @@ private:
 		if (uriNormalizeSyntaxA(&sourceUri) != 0) {
 			TEST_ASSERT(false);
 		}
+		if (uriNormalizeSyntaxA(&sourceUri) != 0) {
+			TEST_ASSERT(false);
+		}
 		uriFreeUriMembersA(&sourceUri);
 		TEST_ASSERT(true);
 	}
