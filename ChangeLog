@@ -1,5 +1,7 @@
 ???
 
+  * Fixed: Freeing a normalized URI like "http://test?"
+      caused a crash. Thanks to Adrian Manrique for reporting!
   * Fixed: Filename <--> URI string conversion helpers can
       now handle relative URIs and filenames
   * Changed: Soname set to 1:2:0

@@ -78,6 +78,7 @@ public:
 		TEST_ADD(UriSuite::testNormalizeSyntaxMaskRequired)
 		TEST_ADD(UriSuite::testNormalizeSyntax)
 		TEST_ADD(UriSuite::testFilenameUriConversion)
+		TEST_ADD(UriSuite::testFreeZeroLen)
 	}
 
 private:
@@ -1107,6 +1108,16 @@ private:
 
 		testFilenameUriConversionHelper(L"abc def", L"abc%20def", FOR_WINDOWS);
 		testFilenameUriConversionHelper(L"abc def", L"abc%20def", FOR_UNIX);
+	}
+
+	void testFreeZeroLen() {
+		// Testcase by Adrian Manrique
+		UriParserStateA state;
+		UriUriA uri;
+		state.uri = &uri;
+		uriParseUriA(&state, "http://test/?");
+		uriNormalizeSyntaxA(&uri);
+		uriFreeUriMembersA(&uri);
 	}
 
 };
