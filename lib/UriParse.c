@@ -2068,7 +2068,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 	if (uri->owner) {
 		/* Scheme */
 		if (uri->scheme.first != NULL) {
-			if (uri->scheme.first < uri->scheme.afterLast) {
+			if (uri->scheme.first != uri->scheme.afterLast) {
 				free((URI_CHAR *)uri->scheme.first);
 			}
 			uri->scheme.first = NULL;
@@ -2077,7 +2077,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 
 		/* User info */
 		if (uri->userInfo.first != NULL) {
-			if (uri->userInfo.first < uri->userInfo.afterLast) {
+			if (uri->userInfo.first != uri->userInfo.afterLast) {
 				free((URI_CHAR *)uri->userInfo.first);
 			}
 			uri->userInfo.first = NULL;
@@ -2086,7 +2086,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 
 		/* Host data - IPvFuture */
 		if (uri->hostData.ipFuture.first != NULL) {
-			if (uri->hostData.ipFuture.first < uri->hostData.ipFuture.afterLast) {
+			if (uri->hostData.ipFuture.first != uri->hostData.ipFuture.afterLast) {
 				free((URI_CHAR *)uri->hostData.ipFuture.first);
 			}
 			uri->hostData.ipFuture.first = NULL;
@@ -2100,7 +2100,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 				&& (uri->hostData.ip4 == NULL)
 				&& (uri->hostData.ip6 == NULL)) {
 			/* Real regname */
-			if (uri->hostText.first < uri->hostText.afterLast) {
+			if (uri->hostText.first != uri->hostText.afterLast) {
 				free((URI_CHAR *)uri->hostText.first);
 			}
 			uri->hostText.first = NULL;
@@ -2122,7 +2122,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 
 	/* Port text */
 	if (uri->owner && (uri->portText.first != NULL)) {
-		if (uri->portText.first < uri->portText.afterLast) {
+		if (uri->portText.first != uri->portText.afterLast) {
 			free((URI_CHAR *)uri->portText.first);
 		}
 		uri->portText.first = NULL;
@@ -2148,7 +2148,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 	if (uri->owner) {
 		/* Query */
 		if (uri->query.first != NULL) {
-			if (uri->query.first < uri->query.afterLast) {
+			if (uri->query.first != uri->query.afterLast) {
 				free((URI_CHAR *)uri->query.first);
 			}
 			uri->query.first = NULL;
@@ -2157,7 +2157,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 
 		/* Fragment */
 		if (uri->fragment.first != NULL) {
-			if (uri->fragment.first < uri->fragment.afterLast) {
+			if (uri->fragment.first != uri->fragment.afterLast) {
 				free((URI_CHAR *)uri->fragment.first);
 			}
 			uri->fragment.first = NULL;
