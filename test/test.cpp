@@ -79,6 +79,7 @@ public:
 		TEST_ADD(UriSuite::testNormalizeSyntax)
 		TEST_ADD(UriSuite::testFilenameUriConversion)
 		TEST_ADD(UriSuite::testFreeZeroLen)
+		TEST_ADD(UriSuite::testCrashSample)
 	}
 
 private:
@@ -1118,6 +1119,23 @@ private:
 		uriParseUriA(&state, "http://test/?");
 		uriNormalizeSyntaxA(&uri);
 		uriFreeUriMembersA(&uri);
+
+		TEST_ASSERT(true);
+	}
+
+	void testCrashSample() {
+		UriParserStateA state;
+		UriUriA sourceUri;
+		state.uri = &sourceUri;
+		char * const sourceUriString = "file:///home/user/song.mp3";
+		if (uriParseUriA(&state, sourceUriString) != 0) {
+			TEST_ASSERT(false);
+		}
+		if (uriNormalizeSyntaxA(&sourceUri) != 0) {
+			TEST_ASSERT(false);
+		}
+		uriFreeUriMembersA(&sourceUri);
+		TEST_ASSERT(true);
 	}
 
 };
