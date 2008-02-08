@@ -1,4 +1,4 @@
-AC_PREREQ(2.61a)
+AC_PREREQ(2.61)
 AC_INIT([uriparser], [0.6.2])
 AM_INIT_AUTOMAKE([1.9 foreign])
 AM_CONFIG_HEADER(test/CppTest/config.h)
@@ -44,3 +44,4 @@ CPPFLAGS="-I${srcdir}/include ${CPPFLAGS}"
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
+
