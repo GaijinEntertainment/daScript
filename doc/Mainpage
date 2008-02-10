@@ -122,8 +122,6 @@
  * 	uriFreeUriMembersA(&absoluteDest);
  * @endcode
  *
- * TODO
- *
  *
  * @subsection SEC_REF_CREATE Creating References
  * Reference Creation is the inverse process of Reference Resolution: A common base URI
@@ -239,11 +237,6 @@
  * @endcode
  *
  *
- * @section SEC_MEMORY Memory Model
- * uriparser tries to save memory where possible, e.g. when parsing a URI instead of copying srings pointers indicating start and end of certain parts are stored.
- * TODO
- *
- *
  * @section SEC_UNICODE Ansi and Unicode
  * uriparser brings two versions of every structure and function:
  * one handling Ansi text (char *) and one working with Unicode text (wchar_t *),
@@ -252,5 +245,5 @@
  * - uriParseUriW() for Unicode.
  *
  * This brief tutorial only shows the usage of the Ansi editions but
- * their Unicode counterparst work in the very same way.
+ * their Unicode counterparts work in the very same way.
  */
