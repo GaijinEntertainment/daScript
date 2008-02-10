@@ -2,8 +2,8 @@
  * @mainpage
  *
  * @section SEC_TOC Table of Contents
- * - <a href="#SEC_INTRO">Introduction and intended audience</a>
- * - <a href="#SEC_ALGO">Algorithms and Examples</a>
+ * - <a href="#SEC_INTRO">Introduction</a>
+ * - Algorithms and Examples
  *   - <a href="#SEC_PARSE">Parsing URIs</a> (from string to object)
  *   - <a href="#SEC_TOSTRING">Recomposing URIs</a> (from object back to string)
  *   - <a href="#SEC_REF_RESOLVE">Resolving References</a>
@@ -13,33 +13,40 @@
  * - <a href="#SEC_MEMORY">Memory Model</a>
  * - <a href="#SEC_UNICODE">Ansi and Unicode</a>
  *
- * @section SEC_INTRO Introduction and Intended Audience
+ *
+ * @section SEC_INTRO Introduction
  * This text was written for users of the uriparser library.
  * It is intended to answer upcoming questions and to shed light
  * where function prototypes alone are not enough. Please
  * <a href="https://sourceforge.net/tracker/?atid=902834&group_id=182840&func=browse" target="_blank">request a fix</a>
- * if this document still leaves questions open.
+ * if this document still leaves questions open. Please also report typos to save people headaches.
+ *
  * Thank you for your attention and good luck with uriparser!</p>
  *
- * @section SEC_ALGO Algorithms and Examples
- * TODO asdsa dsa das dsa dsad s
  *
  * @subsection SEC_PARSE Parsing URIs (from string to object)
- * TODO
+ * Parsing a URI with uriparser looks like this:
+ *
  * @code
  * 	UriParserStateA state;
  * 	UriUriA uri;
  *
  * 	state.uri = &uri;
  * 	if (uriParseUriA(&state, "file:///home/user/song.mp3") != URI_SUCCESS) {
- * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
  * 	}
- * 	/COMMENT_HACK* DO STUFF *COMMENT_HACK/
- *
+ * 	...
  * 	uriFreeUriMembersA(&uri);
  * @endcode
  *
+ * While the URI object (UriUriA) holds information about the recogized
+ * parts of the given URI string, the parser state object (UriParserStateA)
+ * keeps error code and position. This information does not belong to
+ * the URI itself, which is why there are two seperate objects.
+ *
  * You can reuse parser state objects for parsing several URIs like this:
+ *
  * @code
  * 	UriParserStateA state;
  * 	UriUriA uriOne;
@@ -47,17 +54,17 @@
  *
  * 	state.uri = &uriOne;
  * 	if (uriParseUriA(&state, "file:///home/user/one") != URI_SUCCESS) {
- * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
  * 	}
- * 	/COMMENT_HACK* DO STUFF *COMMENT_HACK/
- *
+ * 	...
  * 	state.uri = &uriTwo;
  * 	if (uriParseUriA(&state, "file:///home/user/two") != URI_SUCCESS) {
- * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
  * 		uriFreeUriMembersA(&uriOne);
  * 	}
- * 	/COMMENT_HACK* DO STUFF *COMMENT_HACK/
- *
+ * 	...
  * 	uriFreeUriMembersA(&uriOne);
  * 	uriFreeUriMembersA(&uriTwo);
  * @endcode
@@ -68,43 +75,182 @@
  * glueing parts of a URI together to form a string is called recomposition.
  * Before we can recompose a URI object we have to know how much
  * space the resulting string will take:
+ *
  * @code
  * 	char * uriString;
  * 	int charsRequired;
  * 	if (uriToStringCharsRequiredA(&uri, &charsRequired) != URI_SUCCESS) {
- * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
  * 	}
  * 	charsRequired++;
  * @endcode
  *
  * Now we can tell uriToStringA() to write the string to a given buffer:
+ *
  * @code
  * 	uriString = malloc(charsRequired * sizeof(char));
  * 	if (uriString == NULL) {
- * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
  * 	}
  * 	if (uriToStringA(uriString, uri, charsRequired, NULL) != URI_SUCCESS) {
- * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
  * 	}
  * @endcode
  *
  *
  * @subsection SEC_REF_RESOLVE Resolving References
+ * <a href="http://tools.ietf.org/html/rfc3986#section-5" target="_blank">Reference Resolution</a>
+ * is the process of turning a (relative) URI reference into an absolute URI by applying a base
+ * URI to it. In code it looks like this:
+ *
+ * @code
+ * 	UriUriA absoluteDest;
+ * 	UriUriA relativeSource;
+ * 	UriUriA absoluteBase;
+ * 	...
+ * 	/COMMENT_HACK* relativeSource holds "../TWO" now *COMMENT_HACK/
+ * 	/COMMENT_HACK* absoluteBase holds "file:///one/two/three" now *COMMENT_HACK/
+ * 	if (uriAddBaseUriA(&absoluteDest, &relativeSource, &absoluteBase) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 	}
+ * 	/COMMENT_HACK* absoluteDest holds "file:///one/TWO" now *COMMENT_HACK/
+ * 	...
+ * 	uriFreeUriMembersA(&absoluteDest);
+ * @endcode
+ *
  * TODO
+ *
  *
  * @subsection SEC_REF_CREATE Creating References
- * TODO
+ * Reference Creation is the inverse process of Reference Resolution: A common base URI
+ * is &quot;substracted&quot; from an absolute URI to make a (relative) reference.
+ * If the base URI is not common the remaining URI will still be absolute, i.e. will
+ * carry a scheme
+ *
+ * @code
+ * 	UriUriA dest;
+ * 	UriUriA absoluteSource;
+ * 	UriUriA absoluteBase;
+ * 	...
+ * 	/COMMENT_HACK* absoluteSource holds "file:///one/TWO" now *COMMENT_HACK/
+ * 	/COMMENT_HACK* absoluteBase holds "file:///one/two/three" now *COMMENT_HACK/
+ * 	if (uriRemoveBaseUriA(&dest, &absoluteSource, &absoluteBase, URI_FALSE) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 	}
+ * 	/COMMENT_HACK* dest holds "../TWO" now *COMMENT_HACK/
+ * 	...
+ * 	uriFreeUriMembersA(&dest);
+ * @endcode
+ *
+ * The fourth parameter is the domain root mode. With <c>URI_FALSE</c> as above this will produce
+ * URIs relative to the base URI. With <c>URI_TRUE</c> the resulting URI will be relative to the
+ * domain root instead, e.g. &quot;/one/TWO&quot; in this case.
+ *
  *
  * @subsection SEC_FILENAME Filenames and URIs
- * TODO
+ * Converting filenames to and from URIs works on strings directly,
+ * i.e. without creating an URI object. 
+ *
+ * @code
+ * 	const char * const absFilename = "E:\\Documents and Settings";
+ * 	const int bytesNeeded = 8 + 3 * strlen(absFilename) + 1;
+ * 	char * absUri = malloc(bytesNeeded * sizeof(char));
+ * 	if (uriWindowsFilenameToUriStringA(absFilename, absUri) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 		free(absUri);
+ * 	}
+ * 	/COMMENT_HACK* absUri is "file:///E:/Documents%20and%20Settings" now *COMMENT_HACK/
+ * 	...
+ * 	free(absUri);
+ * @endcode
+ *
+ * Conversion works ..
+ * - for relative or absolute values,
+ * - in both directions (filenames &lt;--&gt; URIs) and
+ * - with Unix and Windows filenames.
+ *
+ * All you have to do is to choose the right function for your job and allocate
+ * the required space (in characters) for the target buffer.
+ * Let me show you and overview:
+ * - Filename --&gt; URI
+ *   - uriUnixFilenameToUriStringA()\n
+ *     Space required: <b>7</b> + 3 * len(filename) + 1 
+ *   - uriWindowsFilenameToUriStringA()\n
+ *     Space required: <b>8</b> + 3 * len(filename) + 1
+ * - URI --&gt; filename
+ *   - uriUriStringToUnixFilenameA()\n
+ *     Space required: len(uriString) + 1 - <b>7</b>
+ *   - uriUriStringToWindowsFilenameA()\n
+ *     Space required: len(uriString) + 1 - <b>8</b>
+ *
  *
  * @subsection SEC_NORMALIZE Normalizing URIs
- * TODO
+ * Sometimes we come accross URIs like this:
+ * http://example.org/one/two/../../one
+ * The process of converting this URI into
+ * http://example.org/one
+ * is called
+ * <a href="http://tools.ietf.org/html/rfc3986#section-6.2.2" target="_blank">Syntax-Based Normalization</a>.
+ * Normalizing a URI does more than just &quot;strip dot segements&quot;. Please have a look at
+ * <a href="http://tools.ietf.org/html/rfc3986#section-6.2.2" target="_blank">Section 6.2.2 of RFC 3986</a>
+ * for the full description.
  *
- * @section SEC_UNICODE Ansi and Unicode
- * TODO
+ * As we asked uriToStringCharsRequiredA() for the required space when converting
+ * a URI object back to a sring, we can ask uriNormalizeSyntaxMaskRequiredA() for
+ * the parts of a URI that require normalization and then pass this normalization
+ * mask to uriNormalizeSyntaxExA() like this:
+ *
+ * @code
+ * 	const unsigned int dirtyParts = uriNormalizeSyntaxMaskRequiredA(&uri);
+ * 	if (uriNormalizeSyntaxExA(&uri, dirtyParts) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 	}
+ * @endcode
+ *
+ * If you don't want to normalize all parts of the URI you can pass a custom
+ * mask as well:
+ *
+ * @code
+ * 	const unsigned int normMask = URI_NORMALIZE_SCHEME | URI_NORMALIZE_USER_INFO;
+ * 	if (uriNormalizeSyntaxExA(&uri, normMask) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 	}
+ * @endcode
+ *
+ * Please see #UriNormalizationMask for the complete set of flags.
+ *
+ * On the other hand calling plain uriNormalizeSyntaxA() (without the &quot;Ex&quot;)
+ * saves you thinking about single parts, as it queries uriNormalizeSyntaxMaskRequiredA()
+ * internally:
+ *
+ * @code
+ * 	if (uriNormalizeSyntaxA(&uri) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 	}
+ * @endcode
+ *
  *
  * @section SEC_MEMORY Memory Model
  * uriparser tries to save memory where possible, e.g. when parsing a URI instead of copying srings pointers indicating start and end of certain parts are stored.
  * TODO
+ *
+ *
+ * @section SEC_UNICODE Ansi and Unicode
+ * uriparser brings two versions of every structure and function:
+ * one handling Ansi text (char *) and one working with Unicode text (wchar_t *),
+ * for instance
+ * - uriParseUriA() for Ansi and
+ * - uriParseUriW() for Unicode.
+ *
+ * This brief tutorial only shows the usage of the Ansi editions but
+ * their Unicode counterparst work in the very same way.
  */
