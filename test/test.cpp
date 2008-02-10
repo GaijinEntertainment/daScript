@@ -67,7 +67,7 @@ public:
 		TEST_ADD(UriSuite::testUriHostIpSix2)
 		TEST_ADD(UriSuite::testUriHostIpFuture)
 		TEST_ADD(UriSuite::testUriComponents)
-		TEST_ADD(UriSuite::testUriComponentsBug20070701)
+		TEST_ADD(UriSuite::testUriComponents_Bug20070701)
 		TEST_ADD(UriSuite::testEscaping)
 		TEST_ADD(UriSuite::testUnescaping)
 		TEST_ADD(UriSuite::testTrailingSlash)
@@ -78,8 +78,8 @@ public:
 		TEST_ADD(UriSuite::testNormalizeSyntaxMaskRequired)
 		TEST_ADD(UriSuite::testNormalizeSyntax)
 		TEST_ADD(UriSuite::testFilenameUriConversion)
-		TEST_ADD(UriSuite::testFreeZeroLen)
-		TEST_ADD(UriSuite::testCrashSample)
+		TEST_ADD(UriSuite::testCrash_FreeUriMembers_Bug20080116)
+		TEST_ADD(UriSuite::testCrash_MakeOwner_Bug20080207)
 	}
 
 private:
@@ -303,7 +303,7 @@ private:
 		uriFreeUriMembersA(&uriA);
 	}
 
-	void testUriComponentsBug20070701() {
+	void testUriComponents_Bug20070701() {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
@@ -1030,13 +1030,7 @@ private:
 			return false;
 		}
 
-		const bool equalBefore = (URI_TRUE == uriEqualsUriW(&testUri, &expectedUri));
-		if (equalBefore) {
-			uriFreeUriMembersW(&testUri);
-			uriFreeUriMembersW(&expectedUri);
-			return false;
-		}
-
+		// First run
 		res = uriNormalizeSyntaxW(&testUri);
 		if (res != 0) {
 			uriFreeUriMembersW(&testUri);
@@ -1044,7 +1038,19 @@ private:
 			return false;
 		}
 
-		const bool equalAfter = (URI_TRUE == uriEqualsUriW(&testUri, &expectedUri));
+		bool equalAfter = (URI_TRUE == uriEqualsUriW(&testUri, &expectedUri));
+
+		// Second run
+		res = uriNormalizeSyntaxW(&testUri);
+		if (res != 0) {
+			uriFreeUriMembersW(&testUri);
+			uriFreeUriMembersW(&expectedUri);
+			return false;
+		}
+
+		equalAfter = equalAfter
+				&& (URI_TRUE == uriEqualsUriW(&testUri, &expectedUri));
+
 		uriFreeUriMembersW(&testUri);
 		uriFreeUriMembersW(&expectedUri);
 		return equalAfter;
@@ -1064,6 +1070,15 @@ private:
 		TEST_ASSERT(testNormalizeSyntaxHelper(
 				L"http://example.com/a/b/%2E%2E/",
 				L"http://example.com/a/"));
+
+		// Reported by Adrian Manrique
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"http://user:pass@SOMEHOST.COM:123",
+				L"http://user:pass@somehost.com:123"));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"HTTP://a:b@HOST:123/./1/2/../%41?abc#def",
+				L"http://a:b@host:123/1/A?abc#def"));
 	}
 
 	void testFilenameUriConversionHelper(const wchar_t * filename,
@@ -1111,7 +1126,7 @@ private:
 		testFilenameUriConversionHelper(L"abc def", L"abc%20def", FOR_UNIX);
 	}
 
-	void testFreeZeroLen() {
+	void testCrash_FreeUriMembers_Bug20080116() {
 		// Testcase by Adrian Manrique
 		UriParserStateA state;
 		UriUriA uri;
@@ -1123,15 +1138,13 @@ private:
 		TEST_ASSERT(true);
 	}
 
-	void testCrashSample() {
+	void testCrash_MakeOwner_Bug20080207() {
+		// Testcase by Adrian Manrique
 		UriParserStateA state;
 		UriUriA sourceUri;
 		state.uri = &sourceUri;
-		char * const sourceUriString = "file:///home/user/song.mp3";
+		const char * const sourceUriString = "http://user:pass@somehost.com:80/";
 		if (uriParseUriA(&state, sourceUriString) != 0) {
-			TEST_ASSERT(false);
-		}
-		if (uriNormalizeSyntaxA(&sourceUri) != 0) {
 			TEST_ASSERT(false);
 		}
 		if (uriNormalizeSyntaxA(&sourceUri) != 0) {

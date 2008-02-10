@@ -1,6 +1,8 @@
 ???
 
   * Added: Brief usage tutorial
+  * Fixed: Two major crash bugs in normalization code
+      Thanks to Adrian Manrique for the patch!
   * Changed: Soname set to 1:3:0
 
 2008-02-08 -- 0.6.2

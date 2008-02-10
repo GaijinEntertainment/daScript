@@ -370,7 +370,7 @@ static URI_INLINE UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
 		if (dup == NULL) {
 			return URI_FALSE; /* Raises malloc error */
 		}
-		memcpy(dup, range->afterLast, lenInBytes);
+		memcpy(dup, range->first, lenInBytes);
 		range->first = dup;
 		range->afterLast = dup + lenInChars;
 		*doneMask |= maskTest;
@@ -450,9 +450,9 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 	}
 
 	/* Port text, must come last so we don't have to undo that one if it fails. *
-	 * Otherwise we would need and extra enum flag for it althoug the port      *
+	 * Otherwise we would need and extra enum flag for it although the port      *
 	 * cannot go unnormalized...                                                */
-	if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(uri->userInfo))) {
+	if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(uri->portText))) {
 		return URI_FALSE; /* Raises malloc error */
 	}
 
