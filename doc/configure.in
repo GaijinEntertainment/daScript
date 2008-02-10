@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
-AC_PREREQ(2.61a)
+AC_PREREQ(2.61)
 AC_INIT(Doxyfile)
-AM_INIT_AUTOMAKE(uriparser, 0.6.2-doc)
+AM_INIT_AUTOMAKE(uriparser, 0.6.3-doc)
 
 
 ## Doxygen
@@ -19,4 +19,3 @@ fi
 
 
 AC_OUTPUT(Makefile)
-

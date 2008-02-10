@@ -1,5 +1,5 @@
 ## Process this file with automake to produce Makefile.in
-AUTOMAKE_OPTIONS = 1.10a foreign dist-zip dist-lzma no-dist-gzip
+AUTOMAKE_OPTIONS = 1.10 foreign dist-zip no-dist-gzip
 
 noinst_SCRIPTS = phony_html_doc
 

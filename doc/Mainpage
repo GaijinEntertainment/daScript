@@ -2,29 +2,26 @@
  * @mainpage
  *
  * @section SEC_TOC Table of Contents
- * - <a href="#SEC_INTRO">Introduction</a>
+ * - <a href="#intro">Introduction</a>
  * - Algorithms and Examples
- *   - <a href="#SEC_PARSE">Parsing URIs</a> (from string to object)
- *   - <a href="#SEC_TOSTRING">Recomposing URIs</a> (from object back to string)
- *   - <a href="#SEC_REF_RESOLVE">Resolving References</a>
- *   - <a href="#SEC_REF_CREATE">Creating References</a>
- *   - <a href="#SEC_FILENAME">Filenames and URIs</a>
- *   - <a href="#SEC_NORMALIZE">Normalizing URIs</a>
- * - <a href="#SEC_MEMORY">Memory Model</a>
- * - <a href="#SEC_UNICODE">Ansi and Unicode</a>
+ *   - <a href="#parsing">Parsing URIs</a> (from string to object)
+ *   - <a href="#recomposition">Recomposing URIs</a> (from object back to string)
+ *   - <a href="#resolution">Resolving References</a>
+ *   - <a href="#shortening">Creating References</a>
+ *   - <a href="#filenames">Filenames and URIs</a>
+ *   - <a href="#normalization">Normalizing URIs</a>
+ * - <a href="#chartypes">Ansi and Unicode</a>
  *
  *
- * @section SEC_INTRO Introduction
- * This text was written for users of the uriparser library.
+ * @section intro Introduction
+ * Welcome to the short uriparser integration tutorial.
  * It is intended to answer upcoming questions and to shed light
- * where function prototypes alone are not enough. Please
- * <a href="https://sourceforge.net/tracker/?atid=902834&group_id=182840&func=browse" target="_blank">request a fix</a>
- * if this document still leaves questions open. Please also report typos to save people headaches.
- *
- * Thank you for your attention and good luck with uriparser!</p>
+ * where function prototypes alone are not enough.
+ * Please drop me a line if you need further assistance and I will
+ * see what I can do for you. Good luck with uriparser!
  *
  *
- * @subsection SEC_PARSE Parsing URIs (from string to object)
+ * @subsection parsing Parsing URIs (from string to object)
  * Parsing a URI with uriparser looks like this:
  *
  * @code
@@ -34,6 +31,7 @@
  * 	state.uri = &uri;
  * 	if (uriParseUriA(&state, "file:///home/user/song.mp3") != URI_SUCCESS) {
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		uriFreeUriMembersA(&uri);
  * 		...
  * 	}
  * 	...
@@ -55,14 +53,16 @@
  * 	state.uri = &uriOne;
  * 	if (uriParseUriA(&state, "file:///home/user/one") != URI_SUCCESS) {
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		uriFreeUriMembersA(&uriOne);
  * 		...
  * 	}
  * 	...
  * 	state.uri = &uriTwo;
  * 	if (uriParseUriA(&state, "file:///home/user/two") != URI_SUCCESS) {
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
- * 		...
  * 		uriFreeUriMembersA(&uriOne);
+ * 		uriFreeUriMembersA(&uriTwo);
+ * 		...
  * 	}
  * 	...
  * 	uriFreeUriMembersA(&uriOne);
@@ -70,7 +70,7 @@
  * @endcode
  *
  *
- * @subsection SEC_TOSTRING Recomposing URIs (from object back to string)
+ * @subsection recomposition Recomposing URIs (from object back to string)
  * According to <a href="http://tools.ietf.org/html/rfc3986#section-5.3" target="_blank">RFC 3986</a>
  * glueing parts of a URI together to form a string is called recomposition.
  * Before we can recompose a URI object we have to know how much
@@ -85,6 +85,13 @@
  * 	}
  * 	charsRequired++;
  * @endcode
+ *
+ * @remarks
+ * Incrementing <c>charsRequired</c> by 1 is required since
+ * uriToStringCharsRequiredA() returns the length of the string
+ * as strlen() does. uriToStringA() works with the number
+ * of maximum characters to be written <b>including</b> the
+ * zero-terminator.
  *
  * Now we can tell uriToStringA() to write the string to a given buffer:
  *
@@ -101,7 +108,7 @@
  * @endcode
  *
  *
- * @subsection SEC_REF_RESOLVE Resolving References
+ * @subsection resolution Resolving References
  * <a href="http://tools.ietf.org/html/rfc3986#section-5" target="_blank">Reference Resolution</a>
  * is the process of turning a (relative) URI reference into an absolute URI by applying a base
  * URI to it. In code it looks like this:
@@ -115,6 +122,7 @@
  * 	/COMMENT_HACK* absoluteBase holds "file:///one/two/three" now *COMMENT_HACK/
  * 	if (uriAddBaseUriA(&absoluteDest, &relativeSource, &absoluteBase) != URI_SUCCESS) {
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		uriFreeUriMembersA(&absoluteDest);
  * 		...
  * 	}
  * 	/COMMENT_HACK* absoluteDest holds "file:///one/TWO" now *COMMENT_HACK/
@@ -122,8 +130,12 @@
  * 	uriFreeUriMembersA(&absoluteDest);
  * @endcode
  *
+ * @remarks
+ * uriAddBaseUriA() does not normalize the resulting URI.
+ * Usually you might want to pass it through uriNormalizeSyntaxA() after.
  *
- * @subsection SEC_REF_CREATE Creating References
+ *
+ * @subsection shortening Creating References
  * Reference Creation is the inverse process of Reference Resolution: A common base URI
  * is &quot;substracted&quot; from an absolute URI to make a (relative) reference.
  * If the base URI is not common the remaining URI will still be absolute, i.e. will
@@ -138,6 +150,7 @@
  * 	/COMMENT_HACK* absoluteBase holds "file:///one/two/three" now *COMMENT_HACK/
  * 	if (uriRemoveBaseUriA(&dest, &absoluteSource, &absoluteBase, URI_FALSE) != URI_SUCCESS) {
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		uriFreeUriMembersA(&dest);
  * 		...
  * 	}
  * 	/COMMENT_HACK* dest holds "../TWO" now *COMMENT_HACK/
@@ -150,7 +163,7 @@
  * domain root instead, e.g. &quot;/one/TWO&quot; in this case.
  *
  *
- * @subsection SEC_FILENAME Filenames and URIs
+ * @subsection filenames Filenames and URIs
  * Converting filenames to and from URIs works on strings directly,
  * i.e. without creating an URI object. 
  *
@@ -160,8 +173,8 @@
  * 	char * absUri = malloc(bytesNeeded * sizeof(char));
  * 	if (uriWindowsFilenameToUriStringA(absFilename, absUri) != URI_SUCCESS) {
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
- * 		...
  * 		free(absUri);
+ * 		...
  * 	}
  * 	/COMMENT_HACK* absUri is "file:///E:/Documents%20and%20Settings" now *COMMENT_HACK/
  * 	...
@@ -188,14 +201,11 @@
  *     Space required: len(uriString) + 1 - <b>8</b>
  *
  *
- * @subsection SEC_NORMALIZE Normalizing URIs
- * Sometimes we come accross URIs like this:
- * http://example.org/one/two/../../one
- * The process of converting this URI into
- * http://example.org/one
- * is called
+ * @subsection normalization Normalizing URIs
+ * Sometimes we come accross unnecessarily long URIs like &quot;http<b></b>://example.org/one/two/../../one&quot;.
+ * The algorithm we can use to convert this URI into &quot;http<b></b>://example.org/one&quot; is called
  * <a href="http://tools.ietf.org/html/rfc3986#section-6.2.2" target="_blank">Syntax-Based Normalization</a>.
- * Normalizing a URI does more than just &quot;strip dot segements&quot;. Please have a look at
+ * Note that normalizing a URI does more than just &quot;stripping dot segments&quot;. Please have a look at
  * <a href="http://tools.ietf.org/html/rfc3986#section-6.2.2" target="_blank">Section 6.2.2 of RFC 3986</a>
  * for the full description.
  *
@@ -237,13 +247,13 @@
  * @endcode
  *
  *
- * @section SEC_UNICODE Ansi and Unicode
+ * @section chartypes Ansi and Unicode
  * uriparser brings two versions of every structure and function:
  * one handling Ansi text (char *) and one working with Unicode text (wchar_t *),
  * for instance
  * - uriParseUriA() for Ansi and
  * - uriParseUriW() for Unicode.
  *
- * This brief tutorial only shows the usage of the Ansi editions but
+ * This tutorial only shows the usage of the Ansi editions but
  * their Unicode counterparts work in the very same way.
  */

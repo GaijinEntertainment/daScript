@@ -13,6 +13,7 @@ PROJECT_NAME = uriparser
 
 
 PROJECT_NUMBER = "0.6.3 (unreleased)"
+# PROJECT_NUMBER = "0.6.3"
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This could be handy for archiving the generated documentation or if some version control system is used.
 
 
