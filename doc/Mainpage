@@ -1,0 +1,110 @@
+/**
+ * @mainpage
+ *
+ * @section SEC_TOC Table of Contents
+ * - <a href="#SEC_INTRO">Introduction and intended audience</a>
+ * - <a href="#SEC_ALGO">Algorithms and Examples</a>
+ *   - <a href="#SEC_PARSE">Parsing URIs</a> (from string to object)
+ *   - <a href="#SEC_TOSTRING">Recomposing URIs</a> (from object back to string)
+ *   - <a href="#SEC_REF_RESOLVE">Resolving References</a>
+ *   - <a href="#SEC_REF_CREATE">Creating References</a>
+ *   - <a href="#SEC_FILENAME">Filenames and URIs</a>
+ *   - <a href="#SEC_NORMALIZE">Normalizing URIs</a>
+ * - <a href="#SEC_MEMORY">Memory Model</a>
+ * - <a href="#SEC_UNICODE">Ansi and Unicode</a>
+ *
+ * @section SEC_INTRO Introduction and Intended Audience
+ * This text was written for users of the uriparser library.
+ * It is intended to answer upcoming questions and to shed light
+ * where function prototypes alone are not enough. Please
+ * <a href="https://sourceforge.net/tracker/?atid=902834&group_id=182840&func=browse" target="_blank">request a fix</a>
+ * if this document still leaves questions open.
+ * Thank you for your attention and good luck with uriparser!</p>
+ *
+ * @section SEC_ALGO Algorithms and Examples
+ * TODO asdsa dsa das dsa dsad s
+ *
+ * @subsection SEC_PARSE Parsing URIs (from string to object)
+ * TODO
+ * @code
+ * 	UriParserStateA state;
+ * 	UriUriA uri;
+ *
+ * 	state.uri = &uri;
+ * 	if (uriParseUriA(&state, "file:///home/user/song.mp3") != URI_SUCCESS) {
+ * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 	}
+ * 	/COMMENT_HACK* DO STUFF *COMMENT_HACK/
+ *
+ * 	uriFreeUriMembersA(&uri);
+ * @endcode
+ *
+ * You can reuse parser state objects for parsing several URIs like this:
+ * @code
+ * 	UriParserStateA state;
+ * 	UriUriA uriOne;
+ * 	UriUriA uriTwo;
+ *
+ * 	state.uri = &uriOne;
+ * 	if (uriParseUriA(&state, "file:///home/user/one") != URI_SUCCESS) {
+ * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 	}
+ * 	/COMMENT_HACK* DO STUFF *COMMENT_HACK/
+ *
+ * 	state.uri = &uriTwo;
+ * 	if (uriParseUriA(&state, "file:///home/user/two") != URI_SUCCESS) {
+ * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 		uriFreeUriMembersA(&uriOne);
+ * 	}
+ * 	/COMMENT_HACK* DO STUFF *COMMENT_HACK/
+ *
+ * 	uriFreeUriMembersA(&uriOne);
+ * 	uriFreeUriMembersA(&uriTwo);
+ * @endcode
+ *
+ *
+ * @subsection SEC_TOSTRING Recomposing URIs (from object back to string)
+ * According to <a href="http://tools.ietf.org/html/rfc3986#section-5.3" target="_blank">RFC 3986</a>
+ * glueing parts of a URI together to form a string is called recomposition.
+ * Before we can recompose a URI object we have to know how much
+ * space the resulting string will take:
+ * @code
+ * 	char * uriString;
+ * 	int charsRequired;
+ * 	if (uriToStringCharsRequiredA(&uri, &charsRequired) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 	}
+ * 	charsRequired++;
+ * @endcode
+ *
+ * Now we can tell uriToStringA() to write the string to a given buffer:
+ * @code
+ * 	uriString = malloc(charsRequired * sizeof(char));
+ * 	if (uriString == NULL) {
+ * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 	}
+ * 	if (uriToStringA(uriString, uri, charsRequired, NULL) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* FAILURE *COMMENT_HACK/
+ * 	}
+ * @endcode
+ *
+ *
+ * @subsection SEC_REF_RESOLVE Resolving References
+ * TODO
+ *
+ * @subsection SEC_REF_CREATE Creating References
+ * TODO
+ *
+ * @subsection SEC_FILENAME Filenames and URIs
+ * TODO
+ *
+ * @subsection SEC_NORMALIZE Normalizing URIs
+ * TODO
+ *
+ * @section SEC_UNICODE Ansi and Unicode
+ * TODO
+ *
+ * @section SEC_MEMORY Memory Model
+ * uriparser tries to save memory where possible, e.g. when parsing a URI instead of copying srings pointers indicating start and end of certain parts are stored.
+ * TODO
+ */

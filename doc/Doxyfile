@@ -277,7 +277,7 @@ WARN_FORMAT = "WARNING: $text ($line, $file)"
 ###############################################################
 
 
-INPUT = ../include
+INPUT = ../include Mainpage
 # The INPUT tag is used to specify the files and/or directories that contain documented source files. You may enter file names like myfile.cpp or directories like /usr/src/myproject. Separate the files or directories with spaces.
 #
 # Note: If this tag is empty the current directory is searched.
@@ -343,7 +343,7 @@ RECURSIVE = YES
 # The IMAGE_PATH tag can be used to specify one or more files or directories that contain images that are to be included in the documentation (see the \image command).
 
 
-INPUT_FILTER = "cpp -C -D URI_DOXYGEN -I ../include"
+INPUT_FILTER = "bash preprocess.sh"
 # The INPUT_FILTER tag can be used to specify a program that doxygen should invoke to filter for each input file. Doxygen will invoke the filter program by executing (via popen()) the command:
 #
 # <filter> <input-file>

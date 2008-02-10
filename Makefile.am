@@ -69,6 +69,7 @@ EXTRA_DIST = \
 	doc/configure.in \
 	doc/Doxyfile \
 	doc/install-sh \
+	doc/Mainpage \
 	doc/Makefile.am \
 	doc/Makefile.in \
 	doc/missing \
