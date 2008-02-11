@@ -395,7 +395,7 @@ STRIP_CODE_COMMENTS = YES
 # If the REFERENCES_LINK_SOURCE tag is set to YES (the default) and SOURCE_BROWSER tag is set to YES, then the hyperlinks from functions in REFERENCES_RELATION and REFERENCED_BY_RELATION lists will link to the source code. Otherwise they will link to the documentstion.
 
 
-# VERBATIM_HEADERS = 
+VERBATIM_HEADERS = NO
 # If the VERBATIM_HEADERS tag is set the YES (the default) then doxygen will generate a verbatim copy of the header file for each class for which an include is specified. Set to NO to disable this.
 #
 # See also:

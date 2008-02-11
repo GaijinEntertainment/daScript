@@ -91,7 +91,7 @@ extern "C" {
 typedef struct URI_TYPE(TextRangeStruct) {
 	const URI_CHAR * first; /**< Pointer to first character */
 	const URI_CHAR * afterLast; /**< Pointer to character after the last one still in */
-} URI_TYPE(TextRange);
+} URI_TYPE(TextRange); /**< @copydoc UriTextRangeStructA */
 
 
 
@@ -105,7 +105,7 @@ typedef struct URI_TYPE(PathSegmentStruct) {
 	struct URI_TYPE(PathSegmentStruct) * next; /**< Pointer to the next path segment in the list, can be NULL if last already */
 
 	void * reserved; /**< Reserved to the parser */
-} URI_TYPE(PathSegment);
+} URI_TYPE(PathSegment); /**< @copydoc UriPathSegmentStructA */
 
 
 
@@ -119,7 +119,7 @@ typedef struct URI_TYPE(HostDataStruct) {
 	UriIp4 * ip4; /**< IPv4 address */
 	UriIp6 * ip6; /**< IPv6 address */
 	URI_TYPE(TextRange) ipFuture; /**< IPvFuture address */
-} URI_TYPE(HostData);
+} URI_TYPE(HostData); /**< @copydoc UriHostDataStructA */
 
 
 
@@ -141,7 +141,7 @@ typedef struct URI_TYPE(UriStruct) {
 	UriBool owner; /**< Memory owner flag */
 
 	void * reserved; /**< Reserved to the parser */
-} URI_TYPE(Uri);
+} URI_TYPE(Uri); /**< @copydoc UriUriStructA */
 
 
 
@@ -156,7 +156,7 @@ typedef struct URI_TYPE(ParserStateStruct) {
 	const URI_CHAR * errorPos; /**< Pointer to position in case of a syntax error */
 
 	void * reserved; /**< Reserved to the parser */
-} URI_TYPE(ParserState);
+} URI_TYPE(ParserState); /**< @copydoc UriParserStateStructA */
 
 
 

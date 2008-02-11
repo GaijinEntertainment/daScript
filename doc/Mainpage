@@ -39,8 +39,8 @@
  * 	uriFreeUriMembersA(&uri);
  * @endcode
  *
- * While the URI object (#UriUriA) holds information about the recogized
- * parts of the given URI string, the parser state object (#UriParserStateA)
+ * While the URI object (::UriUriA) holds information about the recogized
+ * parts of the given URI string, the parser state object (::UriParserStateA)
  * keeps error code and position. This information does not belong to
  * the URI itself, which is why there are two seperate objects.
  *
@@ -234,7 +234,7 @@
  * 	}
  * @endcode
  *
- * Please see #UriNormalizationMask for the complete set of flags.
+ * Please see ::UriNormalizationMaskEnum for the complete set of flags.
  *
  * On the other hand calling plain uriNormalizeSyntaxA() (without the &quot;Ex&quot;)
  * saves you thinking about single parts, as it queries uriNormalizeSyntaxMaskRequiredA()
