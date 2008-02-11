@@ -78,8 +78,10 @@
  * space the resulting string will take:
  *
  * @code
+ * 	UriUriA uri;
  * 	char * uriString;
  * 	int charsRequired;
+ * 	...
  * 	if (uriToStringCharsRequiredA(&uri, &charsRequired) != URI_SUCCESS) {
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
  * 		...
@@ -95,7 +97,7 @@
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
  * 		...
  * 	}
- * 	if (uriToStringA(uriString, uri, charsRequired, NULL) != URI_SUCCESS) {
+ * 	if (uriToStringA(uriString, &uri, charsRequired, NULL) != URI_SUCCESS) {
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
  * 		...
  * 	}
