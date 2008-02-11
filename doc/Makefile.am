@@ -11,6 +11,7 @@ phony_html_doc :
 	rm -f html/*.map
 	rm -f html/*.md5
 	rm -f html/graph_legend.dot
+	rm -f html/index.*
 	doxygen Doxyfile
 
 EXTRA_DIST = \
