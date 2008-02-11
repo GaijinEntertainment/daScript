@@ -331,8 +331,8 @@ static URI_INLINE UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** f
 	URI_CHAR * buffer;
 
 	/* Death checks */
-	if ((first == NULL) || (afterLast == NULL) || (*first == NULL)
-		|| (*afterLast == NULL)) {
+	if ((first == NULL) || (afterLast == NULL)
+			|| (*first == NULL) || (*afterLast == NULL)) {
 		return URI_FALSE;
 	}
 
@@ -623,7 +623,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			walker = walker->next;
 		}
 	} else {
-		const URI_TYPE(PathSegment) * walker;
+		URI_TYPE(PathSegment) * walker;
 
 		/* Fix percent-encoding for each segment */
 		walker = uri->pathHead;
