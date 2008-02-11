@@ -73,6 +73,7 @@ EXTRA_DIST = \
 	doc/Makefile.am \
 	doc/Makefile.in \
 	doc/missing \
+	doc/preprocess.sh \
 	\
 	doc/rfc3513.htm \
 	doc/rfc3986.htm \
