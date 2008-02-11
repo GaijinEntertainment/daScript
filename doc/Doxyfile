@@ -16,7 +16,7 @@ PROJECT_NUMBER = "0.6.3"
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This could be handy for archiving the generated documentation or if some version control system is used.
 
 
-CHM_FILE = ..\uriparser-0.6.3.chm
+CHM_FILE = ..\uriparser-0.6.3-doc.chm
 # If the GENERATE_HTMLHELP tag is set to YES, the CHM_FILE tag can be used to specify the file name of the resulting .chm file. You can add a path in front of the file if the result should not be written to the html output directory.
 
 
