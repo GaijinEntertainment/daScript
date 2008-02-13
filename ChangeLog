@@ -1,3 +1,9 @@
+???
+
+  * Added: MinGW Makefile
+      Thanks to Michael Anthony Puls II!
+  * Changed: Soname set to 1:4:0
+
 2008-02-11 -- 0.6.3
 
   * Fixed: Two major crash bugs in normalization code
