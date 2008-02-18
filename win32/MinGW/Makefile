@@ -51,25 +51,27 @@ dos = $(subst /,\,$(1))
 URIPARSER_OBJECTS := $(patsubst %.c,%.o,$(wildcard $(LIB_DIR)/*.c))
 TEST_OBJECTS := $(patsubst %.cpp,%.o,$(wildcard $(CPP_TEST_DIR)/*.cpp)) \
 		$(patsubst %.cpp,%.o,$(wildcard $(TEST_DIR)/*.cpp))
+LIBRARY = $(WIN32_DIR)/liburiparser.a
+TEST_SUITE = $(WIN32_DIR)/test.exe
 
-$(WIN32_DIR)/liburiparser.a: $(URIPARSER_OBJECTS)
-	ar rcs $(WIN32_DIR)/liburiparser.a $(URIPARSER_OBJECTS)
+$(LIBRARY): $(URIPARSER_OBJECTS)
+	ar rcs $(LIBRARY) $(URIPARSER_OBJECTS)
 
 $(URIPARSER_OBJECTS): %.o : %.c
 	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -o "$@" -c "$<"
 
-$(WIN32_DIR)/test.exe: $(TEST_OBJECTS)
+$(TEST_SUITE): $(LIBRARY) $(TEST_OBJECTS)
 	$(CXX) $(CFLAGS) -I$(INCLUDE_DIR) $(TEST_OBJECTS) \
-		-L$(WIN32_DIR) -luriparser -o $(WIN32_DIR)/test.exe
+		-L$(WIN32_DIR) -luriparser -o $(TEST_SUITE)
 
 $(TEST_OBJECTS): %.o : %.cpp
 	$(CXX) $(CFLAGS) -I$(INCLUDE_DIR) -c "$<" -o "$@" 
     
-all: $(WIN32_DIR)/liburiparser.a
+all: $(LIBRARY)
 
 clean:
-	del $(call dos,$(URIPARSER_OBJECTS)) $(WIN32_DIR)\liburiparser.a \
-		$(call dos,$(TEST_OBJECTS)) $(WIN32_DIR)\test.exe
+	del $(call dos,$(URIPARSER_OBJECTS)) $(call dos,$(LIBRARY)) \
+		$(call dos,$(TEST_OBJECTS)) $(call dos,$(TEST_SUITE))
 
-check: $(WIN32_DIR)/test.exe
-	$(WIN32_DIR)/test.exe
+check: $(TEST_SUITE)
+	$(TEST_SUITE)
