@@ -1,6 +1,7 @@
 == BEFORE NEXT RELEASE ==
 
 == REAL SOON ==
+ * Add example check_uri a la check_spiff
  * Filename helpers
    * samba shares
    * pipe characters? C:/C|

@@ -100,6 +100,7 @@ EXTRA_DIST = \
 	win32/Code_Blocks/uriparser.cbp \
 	\
 	win32/MinGW/Makefile \
+	win32/MinGW/Readme.txt
 	\
 	win32/Visual_Studio_2005/test.vcproj \
 	win32/Visual_Studio_2005/uriparser.sln \
