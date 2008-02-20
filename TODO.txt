@@ -1,6 +1,12 @@
 == BEFORE NEXT RELEASE ==
+  * filename/uri space req doc bug
 
-== REAL SOON ==
+== SOON ==
+ * samba filename conversion?
+ * (g/s)etters for single components?
+ * normalize relative URIs?
+   e.g. "../../abc/../def/" -> "../../def/"
+ * Add configure options to disable Ansi or Unicode
  * Add example check_uri a la check_spiff
  * Filename helpers
    * samba shares
@@ -8,13 +14,11 @@
  * Test owner code
  * Implement CleanBase (strips off last component, query and stuff)
  * Implement Clone
-
-== SOON ==
- * Enable/disable single components/algorithms?
- * Pretty/smarter IPv6 stringification
  * Test Equals
  * Code TODOs
  * Make hostText from hostData?
 
 == LATER ==
+ * Enable/disable single components/algorithms?
+ * Pretty/smarter IPv6 stringification
  * Reduce recursion, replace some by loops
