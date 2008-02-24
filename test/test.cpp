@@ -77,6 +77,8 @@ public:
 		TEST_ADD(UriSuite::testToStringCharsRequired)
 		TEST_ADD(UriSuite::testNormalizeSyntaxMaskRequired)
 		TEST_ADD(UriSuite::testNormalizeSyntax)
+		TEST_ADD(UriSuite::testNormalizeSyntaxComponents)
+		TEST_ADD(UriSuite::testNormalizeCrash_Bug20080224)
 		TEST_ADD(UriSuite::testFilenameUriConversion)
 		TEST_ADD(UriSuite::testCrash_FreeUriMembers_Bug20080116)
 		TEST_ADD(UriSuite::testCrash_MakeOwner_Bug20080207)
@@ -1008,7 +1010,8 @@ private:
 		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/#AB%43", URI_NORMALIZE_FRAGMENT));
 	}
 
-	bool testNormalizeSyntaxHelper(wchar_t * uriText, wchar_t * expectedNormalized) {
+	bool testNormalizeSyntaxHelper(wchar_t * uriText, wchar_t * expectedNormalized,
+			unsigned int mask = static_cast<unsigned int>(-1)) {
 		UriParserStateW stateW;
 		int res;
 
@@ -1031,7 +1034,7 @@ private:
 		}
 
 		// First run
-		res = uriNormalizeSyntaxW(&testUri);
+		res = uriNormalizeSyntaxExW(&testUri, mask);
 		if (res != 0) {
 			uriFreeUriMembersW(&testUri);
 			uriFreeUriMembersW(&expectedUri);
@@ -1041,7 +1044,7 @@ private:
 		bool equalAfter = (URI_TRUE == uriEqualsUriW(&testUri, &expectedUri));
 
 		// Second run
-		res = uriNormalizeSyntaxW(&testUri);
+		res = uriNormalizeSyntaxExW(&testUri, mask);
 		if (res != 0) {
 			uriFreeUriMembersW(&testUri);
 			uriFreeUriMembersW(&expectedUri);
@@ -1079,6 +1082,88 @@ private:
 		TEST_ASSERT(testNormalizeSyntaxHelper(
 				L"HTTP://a:b@HOST:123/./1/2/../%41?abc#def",
 				L"http://a:b@host:123/1/A?abc#def"));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"../../abc",
+				L"../../abc"));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"../../abc/..",
+				L"../.."));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"abc/..",
+				L""));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"../../abc/./def",
+				L"../../abc/def"));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"./def",
+				L"def"));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"def/.",
+				L"def/"));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"./abc:def",
+				L"./abc:def"));
+	}
+
+	void testNormalizeSyntaxComponents() {
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
+				L"http://%41@EXAMPLE.ORG/../a?%41#%41",
+				URI_NORMALIZE_SCHEME));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
+				L"HTTP://A@EXAMPLE.ORG/../a?%41#%41",
+				URI_NORMALIZE_USER_INFO));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
+				L"HTTP://%41@example.org/../a?%41#%41",
+				URI_NORMALIZE_HOST));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
+				L"HTTP://%41@EXAMPLE.ORG/a?%41#%41",
+				URI_NORMALIZE_PATH));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
+				L"HTTP://%41@EXAMPLE.ORG/../a?A#%41",
+				URI_NORMALIZE_QUERY));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
+				L"HTTP://%41@EXAMPLE.ORG/../a?%41#A",
+				URI_NORMALIZE_FRAGMENT));
+	}
+
+	void testNormalizeCrash_Bug20080224() {
+		UriParserStateW stateW;
+		int res;
+		UriUriW testUri;
+		stateW.uri = &testUri;
+
+		res = uriParseUriW(&stateW, L"http://example.org/abc//../def");
+		TEST_ASSERT(res == 0);
+
+		// First call will make us owner of copied memory
+		res = uriNormalizeSyntaxExW(&testUri, URI_NORMALIZE_SCHEME);
+		TEST_ASSERT(res == 0);
+		res = uriNormalizeSyntaxExW(&testUri, URI_NORMALIZE_HOST);
+		TEST_ASSERT(res == 0);
+
+		// Frees empty path segment -> crash
+		res = uriNormalizeSyntaxW(&testUri);
+		TEST_ASSERT(res == 0);
+
+		uriFreeUriMembersW(&testUri);
 	}
 
 	void testFilenameUriConversionHelper(const wchar_t * filename,

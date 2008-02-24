@@ -593,9 +593,15 @@ void FourSuite::pctEncNormalizationTests() {
 
 void FourSuite::pathSegmentNormalizationTests() {
 	TEST_ASSERT(normalizeAndCompare("/a/b/../../c", "/c"));
-	TEST_ASSERT(normalizeAndCompare("a/b/../../c", "a/b/../../c"));
+	// TEST_ASSERT(normalizeAndCompare("a/b/../../c", "a/b/../../c"));
+	// Fixed:
+	TEST_ASSERT(normalizeAndCompare("a/b/../../c", "c"));
 	TEST_ASSERT(normalizeAndCompare("/a/b/././c", "/a/b/c"));
-	TEST_ASSERT(normalizeAndCompare("a/b/././c", "a/b/././c"));
+	// TEST_ASSERT(normalizeAndCompare("a/b/././c", "a/b/././c"));
+	// Fixed:
+	TEST_ASSERT(normalizeAndCompare("a/b/././c", "a/b/c"));
 	TEST_ASSERT(normalizeAndCompare("/a/b/../c/././d", "/a/c/d"));
-	TEST_ASSERT(normalizeAndCompare("a/b/../c/././d", "a/b/../c/././d"));
+	// TEST_ASSERT(normalizeAndCompare("a/b/../c/././d", "a/b/../c/././d"));
+	// Fixed:
+	TEST_ASSERT(normalizeAndCompare("a/b/../c/././d", "a/c/d"));
 }

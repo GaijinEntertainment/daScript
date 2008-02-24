@@ -148,7 +148,7 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 					if (!URI_FUNC(CopyPath)(absDest, relSource)) {
 						return URI_ERROR_MALLOC;
 					}
-					if (!URI_FUNC(RemoveDotSegments)(absDest)) {
+					if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
 						return URI_ERROR_MALLOC;
 					}
 	/* [05/32]		T.query = R.query; */
@@ -165,7 +165,7 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 						if (!URI_FUNC(CopyPath)(absDest, relSource)) {
 							return URI_ERROR_MALLOC;
 						}
-						if (!URI_FUNC(RemoveDotSegments)(absDest)) {
+						if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
 							return URI_ERROR_MALLOC;
 						}
 	/* [10/32]			T.query = R.query; */
@@ -196,7 +196,7 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 								if (!URI_FUNC(CopyPath)(absDest, relSource)) {
 									return URI_ERROR_MALLOC;
 								}
-								if (!URI_FUNC(RemoveDotSegments)(absDest)) {
+								if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
 									return URI_ERROR_MALLOC;
 								}
 	/* [22/32]				else */
@@ -209,7 +209,7 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 									return URI_ERROR_MALLOC;
 								}
 	/* [24/32]					T.path = remove_dot_segments(T.path); */
-								if (!URI_FUNC(RemoveDotSegments)(absDest)) {
+								if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
 									return URI_ERROR_MALLOC;
 								}
 

@@ -498,9 +498,6 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 	} else if (inMask == URI_NORMALIZED) {
 		/* Nothing to do */
 		return URI_SUCCESS;
-	} else if ((uri->scheme.first == NULL) && !uri->absolutePath) {
-		/* Normalization only done for absolute paths */
-		return URI_SUCCESS;
 	}
 
 	/* Scheme, host */
@@ -622,7 +619,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			}
 			walker = walker->next;
 		}
-	} else {
+	} else if (inMask & URI_NORMALIZE_PATH) {
 		URI_TYPE(PathSegment) * walker;
 
 		/* Fix percent-encoding for each segment */
@@ -645,9 +642,16 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 		}
 
 		/* 6.2.2.3 Path Segment Normalization */
-		if (!URI_FUNC(RemoveDotSegments)(uri)) {
-			URI_FUNC(PreventLeakage)(uri, doneMask);
-			return URI_ERROR_MALLOC;
+		if ((uri->scheme.first == NULL) && !uri->absolutePath) {
+			if (!URI_FUNC(RemoveDotSegmentsRelative)(uri)) {
+				URI_FUNC(PreventLeakage)(uri, doneMask);
+				return URI_ERROR_MALLOC;
+			}
+		} else {
+			if (!URI_FUNC(RemoveDotSegmentsAbsolute)(uri)) {
+				URI_FUNC(PreventLeakage)(uri, doneMask);
+				return URI_ERROR_MALLOC;
+			}
 		}
 	}
 

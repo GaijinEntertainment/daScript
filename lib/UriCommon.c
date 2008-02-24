@@ -76,8 +76,8 @@ void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri) {
 
 
 
-/* Properly removes "." and ".." path segments */
-UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
+/* Properly removes "." and ".." path segments in an absolute path */
+UriBool URI_FUNC(RemoveDotSegmentsAbsolute)(URI_TYPE(Uri) * uri) {
 	URI_TYPE(PathSegment) * walker;
 	if ((uri == NULL) || (uri->pathHead == NULL)) {
 		return URI_TRUE;
@@ -107,7 +107,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						prev->next = walker->next;
 					}
 
-					if (uri->owner) {
+					if (uri->owner && (walker->text.first != walker->text.afterLast)) {
 						free((URI_CHAR *)walker->text.first);
 					}
 					free(walker);
@@ -115,7 +115,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 					/* Last segment */
 					if (prev == NULL) {
 						/* Last and first */
-						if (uri->owner) {
+						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
 							free((URI_CHAR *)walker->text.first);
 						}
 						free(walker);
@@ -124,7 +124,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						uri->pathTail = NULL;
 					} else {
 						/* Last but not first, replace "." with empty segment to represent trailing slash */
-						if (uri->owner) {
+						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
 							free((URI_CHAR *)walker->text.first);
 						}
 						walker->text.first = URI_FUNC(SafeToPointTo);
@@ -163,12 +163,12 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 							/* Last segment -> insert "" segment to represent trailing slash, update tail */
 							URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
 							if (segment == NULL) {
-								if (uri->owner) {
+								if (uri->owner && (walker->text.first != walker->text.afterLast)) {
 									free((URI_CHAR *)walker->text.first);
 								}
 								free(walker);
 
-								if (uri->owner) {
+								if (uri->owner && (prev->text.first != prev->text.afterLast)) {
 									free((URI_CHAR *)prev->text.first);
 								}
 								free(prev);
@@ -182,12 +182,12 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 							uri->pathTail = segment;
 						}
 
-						if (uri->owner) {
+						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
 							free((URI_CHAR *)walker->text.first);
 						}
 						free(walker);
 
-						if (uri->owner) {
+						if (uri->owner && (prev->text.first != prev->text.afterLast)) {
 							free((URI_CHAR *)prev->text.first);
 						}
 						free(prev);
@@ -203,12 +203,12 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 							uri->pathTail = NULL;
 						}
 
-						if (uri->owner) {
+						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
 							free((URI_CHAR *)walker->text.first);
 						}
 						free(walker);
 
-						if (uri->owner) {
+						if (uri->owner && (prev->text.first != prev->text.afterLast)) {
 							free((URI_CHAR *)prev->text.first);
 						}
 						free(prev);
@@ -226,7 +226,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 						uri->pathTail = NULL;
 					}
 
-					if (uri->owner) {
+					if (uri->owner && (walker->text.first != walker->text.afterLast)) {
 						free((URI_CHAR *)walker->text.first);
 					}
 					free(walker);
@@ -265,6 +265,167 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri) {
 		uri->pathHead = NULL;
 		uri->pathTail = NULL;
 	}
+
+	return URI_TRUE;
+}
+
+
+
+/* Properly removes "." and ".." path segments in a a relative path */
+UriBool URI_FUNC(RemoveDotSegmentsRelative)(URI_TYPE(Uri) * uri) {
+	URI_TYPE(PathSegment) * walker;
+	if ((uri == NULL) || (uri->pathHead == NULL)) {
+		return URI_TRUE;
+	}
+
+	walker = uri->pathHead;
+	walker->reserved = NULL; /* Prev pointer */
+	do {
+		if (((walker->text.afterLast - walker->text.first) == 1)
+				&& ((walker->text.first)[0] == _UT('.'))) {
+			/* Path "." -> remove this segment */
+			URI_TYPE(PathSegment) * const prev = walker->reserved;
+			URI_TYPE(PathSegment) * const nextBackup = walker->next;
+			UriBool containsColon = URI_FALSE;
+
+			if ((walker == uri->pathHead) && (walker->next != NULL)) {
+				const URI_CHAR * ch = walker->next->text.first;
+				for (; ch < walker->next->text.afterLast; ch++) {
+					if (*ch == _UT(':')) {
+						containsColon = URI_TRUE;
+						break;
+					}
+				}
+			}
+
+			if (containsColon) {
+				/* We cannot remove this segment or we will get */
+				/* a scheme instead if we reparse the string: */
+				/* "./http:b/" -> "http:b/" -> trouble */
+				if (walker->next != NULL) {
+					walker->next->reserved = walker;
+				} else {
+					/* Last segment -> update tail */
+					uri->pathTail = walker;
+				}
+				walker = walker->next;
+			} else {
+				/* Last segment? */
+				if (walker->next != NULL) {
+					/* Not last segment */
+					walker->next->reserved = prev;
+
+					if (prev == NULL) {
+						/* First but not last segment */
+						uri->pathHead = walker->next;
+					} else {
+						/* Middle segment */
+						prev->next = walker->next;
+					}
+
+					if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+						free((URI_CHAR *)walker->text.first);
+					}
+					free(walker);
+				} else {
+					/* Last segment */
+					if (prev == NULL) {
+						/* Last and first */
+						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+							free((URI_CHAR *)walker->text.first);
+						}
+						free(walker);
+
+						uri->pathHead = NULL;
+						uri->pathTail = NULL;
+					} else {
+						/* Last but not first, replace "." with empty segment to represent trailing slash */
+						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+							free((URI_CHAR *)walker->text.first);
+						}
+						walker->text.first = URI_FUNC(SafeToPointTo);
+						walker->text.afterLast = URI_FUNC(SafeToPointTo);
+					}
+				}
+
+				walker = nextBackup;
+			}
+		} else {
+			if ((walker->next != NULL)
+					&& !(((walker->text.afterLast - walker->text.first) == 2)
+						&& ((walker->text.first)[0] == _UT('.'))
+						&& ((walker->text.first)[1] == _UT('.')))
+					&& ((walker->next->text.afterLast - walker->next->text.first) == 2)
+					&& ((walker->next->text.first)[0] == _UT('.'))
+					&& ((walker->next->text.first)[1] == _UT('.'))) {
+				/* Path "<some>/.." -> remove both segments */
+				URI_TYPE(PathSegment) * const prev = walker->reserved;
+				URI_TYPE(PathSegment) * const nextBackup = walker->next->next;
+
+				/* Last segment? */
+				if (walker->next->next != NULL) {
+					/* Not last segment */
+					walker->next->next->reserved = prev;
+
+					if (prev == NULL) {
+						/* First but not last segment */
+						uri->pathHead = walker->next->next;
+					} else {
+						/* Middle segment */
+						prev->next = walker->next->next;
+					}
+
+					if (uri->owner) {
+						if (walker->text.first != walker->text.afterLast) {
+							free((URI_CHAR *)walker->text.first);
+						}
+						if (walker->next->text.first != walker->next->text.afterLast) {
+							free((URI_CHAR *)walker->next->text.first);
+						}
+					}
+					free(walker->next);
+					free(walker);
+				} else {
+					/* Last segment */
+					if (prev == NULL) {
+						/* Last and first */
+						uri->pathHead = NULL;
+					} else {
+						prev->next = nextBackup;
+					}
+
+					if (uri->owner) {
+						if (walker->text.first != walker->text.afterLast) {
+							free((URI_CHAR *)walker->text.first);
+						}
+						if (walker->next->text.first != walker->next->text.afterLast) {
+							free((URI_CHAR *)walker->next->text.first);
+						}
+					}
+					free(walker->next);
+					free(walker);
+
+					uri->pathTail = prev;
+				}
+				
+				if (prev != NULL) {
+					/* e.g. to fix "a/b/../../c" to "c" */
+					/* and not just "a/../c" */
+					walker = prev;
+				} else {
+					walker = nextBackup;
+				}
+			} else {
+				if (walker->next != NULL) {
+					walker->next->reserved = walker;
+				} else {
+					/* Last segment -> update tail */
+					uri->pathTail = walker;
+				}
+				walker = walker->next;
+			}
+		}
+	} while (walker != NULL);
 
 	return URI_TRUE;
 }

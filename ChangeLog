@@ -1,6 +1,10 @@
 ???
 
-  * Added: MinGW Makefile
+  * Added: Syntax-based normalization can now handle relative URIs,
+      e.g. "../../a/b/.././c" is normalized "../../a/c"
+  * Fixed: Normalization code could free foreign memory
+  * Fixed: Normalization processed the path segment even when asked not to
+  * Added: MinGW Makefile and related readme
       Thanks to Michael Anthony Puls II!
   * Changed: Soname set to 1:4:0
 
