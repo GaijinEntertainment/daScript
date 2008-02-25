@@ -1,5 +1,6 @@
 == BEFORE NEXT RELEASE ==
-  * filename/uri space req doc bug
+ * filename/uri space req doc bug
+ * fix warning: normalize code
 
 == SOON ==
  * samba filename conversion?

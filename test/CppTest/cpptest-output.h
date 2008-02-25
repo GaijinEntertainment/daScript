@@ -64,14 +64,14 @@ namespace Test
 		/// \param tests Total number of tests in all suites.
 		/// \param time  Total elapsed time for all tests.
 		///
-		virtual void finished(int tests, const Time& time) {}
+		virtual void finished(int /*tests*/, const Time& /*time*/) {}
 
 		/// Called when a suite is entered.
 		///
 		/// \param tests Number of tests in this suite.
 		/// \param name  Name of the suite.
 		///
-		virtual void suite_start(int tests, const std::string& name) {}
+		virtual void suite_start(int /*tests*/, const std::string& /*name*/) {}
 		
 		/// Called when a suite is finished.
 		///
@@ -79,14 +79,14 @@ namespace Test
 		/// \param name  Name of the suite.
 		/// \param time  Total elapsed time for all tests in this suite.
 		///
-		virtual void suite_end(int tests, const std::string& name,
-							   const Time& time) {}
+		virtual void suite_end(int /*tests*/, const std::string& /*name*/,
+							   const Time& /*time*/) {}
 		
 		/// Called when a tests is executed.
 		///
 		/// \param name Name of the test function.
 		///
-		virtual void test_start(const std::string& name) {}
+		virtual void test_start(const std::string& /*name*/) {}
 		
 		/// Called when a test if finished, regardless if an assertment was
 		/// issued.
@@ -95,14 +95,14 @@ namespace Test
 		/// \param ok   True if the test was successful; false otherwise.
 		/// \param time  Execution time.
 		///
-		virtual void test_end(const std::string& name, bool ok,
-							  const Time& time) {}
+		virtual void test_end(const std::string& /*name*/, bool /*ok*/,
+							  const Time& /*time*/) {}
 		
 		/// Called when an assertment is issued.
 		///
 		/// \param s Assert point information.
 		///
-		virtual void assertment(const Source& s) {}
+		virtual void assertment(const Source& /*s*/) {}
 
 	protected:
 		/// Empty constructor.
