@@ -463,7 +463,15 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 
 unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri) {
 	unsigned int res;
+#if defined(__GNUC__) && ((__GNUC__ > 4) \
+        || ((__GNUC__ == 4) && defined(__GNUC_MINOR__) && (__GNUC_MINOR__ >= 2)))
+    /* Slower code that fixes a warning, not sure if this is a smart idea */
+	URI_TYPE(Uri) writeableClone;
+	memcpy(&writeableClone, uri, 1 * sizeof(URI_TYPE(Uri)));
+	URI_FUNC(NormalizeSyntaxEngine)(&writeableClone, 0, &res);
+#else
 	URI_FUNC(NormalizeSyntaxEngine)((URI_TYPE(Uri) *)uri, 0, &res);
+#endif
 	return res;
 }
 
