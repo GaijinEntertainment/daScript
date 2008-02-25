@@ -1,5 +1,5 @@
 AC_PREREQ(2.61)
-AC_INIT([uriparser], [0.6.3])
+AC_INIT([uriparser], [0.6.4])
 AM_INIT_AUTOMAKE([1.10.1 foreign dist-zip dist-bzip2 dist-lzma subdir-objects])
 AM_CONFIG_HEADER(test/CppTest/config.h)
 
@@ -8,6 +8,24 @@ AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_LIBTOOL
 AC_HEADER_STDC
+
+
+
+# Check for 
+AC_MSG_CHECKING(for wsprintf)
+AC_LINK_IFELSE([
+	#include <stdio.h>
+	#include <wchar.h>
+	int main() {
+	    swprintf((wchar_t *)0, (size_t)0, (wchar_t *)0, 0);
+	    return 0;
+	}
+],[
+	AC_MSG_RESULT(yes)
+],[
+	AC_DEFINE([NO_WSPRINTF],, [Define if your CRT provides is missing the wsprintf function.])
+	AC_MSG_RESULT(no)
+])
 
 
 
