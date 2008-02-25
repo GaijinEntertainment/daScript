@@ -6,6 +6,8 @@
   * Fixed: Normalization processed the path segment even when asked not to
   * Added: MinGW Makefile and related readme
       Thanks to Michael Anthony Puls II!
+  * Fixed: Documentation bug not requiring enough memory for the output
+      buffer when converting a relative file URI back to a filename
   * Changed: Soname set to 1:4:0
 
 2008-02-11 -- 0.6.3

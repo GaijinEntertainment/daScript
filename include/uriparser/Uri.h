@@ -387,9 +387,10 @@ int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
 
 
 /**
- * Converts an absolute Unix filename to a %URI string.
- * The destination buffer must be large enough to hold
- * 7 + 3 * len(filename) + 1 characters.
+ * Converts a Unix filename to a %URI string.
+ * The destination buffer must be large enough to hold 7 + 3 * len(filename) + 1
+ * characters in case of an absolute filename or 3 * len(filename) + 1 in case
+ * of a relative filename.
  *
  * EXAMPLE
  *   Input:  "/bin/bash"
@@ -405,9 +406,10 @@ int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
 
 
 /**
- * Converts an absolute Windows filename to a %URI string.
- * The destination buffer must be large enough to hold
- * 8 + 3 * len(filename) + 1 characters.
+ * Converts a Windows filename to a %URI string.
+ * The destination buffer must be large enough to hold 8 + 3 * len(filename) + 1
+ * characters in case of an absolute filename or 3 * len(filename) + 1 in case
+ * of a relative filename.
  *
  * EXAMPLE
  *   Input:  "E:\\Documents and Settings"
@@ -423,9 +425,10 @@ int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
 
 
 /**
- * Extracts an absolute Unix filename from a %URI string.
- * The destination buffer must be large enough to hold
- * len(uriString) + 1 - 7 characters.
+ * Extracts a Unix filename from a %URI string.
+ * The destination buffer must be large enough to hold len(uriString) + 1 - 7
+ * characters in case of an absolute %URI or len(uriString) + 1 in case
+ * of a relative %URI.
  *
  * @param uriString    %URI string to convert
  * @param filename     Destination to write filename to
@@ -437,9 +440,10 @@ int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
 
 
 /**
- * Extracts an absolute Windows filename from a %URI string.
- * The destination buffer must be large enough to hold
- * len(uriString) + 1 - 8 characters.
+ * Extracts a Windows filename from a %URI string.
+ * The destination buffer must be large enough to hold len(uriString) + 1 - 8
+ * characters in case of an absolute %URI or len(uriString) + 1 in case
+ * of a relative %URI.
  *
  * @param uriString    %URI string to convert
  * @param filename     Destination to write filename to

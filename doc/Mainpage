@@ -192,16 +192,17 @@
  * All you have to do is to choose the right function for the task and allocate
  * the required space (in characters) for the target buffer.
  * Let me present you an overview:
+ *
  * - Filename --&gt; URI
  *   - uriUnixFilenameToUriStringA()\n
- *     Space required: <b>7</b> + 3 * len(filename) + 1 
+ *     Space required: [<b>7</b> +] 3 * len(filename) + 1 
  *   - uriWindowsFilenameToUriStringA()\n
- *     Space required: <b>8</b> + 3 * len(filename) + 1
+ *     Space required: [<b>8</b> +] 3 * len(filename) + 1
  * - URI --&gt; filename
  *   - uriUriStringToUnixFilenameA()\n
- *     Space required: len(uriString) + 1 - <b>7</b>
+ *     Space required: len(uriString) + 1 [- <b>7]</b>
  *   - uriUriStringToWindowsFilenameA()\n
- *     Space required: len(uriString) + 1 - <b>8</b>
+ *     Space required: len(uriString) + 1 [- <b>8]</b>
  *
  *
  * @subsection normalization Normalizing URIs
