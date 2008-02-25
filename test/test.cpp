@@ -1089,10 +1089,18 @@ private:
 
 		TEST_ASSERT(testNormalizeSyntaxHelper(
 				L"../../abc/..",
-				L"../.."));
+				L"../../"));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"../../abc/../def",
+				L"../../def"));
 
 		TEST_ASSERT(testNormalizeSyntaxHelper(
 				L"abc/..",
+				L""));
+
+		TEST_ASSERT(testNormalizeSyntaxHelper(
+				L"abc/../",
 				L""));
 
 		TEST_ASSERT(testNormalizeSyntaxHelper(

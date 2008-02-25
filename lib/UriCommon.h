@@ -75,7 +75,7 @@ extern const URI_CHAR * const URI_FUNC(ConstParent);
 void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri);
 
 UriBool URI_FUNC(RemoveDotSegmentsAbsolute)(URI_TYPE(Uri) * uri);
-UriBool URI_FUNC(RemoveDotSegmentsRelative)(URI_TYPE(Uri) * uri);
+UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri, UriBool relative);
 
 unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig);
 URI_CHAR URI_FUNC(HexToLetter)(unsigned int value);
