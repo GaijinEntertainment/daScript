@@ -263,20 +263,20 @@
  *
  * @section autoconf Autoconf Check
  * You can use the code below to make <c>./configure</c> test for presence
- * of uriparser 0.6.3 or later.
+ * of uriparser 0.6.4 or later.
  *
  *<div class="fragment"><pre class="fragment">URIPARSER_MISSING=<span class="stringliteral">"Please install uriparser 0.6.3 or later.
  *   On a Debian-based system enter 'sudo apt-get install liburiparser-dev'."</span>
  *AC_CHECK_LIB(uriparser, uriParseUriA,, AC_MSG_ERROR(${URIPARSER_MISSING}))
  *AC_CHECK_HEADER(uriparser/Uri.h,, AC_MSG_ERROR(${URIPARSER_MISSING}))
  *<b></b>
- *URIPARSER_TOO_OLD=<span class="stringliteral">"uriparser 0.6.3 or later is required, your copy is too old."</span>
+ *URIPARSER_TOO_OLD=<span class="stringliteral">"uriparser 0.6.4 or later is required, your copy is too old."</span>
  *AC_COMPILE_IFELSE([
  *<span class="preprocessor">\#include <uriparser/Uri.h>
  *\#if (defined(URI_VER_MAJOR) && defined(URI_VER_MINOR) && defined(URI_VER_RELEASE) \\<b></b>
  *&& ((URI_VER_MAJOR > 0) \\<b></b>
  *|| ((URI_VER_MAJOR == 0) && (URI_VER_MINOR > 6)) \\<b></b>
- *|| ((URI_VER_MAJOR == 0) && (URI_VER_MINOR == 6) && (URI_VER_RELEASE >= 3)) \\<b></b>
+ *|| ((URI_VER_MAJOR == 0) && (URI_VER_MINOR == 6) && (URI_VER_RELEASE >= 4)) \\<b></b>
  *))</span>
  *<span class="comment"><b></b>/<b></b>* FINE *<b></b>/</span>
  *<span class="preprocessor">\#else
