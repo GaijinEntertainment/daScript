@@ -1,7 +1,7 @@
 ???
 
   * Added: Syntax-based normalization can now handle relative URIs,
-      e.g. "../../a/b/.././c" is normalized "../../a/c"
+      e.g. "../../a/b/.././c" is normalized to "../../a/c"
   * Fixed: Normalization code could free foreign memory
   * Fixed: Normalization processed the path segment even when asked not to
   * Added: MinGW Makefile and related readme
