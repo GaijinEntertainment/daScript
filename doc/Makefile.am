@@ -17,6 +17,8 @@ phony_html_doc :
 EXTRA_DIST = \
 	Doxyfile \
 	\
+	Mainpage \
+	\
 	html/*.css \
 	html/*.gif \
 	html/*.html \
