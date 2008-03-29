@@ -66,93 +66,109 @@
 
 static int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList,
-		int maxChars, int * charsWritten, int * charsRequired);
+		int maxChars, int * charsWritten, int * charsRequired,
+		UriBool spaceToPlus, UriBool normalizeBreaks);
 
 static UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
-		int * itemCount, const URI_CHAR * keyFirst, const URI_CHAR * keyAfterLast,
-		const URI_CHAR * valueFirst, const URI_CHAR * valueAfterLast,
+		int * itemCount, const URI_CHAR * keyFirst, const URI_CHAR * keyAfter,
+		const URI_CHAR * valueFirst, const URI_CHAR * valueAfter,
 		UriBool plusToSpace, UriBreakConversion breakConversion);
 
 
 
-int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
-		int * charsRequired) {
+int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
+		int * charsRequired, UriBool spaceToPlus, UriBool normalizeBreaks) {
+	if ((queryList == NULL) || (charsRequired == NULL)) {
+		return URI_ERROR_NULL;
+	}
+
 	return URI_FUNC(ComposeQueryEngine)(NULL, queryList, 0, NULL,
-			charsRequired);
+			charsRequired, spaceToPlus, normalizeBreaks);
 }
 
 
 
-int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
-		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten) {
+int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
+		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten,
+		UriBool spaceToPlus, UriBool normalizeBreaks) {
+	if ((dest == NULL) || (queryList == NULL)) {
+		return URI_ERROR_NULL;
+	}
+
+	if (maxChars < 1) {
+		return URI_ERROR_COMPOSE_QUERY_TOO_LONG;
+	}
+
 	return URI_FUNC(ComposeQueryEngine)(dest, queryList, maxChars,
-			charsWritten, NULL);
+			charsWritten, NULL, spaceToPlus, normalizeBreaks);
 }
 
 
 
 int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList,
-		int maxChars, int * charsWritten, int * charsRequired) {
+		int maxChars, int * charsWritten, int * charsRequired,
+		UriBool spaceToPlus, UriBool normalizeBreaks) {
 	UriBool firstItem = URI_TRUE;
+	int ampersandLen = 0;
 	URI_CHAR * write = dest;
-			
-	/* TODO */
-	UriBool spaceToPlus;
-	UriBool normalizeBreaks;
 
-	if (queryList == NULL) {
-		/* TODO */
-		return URI_ERROR_NULL;
-	}
-
+	/* Subtract terminator */
 	if (dest == NULL) {
-		if (charsRequired == NULL) {
-			/* TODO */
-			return URI_ERROR_NULL;
-		}
+		*charsRequired = 0;
+	} else {
+		maxChars--;
 	}
-	
+			
 	while (queryList != NULL) {
 		const URI_CHAR * const key = queryList->key;
 		const URI_CHAR * const value = queryList->value;
+		const int worstCase = (normalizeBreaks == URI_TRUE ? 6 : 3);
 		const int keyLen = (key == NULL) ? 0 : URI_STRLEN(key);
-		/* TODO */
-		const int keyRequiredChars = 3 * keyLen;
+		const int keyRequiredChars = worstCase * keyLen;
 		const int valueLen = (value == NULL) ? 0 : URI_STRLEN(value);
-		/* TODO */
-		const int valueRequiredChars = 3 * valueLen;
+		const int valueRequiredChars = worstCase * valueLen;
 
 		if (dest == NULL) {
-			(*charsRequired) += keyRequiredChars
-						+ ((value == NULL)
-							? 0
-							: 1 + valueRequiredChars)
-						+ 1;
-		} else {
-			if ((write - dest) + 1 + keyRequiredChars < maxChars) {
-				URI_CHAR * afterKey;
-				if (firstItem == URI_TRUE) {
-					firstItem = URI_FALSE;
-					write[0] = _UT('?');
-				} else {
-					write[0] = _UT('&');
-				}
-				write++;
-				afterKey = URI_FUNC(EscapeEx)(key, key + keyLen,
-						write, spaceToPlus, normalizeBreaks);
-				write += (afterKey - write);
+			if (firstItem == URI_TRUE) {
+				ampersandLen = 1;
+				firstItem = URI_FALSE;
 			}
 
+			(*charsRequired) += ampersandLen + keyRequiredChars + ((value == NULL)
+						? 0
+						: 1 + valueRequiredChars);
+		} else {
+			URI_CHAR * afterKey;
+
+			if ((write - dest) + ampersandLen + keyRequiredChars > maxChars) {
+				return URI_ERROR_COMPOSE_QUERY_TOO_LONG;
+			}
+
+			/* Copy key */
+			if (firstItem == URI_TRUE) {
+				firstItem = URI_FALSE;
+			} else {
+				write[0] = _UT('&');
+				write++;
+			}
+			afterKey = URI_FUNC(EscapeEx)(key, key + keyLen,
+					write, spaceToPlus, normalizeBreaks);
+			write += (afterKey - write);
+
 			if (value != NULL) {
-				if ((write - dest) + 1 + valueRequiredChars < maxChars) {
-					URI_CHAR * afterValue;
-					write[0] = _UT('=');
-					write++;
-					afterValue = URI_FUNC(EscapeEx)(value, value + valueLen,
-							write, spaceToPlus, normalizeBreaks);
-					write += (afterValue - write);
+				URI_CHAR * afterValue;
+
+				if ((write - dest) + 1 + valueRequiredChars > maxChars) {
+					return URI_ERROR_COMPOSE_QUERY_TOO_LONG;
 				}
+
+				/* Copy value */
+				write[0] = _UT('=');
+				write++;
+				afterValue = URI_FUNC(EscapeEx)(value, value + valueLen,
+						write, spaceToPlus, normalizeBreaks);
+				write += (afterValue - write);
 			}
 		}
 
@@ -162,27 +178,29 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 	if (dest != NULL) {
 		write[0] = _UT('\0');
 		if (charsWritten != NULL) {
-			*charsWritten = write - dest;
+			*charsWritten = (write - dest) + 1; /* .. for terminator */
 		}
 	}
 
-	return URI_ERROR_NOT_IMPLEMENTED;
+	return URI_SUCCESS;
 }
 
 
 
 UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
-		int * itemCount, const URI_CHAR * keyFirst, const URI_CHAR * keyAfterLast,
-		const URI_CHAR * valueFirst, const URI_CHAR * valueAfterLast,
+		int * itemCount, const URI_CHAR * keyFirst, const URI_CHAR * keyAfter,
+		const URI_CHAR * valueFirst, const URI_CHAR * valueAfter,
 		UriBool plusToSpace, UriBreakConversion breakConversion) {
-	const int keyLen = keyAfterLast - keyFirst;
-	const int valueLen = valueAfterLast - valueFirst;
+	const int keyLen = keyAfter - keyFirst;
+	const int valueLen = valueAfter - valueFirst;
 	URI_CHAR * key;
 	URI_CHAR * value;
 
 	if ((prevNext == NULL) || (itemCount == NULL)
-			|| (keyFirst == NULL) || (keyAfterLast == NULL)
-			|| (keyFirst > keyAfterLast) || (valueFirst > valueAfterLast)) {
+			|| (keyFirst == NULL) || (keyAfter == NULL)
+			|| (keyFirst > keyAfter) || (valueFirst > valueAfter)
+			|| ((keyFirst == keyAfter)
+				&& (valueFirst == NULL) && (valueAfter == NULL))) {
 		return URI_TRUE;
 	}
 
@@ -208,7 +226,7 @@ UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
 		memcpy(key, keyFirst, keyLen * sizeof(URI_CHAR));
 
 		/* Unescape */
-		uriUnescapeInPlaceExA(key, plusToSpace, breakConversion);
+		URI_FUNC(UnescapeInPlaceEx)(key, plusToSpace, breakConversion);
 	}
 	(*prevNext)->key = key;
 
@@ -217,7 +235,7 @@ UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
 	if (valueFirst != NULL) {
 		value = malloc((valueLen + 1) * sizeof(URI_CHAR));
 		if (value == NULL) {
-			free((*prevNext)->key);
+			free(key);
 			free(*prevNext);
 			*prevNext = NULL;
 			return URI_FALSE; /* Raises malloc error */
@@ -229,7 +247,7 @@ UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
 			memcpy(value, valueFirst, valueLen * sizeof(URI_CHAR));
 
 			/* Unescape */
-			uriUnescapeInPlaceExA(value, plusToSpace, breakConversion);
+			URI_FUNC(UnescapeInPlaceEx)(value, plusToSpace, breakConversion);
 		}
 		(*prevNext)->value = value;
 	} else {
@@ -253,14 +271,14 @@ void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList) {
 
 
 
-int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
+int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion) {
 	const URI_CHAR * walk = first;
 	const URI_CHAR * keyFirst = first;
-	const URI_CHAR * keyAfterLast = first;
+	const URI_CHAR * keyAfter = first;
 	const URI_CHAR * valueFirst = NULL;
-	const URI_CHAR * valueAfterLast = NULL;
+	const URI_CHAR * valueAfter = NULL;
 	URI_TYPE(QueryList) ** prevNext = dest;
 	int nullCounter;
 	int * itemsAppended = (itemCount == NULL) ? &nullCounter : itemCount;
@@ -273,14 +291,21 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		return URI_ERROR_RANGE_INVALID;
 	}
 
+	*dest = NULL;
 	*itemsAppended = 0;
 
 	/* Parse query string */
 	for (; walk < afterLast; walk++) {
 		switch (*walk) {
 		case _UT('&'):
+			if (valueFirst != NULL) {
+				valueAfter = walk;
+			} else {
+				keyAfter = walk;
+			}
+
 			if (URI_FUNC(AppendQueryItem)(prevNext, itemsAppended,
-					keyFirst, keyAfterLast, valueFirst, valueAfterLast,
+					keyFirst, keyAfter, valueFirst, valueAfter,
 					plusToSpace, breakConversion)
 					== URI_FALSE) {
 				/* Free list we built */
@@ -296,20 +321,20 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 
 			if (walk + 1 < afterLast) {
 				keyFirst = walk + 1;
-				keyAfterLast = walk + 1;
+				keyAfter = walk + 1;
 			} else {
 				keyFirst = NULL;
-				keyAfterLast = NULL;
+				keyAfter = NULL;
 			}
 			valueFirst = NULL;
-			valueAfterLast = NULL;
+			valueAfter = NULL;
 			break;
 
 		case _UT('='):
-			keyAfterLast = walk;
+			keyAfter = walk;
 			if (walk + 1 < afterLast) {
 				valueFirst = walk + 1;
-				valueAfterLast = walk + 1;
+				valueAfter = walk + 1;
 			}
 			break;
 
@@ -320,14 +345,14 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 
 	if (valueFirst != NULL) {
 		/* Must be key/value pair */
-		valueAfterLast = walk;
+		valueAfter = walk;
 	} else {
 		/* Must be key only */
-		keyAfterLast = walk;
+		keyAfter = walk;
 	}
 
-	if (URI_FUNC(AppendQueryItem)(prevNext, itemsAppended, keyFirst, keyAfterLast,
-			valueFirst, valueAfterLast, plusToSpace, breakConversion)
+	if (URI_FUNC(AppendQueryItem)(prevNext, itemsAppended, keyFirst, keyAfter,
+			valueFirst, valueAfter, plusToSpace, breakConversion)
 			== URI_FALSE) {
 		/* Free list we built */
 		*itemsAppended = 0;

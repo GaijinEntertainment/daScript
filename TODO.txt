@@ -1,7 +1,5 @@
 == BEFORE NEXT RELEASE ==
- * implement and test query composition
- * test query dissection
- * add "(IN|OUT|INOUT):" marker to parameters in API docs
+ * add "(IN|OUT|INOUT):" marker to all parameters in API docs
 
 == SOON ==
  * samba filename conversion?

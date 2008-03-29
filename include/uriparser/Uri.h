@@ -473,26 +473,32 @@ typedef struct URI_TYPE(QueryListStruct) {
  * string representation of the given query list excluding the
  * terminator.
  *
- * @param queryList       Query list to measure
- * @param charsRequired   Length of the string representation in characters <b>excluding</b> terminator
- * @return                Error code or 0 on success
+ * @param queryList         IN: Query list to measure
+ * @param charsRequired     OUT: Length of the string representation in characters <b>excluding</b> terminator
+ * @param spaceToPlus       IN: Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks   IN: Wether to convert CR and LF to CR-LF or not.
+ * @return                  Error code or 0 on success
  */
-int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
-		int * charsRequired);
+int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
+		int * charsRequired, UriBool spaceToPlus, UriBool normalizeBreaks);
 
 
 
 /**
- * Converts a query list structure back to text.
+ * Converts a query list structure back to a query string.
+ * The composed string does not start with '?'.
  *
- * @param dest           Output destination
- * @param queryList      Query list to convert
- * @param maxChars       Maximum number of characters to copy <b>including</b> terminator
- * @param charsWritten   Number of characters written, can be lower than maxChars even if the query list is too long!
- * @return               Error code or 0 on success
+ * @param dest              OUT: Output destination
+ * @param queryList         IN: Query list to convert
+ * @param maxChars          IN: Maximum number of characters to copy <b>including</b> terminator
+ * @param charsWritten      OUT: Number of characters written, can be lower than maxChars even if the query list is too long!
+ * @param spaceToPlus       IN: Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks   IN: Wether to convert CR and LF to CR-LF or not.
+ * @return                  Error code or 0 on success
  */
-int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
-		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten);
+int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
+		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten,
+		UriBool spaceToPlus, UriBool normalizeBreaks);
 
 
 
@@ -507,7 +513,7 @@ int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
  * @param breakConversion   IN: Line break conversion mode
  * @return                  Error code or 0 on success
  */
-int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
+int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion);
 
