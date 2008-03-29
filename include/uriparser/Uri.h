@@ -499,14 +499,15 @@ int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
 /*
  * Constructs a query list from the raw query string of a given URI.
  *
- * @param dest              Output destination
- * @param first             Pointer to first character <b>after<b> '?'
- * @param afterLast         Pointer to character after the last one still in
- * @param plusToSpace       Whether to convert '+' to ' ' or not
- * @param breakConversion   Line break conversion mode
+ * @param dest              OUT: Output destination
+ * @param itemCount         OUT: Number of items found, can be NULL
+ * @param first             IN: Pointer to first character <b>after<b> '?'
+ * @param afterLast         IN: Pointer to character after the last one still in
+ * @param plusToSpace       IN: Whether to convert '+' to ' ' or not
+ * @param breakConversion   IN: Line break conversion mode
  * @return                  Error code or 0 on success
  */
-int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest,
+int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion);
 

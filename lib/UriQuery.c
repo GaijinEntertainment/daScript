@@ -68,8 +68,8 @@ static int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList,
 		int maxChars, int * charsWritten, int * charsRequired);
 
-static UriBool URI_FUNC(AppendQueryElem)(URI_TYPE(QueryList) ** prevNext,
-		const URI_CHAR * keyFirst, const URI_CHAR * keyAfterLast,
+static UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
+		int * itemCount, const URI_CHAR * keyFirst, const URI_CHAR * keyAfterLast,
 		const URI_CHAR * valueFirst, const URI_CHAR * valueAfterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion);
 
@@ -100,8 +100,8 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 
 
 
-UriBool URI_FUNC(AppendQueryElem)(URI_TYPE(QueryList) ** prevNext,
-		const URI_CHAR * keyFirst, const URI_CHAR * keyAfterLast,
+UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
+		int * itemCount, const URI_CHAR * keyFirst, const URI_CHAR * keyAfterLast,
 		const URI_CHAR * valueFirst, const URI_CHAR * valueAfterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion) {
 	const int keyLen = keyAfterLast - keyFirst;
@@ -109,12 +109,13 @@ UriBool URI_FUNC(AppendQueryElem)(URI_TYPE(QueryList) ** prevNext,
 	URI_CHAR * key;
 	URI_CHAR * value;
 
-	if ((prevNext == NULL) || (keyFirst == NULL) || (keyAfterLast == NULL)
+	if ((prevNext == NULL) || (itemCount == NULL)
+			|| (keyFirst == NULL) || (keyAfterLast == NULL)
 			|| (keyFirst > keyAfterLast) || (valueFirst > valueAfterLast)) {
 		return URI_TRUE;
 	}
 
-	/* Append new empty element */
+	/* Append new empty item */
 	*prevNext = malloc(1 * sizeof(URI_TYPE(QueryList)));
 	if (*prevNext == NULL) {
 		return URI_FALSE; /* Raises malloc error */
@@ -165,6 +166,7 @@ UriBool URI_FUNC(AppendQueryElem)(URI_TYPE(QueryList) ** prevNext,
 	}
 	(*prevNext)->value = value;
 
+	(*itemCount)++;
 	return URI_TRUE;
 }
 
@@ -180,7 +182,7 @@ void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList) {
 
 
 
-int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest,
+int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion) {
 	const URI_CHAR * walk = first;
@@ -189,8 +191,11 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest,
 	const URI_CHAR * valueFirst = NULL;
 	const URI_CHAR * valueAfterLast = NULL;
 	URI_TYPE(QueryList) ** prevNext = dest;
+	int nullCounter;
+	int * itemsAppended = (itemCount == NULL) ? &nullCounter : itemCount;
 
-	if ((dest == NULL) || (first == NULL) || (afterLast == NULL)) {
+	if ((dest == NULL) || (itemCount == NULL)
+			|| (first == NULL) || (afterLast == NULL)) {
 		return URI_ERROR_NULL;
 	}
 
@@ -198,20 +203,23 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest,
 		return URI_ERROR_RANGE_INVALID;
 	}
 
+	*itemCount = 0;
+
 	/* Parse query string */
 	for (; walk < afterLast; walk++) {
 		switch (*walk) {
 		case _UT('&'):
-			if (URI_FUNC(AppendQueryElem)(prevNext, keyFirst, keyAfterLast,
-					valueFirst, valueAfterLast, plusToSpace, breakConversion)
+			if (URI_FUNC(AppendQueryItem)(prevNext, itemsAppended,
+					keyFirst, keyAfterLast, valueFirst, valueAfterLast,
+					plusToSpace, breakConversion)
 					== URI_FALSE) {
 				/* Free list we built */
-				if (dest != NULL) {
-					URI_FUNC(FreeQueryList)(*dest);
-				}
+				*itemCount = 0;
+				URI_FUNC(FreeQueryList)(*dest);
+				return URI_ERROR_MALLOC;
 			}
 
-			/* Make future elements children of the current */
+			/* Make future items children of the current */
 			if (prevNext != NULL) {
 				prevNext = &((*prevNext)->next);
 			}
@@ -248,13 +256,13 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest,
 		keyAfterLast = walk;
 	}
 
-	if (URI_FUNC(AppendQueryElem)(prevNext, keyFirst, keyAfterLast,
+	if (URI_FUNC(AppendQueryItem)(prevNext, itemsAppended, keyFirst, keyAfterLast,
 			valueFirst, valueAfterLast, plusToSpace, breakConversion)
 			== URI_FALSE) {
 		/* Free list we built */
-		if (dest != NULL) {
-			URI_FUNC(FreeQueryList)(*dest);
-		}
+		*itemCount = 0;
+		URI_FUNC(FreeQueryList)(*dest);
+		return URI_ERROR_MALLOC;
 	}
 
 	return URI_SUCCESS;
