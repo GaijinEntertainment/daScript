@@ -94,10 +94,76 @@ int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
 int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList,
 		int maxChars, int * charsWritten, int * charsRequired) {
+	UriBool firstItem = URI_TRUE;
+	URI_CHAR * write = dest;
+			
 	/* TODO */
+	UriBool spaceToPlus;
+	UriBool normalizeBreaks;
 
+	if (queryList == NULL) {
+		/* TODO */
+		return URI_ERROR_NULL;
+	}
+
+	if (dest == NULL) {
+		if (charsRequired == NULL) {
+			/* TODO */
+			return URI_ERROR_NULL;
+		}
+	}
+	
 	while (queryList != NULL) {
+		const URI_CHAR * const key = queryList->key;
+		const URI_CHAR * const value = queryList->value;
+		const int keyLen = (key == NULL) ? 0 : URI_STRLEN(key);
+		/* TODO */
+		const int keyRequiredChars = 3 * keyLen;
+		const int valueLen = (value == NULL) ? 0 : URI_STRLEN(value);
+		/* TODO */
+		const int valueRequiredChars = 3 * valueLen;
+
+		if (dest == NULL) {
+			(*charsRequired) += keyRequiredChars
+						+ ((value == NULL)
+							? 0
+							: 1 + valueRequiredChars)
+						+ 1;
+		} else {
+			if ((write - dest) + 1 + keyRequiredChars < maxChars) {
+				URI_CHAR * afterKey;
+				if (firstItem == URI_TRUE) {
+					firstItem = URI_FALSE;
+					write[0] = _UT('?');
+				} else {
+					write[0] = _UT('&');
+				}
+				write++;
+				afterKey = URI_FUNC(EscapeEx)(key, key + keyLen,
+						write, spaceToPlus, normalizeBreaks);
+				write += (afterKey - write);
+			}
+
+			if (value != NULL) {
+				if ((write - dest) + 1 + valueRequiredChars < maxChars) {
+					URI_CHAR * afterValue;
+					write[0] = _UT('=');
+					write++;
+					afterValue = URI_FUNC(EscapeEx)(value, value + valueLen,
+							write, spaceToPlus, normalizeBreaks);
+					write += (afterValue - write);
+				}
+			}
+		}
+
 		queryList = queryList->next;
+	}
+
+	if (dest != NULL) {
+		write[0] = _UT('\0');
+		if (charsWritten != NULL) {
+			*charsWritten = write - dest;
+		}
 	}
 
 	return URI_ERROR_NOT_IMPLEMENTED;
