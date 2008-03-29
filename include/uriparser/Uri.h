@@ -88,6 +88,9 @@ extern "C" {
  * to one before <c>afterLast</c>. So if both are
  * non-NULL the difference is the length of the text range.
  *
+ * @see UriUriA
+ * @see UriPathSegmentA
+ * @see UriHostDataA
  * @since 0.3.0
  */
 typedef struct URI_TYPE(TextRangeStruct) {
@@ -102,6 +105,7 @@ typedef struct URI_TYPE(TextRangeStruct) {
  * More precisely it is a node in a linked
  * list of path segments.
  *
+ * @see UriUriA
  * @since 0.3.0
  */
 typedef struct URI_TYPE(PathSegmentStruct) {
@@ -119,6 +123,7 @@ typedef struct URI_TYPE(PathSegmentStruct) {
  * text for IPvFuture or all zero for
  * a registered name.
  *
+ * @see UriUriA
  * @since 0.3.0
  */
 typedef struct URI_TYPE(HostDataStruct) {
@@ -133,6 +138,9 @@ typedef struct URI_TYPE(HostDataStruct) {
  * Represents an RFC 3986 %URI.
  * Missing components can be {NULL, NULL} ranges.
  *
+ * @see uriParseUriA
+ * @see uriFreeUriMembersA
+ * @see UriParserStateA
  * @since 0.3.0
  */
 typedef struct URI_TYPE(UriStruct) {
@@ -158,6 +166,7 @@ typedef struct URI_TYPE(UriStruct) {
  * Missing components can be NULL to reflect
  * a components absence.
  *
+ * @see uriFreeUriMembersA
  * @since 0.3.0
  */
 typedef struct URI_TYPE(ParserStateStruct) {
@@ -174,6 +183,8 @@ typedef struct URI_TYPE(ParserStateStruct) {
  * Represents a query element.
  * More precisely it is a node in a linked
  * list of query elements.
+ *
+ * @since 0.7.0
  */
 typedef struct URI_TYPE(QueryListStruct) {
 	const URI_CHAR * key; /**< Key of the query element */
@@ -193,6 +204,7 @@ typedef struct URI_TYPE(QueryListStruct) {
  * @return            0 on success, error code otherwise
  *
  * @see uriParseUriA
+ * @see uriToStringA
  * @since 0.3.0
  */
 int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
@@ -208,6 +220,7 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
  * @return        0 on success, error code otherwise
  *
  * @see uriParseUriExA
+ * @see uriToStringA
  * @since 0.3.0
  */
 int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
@@ -244,6 +257,8 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * @return                  Position of terminator in output string
  *
  * @see uriEscapeA
+ * @see uriUnescapeInPlaceExA
+ * @since 0.5.2
  */
 URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
 		const URI_CHAR * inAfterLast, URI_CHAR * out,
@@ -266,6 +281,8 @@ URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
  * @return                  Position of terminator in output string
  *
  * @see uriEscapeExA
+ * @see uriUnescapeInPlaceA
+ * @since 0.5.0
  */
 URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
@@ -286,6 +303,8 @@ URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
  * @return                  Pointer to new position of the terminating zero
  *
  * @see uriUnescapeInPlaceA
+ * @see uriEscapeExA
+ * @since 0.5.0
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 		UriBool plusToSpace, UriBreakConversion breakConversion);
@@ -307,6 +326,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
  * @return        Pointer to new position of the terminating zero
  *
  * @see uriUnescapeInPlaceExA
+ * @see uriEscapeA
  * @since 0.3.0
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
@@ -321,6 +341,9 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
  * @param relativeSource   <b>IN</b>: Reference to resolve
  * @param absoluteBase     <b>IN</b>: Base %URI to apply
  * @return                 Error code or 0 on success
+ *
+ * @see uriRemoveBaseUriA
+ * @since 0.4.0
  */
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
@@ -340,6 +363,9 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
  * @param absoluteBase     <b>IN</b>: Base %URI
  * @param domainRootMode   <b>IN</b>: Create %URI with path relative to domain root
  * @return                 Error code or 0 on success
+ *
+ * @see uriAddBaseUriA
+ * @since 0.5.2
  */
 int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absoluteSource,
@@ -356,6 +382,8 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
  * @param a   <b>IN</b>: First %URI
  * @param b   <b>IN</b>: Second %URI
  * @return    <c>URI_TRUE</c> when equal, <c>URI_FAlSE</c> else
+ *
+ * @since 0.4.0
  */
 UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
 
@@ -369,6 +397,9 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
  * @param uri             <b>IN</b>: %URI to measure
  * @param charsRequired   <b>OUT</b>: Length of the string representation in characters <b>excluding</b> terminator
  * @return                Error code or 0 on success
+ *
+ * @see uriToStringA
+ * @since 0.5.0
  */
 int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
 		int * charsRequired);
@@ -384,6 +415,9 @@ int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
  * @param maxChars       <b>IN</b>: Maximum number of characters to copy <b>including</b> terminator
  * @param charsWritten   <b>OUT</b>: Number of characters written, can be lower than maxChars even if the %URI is too long!
  * @return               Error code or 0 on success
+ *
+ * @see uriToStringCharsRequiredA
+ * @since 0.4.0
  */
 int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars, int * charsWritten);
 
@@ -394,6 +428,9 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
  *
  * @param uri   <b>IN</b>: %URI to check
  * @return      Normalization job mask
+ *
+ * @see uriNormalizeSyntaxA
+ * @since 0.5.0
  */
 unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
 
@@ -411,6 +448,8 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
  * @return       Error code or 0 on success
  *
  * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxMaskRequiredA
+ * @since 0.5.0
  */
 int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
 
@@ -426,6 +465,8 @@ int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
  * @return      Error code or 0 on success
  *
  * @see uriNormalizeSyntaxExA
+ * @see uriNormalizeSyntaxMaskRequiredA
+ * @since 0.5.0
  */
 int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
 
@@ -444,6 +485,10 @@ int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
  * @param filename     <b>IN</b>: Unix filename to convert
  * @param uriString    <b>OUT</b>: Destination to write %URI string to
  * @return             Error code or 0 on success
+ *
+ * @see uriUriStringToUnixFilenameA
+ * @see uriWindowsFilenameToUriStringA
+ * @since 0.5.2
  */
 int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
 		URI_CHAR * uriString);
@@ -463,6 +508,10 @@ int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
  * @param filename     <b>IN</b>: Windows filename to convert
  * @param uriString    <b>OUT</b>: Destination to write %URI string to
  * @return             Error code or 0 on success
+ *
+ * @see uriUriStringToWindowsFilenameA
+ * @see uriUnixFilenameToUriStringA
+ * @since 0.5.2
  */
 int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
 		URI_CHAR * uriString);
@@ -478,6 +527,10 @@ int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
  * @param uriString    <b>IN</b>: %URI string to convert
  * @param filename     <b>OUT</b>: Destination to write filename to
  * @return             Error code or 0 on success
+ *
+ * @see uriUnixFilenameToUriStringA
+ * @see uriUriStringToWindowsFilenameA
+ * @since 0.5.2
  */
 int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
 		URI_CHAR * filename);
@@ -493,6 +546,10 @@ int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
  * @param uriString    <b>IN</b>: %URI string to convert
  * @param filename     <b>OUT</b>: Destination to write filename to
  * @return             Error code or 0 on success
+ *
+ * @see uriWindowsFilenameToUriStringA
+ * @see uriUriStringToUnixFilenameA
+ * @since 0.5.2
  */
 int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
 		URI_CHAR * filename);
@@ -510,6 +567,7 @@ int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryCharsRequiredExA
+ * @see uriComposeQueryA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
@@ -529,6 +587,7 @@ int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryCharsRequiredA
+ * @see uriComposeQueryExA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
@@ -549,6 +608,8 @@ int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryExA
+ * @see uriComposeQueryCharsRequiredA
+ * @see uriDissectQueryMallocA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
@@ -569,6 +630,8 @@ int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryA
+ * @see uriComposeQueryCharsRequiredExA
+ * @see uriDissectQueryMallocExA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
@@ -588,6 +651,8 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
  * @return                  Error code or 0 on success
  *
  * @see uriDissectQueryMallocExA
+ * @see uriComposeQueryA
+ * @see uriFreeQueryListA
  * @since 0.7.0
  */
 int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
@@ -607,6 +672,8 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * @return                  Error code or 0 on success
  *
  * @see uriDissectQueryMallocA
+ * @see uriComposeQueryExA
+ * @see uriFreeQueryListA
  * @since 0.7.0
  */
 int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
@@ -620,6 +687,8 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * The the structure itself is freed as well.
  *
  * @param queryList   <b>INOUT</b>: Query list to free
+ *
+ * @since 0.7.0
  */
 void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
 
