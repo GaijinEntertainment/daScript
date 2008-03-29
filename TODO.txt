@@ -1,4 +1,6 @@
 == BEFORE NEXT RELEASE ==
+ * implement and test query composition
+ * test query dissection
 
 == SOON ==
  * samba filename conversion?

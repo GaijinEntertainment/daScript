@@ -96,7 +96,7 @@ typedef struct URI_TYPE(TextRangeStruct) {
 
 
 /**
- * Represents a segment within a %URI path.
+ * Represents a path segment within a %URI path.
  * More precisely it is a node in a linked
  * list of path segments.
  */
@@ -201,7 +201,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * writes the encoded version to the output string.
  * Be sure to allocate <b>3 times</b> the space of the input buffer for
  * the output buffer for <c>normalizeBreaks == URI_FALSE</c> and <b>6 times</b>
- * the space for <c>normalizeBreaks == URI_FALSE</c>
+ * the space for <c>normalizeBreaks == URI_TRUE</c>
  * (since e.g. "\x0d" becomes "%0D%0A" in that case)
  *
  * @param inFirst           Pointer to first character of the input text
@@ -451,6 +451,74 @@ int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
  */
 int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
 		URI_CHAR * filename);
+
+
+
+/*
+ * Represents a query element.
+ * More precisely it is a node in a linked
+ * list of query elements.
+ */
+typedef struct URI_TYPE(QueryListStruct) {
+	const URI_CHAR * key; /**< Key of the query element */
+	const URI_CHAR * value; /**< Value of the query element, can be NULL */
+
+	struct URI_TYPE(QueryListStruct) * next; /**< Pointer to the next key/value pair in the list, can be NULL if last already */
+} URI_TYPE(QueryList); /**< @copydoc UriQueryListStructA */
+
+
+
+/**
+ * Calculates the number of characters needed to store the
+ * string representation of the given query list excluding the
+ * terminator.
+ *
+ * @param queryList       Query list to measure
+ * @param charsRequired   Length of the string representation in characters <b>excluding</b> terminator
+ * @return                Error code or 0 on success
+ */
+int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
+		int * charsRequired);
+
+
+
+/**
+ * Converts a query list structure back to text.
+ *
+ * @param dest           Output destination
+ * @param queryList      Query list to convert
+ * @param maxChars       Maximum number of characters to copy <b>including</b> terminator
+ * @param charsWritten   Number of characters written, can be lower than maxChars even if the query list is too long!
+ * @return               Error code or 0 on success
+ */
+int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
+		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten);
+
+
+
+/*
+ * Constructs a query list from the raw query string of a given URI.
+ *
+ * @param dest              Output destination
+ * @param first             Pointer to first character <b>after<b> '?'
+ * @param afterLast         Pointer to character after the last one still in
+ * @param plusToSpace       Whether to convert '+' to ' ' or not
+ * @param breakConversion   Line break conversion mode
+ * @return                  Error code or 0 on success
+ */
+int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		UriBool plusToSpace, UriBreakConversion breakConversion);
+
+
+
+/**
+ * Frees all memory associated with the given query list.
+ * The the structure itself is freed as well.
+ *
+ * @param uri   Query list to free
+ */
+void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
 
 
 

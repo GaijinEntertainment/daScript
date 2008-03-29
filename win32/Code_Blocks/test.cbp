@@ -1,19 +1,21 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <CodeBlocks_project_file>
-	<FileVersion major="1" minor="4" />
+	<FileVersion major="1" minor="6" />
 	<Project>
 		<Option title="test" />
 		<Option pch_mode="0" />
 		<Option compiler="gcc" />
 		<Build>
 			<Target title="default">
-				<Option output="..\test.exe" />
+				<Option output="..\test.exe" prefix_auto="0" extension_auto="0" />
 				<Option working_dir="..\..\test" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option includeInTargetAll="1" />
 			</Target>
 		</Build>
+		<VirtualTargets>
+			<Add alias="All" targets="default;" />
+		</VirtualTargets>
 		<Compiler>
 			<Add option="-pedantic" />
 			<Add option="-W" />
@@ -24,169 +26,39 @@
 			<Add library="..\liburiparser.a" />
 			<Add directory="..\" />
 		</Linker>
-		<Unit filename="..\..\include\uriparser\Uri.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriBase.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriDefsAnsi.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriDefsConfig.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriDefsUnicode.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriIp4.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\collectoroutput.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\compileroutput.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest-assert.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest-collectoroutput.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest-compileroutput.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest-htmloutput.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest-output.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest-source.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest-suite.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest-textoutput.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest-time.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\cpptest.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\htmloutput.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\missing.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\missing.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\source.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\suite.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\textoutput.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\time.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\utils.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\utils.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\CppTest\winconfig.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\FourSuite.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\FourSuite.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\test\test.cpp">
-			<Option compilerVar="CPP" />
-			<Option target="default" />
-		</Unit>
+		<Unit filename="..\..\include\uriparser\Uri.h" />
+		<Unit filename="..\..\include\uriparser\UriBase.h" />
+		<Unit filename="..\..\include\uriparser\UriDefsAnsi.h" />
+		<Unit filename="..\..\include\uriparser\UriDefsConfig.h" />
+		<Unit filename="..\..\include\uriparser\UriDefsUnicode.h" />
+		<Unit filename="..\..\include\uriparser\UriIp4.h" />
+		<Unit filename="..\..\test\CppTest\collectoroutput.cpp" />
+		<Unit filename="..\..\test\CppTest\compileroutput.cpp" />
+		<Unit filename="..\..\test\CppTest\cpptest-assert.h" />
+		<Unit filename="..\..\test\CppTest\cpptest-collectoroutput.h" />
+		<Unit filename="..\..\test\CppTest\cpptest-compileroutput.h" />
+		<Unit filename="..\..\test\CppTest\cpptest-htmloutput.h" />
+		<Unit filename="..\..\test\CppTest\cpptest-output.h" />
+		<Unit filename="..\..\test\CppTest\cpptest-source.h" />
+		<Unit filename="..\..\test\CppTest\cpptest-suite.h" />
+		<Unit filename="..\..\test\CppTest\cpptest-textoutput.h" />
+		<Unit filename="..\..\test\CppTest\cpptest-time.h" />
+		<Unit filename="..\..\test\CppTest\cpptest.h" />
+		<Unit filename="..\..\test\CppTest\htmloutput.cpp" />
+		<Unit filename="..\..\test\CppTest\missing.cpp" />
+		<Unit filename="..\..\test\CppTest\missing.h" />
+		<Unit filename="..\..\test\CppTest\source.cpp" />
+		<Unit filename="..\..\test\CppTest\suite.cpp" />
+		<Unit filename="..\..\test\CppTest\textoutput.cpp" />
+		<Unit filename="..\..\test\CppTest\time.cpp" />
+		<Unit filename="..\..\test\CppTest\utils.cpp" />
+		<Unit filename="..\..\test\CppTest\utils.h" />
+		<Unit filename="..\..\test\CppTest\winconfig.h" />
+		<Unit filename="..\..\test\FourSuite.cpp" />
+		<Unit filename="..\..\test\FourSuite.h" />
+		<Unit filename="..\..\test\test.cpp" />
+		<Extensions>
+			<code_completion />
+		</Extensions>
 	</Project>
 </CodeBlocks_project_file>

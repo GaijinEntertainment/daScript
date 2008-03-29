@@ -1,136 +1,81 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <CodeBlocks_project_file>
-	<FileVersion major="1" minor="4" />
+	<FileVersion major="1" minor="6" />
 	<Project>
 		<Option title="uriparser" />
 		<Option pch_mode="0" />
 		<Option compiler="gcc" />
 		<Build>
 			<Target title="default">
-				<Option output="..\liburiparser.a" />
+				<Option output="..\liburiparser.a" prefix_auto="0" extension_auto="0" />
 				<Option working_dir="" />
 				<Option type="2" />
 				<Option compiler="gcc" />
-				<Option includeInTargetAll="1" />
 			</Target>
 		</Build>
+		<VirtualTargets>
+			<Add alias="All" targets="default;" />
+		</VirtualTargets>
 		<Compiler>
 			<Add option="-pedantic" />
 			<Add option="-W" />
 			<Add option="-Wall" />
 			<Add directory="..\..\include" />
 		</Compiler>
-		<Unit filename="..\..\include\uriparser\Uri.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriBase.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriDefsAnsi.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriDefsConfig.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriDefsUnicode.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
-		<Unit filename="..\..\include\uriparser\UriIp4.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
+		<Unit filename="..\..\include\uriparser\Uri.h" />
+		<Unit filename="..\..\include\uriparser\UriBase.h" />
+		<Unit filename="..\..\include\uriparser\UriDefsAnsi.h" />
+		<Unit filename="..\..\include\uriparser\UriDefsConfig.h" />
+		<Unit filename="..\..\include\uriparser\UriDefsUnicode.h" />
+		<Unit filename="..\..\include\uriparser\UriIp4.h" />
 		<Unit filename="..\..\lib\UriCommon.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\lib\UriCommon.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
+		<Unit filename="..\..\lib\UriCommon.h" />
 		<Unit filename="..\..\lib\UriCompare.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriEscape.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriFile.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriIp4.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriIp4Base.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\lib\UriIp4Base.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
+		<Unit filename="..\..\lib\UriIp4Base.h" />
 		<Unit filename="..\..\lib\UriNormalize.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriNormalizeBase.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\lib\UriNormalizeBase.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
-		</Unit>
+		<Unit filename="..\..\lib\UriNormalizeBase.h" />
 		<Unit filename="..\..\lib\UriParse.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriParseBase.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
-		<Unit filename="..\..\lib\UriParseBase.h">
-			<Option compilerVar="CPP" />
-			<Option compile="0" />
-			<Option link="0" />
-			<Option target="default" />
+		<Unit filename="..\..\lib\UriParseBase.h" />
+		<Unit filename="..\..\lib\UriQuery.c">
+			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="..\..\lib\UriRecompose.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriResolve.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
 		<Unit filename="..\..\lib\UriShorten.c">
 			<Option compilerVar="CC" />
-			<Option target="default" />
 		</Unit>
+		<Extensions>
+			<code_completion />
+		</Extensions>
 	</Project>
 </CodeBlocks_project_file>

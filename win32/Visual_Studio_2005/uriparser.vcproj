@@ -237,6 +237,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\lib\UriQuery.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\lib\UriRecompose.c"
 				>
 			</File>

@@ -1,3 +1,7 @@
+???
+
+  * Added: Composition and dissection of query strings
+
 2008-02-25 -- 0.6.4
 
   * Added: Syntax-based normalization can now handle relative URIs,
