@@ -95,6 +95,11 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList,
 		int maxChars, int * charsWritten, int * charsRequired) {
 	/* TODO */
+
+	while (queryList != NULL) {
+		queryList = queryList->next;
+	}
+
 	return URI_ERROR_NOT_IMPLEMENTED;
 }
 
@@ -194,8 +199,7 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 	int nullCounter;
 	int * itemsAppended = (itemCount == NULL) ? &nullCounter : itemCount;
 
-	if ((dest == NULL) || (itemCount == NULL)
-			|| (first == NULL) || (afterLast == NULL)) {
+	if ((dest == NULL) || (first == NULL) || (afterLast == NULL)) {
 		return URI_ERROR_NULL;
 	}
 
@@ -203,7 +207,7 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		return URI_ERROR_RANGE_INVALID;
 	}
 
-	*itemCount = 0;
+	*itemsAppended = 0;
 
 	/* Parse query string */
 	for (; walk < afterLast; walk++) {
@@ -214,7 +218,7 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 					plusToSpace, breakConversion)
 					== URI_FALSE) {
 				/* Free list we built */
-				*itemCount = 0;
+				*itemsAppended = 0;
 				URI_FUNC(FreeQueryList)(*dest);
 				return URI_ERROR_MALLOC;
 			}
@@ -260,7 +264,7 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 			valueFirst, valueAfterLast, plusToSpace, breakConversion)
 			== URI_FALSE) {
 		/* Free list we built */
-		*itemCount = 0;
+		*itemsAppended = 0;
 		URI_FUNC(FreeQueryList)(*dest);
 		return URI_ERROR_MALLOC;
 	}
