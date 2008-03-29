@@ -10,6 +10,7 @@
  *   - <a href="#shortening">Creating References</a>
  *   - <a href="#filenames">Filenames and URIs</a>
  *   - <a href="#normalization">Normalizing URIs</a>
+ *   - <a href="#querystrings">Working with query strings</a>
  * - <a href="#chartypes">Ansi and Unicode</a>
  * - <a href="#autoconf">Autoconf Check</a>
  *
@@ -248,6 +249,61 @@
  * 		/COMMENT_HACK* Failure *COMMENT_HACK/
  * 		...
  * 	}
+ * @endcode
+ *
+ *
+ * @section querystrings Working with query strings
+ * <a href="http://tools.ietf.org/html/rfc3986" target="_blank">RFC 3986</a>
+ * itself does not understand the query part of a URI as a list of key/value pairs.
+ * But HTML 2.0 does and defines a media type <i>application/x-www-form-urlencoded</i>
+ * in in <a href="http://tools.ietf.org/html/rfc1866#section-8.2.1" target="blank">section 8.2.1</a>
+ * of <a href="http://tools.ietf.org/html/rfc1866" target="blank">RFC 1866</a>.
+ * uriparser allows you to dissect (or parse) a query string into unescaped key/value pairs
+ * and back.
+ *
+ * To dissect the query part of a just-parsed URI you could write code like this:
+ * 
+ * @code
+ * 	UriUriA uri;
+ * 	UriQueryListA * queryList;
+ * 	int itemCount;
+ * 	...
+ * 	if (uriDissectQueryMallocA(&queryList, &itemCount, uri.query.first,
+ * 			uri.query.afterLast) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 	}
+ * 	...
+ * 	uriFreeQueryListA(queryList);
+ * @endcode
+ *
+ * @remarks
+ * - <c>NULL</c> in the <c>value</c> member means there was <b>no</b> '=' in the item text as with "?abc&def".
+ * - An empty string in the <c>value</c> member means there was '=' in the item as with "?abc=&def".
+ *
+ *
+ * To compose a query string from a query list you could write code like this:
+ *
+ * @code
+ * 	int charsRequired;
+ * 	int charsWritten;
+ * 	char * queryString;
+ * 	...
+ * 	if (uriComposeQueryCharsRequiredA(queryList, &charsRequired) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 	}
+ * 	queryString = malloc((charsRequired + 1) * sizeof(char));
+ * 	if (queryString == NULL) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 	}
+ * 	if (uriComposeQueryA(queryString, queryList, charsRequired + 1, &charsWritten) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure *COMMENT_HACK/
+ * 		...
+ * 	}
+ * 	...
+ * 	free(queryString);
  * @endcode
  *
  *

@@ -76,6 +76,17 @@ static UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
 
 
 
+int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
+		int * charsRequired) {
+	const UriBool spaceToPlus = URI_TRUE;
+	const UriBool normalizeBreaks = URI_TRUE;
+
+	return URI_FUNC(ComposeQueryCharsRequiredEx)(queryList, charsRequired,
+			spaceToPlus, normalizeBreaks);
+}
+
+
+
 int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
 		int * charsRequired, UriBool spaceToPlus, UriBool normalizeBreaks) {
 	if ((queryList == NULL) || (charsRequired == NULL)) {
@@ -84,6 +95,17 @@ int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
 
 	return URI_FUNC(ComposeQueryEngine)(NULL, queryList, 0, NULL,
 			charsRequired, spaceToPlus, normalizeBreaks);
+}
+
+
+
+int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
+						   const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten) {
+	const UriBool spaceToPlus = URI_TRUE;
+	const UriBool normalizeBreaks = URI_TRUE;
+
+	return URI_FUNC(ComposeQueryEx)(dest, queryList, maxChars, charsWritten,
+			spaceToPlus, normalizeBreaks);
 }
 
 
@@ -267,6 +289,17 @@ void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList) {
 		free(queryList);
 		queryList = nextBackup;
 	}
+}
+
+
+
+int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
+		const URI_CHAR * first, const URI_CHAR * afterLast) {
+	const UriBool plusToSpace = URI_TRUE;
+	const UriBreakConversion breakConversion = URI_BR_DONT_TOUCH;
+
+	return URI_FUNC(DissectQueryMallocEx)(dest, itemCount, first, afterLast,
+			plusToSpace, breakConversion);
 }
 
 

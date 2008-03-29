@@ -1,6 +1,8 @@
 ???
 
-  * Added: Composition and dissection of query strings
+  * Added: Dissection and composition of query strings
+  * Added: Minor documentation improvements
+      (in|out|inout indicators, addition of \since and \see)
 
 2008-02-25 -- 0.6.4
 

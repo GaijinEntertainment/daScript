@@ -84,9 +84,11 @@ extern "C" {
 
 /**
  * Specifies a range of characters within a string.
- * The range includes all characters from <code>first</code>
- * to one before <code>afterLast</code>. So if both are
+ * The range includes all characters from <c>first</c>
+ * to one before <c>afterLast</c>. So if both are
  * non-NULL the difference is the length of the text range.
+ *
+ * @since 0.3.0
  */
 typedef struct URI_TYPE(TextRangeStruct) {
 	const URI_CHAR * first; /**< Pointer to first character */
@@ -99,6 +101,8 @@ typedef struct URI_TYPE(TextRangeStruct) {
  * Represents a path segment within a %URI path.
  * More precisely it is a node in a linked
  * list of path segments.
+ *
+ * @since 0.3.0
  */
 typedef struct URI_TYPE(PathSegmentStruct) {
 	URI_TYPE(TextRange) text; /**< Path segment name */
@@ -114,6 +118,8 @@ typedef struct URI_TYPE(PathSegmentStruct) {
  * This is either a IPv4, IPv6, plain
  * text for IPvFuture or all zero for
  * a registered name.
+ *
+ * @since 0.3.0
  */
 typedef struct URI_TYPE(HostDataStruct) {
 	UriIp4 * ip4; /**< IPv4 address */
@@ -126,6 +132,8 @@ typedef struct URI_TYPE(HostDataStruct) {
 /**
  * Represents an RFC 3986 %URI.
  * Missing components can be {NULL, NULL} ranges.
+ *
+ * @since 0.3.0
  */
 typedef struct URI_TYPE(UriStruct) {
 	URI_TYPE(TextRange) scheme; /**< Scheme (e.g. "http") */
@@ -149,6 +157,8 @@ typedef struct URI_TYPE(UriStruct) {
  * Represents a state of the %URI parser.
  * Missing components can be NULL to reflect
  * a components absence.
+ *
+ * @since 0.3.0
  */
 typedef struct URI_TYPE(ParserStateStruct) {
 	URI_TYPE(Uri) * uri; /**< Plug in the %URI structure to be filled while parsing here */
@@ -181,6 +191,9 @@ typedef struct URI_TYPE(QueryListStruct) {
  * @param first       <b>IN</b>: Pointer to the first character to parse, must not be NULL
  * @param afterLast   <b>IN</b>: Pointer to the character after the last to parse, must not be NULL
  * @return            0 on success, error code otherwise
+ *
+ * @see uriParseUriA
+ * @since 0.3.0
  */
 int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -193,6 +206,9 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
  * @param state   <b>INOUT</b>: Parser state with set output %URI, must not be NULL
  * @param text    <b>IN</b>: Text to parse, must not be NULL
  * @return        0 on success, error code otherwise
+ *
+ * @see uriParseUriExA
+ * @since 0.3.0
  */
 int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * text);
@@ -205,6 +221,8 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
  * itself is not freed, only its members.
  *
  * @param uri   <b>INOUT</b>: %URI structure whose members should be freed
+ *
+ * @since 0.3.0
  */
 void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 
@@ -224,6 +242,8 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
  * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
  * @return                  Position of terminator in output string
+ *
+ * @see uriEscapeA
  */
 URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
 		const URI_CHAR * inAfterLast, URI_CHAR * out,
@@ -244,6 +264,8 @@ URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
  * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
  * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
  * @return                  Position of terminator in output string
+ *
+ * @see uriEscapeExA
  */
 URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
@@ -255,13 +277,15 @@ URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
  * E.g. "%20" will become " ". Unescaping is done in place.
  * The return value will be point to the new position
  * of the terminating zero. Use this value to get the new
- * length of the string. NULL is only returned if <code>inout</code>
+ * length of the string. NULL is only returned if <c>inout</c>
  * is NULL.
  *
  * @param inout             <b>INOUT</b>: Text to unescape/decode
  * @param plusToSpace       <b>IN</b>: Whether to convert '+' to ' ' or not
  * @param breakConversion   <b>IN</b>: Line break conversion mode
  * @return                  Pointer to new position of the terminating zero
+ *
+ * @see uriUnescapeInPlaceA
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 		UriBool plusToSpace, UriBreakConversion breakConversion);
@@ -273,7 +297,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
  * E.g. "%20" will become " ". Unescaping is done in place.
  * The return value will be point to the new position
  * of the terminating zero. Use this value to get the new
- * length of the string. NULL is only returned if <code>inout</code>
+ * length of the string. NULL is only returned if <c>inout</c>
  * is NULL.
  *
  * NOTE: '+' is not decoded to ' ' and line breaks are not converted.
@@ -281,6 +305,9 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
  *
  * @param inout   <b>INOUT</b>: Text to unescape/decode
  * @return        Pointer to new position of the terminating zero
+ *
+ * @see uriUnescapeInPlaceExA
+ * @since 0.3.0
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 
@@ -324,11 +351,11 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 /**
  * Checks two URIs for equivalence. Comparison is done
  * the naive way, without prior normalization.
- * NOTE: Two <code>NULL</code> URIs are equal as well.
+ * NOTE: Two <c>NULL</c> URIs are equal as well.
  *
  * @param a   <b>IN</b>: First %URI
  * @param b   <b>IN</b>: Second %URI
- * @return    <code>URI_TRUE</code> when equal, <code>URI_FAlSE</code> else
+ * @return    <c>URI_TRUE</c> when equal, <c>URI_FAlSE</c> else
  */
 UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
 
@@ -382,6 +409,8 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
  * @param uri    <b>INOUT</b>: %URI to normalize
  * @param mask   <b>IN</b>: Normalization mask
  * @return       Error code or 0 on success
+ *
+ * @see uriNormalizeSyntaxA
  */
 int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
 
@@ -395,6 +424,8 @@ int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
  *
  * @param uri   <b>INOUT</b>: %URI to normalize
  * @return      Error code or 0 on success
+ *
+ * @see uriNormalizeSyntaxExA
  */
 int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
 
@@ -471,6 +502,24 @@ int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
 /**
  * Calculates the number of characters needed to store the
  * string representation of the given query list excluding the
+ * terminator. It is assumed that line breaks are will be
+ * normalized to "%0D%0A".
+ *
+ * @param queryList         <b>IN</b>: Query list to measure
+ * @param charsRequired     <b>OUT</b>: Length of the string representation in characters <b>excluding</b> terminator
+ * @return                  Error code or 0 on success
+ *
+ * @see uriComposeQueryCharsRequiredExA
+ * @since 0.7.0
+ */
+int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
+		int * charsRequired);
+
+
+
+/**
+ * Calculates the number of characters needed to store the
+ * string representation of the given query list excluding the
  * terminator.
  *
  * @param queryList         <b>IN</b>: Query list to measure
@@ -478,9 +527,32 @@ int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
  * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
  * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
  * @return                  Error code or 0 on success
+ *
+ * @see uriComposeQueryCharsRequiredA
+ * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
 		int * charsRequired, UriBool spaceToPlus, UriBool normalizeBreaks);
+
+
+
+/**
+ * Converts a query list structure back to a query string.
+ * The composed string does not start with '?',
+ * on the way ' ' is converted to '+' and line breaks are
+ * normalized to "%0D%0A".
+ *
+ * @param dest              <b>OUT</b>: Output destination
+ * @param queryList         <b>IN</b>: Query list to convert
+ * @param maxChars          <b>IN</b>: Maximum number of characters to copy <b>including</b> terminator
+ * @param charsWritten      <b>OUT</b>: Number of characters written, can be lower than maxChars even if the query list is too long!
+ * @return                  Error code or 0 on success
+ *
+ * @see uriComposeQueryExA
+ * @since 0.7.0
+ */
+int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
+		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten);
 
 
 
@@ -495,6 +567,9 @@ int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
  * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
  * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
  * @return                  Error code or 0 on success
+ *
+ * @see uriComposeQueryA
+ * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten,
@@ -502,16 +577,37 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
 
 
 
-/*
+/**
+ * Constructs a query list from the raw query string of a given URI.
+ * On the way '+' is converted back to ' ', line breaks are not modified.
+ *
+ * @param dest              <b>OUT</b>: Output destination
+ * @param itemCount         <b>OUT</b>: Number of items found, can be NULL
+ * @param first             <b>IN</b>: Pointer to first character <b>after</b> '?'
+ * @param afterLast         <b>IN</b>: Pointer to character after the last one still in
+ * @return                  Error code or 0 on success
+ *
+ * @see uriDissectQueryMallocExA
+ * @since 0.7.0
+ */
+int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
+		const URI_CHAR * first, const URI_CHAR * afterLast);
+
+
+
+/**
  * Constructs a query list from the raw query string of a given URI.
  *
  * @param dest              <b>OUT</b>: Output destination
  * @param itemCount         <b>OUT</b>: Number of items found, can be NULL
- * @param first             <b>IN</b>: Pointer to first character <b>after<b> '?'
+ * @param first             <b>IN</b>: Pointer to first character <b>after</b> '?'
  * @param afterLast         <b>IN</b>: Pointer to character after the last one still in
  * @param plusToSpace       <b>IN</b>: Whether to convert '+' to ' ' or not
  * @param breakConversion   <b>IN</b>: Line break conversion mode
  * @return                  Error code or 0 on success
+ *
+ * @see uriDissectQueryMallocA
+ * @since 0.7.0
  */
 int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
@@ -523,7 +619,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * Frees all memory associated with the given query list.
  * The the structure itself is freed as well.
  *
- * @param uri   <b>INOUT</b>: Query list to free
+ * @param queryList   <b>INOUT</b>: Query list to free
  */
 void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
 

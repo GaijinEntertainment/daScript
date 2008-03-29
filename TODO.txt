@@ -1,6 +1,4 @@
 == BEFORE NEXT RELEASE ==
- * add query list example to tutorial
- * add non-"Ex" versions of query list functions
 
 == SOON ==
  * samba filename conversion?
