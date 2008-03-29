@@ -161,11 +161,25 @@ typedef struct URI_TYPE(ParserStateStruct) {
 
 
 /**
+ * Represents a query element.
+ * More precisely it is a node in a linked
+ * list of query elements.
+ */
+typedef struct URI_TYPE(QueryListStruct) {
+	const URI_CHAR * key; /**< Key of the query element */
+	const URI_CHAR * value; /**< Value of the query element, can be NULL */
+
+	struct URI_TYPE(QueryListStruct) * next; /**< Pointer to the next key/value pair in the list, can be NULL if last already */
+} URI_TYPE(QueryList); /**< @copydoc UriQueryListStructA */
+
+
+
+/**
  * Parses a RFC 3986 URI.
  *
- * @param state       Parser state with set output %URI, must not be NULL
- * @param first       Pointer to the first character to parse, must not be NULL
- * @param afterLast   Pointer to the character after the last to parse, must not be NULL
+ * @param state       <b>INOUT</b>: Parser state with set output %URI, must not be NULL
+ * @param first       <b>IN</b>: Pointer to the first character to parse, must not be NULL
+ * @param afterLast   <b>IN</b>: Pointer to the character after the last to parse, must not be NULL
  * @return            0 on success, error code otherwise
  */
 int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
@@ -176,8 +190,8 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 /**
  * Parses a RFC 3986 %URI.
  *
- * @param state   Parser state with set output %URI, must not be NULL
- * @param text    Text to parse, must not be NULL
+ * @param state   <b>INOUT</b>: Parser state with set output %URI, must not be NULL
+ * @param text    <b>IN</b>: Text to parse, must not be NULL
  * @return        0 on success, error code otherwise
  */
 int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
@@ -190,7 +204,7 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
  * of the %URI structure. Note that the structure
  * itself is not freed, only its members.
  *
- * @param uri   %URI structure whose members should be freed
+ * @param uri   <b>INOUT</b>: %URI structure whose members should be freed
  */
 void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 
@@ -204,11 +218,11 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * the space for <c>normalizeBreaks == URI_TRUE</c>
  * (since e.g. "\x0d" becomes "%0D%0A" in that case)
  *
- * @param inFirst           Pointer to first character of the input text
- * @param inAfterLast       Pointer after the last character of the input text
- * @param out               Encoded text destination
- * @param spaceToPlus       Wether to convert ' ' to '+' or not
- * @param normalizeBreaks   Wether to convert CR and LF to CR-LF or not.
+ * @param inFirst           <b>IN</b>: Pointer to first character of the input text
+ * @param inAfterLast       <b>IN</b>: Pointer after the last character of the input text
+ * @param out               <b>OUT</b>: Encoded text destination
+ * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
  * @return                  Position of terminator in output string
  */
 URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
@@ -225,10 +239,10 @@ URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
  * the space for <c>normalizeBreaks == URI_FALSE</c>
  * (since e.g. "\x0d" becomes "%0D%0A" in that case)
  *
- * @param in                Text source
- * @param out               Encoded text destination
- * @param spaceToPlus       Wether to convert ' ' to '+' or not
- * @param normalizeBreaks   Wether to convert CR and LF to CR-LF or not.
+ * @param in                <b>IN</b>: Text source
+ * @param out               <b>OUT</b>: Encoded text destination
+ * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
  * @return                  Position of terminator in output string
  */
 URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
@@ -244,9 +258,9 @@ URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
  * length of the string. NULL is only returned if <code>inout</code>
  * is NULL.
  *
- * @param inout             Text to unescape/decode
- * @param plusToSpace       Whether to convert '+' to ' ' or not
- * @param breakConversion   Line break conversion mode
+ * @param inout             <b>INOUT</b>: Text to unescape/decode
+ * @param plusToSpace       <b>IN</b>: Whether to convert '+' to ' ' or not
+ * @param breakConversion   <b>IN</b>: Line break conversion mode
  * @return                  Pointer to new position of the terminating zero
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
@@ -265,7 +279,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
  * NOTE: '+' is not decoded to ' ' and line breaks are not converted.
  * Use the more advanced UnescapeInPlaceEx for that features instead.
  *
- * @param inout   Text to unescape/decode
+ * @param inout   <b>INOUT</b>: Text to unescape/decode
  * @return        Pointer to new position of the terminating zero
  */
 const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
@@ -276,9 +290,9 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
  * Performs reference resolution as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
  *
- * @param absoluteDest     Result %URI
- * @param relativeSource   Reference to resolve
- * @param absoluteBase     Base %URI to apply
+ * @param absoluteDest     <b>OUT</b>: Result %URI
+ * @param relativeSource   <b>IN</b>: Reference to resolve
+ * @param absoluteBase     <b>IN</b>: Base %URI to apply
  * @return                 Error code or 0 on success
  */
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
@@ -294,10 +308,10 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
  * the base %URI. If it does not the result will still be
  * an absolute URI (with scheme part if necessary).
  *
- * @param dest             Result %URI
- * @param absoluteSource   Absolute %URI to make relative
- * @param absoluteBase     Base %URI
- * @param domainRootMode   Create %URI with path relative to domain root
+ * @param dest             <b>OUT</b>: Result %URI
+ * @param absoluteSource   <b>IN</b>: Absolute %URI to make relative
+ * @param absoluteBase     <b>IN</b>: Base %URI
+ * @param domainRootMode   <b>IN</b>: Create %URI with path relative to domain root
  * @return                 Error code or 0 on success
  */
 int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
@@ -312,8 +326,8 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
  * the naive way, without prior normalization.
  * NOTE: Two <code>NULL</code> URIs are equal as well.
  *
- * @param a   First %URI
- * @param b   Second %URI
+ * @param a   <b>IN</b>: First %URI
+ * @param b   <b>IN</b>: Second %URI
  * @return    <code>URI_TRUE</code> when equal, <code>URI_FAlSE</code> else
  */
 UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
@@ -325,8 +339,8 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
  * string representation of the given %URI excluding the
  * terminator.
  *
- * @param uri             %URI to measure
- * @param charsRequired   Length of the string representation in characters <b>excluding</b> terminator
+ * @param uri             <b>IN</b>: %URI to measure
+ * @param charsRequired   <b>OUT</b>: Length of the string representation in characters <b>excluding</b> terminator
  * @return                Error code or 0 on success
  */
 int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
@@ -338,10 +352,10 @@ int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
  * Converts a %URI structure back to text as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.3">section 5.3 of RFC 3986</a>.
  *
- * @param dest           Output destination
- * @param uri            %URI to convert
- * @param maxChars       Maximum number of characters to copy <b>including</b> terminator
- * @param charsWritten   Number of characters written, can be lower than maxChars even if the %URI is too long!
+ * @param dest           <b>OUT</b>: Output destination
+ * @param uri            <b>IN</b>: %URI to convert
+ * @param maxChars       <b>IN</b>: Maximum number of characters to copy <b>including</b> terminator
+ * @param charsWritten   <b>OUT</b>: Number of characters written, can be lower than maxChars even if the %URI is too long!
  * @return               Error code or 0 on success
  */
 int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars, int * charsWritten);
@@ -351,7 +365,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
 /**
  * Determines the components of a %URI that are not normalized.
  *
- * @param uri   %URI to check
+ * @param uri   <b>IN</b>: %URI to check
  * @return      Normalization job mask
  */
 unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
@@ -365,8 +379,8 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
  * NOTE: If necessary the %URI becomes owner of all memory
  * behind the text pointed to. Text is duplicated in that case.
  *
- * @param uri    %URI to normalize
- * @param mask   Normalization mask
+ * @param uri    <b>INOUT</b>: %URI to normalize
+ * @param mask   <b>IN</b>: Normalization mask
  * @return       Error code or 0 on success
  */
 int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
@@ -379,7 +393,7 @@ int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
  * NOTE: If necessary the %URI becomes owner of all memory
  * behind the text pointed to. Text is duplicated in that case.
  *
- * @param uri   %URI to normalize
+ * @param uri   <b>INOUT</b>: %URI to normalize
  * @return      Error code or 0 on success
  */
 int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
@@ -396,8 +410,8 @@ int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
  *   Input:  "/bin/bash"
  *   Output: "file:///bin/bash"
  *
- * @param filename     Unix filename to convert
- * @param uriString    Destination to write %URI string to
+ * @param filename     <b>IN</b>: Unix filename to convert
+ * @param uriString    <b>OUT</b>: Destination to write %URI string to
  * @return             Error code or 0 on success
  */
 int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
@@ -415,8 +429,8 @@ int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
  *   Input:  "E:\\Documents and Settings"
  *   Output: "file:///E:/Documents%20and%20Settings"
  *
- * @param filename     Windows filename to convert
- * @param uriString    Destination to write %URI string to
+ * @param filename     <b>IN</b>: Windows filename to convert
+ * @param uriString    <b>OUT</b>: Destination to write %URI string to
  * @return             Error code or 0 on success
  */
 int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
@@ -430,8 +444,8 @@ int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
  * characters in case of an absolute %URI or len(uriString) + 1 in case
  * of a relative %URI.
  *
- * @param uriString    %URI string to convert
- * @param filename     Destination to write filename to
+ * @param uriString    <b>IN</b>: %URI string to convert
+ * @param filename     <b>OUT</b>: Destination to write filename to
  * @return             Error code or 0 on success
  */
 int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
@@ -445,26 +459,12 @@ int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
  * characters in case of an absolute %URI or len(uriString) + 1 in case
  * of a relative %URI.
  *
- * @param uriString    %URI string to convert
- * @param filename     Destination to write filename to
+ * @param uriString    <b>IN</b>: %URI string to convert
+ * @param filename     <b>OUT</b>: Destination to write filename to
  * @return             Error code or 0 on success
  */
 int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
 		URI_CHAR * filename);
-
-
-
-/*
- * Represents a query element.
- * More precisely it is a node in a linked
- * list of query elements.
- */
-typedef struct URI_TYPE(QueryListStruct) {
-	const URI_CHAR * key; /**< Key of the query element */
-	const URI_CHAR * value; /**< Value of the query element, can be NULL */
-
-	struct URI_TYPE(QueryListStruct) * next; /**< Pointer to the next key/value pair in the list, can be NULL if last already */
-} URI_TYPE(QueryList); /**< @copydoc UriQueryListStructA */
 
 
 
@@ -473,10 +473,10 @@ typedef struct URI_TYPE(QueryListStruct) {
  * string representation of the given query list excluding the
  * terminator.
  *
- * @param queryList         IN: Query list to measure
- * @param charsRequired     OUT: Length of the string representation in characters <b>excluding</b> terminator
- * @param spaceToPlus       IN: Wether to convert ' ' to '+' or not
- * @param normalizeBreaks   IN: Wether to convert CR and LF to CR-LF or not.
+ * @param queryList         <b>IN</b>: Query list to measure
+ * @param charsRequired     <b>OUT</b>: Length of the string representation in characters <b>excluding</b> terminator
+ * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
  * @return                  Error code or 0 on success
  */
 int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
@@ -488,12 +488,12 @@ int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
  * Converts a query list structure back to a query string.
  * The composed string does not start with '?'.
  *
- * @param dest              OUT: Output destination
- * @param queryList         IN: Query list to convert
- * @param maxChars          IN: Maximum number of characters to copy <b>including</b> terminator
- * @param charsWritten      OUT: Number of characters written, can be lower than maxChars even if the query list is too long!
- * @param spaceToPlus       IN: Wether to convert ' ' to '+' or not
- * @param normalizeBreaks   IN: Wether to convert CR and LF to CR-LF or not.
+ * @param dest              <b>OUT</b>: Output destination
+ * @param queryList         <b>IN</b>: Query list to convert
+ * @param maxChars          <b>IN</b>: Maximum number of characters to copy <b>including</b> terminator
+ * @param charsWritten      <b>OUT</b>: Number of characters written, can be lower than maxChars even if the query list is too long!
+ * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
  * @return                  Error code or 0 on success
  */
 int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
@@ -505,12 +505,12 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
 /*
  * Constructs a query list from the raw query string of a given URI.
  *
- * @param dest              OUT: Output destination
- * @param itemCount         OUT: Number of items found, can be NULL
- * @param first             IN: Pointer to first character <b>after<b> '?'
- * @param afterLast         IN: Pointer to character after the last one still in
- * @param plusToSpace       IN: Whether to convert '+' to ' ' or not
- * @param breakConversion   IN: Line break conversion mode
+ * @param dest              <b>OUT</b>: Output destination
+ * @param itemCount         <b>OUT</b>: Number of items found, can be NULL
+ * @param first             <b>IN</b>: Pointer to first character <b>after<b> '?'
+ * @param afterLast         <b>IN</b>: Pointer to character after the last one still in
+ * @param plusToSpace       <b>IN</b>: Whether to convert '+' to ' ' or not
+ * @param breakConversion   <b>IN</b>: Line break conversion mode
  * @return                  Error code or 0 on success
  */
 int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
@@ -523,7 +523,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * Frees all memory associated with the given query list.
  * The the structure itself is freed as well.
  *
- * @param uri   Query list to free
+ * @param uri   <b>INOUT</b>: Query list to free
  */
 void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
 

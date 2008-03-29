@@ -1,5 +1,6 @@
 == BEFORE NEXT RELEASE ==
- * add "(IN|OUT|INOUT):" marker to all parameters in API docs
+ * add query list example to tutorial
+ * add non-"Ex" versions of query list functions
 
 == SOON ==
  * samba filename conversion?
