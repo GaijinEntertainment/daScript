@@ -322,7 +322,7 @@
  * You can use the code below to make <c>./configure</c> test for presence
  * of uriparser 0.6.4 or later.
  *
- *<div class="fragment"><pre class="fragment">URIPARSER_MISSING=<span class="stringliteral">"Please install uriparser 0.6.3 or later.
+ *<div class="fragment"><pre class="fragment">URIPARSER_MISSING=<span class="stringliteral">"Please install uriparser 0.6.4 or later.
  *   On a Debian-based system enter 'sudo apt-get install liburiparser-dev'."</span>
  *AC_CHECK_LIB(uriparser, uriParseUriA,, AC_MSG_ERROR(${URIPARSER_MISSING}))
  *AC_CHECK_HEADER(uriparser/Uri.h,, AC_MSG_ERROR(${URIPARSER_MISSING}))
