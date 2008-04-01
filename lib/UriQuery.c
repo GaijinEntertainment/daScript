@@ -128,18 +128,18 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
 
 
 int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
-		const URI_TYPE(QueryList) * queryList, int * charsWritten) {
+		const URI_TYPE(QueryList) * queryList) {
 	const UriBool spaceToPlus = URI_TRUE;
 	const UriBool normalizeBreaks = URI_TRUE;
 
-	return URI_FUNC(ComposeQueryMallocEx)(dest, queryList, charsWritten,
+	return URI_FUNC(ComposeQueryMallocEx)(dest, queryList,
 			spaceToPlus, normalizeBreaks);
 }
 
 
 
 int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
-		const URI_TYPE(QueryList) * queryList, int * charsWritten,
+		const URI_TYPE(QueryList) * queryList,
 		UriBool spaceToPlus, UriBool normalizeBreaks) {
 	int charsRequired;
 	int res;
@@ -165,7 +165,7 @@ int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
 
 	/* Put query in */
 	res = URI_FUNC(ComposeQueryEx)(queryString, queryList, charsRequired,
-			charsWritten, spaceToPlus, normalizeBreaks);
+			NULL, spaceToPlus, normalizeBreaks);
 	if (res != URI_SUCCESS) {
 		free(queryString);
 		return res;

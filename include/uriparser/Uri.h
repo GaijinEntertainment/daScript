@@ -652,7 +652,6 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
  * @param dest              <b>OUT</b>: Output destination
  * @param queryList         <b>IN</b>: Query list to convert
  * @param maxChars          <b>IN</b>: Maximum number of characters to copy <b>including</b> terminator
- * @param charsWritten      <b>OUT</b>: Number of characters written, can be lower than maxChars even if the query list is too long!
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryMallocExA
@@ -661,7 +660,7 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
-		const URI_TYPE(QueryList) * queryList, int * charsWritten);
+		const URI_TYPE(QueryList) * queryList);
 
 
 
@@ -673,7 +672,6 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
  * @param dest              <b>OUT</b>: Output destination
  * @param queryList         <b>IN</b>: Query list to convert
  * @param maxChars          <b>IN</b>: Maximum number of characters to copy <b>including</b> terminator
- * @param charsWritten      <b>OUT</b>: Number of characters written, can be lower than maxChars even if the query list is too long!
  * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
  * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
  * @return                  Error code or 0 on success
@@ -684,7 +682,7 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
-		const URI_TYPE(QueryList) * queryList, int * charsWritten,
+		const URI_TYPE(QueryList) * queryList,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
 
 
