@@ -608,6 +608,7 @@ int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryExA
+ * @see uriComposeQueryMallocA
  * @see uriComposeQueryCharsRequiredA
  * @see uriDissectQueryMallocA
  * @since 0.7.0
@@ -630,12 +631,60 @@ int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryA
+ * @see uriComposeQueryMallocExA
  * @see uriComposeQueryCharsRequiredExA
  * @see uriDissectQueryMallocExA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten,
+		UriBool spaceToPlus, UriBool normalizeBreaks);
+
+
+
+/**
+ * Converts a query list structure back to a query string.
+ * Memory for this string is allocated internally.
+ * The composed string does not start with '?',
+ * on the way ' ' is converted to '+' and line breaks are
+ * normalized to "%0D%0A".
+ *
+ * @param dest              <b>OUT</b>: Output destination
+ * @param queryList         <b>IN</b>: Query list to convert
+ * @param maxChars          <b>IN</b>: Maximum number of characters to copy <b>including</b> terminator
+ * @param charsWritten      <b>OUT</b>: Number of characters written, can be lower than maxChars even if the query list is too long!
+ * @return                  Error code or 0 on success
+ *
+ * @see uriComposeQueryMallocExA
+ * @see uriComposeQueryA
+ * @see uriDissectQueryMallocA
+ * @since 0.7.0
+ */
+int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
+		const URI_TYPE(QueryList) * queryList, int * charsWritten);
+
+
+
+/**
+ * Converts a query list structure back to a query string.
+ * Memory for this string is allocated internally.
+ * The composed string does not start with '?'.
+ *
+ * @param dest              <b>OUT</b>: Output destination
+ * @param queryList         <b>IN</b>: Query list to convert
+ * @param maxChars          <b>IN</b>: Maximum number of characters to copy <b>including</b> terminator
+ * @param charsWritten      <b>OUT</b>: Number of characters written, can be lower than maxChars even if the query list is too long!
+ * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
+ * @return                  Error code or 0 on success
+ *
+ * @see uriComposeQueryMallocA
+ * @see uriComposeQueryExA
+ * @see uriDissectQueryMallocExA
+ * @since 0.7.0
+ */
+int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
+		const URI_TYPE(QueryList) * queryList, int * charsWritten,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
 
 
