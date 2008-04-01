@@ -83,6 +83,7 @@ public:
 		TEST_ADD(UriSuite::testCrash_FreeUriMembers_Bug20080116)
 		TEST_ADD(UriSuite::testCrash_MakeOwner_Bug20080207)
 		TEST_ADD(UriSuite::testQueryList)
+		TEST_ADD(UriSuite::testQueryListPair)
 	}
 
 private:
@@ -1282,7 +1283,7 @@ private:
 			delete [] recomposed;
 
 			recomposed = NULL;
-			res = uriComposeQueryMallocW(&recomposed, queryList, &charsWritten);
+			res = uriComposeQueryMallocW(&recomposed, queryList);
 			TEST_ASSERT(res == URI_SUCCESS);
 			TEST_ASSERT(recomposed != NULL);
 			TEST_ASSERT(charsWritten = wcslen(input) + 1);
@@ -1300,6 +1301,32 @@ private:
 		testQueryListHelper(L"one=ONE", 1);
 		testQueryListHelper(L"one", 1);
 		testQueryListHelper(L"", 0);
+	}
+
+	void testQueryListPairHelper(const char * pair, const char * unescapedKey,
+			const char * unescapedValue, const char * fixed = NULL) {
+		int res;
+		UriQueryListA * queryList;
+		int itemCount;
+		
+		res = uriDissectQueryMallocA(&queryList, &itemCount, pair, pair + strlen(pair));
+		TEST_ASSERT(res == URI_SUCCESS);
+		TEST_ASSERT(queryList != NULL);
+		TEST_ASSERT(itemCount = 1);
+		TEST_ASSERT(!strcmp(queryList->key, unescapedKey));
+		TEST_ASSERT(!strcmp(queryList->value, unescapedValue));
+
+		char * recomposed;
+		res = uriComposeQueryMallocA(&recomposed, queryList);
+		TEST_ASSERT(res == URI_SUCCESS);
+		TEST_ASSERT(recomposed != NULL);
+		TEST_ASSERT(!strcmp(recomposed, (fixed != NULL) ? fixed : pair));
+		free(recomposed);
+	}
+
+	void testQueryListPair() {
+		testQueryListPairHelper("one+two+%26+three=%2B", "one two & three", "+");
+		testQueryListPairHelper("one=two=three", "one", "two=three", "one=two%3Dthree");
 	}
 
 };

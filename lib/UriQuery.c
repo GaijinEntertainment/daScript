@@ -359,7 +359,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		UriBool plusToSpace, UriBreakConversion breakConversion) {
 	const URI_CHAR * walk = first;
 	const URI_CHAR * keyFirst = first;
-	const URI_CHAR * keyAfter = first;
+	const URI_CHAR * keyAfter = NULL;
 	const URI_CHAR * valueFirst = NULL;
 	const URI_CHAR * valueAfter = NULL;
 	URI_TYPE(QueryList) ** prevNext = dest;
@@ -404,20 +404,23 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 
 			if (walk + 1 < afterLast) {
 				keyFirst = walk + 1;
-				keyAfter = walk + 1;
 			} else {
 				keyFirst = NULL;
-				keyAfter = NULL;
 			}
+			keyAfter = NULL;
 			valueFirst = NULL;
 			valueAfter = NULL;
 			break;
 
 		case _UT('='):
-			keyAfter = walk;
-			if (walk + 1 < afterLast) {
-				valueFirst = walk + 1;
-				valueAfter = walk + 1;
+			/* NOTE: WE treat the first '=' as a separator, */
+			/*       all following go into the value part   */
+			if (keyAfter == NULL) {
+				keyAfter = walk;
+				if (walk + 1 < afterLast) {
+					valueFirst = walk + 1;
+					valueAfter = walk + 1;
+				}
 			}
 			break;
 
