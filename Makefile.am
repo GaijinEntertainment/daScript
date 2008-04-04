@@ -19,7 +19,7 @@ include_uriparser_HEADERS = \
 
 
 
-liburiparser_la_LDFLAGS = -version-info 1:4:0
+liburiparser_la_LDFLAGS = -version-info 1:5:0
 
 liburiparser_la_SOURCES = \
 	lib/UriCommon.c \
@@ -97,6 +97,7 @@ EXTRA_DIST = \
 	\
 	win32/Code_Blocks/test.cbp \
 	win32/Code_Blocks/uriparser.cbp \
+	win32/Code_Blocks/uriparser.workspace \
 	\
 	win32/MinGW/Makefile \
 	win32/MinGW/Readme.txt \

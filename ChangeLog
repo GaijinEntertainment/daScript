@@ -3,6 +3,10 @@
   * Added: Dissection and composition of query strings
   * Added: Minor documentation improvements
       (in|out|inout indicators, addition of \since and \see)
+  * Changed: Code::Blocks project files updated from file format
+      version 1.4 to 1.6, the one used by Code::Blocks 8.02
+  * Added: Code::Blocks workspace file
+  * Changed: Soname set to 1:5:0
 
 2008-02-25 -- 0.6.4
 
