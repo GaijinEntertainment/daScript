@@ -1270,7 +1270,7 @@ private:
 			res = uriComposeQueryCharsRequiredExW(queryList, &charsRequired, spacePlusConversion, 
 					normalizeBreaks);
 			TEST_ASSERT(res == URI_SUCCESS);
-			TEST_ASSERT(charsRequired >= wcslen(input));
+			TEST_ASSERT(charsRequired >= (int)wcslen(input));
 
 			wchar_t * recomposed = new wchar_t[charsRequired + 1];
 			int charsWritten;
@@ -1278,7 +1278,7 @@ private:
 					&charsWritten, spacePlusConversion, normalizeBreaks);
 			TEST_ASSERT(res == URI_SUCCESS);
 			TEST_ASSERT(charsWritten <= charsRequired);
-			TEST_ASSERT(charsWritten = wcslen(input) + 1);
+			TEST_ASSERT(charsWritten = (int)wcslen(input) + 1);
 			TEST_ASSERT(!wcscmp(input, recomposed));
 			delete [] recomposed;
 
@@ -1286,7 +1286,7 @@ private:
 			res = uriComposeQueryMallocW(&recomposed, queryList);
 			TEST_ASSERT(res == URI_SUCCESS);
 			TEST_ASSERT(recomposed != NULL);
-			TEST_ASSERT(charsWritten = wcslen(input) + 1);
+			TEST_ASSERT(charsWritten = (int)wcslen(input) + 1);
 			TEST_ASSERT(!wcscmp(input, recomposed));
 			free(recomposed);
 		}

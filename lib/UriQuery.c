@@ -196,9 +196,9 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const URI_CHAR * const key = queryList->key;
 		const URI_CHAR * const value = queryList->value;
 		const int worstCase = (normalizeBreaks == URI_TRUE ? 6 : 3);
-		const int keyLen = (key == NULL) ? 0 : URI_STRLEN(key);
+		const int keyLen = (key == NULL) ? 0 : (int)URI_STRLEN(key);
 		const int keyRequiredChars = worstCase * keyLen;
-		const int valueLen = (value == NULL) ? 0 : URI_STRLEN(value);
+		const int valueLen = (value == NULL) ? 0 : (int)URI_STRLEN(value);
 		const int valueRequiredChars = worstCase * valueLen;
 
 		if (dest == NULL) {
@@ -250,7 +250,7 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 	if (dest != NULL) {
 		write[0] = _UT('\0');
 		if (charsWritten != NULL) {
-			*charsWritten = (write - dest) + 1; /* .. for terminator */
+			*charsWritten = (int)(write - dest) + 1; /* .. for terminator */
 		}
 	}
 
@@ -263,8 +263,8 @@ UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
 		int * itemCount, const URI_CHAR * keyFirst, const URI_CHAR * keyAfter,
 		const URI_CHAR * valueFirst, const URI_CHAR * valueAfter,
 		UriBool plusToSpace, UriBreakConversion breakConversion) {
-	const int keyLen = keyAfter - keyFirst;
-	const int valueLen = valueAfter - valueFirst;
+	const int keyLen = (int)(keyAfter - keyFirst);
+	const int valueLen = (int)(valueAfter - valueFirst);
 	URI_CHAR * key;
 	URI_CHAR * value;
 
