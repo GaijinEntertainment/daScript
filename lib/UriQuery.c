@@ -118,7 +118,7 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
 	}
 
 	if (maxChars < 1) {
-		return URI_ERROR_COMPOSE_QUERY_TOO_LONG;
+		return URI_ERROR_OUTPUT_TOO_LARGE;
 	}
 
 	return URI_FUNC(ComposeQueryEngine)(dest, queryList, maxChars,
@@ -214,7 +214,7 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 			URI_CHAR * afterKey;
 
 			if ((write - dest) + ampersandLen + keyRequiredChars > maxChars) {
-				return URI_ERROR_COMPOSE_QUERY_TOO_LONG;
+				return URI_ERROR_OUTPUT_TOO_LARGE;
 			}
 
 			/* Copy key */
@@ -232,7 +232,7 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 				URI_CHAR * afterValue;
 
 				if ((write - dest) + 1 + valueRequiredChars > maxChars) {
-					return URI_ERROR_COMPOSE_QUERY_TOO_LONG;
+					return URI_ERROR_OUTPUT_TOO_LARGE;
 				}
 
 				/* Copy value */
