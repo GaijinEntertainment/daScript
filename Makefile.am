@@ -74,6 +74,7 @@ EXTRA_DIST = \
 	doc/missing \
 	doc/preprocess.sh \
 	\
+	doc/rfc1866.htm \
 	doc/rfc3513.htm \
 	doc/rfc3986.htm \
 	doc/rfc3986_grammar_only.txt \
