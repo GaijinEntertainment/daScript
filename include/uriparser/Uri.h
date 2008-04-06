@@ -729,7 +729,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 
 /**
  * Frees all memory associated with the given query list.
- * The the structure itself is freed as well.
+ * The structure itself is freed as well.
  *
  * @param queryList   <b>INOUT</b>: Query list to free
  *
