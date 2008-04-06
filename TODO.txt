@@ -1,6 +1,8 @@
 == BEFORE NEXT RELEASE ==
 
 == SOON ==
+ * try to remove need for free after parser fail?
+ * add more responsibility/ownership/init info to docs
  * samba filename conversion?
  * (g/s)etters for single components?
  * Add configure options to disable Ansi or Unicode
