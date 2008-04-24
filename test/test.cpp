@@ -388,10 +388,16 @@ private:
 		int res;
 		
 		res = uriParseUriA(&stateA, "http://user:21@host/");
-		TEST_ASSERT(0 == res);
+		TEST_ASSERT(URI_SUCCESS == res);
 
 		res = uriParseUriA(&stateA, "http://user:1234@192.168.0.1:1234/foo.com");
-		TEST_ASSERT(0 == res);
+		TEST_ASSERT(URI_SUCCESS == res);
+
+		res = uriParseUriA(&stateA, "http://moo:21@moo:21@moo/");
+		TEST_ASSERT(URI_ERROR_SYNTAX == res);
+
+		res = uriParseUriA(&stateA, "http://moo:21@moo:21@moo:21/");
+		TEST_ASSERT(URI_ERROR_SYNTAX == res);
 	}
 
 	void testUriUserInfoHostPort3() {
