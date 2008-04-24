@@ -1,3 +1,8 @@
+???
+
+  * Fixed: Parse error with port-like passwords as in "http://user:21@host/"
+      Thanks to Friedrich Delgado Friedrichs for reporting!
+
 2008-04-04 -- 0.7.0
 
   * Added: Dissection and composition of query strings

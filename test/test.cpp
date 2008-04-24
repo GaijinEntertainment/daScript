@@ -385,7 +385,12 @@ private:
 		UriUriA uriA;
 		stateA.uri = &uriA;
 
-		int res = uriParseUriA(&stateA, "http://user:1234@192.168.0.1:1234/foo.com");
+		int res;
+		
+		res = uriParseUriA(&stateA, "http://user:21@host/");
+		TEST_ASSERT(0 == res);
+
+		res = uriParseUriA(&stateA, "http://user:1234@192.168.0.1:1234/foo.com");
 		TEST_ASSERT(0 == res);
 	}
 

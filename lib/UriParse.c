@@ -1182,6 +1182,7 @@ static URI_INLINE UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) 
  * [ownPortUserInfo]-><_>[ownUserInfo]
  * [ownPortUserInfo]-><~>[ownUserInfo]
  * [ownPortUserInfo]-><->[ownUserInfo]
+ * [ownPortUserInfo]-><@>[ownHost]
  * [ownPortUserInfo]-><NULL>
  */
 static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
@@ -1205,6 +1206,9 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 
 	case URI_SET_DIGIT:
 		return URI_FUNC(ParseOwnPortUserInfo)(state, first + 1, afterLast);
+
+	case _UT('@'):
+		return URI_FUNC(ParseOwnHost)(state, first + 1, afterLast);
 
 	default:
 		if (!URI_FUNC(OnExitOwnPortUserInfo)(state, first)) {
