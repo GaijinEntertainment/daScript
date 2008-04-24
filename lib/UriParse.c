@@ -1208,6 +1208,10 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 		return URI_FUNC(ParseOwnPortUserInfo)(state, first + 1, afterLast);
 
 	case _UT('@'):
+		state->uri->hostText.afterLast = NULL; /* Not a host, reset */
+		state->uri->portText.first = NULL; /* Not a port, reset */
+		state->uri->userInfo.afterLast = first; /* USERINFO END */
+		state->uri->hostText.first = first + 1; /* HOST BEGIN */
 		return URI_FUNC(ParseOwnHost)(state, first + 1, afterLast);
 
 	default:

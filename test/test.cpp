@@ -389,6 +389,12 @@ private:
 		
 		res = uriParseUriA(&stateA, "http://user:21@host/");
 		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(!memcmp(uriA.userInfo.first, "user:21", 7 * sizeof(char)));
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 7);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
 
 		res = uriParseUriA(&stateA, "http://user:1234@192.168.0.1:1234/foo.com");
 		TEST_ASSERT(URI_SUCCESS == res);
