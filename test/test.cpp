@@ -56,6 +56,7 @@ public:
 		TEST_ADD(UriSuite::testUri)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort1)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort2)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort22_Bug1948038)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort3)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort4)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort5)
@@ -73,6 +74,7 @@ public:
 		TEST_ADD(UriSuite::testTrailingSlash)
 		TEST_ADD(UriSuite::testAddBase)
 		TEST_ADD(UriSuite::testToString)
+		TEST_ADD(UriSuite::testToString_Bug1950126)
 		TEST_ADD(UriSuite::testToStringCharsRequired)
 		TEST_ADD(UriSuite::testToStringCharsRequired)
 		TEST_ADD(UriSuite::testNormalizeSyntaxMaskRequired)
@@ -376,6 +378,15 @@ private:
 		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 7 + 1 + 9 + 1);
 		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 7 + 1 + 9 + 1 + 3);
 		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort22_Bug1948038() {
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res = uriParseUriA(&stateA, "http://user:1234@192.168.0.1:1234/foo.com");
+		TEST_ASSERT(0 == res);
 	}
 
 	void testUriUserInfoHostPort3() {
@@ -919,6 +930,11 @@ private:
 
 		// Tests for bugs from the past
 		TEST_ASSERT(testToStringHelper(L"f:/.//g"));
+	}
+
+	void testToString_Bug1950126() {
+		TEST_ASSERT(testToStringHelper(L"http://e.com/"));
+		TEST_ASSERT(testToStringHelper(L"http://e.com"));
 	}
 
 	bool testToStringCharsRequiredHelper(wchar_t * text) {
