@@ -172,6 +172,10 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 						absDest->query = relSource->query;
 	/* [11/32]		else */
 					} else {
+	/* [28/32]			T.authority = Base.authority; */
+						if (!URI_FUNC(CopyAuthority)(absDest, absBase)) {
+							return URI_ERROR_MALLOC;
+						}
 	/* [12/32]			if (R.path == "") then */
 						if (relSource->pathHead == NULL) {
 	/* [13/32]				T.path = Base.path; */
@@ -222,10 +226,7 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 							absDest->query = relSource->query;
 	/* [27/32]			endif; */
 						}
-	/* [28/32]			T.authority = Base.authority; */
-					if (!URI_FUNC(CopyAuthority)(absDest, absBase)) {
-						return URI_ERROR_MALLOC;
-					}
+						URI_FUNC(FixEmptyTrailSegment)(absDest);
 	/* [29/32]		endif; */
 					}
 	/* [30/32]		T.scheme = Base.scheme; */

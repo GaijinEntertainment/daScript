@@ -128,20 +128,24 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 						free(walker);
 					} else {
 						/* Last segment */
+						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+							free((URI_CHAR *)walker->text.first);
+						}
+
 						if (prev == NULL) {
 							/* Last and first */
-							if (uri->owner && (walker->text.first != walker->text.afterLast)) {
-								free((URI_CHAR *)walker->text.first);
-							}
-							free(walker);
+							if (URI_FUNC(IsHostSet)(uri)) {
+								/* Replace "." with empty segment to represent trailing slash */
+								walker->text.first = URI_FUNC(SafeToPointTo);
+								walker->text.afterLast = URI_FUNC(SafeToPointTo);
+							} else {
+								free(walker);
 
-							uri->pathHead = NULL;
-							uri->pathTail = NULL;
+								uri->pathHead = NULL;
+								uri->pathTail = NULL;
+							}
 						} else {
 							/* Last but not first, replace "." with empty segment to represent trailing slash */
-							if (uri->owner && (walker->text.first != walker->text.afterLast)) {
-								free((URI_CHAR *)walker->text.first);
-							}
 							walker->text.first = URI_FUNC(SafeToPointTo);
 							walker->text.afterLast = URI_FUNC(SafeToPointTo);
 						}
@@ -217,18 +221,25 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 							walker = nextBackup;
 						} else {
 							/* Prev is the first segment */
-							uri->pathHead = walker->next;
 							if (walker->next != NULL) {
+								uri->pathHead = walker->next;
 								walker->next->reserved = NULL;
-							} else {
-								/* Last segment -> update tail */
-								uri->pathTail = NULL;
-							}
 
-							if (uri->owner && (walker->text.first != walker->text.afterLast)) {
-								free((URI_CHAR *)walker->text.first);
+								if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+									free((URI_CHAR *)walker->text.first);
+								}
+								free(walker);
+							} else {
+								/* Re-use segment for "" path segment to represent trailing slash, update tail */ 
+								URI_TYPE(PathSegment) * const segment = walker;
+								if (uri->owner && (segment->text.first != segment->text.afterLast)) {
+									free((URI_CHAR *)segment->text.first);
+								}
+								segment->text.first = URI_FUNC(SafeToPointTo);
+								segment->text.afterLast = URI_FUNC(SafeToPointTo);
+								uri->pathHead = segment;
+								uri->pathTail = segment;
 							}
-							free(walker);
 
 							if (uri->owner && (prev->text.first != prev->text.afterLast)) {
 								free((URI_CHAR *)prev->text.first);
@@ -271,15 +282,6 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 			walker = walker->next;
 		}
 	} while (walker != NULL);
-
-	/* Fix path if only one empty segment */
-	if ((uri->pathHead != NULL)
-			&& (uri->pathHead->next == NULL)
-			&& (uri->pathHead->text.first == uri->pathHead->text.afterLast)) {
-		free(uri->pathHead);
-		uri->pathHead = NULL;
-		uri->pathTail = NULL;
-	}
 
 	return URI_TRUE;
 }
@@ -487,6 +489,21 @@ UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri) {
 	segment->text.afterLast = URI_FUNC(ConstPwd) + 1;
 	uri->pathHead = segment;
 	return URI_TRUE;
+}
+
+
+
+void URI_FUNC(FixEmptyTrailSegment)(URI_TYPE(Uri) * uri) {
+	/* Fix path if only one empty segment */
+	if (!uri->absolutePath
+			&& !URI_FUNC(IsHostSet)(uri)
+			&& (uri->pathHead != NULL)
+			&& (uri->pathHead->next == NULL)
+			&& (uri->pathHead->text.first == uri->pathHead->text.afterLast)) {
+		free(uri->pathHead);
+		uri->pathHead = NULL;
+		uri->pathTail = NULL;
+	}
 }
 
 

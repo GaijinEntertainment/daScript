@@ -656,6 +656,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			URI_FUNC(PreventLeakage)(uri, doneMask);
 			return URI_ERROR_MALLOC;
 		}
+		URI_FUNC(FixEmptyTrailSegment)(uri);
 	}
 
 	/* Query, fragment */

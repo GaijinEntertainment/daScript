@@ -1308,14 +1308,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserS
 			}
 			afterPathAbsEmpty = URI_FUNC(ParsePathAbsEmpty)(state, afterAuthority, afterLast);
 
-			/* Fix path if only one empty segment */
-			if ((state->uri->pathHead != NULL)
-					&& (state->uri->pathHead->next == NULL)
-					&& (state->uri->pathHead->text.first == state->uri->pathHead->text.afterLast)) {
-				free(state->uri->pathHead);
-				state->uri->pathHead = NULL;
-				state->uri->pathTail = NULL;
-			}
+			URI_FUNC(FixEmptyTrailSegment)(state->uri);
 
 			return afterPathAbsEmpty;
 		}

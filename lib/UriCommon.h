@@ -86,7 +86,7 @@ UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest, const URI_TYPE(Uri) * source);
 UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest, const URI_TYPE(Uri) * source);
 
 UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri);
-
+void URI_FUNC(FixEmptyTrailSegment)(URI_TYPE(Uri) * uri);
 
 
 #endif

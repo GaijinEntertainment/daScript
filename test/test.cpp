@@ -50,6 +50,7 @@ class UriSuite : public Suite {
 
 public:
 	UriSuite() {
+		TEST_ADD(UriSuite::testDistinction)
 		TEST_ADD(UriSuite::testIpFour)
 		TEST_ADD(UriSuite::testIpSixPass)
 		TEST_ADD(UriSuite::testIpSixFail)
@@ -89,6 +90,75 @@ public:
 	}
 
 private:
+	bool testDistinctionHelper(const char * uriText, bool expectedHostSet,
+			bool expectedAbsPath, bool expectedEmptyTailSegment) {
+		UriParserStateA state;
+		UriUriA uri;
+		state.uri = &uri;
+
+		int res = uriParseUriA(&state, uriText);
+		if (res != URI_SUCCESS) {
+			uriFreeUriMembersA(&uri);
+			return false;
+		}
+
+		if (expectedHostSet != (uri.hostText.first != NULL)) {
+			uriFreeUriMembersA(&uri);
+			return false;
+		}
+
+		if (expectedAbsPath != (uri.absolutePath == URI_TRUE)) {
+			uriFreeUriMembersA(&uri);
+			return false;
+		}
+
+		if (expectedEmptyTailSegment != ((uri.pathTail != NULL)
+				&& (uri.pathTail->text.first == uri.pathTail->text.afterLast))) {
+			uriFreeUriMembersA(&uri);
+			return false;
+		}
+
+		uriFreeUriMembersA(&uri);
+		return true;
+	}
+
+	void testDistinction() {
+		/*
+============================================================================
+Rule                                | Example | hostSet | absPath | emptySeg
+------------------------------------|---------|---------|---------|---------
+1) URI = scheme ":" hier-part ...   |         |         |         |
+   1) "//" authority path-abempty   | "s://"  | true    |   false |   false
+                                    | "s:///" | true    |   false | true
+   2) path-absolute                 | "s:/"   |   false | true    |   false
+   3) path-rootless                 | "s:a"   |   false |   false |   false
+                                    | "s:a/"  |   false |   false | true
+   4) path-empty                    | "s:"    |   false |   false |   false
+------------------------------------|---------|---------|---------|---------
+2) relative-ref = relative-part ... |         |         |         |
+   1) "//" authority path-abempty   | "//"    | true    |   false |   false
+                                    | "///"   | true    |   false | true
+   2) path-absolute                 | "/"     |   false | true    |   false
+   3) path-noscheme                 | "a"     |   false |   false |   false
+                                    | "a/"    |   false |   false | true
+   4) path-empty                    | ""      |   false |   false |   false
+============================================================================
+		*/
+		TEST_ASSERT(testDistinctionHelper("s://", true, false, false));
+		TEST_ASSERT(testDistinctionHelper("s:///", true, false, true));
+		TEST_ASSERT(testDistinctionHelper("s:/", false, true, false));
+		TEST_ASSERT(testDistinctionHelper("s:a", false, false, false));
+		TEST_ASSERT(testDistinctionHelper("s:a/", false, false, true));
+		TEST_ASSERT(testDistinctionHelper("s:", false, false, false));
+
+		TEST_ASSERT(testDistinctionHelper("//", true, false, false));
+		TEST_ASSERT(testDistinctionHelper("///", true, false, true));
+		TEST_ASSERT(testDistinctionHelper("/", false, true, false));
+		TEST_ASSERT(testDistinctionHelper("a", false, false, false));
+		TEST_ASSERT(testDistinctionHelper("a/", false, false, true));
+		TEST_ASSERT(testDistinctionHelper("", false, false, false));
+	}
+
 	void testIpFour() {
 		URI_TEST_IP_FOUR_FAIL("01.0.0.0");
 		URI_TEST_IP_FOUR_FAIL("001.0.0.0");
@@ -904,10 +974,11 @@ private:
 		// Port
 		TEST_ASSERT(testToStringHelper(L"http://example.com:123/"));
 		// Path
+		TEST_ASSERT(testToStringHelper(L"http://example.com"));
 		TEST_ASSERT(testToStringHelper(L"http://example.com/"));
 		TEST_ASSERT(testToStringHelper(L"http://example.com/abc/"));
 		TEST_ASSERT(testToStringHelper(L"http://example.com/abc/def"));
-		TEST_ASSERT(testToStringHelper(L"http://example.com/abc/def"));
+		TEST_ASSERT(testToStringHelper(L"http://example.com/abc/def/"));
 		TEST_ASSERT(testToStringHelper(L"http://example.com//"));
 		TEST_ASSERT(testToStringHelper(L"http://example.com/./.."));
 		// Query

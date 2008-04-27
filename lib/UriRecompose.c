@@ -401,32 +401,17 @@ static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest,
 							(*charsRequired) += 1 + charsToWrite;
 						}
 					}
-
-					/* Slash between authority and path */
-					if (dest != NULL) {
-						if (written + 1 <= maxChars) {
-								memcpy(dest + written, _UT("/"),
-										1 * sizeof(URI_CHAR));
-								written += 1;
-						} else {
-							dest[0] = _UT('\0');
-							if (charsWritten != NULL) {
-								*charsWritten = 0;
-							}
-							return URI_ERROR_TOSTRING_TOO_LONG;
-						}
-					} else {
-						(*charsRequired) += 1;
-					}
 	/* [09/19]	endif; */
 				}
 	/* [10/19]	append path to result; */
-				if (uri->absolutePath && ((uri->scheme.first == NULL) || !URI_FUNC(IsHostSet)(uri))) {
+				/* Slash needed here? */
+				if (uri->absolutePath || ((uri->pathHead != NULL)
+						&& URI_FUNC(IsHostSet)(uri))) {
 					if (dest != NULL) {
 						if (written + 1 <= maxChars) {
-								memcpy(dest + written, _UT("/"),
-										1 * sizeof(URI_CHAR));
-								written += 1;
+							memcpy(dest + written, _UT("/"),
+									1 * sizeof(URI_CHAR));
+							written += 1;
 						} else {
 							dest[0] = _UT('\0');
 							if (charsWritten != NULL) {
