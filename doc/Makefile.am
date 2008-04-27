@@ -15,7 +15,7 @@ phony_html_doc :
 	doxygen Doxyfile
 
 EXTRA_DIST = \
-	Doxyfile \
+	Doxyfile.in \
 	\
 	Mainpage \
 	\

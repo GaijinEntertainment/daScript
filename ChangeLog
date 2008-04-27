@@ -1,11 +1,11 @@
-???
+2008-04-27 -- 0.7.1
 
-  * Fixed: Invalid syntax error when parsing URIs with port-like
+  * Fixed: Bogus syntax error when parsing URIs with port-like
       passwords, e.g. "http://user:21@host/" (#1948038)
       Thanks to Friedrich Delgado Friedrichs for reporting!
-  * Fixed: Parser did not correctly handle trailing slashes, which also
-      made the structures produced from parsing "http://e.com/" and
-      "http://e.com" indistinguishable. (#1950126)
+  * Fixed: Parser did not handle trailing slashes correctly in some cases,
+      which also made the structures produced from parsing "http://e.com/"
+      and "http://e.com" indistinguishable. (#1950126)
       Thanks to Edward Z. Yang for reporting!
 
 2008-04-04 -- 0.7.0

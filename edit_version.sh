@@ -1,3 +1,3 @@
 #!/bin/bash
-gedit doc/configure.in doc/Doxyfile include/uriparser/UriBase.h configure.in ChangeLog &
+gedit doc/configure.in include/uriparser/UriBase.h configure.in ChangeLog &
 

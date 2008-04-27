@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.61)
-AC_INIT(Doxyfile)
-AM_INIT_AUTOMAKE(uriparser, 0.7.0-doc)
+AC_INIT(Doxyfile.in)
+AM_INIT_AUTOMAKE(uriparser, 0.7.1-doc)
 
 
 ## Doxygen
@@ -18,5 +18,19 @@ if test ${GRAPHVIZ_CHECK} != "found" ; then
 fi
 
 
-AC_OUTPUT(Makefile)
+## HTML help
+host_triplet=`../config.guess`
+if grep cygwin <<<"${host_triplet}" ; then
+    GENERATE_HTMLHELP=YES
+else
+    GENERATE_HTMLHELP=NO
+fi
+AC_SUBST(GENERATE_HTMLHELP)
+
+
+AC_CONFIG_FILES([
+    Doxyfile
+    Makefile
+])
+AC_OUTPUT
 

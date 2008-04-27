@@ -66,12 +66,10 @@ EXTRA_DIST = \
 	doc/aclocal.m4 \
 	doc/configure \
 	doc/configure.in \
-	doc/Doxyfile \
-	doc/install-sh \
+	doc/Doxyfile.in \
 	doc/Mainpage \
 	doc/Makefile.am \
 	doc/Makefile.in \
-	doc/missing \
 	doc/preprocess.sh \
 	\
 	doc/rfc1866.htm \
