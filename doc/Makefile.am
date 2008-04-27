@@ -1,6 +1,8 @@
 ## Process this file with automake to produce Makefile.in
 AUTOMAKE_OPTIONS = 1.10 foreign dist-zip no-dist-gzip
 
+distdir = $(PACKAGE)-$(VERSION)-doc
+
 noinst_SCRIPTS = phony_html_doc
 
 phony_html_doc :

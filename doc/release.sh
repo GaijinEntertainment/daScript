@@ -1,20 +1,36 @@
-#! /bin/sh
-echo "[  0%] aclocal"
-aclocal || exit 1
+#! /bin/bash
+CUR=0
+COUNT=5
 
-echo "[ 17%] automake"
-automake --add-missing --copy || exit 1
+step() {
+	PERC=$((100 * CUR / COUNT))
+	printf "[%3i%%] %s" ${PERC} "$1"
+	echo
+	CUR=$((CUR + 1))
+}
 
-echo "[ 34%] autoconf"
-autoconf || exit 1
+## Parent bootstrap
+step "../bootstrap.sh"
+PWD_BACKUP=$PWD
+cd .. || exit 1
+./bootstrap.sh || exit 1
+cd "${PWD_BACKUP}" || exit 1
 
-echo "[ 50%] ./configure"
+## Bootstrap
+step "./bootstrap.sh"
+./bootstrap.sh || exit 1
+
+## Configure
+step "./configure"
 ./configure || exit 1
 
-echo "[ 67%] make"
+## Make
+step "make"
 make || exit 1
 
-echo "[ 85%] make dist"
+## Make dist
+step "make dist"
 make dist || exit 1
 
-echo "[100%] ."
+step "."
+exit 0
