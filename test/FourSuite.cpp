@@ -92,7 +92,7 @@ bool FourSuite::testAddOrRemoveBaseHelper(const char * ref, const char * base,
 
 
 void FourSuite::absolutize_test_cases() {
-	char * BASE_URI[] = {
+	const char * const BASE_URI[] = {
 			"http://a/b/c/d;p?q",
 			"http://a/b/c/d;p?q=1/2",
 			"http://a/b/c/d;p=1/2?q",
