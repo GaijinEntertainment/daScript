@@ -1,6 +1,6 @@
 // ---
 //
-// $Id: cpptest-output.h,v 1.3 2004/02/05 12:46:08 nilu Exp $
+// $Id: cpptest-output.h,v 1.5 2005/06/08 09:25:09 nilu Exp $
 //
 // CppTest - A C++ Unit Testing Framework
 // Copyright (c) 2003 Niklas Lundell

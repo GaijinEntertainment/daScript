@@ -1,6 +1,6 @@
 // ---
 //
-// $Id: cpptest-collectoroutput.h,v 1.2 2004/02/04 21:08:23 nilu Exp $
+// $Id: cpptest-collectoroutput.h,v 1.3 2005/06/08 08:08:06 nilu Exp $
 //
 // CppTest - A C++ Unit Testing Framework
 // Copyright (c) 2003 Niklas Lundell

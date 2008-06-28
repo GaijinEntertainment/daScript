@@ -1,6 +1,6 @@
 // ---
 //
-// $Id: source.cpp,v 1.2 2004/02/04 21:08:23 nilu Exp $
+// $Id: source.cpp,v 1.4 2005/06/08 09:25:09 nilu Exp $
 //
 // CppTest - A C++ Unit Testing Framework
 // Copyright (c) 2003 Niklas Lundell
@@ -39,7 +39,7 @@ namespace Test
 	
 	/// Constructs a source object.
 	///
-	///	\param file Name of the file containing the failing function.
+	/// \param file Name of the file containing the failing function.
 	/// \param line Line where the function starts.
 	/// \param msg  Expression (or message) that caused the failure.
 	///
@@ -50,7 +50,7 @@ namespace Test
 	{}
 	
 	/// \return Name of the file containing the failing function.
-	//
+	///
 	const string&
 	Source::file() const 	
 	{
