@@ -1,6 +1,6 @@
 // ---
 //
-// $Id: time.cpp,v 1.3 2005/06/08 08:08:06 nilu Exp $
+// $Id: time.cpp,v 1.4 2008/07/15 20:33:31 hartwork Exp $
 //
 // CppTest - A C++ Unit Testing Framework
 // Copyright (c) 2003 Niklas Lundell
@@ -28,7 +28,8 @@
 # include "winconfig.h"
 #else
 # include "config.h"
-#endif
+#endif 
+
 #include "missing.h"
 #include "cpptest-time.h"
 

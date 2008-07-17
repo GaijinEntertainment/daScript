@@ -1,6 +1,6 @@
 // ---
 //
-// $Id: suite.cpp,v 1.3 2005/06/08 08:08:06 nilu Exp $
+// $Id: suite.cpp,v 1.6 2008/07/15 20:33:31 hartwork Exp $
 //
 // CppTest - A C++ Unit Testing Framework
 // Copyright (c) 2003 Niklas Lundell
@@ -34,7 +34,8 @@
 # include "winconfig.h"
 #else
 # include "config.h"
-#endif
+#endif 
+
 #include "cpptest-output.h"
 #include "cpptest-source.h"
 #include "cpptest-suite.h"
@@ -172,7 +173,13 @@ namespace Test
 			
 			_suite.setup();
 			Time start(Time::current());
-			(_suite.*data._func)();
+			// FIXME Also feedback exception to user
+			try
+			{
+				(_suite.*data._func)();
+			} catch (...) {
+				_suite._result = false;
+			}
 			Time end(Time::current());
 			_suite.tear_down();
 			
@@ -206,20 +213,19 @@ namespace Test
 
 		for_each(_suites.begin(), _suites.end(), DoRun(_output, _continue));
 
-		// BEGIN workaround
+		// FIXME Find a cleaner way
 		Suites::const_iterator iter = _suites.begin();
 		while (iter != _suites.end())
 		{
-				if (!(*iter)->_success)
-				{
-						_success = false;
-						break;
-				}
-				iter++;
+			if (!(*iter)->_success)
+			{
+				_success = false;
+				break;
+			}
+			iter++;
 		}
-		// END
 	}
-	
+
 	// Functor to count all tests in a suite.
 	//
 	struct Suite::SubSuiteTests
