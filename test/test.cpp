@@ -87,6 +87,7 @@ public:
 		TEST_ADD(UriSuite::testCrash_MakeOwner_Bug20080207)
 		TEST_ADD(UriSuite::testQueryList)
 		TEST_ADD(UriSuite::testQueryListPair)
+		TEST_ADD(UriSuite::testFreeCrash_Bug20080827)
 	}
 
 private:
@@ -1445,6 +1446,32 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testQueryListPairHelper("one+two+%26+three=%2B", "one two & three", "+");
 		testQueryListPairHelper("one=two=three", "one", "two=three", "one=two%3Dthree");
 		testQueryListPairHelper("one=two=three=four", "one", "two=three=four", "one=two%3Dthree%3Dfour");
+	}
+
+	void testFreeCrash_Bug20080827() {
+		char const * const sourceUri = "abc";
+		char const * const baseUri = "http://www.example.org/";
+
+		int res;
+		UriParserStateA state;
+		UriUriA absoluteDest;
+		UriUriA relativeSource;
+		UriUriA absoluteBase;
+
+		state.uri = &relativeSource;
+		res = uriParseUriA(&state, sourceUri);
+		TEST_ASSERT(res == URI_SUCCESS);
+
+		state.uri = &absoluteBase;
+		res = uriParseUriA(&state, baseUri);
+		TEST_ASSERT(res == URI_SUCCESS);
+
+		res = uriRemoveBaseUriA(&absoluteDest, &relativeSource, &absoluteBase, URI_FALSE);
+		TEST_ASSERT(res == URI_ERROR_REMOVEBASE_REL_SOURCE);
+
+		uriFreeUriMembersA(&relativeSource);
+		uriFreeUriMembersA(&absoluteBase);
+		uriFreeUriMembersA(&absoluteDest);
 	}
 
 };

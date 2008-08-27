@@ -1,4 +1,5 @@
 == BEFORE NEXT RELEASE ==
+ * Fix uriRemoveBase bug, see test suite
 
 == SOON ==
  * try to remove need for free after parser fail?
