@@ -64,10 +64,6 @@
 
 
 
-static UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork, const URI_TYPE(Uri) * relAppend);
-
-
-
 /* Appends a relative URI to an absolute. The last path segement of
  * the absolute URI is replaced. */
 static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
@@ -122,10 +118,15 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 
 
 
-int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
+static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource,
 		const URI_TYPE(Uri) * absBase) {
-	if ((absDest == NULL) || (relSource == NULL) || (absBase == NULL)) {
+	if (absDest == NULL) {
+		return URI_ERROR_NULL;
+	}
+	URI_FUNC(ResetUri)(absDest);
+
+	if ((relSource == NULL) || (absBase == NULL)) {
 		return URI_ERROR_NULL;
 	}
 
@@ -133,8 +134,6 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 	if (absBase->scheme.first == NULL) {
 		return URI_ERROR_ADDBASE_REL_BASE;
 	}
-
-	URI_FUNC(ResetUri)(absDest);
 
 	/* [01/32]	if defined(R.scheme) then */
 				if (relSource->scheme.first != NULL) {
@@ -237,6 +236,18 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 				absDest->fragment = relSource->fragment;
 
 	return URI_SUCCESS;
+
+}
+
+
+
+int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
+		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase) {
+	const int res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase);
+	if ((res != URI_SUCCESS) && (absDest != NULL)) {
+		URI_FUNC(FreeUriMembers)(absDest);
+	}
+	return res;
 }
 
 

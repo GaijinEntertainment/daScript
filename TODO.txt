@@ -1,5 +1,6 @@
 == BEFORE NEXT RELEASE ==
- * Fix uriRemoveBase bug, see test suite
+ * Look for more bad cleanup logic
+ * Bump version to non-beta 0.7.2
 
 == SOON ==
  * try to remove need for free after parser fail?

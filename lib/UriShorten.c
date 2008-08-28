@@ -127,11 +127,16 @@ static URI_INLINE UriBool URI_FUNC(EqualsAuthority)(const URI_TYPE(Uri) * first,
 
 
 
-int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
+int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absSource,
 		const URI_TYPE(Uri) * absBase,
 		UriBool domainRootMode) {
-	if ((dest == NULL) || (absSource == NULL) || (absBase == NULL)) {
+	if (dest == NULL) {
+		return URI_ERROR_NULL;
+	}
+	URI_FUNC(ResetUri)(dest);
+
+	if ((absSource == NULL) || (absBase == NULL)) {
 		return URI_ERROR_NULL;
 	}
 
@@ -144,8 +149,6 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 	if (absSource->scheme.first == NULL) {
 		return URI_ERROR_REMOVEBASE_REL_SOURCE;
 	}
-
-	URI_FUNC(ResetUri)(dest);
 
 	/* [01/50]	if (A.scheme != Base.scheme) then */
 				if (URI_STRNCMP(absSource->scheme.first, absBase->scheme.first,
@@ -292,6 +295,20 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 				dest->fragment = absSource->fragment;
 
 	return URI_SUCCESS;
+}
+
+
+
+int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * absSource,
+		const URI_TYPE(Uri) * absBase,
+		UriBool domainRootMode) {
+	const int res = URI_FUNC(RemoveBaseUriImpl)(dest, absSource,
+			absBase, domainRootMode);
+	if ((res != URI_SUCCESS) && (dest != NULL)) {
+		URI_FUNC(FreeUriMembers)(dest);
+	}
+	return res;
 }
 
 

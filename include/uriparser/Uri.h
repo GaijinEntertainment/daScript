@@ -336,6 +336,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 /**
  * Performs reference resolution as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
+ * NOTE: On success you have to call uriFreeUriMembersA on \p absoluteDest manually later.
  *
  * @param absoluteDest     <b>OUT</b>: Result %URI
  * @param relativeSource   <b>IN</b>: Reference to resolve
@@ -357,6 +358,8 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
  * the absolute %URI shares scheme and authority with
  * the base %URI. If it does not the result will still be
  * an absolute URI (with scheme part if necessary).
+ * NOTE: On success you have to call uriFreeUriMembersA on
+ * \p dest manually later.
  *
  * @param dest             <b>OUT</b>: Result %URI
  * @param absoluteSource   <b>IN</b>: Absolute %URI to make relative

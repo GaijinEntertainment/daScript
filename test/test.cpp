@@ -1471,7 +1471,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 		uriFreeUriMembersA(&relativeSource);
 		uriFreeUriMembersA(&absoluteBase);
-		uriFreeUriMembersA(&absoluteDest);
+		uriFreeUriMembersA(&absoluteDest); // Crashed here
 	}
 
 };
