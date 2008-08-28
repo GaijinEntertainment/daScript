@@ -4,8 +4,8 @@
       - uriAddBaseUri
       - uriRemoveBaseUri
       Previously you needed to call uriFreeUriMembers on return code
-      URI_ERROR_MALLOC and only that. So that's why these functions now
-      take cleanup off your shoulders. An extra uriFreeUriMembers
+      URI_ERROR_MALLOC and only then. So that's why these functions now
+      take cleanup off your shoulders. An extra call to uriFreeUriMembers
       from your side is still needed in case of success.
 
 2008-04-27 -- 0.7.1
