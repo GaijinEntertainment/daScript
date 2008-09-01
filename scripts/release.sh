@@ -1,4 +1,9 @@
-#! /bin/sh
+#! /usr/bin/env bash
+PWD_BACKUP=${PWD}
+SCRIPT_DIR=`dirname "${PWD}/$0"`
+cd "${SCRIPT_DIR}/.." || exit 1
+function fail() { cd "${PWD_BACKUP}" ; exit 1; }
+####################################################################
 
 INSTALL_DIR="${HOME}/install"
 PREFIX="--prefix=${INSTALL_DIR}"
@@ -12,40 +17,44 @@ make clean &> /dev/null
 make distclean &> /dev/null
 
 echo
-echo ========== prepare ==========
-aclocal || exit 1
-automake || exit 1
-autoconf || exit 1
+echo ========== doc ==========
+cd doc
+./bootstrap.sh || fail
+cd -
+
+echo
+echo ========== bootstrap ==========
+./bootstrap.sh || fail
 
 echo
 echo ========== configure ==========
-./configure ${PREFIX} || exit 1
+./configure ${PREFIX} || fail
 
 echo
 echo ========== make uninstall ==========
-make uninstall || exit 1
+make uninstall || fail
 
 echo
 echo ========== make ==========
-make ${MAKE_PARAMS} || exit 1
+make ${MAKE_PARAMS} || fail
 
 
 
 echo
 echo ========== make check ==========
-make check || exit 1
+make check || fail
 
 
 
 echo
 echo ========== make install ==========
-make install || exit 1
+make install || fail
 
 
 
 echo
 echo ========== make distcheck ==========
-make distcheck || exit 1
+make distcheck || fail
 
 
 
@@ -65,4 +74,8 @@ Have you
   grep -R 'TODO' include/* lib/* test/*
 ?
 CHECKLIST
+
+####################################################################
+cd "${PWD_BACKUP}" || fail
+exit 0
 

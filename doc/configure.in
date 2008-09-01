@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.61)
 AC_INIT(Doxyfile.in)
-AM_INIT_AUTOMAKE(uriparser, 0.7.1)
+AM_INIT_AUTOMAKE(uriparser, 0.7.2)
 
 ## Doxygen
 AC_CHECK_PROG(DOXY_CHECK, doxygen, found, missing)
@@ -32,3 +32,4 @@ AC_CONFIG_FILES([
     Makefile
 ])
 AC_OUTPUT
+
