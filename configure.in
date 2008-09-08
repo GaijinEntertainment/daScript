@@ -12,7 +12,7 @@ AC_HEADER_STDC
 
 
 # Check for 
-AC_MSG_CHECKING(for wsprintf)
+AC_MSG_CHECKING(for swprintf)
 AC_LINK_IFELSE([
 	#include <stdio.h>
 	#include <wchar.h>
@@ -23,7 +23,7 @@ AC_LINK_IFELSE([
 ],[
 	AC_MSG_RESULT(yes)
 ],[
-	AC_DEFINE([NO_WSPRINTF],, [Define if your CRT provides is missing the wsprintf function.])
+	AC_DEFINE([NO_SWPRINTF],, [Define if your CRT provides is missing the swprintf function.])
 	AC_MSG_RESULT(no)
 ])
 
