@@ -1,4 +1,8 @@
 ## Makefile.am
+if URI_GENERATE_DOC
+SUBDIRS = . doc
+endif
+
 lib_LTLIBRARIES = liburiparser.la
 check_PROGRAMS = test/uriparser_test
 TESTS = test/uriparser_test
@@ -6,17 +10,13 @@ TESTS = test/uriparser_test
 ## man_MANS = uriparser.3
 
 
-
-include_uriparserdir = $(prefix)/include/uriparser
-
-include_uriparser_HEADERS = \
+pkginclude_HEADERS = \
 	include/uriparser/Uri.h \
 	include/uriparser/UriBase.h \
 	include/uriparser/UriDefsAnsi.h \
 	include/uriparser/UriDefsConfig.h \
 	include/uriparser/UriDefsUnicode.h \
 	include/uriparser/UriIp4.h
-
 
 
 liburiparser_la_LDFLAGS = -version-info 1:7:0
@@ -42,7 +42,6 @@ liburiparser_la_SOURCES = \
 	lib/UriShorten.c
 
 
-
 test_uriparser_test_LDADD = liburiparser.la
 
 test_uriparser_test_SOURCES = \
@@ -61,15 +60,8 @@ test_uriparser_test_SOURCES = \
 	test/test.cpp
 
 
-
 EXTRA_DIST = \
-	doc/aclocal.m4 \
-	doc/configure \
-	doc/configure.in \
-	doc/Doxyfile.in \
 	doc/Mainpage \
-	doc/Makefile.am \
-	doc/Makefile.in \
 	doc/preprocess.sh \
 	\
 	doc/rfc1866.htm \
@@ -104,4 +96,3 @@ EXTRA_DIST = \
 	win32/Visual_Studio_2005/test.vcproj \
 	win32/Visual_Studio_2005/uriparser.sln \
 	win32/Visual_Studio_2005/uriparser.vcproj
-

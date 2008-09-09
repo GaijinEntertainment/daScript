@@ -16,17 +16,9 @@ cd .. || exit 1
 ./bootstrap.sh || exit 1
 cd "${PWD_BACKUP}" || exit 1
 
-## Bootstrap
-step "./bootstrap.sh"
-./bootstrap.sh || exit 1
-
 ## Configure
 step "./configure"
 ./configure || exit 1
-
-## Make
-step "make"
-make || exit 1
 
 ## Make dist
 step "make dist"

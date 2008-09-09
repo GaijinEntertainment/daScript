@@ -1,4 +1,4 @@
-# uriparser Doxyfile for Doxygen 1.4.7
+# Doxyfile for Doxygen 1.4.7
 
 
 
@@ -8,7 +8,7 @@
 ###############################################################
 
 
-PROJECT_NAME = uriparser
+PROJECT_NAME = "@PACKAGE@"
 # The PROJECT_NAME tag is a single word (or a sequence of words surrounded by double-quotes) that should identify the project for which the documentation is generated. This name is used in the title of most generated pages and in a few other places.
 
 
@@ -16,7 +16,7 @@ PROJECT_NUMBER = "@VERSION@"
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This could be handy for archiving the generated documentation or if some version control system is used.
 
 
-CHM_FILE = "..\uriparser-@VERSION@-doc.chm"
+CHM_FILE = "..\@PACKAGE@-@VERSION@-doc.chm"
 # If the GENERATE_HTMLHELP tag is set to YES, the CHM_FILE tag can be used to specify the file name of the resulting .chm file. You can add a path in front of the file if the result should not be written to the html output directory.
 
 

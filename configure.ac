@@ -11,8 +11,7 @@ AC_PROG_LIBTOOL
 AC_HEADER_STDC
 
 
-
-# Check for 
+## Check for swprintf
 AC_MSG_CHECKING(for swprintf)
 AC_LINK_IFELSE([
 	#include <stdio.h>
@@ -24,13 +23,12 @@ AC_LINK_IFELSE([
 ],[
 	AC_MSG_RESULT(yes)
 ],[
-	AC_DEFINE([NO_SWPRINTF],, [Define if your CRT provides is missing the swprintf function.])
+	AC_DEFINE([NO_SWPRINTF],, [Define if your CRT is missing the swprintf function.])
 	AC_MSG_RESULT(no)
 ])
 
 
-
-# URI_SIZEDOWN
+## Option for URI_SIZEDOWN
 AC_ARG_ENABLE(sizedown, [
 Extra options:
   --enable-sizedown       save space whereever possible (resulting in slower code)], [
@@ -38,8 +36,7 @@ Extra options:
 ], [])
 
 
-
-# These are for and from CppTest
+## Checks for and from CppTest
 AC_CHECK_HEADERS(sys/time.h)
 AC_CHECK_FUNCS([gettimeofday])
 AC_MSG_CHECKING(for round)
@@ -53,14 +50,25 @@ if test "$round" = "yes"; then
 fi
 
 
-
-# Local headers must come very first. Otherwise we
-# risk including headers of an already installed
-# uriparser version if its path is in CPPFLAGS
+## Local headers must come very first. Otherwise we
+## risk including headers of an already installed
+## uriparser version if its path is in CPPFLAGS
 CPPFLAGS="-I${srcdir}/include ${CPPFLAGS}"
 
 
+## API documentation
+URI_GENERATE_DOC=0
+AC_ARG_ENABLE(doc, [
+  --enable-doc            generate API documentation with Doxygen (off by default)], [
+	AC_CONFIG_SUBDIRS([doc])
+	URI_GENERATE_DOC=1
+], [])
+AM_CONDITIONAL(URI_GENERATE_DOC, test x${URI_GENERATE_DOC} = x1)
+
+## Nested configure hacks
+AM_CONDITIONAL(CALLED_BY_PARENT, true)
+
 
 AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([doc/Makefile])
 AC_OUTPUT
-

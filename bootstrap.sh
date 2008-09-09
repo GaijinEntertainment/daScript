@@ -17,6 +17,7 @@ if [ -e ${LIBTOOL_M4} ]; then
 	cp "${LIBTOOL_M4}" acinclude.m4 || exit 1
 fi
 aclocal || exit 1
+cd doc && aclocal && cd .. || exit 1
 
 ## Libtoolize
 LIBTOOLIZE=libtoolize
@@ -34,6 +35,7 @@ ${LIBTOOLIZE} --copy --force >/dev/null || exit 1
 AUTOCONF_VERSION=`autoconf --version | head -1 | grep -o '[^ ]*$'`
 step "autoconf    ${AUTOCONF_VERSION}"
 autoconf || exit 1
+cd doc && autoconf && cd .. || exit 1
 
 ## Autoheader
 AUTOHEADER_VERSION=`autoheader --version | head -1 | grep -o '[^ ]*$'`
@@ -44,6 +46,7 @@ autoheader || exit 1
 AUTOMAKE_VERSION=`automake --version | head -1 | grep -o '[^ ]*$'`
 step "automake    ${AUTOMAKE_VERSION}"
 automake --add-missing --copy || exit 1
+cd doc && automake --add-missing --copy && cd .. || exit 1
 
 step "."
 exit 0

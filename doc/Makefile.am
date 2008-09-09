@@ -16,12 +16,28 @@ phony_html_doc :
 	rm -f html/index.*
 	doxygen Doxyfile
 
-EXTRA_DIST = \
-	Doxyfile.in \
-	\
-	Mainpage \
-	\
+URI_DOC_FILES = \
 	html/*.css \
 	html/*.gif \
 	html/*.html \
 	html/*.png
+
+
+## Nested configure hacks
+if CALLED_BY_PARENT
+
+## Make doc get installed
+nobase_nodist_doc_DATA = $(URI_DOC_FILES)
+
+## Kill automake error
+DIST_COMMON = $(DIST_COMMON)
+
+else
+
+## Make Automake not ship package sources
+DIST_COMMON =
+
+## Make doc go into dist when run from doc folder
+EXTRA_DIST = $(URI_DOC_FILES)
+
+endif
