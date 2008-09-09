@@ -1,3 +1,9 @@
+???
+
+  * Changed: Minor build system changes:
+      - renamed configure.in to configure.ac
+      - moved some Autotools files to build-aux directory
+
 2008-09-01 -- 0.7.2
 
   * Fixed: Bad cleanup logic in functions

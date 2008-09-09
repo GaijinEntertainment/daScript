@@ -27,6 +27,7 @@ if glibtoolize --version &>/dev/null ; then
 fi
 LIBTOOLIZE_VERSION=`${LIBTOOLIZE} --version | head -1 | grep -o '[^ ]*$'`
 step "${LIBTOOLIZE}${WHITESPACE}${LIBTOOLIZE_VERSION}"
+mkdir -p build-aux
 ${LIBTOOLIZE} --copy --force >/dev/null || exit 1
 
 ## Autoconf
