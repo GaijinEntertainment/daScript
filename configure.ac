@@ -1,5 +1,5 @@
 AC_PREREQ(2.61)
-AC_INIT([uriparser], [0.7.2])
+AC_INIT([uriparser], [0.7.3])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.10.1 foreign dist-zip dist-bzip2 dist-lzma subdir-objects])
 AM_CONFIG_HEADER(test/CppTest/config.h)
@@ -69,6 +69,9 @@ AM_CONDITIONAL(URI_GENERATE_DOC, test x${URI_GENERATE_DOC} = x1)
 AM_CONDITIONAL(CALLED_BY_PARENT, true)
 
 
-AC_CONFIG_FILES([Makefile])
-AC_CONFIG_FILES([doc/Makefile])
+AC_CONFIG_FILES([
+	Makefile
+	doc/Makefile
+])
 AC_OUTPUT
+

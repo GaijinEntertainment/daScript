@@ -6,9 +6,9 @@ function fail() { cd "${PWD_BACKUP}" ; exit 1; }
 ####################################################################
 
 gedit \
-	doc/configure.in \
+	doc/configure.ac \
 	include/uriparser/UriBase.h \
-	configure.in \
+	configure.ac \
 	ChangeLog \
 	&
 

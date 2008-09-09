@@ -1,7 +1,13 @@
 ## Process this file with automake to produce Makefile.in
 AUTOMAKE_OPTIONS = 1.10 foreign dist-zip no-dist-gzip
 
+
+## Nested configure hacks
+if CALLED_BY_PARENT
+else
 distdir = $(PACKAGE)-$(VERSION)-doc
+endif
+
 
 noinst_SCRIPTS = phony_html_doc
 

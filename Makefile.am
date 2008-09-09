@@ -19,7 +19,7 @@ pkginclude_HEADERS = \
 	include/uriparser/UriIp4.h
 
 
-liburiparser_la_LDFLAGS = -version-info 1:7:0
+liburiparser_la_LDFLAGS = -version-info 1:8:0
 
 liburiparser_la_SOURCES = \
 	lib/UriCommon.c \
@@ -61,6 +61,14 @@ test_uriparser_test_SOURCES = \
 
 
 EXTRA_DIST = \
+	doc/acinclude.m4 \
+	doc/aclocal.m4 \
+	doc/configure \
+	doc/Makefile.in \
+	\	
+	doc/configure.ac \
+	doc/Makefile.am \
+	\
 	doc/Mainpage \
 	doc/preprocess.sh \
 	\
@@ -96,3 +104,4 @@ EXTRA_DIST = \
 	win32/Visual_Studio_2005/test.vcproj \
 	win32/Visual_Studio_2005/uriparser.sln \
 	win32/Visual_Studio_2005/uriparser.vcproj
+

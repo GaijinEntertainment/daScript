@@ -4,6 +4,7 @@
       - configure option --enable-doc added
       - renamed configure.in to configure.ac
       - moved some Autotools files to build-aux directory
+  * Soname: 1:8:0
 
 2008-09-01 -- 0.7.2
 

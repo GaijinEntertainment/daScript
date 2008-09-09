@@ -5,64 +5,24 @@ cd "${SCRIPT_DIR}/.." || exit 1
 function fail() { cd "${PWD_BACKUP}" ; exit 1; }
 ####################################################################
 
-INSTALL_DIR="${HOME}/install"
-PREFIX="--prefix=${INSTALL_DIR}"
-MAKE_PARAMS=-j10
-
-
 
 echo ========== cleanup ==========
-rm uriparser-*.tar.* uriparser-*.zip &> /dev/null
-make clean &> /dev/null
-make distclean &> /dev/null
-
-echo
-echo ========== doc ==========
-cd doc
-./bootstrap.sh || fail
-cd -
+rm -v uriparser-*.tar.* uriparser-*.zip 2> /dev/null
+rm -vRf uriparser-* 2> /dev/null
 
 echo
 echo ========== bootstrap ==========
 ./bootstrap.sh || fail
 
 echo
-echo ========== configure ==========
-./configure ${PREFIX} || fail
-
-echo
-echo ========== make uninstall ==========
-make uninstall || fail
-
-echo
-echo ========== make ==========
-make ${MAKE_PARAMS} || fail
-
-
-
-echo
-echo ========== make check ==========
-make check || fail
-
-
-
-echo
-echo ========== make install ==========
-make install || fail
-
-
-
-echo
 echo ========== make distcheck ==========
-make distcheck || fail
+make -j10 distcheck || fail
 
-
-
-echo
-echo Fine.
-
-echo
 cat <<'CHECKLIST'
+
+Fine.
+
+
 Have you
 * run ./edit_version.sh
 * updated the soname
@@ -73,7 +33,19 @@ Have you
 * searched for TODO inside code using
   grep -R 'TODO' include/* lib/* test/*
 ?
+
+If so ..
+* upload release with ReleaseForge
+* announce through ..
+  - Blog
+  - Mailing lists
+  - Freshmeat
+  - SourceForge news
+* update doc on website
+* upload doc
+
 CHECKLIST
+
 
 ####################################################################
 cd "${PWD_BACKUP}" || fail
