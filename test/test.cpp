@@ -843,7 +843,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 			wchar_t expectedUriText[1024 * 8];
 			uriToStringW(transformedUriText, &transformedUri, 1024 * 8, NULL);
 			uriToStringW(expectedUriText, &expectedUri, 1024 * 8, NULL);
+#ifdef HAVE_WPRINTF
 			wprintf(L"\n\n\nExpected: \"%s\"\nReceived: \"%s\"\n\n\n", expectedUriText, transformedUriText);
+#endif
 		}
 
 		uriFreeUriMembersW(&baseUri);
@@ -938,7 +940,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		// Compare
 		bool equals = (0 == wcscmp(shouldbeTheSame, text));
 		if (!equals) {
+#ifdef HAVE_WPRINTF
 			wprintf(L"\n\n\nExpected: \"%s\"\nReceived: \"%s\"\n\n\n", text, shouldbeTheSame);
+#endif
 		}
 
 		// Back to string, _exact_ limit
@@ -1306,7 +1310,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		} else {
 			uriWindowsFilenameToUriStringW(filename, uriBuffer);
 		}
+#ifdef HAVE_WPRINTF
 		// wprintf(L"1 [%s][%s]\n", uriBuffer, uriString);
+#endif
 		TEST_ASSERT(!wcscmp(uriBuffer, uriString));
 		delete [] uriBuffer;
 
@@ -1318,7 +1324,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		} else {
 			uriUriStringToWindowsFilenameW(uriString, filenameBuffer);
 		}
+#ifdef HAVE_WPRINTF
 		// wprintf(L"2 [%s][%s]\n", filenameBuffer, filename);
+#endif
 		TEST_ASSERT(!wcscmp(filenameBuffer, filename));
 		delete [] filenameBuffer;
 	}

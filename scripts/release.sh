@@ -14,6 +14,12 @@ echo
 echo ========== bootstrap ==========
 ./bootstrap.sh || fail
 
+if [[ ! -f Makefile ]]; then
+echo
+echo ========== configure ==========
+./configure || fail
+fi
+
 echo
 echo ========== make distcheck ==========
 make -j10 distcheck || fail
@@ -41,8 +47,8 @@ If so ..
   - Mailing lists
   - Freshmeat
   - SourceForge news
-* update doc on website
 * upload doc
+* update doc on website
 
 CHECKLIST
 

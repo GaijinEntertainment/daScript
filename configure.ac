@@ -21,9 +21,26 @@ AC_LINK_IFELSE([
 	    return 0;
 	}
 ],[
+	AC_DEFINE([HAVE_SWPRINTF],, [Define if your CRT provides the swprintf function.])
 	AC_MSG_RESULT(yes)
 ],[
-	AC_DEFINE([NO_SWPRINTF],, [Define if your CRT is missing the swprintf function.])
+	AC_MSG_RESULT(no)
+])
+
+
+## Check for wprintf
+AC_MSG_CHECKING(for wprintf)
+AC_LINK_IFELSE([
+	#include <stdio.h>
+	#include <wchar.h>
+	int main() {
+	    wprintf((wchar_t *)0, 0);
+	    return 0;
+	}
+],[
+	AC_DEFINE([HAVE_WPRINTF],, [Define if your CRT provides the wprintf function.])
+	AC_MSG_RESULT(yes)
+],[
 	AC_MSG_RESULT(no)
 ])
 

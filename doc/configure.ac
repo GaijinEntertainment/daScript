@@ -2,7 +2,7 @@
 AC_PREREQ(2.61)
 AC_INIT(Doxyfile.in)
 AC_CONFIG_AUX_DIR([../build-aux])
-AM_INIT_AUTOMAKE(uriparser, 0.7.3)
+AM_INIT_AUTOMAKE(uriparser-doc, 0.7.3)
 
 
 ## Nested configure hacks
@@ -29,7 +29,7 @@ fi
 
 ## HTML help
 host_triplet=`${ac_config_guess}`
-if grep cygwin <<<"${host_triplet}" >/dev/null ; then
+if echo "${host_triplet}" | grep cygwin &>/dev/null ; then
 	GENERATE_HTMLHELP=YES
 else
 	GENERATE_HTMLHELP=NO

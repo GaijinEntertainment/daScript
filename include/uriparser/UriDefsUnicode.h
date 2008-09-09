@@ -77,5 +77,8 @@
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32))
 # define URI_SNPRINTF _snwprintf
 #else
+# ifndef HAVE_SWPRINTF
+#  error Function swprintf required but missing.
+# endif	
 # define URI_SNPRINTF swprintf
 #endif
