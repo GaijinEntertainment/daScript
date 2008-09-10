@@ -208,7 +208,17 @@ static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest,
 							if (dest != NULL) {
 								if (written + charsToWrite <= maxChars) {
 									URI_CHAR text[4];
-									URI_SNPRINTF(text, charsToWrite + 1, _UT("%i"), value);
+									if (value > 99) {
+										text[0] = _UT('0') + (value / 100);
+										text[1] = _UT('0') + ((value % 100) / 10);
+										text[2] = _UT('0') + (value % 10);
+									} else if (value > 9)  {
+										text[0] = _UT('0') + (value / 10);
+										text[1] = _UT('0') + (value % 10);
+									} else {
+										text[0] = _UT('0') + value;
+									}
+									text[charsToWrite] = _UT('\0');
 									memcpy(dest + written, text, charsToWrite * sizeof(URI_CHAR));
 									written += charsToWrite;
 								} else {
@@ -259,7 +269,9 @@ static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest,
 							if (dest != NULL) {
 								if (written + 2 <= maxChars) {
 									URI_CHAR text[3];
-									URI_SNPRINTF(text, 2 + 1, _UT("%x"), value);
+									text[0] = URI_FUNC(HexToLetterEx)(value / 16, URI_FALSE);
+									text[1] = URI_FUNC(HexToLetterEx)(value % 16, URI_FALSE);
+									text[2] = _UT('\0');
 									memcpy(dest + written, text, 2 * sizeof(URI_CHAR));
 									written += 2;
 								} else {

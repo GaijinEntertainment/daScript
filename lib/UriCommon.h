@@ -79,6 +79,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri, UriBool relative);
 
 unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig);
 URI_CHAR URI_FUNC(HexToLetter)(unsigned int value);
+URI_CHAR URI_FUNC(HexToLetterEx)(unsigned int value, UriBool uppercase);
 
 UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri);
 

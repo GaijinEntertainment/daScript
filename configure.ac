@@ -11,23 +11,6 @@ AC_PROG_LIBTOOL
 AC_HEADER_STDC
 
 
-## Check for swprintf
-AC_MSG_CHECKING(for swprintf)
-AC_LINK_IFELSE([
-	#include <stdio.h>
-	#include <wchar.h>
-	int main() {
-	    swprintf((wchar_t *)0, (size_t)0, (wchar_t *)0, 0);
-	    return 0;
-	}
-],[
-	AC_DEFINE([HAVE_SWPRINTF],, [Define if your CRT provides the swprintf function.])
-	AC_MSG_RESULT(yes)
-],[
-	AC_MSG_RESULT(no)
-])
-
-
 ## Check for wprintf
 AC_MSG_CHECKING(for wprintf)
 AC_LINK_IFELSE([

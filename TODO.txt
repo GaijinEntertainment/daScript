@@ -1,6 +1,7 @@
 == BEFORE NEXT RELEASE ==
+ * Test HexToLetterEx in UriRecompose.c
+ * Fix acinclude.m4 inclusion thing
  * Look for more bad cleanup logic
- * Bump version to non-beta 0.7.2
 
 == SOON ==
  * try to remove need for free after parser fail?

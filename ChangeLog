@@ -1,5 +1,7 @@
 ???
 
+  * Fixed: uriparser now builds on Cygwin
+  * Changed: swprintf requirement resolved
   * Changed: Build system changes:
       - configure option --enable-doc added
       - renamed configure.in to configure.ac

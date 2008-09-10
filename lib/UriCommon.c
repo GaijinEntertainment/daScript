@@ -334,6 +334,14 @@ unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig) {
 
 
 URI_CHAR URI_FUNC(HexToLetter)(unsigned int value) {
+	/* Uppercase recommended in section 2.1. of RFC 3986 *
+	 * http://tools.ietf.org/html/rfc3986#section-2.1    */
+	return URI_FUNC(HexToLetterEx)(value, URI_TRUE);
+}
+
+
+
+URI_CHAR URI_FUNC(HexToLetterEx)(unsigned int value, UriBool uppercase) {
 	switch (value) {
 	case  0: return _UT('0');
 	case  1: return _UT('1');
@@ -346,14 +354,12 @@ URI_CHAR URI_FUNC(HexToLetter)(unsigned int value) {
 	case  8: return _UT('8');
 	case  9: return _UT('9');
 
-	/* Uppercase recommended in section 2.1. of RFC 3986 *
-	 * http://tools.ietf.org/html/rfc3986#section-2.1    */
-	case 10: return _UT('A');
-	case 11: return _UT('B');
-	case 12: return _UT('C');
-	case 13: return _UT('D');
-	case 14: return _UT('E');
-	default: return _UT('F');
+	case 10: return (uppercase == URI_TRUE) ? _UT('A') : _UT('a');
+	case 11: return (uppercase == URI_TRUE) ? _UT('B') : _UT('b');
+	case 12: return (uppercase == URI_TRUE) ? _UT('C') : _UT('c');
+	case 13: return (uppercase == URI_TRUE) ? _UT('D') : _UT('d');
+	case 14: return (uppercase == URI_TRUE) ? _UT('E') : _UT('e');
+	default: return (uppercase == URI_TRUE) ? _UT('F') : _UT('f');
 	}
 }
 

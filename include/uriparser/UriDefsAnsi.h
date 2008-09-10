@@ -73,6 +73,7 @@
 #undef URI_STRNCMP
 #define URI_STRNCMP strncmp
 
+/* TODO Remove on next source-compatibility break */
 #undef URI_SNPRINTF
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32))
 # define URI_SNPRINTF _snprintf
