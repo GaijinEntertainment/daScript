@@ -61,6 +61,7 @@ test_uriparser_test_SOURCES = \
 
 
 EXTRA_DIST = \
+	doc/acinclude.m4 \
 	doc/aclocal.m4 \
 	doc/configure \
 	doc/Makefile.in \

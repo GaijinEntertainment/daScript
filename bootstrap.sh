@@ -20,6 +20,9 @@ LIBTOOL_M4=$(dirname $(dirname $(which libtool)))/share/libtool/libtool.m4
 if [ -e ${LIBTOOL_M4} ]; then
 	cp "${LIBTOOL_M4}" acinclude.m4 || exit 1
 	cp "${LIBTOOL_M4}" doc/acinclude.m4 || exit 1
+else
+	touch acinclude.m4 || exit 1
+	touch doc/acinclude.m4 || exit 1
 fi
 aclocal || exit 1
 cd doc && aclocal && cd .. || exit 1
