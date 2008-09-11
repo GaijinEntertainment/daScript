@@ -1,5 +1,4 @@
 == BEFORE NEXT RELEASE ==
- * Test HexToLetterEx in UriRecompose.c
  * Look for more bad cleanup logic
 
 == SOON ==
