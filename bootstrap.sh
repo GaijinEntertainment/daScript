@@ -35,6 +35,8 @@ fi
 step ${LIBTOOLIZE} `extractGnuVersion ${LIBTOOLIZE}`
 mkdir -p build-aux
 ${LIBTOOLIZE} --copy --force >/dev/null || exit 1
+wget 'http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=build-aux/config.guess;hb=HEAD' -O build-aux/config.guess &>/dev/null || exit 1
+grep '^timestamp=' build-aux/config.guess >/dev/null || exit 1
 
 ## Autoconf
 step autoconf `extractGnuVersion autoconf`

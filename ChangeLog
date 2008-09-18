@@ -1,6 +1,8 @@
 ???
 
   * Fixed: uriparser now builds on Cygwin
+  * Fixed: Now shipping gnulib's config.guess from HEAD
+      which is suitable for Haiku (#2116355)
   * Changed: swprintf requirement resolved
   * Changed: Build system changes:
       - configure option --enable-doc added
