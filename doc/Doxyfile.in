@@ -1,6 +1,13 @@
-# Doxyfile for Doxygen 1.4.7
+# Doxyfile for Doxygen 1.5.7
 
+# .qhp output
+GENERATE_QHP = yes
+QHP_NAMESPACE = "net.sourceforge.uriparser"
+QHP_VIRTUAL_FOLDER = "uriparser-@VERSION@"
 
+# .qch output
+QCH_FILE = "..\@PACKAGE@-@VERSION@.qch"
+QHG_LOCATION = "qhelpgenerator"
 
 
 ###############################################################
@@ -93,10 +100,6 @@ BUILTIN_STL_SUPPORT = NO
 
 # MULTILINE_CPP_IS_BRIEF = 
 # The MULTILINE_CPP_IS_BRIEF tag can be set to YES to make Doxygen treat a multi-line C++ special comment block (i.e. a block of //! or /// comments) as a brief description. This used to be the default behaviour. The new default is to treat a multi-line C++ comment block as a detailed description. Set this tag to YES if you prefer the old behaviour instead. Note that setting this tag to YES also means that rational rose comments are not recognized any more.
-
-
-DETAILS_AT_TOP = YES
-# If the DETAILS_AT_TOP tag is set to YES then Doxygen will output the detailed description near the top, like JavaDoc. If set to NO, the detailed description appears after the member documentation.
 
 
 # INHERIT_DOCS = 
@@ -419,10 +422,6 @@ VERBATIM_HEADERS = NO
 ###############################################################
 # Alphabetical index options
 ###############################################################
-
-
-ALPHABETICAL_INDEX = NO
-# If the ALPHABETICAL_INDEX tag is set to YES, an alphabetical index of all compounds will be generated. Enable this if the project contains a lot of classes, structs, unions or interfaces.
 
 
 # COLS_IN_ALPHA_INDEX = 
