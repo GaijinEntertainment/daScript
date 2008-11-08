@@ -2,6 +2,9 @@
  * Look for more bad cleanup logic
 
 == SOON ==
+ * migrate structures to d-pointers to
+   - hide low-level details
+   - improve ABI compatibility
  * try to remove need for free after parser fail?
  * add more responsibility/ownership/init info to docs
  * samba filename conversion?
