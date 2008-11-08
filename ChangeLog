@@ -1,13 +1,15 @@
 ???
 
+  * Fixed: Missing NULL check in parsing routines
+      Thanks to Sezai Tekin for reporting!
   * Fixed: uriparser now builds on Cygwin
   * Fixed: Now shipping gnulib's config.guess from HEAD
       which is suitable for Haiku (#2116355)
   * Changed: swprintf requirement resolved
   * Changed: Build system changes:
       - configure option --enable-doc added
-      - renamed configure.in to configure.ac
-      - moved some Autotools files to build-aux directory
+      - configure.in renamed to configure.ac
+      - some Autotools files moved to build-aux directory
   * Soname: 1:8:0
 
 2008-09-01 -- 0.7.2

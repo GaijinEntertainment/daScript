@@ -2030,7 +2030,7 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state, const URI_CHAR * first, 
 	URI_TYPE(Uri) * uri;
 
 	/* Check params */
-	if ((state == NULL) || (state == NULL) || (state == NULL)) {
+	if ((state == NULL) || (first == NULL) || (afterLast == NULL)) {
 		return URI_ERROR_NULL;
 	}
 	uri = state->uri;
