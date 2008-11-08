@@ -5,7 +5,7 @@ cd "${SCRIPT_DIR}/.." || exit 1
 function fail() { cd "${PWD_BACKUP}" ; exit 1; }
 ####################################################################
 
-gedit \
+kwrite \
 	doc/configure.ac \
 	include/uriparser/UriBase.h \
 	configure.ac \

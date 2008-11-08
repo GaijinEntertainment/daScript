@@ -1,4 +1,4 @@
-???
+2008-11-08 -- 0.7.3
 
   * Fixed: Missing NULL check in parsing routines
       Thanks to Sezai Tekin for reporting!
