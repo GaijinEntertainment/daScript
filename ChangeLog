@@ -10,6 +10,10 @@
       - configure option --enable-doc added
       - configure.in renamed to configure.ac
       - some Autotools files moved to build-aux directory
+  * Added: Qt Assistant documentation output:
+      - Qt Compressed Help (.qch) at <doc/uriparser-doc-*.qch>
+      - Qt Help Project (.qhp) at <doc/html/index.qhp>
+      Generation requires Doxygen 1.5.7.1-20081103 or later.
   * Soname: 1:8:0
 
 2008-09-01 -- 0.7.2

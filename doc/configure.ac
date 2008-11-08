@@ -27,14 +27,17 @@ if test ${GRAPHVIZ_CHECK} != "found" ; then
 fi
 
 
-## HTML help
+## HTML help, Qt Compressed Help
 host_triplet=`${ac_config_guess}`
 if echo "${host_triplet}" | grep cygwin &>/dev/null ; then
 	GENERATE_HTMLHELP=YES
+	QHG_LOCATION=../qhelpgenerator.exe
 else
 	GENERATE_HTMLHELP=NO
+	QHG_LOCATION=qhelpgenerator
 fi
 AC_SUBST(GENERATE_HTMLHELP)
+AC_SUBST(QHG_LOCATION)
 
 
 AC_CONFIG_FILES([
