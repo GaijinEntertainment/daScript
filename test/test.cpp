@@ -84,6 +84,7 @@ public:
 		TEST_ADD(UriSuite::testNormalizeCrash_Bug20080224)
 		TEST_ADD(UriSuite::testFilenameUriConversion)
 		TEST_ADD(UriSuite::testCrash_FreeUriMembers_Bug20080116)
+		TEST_ADD(UriSuite::testCrash_Report2418192)
 		TEST_ADD(UriSuite::testCrash_MakeOwner_Bug20080207)
 		TEST_ADD(UriSuite::testQueryList)
 		TEST_ADD(UriSuite::testQueryListPair)
@@ -1357,6 +1358,30 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		uriFreeUriMembersA(&uri);
 
 		TEST_ASSERT(true);
+	}
+
+	void testCrash_Report2418192() {
+		// Testcase by Harvey Vrsalovic
+		helperTestQueryString("http://svcs.cnn.com/weather/wrapper.jsp?&csiID=csi1", 1);
+	}
+
+	void helperTestQueryString(char const * uriString, int pairsExpected) {
+		UriParserStateA state;
+		UriUriA uri;
+		state.uri = &uri;
+		int res = uriParseUriA(&state, uriString);
+		TEST_ASSERT(res == URI_SUCCESS);
+
+		UriQueryListA * queryList = NULL;
+		int itemCount = 0;
+
+		res = uriDissectQueryMallocA(&queryList, &itemCount,
+				uri.query.first, uri.query.afterLast);
+		TEST_ASSERT(res == URI_SUCCESS);
+		TEST_ASSERT(queryList != NULL);
+		TEST_ASSERT(itemCount == pairsExpected);
+		uriFreeQueryListA(queryList);
+		uriFreeUriMembersA(&uri);
 	}
 
 	void testCrash_MakeOwner_Bug20080207() {

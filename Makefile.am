@@ -19,7 +19,7 @@ pkginclude_HEADERS = \
 	include/uriparser/UriIp4.h
 
 
-liburiparser_la_LDFLAGS = -version-info 1:8:0
+liburiparser_la_LDFLAGS = -version-info 1:9:0
 
 liburiparser_la_SOURCES = \
 	lib/UriCommon.c \

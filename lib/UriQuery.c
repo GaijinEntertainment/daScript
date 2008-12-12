@@ -398,7 +398,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 			}
 
 			/* Make future items children of the current */
-			if (prevNext != NULL) {
+			if ((prevNext != NULL) && (*prevNext != NULL)) {
 				prevNext = &((*prevNext)->next);
 			}
 
