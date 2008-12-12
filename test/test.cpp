@@ -85,6 +85,7 @@ public:
 		TEST_ADD(UriSuite::testFilenameUriConversion)
 		TEST_ADD(UriSuite::testCrash_FreeUriMembers_Bug20080116)
 		TEST_ADD(UriSuite::testCrash_Report2418192)
+		TEST_ADD(UriSuite::testPervertedQueryString);
 		TEST_ADD(UriSuite::testCrash_MakeOwner_Bug20080207)
 		TEST_ADD(UriSuite::testQueryList)
 		TEST_ADD(UriSuite::testQueryListPair)
@@ -1363,6 +1364,10 @@ Rule                                | Example | hostSet | absPath | emptySeg
 	void testCrash_Report2418192() {
 		// Testcase by Harvey Vrsalovic
 		helperTestQueryString("http://svcs.cnn.com/weather/wrapper.jsp?&csiID=csi1", 1);
+	}
+
+	void testPervertedQueryString() {
+		helperTestQueryString("http://example.org/?&&=&&&=&&&&==&===&====", 5);
 	}
 
 	void helperTestQueryString(char const * uriString, int pairsExpected) {
