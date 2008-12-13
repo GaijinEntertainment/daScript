@@ -3,6 +3,8 @@
   * Fixed: Null pointer de-referencing when dissecting query
       strings starting with "&" right after "?" (#2418192).
       Thanks to Harvey Vrsalovic for reporting!
+  * Fixed: Memory leak in uriFreeQueryList
+      Thanks to Daniel Chapiesky for reporting!
   * Soname: 1:9:0
 
 2008-11-08 -- 0.7.3
