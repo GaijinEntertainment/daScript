@@ -12,7 +12,7 @@ rm -vRf uriparser-* 2> /dev/null
 
 echo
 echo ========== bootstrap ==========
-./bootstrap.sh || fail
+./autogen.sh --download || fail
 
 if [[ ! -f Makefile ]]; then
 echo
