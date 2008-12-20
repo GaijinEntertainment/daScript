@@ -652,7 +652,10 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 		}
 
 		/* 6.2.2.3 Path Segment Normalization */
-		if (!URI_FUNC(RemoveDotSegments)(uri, relative)) {
+		if (!URI_FUNC(RemoveDotSegmentsEx)(uri, relative,
+				(uri->owner == URI_TRUE)
+				|| ((doneMask & URI_NORMALIZE_PATH) != 0)
+				)) {
 			URI_FUNC(PreventLeakage)(uri, doneMask);
 			return URI_ERROR_MALLOC;
 		}

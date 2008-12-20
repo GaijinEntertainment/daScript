@@ -79,6 +79,17 @@ void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri) {
 /* Properly removes "." and ".." path segments */
 UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 		UriBool relative) {
+	if (uri == NULL) {
+		return URI_TRUE;
+	}
+	const UriBool pathOwned = uri->owner;
+	return URI_FUNC(RemoveDotSegmentsEx)(uri, relative, pathOwned);
+}
+
+
+
+UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
+        UriBool relative, UriBool pathOwned) {
 	URI_TYPE(PathSegment) * walker;
 	if ((uri == NULL) || (uri->pathHead == NULL)) {
 		return URI_TRUE;
@@ -122,13 +133,13 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 							prev->next = walker->next;
 						}
 
-						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+						if (pathOwned && (walker->text.first != walker->text.afterLast)) {
 							free((URI_CHAR *)walker->text.first);
 						}
 						free(walker);
 					} else {
 						/* Last segment */
-						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+						if (pathOwned && (walker->text.first != walker->text.afterLast)) {
 							free((URI_CHAR *)walker->text.first);
 						}
 
@@ -189,12 +200,12 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 								/* Last segment -> insert "" segment to represent trailing slash, update tail */
 								URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
 								if (segment == NULL) {
-									if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+									if (pathOwned && (walker->text.first != walker->text.afterLast)) {
 										free((URI_CHAR *)walker->text.first);
 									}
 									free(walker);
 
-									if (uri->owner && (prev->text.first != prev->text.afterLast)) {
+									if (pathOwned && (prev->text.first != prev->text.afterLast)) {
 										free((URI_CHAR *)prev->text.first);
 									}
 									free(prev);
@@ -208,12 +219,12 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 								uri->pathTail = segment;
 							}
 
-							if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+							if (pathOwned && (walker->text.first != walker->text.afterLast)) {
 								free((URI_CHAR *)walker->text.first);
 							}
 							free(walker);
 
-							if (uri->owner && (prev->text.first != prev->text.afterLast)) {
+							if (pathOwned && (prev->text.first != prev->text.afterLast)) {
 								free((URI_CHAR *)prev->text.first);
 							}
 							free(prev);
@@ -225,14 +236,14 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 								uri->pathHead = walker->next;
 								walker->next->reserved = NULL;
 
-								if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+								if (pathOwned && (walker->text.first != walker->text.afterLast)) {
 									free((URI_CHAR *)walker->text.first);
 								}
 								free(walker);
 							} else {
 								/* Re-use segment for "" path segment to represent trailing slash, update tail */ 
 								URI_TYPE(PathSegment) * const segment = walker;
-								if (uri->owner && (segment->text.first != segment->text.afterLast)) {
+								if (pathOwned && (segment->text.first != segment->text.afterLast)) {
 									free((URI_CHAR *)segment->text.first);
 								}
 								segment->text.first = URI_FUNC(SafeToPointTo);
@@ -241,7 +252,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 								uri->pathTail = segment;
 							}
 
-							if (uri->owner && (prev->text.first != prev->text.afterLast)) {
+							if (pathOwned && (prev->text.first != prev->text.afterLast)) {
 								free((URI_CHAR *)prev->text.first);
 							}
 							free(prev);
@@ -259,7 +270,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 							uri->pathTail = NULL;
 						}
 
-						if (uri->owner && (walker->text.first != walker->text.afterLast)) {
+						if (pathOwned && (walker->text.first != walker->text.afterLast)) {
 							free((URI_CHAR *)walker->text.first);
 						}
 						free(walker);

@@ -7,7 +7,7 @@ function fail() { cd "${PWD_BACKUP}" ; exit 1; }
 
 
 echo ========== cleanup ==========
-rm -v uriparser-*.tar.* uriparser-*.zip 2> /dev/null
+rm -vf uriparser-*.tar.* uriparser-*.zip 2> /dev/null
 rm -vRf uriparser-* 2> /dev/null
 
 echo
