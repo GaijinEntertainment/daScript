@@ -82,8 +82,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 	if (uri == NULL) {
 		return URI_TRUE;
 	}
-	const UriBool pathOwned = uri->owner;
-	return URI_FUNC(RemoveDotSegmentsEx)(uri, relative, pathOwned);
+	return URI_FUNC(RemoveDotSegmentsEx)(uri, relative, uri->owner);
 }
 
 
@@ -241,7 +240,7 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 								}
 								free(walker);
 							} else {
-								/* Re-use segment for "" path segment to represent trailing slash, update tail */ 
+								/* Re-use segment for "" path segment to represent trailing slash, update tail */
 								URI_TYPE(PathSegment) * const segment = walker;
 								if (pathOwned && (segment->text.first != segment->text.afterLast)) {
 									free((URI_CHAR *)segment->text.first);
