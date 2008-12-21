@@ -57,6 +57,7 @@ bool FourSuite::testAddOrRemoveBaseHelper(const char * ref, const char * base,
 	if (res != 0) {
 		uriFreeUriMembersA(&baseUri);
 		uriFreeUriMembersA(&relUri);
+		uriFreeUriMembersA(&expectedUri);
 		return false;
 	}
 
@@ -71,6 +72,8 @@ bool FourSuite::testAddOrRemoveBaseHelper(const char * ref, const char * base,
 	if (res != 0) {
 		uriFreeUriMembersA(&baseUri);
 		uriFreeUriMembersA(&relUri);
+		uriFreeUriMembersA(&expectedUri);
+		uriFreeUriMembersA(&transformedUri);
 		return false;
 	}
 
@@ -86,6 +89,7 @@ bool FourSuite::testAddOrRemoveBaseHelper(const char * ref, const char * base,
 	uriFreeUriMembersA(&baseUri);
 	uriFreeUriMembersA(&relUri);
 	uriFreeUriMembersA(&expectedUri);
+	uriFreeUriMembersA(&transformedUri);
 	return equal;
 }
 

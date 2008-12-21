@@ -846,6 +846,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 			uriFreeUriMembersW(&baseUri);
 			uriFreeUriMembersW(&relUri);
 			uriFreeUriMembersW(&expectedUri);
+			uriFreeUriMembersW(&transformedUri);
 			return false;
 		}
 
@@ -863,6 +864,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		uriFreeUriMembersW(&baseUri);
 		uriFreeUriMembersW(&relUri);
 		uriFreeUriMembersW(&expectedUri);
+		uriFreeUriMembersW(&transformedUri);
 		return equal;
 	}
 
@@ -1488,6 +1490,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(recomposed != NULL);
 		TEST_ASSERT(!strcmp(recomposed, (fixed != NULL) ? fixed : pair));
 		free(recomposed);
+		uriFreeQueryListA(queryList);
 	}
 
 	void testQueryListPair() {
