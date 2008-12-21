@@ -459,7 +459,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		stateA.uri = &uriA;
 
 		int res;
-		
+
 		res = uriParseUriA(&stateA, "http://user:21@host/");
 		TEST_ASSERT(URI_SUCCESS == res);
 		TEST_ASSERT(!memcmp(uriA.userInfo.first, "user:21", 7 * sizeof(char)));
@@ -468,15 +468,19 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
 		TEST_ASSERT(uriA.portText.first == NULL);
 		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
 
 		res = uriParseUriA(&stateA, "http://user:1234@192.168.0.1:1234/foo.com");
 		TEST_ASSERT(URI_SUCCESS == res);
+		uriFreeUriMembersA(&uriA);
 
 		res = uriParseUriA(&stateA, "http://moo:21@moo:21@moo/");
 		TEST_ASSERT(URI_ERROR_SYNTAX == res);
+		uriFreeUriMembersA(&uriA);
 
 		res = uriParseUriA(&stateA, "http://moo:21@moo:21@moo:21/");
 		TEST_ASSERT(URI_ERROR_SYNTAX == res);
+		uriFreeUriMembersA(&uriA);
 	}
 
 	void testUriUserInfoHostPort3() {
@@ -704,12 +708,14 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 	bool testUnescapingHelper(const wchar_t * input, const wchar_t * output,
 			bool plusToSpace = false, UriBreakConversion breakConversion = URI_BR_DONT_TOUCH) {
-		wchar_t * working = static_cast<URI_CHAR *>(malloc((URI_STRLEN(input) + 1) * sizeof(URI_CHAR)));
+		wchar_t * working = new wchar_t[URI_STRLEN(input) + 1];
 		wcscpy(working, input);
 		const wchar_t * newTermZero = uriUnescapeInPlaceExW(working,
 				plusToSpace ? URI_TRUE : URI_FALSE, breakConversion);
-		return ((newTermZero == working + wcslen(output))
+		const bool success = ((newTermZero == working + wcslen(output))
 				&& !wcscmp(working, output));
+		delete[] working;
+		return success;
 	}
 
 	void testUnescaping() {
@@ -808,6 +814,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		stateW.uri = &baseUri;
 		int res = uriParseUriW(&stateW, base);
 		if (res != 0) {
+			uriFreeUriMembersW(&baseUri);
 			return false;
 		}
 
@@ -817,6 +824,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		res = uriParseUriW(&stateW, rel);
 		if (res != 0) {
 			uriFreeUriMembersW(&baseUri);
+			uriFreeUriMembersW(&relUri);
 			return false;
 		}
 
@@ -827,6 +835,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		if (res != 0) {
 			uriFreeUriMembersW(&baseUri);
 			uriFreeUriMembersW(&relUri);
+			uriFreeUriMembersW(&expectedUri);
 			return false;
 		}
 
@@ -836,6 +845,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		if (res != 0) {
 			uriFreeUriMembersW(&baseUri);
 			uriFreeUriMembersW(&relUri);
+			uriFreeUriMembersW(&expectedUri);
 			return false;
 		}
 
@@ -1407,7 +1417,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 	void testQueryListHelper(const wchar_t * input, int expectedItemCount) {
 		int res;
-		
+
 		UriBool spacePlusConversion = URI_TRUE;
 		UriBool normalizeBreaks = URI_FALSE;
 		UriBreakConversion breakConversion = URI_BR_DONT_TOUCH;
@@ -1421,9 +1431,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT((queryList == NULL) == (expectedItemCount == 0));
 
 		if (expectedItemCount != 0) {
-			// First 
+			// First
 			int charsRequired;
-			res = uriComposeQueryCharsRequiredExW(queryList, &charsRequired, spacePlusConversion, 
+			res = uriComposeQueryCharsRequiredExW(queryList, &charsRequired, spacePlusConversion,
 					normalizeBreaks);
 			TEST_ASSERT(res == URI_SUCCESS);
 			TEST_ASSERT(charsRequired >= (int)wcslen(input));
@@ -1464,7 +1474,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int res;
 		UriQueryListA * queryList;
 		int itemCount;
-		
+
 		res = uriDissectQueryMallocA(&queryList, &itemCount, pair, pair + strlen(pair));
 		TEST_ASSERT(res == URI_SUCCESS);
 		TEST_ASSERT(queryList != NULL);
