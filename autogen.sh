@@ -988,7 +988,7 @@ initialize ( ) {
     ##########################################
     # make sure certain required files exist #
     ##########################################
-    for file in AUTHORS COPYING ChangeLog INSTALL NEWS README ; do
+    for file in AUTHORS COPYING ChangeLog ; do
 	if test ! -f $file ; then
 	    $VERBOSE_ECHO "Touching ${file} since it does not exist"
 	    touch $file
