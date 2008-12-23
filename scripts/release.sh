@@ -12,7 +12,7 @@ rm -vRf uriparser-* 2> /dev/null
 
 echo
 echo ========== bootstrap ==========
-./autogen.sh --download || fail
+./autogen.sh -v --download || fail
 
 if [[ ! -f Makefile ]]; then
 echo
@@ -56,4 +56,3 @@ CHECKLIST
 ####################################################################
 cd "${PWD_BACKUP}" || fail
 exit 0
-

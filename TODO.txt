@@ -10,7 +10,11 @@
  * samba filename conversion?
  * (g/s)etters for single components?
  * Add configure options to disable Ansi or Unicode
- * Add example check_uri a la check_spiff
+ * Add example "uritool":
+   * uritool check <uri>
+   * uritool getHost <uri>
+   * uritool setHost <host> <uri>
+   * ...
  * Filename helpers
    * samba shares
    * pipe characters? C:/C|
