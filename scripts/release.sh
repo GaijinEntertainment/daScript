@@ -54,6 +54,7 @@ If so ..
   - SourceForge news
 * upload doc
 * update doc to website
+* tag svn trunk
 
 CHECKLIST
 exit $res
