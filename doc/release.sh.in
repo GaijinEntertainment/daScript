@@ -1,0 +1,26 @@
+#! /usr/bin/env bash
+(
+cd $(dirname $(which "$0")) || exit 1
+distdir="@PACKAGE@-@VERSION@"
+
+# Clean up
+rm -Rf "${distdir}" "${distdir}.zip"
+
+# Copy
+mkdir -p "${distdir}/html"
+cp \
+	html/*.css \
+	html/*.gif \
+	html/*.html \
+	html/*.png \
+	\
+	"${distdir}/html/"
+
+# Package
+zip -r "${distdir}.zip" "${distdir}"
+
+# Clean up
+rm -Rf "${distdir}"
+
+)
+exit $?

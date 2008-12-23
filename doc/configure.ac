@@ -5,14 +5,6 @@ AC_CONFIG_AUX_DIR([../build-aux])
 AM_INIT_AUTOMAKE(uriparser-doc, 0.7.4)
 
 
-## Nested configure hacks
-CALLED_BY_PARENT=0
-AC_ARG_ENABLE(doc, [], [
-	CALLED_BY_PARENT=1
-], [])
-AM_CONDITIONAL(CALLED_BY_PARENT, test x${CALLED_BY_PARENT} = x1)
-
-
 ## Doxygen
 AC_CHECK_PROG(DOXY_CHECK, doxygen, found, missing)
 if test ${DOXY_CHECK} != "found" ; then
@@ -42,6 +34,7 @@ AC_SUBST(QHG_LOCATION)
 
 AC_CONFIG_FILES([
 	Doxyfile
+	release.sh
 	Makefile
 ])
 AC_OUTPUT

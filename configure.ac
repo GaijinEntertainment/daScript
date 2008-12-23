@@ -65,13 +65,9 @@ AC_ARG_ENABLE(doc, [
 ], [])
 AM_CONDITIONAL(URI_GENERATE_DOC, test x${URI_GENERATE_DOC} = x1)
 
-## Nested configure hacks
-AM_CONDITIONAL(CALLED_BY_PARENT, true)
-
 
 AC_CONFIG_FILES([
 	Makefile
 	doc/Makefile
 ])
 AC_OUTPUT
-

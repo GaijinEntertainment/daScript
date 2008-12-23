@@ -7,6 +7,7 @@
       Thanks to Daniel Chapiesky for reporting!
   * Fixed: Memory leak in uriNormalizeSyntax(Ex) functions (#2413066)
       Thanks to Daniel Chapiesky for reporting!
+  * Improved: Nested configure hacks resolved
   * Soname: 1:9:0
 
 2008-11-08 -- 0.7.3

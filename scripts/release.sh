@@ -1,8 +1,6 @@
 #! /usr/bin/env bash
-PWD_BACKUP=${PWD}
-SCRIPT_DIR=`dirname "${PWD}/$0"`
-cd "${SCRIPT_DIR}/.." || exit 1
-function fail() { cd "${PWD_BACKUP}" ; exit 1; }
+(
+cd $(dirname $(which "$0"))/.. || exit 1
 ####################################################################
 
 
@@ -12,17 +10,26 @@ rm -vRf uriparser-* 2> /dev/null
 
 echo
 echo ========== bootstrap ==========
-./autogen.sh -v --download || fail
+./autogen.sh --download || exit 1
 
 if [[ ! -f Makefile ]]; then
 echo
 echo ========== configure ==========
-./configure || fail
+./configure --enable-doc || exit 1
 fi
 
 echo
 echo ========== make distcheck ==========
-make -j10 distcheck || fail
+make -j10 distcheck || exit 1
+
+echo
+echo ========== package docs ==========
+./doc/release.sh || exit 1
+
+####################################################################
+)
+res=$?
+[ $res = 0 ] || exit $res
 
 cat <<'CHECKLIST'
 
@@ -48,11 +55,7 @@ If so ..
   - Freshmeat
   - SourceForge news
 * upload doc
-* update doc on website
+* update doc to website
 
 CHECKLIST
-
-
-####################################################################
-cd "${PWD_BACKUP}" || fail
-exit 0
+exit $res

@@ -63,14 +63,12 @@ test_uriparser_test_SOURCES = \
 EXTRA_DIST = \
 	doc/aclocal.m4 \
 	doc/configure \
-	doc/Makefile.in \
-	\
 	doc/configure.ac \
-	doc/Makefile.am \
-	\
 	doc/Mainpage \
+	doc/Makefile.am \
+	doc/Makefile.in \
 	doc/preprocess.sh \
-	\
+	doc/release.sh \
 	doc/rfc1866.htm \
 	doc/rfc3513.htm \
 	doc/rfc3986.htm \
