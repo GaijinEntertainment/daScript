@@ -34,7 +34,7 @@ AC_SUBST(QHG_LOCATION)
 
 AC_CONFIG_FILES([
 	Doxyfile
-	release.sh
 	Makefile
 ])
+AC_CONFIG_FILES([release.sh], [chmod a+x release.sh])
 AC_OUTPUT

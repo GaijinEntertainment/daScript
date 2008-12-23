@@ -12,11 +12,9 @@ echo
 echo ========== bootstrap ==========
 ./autogen.sh --download || exit 1
 
-if [[ ! -f Makefile ]]; then
 echo
 echo ========== configure ==========
 ./configure --enable-doc || exit 1
-fi
 
 echo
 echo ========== make distcheck ==========
