@@ -68,7 +68,7 @@ EXTRA_DIST = \
 	doc/Makefile.am \
 	doc/Makefile.in \
 	doc/preprocess.sh \
-	doc/release.sh \
+	doc/release.sh.in \
 	doc/rfc1866.htm \
 	doc/rfc3513.htm \
 	doc/rfc3986.htm \
