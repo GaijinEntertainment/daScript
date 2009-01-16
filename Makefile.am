@@ -64,6 +64,7 @@ EXTRA_DIST = \
 	doc/aclocal.m4 \
 	doc/configure \
 	doc/configure.ac \
+	doc/Doxyfile.in \
 	doc/Mainpage \
 	doc/Makefile.am \
 	doc/Makefile.in \

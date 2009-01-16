@@ -985,15 +985,41 @@ initialize ( ) {
 	fi
     done
 
-    ##########################################
-    # make sure certain required files exist #
-    ##########################################
-    for file in AUTHORS COPYING ChangeLog ; do
-	if test ! -f $file ; then
-	    $VERBOSE_ECHO "Touching ${file} since it does not exist"
-	    touch $file
+    ###########################################################
+    # make sure certain required files exist for GNU projects #
+    ###########################################################
+    _marker_found=0
+    _marker_found_message_intro='Detected non-GNU marker "'
+    _marker_found_message_mid='" in '
+    for marker in foreign cygnus ; do
+	_marker_found_message=${_marker_found_message_intro}${marker}${_marker_found_message_mid}
+	if grep 'AM_INIT_AUTOMAKE.*'${marker} $CONFIGURE > /dev/null 2>&1 ; then
+	    $VERBOSE_ECHO ${_marker_found_message}`basename "$CONFIGURE"`
+	    _marker_found=1
+	    break
+	else
+	    if grep 'AUTOMAKE_OPTIONS.*'${marker} Makefile.am > /dev/null 2>&1 ; then
+		$VERBOSE_ECHO ${_marker_found_message}Makefile.am
+		_marker_found=1
+		break
+	    fi
 	fi
     done
+    if [ ${_marker_found} = 0 ] ; then
+	_suggest_foreign=1
+	for file in AUTHORS COPYING ChangeLog INSTALL NEWS README ; do
+	    if test -f $file ; then
+		_suggest_foreign=0
+	    else
+		$VERBOSE_ECHO "Touching ${file} since it does not exist"
+		touch $file
+	    fi
+	done
+
+	if [ ${_suggest_foreign} = 1 ] ; then
+	    $ECHO "Hint: Have you considered adding 'foreign' to AUTOMAKE_OPTIONS?"
+	fi
+    fi
 
     ##################################################
     # make sure certain generated files do not exist #
@@ -1057,17 +1083,13 @@ initialize
 #########################################
 # DOWNLOAD_GNULIB_CONFIG_GUESS FUNCTION #
 #########################################
-
-# TODO - should make sure wget/curl exist and/or work before trying to
-# use them.
-
 download_gnulib_config_guess () {
     # abuse gitweb to download gnulib's latest config.guess via HTTP
     config_guess_temp="config.guess.$$.download"
     ret=1
     for __cmd in wget curl fetch ; do
 	$VERBOSE_ECHO "Checking for command ${__cmd}"
-	${__cmd} --version &>/dev/null
+	${__cmd} --version > /dev/null 2>&1
 	ret=$?
 	if [ ! $ret = 0 ] ; then
 	    continue
