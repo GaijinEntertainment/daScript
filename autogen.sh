@@ -1,7 +1,7 @@
 #!/bin/sh
 #                        a u t o g e n . s h
 #
-# Copyright (c) 2005-2008 United States Government as represented by
+# Copyright (c) 2005-2009 United States Government as represented by
 # the U.S. Army Research Laboratory.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -988,36 +988,45 @@ initialize ( ) {
     ###########################################################
     # make sure certain required files exist for GNU projects #
     ###########################################################
-    _marker_found=0
+    _marker_found=""
     _marker_found_message_intro='Detected non-GNU marker "'
     _marker_found_message_mid='" in '
     for marker in foreign cygnus ; do
 	_marker_found_message=${_marker_found_message_intro}${marker}${_marker_found_message_mid}
-	if grep 'AM_INIT_AUTOMAKE.*'${marker} $CONFIGURE > /dev/null 2>&1 ; then
-	    $VERBOSE_ECHO ${_marker_found_message}`basename "$CONFIGURE"`
-	    _marker_found=1
+	_marker_found="`grep 'AM_INIT_AUTOMAKE.*'${marker} $CONFIGURE`"
+	if [ ! "x$_marker_found" = "x" ] ; then
+	    $VERBOSE_ECHO "${_marker_found_message}`basename \"$CONFIGURE\"`"
 	    break
-	else
-	    if grep 'AUTOMAKE_OPTIONS.*'${marker} Makefile.am > /dev/null 2>&1 ; then
-		$VERBOSE_ECHO ${_marker_found_message}Makefile.am
-		_marker_found=1
+	fi
+	if test -f "`dirname \"$CONFIGURE\"/Makefile.am`" ; then
+	    _marker_found="`grep 'AUTOMAKE_OPTIONS.*'${marker} Makefile.am`"
+	    if [ ! "x$_marker_found" = "x" ] ; then
+		$VERBOSE_ECHO "${_marker_found_message}Makefile.am"
 		break
 	    fi
 	fi
     done
-    if [ ${_marker_found} = 0 ] ; then
-	_suggest_foreign=1
+    if [ "x${_marker_found}" = "x" ] ; then
+	_suggest_foreign=no
 	for file in AUTHORS COPYING ChangeLog INSTALL NEWS README ; do
-	    if test -f $file ; then
-		_suggest_foreign=0
-	    else
+	    if [ ! -f $file ] ; then
 		$VERBOSE_ECHO "Touching ${file} since it does not exist"
+		_suggest_foreign=yes
 		touch $file
 	    fi
 	done
 
-	if [ ${_suggest_foreign} = 1 ] ; then
-	    $ECHO "Hint: Have you considered adding 'foreign' to AUTOMAKE_OPTIONS?"
+	if [ "x${_suggest_foreign}" = "xyes" ] ; then
+	    $ECHO
+	    $ECHO "Warning: Several files expected of projects that conform to the GNU"
+	    $ECHO "coding standards were not found.  The files were automatically added"
+	    $ECHO "for you since you do not have a 'foreign' declaration specified."
+	    $ECHO
+	    $ECHO "Considered adding 'foreign' to AM_INIT_AUTOMAKE in `basename \"$CONFIGURE\"`"
+	    if test -f "`dirname \"$CONFIGURE\"/Makefile.am`" ; then
+		$ECHO "or to AUTOMAKE_OPTIONS in your top-level Makefile.am file."
+	    fi
+	    $ECHO
 	fi
     fi
 
@@ -1083,6 +1092,10 @@ initialize
 #########################################
 # DOWNLOAD_GNULIB_CONFIG_GUESS FUNCTION #
 #########################################
+
+# TODO - should make sure wget/curl exist and/or work before trying to
+# use them.
+
 download_gnulib_config_guess () {
     # abuse gitweb to download gnulib's latest config.guess via HTTP
     config_guess_temp="config.guess.$$.download"
@@ -1367,7 +1380,7 @@ manual_autogen ( ) {
 	    $ECHO
 	    $ECHO "Warning:  Unsupported macros were found in $CONFIGURE"
 	    $ECHO
-	    $ECHO "The `echo $CONFIGURE | basename` file was scanned in order to determine if any"
+	    $ECHO "The `basename \"$CONFIGURE\"` file was scanned in order to determine if any"
 	    $ECHO "unsupported macros are used that exceed the minimum version"
 	    $ECHO "settings specified within this file.  As such, the following macros"
 	    $ECHO "should be removed from configure.ac or the version numbers in this"
@@ -1411,7 +1424,7 @@ EOF
 		$ECHO "	$AUTOGEN_SH --verbose"
 	    else
 		$ECHO "reviewing the minimum GNU Autotools version settings contained in"
-		$ECHO "this script along with the macros being used in your `echo $CONFIGURE | basename` file."
+		$ECHO "this script along with the macros being used in your `basename \"$CONFIGURE\"` file."
 	    fi
 	    $ECHO
 	    $ECHO $ECHO_N "Continuing build preparation ... $ECHO_C"
