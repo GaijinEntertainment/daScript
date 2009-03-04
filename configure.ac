@@ -29,14 +29,25 @@ AC_LINK_IFELSE([
 
 ## Option for URI_SIZEDOWN
 AC_ARG_ENABLE(sizedown, [
+===========================================================================
 Extra options:
-  --enable-sizedown       save space whereever possible (resulting in slower code)], [
-	CPPFLAGS="${CPPFLAGS} -DURI_SIZEDOWN"
-], [])
+AS_HELP_STRING(
+	[--enable-sizedown], [save space whereever possible])
+AS_HELP_STRING(
+	[], [(resulting in slower code)])], [
+	URI_SIZE_DOWN_YESNO=${enableval}
+	if test ${enableval} = yes ; then
+		CPPFLAGS="${CPPFLAGS} -DURI_SIZEDOWN"
+	fi
+],[
+	URI_SIZE_DOWN_YESNO=no
+])
 
 
 ## Option --disable-test
-AC_ARG_ENABLE(test, [  --disable-test          disable 'make check' and libcpptest dependency (on by default)], [
+AC_ARG_ENABLE(test, [AS_HELP_STRING(
+	[--disable-test], [disable 'make check' and libcpptest dependency]
+)], [
 	URI_TEST_YESNO=${enableval}
 ],[
 	URI_TEST_YESNO=yes
@@ -61,13 +72,17 @@ CPPFLAGS="-I${srcdir}/include ${CPPFLAGS}"
 
 
 ## API documentation
-URI_GENERATE_DOC=0
-AC_ARG_ENABLE(doc, [
-  --enable-doc            generate API documentation with Doxygen (off by default)], [
-	AC_CONFIG_SUBDIRS([doc])
-	URI_GENERATE_DOC=1
-], [])
-AM_CONDITIONAL(URI_GENERATE_DOC, test x${URI_GENERATE_DOC} = x1)
+AC_ARG_ENABLE(doc, [AS_HELP_STRING(
+	[--enable-doc], [generate API documentation with Doxygen])
+===========================================================================], [
+	URI_DOC_YESNO=${enableval}
+	if test ${enableval} = yes ; then
+		AC_CONFIG_SUBDIRS([doc])
+	fi
+],[
+	URI_DOC_YESNO=yes
+])
+AM_CONDITIONAL(URI_GENERATE_DOC, test ${URI_DOC_YESNO} = yes)
 
 
 AC_CONFIG_FILES([
@@ -76,3 +91,22 @@ AC_CONFIG_FILES([
 	doc/Makefile
 ])
 AC_OUTPUT
+
+cat <<CONFIG
+===========================================================================
+
+Configuration
+  Prefix ........... ${prefix}
+  Size down ........ ${URI_SIZE_DOWN_YESNO}
+  Test suite ....... ${URI_TEST_YESNO}
+  Documentation .... ${URI_DOC_YESNO}
+
+CONFIG
+
+cat <<"INFO"
+Continue with
+  make
+  make check
+  sudo make install
+
+INFO
