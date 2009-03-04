@@ -2,7 +2,7 @@
 AC_PREREQ(2.61)
 AC_INIT(Doxyfile.in)
 AC_CONFIG_AUX_DIR([../build-aux])
-AM_INIT_AUTOMAKE(uriparser-doc, 0.7.4)
+AM_INIT_AUTOMAKE(uriparser-doc, 0.7.5)
 
 
 ## Doxygen

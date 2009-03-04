@@ -10,6 +10,7 @@
       Both dependencies can be disable through configuring
       with --disable-test, which excludes the test suite
       from compilation completely.
+  * Soname: 1:10:0
 
 2008-12-23 -- 0.7.4
 
