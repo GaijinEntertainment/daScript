@@ -14,15 +14,16 @@ echo ========== bootstrap ==========
 
 echo
 echo ========== configure ==========
-./configure --enable-doc || exit 1
+./configure || exit 1
 
 echo
 echo ========== make distcheck ==========
-make -j10 distcheck || exit 1
+make -j10 DISTCHECK_CONFIGURE_FLAGS='--enable-doc' distcheck || exit 1
 
 echo
 echo ========== package docs ==========
 ./doc/release.sh || exit 1
+
 
 ####################################################################
 )

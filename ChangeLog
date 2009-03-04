@@ -3,6 +3,7 @@
   * Added: pkg-config file
   * Fixed: File Doxyfile.in was missing from release archives
       Thanks to Rakesh Pandit for reporting!
+  * Fixed: Doc generation troubles
   * Changed: No longer shipping bundled libcpptest.
   * Changed: New dependencies:
       - libcpptest 1.1.0 or later

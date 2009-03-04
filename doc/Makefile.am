@@ -2,25 +2,34 @@
 AUTOMAKE_OPTIONS = 1.10 foreign dist-zip no-dist-gzip
 
 
-noinst_SCRIPTS = phony_html_doc
+## Build doc files
+all-local: html/index.html
 
-phony_html_doc :
-	rm -f html/*.css
-	rm -f html/*.gif
-	rm -f html/*.html
-	rm -f html/*.png
-	rm -f html/*.map
-	rm -f html/*.md5
-	rm -f html/graph_legend.dot
-	rm -f html/index.*
+html/index.html: $(srcdir)/../include/uriparser/*.h \
+		$(srcdir)/../lib/*.c \
+		$(srcdir)/../lib/*.h
+	-rm -Rf "$(builddir)/html"
 	doxygen Doxyfile
-
-URI_DOC_FILES = \
-	html/*.css \
-	html/*.gif \
-	html/*.html \
-	html/*.png
+	touch html/index.html
 
 
-## Make doc files get installed
-nobase_nodist_doc_DATA = $(URI_DOC_FILES)
+## Clean doc files
+clean-local:
+	-rm -Rf "$(builddir)/html"
+	-rm -f *.qch
+
+
+## Clean configure files
+distclean-local:
+	-rm -f config.{log,status} release.sh Doxyfile
+
+
+## Install doc files
+install-data-local:
+	$(MKDIR_P) "$(DESTDIR)$(docdir)/html"  ## Didn't work with installdirs-local
+	$(INSTALL_DATA) html/*.{css,gif,html,png} "$(DESTDIR)$(docdir)/html/"
+
+
+## Uninstall doc files
+uninstall-local:
+	-rm -Rf "$(DESTDIR)$(docdir)/html"

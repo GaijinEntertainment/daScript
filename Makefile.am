@@ -64,6 +64,9 @@ test_uriparser_test_SOURCES = \
 endif
 
 
+## NOTE: Adding an empty doc/m4/pkg.m4 file
+##   is done to workaround ACLOCAL_AMFLAGS
+##   behaviour, that might be a bug or not.
 EXTRA_DIST = \
 	doc/aclocal.m4 \
 	doc/configure \
@@ -80,6 +83,8 @@ EXTRA_DIST = \
 	doc/rfc3986_grammar_only.txt \
 	doc/rule_dependencies.dot \
 	doc/rule_dependencies.sh \
+	\
+	doc/m4/pkg.m4 \
 	\
 	win32/Code_Blocks/test.cbp \
 	win32/Code_Blocks/uriparser.cbp \
