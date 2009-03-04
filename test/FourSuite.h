@@ -24,7 +24,8 @@
 
 
 
-#include "CppTest/cpptest.h"
+#include <cpptest.h>
+
 using namespace Test;
 
 

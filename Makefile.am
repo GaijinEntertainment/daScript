@@ -3,11 +3,19 @@ if URI_GENERATE_DOC
 SUBDIRS = . doc
 endif
 
+ACLOCAL_AMFLAGS = -I m4
+
 lib_LTLIBRARIES = liburiparser.la
+
+if URI_TEST_ENABLED
 check_PROGRAMS = test/uriparser_test
 TESTS = test/uriparser_test
+endif
 
-## man_MANS = uriparser.3
+
+pkgconfig_DATA = liburiparser.pc
+
+pkgconfigdir = $(libdir)/pkgconfig
 
 
 pkginclude_HEADERS = \
@@ -42,22 +50,18 @@ liburiparser_la_SOURCES = \
 	lib/UriShorten.c
 
 
+if URI_TEST_ENABLED
+test_uriparser_test_LDFLAGS = @CPPTEST_LIBS@
+
+test_uriparser_test_CFLAGS = @CPPTEST_CFLAGS@
+
 test_uriparser_test_LDADD = liburiparser.la
 
 test_uriparser_test_SOURCES = \
-	test/CppTest/collectoroutput.cpp \
-	test/CppTest/compileroutput.cpp \
-	test/CppTest/htmloutput.cpp \
-	test/CppTest/missing.cpp \
-	test/CppTest/source.cpp \
-	test/CppTest/suite.cpp \
-	test/CppTest/textoutput.cpp \
-	test/CppTest/time.cpp \
-	test/CppTest/utils.cpp \
-	\
 	test/FourSuite.cpp \
 	test/FourSuite.h \
 	test/test.cpp
+endif
 
 
 EXTRA_DIST = \
@@ -77,21 +81,6 @@ EXTRA_DIST = \
 	doc/rule_dependencies.dot \
 	doc/rule_dependencies.sh \
 	\
-	test/CppTest/COPYING \
-	test/CppTest/cpptest-assert.h \
-	test/CppTest/cpptest-collectoroutput.h \
-	test/CppTest/cpptest-compileroutput.h \
-	test/CppTest/cpptest.h \
-	test/CppTest/cpptest-htmloutput.h \
-	test/CppTest/cpptest-output.h \
-	test/CppTest/cpptest-source.h \
-	test/CppTest/cpptest-suite.h \
-	test/CppTest/cpptest-textoutput.h \
-	test/CppTest/cpptest-time.h \
-	test/CppTest/missing.h \
-	test/CppTest/utils.h \
-	test/CppTest/winconfig.h \
-	\
 	win32/Code_Blocks/test.cbp \
 	win32/Code_Blocks/uriparser.cbp \
 	win32/Code_Blocks/uriparser.workspace \
@@ -102,4 +91,3 @@ EXTRA_DIST = \
 	win32/Visual_Studio_2005/test.vcproj \
 	win32/Visual_Studio_2005/uriparser.sln \
 	win32/Visual_Studio_2005/uriparser.vcproj
-

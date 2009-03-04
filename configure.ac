@@ -2,7 +2,6 @@ AC_PREREQ(2.61)
 AC_INIT([uriparser], [0.7.4])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.10.1 foreign dist-zip dist-bzip2 dist-lzma subdir-objects])
-AM_CONFIG_HEADER(test/CppTest/config.h)
 
 
 AC_PROG_CC
@@ -36,17 +35,22 @@ Extra options:
 ], [])
 
 
-## Checks for and from CppTest
-AC_CHECK_HEADERS(sys/time.h)
-AC_CHECK_FUNCS([gettimeofday])
-AC_MSG_CHECKING(for round)
-AC_TRY_COMPILE(
-	[ #include <math.h> ],
-	[ double d = round(1.0); ],
-	[ round=yes ],[ round=no ])
-AC_MSG_RESULT($round)
-if test "$round" = "yes"; then
-	AC_DEFINE([HAVE_ROUND],,[Defined if the function exists])
+## Option --disable-test
+AC_ARG_ENABLE(test, [  --disable-test          disable 'make check' and libcpptest dependency (on by default)], [
+	URI_TEST_YESNO=${enableval}
+],[
+	URI_TEST_YESNO=yes
+])
+AM_CONDITIONAL([URI_TEST_ENABLED], [test "${URI_TEST_YESNO}" = "yes"])
+
+
+## Check for CppTest
+if test "${URI_TEST_YESNO}" = "yes"; then
+	PKG_CHECK_MODULES([CPPTEST], [
+		libcpptest >= 1.1.0
+	], [], [
+		AC_MSG_ERROR(Please install libcpptest 1.1.0 or later.)
+	])
 fi
 
 
@@ -67,6 +71,7 @@ AM_CONDITIONAL(URI_GENERATE_DOC, test x${URI_GENERATE_DOC} = x1)
 
 
 AC_CONFIG_FILES([
+	liburiparser.pc
 	Makefile
 	doc/Makefile
 ])

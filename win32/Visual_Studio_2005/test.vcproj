@@ -228,95 +228,95 @@
 				Name="CppTest"
 				>
 				<File
-					RelativePath="..\..\test\CppTest\collectoroutput.cpp"
+					RelativePath="..\CppTest\collectoroutput.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\compileroutput.cpp"
+					RelativePath="..\CppTest\compileroutput.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\config.h"
+					RelativePath="..\CppTest\config.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest-assert.h"
+					RelativePath="..\CppTest\cpptest-assert.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest-collectoroutput.h"
+					RelativePath="..\CppTest\cpptest-collectoroutput.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest-compileroutput.h"
+					RelativePath="..\CppTest\cpptest-compileroutput.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest-htmloutput.h"
+					RelativePath="..\CppTest\cpptest-htmloutput.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest-output.h"
+					RelativePath="..\CppTest\cpptest-output.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest-source.h"
+					RelativePath="..\CppTest\cpptest-source.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest-suite.h"
+					RelativePath="..\CppTest\cpptest-suite.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest-textoutput.h"
+					RelativePath="..\CppTest\cpptest-textoutput.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest-time.h"
+					RelativePath="..\CppTest\cpptest-time.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\cpptest.h"
+					RelativePath="..\CppTest\cpptest.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\htmloutput.cpp"
+					RelativePath="..\CppTest\htmloutput.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\missing.cpp"
+					RelativePath="..\CppTest\missing.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\missing.h"
+					RelativePath="..\CppTest\missing.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\source.cpp"
+					RelativePath="..\CppTest\source.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\suite.cpp"
+					RelativePath="..\CppTest\suite.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\textoutput.cpp"
+					RelativePath="..\CppTest\textoutput.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\time.cpp"
+					RelativePath="..\CppTest\time.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\utils.cpp"
+					RelativePath="..\CppTest\utils.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\utils.h"
+					RelativePath="..\CppTest\utils.h"
 					>
 				</File>
 				<File
-					RelativePath="..\..\test\CppTest\winconfig.h"
+					RelativePath="..\CppTest\winconfig.h"
 					>
 				</File>
 			</Filter>

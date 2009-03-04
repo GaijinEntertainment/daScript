@@ -1,7 +1,15 @@
 ???
 
+  * Added: pkg-config file
   * Fixed: File Doxyfile.in was missing from release archives
       Thanks to Rakesh Pandit for reporting!
+  * Changed: No longer shipping bundled libcpptest.
+  * Changed: New dependencies:
+      - libcpptest 1.1.0 or later
+      - pkg-config (for libcpptest detection)
+      Both dependencies can be disable through configuring
+      with --disable-test, which excludes the test suite
+      from compilation completely.
 
 2008-12-23 -- 0.7.4
 
@@ -187,4 +195,3 @@
       The test suite code is licensed under LGPL.
 
 2006-12-08 -- 0.2.1
-

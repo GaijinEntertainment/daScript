@@ -20,11 +20,13 @@
  */
 
 #include <uriparser/Uri.h>
-#include "CppTest/cpptest.h"
-#include "FourSuite.h"
+#include <cpptest.h>
 #include <memory>
 #include <stdio.h>
 #include <wchar.h>
+
+#include "FourSuite.h"
+
 using namespace Test;
 using namespace std;
 
