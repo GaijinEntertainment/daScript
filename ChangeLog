@@ -1,16 +1,16 @@
-???
+2009-03-04 -- 0.7.5
 
   * Added: pkg-config file
   * Fixed: File Doxyfile.in was missing from release archives
       Thanks to Rakesh Pandit for reporting!
   * Fixed: Doc generation troubles
-  * Changed: No longer shipping bundled libcpptest.
+  * Changed: No longer shipping bundled libcpptest
   * Changed: New dependencies:
       - libcpptest 1.1.0 or later
       - pkg-config (for libcpptest detection)
       Both dependencies can be disable through configuring
       with --disable-test, which excludes the test suite
-      from compilation completely.
+      from compilation.
   * Soname: 1:10:0
 
 2008-12-23 -- 0.7.4
