@@ -28,50 +28,50 @@
 		<Unit filename="..\..\include\uriparser\UriDefsConfig.h" />
 		<Unit filename="..\..\include\uriparser\UriDefsUnicode.h" />
 		<Unit filename="..\..\include\uriparser\UriIp4.h" />
-		<Unit filename="..\..\lib\UriCommon.c">
+		<Unit filename="..\..\src\UriCommon.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriCommon.h" />
-		<Unit filename="..\..\lib\UriCompare.c">
+		<Unit filename="..\..\src\UriCommon.h" />
+		<Unit filename="..\..\src\UriCompare.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriEscape.c">
+		<Unit filename="..\..\src\UriEscape.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriFile.c">
+		<Unit filename="..\..\src\UriFile.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriIp4.c">
+		<Unit filename="..\..\src\UriIp4.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriIp4Base.c">
+		<Unit filename="..\..\src\UriIp4Base.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriIp4Base.h" />
-		<Unit filename="..\..\lib\UriNormalize.c">
+		<Unit filename="..\..\src\UriIp4Base.h" />
+		<Unit filename="..\..\src\UriNormalize.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriNormalizeBase.c">
+		<Unit filename="..\..\src\UriNormalizeBase.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriNormalizeBase.h" />
-		<Unit filename="..\..\lib\UriParse.c">
+		<Unit filename="..\..\src\UriNormalizeBase.h" />
+		<Unit filename="..\..\src\UriParse.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriParseBase.c">
+		<Unit filename="..\..\src\UriParseBase.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriParseBase.h" />
-		<Unit filename="..\..\lib\UriQuery.c">
+		<Unit filename="..\..\src\UriParseBase.h" />
+		<Unit filename="..\..\src\UriQuery.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriRecompose.c">
+		<Unit filename="..\..\src\UriRecompose.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriResolve.c">
+		<Unit filename="..\..\src\UriResolve.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\..\lib\UriShorten.c">
+		<Unit filename="..\..\src\UriShorten.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Extensions>

@@ -30,6 +30,7 @@ else
 fi
 AC_SUBST(GENERATE_HTMLHELP)
 AC_SUBST(QHG_LOCATION)
+AC_SUBST(srcdir, [${ac_abs_confdir}])
 
 
 AC_CONFIG_FILES([

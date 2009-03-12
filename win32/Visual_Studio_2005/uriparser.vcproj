@@ -181,75 +181,75 @@
 			Name="lib"
 			>
 			<File
-				RelativePath="..\..\lib\UriCommon.c"
+				RelativePath="..\..\src\UriCommon.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriCommon.h"
+				RelativePath="..\..\src\UriCommon.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriCompare.c"
+				RelativePath="..\..\src\UriCompare.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriEscape.c"
+				RelativePath="..\..\src\UriEscape.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriFile.c"
+				RelativePath="..\..\src\UriFile.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriIp4.c"
+				RelativePath="..\..\src\UriIp4.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriIp4Base.c"
+				RelativePath="..\..\src\UriIp4Base.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriIp4Base.h"
+				RelativePath="..\..\src\UriIp4Base.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriNormalize.c"
+				RelativePath="..\..\src\UriNormalize.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriNormalizeBase.c"
+				RelativePath="..\..\src\UriNormalizeBase.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriNormalizeBase.h"
+				RelativePath="..\..\src\UriNormalizeBase.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriParse.c"
+				RelativePath="..\..\src\UriParse.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriParseBase.c"
+				RelativePath="..\..\src\UriParseBase.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriParseBase.h"
+				RelativePath="..\..\src\UriParseBase.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriQuery.c"
+				RelativePath="..\..\src\UriQuery.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriRecompose.c"
+				RelativePath="..\..\src\UriRecompose.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriResolve.c"
+				RelativePath="..\..\src\UriResolve.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\lib\UriShorten.c"
+				RelativePath="..\..\src\UriShorten.c"
 				>
 			</File>
 		</Filter>

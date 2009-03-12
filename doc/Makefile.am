@@ -6,8 +6,9 @@ AUTOMAKE_OPTIONS = 1.10 foreign dist-zip no-dist-gzip
 all-local: html/index.html
 
 html/index.html: $(srcdir)/../include/uriparser/*.h \
-		$(srcdir)/../lib/*.c \
-		$(srcdir)/../lib/*.h
+		$(srcdir)/../src/*.c \
+		$(srcdir)/../src/*.h \
+		$(srcdir)/Mainpage
 	-rm -Rf "$(builddir)/html"
 	doxygen Doxyfile
 	touch html/index.html
@@ -28,8 +29,10 @@ distclean-local:
 install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(docdir)/html"  ## Didn't work with installdirs-local
 	$(INSTALL_DATA) html/*.{css,gif,html,png} "$(DESTDIR)$(docdir)/html/"
+	$(INSTALL_DATA) *.qch "$(DESTDIR)$(docdir)/"
 
 
 ## Uninstall doc files
 uninstall-local:
 	-rm -Rf "$(DESTDIR)$(docdir)/html"
+	-rm -f "$(DESTDIR)$(docdir)"/*.qch

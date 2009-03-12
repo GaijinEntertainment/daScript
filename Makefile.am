@@ -30,24 +30,24 @@ pkginclude_HEADERS = \
 liburiparser_la_LDFLAGS = -version-info 1:10:0
 
 liburiparser_la_SOURCES = \
-	lib/UriCommon.c \
-	lib/UriCommon.h \
-	lib/UriCompare.c \
-	lib/UriEscape.c \
-	lib/UriFile.c \
-	lib/UriIp4.c \
-	lib/UriIp4Base.c \
-	lib/UriIp4Base.h \
-	lib/UriNormalize.c \
-	lib/UriNormalizeBase.c \
-	lib/UriNormalizeBase.h \
-	lib/UriParse.c \
-	lib/UriParseBase.c \
-	lib/UriParseBase.h \
-	lib/UriQuery.c \
-	lib/UriRecompose.c \
-	lib/UriResolve.c \
-	lib/UriShorten.c
+	src/UriCommon.c \
+	src/UriCommon.h \
+	src/UriCompare.c \
+	src/UriEscape.c \
+	src/UriFile.c \
+	src/UriIp4.c \
+	src/UriIp4Base.c \
+	src/UriIp4Base.h \
+	src/UriNormalize.c \
+	src/UriNormalizeBase.c \
+	src/UriNormalizeBase.h \
+	src/UriParse.c \
+	src/UriParseBase.c \
+	src/UriParseBase.h \
+	src/UriQuery.c \
+	src/UriRecompose.c \
+	src/UriResolve.c \
+	src/UriShorten.c
 
 
 if URI_TEST_ENABLED
