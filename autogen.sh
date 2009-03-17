@@ -1145,7 +1145,7 @@ download_gnulib_config_guess () {
 ##############################
 libtoolize_needed () {
     ret=1 # means no, don't need libtoolize
-    for feature in AC_PROG_LIBTOOL LT_INIT ; do
+    for feature in AC_PROG_LIBTOOL AM_PROG_LIBTOOL LT_INIT ; do
 	$VERBOSE_ECHO "Searching for $feature in $CONFIGURE"
 	found="`grep \"^$feature.*\" $CONFIGURE`"
 	if [ ! "x$found" = "x" ] ; then
