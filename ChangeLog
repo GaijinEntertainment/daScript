@@ -2,6 +2,8 @@
 
   * Fixed: Qt Compressed Help file was not installed
   * Fixed: Shadow/VPATH build doc generation
+  * Fixed: Compile error from Doxygen when configuring with
+      neither --enable-doc nor --disable-doc
 
 2009-03-04 -- 0.7.5
 

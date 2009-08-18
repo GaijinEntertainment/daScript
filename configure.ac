@@ -76,12 +76,12 @@ AC_ARG_ENABLE(doc, [AS_HELP_STRING(
 	[--enable-doc], [generate API documentation with Doxygen])
 ===========================================================================], [
 	URI_DOC_YESNO=${enableval}
-	if test ${enableval} = yes ; then
-		AC_CONFIG_SUBDIRS([doc])
-	fi
 ],[
 	URI_DOC_YESNO=yes
 ])
+if test ${URI_DOC_YESNO} = yes ; then
+    AC_CONFIG_SUBDIRS([doc])
+fi
 AM_CONDITIONAL(URI_GENERATE_DOC, test ${URI_DOC_YESNO} = yes)
 
 
