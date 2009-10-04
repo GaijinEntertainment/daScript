@@ -4,6 +4,8 @@
   * Fixed: Shadow/VPATH build doc generation
   * Fixed: Compile error from Doxygen when configuring with
       neither --enable-doc nor --disable-doc
+  * Fixed: Code documentation errors
+      Thanks to Valentin Haenel for the patch!
 
 2009-03-04 -- 0.7.5
 
