@@ -271,7 +271,7 @@ URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
  * writes the encoded version to the output string.
  * Be sure to allocate <b>3 times</b> the space of the input buffer for
  * the output buffer for <c>normalizeBreaks == URI_FALSE</c> and <b>6 times</b>
- * the space for <c>normalizeBreaks == URI_FALSE</c>
+ * the space for <c>normalizeBreaks == URI_TRUE</c>
  * (since e.g. "\x0d" becomes "%0D%0A" in that case)
  *
  * @param in                <b>IN</b>: Text source
