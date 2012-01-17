@@ -9,4 +9,4 @@ Description: URI parsing and handling library
 Version: @VERSION@
 URL: http://uriparser.sourceforge.net/
 Libs: -L${libdir} -luriparser
-Cflags: -I${includedir}/uriparser
+Cflags: -I${includedir}

@@ -6,6 +6,10 @@
       neither --enable-doc nor --disable-doc
   * Fixed: Code documentation errors
       Thanks to Valentin Haenel for the patch!
+  * Fixed: Fix include path in pkg-config, i.e. remove
+      "/uriparser" suffix as uriparser's headers are meant to
+      be included by statements like #include <uriparser/....> .
+      Thanks to Philip de Nier for reporting!
 
 2009-03-04 -- 0.7.5
 
