@@ -60,7 +60,9 @@ if test "${URI_TEST_YESNO}" = "yes"; then
 	PKG_CHECK_MODULES([CPPTEST], [
 		libcpptest >= 1.1.0
 	], [], [
-		AC_MSG_ERROR(Please install libcpptest 1.1.0 or later.)
+		AC_MSG_ERROR([Please install libcpptest 1.1.0 or later.
+			Alternatively, you could pass --disable-test to the call to configure.
+			However, it is not recommended to disable the test suite.])
 	])
 fi
 
