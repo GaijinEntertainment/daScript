@@ -12,14 +12,14 @@ AC_HEADER_STDC
 
 ## Check for wprintf
 AC_MSG_CHECKING(for wprintf)
-AC_LINK_IFELSE([
+AC_LINK_IFELSE([AC_LANG_SOURCE([
 	#include <stdio.h>
 	#include <wchar.h>
 	int main() {
 	    wprintf((wchar_t *)0, 0);
 	    return 0;
 	}
-],[
+])],[
 	AC_DEFINE([HAVE_WPRINTF],, [Define if your CRT provides the wprintf function.])
 	AC_MSG_RESULT(yes)
 ],[
