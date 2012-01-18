@@ -16,13 +16,13 @@ html/index.html: $(srcdir)/../include/uriparser/*.h \
 
 ## Clean doc files
 clean-local:
-	-rm -Rf "$(builddir)/html"
-	-rm -f *.qch
+	rm -Rf "$(builddir)/html"
+	rm -f *.qch
 
 
 ## Clean configure files
 distclean-local:
-	-rm -f config.{log,status} release.sh Doxyfile
+	rm -f config.{log,status} release.sh Doxyfile
 
 
 ## Install doc files
@@ -34,5 +34,5 @@ install-data-local:
 
 ## Uninstall doc files
 uninstall-local:
-	-rm -Rf "$(DESTDIR)$(docdir)/html"
-	-rm -f "$(DESTDIR)$(docdir)"/*.qch
+	rm -Rf "$(DESTDIR)$(docdir)/html"
+	rm -f "$(DESTDIR)$(docdir)"/*.qch
