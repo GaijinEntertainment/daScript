@@ -29,7 +29,7 @@ distclean-local:
 install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(docdir)/html"  ## Didn't work with installdirs-local
 	$(INSTALL_DATA) html/*.{css,html,png} "$(DESTDIR)$(docdir)/html/"
-	$(INSTALL_DATA) *.qch "$(DESTDIR)$(docdir)/"
+	-$(INSTALL_DATA) *.qch "$(DESTDIR)$(docdir)/"
 
 
 ## Uninstall doc files
