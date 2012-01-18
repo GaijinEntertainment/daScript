@@ -20,7 +20,7 @@ AC_LINK_IFELSE([AC_LANG_SOURCE([
 	    return 0;
 	}
 ])],[
-	AC_DEFINE([HAVE_WPRINTF],, [Define if your CRT provides the wprintf function.])
+	AC_DEFINE([HAVE_WPRINTF],, [Define if your C runtime provides the wprintf function.])
 	AC_MSG_RESULT(yes)
 ],[
 	AC_MSG_RESULT(no)
