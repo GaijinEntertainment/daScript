@@ -5,7 +5,7 @@ html/index.html: $(srcdir)/../include/uriparser/*.h \
 		$(srcdir)/../src/*.c \
 		$(srcdir)/../src/*.h \
 		$(srcdir)/Mainpage
-	-rm -Rf "$(builddir)/html"
+	rm -Rf "$(builddir)/html"
 	doxygen Doxyfile
 	touch html/index.html
 
