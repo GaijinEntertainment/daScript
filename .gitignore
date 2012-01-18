@@ -6,6 +6,7 @@ aclocal.m4
 Makefile
 Makefile.in
 config.log
+config.guess
 config.status
 *.o
 *.lo
@@ -18,3 +19,6 @@ config.status
 /doc/Doxyfile
 /doc/html
 /doc/release.sh
+/uriparser-*.tar.bz2
+/uriparser-*.zip
+/doc/uriparser-*-doc.zip
