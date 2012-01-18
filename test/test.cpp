@@ -1059,7 +1059,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(testToStringHelper(uriTwoString));
 	}
 
-	bool testToStringCharsRequiredHelper(wchar_t * text) {
+	bool testToStringCharsRequiredHelper(const wchar_t * text) {
 		// Parse
 		UriParserStateW state;
 		UriUriW uri;
@@ -1109,7 +1109,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(testToStringCharsRequiredHelper(L"test"));
 	}
 
-	bool testNormalizeMaskHelper(wchar_t * uriText, unsigned int expectedMask) {
+	bool testNormalizeMaskHelper(const wchar_t * uriText, unsigned int expectedMask) {
 		UriParserStateW state;
 		UriUriW uri;
 		state.uri = &uri;
@@ -1150,7 +1150,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/#AB%43", URI_NORMALIZE_FRAGMENT));
 	}
 
-	bool testNormalizeSyntaxHelper(wchar_t * uriText, wchar_t * expectedNormalized,
+	bool testNormalizeSyntaxHelper(const wchar_t * uriText, const wchar_t * expectedNormalized,
 			unsigned int mask = static_cast<unsigned int>(-1)) {
 		UriParserStateW stateW;
 		int res;
