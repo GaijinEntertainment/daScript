@@ -1,7 +1,3 @@
-## Process this file with automake to produce Makefile.in
-AUTOMAKE_OPTIONS = 1.10 foreign dist-zip no-dist-gzip
-
-
 ## Build doc files
 all-local: html/index.html
 
