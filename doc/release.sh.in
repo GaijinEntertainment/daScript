@@ -15,7 +15,6 @@ rm -Rf "${distdir}" "${distdir}.zip"
 mkdir -p "${distdir}/html"
 cp \
 	html/*.css \
-	html/*.gif \
 	html/*.html \
 	html/*.png \
 	\
