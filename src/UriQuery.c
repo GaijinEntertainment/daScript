@@ -336,8 +336,8 @@ UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
 void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList) {
 	while (queryList != NULL) {
 		URI_TYPE(QueryList) * nextBackup = queryList->next;
-		free(queryList->key);
-		free(queryList->value);
+		free((URI_CHAR *)queryList->key); /* const cast */
+		free((URI_CHAR *)queryList->value); /* const cast */
 		free(queryList);
 		queryList = nextBackup;
 	}
