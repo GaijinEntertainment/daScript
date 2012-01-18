@@ -82,7 +82,30 @@ AC_ARG_ENABLE(doc, [AS_HELP_STRING(
 	URI_DOC_YESNO=yes
 ])
 if test ${URI_DOC_YESNO} = yes ; then
-    AC_CONFIG_SUBDIRS([doc])
+	## Doxygen
+	AC_CHECK_PROG(DOXY_CHECK, doxygen, found, missing)
+	if test ${DOXY_CHECK} != "found" ; then
+		AC_MSG_ERROR([Please install Doxygen first.])
+	fi
+
+	## Graphviz
+	AC_CHECK_PROG(GRAPHVIZ_CHECK, dot, found, missing)
+	if test ${GRAPHVIZ_CHECK} != "found" ; then
+		AC_MSG_ERROR([Please install Graphviz first.])
+	fi
+
+	## HTML help, Qt Compressed Help
+	host_triplet=`${ac_config_guess}`
+	if echo "${host_triplet}" | grep cygwin &>/dev/null ; then
+		GENERATE_HTMLHELP=YES
+		QHG_LOCATION=../qhelpgenerator.exe
+	else
+		GENERATE_HTMLHELP=NO
+		QHG_LOCATION=qhelpgenerator
+	fi
+	AC_SUBST(GENERATE_HTMLHELP)
+	AC_SUBST(QHG_LOCATION)
+	AC_SUBST(ac_abs_confdir, [${ac_abs_confdir}])
 fi
 AM_CONDITIONAL(URI_GENERATE_DOC, test ${URI_DOC_YESNO} = yes)
 
@@ -91,7 +114,9 @@ AC_CONFIG_FILES([
 	liburiparser.pc
 	Makefile
 	doc/Makefile
+	doc/Doxyfile
 ])
+AC_CONFIG_FILES([doc/release.sh], [chmod a+x doc/release.sh])
 AC_OUTPUT
 
 cat <<CONFIG
