@@ -47,12 +47,16 @@
 #include <uriparser/UriDefsConfig.h>
 #if (!defined(URI_PASS_ANSI) && !defined(URI_PASS_UNICODE))
 /* Include SELF twice */
-# define URI_PASS_ANSI 1
-# include "UriParse.c"
-# undef URI_PASS_ANSI
-# define URI_PASS_UNICODE 1
-# include "UriParse.c"
-# undef URI_PASS_UNICODE
+# ifdef URI_ENABLE_ANSI
+#  define URI_PASS_ANSI 1
+#  include "UriParse.c"
+#  undef URI_PASS_ANSI
+# endif
+# ifdef URI_ENABLE_UNICODE
+#  define URI_PASS_UNICODE 1
+#  include "UriParse.c"
+#  undef URI_PASS_UNICODE
+# endif
 #else
 # ifdef URI_PASS_ANSI
 #  include <uriparser/UriDefsAnsi.h>

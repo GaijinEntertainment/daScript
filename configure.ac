@@ -73,6 +73,37 @@ fi
 CPPFLAGS="-I${srcdir}/include ${CPPFLAGS}"
 
 
+## Character type selection
+AC_ARG_ENABLE(char, [AS_HELP_STRING(
+	[--disable-char], [disable code for type char *])], [
+	CHAR_YESNO=${enableval}
+],[
+	CHAR_YESNO=yes
+])
+AC_ARG_ENABLE(wchar_t, [AS_HELP_STRING(
+	[--disable-wchar_t], [disable code for type wchar_t *])], [
+	WCHAR_T_YESNO=${enableval}
+],[
+	WCHAR_T_YESNO=yes
+])
+if test ${CHAR_YESNO} = no -a ${WCHAR_T_YESNO} = no ; then
+	AC_MSG_ERROR([Parameters --disable-char and --disable-wchar_t cannot be used together.])
+elif test ${CHAR_YESNO} = no -o ${WCHAR_T_YESNO} = no ; then
+	if test ${CHAR_YESNO} = no ; then
+		CPPFLAGS="${CPPFLAGS} -DURI_NO_ANSI"
+		troublemaker='--disable-char'
+	elif test ${WCHAR_T_YESNO} = no ; then
+		CPPFLAGS="${CPPFLAGS} -DURI_NO_UNICODE"
+		troublemaker='--disable-wchar_t'
+	fi
+
+	if test "${URI_TEST_YESNO}" = "yes"; then
+		AC_MSG_ERROR([The test suite relies on code for both char * and wchar_t *.
+			Either remove ${troublemaker} or add --disable-test, please.])
+	fi
+fi
+
+
 ## API documentation
 AC_ARG_ENABLE(doc, [AS_HELP_STRING(
 	[--disable-doc], [disable generation of API documentation with Doxygen])
@@ -123,10 +154,12 @@ cat <<CONFIG
 ===========================================================================
 
 Configuration
-  Prefix ........... ${prefix}
-  Size down ........ ${URI_SIZE_DOWN_YESNO}
-  Test suite ....... ${URI_TEST_YESNO}
-  Documentation .... ${URI_DOC_YESNO}
+  Prefix ............... ${prefix}
+  Size down ............ ${URI_SIZE_DOWN_YESNO}
+  Code for char * ...... ${CHAR_YESNO}
+  Code for wchar_t * ... ${WCHAR_T_YESNO}
+  Test suite ........... ${URI_TEST_YESNO}
+  Documentation ........ ${URI_DOC_YESNO}
 
 CONFIG
 

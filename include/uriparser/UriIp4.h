@@ -50,12 +50,16 @@
 #include "UriDefsConfig.h"
 #if (!defined(URI_PASS_ANSI) && !defined(URI_PASS_UNICODE))
 /* Include SELF twice */
-# define URI_PASS_ANSI 1
-# include "UriIp4.h"
-# undef URI_PASS_ANSI
-# define URI_PASS_UNICODE 1
-# include "UriIp4.h"
-# undef URI_PASS_UNICODE
+# ifdef URI_ENABLE_ANSI
+#  define URI_PASS_ANSI 1
+#  include "UriIp4.h"
+#  undef URI_PASS_ANSI
+# endif
+# ifdef URI_ENABLE_UNICODE
+#  define URI_PASS_UNICODE 1
+#  include "UriIp4.h"
+#  undef URI_PASS_UNICODE
+# endif
 /* Only one pass for each encoding */
 #elif (defined(URI_PASS_ANSI) && !defined(URI_IP4_TWICE_H_ANSI) \
 	&& defined(URI_ENABLE_ANSI)) || (defined(URI_PASS_UNICODE) \
@@ -66,6 +70,7 @@
 # else
 #  define URI_IP4_TWICE_H_UNICODE 1
 #  include "UriDefsUnicode.h"
+#  include <wchar.h>
 # endif
 
 
