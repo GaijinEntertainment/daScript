@@ -29,7 +29,7 @@ AC_LINK_IFELSE([AC_LANG_SOURCE([
 
 ## Option for URI_SIZEDOWN
 AC_ARG_ENABLE(sizedown, [
-===========================================================================
+==============================================================================
 Extra options:
 AS_HELP_STRING(
 	[--enable-sizedown], [save space whereever possible])
@@ -75,8 +75,8 @@ CPPFLAGS="-I${srcdir}/include ${CPPFLAGS}"
 
 ## API documentation
 AC_ARG_ENABLE(doc, [AS_HELP_STRING(
-	[--enable-doc], [generate API documentation with Doxygen])
-===========================================================================], [
+	[--disable-doc], [disable generation of API documentation with Doxygen])
+==============================================================================], [
 	URI_DOC_YESNO=${enableval}
 ],[
 	URI_DOC_YESNO=yes
