@@ -60,16 +60,16 @@
 #  error URI_NO_ANSI and URI_NO_UNICODE cannot go together.
 # else
 /* Unicode only */
-#  define URI_ENABLE_UNICODE   1
+#  define URI_ENABLE_UNICODE  1
 # endif
 #else
 # ifdef URI_NO_UNICODE
 /* ANSI only */
-#  define URI_ENABLE_ANSI       1
+#  define URI_ENABLE_ANSI     1
 # else
 /* Both ANSI and Unicode */
-#  define URI_ENABLE_ANSI       1
-#  define URI_ENABLE_UNICODE    1
+#  define URI_ENABLE_ANSI     1
+#  define URI_ENABLE_UNICODE  1
 # endif
 #endif
 
