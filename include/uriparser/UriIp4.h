@@ -66,6 +66,7 @@
 # else
 #  define URI_IP4_TWICE_H_UNICODE 1
 #  include "UriDefsUnicode.h"
+#  include <wchar.h>
 # endif
 
 
