@@ -1,4 +1,4 @@
-???
+2012-01-20 -- 0.7.6
 
   * Fixed: Qt Compressed Help file was not installed
   * Fixed: Shadow/VPATH build doc generation
@@ -17,6 +17,7 @@
       time: <char *> or <wchar_t *> or both
   * Added: configure parameters to disable either character
       widths: --disable-char, --disable-wchar_t
+  * Soname: 1:11:0
 
 2009-03-04 -- 0.7.5
 
