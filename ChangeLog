@@ -10,6 +10,13 @@
       "/uriparser" suffix as uriparser's headers are meant to
       be included by statements like #include <uriparser/....> .
       Thanks to Philip de Nier for reporting!
+  * Fixed: Compilation in context of Eclipse + Cygwin + wchar_t
+      (bug #3462912)
+      Thanks to Gary Mazzaferro for reporting!
+  * Fixed: Selection of supported character widths at build
+      time: <char *> or <wchar_t *> or both
+  * Added: configure parameters to disable either character
+      widths: --disable-char, --disable-wchar_t
 
 2009-03-04 -- 0.7.5
 
