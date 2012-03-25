@@ -1,3 +1,10 @@
+?????????? -- 0.7.7
+
+  * Fixed: Fix rejection of some valid characters for userinfo
+      section, e.g. "http://%2Fuser:%2F21@host/" (#3510198)
+  * Fixed: Fix rejection of valid double colon in userinfo
+      section, e.g. "http://::@host/"
+
 2012-01-20 -- 0.7.6
 
   * Fixed: Qt Compressed Help file was not installed
