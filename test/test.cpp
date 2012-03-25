@@ -64,6 +64,8 @@ public:
 		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_2)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_3)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_4)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_related_1)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_related_2)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort3)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort4)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort5)
@@ -560,6 +562,45 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(URI_SUCCESS == res);
 		TEST_ASSERT(!memcmp(uriA.userInfo.first, "!$&'()*+,;=:password", 20 * sizeof(char)));
 		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 20);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_related_1() {
+		// Empty user info
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(uriA.userInfo.afterLast != NULL);
+		TEST_ASSERT(uriA.userInfo.first != NULL);
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 0);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_related_2() {
+		// Several colons in userinfo
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  0 2  01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "::" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(!memcmp(uriA.userInfo.first, "::", 2 * sizeof(char)));
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 2);
 		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
 		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
 		TEST_ASSERT(uriA.portText.first == NULL);
