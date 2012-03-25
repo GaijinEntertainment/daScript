@@ -4,6 +4,7 @@
       section, e.g. "http://%2Fuser:%2F21@host/" (#3510198)
   * Fixed: Fix rejection of valid double colon in userinfo
       section, e.g. "http://::@host/"
+  * Soname: 1:12:0
 
 2012-01-20 -- 0.7.6
 

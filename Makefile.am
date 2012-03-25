@@ -27,7 +27,7 @@ pkginclude_HEADERS = \
 	include/uriparser/UriIp4.h
 
 
-liburiparser_la_LDFLAGS = -version-info 1:11:0
+liburiparser_la_LDFLAGS = -version-info 1:12:0
 
 liburiparser_la_SOURCES = \
 	src/UriCommon.c \
