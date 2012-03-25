@@ -60,6 +60,13 @@ public:
 		TEST_ADD(UriSuite::testUriUserInfoHostPort1)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort2)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort22_Bug1948038)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_1)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_2)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_3)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_4)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_related_1)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_related_12)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_related_2)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort3)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort4)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort5)
@@ -70,6 +77,7 @@ public:
 		TEST_ADD(UriSuite::testUriHostIpSix1)
 		TEST_ADD(UriSuite::testUriHostIpSix2)
 		TEST_ADD(UriSuite::testUriHostIpFuture)
+		TEST_ADD(UriSuite::testUriHostEmpty)
 		TEST_ADD(UriSuite::testUriComponents)
 		TEST_ADD(UriSuite::testUriComponents_Bug20070701)
 		TEST_ADD(UriSuite::testEscaping)
@@ -485,6 +493,142 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		uriFreeUriMembersA(&uriA);
 	}
 
+	void testUriUserInfoHostPort23_Bug3510198_1() {
+		// User info with ":", with port, with escaped chars in password
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  0         10 01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "user:%2F21" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(!memcmp(uriA.userInfo.first, "user:%2F21", 10 * sizeof(char)));
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 10);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_2() {
+		// User info with ":", with port, with escaped chars in user name and password
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  0            13 01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "%2Fuser:%2F21" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(!memcmp(uriA.userInfo.first, "%2Fuser:%2F21", 13 * sizeof(char)));
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 13);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_3() {
+		// User info with ":", with port, with escaped chars in password
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  0               16 01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "user:!$&'()*+,;=" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(!memcmp(uriA.userInfo.first, "user:!$&'()*+,;=", 16 * sizeof(char)));
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 16);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_4() {
+		// User info with ":", with port, with escaped chars in user name and password
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  0                   20 01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "!$&'()*+,;=:password" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(!memcmp(uriA.userInfo.first, "!$&'()*+,;=:password", 20 * sizeof(char)));
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 20);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_related_1() {
+		// Empty user info
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(uriA.userInfo.afterLast != NULL);
+		TEST_ASSERT(uriA.userInfo.first != NULL);
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 0);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_related_12() {
+		// Empty user info
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  0      7  01
+		res = uriParseUriA(&stateA, "http" "://" "%2Fhost" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
+		TEST_ASSERT(uriA.userInfo.first == NULL);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "%2Fhost", 7 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 7);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_related_2() {
+		// Several colons in userinfo
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  0 2  01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "::" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(!memcmp(uriA.userInfo.first, "::", 2 * sizeof(char)));
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 2);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
 	void testUriUserInfoHostPort3() {
 		// User info without ":", no port
 		UriParserStateA stateA;
@@ -641,6 +785,24 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(uriA.hostData.ip6 != NULL);
 		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
 		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriHostEmpty() {
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+		//                          0   4  0  3  01  0  3
+		const char * const input = "http" "://" ":" "123";
+		const int res = uriParseUriA(&stateA, input);
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(uriA.userInfo.first == NULL);
+		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
+		TEST_ASSERT(uriA.hostText.first != NULL);
+		TEST_ASSERT(uriA.hostText.afterLast != NULL);
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 0);
+		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 1);
+		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 1 + 3);
 		uriFreeUriMembersA(&uriA);
 	}
 
