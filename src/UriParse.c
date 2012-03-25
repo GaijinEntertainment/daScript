@@ -1188,6 +1188,7 @@ static URI_INLINE UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) 
  * [ownPortUserInfo]-><->[ownUserInfo]
  * [ownPortUserInfo]->[subDelims][ownUserInfo]
  * [ownPortUserInfo]->[pctEncoded][ownUserInfo]
+ * [ownPortUserInfo]-><:>[ownUserInfo]
  * [ownPortUserInfo]-><@>[ownHost]
  * [ownPortUserInfo]-><NULL>
  */
@@ -1220,6 +1221,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 	case _UT('_'):
 	case _UT('~'):
 	/* end unreserved (except alpha and digit) */
+	case _UT(':'):
 	case URI_SET_ALPHA:
 		state->uri->hostText.afterLast = NULL; /* Not a host, reset */
 		state->uri->portText.first = NULL; /* Not a port, reset */
