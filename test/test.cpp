@@ -60,6 +60,8 @@ public:
 		TEST_ADD(UriSuite::testUriUserInfoHostPort1)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort2)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort22_Bug1948038)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_1)
+		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_2)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort3)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort4)
 		TEST_ADD(UriSuite::testUriUserInfoHostPort5)
@@ -482,6 +484,45 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 		res = uriParseUriA(&stateA, "http://moo:21@moo:21@moo:21/");
 		TEST_ASSERT(URI_ERROR_SYNTAX == res);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_1() {
+		// User info with ":", with port, with escaped chars in password
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  0         10 01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "user:%2F21" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(!memcmp(uriA.userInfo.first, "user:%2F21", 10 * sizeof(char)));
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 10);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+
+	}
+
+	void testUriUserInfoHostPort23_Bug3510198_2() {
+		// User info with ":", with port, with escaped chars in user name and password
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+
+		int res;
+		//                           0   4  0  3  0            13 01  0   4  01
+		res = uriParseUriA(&stateA, "http" "://" "%2Fuser:%2F21" "@" "host" "/");
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(!memcmp(uriA.userInfo.first, "%2Fuser:%2F21", 13 * sizeof(char)));
+		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 13);
+		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		TEST_ASSERT(uriA.portText.first == NULL);
+		TEST_ASSERT(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
 	}
 
