@@ -1186,6 +1186,8 @@ static URI_INLINE UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) 
  * [ownPortUserInfo]-><_>[ownUserInfo]
  * [ownPortUserInfo]-><~>[ownUserInfo]
  * [ownPortUserInfo]-><->[ownUserInfo]
+ * [ownPortUserInfo]->[subDelims][ownUserInfo]
+ * [ownPortUserInfo]->[pctEncoded][ownUserInfo]
  * [ownPortUserInfo]-><@>[ownHost]
  * [ownPortUserInfo]-><NULL>
  */
@@ -1199,6 +1201,19 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 	}
 
 	switch (*first) {
+	/* begin sub-delims */
+	case _UT('!'):
+	case _UT('$'):
+	case _UT('&'):
+	case _UT('\''):
+	case _UT('('):
+	case _UT(')'):
+	case _UT('*'):
+	case _UT('+'):
+	case _UT(','):
+	case _UT(';'):
+	case _UT('='):
+	/* end sub-delims */
 	case _UT('.'):
 	case _UT('_'):
 	case _UT('~'):
@@ -1210,6 +1225,17 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 
 	case URI_SET_DIGIT:
 		return URI_FUNC(ParseOwnPortUserInfo)(state, first + 1, afterLast);
+
+	case _UT('%'):
+		state->uri->portText.first = NULL; /* Not a port, reset */
+		{
+			const URI_CHAR * const afterPct
+					= URI_FUNC(ParsePctEncoded)(state, first, afterLast);
+			if (afterPct == NULL) {
+				return NULL;
+			}
+			return URI_FUNC(ParseOwnUserInfo)(state, afterPct, afterLast);
+		}
 
 	case _UT('@'):
 		state->uri->hostText.afterLast = NULL; /* Not a host, reset */
