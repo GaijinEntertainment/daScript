@@ -77,6 +77,7 @@ public:
 		TEST_ADD(UriSuite::testUriHostIpSix1)
 		TEST_ADD(UriSuite::testUriHostIpSix2)
 		TEST_ADD(UriSuite::testUriHostIpFuture)
+		TEST_ADD(UriSuite::testUriHostEmpty)
 		TEST_ADD(UriSuite::testUriComponents)
 		TEST_ADD(UriSuite::testUriComponents_Bug20070701)
 		TEST_ADD(UriSuite::testEscaping)
@@ -784,6 +785,24 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(uriA.hostData.ip6 != NULL);
 		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
 		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		uriFreeUriMembersA(&uriA);
+	}
+
+	void testUriHostEmpty() {
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+		//                          0   4  0  3  01  0  3
+		const char * const input = "http" "://" ":" "123";
+		const int res = uriParseUriA(&stateA, input);
+		TEST_ASSERT(URI_SUCCESS == res);
+		TEST_ASSERT(uriA.userInfo.first == NULL);
+		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
+		TEST_ASSERT(uriA.hostText.first != NULL);
+		TEST_ASSERT(uriA.hostText.afterLast != NULL);
+		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 0);
+		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 1);
+		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 1 + 3);
 		uriFreeUriMembersA(&uriA);
 	}
 
