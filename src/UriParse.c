@@ -1214,10 +1214,12 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 	case _UT(';'):
 	case _UT('='):
 	/* end sub-delims */
+	/* begin unreserved (except alpha and digit) */
+	case _UT('-'):
 	case _UT('.'):
 	case _UT('_'):
 	case _UT('~'):
-	case _UT('-'):
+	/* end unreserved (except alpha and digit) */
 	case URI_SET_ALPHA:
 		state->uri->hostText.afterLast = NULL; /* Not a host, reset */
 		state->uri->portText.first = NULL; /* Not a port, reset */
