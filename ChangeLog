@@ -1,4 +1,4 @@
-?????????? -- 0.7.7
+2012-04-05 -- 0.7.7
 
   * Fixed: Fix rejection of some valid characters for userinfo
       section, e.g. "http://%2Fuser:%2F21@host/" (#3510198)
