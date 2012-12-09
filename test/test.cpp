@@ -99,6 +99,7 @@ public:
 		TEST_ADD(UriSuite::testCrash_MakeOwner_Bug20080207)
 		TEST_ADD(UriSuite::testQueryList)
 		TEST_ADD(UriSuite::testQueryListPair)
+		TEST_ADD(UriSuite::testQueryDissection_Bug3590761)
 		TEST_ADD(UriSuite::testFreeCrash_Bug20080827)
 	}
 
@@ -1661,6 +1662,40 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testQueryListPairHelper("one+two+%26+three=%2B", "one two & three", "+");
 		testQueryListPairHelper("one=two=three", "one", "two=three", "one=two%3Dthree");
 		testQueryListPairHelper("one=two=three=four", "one", "two=three=four", "one=two%3Dthree%3Dfour");
+	}
+
+	void testQueryDissection_Bug3590761() {
+		int res;
+		UriQueryListA * queryList;
+		int itemCount;
+		const char * const pair = "q=hello&x=&y=";
+
+		res = uriDissectQueryMallocA(&queryList, &itemCount, pair, pair + strlen(pair));
+		TEST_ASSERT(res == URI_SUCCESS);
+		TEST_ASSERT(queryList != NULL);
+		TEST_ASSERT(itemCount == 3);
+
+		printf("<%s> <%s>\n", queryList->key, "q");
+		printf("<%s> <%s>\n", queryList->value, "hello");
+
+		printf("<%s> <%s>\n", queryList->next->key, "x");
+		printf("<%s> <%s>\n", queryList->next->value, "");
+
+		printf("<%s> <%s>\n", queryList->next->next->key, "y");
+		printf("<%s> <%s>\n", queryList->next->next->value, "");
+
+		TEST_ASSERT(!strcmp(queryList->key, "q"));
+		TEST_ASSERT(!strcmp(queryList->value, "hello"));
+
+		TEST_ASSERT(!strcmp(queryList->next->key, "x"));
+		TEST_ASSERT(!strcmp(queryList->next->value, ""));
+
+		TEST_ASSERT(!strcmp(queryList->next->next->key, "y"));
+		TEST_ASSERT(!strcmp(queryList->next->next->value, ""));
+
+		TEST_ASSERT(! queryList->next->next->next);
+
+		uriFreeQueryListA(queryList);
 	}
 
 	void testFreeCrash_Bug20080827() {
