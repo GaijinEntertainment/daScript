@@ -1610,7 +1610,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 					&charsWritten, spacePlusConversion, normalizeBreaks);
 			TEST_ASSERT(res == URI_SUCCESS);
 			TEST_ASSERT(charsWritten <= charsRequired);
-			TEST_ASSERT(charsWritten = (int)wcslen(input) + 1);
+			TEST_ASSERT(charsWritten == (int)wcslen(input) + 1);
 			TEST_ASSERT(!wcscmp(input, recomposed));
 			delete [] recomposed;
 
@@ -1618,7 +1618,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 			res = uriComposeQueryMallocW(&recomposed, queryList);
 			TEST_ASSERT(res == URI_SUCCESS);
 			TEST_ASSERT(recomposed != NULL);
-			TEST_ASSERT(charsWritten = (int)wcslen(input) + 1);
+			TEST_ASSERT(charsWritten == (int)wcslen(input) + 1);
 			TEST_ASSERT(!wcscmp(input, recomposed));
 			free(recomposed);
 		}
@@ -1644,7 +1644,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		res = uriDissectQueryMallocA(&queryList, &itemCount, pair, pair + strlen(pair));
 		TEST_ASSERT(res == URI_SUCCESS);
 		TEST_ASSERT(queryList != NULL);
-		TEST_ASSERT(itemCount = 1);
+		TEST_ASSERT(itemCount == 1);
 		TEST_ASSERT(!strcmp(queryList->key, unescapedKey));
 		TEST_ASSERT(!strcmp(queryList->value, unescapedValue));
 
