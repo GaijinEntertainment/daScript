@@ -1,3 +1,7 @@
+??????
+
+  * Fixed: Fix dissection of query string "q=hello&x=&y=" (#3590761)
+
 2012-04-05 -- 0.7.7
 
   * Fixed: Fix rejection of some valid characters for userinfo

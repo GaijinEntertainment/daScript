@@ -423,7 +423,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 			/*       all following go into the value part   */
 			if (keyAfter == NULL) {
 				keyAfter = walk;
-				if (walk + 1 < afterLast) {
+				if (walk + 1 <= afterLast) {
 					valueFirst = walk + 1;
 					valueAfter = walk + 1;
 				}
