@@ -1675,15 +1675,6 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(queryList != NULL);
 		TEST_ASSERT(itemCount == 3);
 
-		printf("<%s> <%s>\n", queryList->key, "q");
-		printf("<%s> <%s>\n", queryList->value, "hello");
-
-		printf("<%s> <%s>\n", queryList->next->key, "x");
-		printf("<%s> <%s>\n", queryList->next->value, "");
-
-		printf("<%s> <%s>\n", queryList->next->next->key, "y");
-		printf("<%s> <%s>\n", queryList->next->next->value, "");
-
 		TEST_ASSERT(!strcmp(queryList->key, "q"));
 		TEST_ASSERT(!strcmp(queryList->value, "hello"));
 
