@@ -11,7 +11,7 @@ Makefile.in
 *.o
 *.lo
 *.la
-/.libs
+.libs
 /build-aux
 /m4
 /liburiparser.pc
