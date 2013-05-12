@@ -16,9 +16,5 @@ config.status
 /m4
 /liburiparser.pc
 /libtool
-/doc/Doxyfile
-/doc/html
-/doc/release.sh
 /uriparser-*.tar.bz2
 /uriparser-*.zip
-/doc/uriparser-*-doc.zip
