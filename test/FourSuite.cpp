@@ -511,45 +511,46 @@ void FourSuite::good_URI_references() {
 
 
 void FourSuite::bad_URI_references() {
-	TEST_ASSERT(testBadUri("beepbeep\x07\x07"));
-	TEST_ASSERT(testBadUri("\n"));
-	TEST_ASSERT(testBadUri("::")); // not OK, per Roy Fielding on the W3C uri list on 2004-04-01
+	TEST_ASSERT(testBadUri("beepbeep\x07\x07", 8));
+	TEST_ASSERT(testBadUri("\n", 0));
+	TEST_ASSERT(testBadUri("::", 0)); // not OK, per Roy Fielding on the W3C uri list on 2004-04-01
 
 	// the following test cases are from a Perl script by David A. Wheeler
 	// at http://www.dwheeler.com/secure-programs/url.pl
-	TEST_ASSERT(testBadUri("http://www yahoo.com"));
-	TEST_ASSERT(testBadUri("http://www.yahoo.com/hello world/"));
-	TEST_ASSERT(testBadUri("http://www.yahoo.com/yelp.html#\""));
+	TEST_ASSERT(testBadUri("http://www yahoo.com", 10));
+	TEST_ASSERT(testBadUri("http://www.yahoo.com/hello world/", 26));
+	TEST_ASSERT(testBadUri("http://www.yahoo.com/yelp.html#\"", 31));
 
 	// the following test cases are from a Haskell program by Graham Klyne
 	// at http://www.ninebynine.org/Software/HaskellUtils/Network/URITest.hs
-	TEST_ASSERT(testBadUri("[2010:836B:4179::836B:4179]"));
-	TEST_ASSERT(testBadUri(" "));
-	TEST_ASSERT(testBadUri("%"));
-	TEST_ASSERT(testBadUri("A%Z"));
-	TEST_ASSERT(testBadUri("%ZZ"));
-	TEST_ASSERT(testBadUri("%AZ"));
-	TEST_ASSERT(testBadUri("A C"));
-	TEST_ASSERT(testBadUri("A\\'C")); // r"A\'C"
-	TEST_ASSERT(testBadUri("A`C"));
-	TEST_ASSERT(testBadUri("A<C"));
-	TEST_ASSERT(testBadUri("A>C"));
-	TEST_ASSERT(testBadUri("A^C"));
-	TEST_ASSERT(testBadUri("A\\\\C")); // r'A\\C'
-	TEST_ASSERT(testBadUri("A{C"));
-	TEST_ASSERT(testBadUri("A|C"));
-	TEST_ASSERT(testBadUri("A}C"));
-	TEST_ASSERT(testBadUri("A[C"));
-	TEST_ASSERT(testBadUri("A]C"));
-	TEST_ASSERT(testBadUri("A[**]C"));
-	TEST_ASSERT(testBadUri("http://[xyz]/"));
-	TEST_ASSERT(testBadUri("http://]/"));
-	TEST_ASSERT(testBadUri("http://example.org/[2010:836B:4179::836B:4179]"));
-	TEST_ASSERT(testBadUri("http://example.org/abc#[2010:836B:4179::836B:4179]"));
-	TEST_ASSERT(testBadUri("http://example.org/xxx/[qwerty]#a[b]"));
+	TEST_ASSERT(testBadUri("[2010:836B:4179::836B:4179]", 0));
+	TEST_ASSERT(testBadUri(" ", 0));
+	TEST_ASSERT(testBadUri("%", 1));
+	TEST_ASSERT(testBadUri("A%Z", 2));
+	TEST_ASSERT(testBadUri("%ZZ", 1));
+	TEST_ASSERT(testBadUri("%AZ", 2));
+	TEST_ASSERT(testBadUri("A C", 1));
+	TEST_ASSERT(testBadUri("A\\'C", 1)); // r"A\'C"
+	TEST_ASSERT(testBadUri("A`C", 1));
+	TEST_ASSERT(testBadUri("A<C", 1));
+	TEST_ASSERT(testBadUri("A>C", 1));
+	TEST_ASSERT(testBadUri("A^C", 1));
+	TEST_ASSERT(testBadUri("A\\\\C", 1)); // r'A\\C'
+	TEST_ASSERT(testBadUri("A{C", 1));
+	TEST_ASSERT(testBadUri("A|C", 1));
+	TEST_ASSERT(testBadUri("A}C", 1));
+	TEST_ASSERT(testBadUri("A[C", 1));
+	TEST_ASSERT(testBadUri("A]C", 1));
+	TEST_ASSERT(testBadUri("A[**]C", 1));
+	TEST_ASSERT(testBadUri("http://[xyz]/", 8));
+	TEST_ASSERT(testBadUri("http://]/", 7));
+	TEST_ASSERT(testBadUri("http://example.org/[2010:836B:4179::836B:4179]", 19));
+	TEST_ASSERT(testBadUri("http://example.org/abc#[2010:836B:4179::836B:4179]", 23));
+	TEST_ASSERT(testBadUri("http://example.org/xxx/[qwerty]#a[b]", 23));
 
 	// from a post to the W3C uri list on 2004-02-17
-	TEST_ASSERT(testBadUri("http://w3c.org:80path1/path2"));
+	// breaks at 22 instead of 17 because everything up to that point is a valid userinfo
+	TEST_ASSERT(testBadUri("http://w3c.org:80path1/path2", 22));
 }
 
 
