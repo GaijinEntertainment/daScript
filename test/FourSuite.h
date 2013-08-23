@@ -51,9 +51,9 @@ private:
 	void absolutize_test_cases();
 	void relativize_test_cases();
 
-	int testParseUri(const char * uriText);
+	int testParseUri(const char * uriText, const char ** expectedErrorPos = NULL);
 	bool testGoodUri(const char * uriText);
-	bool testBadUri(const char * uriText);
+	bool testBadUri(const char * uriText, int expectedErrorOffset = -1);
 	void good_URI_references();
 	void bad_URI_references();
 

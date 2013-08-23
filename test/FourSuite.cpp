@@ -388,11 +388,14 @@ void FourSuite::relativize_test_cases() {
 
 
 
-int FourSuite::testParseUri(const char * uriText) {
+int FourSuite::testParseUri(const char * uriText, const char ** expectedErrorPos) {
 	UriParserStateA state;
 	UriUriA uri;
 	state.uri = &uri;
 	int res = uriParseUriA(&state, uriText);
+	if (expectedErrorPos != NULL) {
+		*expectedErrorPos = state.errorPos;
+	}
 	uriFreeUriMembersA(&uri);
 	return res;
 }
@@ -405,8 +408,15 @@ bool FourSuite::testGoodUri(const char * uriText) {
 
 
 
-bool FourSuite::testBadUri(const char * uriText) {
-	return (testParseUri(uriText) == URI_ERROR_SYNTAX);
+bool FourSuite::testBadUri(const char * uriText, int expectedErrorOffset) {
+	const char * errorPos = NULL;
+	const int ret = testParseUri(uriText, &errorPos);
+	return ((ret == URI_ERROR_SYNTAX)
+			&& (errorPos != NULL)
+			&& (
+				(expectedErrorOffset == -1)
+				|| (errorPos == (uriText + expectedErrorOffset))
+			));
 }
 
 
