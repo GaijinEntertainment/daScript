@@ -1,3 +1,9 @@
+2013-08-24 -- 0.7.9
+
+  * Fixed: Error position ended up as NULL for some syntax errors.
+      Thanks to Daniel Solano Gómez for the patch!  (bug #14)
+  * Soname: 1:14:0
+
 2013-05-13 -- 0.7.8
 
   * Fixed: Fix dissection of query string "q=hello&x=&y=" (bug #12)
