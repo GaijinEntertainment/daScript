@@ -1,13 +1,13 @@
 2013-05-13 -- 0.7.8
 
-  * Fixed: Fix dissection of query string "q=hello&x=&y=" (#3590761)
+  * Fixed: Fix dissection of query string "q=hello&x=&y=" (bug #12)
       Thanks to Marc Novakowski for reporting!
   * Soname: 1:13:0
 
 2012-04-05 -- 0.7.7
 
   * Fixed: Fix rejection of some valid characters for userinfo
-      section, e.g. "http://%2Fuser:%2F21@host/" (#3510198)
+      section, e.g. "http://%2Fuser:%2F21@host/" (bug #11)
   * Fixed: Fix rejection of valid double colon in userinfo
       section, e.g. "http://::@host/"
   * Soname: 1:12:0
@@ -25,7 +25,7 @@
       be included by statements like #include <uriparser/....> .
       Thanks to Philip de Nier for reporting!
   * Fixed: Compilation in context of Eclipse + Cygwin + wchar_t
-      (bug #3462912)
+      (bug #10)
       Thanks to Gary Mazzaferro for reporting!
   * Fixed: Selection of supported character widths at build
       time: <char *> or <wchar_t *> or both
@@ -51,11 +51,11 @@
 2008-12-23 -- 0.7.4
 
   * Fixed: Null pointer de-referencing when dissecting query
-      strings starting with "&" right after "?" (#2418192).
+      strings starting with "&" right after "?" (bug #7).
       Thanks to Harvey Vrsalovic for reporting!
-  * Fixed: Memory leak in uriFreeQueryList function (#2413066)
+  * Fixed: Memory leak in uriFreeQueryList function (bug #6)
       Thanks to Daniel Chapiesky for reporting!
-  * Fixed: Memory leak in uriNormalizeSyntax(Ex) functions (#2413066)
+  * Fixed: Memory leak in uriNormalizeSyntax(Ex) functions (bug #6)
       Thanks to Daniel Chapiesky for reporting!
   * Improved: Nested configure hacks resolved
   * Soname: 1:9:0
@@ -66,7 +66,7 @@
       Thanks to Sezai Tekin for reporting!
   * Fixed: uriparser now builds on Cygwin
   * Fixed: Now shipping gnulib's config.guess from HEAD
-      which is suitable for Haiku (#2116355)
+      which is suitable for Haiku (bug #5)
   * Changed: swprintf requirement resolved
   * Changed: Build system changes:
       - configure option --enable-doc added
@@ -92,11 +92,11 @@
 2008-04-27 -- 0.7.1
 
   * Fixed: Bogus syntax error when parsing URIs with port-like
-      passwords, e.g. "http://user:21@host/" (#1948038)
+      passwords, e.g. "http://user:21@host/" (bug #1)
       Thanks to Friedrich Delgado Friedrichs for reporting!
   * Fixed: Parser did not handle trailing slashes correctly in some cases,
       which also made the structures produced from parsing "http://e.com/"
-      and "http://e.com" indistinguishable. (#1950126)
+      and "http://e.com" indistinguishable. (bug #2)
       Thanks to Edward Z. Yang for reporting!
 
 2008-04-04 -- 0.7.0
