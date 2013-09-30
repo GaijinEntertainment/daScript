@@ -263,7 +263,7 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 							walker = nextBackup;
 						}
 					} else {
-						URI_TYPE(PathSegment) * const nextBackup = walker->next;
+						URI_TYPE(PathSegment) * const anotherNextBackup = walker->next;
 						/* First segment -> update head pointer */
 						uri->pathHead = walker->next;
 						if (walker->next != NULL) {
@@ -278,7 +278,7 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 						}
 						free(walker);
 
-						walker = nextBackup;
+						walker = anotherNextBackup;
 					}
 				}
 			}
