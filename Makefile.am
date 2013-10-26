@@ -12,6 +12,13 @@ check_PROGRAMS = test/uriparser_test
 TESTS = test/uriparser_test
 endif
 
+bin_PROGRAMS = uriparse
+uriparse_SOURCES = tool/uriparse.c
+
+uriparse_CFLAGS = -Iinclude
+uriparse_LDADD = $(top_builddir)/liburiparser.la
+uriparse_DEPENDENCIES = $(top_builddir)/liburiparser.la
+
 
 pkgconfig_DATA = liburiparser.pc
 
