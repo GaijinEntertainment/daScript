@@ -2045,7 +2045,8 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state, const URI_CHAR * first, 
 		return state->errorCode;
 	}
 	if (afterUriReference != afterLast) {
-		return URI_ERROR_SYNTAX;
+		URI_FUNC(StopSyntax)(state, afterUriReference);
+		return state->errorCode;
 	}
 	return URI_SUCCESS;
 }
