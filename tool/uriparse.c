@@ -41,7 +41,7 @@
 #include <netinet/in.h>
 
 void usage() {
-	printf("Usage: uriparse <uri> ...\n");
+	printf("Usage: uriparse URI [..]\n");
 }
 
 
@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
 	int i;
 
 
-	if (argc < 1) {
+	if (argc < 2) {
 			usage();
 			exit(1);
 	}
