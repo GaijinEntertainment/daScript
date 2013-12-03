@@ -2,6 +2,7 @@
  * uriparser - RFC 3986 URI parsing library
  *
  * Copyright (C) 2013, Radu Hociung <radu.uriparser@ohmi.org>
+ * Copyright (C) 2013, Sebastian Pipping <sebastian@pipping.org>
  * All rights reserved.
  *
  * Redistribution  and use in source and binary forms, with or without
