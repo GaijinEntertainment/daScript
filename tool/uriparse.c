@@ -36,6 +36,7 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <uriparser/Uri.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -50,7 +51,7 @@ void usage() {
 
 
 int main(int argc, char *argv[]) {
-	int retval = 0;
+	int retval = EXIT_SUCCESS;
 	int i = 1;
 
 	if (argc < 2) {
@@ -74,7 +75,7 @@ int main(int argc, char *argv[]) {
 							? "not enough memory"
 							: "liburiparser bug (please report)",
 					state.errorPos, state.errorPos - argv[i]);
-			retval++;
+			retval = EXIT_FAILURE;
 		} else {
 			if (uri.scheme.first) {
 				printf("scheme:       %.*s\n", RANGE(uri.scheme));
