@@ -3,6 +3,8 @@
  * Fixed: Resolve use of non-POSIX "sed -r" used when building
      documentation  (bug #18)
      Thanks to Ryan Schmidt for reporting!
+ * Fixed: Build DLL with -no-undefined on Windows
+      Thanks to Michel Zou for the patch!  (bug #19)
 
 2013-08-24 -- 0.7.9
 
