@@ -28,6 +28,9 @@ pkginclude_HEADERS = \
 
 
 liburiparser_la_LDFLAGS = -version-info 1:14:0
+if WIN32
+liburiparser_la_LDFLAGS += -no-undefined
+endif
 
 liburiparser_la_SOURCES = \
 	src/UriCommon.c \

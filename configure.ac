@@ -10,6 +10,14 @@ AC_PROG_LIBTOOL
 AC_HEADER_STDC
 
 
+
+case "${host}" in
+        *-*-mingw*) WIN32="yes" ;;
+        *cygwin*) WIN32="yes" ;;
+        *) WIN32="no" ;;
+esac
+AM_CONDITIONAL([WIN32], test "$WIN32" = "yes")
+
 ## Check for wprintf
 AC_MSG_CHECKING(for wprintf)
 AC_LINK_IFELSE([AC_LANG_SOURCE([
