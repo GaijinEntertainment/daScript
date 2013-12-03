@@ -5,6 +5,7 @@
      Thanks to Ryan Schmidt for reporting!
  * Fixed: Build DLL with -no-undefined on Windows
       Thanks to Michel Zou for the patch!  (bug #19)
+  * Soname: 1:15:0
 
 2013-08-24 -- 0.7.9
 

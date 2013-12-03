@@ -27,7 +27,7 @@ pkginclude_HEADERS = \
 	include/uriparser/UriIp4.h
 
 
-liburiparser_la_LDFLAGS = -version-info 1:14:0
+liburiparser_la_LDFLAGS = -version-info 1:15:0
 if WIN32
 liburiparser_la_LDFLAGS += -no-undefined
 endif
