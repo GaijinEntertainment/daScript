@@ -109,7 +109,6 @@ int main(int argc, char *argv[]) {
 				printf("fragment:     %.*s\n", RANGE(uri.fragment));
 			}
 			printf("absolutePath: %s\n", (uri.absolutePath == URI_TRUE) ? "true" : "false");
-			printf("owner:        %s\n", (uri.owner == URI_TRUE) ? "true" : "false");
 		}
 		printf("\n");
 
