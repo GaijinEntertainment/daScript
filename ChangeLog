@@ -1,9 +1,9 @@
 ???
 
- * Fixed: Resolve use of non-POSIX "sed -r" used when building
+  * Fixed: Resolve use of non-POSIX "sed -r" used when building
      documentation  (bug #18)
      Thanks to Ryan Schmidt for reporting!
- * Fixed: Build DLL with -no-undefined on Windows
+  * Fixed: Build DLL with -no-undefined on Windows
       Thanks to Michel Zou for the patch!  (bug #19)
   * Added: Command line tool "uriparse"
       Thanks to Radu Hociung for coding!  (feature request #3)
