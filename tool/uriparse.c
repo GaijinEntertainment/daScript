@@ -43,7 +43,7 @@
 #include <netinet/in.h>
 
 
-#define RANGE(x) ((x).afterLast-(x).first),((x).first)
+#define RANGE(x)  (int)((x).afterLast-(x).first), ((x).first)
 
 
 void usage() {
