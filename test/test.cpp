@@ -101,6 +101,7 @@ public:
 		TEST_ADD(UriSuite::testQueryListPair)
 		TEST_ADD(UriSuite::testQueryDissection_Bug3590761)
 		TEST_ADD(UriSuite::testFreeCrash_Bug20080827)
+		TEST_ADD(UriSuite::testParseInvalid_Bug16)
 	}
 
 private:
@@ -1715,6 +1716,20 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		uriFreeUriMembersA(&absoluteDest); // Crashed here
 	}
 
+	void testParseInvalid_Bug16() {
+		UriParserStateA stateA;
+		UriUriA uriA;
+		stateA.uri = &uriA;
+		const char * const input = "A>B";
+
+		const int res = uriParseUriA(&stateA, input);
+
+		TEST_ASSERT(res == URI_ERROR_SYNTAX);
+		TEST_ASSERT(stateA.errorPos == input + 1);
+		TEST_ASSERT(stateA.errorCode == URI_ERROR_SYNTAX);  /* failed previously */
+
+		uriFreeUriMembersA(&uriA);
+	}
 };
 
 
