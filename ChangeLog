@@ -1,5 +1,7 @@
 ???
 
+  * Fixed: .errorCode could end up unset, previously
+      Thanks to Radu Hociung for the patch!  (bug #16)
   * Fixed: Resolve use of non-POSIX "sed -r" used when building
      documentation  (bug #18)
      Thanks to Ryan Schmidt for reporting!
