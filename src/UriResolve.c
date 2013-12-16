@@ -180,7 +180,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 							return URI_ERROR_MALLOC;
 						}
 	/* [12/32]			if (R.path == "") then */
-						if (relSource->pathHead == NULL) {
+						if (relSource->pathHead == NULL && !relSource->absolutePath) {
 	/* [13/32]				T.path = Base.path; */
 							if (!URI_FUNC(CopyPath)(absDest, absBase)) {
 								return URI_ERROR_MALLOC;

@@ -1,5 +1,7 @@
 ???
 
+  * Fixed: Resolution of relative URI "/" broken
+      Thanks to Mo McRoberts for the patch!
   * Fixed: .errorCode could end up unset, previously
       Thanks to Radu Hociung for the patch!  (bug #16)
   * Fixed: Resolve use of non-POSIX "sed -r" used when building
