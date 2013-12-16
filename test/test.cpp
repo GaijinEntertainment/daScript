@@ -1103,6 +1103,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 		// Bug related to absolutePath flag set despite presence of host
 		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/", L"http://a/"));
+		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/g/", L"http://a/g/"));
 	}
 
 	bool testToStringHelper(const wchar_t * text) {
