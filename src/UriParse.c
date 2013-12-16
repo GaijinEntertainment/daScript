@@ -2045,7 +2045,7 @@ static URI_INLINE UriBool URI_FUNC(PushPathSegment)(URI_TYPE(ParserState) * stat
 
 	/* First segment ever? */
 	if (state->uri->pathHead == NULL) {
-		/* First segement ever, set head and tail */
+		/* First segment ever, set head and tail */
 		state->uri->pathHead = segment;
 		state->uri->pathTail = segment;
 	} else {

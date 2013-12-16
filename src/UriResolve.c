@@ -68,7 +68,7 @@
 
 
 
-/* Appends a relative URI to an absolute. The last path segement of
+/* Appends a relative URI to an absolute. The last path segment of
  * the absolute URI is replaced. */
 static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 		const URI_TYPE(Uri) * relAppend) {
