@@ -2,6 +2,12 @@
 
   * Fixed: Resolution of relative URI "/" broken
       Thanks to Mo McRoberts for the patch!
+  * Fixed: uriAddBaseUri produced uriUri objects with both host
+      and the absolutePath flag set (while the absolutePath flag
+      should only be true for URI objects without a host) when
+      resolving absolute URIs like "/" or "/foo/bar".
+      Now the absolutePath flag is set to URI_FALSE and an empty
+      segment is added as necessary
   * Fixed: .errorCode could end up unset, previously
       Thanks to Radu Hociung for the patch!  (bug #16)
   * Fixed: Resolve use of non-POSIX "sed -r" used when building

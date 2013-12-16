@@ -121,6 +121,32 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 }
 
 
+static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork) {
+	if (absWork == NULL) {
+		return URI_ERROR_NULL;
+	}
+
+	if (URI_FUNC(IsHostSet)(absWork) && absWork->absolutePath) {
+		/* Empty segment needed, instead? */
+		if (absWork->pathHead == NULL) {
+			URI_TYPE(PathSegment) * const segment = malloc(sizeof(URI_TYPE(PathSegment)));
+			if (segment == NULL) {
+				return URI_ERROR_MALLOC;
+			}
+			segment->text.first = URI_FUNC(SafeToPointTo);
+			segment->text.afterLast = URI_FUNC(SafeToPointTo);
+			segment->next = NULL;
+
+			absWork->pathHead = segment;
+			absWork->pathTail = segment;
+		}
+
+		absWork->absolutePath = URI_FALSE;
+	}
+
+	return URI_SUCCESS;
+}
+
 
 static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource,
@@ -202,6 +228,10 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [21/32]					T.path = remove_dot_segments(R.path); */
 								if (!URI_FUNC(CopyPath)(absDest, relSource)) {
 									return URI_ERROR_MALLOC;
+								}
+								const int res = URI_FUNC(ResolveAbsolutePathFlag)(absDest);
+								if (res != URI_SUCCESS) {
+									return res;
 								}
 								if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
 									return URI_ERROR_MALLOC;
