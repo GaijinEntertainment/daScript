@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
 		printf("uri:          %s\n", argv[i]);
 		if (uriParseUriA(&state, argv[i]) != URI_SUCCESS) {
 			/* Failure */
-			printf("Failure:      %s @ '%.18s' (#%zu)\n",
+			printf("Failure:      %s @ '%.18s' (#%lu)\n",
 					(state.errorCode == URI_ERROR_SYNTAX)
 						? "syntax"
 						: (state.errorCode == URI_ERROR_MALLOC)

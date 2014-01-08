@@ -1,3 +1,7 @@
+???
+
+  * Fixed: ISO C90 warnings (bug #20)
+
 2013-12-20 -- 0.8.0
 
   * Fixed: Resolution of relative URI "/" broken

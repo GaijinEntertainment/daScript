@@ -225,11 +225,12 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 						} else {
 	/* [20/32]				if (R.path starts-with "/") then */
 							if (relSource->absolutePath) {
+								int res;
 	/* [21/32]					T.path = remove_dot_segments(R.path); */
 								if (!URI_FUNC(CopyPath)(absDest, relSource)) {
 									return URI_ERROR_MALLOC;
 								}
-								const int res = URI_FUNC(ResolveAbsolutePathFlag)(absDest);
+								res = URI_FUNC(ResolveAbsolutePathFlag)(absDest);
 								if (res != URI_SUCCESS) {
 									return res;
 								}
