@@ -1,6 +1,7 @@
 ???
 
   * Fixed: ISO C90 warnings (bug #20)
+  * Changed: No longer ship RFC documents (to make things easier for Debian)
   * Soname: 1:16:0
 
 2013-12-20 -- 0.8.0

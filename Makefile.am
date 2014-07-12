@@ -81,10 +81,6 @@ EXTRA_DIST = \
 	doc/Makefile.in \
 	doc/preprocess.sh \
 	doc/release.sh.in \
-	doc/rfc1866.htm \
-	doc/rfc3513.htm \
-	doc/rfc3986.htm \
-	doc/rfc3986_grammar_only.txt \
 	doc/rule_dependencies.dot \
 	doc/rule_dependencies.sh \
 	\
