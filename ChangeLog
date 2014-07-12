@@ -1,4 +1,4 @@
-???
+2014-07-12 -- 0.8.0.1
 
   * Fixed: ISO C90 warnings (bug #20)
   * Changed: No longer ship RFC documents (to make things easier for Debian)
