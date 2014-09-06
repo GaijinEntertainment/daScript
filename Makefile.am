@@ -70,6 +70,8 @@ test_uriparser_test_LDADD = liburiparser.la
 test_uriparser_test_SOURCES = \
 	test/FourSuite.cpp \
 	test/FourSuite.h \
+	test/VersionSuite.cpp \
+	test/VersionSuite.h \
 	test/test.cpp
 endif
 
