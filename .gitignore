@@ -18,3 +18,4 @@ Makefile.in
 /libtool
 /uriparser-*.tar.bz2
 /uriparser-*.zip
+/uriparse
