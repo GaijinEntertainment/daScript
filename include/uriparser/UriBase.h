@@ -155,7 +155,7 @@ typedef struct UriIp6Struct {
 
 
 /**
- * Specifies a line break conversion mode
+ * Specifies a line break conversion mode.
  */
 typedef enum UriBreakConversionEnum {
 	URI_BR_TO_LF, /**< Convert to Unix line breaks ("\\x0a") */
