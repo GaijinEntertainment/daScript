@@ -184,5 +184,14 @@ typedef enum UriNormalizationMaskEnum {
 
 
 
-#endif /* URI_BASE_H */
+/**
+ * Specifies how to resolve %URI references.
+ */
+typedef enum UriResolutionOptionsEnum {
+	URI_RESOLVE_STRICTLY = 0, /**< Full RFC conformance */
+	URI_RESOLVE_SCHEME_NO_AUTHORITY_COMPAT = 1 << 0 /**< Resolves "scheme:path" %URIs in backward compatibility mode */
+} UriResolutionOptions; /**< @copydoc UriResolutionOptionsEnum */
 
+
+
+#endif /* URI_BASE_H */
