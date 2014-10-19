@@ -977,7 +977,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0a%0d", L"\x0a\x0d\x0a\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
 	}
 
-	bool testAddBaseHelper(const wchar_t * base, const wchar_t * rel, const wchar_t * expectedResult) {
+	bool testAddBaseHelper(const wchar_t * base, const wchar_t * rel, const wchar_t * expectedResult, bool backward_compatibility = false) {
 		UriParserStateW stateW;
 
 		// Base
@@ -1012,7 +1012,12 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 		// Transform
 		UriUriW transformedUri;
-		res = uriAddBaseUriW(&transformedUri, &relUri, &baseUri);
+		if (backward_compatibility) {
+			res = uriAddBaseUriExW(&transformedUri, &relUri, &baseUri, URI_RESOLVE_SCHEME_NO_AUTHORITY_COMPAT);
+		} else {
+			res = uriAddBaseUriW(&transformedUri, &relUri, &baseUri);
+		}
+
 		if (res != 0) {
 			uriFreeUriMembersW(&baseUri);
 			uriFreeUriMembersW(&relUri);
@@ -1101,6 +1106,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g#s/./x", L"http://a/b/c/g#s/./x"));
 		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g#s/../x", L"http://a/b/c/g#s/../x"));
 		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http:g"));
+
+		// Backward compatibility (feature request #4, RFC3986 5.4.2)
+		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http://a/b/c/g", true));
 
 		// Bug related to absolutePath flag set despite presence of host
 		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/", L"http://a/"));
