@@ -80,6 +80,29 @@ void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri) {
 
 
 
+/* Compares two text ranges for equal text content */
+int URI_FUNC(CompareRange)(
+		const URI_TYPE(TextRange) * a,
+		const URI_TYPE(TextRange) * b) {
+	int diff;
+
+	/* NOTE: Both NULL means equal! */
+	if ((a == NULL) || (b == NULL)) {
+		return ((a == NULL) && (b == NULL)) ? URI_TRUE : URI_FALSE;
+	}
+
+	diff = ((int)(a->afterLast - a->first) - (int)(b->afterLast - b->first));
+	if (diff > 0) {
+		return 1;
+	} else if (diff < 0) {
+		return -1;
+	}
+
+	return URI_STRNCMP(a->first, b->first, (a->afterLast - a->first));
+}
+
+
+
 /* Properly removes "." and ".." path segments */
 UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 		UriBool relative) {

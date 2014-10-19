@@ -78,6 +78,10 @@ extern const URI_CHAR * const URI_FUNC(ConstParent);
 
 void URI_FUNC(ResetUri)(URI_TYPE(Uri) * uri);
 
+int URI_FUNC(CompareRange)(
+		const URI_TYPE(TextRange) * a,
+		const URI_TYPE(TextRange) * b);
+
 UriBool URI_FUNC(RemoveDotSegmentsAbsolute)(URI_TYPE(Uri) * uri);
 UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri, UriBool relative);
 UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,

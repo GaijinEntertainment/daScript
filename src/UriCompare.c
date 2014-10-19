@@ -69,33 +69,6 @@
 
 
 
-static int URI_FUNC(CompareRange)(const URI_TYPE(TextRange) * a,
-		const URI_TYPE(TextRange) * b);
-
-
-
-/* Compares two text ranges for equal text content */
-static URI_INLINE int URI_FUNC(CompareRange)(const URI_TYPE(TextRange) * a,
-		const URI_TYPE(TextRange) * b) {
-	int diff;
-
-	/* NOTE: Both NULL means equal! */
-	if ((a == NULL) || (b == NULL)) {
-		return ((a == NULL) && (b == NULL)) ? URI_TRUE : URI_FALSE;
-	}
-
-	diff = ((int)(a->afterLast - a->first) - (int)(b->afterLast - b->first));
-	if (diff > 0) {
-		return 1;
-	} else if (diff < 0) {
-		return -1;
-	}
-
-	return URI_STRNCMP(a->first, b->first, (a->afterLast - a->first));
-}
-
-
-
 UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a,
 		const URI_TYPE(Uri) * b) {
 	/* NOTE: Both NULL means equal! */
