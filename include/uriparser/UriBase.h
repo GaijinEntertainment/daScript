@@ -189,7 +189,7 @@ typedef enum UriNormalizationMaskEnum {
  */
 typedef enum UriResolutionOptionsEnum {
 	URI_RESOLVE_STRICTLY = 0, /**< Full RFC conformance */
-	URI_RESOLVE_SCHEME_NO_AUTHORITY_COMPAT = 1 << 0 /**< Resolves "scheme:path" %URIs in backward compatibility mode */
+	URI_RESOLVE_IDENTICAL_SCHEME_COMPAT = 1 << 0 /**< Treat %URI to resolve with identical scheme as having no scheme */
 } UriResolutionOptions; /**< @copydoc UriResolutionOptionsEnum */
 
 

@@ -1013,7 +1013,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		// Transform
 		UriUriW transformedUri;
 		if (backward_compatibility) {
-			res = uriAddBaseUriExW(&transformedUri, &relUri, &baseUri, URI_RESOLVE_SCHEME_NO_AUTHORITY_COMPAT);
+			res = uriAddBaseUriExW(&transformedUri, &relUri, &baseUri, URI_RESOLVE_IDENTICAL_SCHEME_COMPAT);
 		} else {
 			res = uriAddBaseUriW(&transformedUri, &relUri, &baseUri);
 		}
@@ -1108,7 +1108,10 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http:g"));
 
 		// Backward compatibility (feature request #4, RFC3986 5.4.2)
+		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http:g", false));
 		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http://a/b/c/g", true));
+		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g?q#f", L"http://a/b/c/g?q#f", true));
+		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"other:g?q#f", L"other:g?q#f", true));
 
 		// Bug related to absolutePath flag set despite presence of host
 		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/", L"http://a/"));

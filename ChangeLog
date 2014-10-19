@@ -1,6 +1,10 @@
 2014-09-07 -- ???
 
   * Fixed: Sync URI_VER_* preprocessor defines (were at 0.7.6, bug #23)
+  * Added: Function uriAddBaseUriEx allowing to resolve URIs with
+      a scheme identical to that of the base URI to resolve against
+      as if the URI to resolve had no scheme specified, when flag
+      URI_RESOLVE_IDENTICAL_SCHEME_COMPAT is specified (feature request #4)
   * Soname: 1:17:0
 
 2014-07-12 -- 0.8.0.1

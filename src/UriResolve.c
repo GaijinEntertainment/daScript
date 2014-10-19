@@ -166,8 +166,20 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 		return URI_ERROR_ADDBASE_REL_BASE;
 	}
 
+	/* [00/32] 	-- A non-strict parser may ignore a scheme in the reference */
+	/* [00/32] 	-- if it is identical to the base URI's scheme. */
+	/* [00/32] 	if ((not strict) and (R.scheme == Base.scheme)) then */
+	UriBool relSourceHasScheme = (relSource->scheme.first != NULL) ? URI_TRUE : URI_FALSE;
+	if ((options & URI_RESOLVE_IDENTICAL_SCHEME_COMPAT)
+			&& (absBase->scheme.first != NULL)
+			&& (0 == URI_FUNC(CompareRange)(&(absBase->scheme), &(relSource->scheme)))) {
+	/* [00/32] 		undefine(R.scheme); */
+		relSourceHasScheme = URI_FALSE;
+	/* [00/32] 	endif; */
+	}
+
 	/* [01/32]	if defined(R.scheme) then */
-				if (relSource->scheme.first != NULL) {
+				if (relSourceHasScheme) {
 	/* [02/32]		T.scheme = R.scheme; */
 					absDest->scheme = relSource->scheme;
 	/* [03/32]		T.authority = R.authority; */
