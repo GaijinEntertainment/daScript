@@ -36,6 +36,7 @@ using namespace std;
 extern "C" {
 UriBool uri_TESTING_ONLY_ParseIpSixA(const char * text);
 UriBool uri_TESTING_ONLY_ParseIpFourA(const char * text);
+int uriCompareRangeA(const UriTextRangeA * a, const UriTextRangeA * b);
 }
 
 
@@ -103,6 +104,8 @@ public:
 		TEST_ADD(UriSuite::testQueryDissection_Bug3590761)
 		TEST_ADD(UriSuite::testFreeCrash_Bug20080827)
 		TEST_ADD(UriSuite::testParseInvalid_Bug16)
+		TEST_ADD(UriSuite::testRangeComparison)
+		TEST_ADD(UriSuite::testEquals)
 	}
 
 private:
@@ -1749,6 +1752,76 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(stateA.errorCode == URI_ERROR_SYNTAX);  /* failed previously */
 
 		uriFreeUriMembersA(&uriA);
+	}
+
+	void testEqualsHelper(const char * uri_to_test) {
+		UriParserStateA state;
+		UriUriA uriOne;
+		UriUriA uriTwo;
+		state.uri = &uriOne;
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state, uri_to_test));
+		state.uri = &uriTwo;
+		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state, uri_to_test));
+		TEST_ASSERT(URI_TRUE == uriEqualsUriA(&uriOne, &uriTwo));
+		uriFreeUriMembersA(&uriOne);
+		uriFreeUriMembersA(&uriTwo);
+	}
+
+	void testEquals() {
+		testEqualsHelper("http://host");
+		testEqualsHelper("http://host:123");
+		testEqualsHelper("http://foo:bar@host:123");
+		testEqualsHelper("http://foo:bar@host:123/");
+		testEqualsHelper("http://foo:bar@host:123/path");
+		testEqualsHelper("http://foo:bar@host:123/path?query");
+		testEqualsHelper("http://foo:bar@host:123/path?query#fragment");
+
+		testEqualsHelper("path");
+		testEqualsHelper("/path");
+		testEqualsHelper("/path/");
+		testEqualsHelper("//path/");
+		testEqualsHelper("//host");
+		testEqualsHelper("//host:123");
+	}
+
+	void testCompareRangeHelper(const char * a, const char * b, int expected) {
+		UriTextRangeA ra;
+		UriTextRangeA rb;
+
+		if (a) {
+			ra.first = a;
+			ra.afterLast = a + strlen(a);
+		}
+		if (b) {
+			rb.first = b;
+			rb.afterLast = b + strlen(b);
+		}
+
+		const int received = uriCompareRangeA(
+				(a == NULL) ? NULL : &ra,
+				(b == NULL) ? NULL : &rb);
+		if (received != expected) {
+			printf("Comparing <%s> to <%s> yields %d, expected %d.\n",
+					a, b, received, expected);
+		}
+		TEST_ASSERT(received == expected);
+	}
+
+	void testRangeComparison() {
+		testCompareRangeHelper("", "", 0);
+		testCompareRangeHelper("a", "", 1);
+		testCompareRangeHelper("", "a", -1);
+
+		testCompareRangeHelper("a", "a", 0);
+		testCompareRangeHelper("a", "b", -1);
+		testCompareRangeHelper("b", "a", 1);
+
+		testCompareRangeHelper("a", "aa", -1);
+		testCompareRangeHelper("aa", "a", 1);
+
+		testCompareRangeHelper(NULL, "a", -1);
+		testCompareRangeHelper("a", NULL, 1);
+		testCompareRangeHelper(NULL, NULL, 0);
 	}
 };
 
