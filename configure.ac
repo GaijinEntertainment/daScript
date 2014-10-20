@@ -3,6 +3,7 @@ AC_INIT([uriparser], [0.8.0.1])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.10.1 foreign dist-zip dist-bzip2 no-dist-gzip subdir-objects])
 
+AC_CONFIG_MACRO_DIR([m4])
 
 AC_PROG_CC
 AC_PROG_CXX
