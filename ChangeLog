@@ -1,4 +1,4 @@
-2014-09-07 -- ???
+2014-10-20 -- 0.8.1
 
   * Fixed: Sync URI_VER_* preprocessor defines (were at 0.7.6, bug #23)
   * Fixed: Bug in internal function that may flip uriEqualsUri results around
