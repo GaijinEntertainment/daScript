@@ -1819,6 +1819,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testCompareRangeHelper("a", "aa", -1);
 		testCompareRangeHelper("aa", "a", 1);
 
+		// Fixed with 0.8.1:
 		testCompareRangeHelper(NULL, "a", -1);
 		testCompareRangeHelper("a", NULL, 1);
 		testCompareRangeHelper(NULL, NULL, 0);

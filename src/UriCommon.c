@@ -88,7 +88,7 @@ int URI_FUNC(CompareRange)(
 
 	/* NOTE: Both NULL means equal! */
 	if ((a == NULL) || (b == NULL)) {
-		return ((a == NULL) && (b == NULL)) ? URI_TRUE : URI_FALSE;
+		return ((a == NULL) ? 0 : 1) - ((b == NULL) ? 0 : 1);
 	}
 
 	diff = ((int)(a->afterLast - a->first) - (int)(b->afterLast - b->first));
