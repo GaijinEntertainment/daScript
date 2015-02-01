@@ -1,3 +1,10 @@
+???
+
+  * Fixed: Limit uriCompareRange return values to -1/0/1 (bug #24)
+      As a side effect, this fixes the test suite for AArch64.
+      Thanks to Marcin Juszkiewicz for the patch!
+  * Soname: 1:18:0
+
 2014-10-20 -- 0.8.1
 
   * Fixed: Sync URI_VER_* preprocessor defines (were at 0.7.6, bug #23)
