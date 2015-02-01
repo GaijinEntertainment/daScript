@@ -98,7 +98,15 @@ int URI_FUNC(CompareRange)(
 		return -1;
 	}
 
-	return URI_STRNCMP(a->first, b->first, (a->afterLast - a->first));
+	diff = URI_STRNCMP(a->first, b->first, (a->afterLast - a->first));
+
+	if (diff > 0) {
+		return 1;
+	} else if (diff < 0) {
+		return -1;
+	}
+
+	return diff;
 }
 
 
