@@ -54,6 +54,8 @@ TEST_OBJECTS := $(patsubst %.cpp,%.o,$(wildcard $(CPP_TEST_DIR)/*.cpp)) \
 LIBRARY = $(WIN32_DIR)/liburiparser.a
 TEST_SUITE = $(WIN32_DIR)/test.exe
 
+all: $(LIBRARY)
+
 $(LIBRARY): $(URIPARSER_OBJECTS)
 	ar rcs $(LIBRARY) $(URIPARSER_OBJECTS)
 
@@ -66,8 +68,6 @@ $(TEST_SUITE): $(LIBRARY) $(TEST_OBJECTS)
 
 $(TEST_OBJECTS): %.o : %.cpp
 	$(CXX) $(CFLAGS) -I$(INCLUDE_DIR) -c "$<" -o "$@" 
-    
-all: $(LIBRARY)
 
 clean:
 	del $(call dos,$(URIPARSER_OBJECTS)) $(call dos,$(LIBRARY)) \
