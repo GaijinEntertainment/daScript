@@ -67,7 +67,7 @@ $(TEST_SUITE): $(LIBRARY) $(TEST_OBJECTS)
 		-L$(WIN32_DIR) -luriparser -o $(TEST_SUITE)
 
 $(TEST_OBJECTS): %.o : %.cpp
-	$(CXX) $(CFLAGS) -I$(INCLUDE_DIR) -c "$<" -o "$@" 
+	$(CXX) $(CFLAGS) -I$(INCLUDE_DIR) -c "$<" -o "$@"
 
 clean:
 	del $(call dos,$(URIPARSER_OBJECTS)) $(call dos,$(LIBRARY)) \
