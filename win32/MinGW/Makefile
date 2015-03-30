@@ -73,7 +73,11 @@ clean:
 	del $(call dos,$(URIPARSER_OBJECTS)) $(call dos,$(LIBRARY)) \
 		$(call dos,$(TEST_OBJECTS)) $(call dos,$(TEST_SUITE))
 
+clean-unix:
+	$(RM) $(URIPARSER_OBJECTS) $(LIBRARY) \
+		$(TEST_OBJECTS) $(TEST_SUITE)
+
 check: $(TEST_SUITE)
 	$(TEST_SUITE)
 
-.PHONY: all check clean
+.PHONY: all check clean clean-unix
