@@ -41,7 +41,7 @@ CFLAGS = -Wall -Wextra -O3 -s
 
 TEST_DIR = ../../test
 CPP_TEST_DIR = ../CppTest
-LIB_DIR = ../../lib
+LIB_DIR = ../../src
 INCLUDE_DIR = ../../include
 WIN32_DIR = ..
 CC = gcc

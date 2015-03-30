@@ -3,6 +3,9 @@
   * Fixed: Limit uriCompareRange return values to -1/0/1 (bug #24)
       As a side effect, this fixes the test suite for AArch64.
       Thanks to Marcin Juszkiewicz for the patch!
+  * Fixed: MinGW Makefile:
+      LIB_DIR fixed from ../../lib leftover to ../../src (bug #27)
+      Thanks to Dmytro Zagashev for the report!
   * Soname: 1:18:0
 
 2014-10-20 -- 0.8.1
