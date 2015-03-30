@@ -75,3 +75,5 @@ clean:
 
 check: $(TEST_SUITE)
 	$(TEST_SUITE)
+
+.PHONY: all check clean
