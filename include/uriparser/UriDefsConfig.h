@@ -88,10 +88,6 @@
 /* http://predef.sourceforge.net/precomp.html#sec32 */
 /* http://msdn2.microsoft.com/en-us/library/ms882281.aspx */
 # define URI_INLINE __forceinline
-#elif (__GNUC__ >= 4)
-/* GCC C/C++ 4.x.x */
-/* http://predef.sourceforge.net/precomp.html#sec13 */
-# define URI_INLINE __attribute__((always_inline))
 #elif (__STDC_VERSION__ >= 199901L)
 /* C99, "inline" is a keyword */
 # define URI_INLINE inline

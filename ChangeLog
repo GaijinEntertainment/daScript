@@ -6,6 +6,7 @@
   * Fixed: MinGW Makefile:
       LIB_DIR fixed from ../../lib leftover to ../../src (bug #27)
       Thanks to Dmytro Zagashev for the report!
+  * Changed: Leave inlining decisions to GCC
   * Soname: 1:18:0
 
 2014-10-20 -- 0.8.1
