@@ -1,4 +1,4 @@
-???
+2015-04-27 -- 0.8.2
 
   * Fixed: Broken conversion from/to Windows network shares (bug #21)
       Thanks to Adam Gross and Dmitry Repkin!
