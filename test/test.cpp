@@ -1548,6 +1548,8 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 		testFilenameUriConversionHelper(L"abc def", L"abc%20def", FOR_WINDOWS);
 		testFilenameUriConversionHelper(L"abc def", L"abc%20def", FOR_UNIX);
+
+		testFilenameUriConversionHelper(L"\\\\Server01\\user\\docs\\Letter.txt", L"file://Server01/user/docs/Letter.txt", FOR_WINDOWS);
 	}
 
 	void testCrash_FreeUriMembers_Bug20080116() {
