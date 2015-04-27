@@ -1,5 +1,7 @@
 ???
 
+  * Fixed: Broken conversion from/to Windows network shares (bug #21)
+      Thanks to Adam Gross and Dmitry Repkin!
   * Fixed: Limit uriCompareRange return values to -1/0/1 (bug #24)
       As a side effect, this fixes the test suite for AArch64.
       Thanks to Marcin Juszkiewicz for the patch!
