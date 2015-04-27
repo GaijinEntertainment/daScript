@@ -143,19 +143,43 @@ static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 
 static URI_INLINE int URI_FUNC(UriStringToFilename)(const URI_CHAR * uriString,
 		URI_CHAR * filename, UriBool toUnix) {
-	const URI_CHAR * const prefix = toUnix ? _UT("file://") : _UT("file:///");
-	const int prefixLen = toUnix ? 7 : 8;
-
 	if ((uriString == NULL) || (filename == NULL)) {
 		return URI_ERROR_NULL;
 	}
 
 	{
-		const UriBool absolute = (URI_STRNCMP(uriString, prefix, prefixLen) == 0);
-		const int charsToSkip = (absolute ? prefixLen : 0);
+		const UriBool file_two_slashes =
+				URI_STRNCMP(uriString, _UT("file://"), URI_STRLEN(_UT("file://"))) == 0;
+		const UriBool file_three_slashes = file_two_slashes
+				&& (URI_STRNCMP(uriString, _UT("file:///"), URI_STRLEN(_UT("file:///"))) == 0);
+
+		const size_t charsToSkip = file_two_slashes
+				? file_three_slashes
+					? toUnix
+						/* file:///bin/bash */
+						? URI_STRLEN(_UT("file://"))
+						/* file:///E:/Documents%20and%20Settings */
+						: URI_STRLEN(_UT("file:///"))
+					/* file://Server01/Letter.txt */
+					: URI_STRLEN(_UT("file://"))
+				: 0;
 		const size_t charsToCopy = URI_STRLEN(uriString + charsToSkip) + 1;
 
-		memcpy(filename, uriString + charsToSkip, charsToCopy * sizeof(URI_CHAR));
+		const UriBool is_windows_network_with_authority =
+				(toUnix == URI_FALSE)
+				&& file_two_slashes
+				&& ! file_three_slashes;
+
+		URI_CHAR * const unescape_target = is_windows_network_with_authority
+				? (filename + 2)
+				: filename;
+
+		if (is_windows_network_with_authority) {
+			filename[0] = '\\';
+			filename[1] = '\\';
+		}
+
+		memcpy(unescape_target, uriString + charsToSkip, charsToCopy * sizeof(URI_CHAR));
 		URI_FUNC(UnescapeInPlaceEx)(filename, URI_FALSE, URI_BR_DONT_TOUCH);
 	}
 
