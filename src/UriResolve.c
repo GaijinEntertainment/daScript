@@ -172,6 +172,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	UriBool relSourceHasScheme = (relSource->scheme.first != NULL) ? URI_TRUE : URI_FALSE;
 	if ((options & URI_RESOLVE_IDENTICAL_SCHEME_COMPAT)
 			&& (absBase->scheme.first != NULL)
+			&& (relSource->scheme.first != NULL)
 			&& (0 == URI_FUNC(CompareRange)(&(absBase->scheme), &(relSource->scheme)))) {
 	/* [00/32] 		undefine(R.scheme); */
 		relSourceHasScheme = URI_FALSE;
