@@ -1,3 +1,9 @@
+???
+
+  * Fixed: uriCompareRange reported NULL pointer and range of
+      length zero as equal, by mistake.
+      Thanks to Robert Kausch and his Coverity report.
+
 2015-04-27 -- 0.8.2
 
   * Fixed: Broken conversion from/to Windows network shares (bug #21)

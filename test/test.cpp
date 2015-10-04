@@ -1786,22 +1786,29 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testEqualsHelper("//host:123");
 	}
 
-	void testCompareRangeHelper(const char * a, const char * b, int expected) {
+	void testCompareRangeHelper(const char * a, const char * b, int expected, bool avoidNullRange = true) {
 		UriTextRangeA ra;
 		UriTextRangeA rb;
 
 		if (a) {
 			ra.first = a;
 			ra.afterLast = a + strlen(a);
+		} else {
+			ra.first = NULL;
+			ra.afterLast = NULL;
 		}
+
 		if (b) {
 			rb.first = b;
 			rb.afterLast = b + strlen(b);
+		} else {
+			rb.first = NULL;
+			rb.afterLast = NULL;
 		}
 
 		const int received = uriCompareRangeA(
-				(a == NULL) ? NULL : &ra,
-				(b == NULL) ? NULL : &rb);
+				((a == NULL) && avoidNullRange) ? NULL : &ra,
+				((b == NULL) && avoidNullRange) ? NULL : &rb);
 		if (received != expected) {
 			printf("Comparing <%s> to <%s> yields %d, expected %d.\n",
 					a, b, received, expected);
@@ -1825,9 +1832,16 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testCompareRangeHelper(NULL, "a", -1);
 		testCompareRangeHelper("a", NULL, 1);
 		testCompareRangeHelper(NULL, NULL, 0);
+
+		// Fixed with 0.8.3
+		const bool KEEP_NULL_RANGE = false;
+		const bool AVOID_NULL_RANGE = true;
+		testCompareRangeHelper(NULL, "", -1, AVOID_NULL_RANGE);
+		testCompareRangeHelper(NULL, "", -1, KEEP_NULL_RANGE);
+		testCompareRangeHelper("", NULL, 1, AVOID_NULL_RANGE);
+		testCompareRangeHelper("", NULL, 1, KEEP_NULL_RANGE);
 	}
 };
-
 
 
 int main() {
