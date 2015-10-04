@@ -3,6 +3,8 @@
   * Fixed: uriCompareRange reported NULL pointer and range of
       length zero as equal, by mistake.
       Thanks to Robert Kausch and his Coverity report.
+  * Fixed: Use-after-free in out-of-memory code of uriMakeOwner.
+      Thanks to Chris Hills and his Klocwork-based report (bug #28)
   * Soname: 1:19:0
 
 2015-04-27 -- 0.8.2

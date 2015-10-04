@@ -424,9 +424,11 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 	if ((*doneMask & URI_NORMALIZE_PATH) == 0) {
 		while (walker != NULL) {
 			if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(walker->text))) {
-				/* Kill path to one before walker */
+				/* Free allocations done so far and kill path */
+
+				/* Kill path to one before walker (if any) */
 				URI_TYPE(PathSegment) * ranger = uri->pathHead;
-				while (ranger->next != walker) {
+				while (ranger != walker) {
 					URI_TYPE(PathSegment) * const next = ranger->next;
 					if ((ranger->text.first != NULL)
 							&& (ranger->text.afterLast != NULL)
