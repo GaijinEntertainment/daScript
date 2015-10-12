@@ -1,3 +1,8 @@
+???
+
+  * Fixed: Stack overflow on parsing malformed IPv6 addresses with
+      more than eigtht quads.  Thanks to Alexander Klink for the report!
+
 2015-10-04 -- 0.8.3
 
   * Fixed: uriCompareRange reported NULL pointer and range of
