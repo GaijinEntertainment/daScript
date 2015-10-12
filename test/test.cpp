@@ -281,8 +281,11 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		URI_TEST_IP_SIX_FAIL("0:0:0:0:0:0:0:");
 		URI_TEST_IP_SIX_FAIL("0:0:0:0:0:0:0:1.2.3.4");
 
-		// Nine quads
-		URI_TEST_IP_SIX_FAIL("0:0:0:0:0:0:0:0:0");
+		// Nine quads (or more)
+		URI_TEST_IP_SIX_FAIL("1:2:3:4:5:6:7:8:9");
+		URI_TEST_IP_SIX_FAIL("::2:3:4:5:6:7:8:9");
+		URI_TEST_IP_SIX_FAIL("1:2:3:4::6:7:8:9");
+		URI_TEST_IP_SIX_FAIL("1:2:3:4:5:6:7:8::");
 
 		// Invalid IPv4 part
 		URI_TEST_IP_SIX_FAIL("::ffff:001.02.03.004"); // Leading zeros
