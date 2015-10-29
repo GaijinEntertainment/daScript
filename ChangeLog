@@ -1,3 +1,8 @@
+???
+
+  * Fixed: Fix compilation of uriparse(1) on FreeBSD
+      Thanks to Ed Schouten for the patch!
+
 2015-10-12 -- 0.8.4
 
   * Fixed: Stack overflow on parsing malformed IPv6 addresses with
