@@ -2,7 +2,7 @@
  * uriparser - RFC 3986 URI parsing library
  *
  * Copyright (C) 2007, Weijia Song <songweijia@gmail.com>
- * Copyright (C) 2007, Sebastian Pipping <webmaster@hartwork.org>
+ * Copyright (C) 2007, Sebastian Pipping <sebastian@pipping.org>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public

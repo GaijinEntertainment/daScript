@@ -2,7 +2,7 @@
 # To use with mingw32-make.exe while running in cmd.exe
 #
 # Copyright (C) 2008, Michael Anthony Puls II <shadow2531@gmail.com>
-# Copyright (C) 2008, Sebastian Pipping <webmaster@hartwork.org>
+# Copyright (C) 2008, Sebastian Pipping <sebastian@pipping.org>
 # All rights reserved.
 #
 # Redistribution  and use in source and binary forms, with or without
