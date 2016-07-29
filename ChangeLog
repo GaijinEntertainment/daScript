@@ -1,5 +1,8 @@
 ???
 
+  * Fixed: Memleak in out-of-memory clean-up code
+      of URI normalization, related to bug #28.
+      Thanks to Chris Hills for the report!
   * Fixed: Fix compilation of uriparse(1) on FreeBSD
       Thanks to Ed Schouten for the patch!
   * Soname: 1:21:0

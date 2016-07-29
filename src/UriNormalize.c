@@ -434,8 +434,8 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 							&& (ranger->text.afterLast != NULL)
 							&& (ranger->text.afterLast > ranger->text.first)) {
 						free((URI_CHAR *)ranger->text.first);
-						free(ranger);
 					}
+					free(ranger);
 					ranger = next;
 				}
 
