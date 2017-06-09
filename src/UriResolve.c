@@ -152,6 +152,8 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource,
 		const URI_TYPE(Uri) * absBase,
 		UriResolutionOptions options) {
+	UriBool relSourceHasScheme;
+
 	if (absDest == NULL) {
 		return URI_ERROR_NULL;
 	}
@@ -169,7 +171,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [00/32] 	-- A non-strict parser may ignore a scheme in the reference */
 	/* [00/32] 	-- if it is identical to the base URI's scheme. */
 	/* [00/32] 	if ((not strict) and (R.scheme == Base.scheme)) then */
-	UriBool relSourceHasScheme = (relSource->scheme.first != NULL) ? URI_TRUE : URI_FALSE;
+	relSourceHasScheme = (relSource->scheme.first != NULL) ? URI_TRUE : URI_FALSE;
 	if ((options & URI_RESOLVE_IDENTICAL_SCHEME_COMPAT)
 			&& (absBase->scheme.first != NULL)
 			&& (relSource->scheme.first != NULL)
