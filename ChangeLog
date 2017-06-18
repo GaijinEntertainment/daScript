@@ -5,6 +5,8 @@
       Thanks to Chris Hills for the report!
   * Fixed: Fix compilation of uriparse(1) on FreeBSD
       Thanks to Ed Schouten for the patch!
+  * Fixed: Fix C90 compilation error
+      Thanks to Joel Cunningham for the patch!
   * Soname: 1:21:0
 
 2015-10-12 -- 0.8.4
