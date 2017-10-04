@@ -7,6 +7,9 @@
       Thanks to Ed Schouten for the patch!
   * Fixed: Fix C90 compilation errors
       Thanks to Joel Cunningham for the patches!
+  * Fixed: Space requirements documented for uriWindowsFilenameToUriStringA
+      given URI "file://server1/file1.txt" (bug #31)
+      Thanks to threedyd for the report!
   * Soname: 1:21:0
 
 2015-10-12 -- 0.8.4

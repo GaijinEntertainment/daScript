@@ -567,7 +567,7 @@ int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
 
 /**
  * Extracts a Windows filename from a %URI string.
- * The destination buffer must be large enough to hold len(uriString) + 1 - 8
+ * The destination buffer must be large enough to hold len(uriString) + 1 - 5
  * characters in case of an absolute %URI or len(uriString) + 1 in case
  * of a relative %URI.
  *
