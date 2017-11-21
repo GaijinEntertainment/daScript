@@ -2211,9 +2211,9 @@ UriBool URI_FUNC(_TESTING_ONLY_ParseIpSix)(const URI_CHAR * text) {
 	const URI_CHAR * const afterIpSix = text + URI_STRLEN(text);
 	const URI_CHAR * res;
 
-	URI_FUNC(ResetParserState)(&parser);
 	URI_FUNC(ResetUri)(&uri);
 	parser.uri = &uri;
+	URI_FUNC(ResetParserState)(&parser);
 	parser.uri->hostData.ip6 = malloc(1 * sizeof(UriIp6));
 	res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
 	URI_FUNC(FreeUriMembers)(&uri);
