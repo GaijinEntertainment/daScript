@@ -83,7 +83,7 @@ static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 	is_windows_network = (filename[0] == _UT('\\')) && (filename[1] == _UT('\\'));
 	absolute = fromUnix
 			? (filename[0] == _UT('/'))
-			: ((filename[0] != _UT('\0')) && (filename[1] == _UT(':'))
+			: (((filename[0] != _UT('\0')) && (filename[1] == _UT(':')))
 				|| is_windows_network);
 
 	if (absolute) {
