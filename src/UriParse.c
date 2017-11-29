@@ -193,7 +193,7 @@ static UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) * state, co
 static UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first);
 static void URI_FUNC(OnExitPartHelperTwo)(URI_TYPE(ParserState) * state);
 
-static void URI_FUNC(ResetParserState)(URI_TYPE(ParserState) * state);
+static void URI_FUNC(ResetParserStateExceptUri)(URI_TYPE(ParserState) * state);
 
 static UriBool URI_FUNC(PushPathSegment)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 
@@ -2022,7 +2022,7 @@ static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) *
 
 
 
-static URI_INLINE void URI_FUNC(ResetParserState)(URI_TYPE(ParserState) * state) {
+static URI_INLINE void URI_FUNC(ResetParserStateExceptUri)(URI_TYPE(ParserState) * state) {
 	URI_TYPE(Uri) * const uriBackup = state->uri;
 	memset(state, 0, sizeof(URI_TYPE(ParserState)));
 	state->uri = uriBackup;
@@ -2071,7 +2071,7 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state, const URI_CHAR * first, 
 	uri = state->uri;
 
 	/* Init parser */
-	URI_FUNC(ResetParserState)(state);
+	URI_FUNC(ResetParserStateExceptUri)(state);
 	URI_FUNC(ResetUri)(uri);
 
 	/* Parse */
@@ -2213,7 +2213,7 @@ UriBool URI_FUNC(_TESTING_ONLY_ParseIpSix)(const URI_CHAR * text) {
 
 	URI_FUNC(ResetUri)(&uri);
 	parser.uri = &uri;
-	URI_FUNC(ResetParserState)(&parser);
+	URI_FUNC(ResetParserStateExceptUri)(&parser);
 	parser.uri->hostData.ip6 = malloc(1 * sizeof(UriIp6));
 	res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
 	URI_FUNC(FreeUriMembers)(&uri);
