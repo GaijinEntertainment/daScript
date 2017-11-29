@@ -12,6 +12,8 @@
       Thanks to threedyd for the report!
   * Fixed: Compiler warnings
       Thanks to Joel Cunningham for the patches!
+  * Fixed: Stop exporting internal function RemoveBaseUriImpl
+      Thanks to Joel Cunningham for the report!
   * Soname: 1:21:0
 
 2015-10-12 -- 0.8.4
