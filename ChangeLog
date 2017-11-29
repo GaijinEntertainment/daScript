@@ -10,6 +10,8 @@
   * Fixed: Space requirements documented for uriWindowsFilenameToUriStringA
       given URI "file://server1/file1.txt" (bug #31)
       Thanks to threedyd for the report!
+  * Fixed: Compiler warnings
+      Thanks to Joel Cunningham for the patches!
   * Soname: 1:21:0
 
 2015-10-12 -- 0.8.4
