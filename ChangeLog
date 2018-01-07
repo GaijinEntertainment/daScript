@@ -1,5 +1,9 @@
 ???
 
+  * Changed: The uriparser project has moved from SourceForge to GitHub:
+      Code + issue tracker: https://github.com/uriparser/uriparser
+      New website: https://uriparser.github.io/
+      Please update any links of yours, accordingly. Thank you!
   * Fixed: Memleak in out-of-memory clean-up code
       of URI normalization, related to bug #28.
       Thanks to Chris Hills for the report!
