@@ -1,0 +1,22 @@
+# Copyright (C) 2018 Sebastian Pipping <sebastian@pipping.org>
+# Licensed under the MIT license
+
+language: cpp
+dist: trusty
+
+env:
+  global:
+    - CFLAGS='-g -pipe'
+
+addons:
+  apt:
+    packages:
+      - doxygen
+      - graphviz
+      - libcpptest-dev
+
+script:
+  - set -e
+  - ./autogen.sh
+  - ./configure
+  - make distcheck
