@@ -4,7 +4,7 @@ all-local: html/index.html
 html/index.html: $(srcdir)/../include/uriparser/*.h \
 		$(srcdir)/../src/*.c \
 		$(srcdir)/../src/*.h \
-		$(srcdir)/Mainpage
+		$(srcdir)/Mainpage.txt
 	rm -Rf "$(builddir)/html"
 	doxygen Doxyfile
 	touch html/index.html

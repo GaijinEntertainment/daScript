@@ -78,7 +78,7 @@ endif
 
 EXTRA_DIST = \
 	doc/Doxyfile.in \
-	doc/Mainpage \
+	doc/Mainpage.txt \
 	doc/Makefile.am \
 	doc/Makefile.in \
 	doc/preprocess.sh \
