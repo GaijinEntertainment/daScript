@@ -19,6 +19,7 @@
   * Fixed: Stop exporting internal function RemoveBaseUriImpl
       Thanks to Joel Cunningham for the report!
   * Fixed: API documentation front page no longer empty with Doxygen 1.8.13
+  * Fixed: "make -C doc install" fixed for lack of .map files
   * Soname: 1:21:0
 
 2015-10-12 -- 0.8.4

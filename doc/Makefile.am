@@ -24,7 +24,7 @@ distclean-local:
 ## Install doc files
 install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(docdir)/html/search"  ## Didn't work with installdirs-local
-	$(INSTALL_DATA) html/*.css html/*.html html/*.js html/*.map html/*.md5 html/*.png "$(DESTDIR)$(docdir)/html/"
+	$(INSTALL_DATA) html/*.css html/*.html html/*.js html/*.md5 html/*.png "$(DESTDIR)$(docdir)/html/"
 	$(INSTALL_DATA) html/search/* "$(DESTDIR)$(docdir)/html/search/"
 	-$(INSTALL_DATA) *.qch "$(DESTDIR)$(docdir)/"
 
