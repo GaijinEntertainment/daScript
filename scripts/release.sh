@@ -10,15 +10,19 @@ rm -vRf uriparser-* 2> /dev/null
 
 echo
 echo ========== bootstrap ==========
-./autogen.sh --download || exit 1
+./autogen.sh || exit 1
 
 echo
 echo ========== configure ==========
-./configure || exit 1
+configure_flags=(
+    CPPFLAGS=-D_GLIBCXX_USE_CXX11_ABI=0  # to address cpptest link errors
+    --enable-doc
+)
+./configure "${configure_flags[@]}" || exit 1
 
 echo
 echo ========== make distcheck ==========
-make -j10 DISTCHECK_CONFIGURE_FLAGS='--enable-doc' distcheck || exit 1
+make -j10 DISTCHECK_CONFIGURE_FLAGS="${configure_flags[*]}" distcheck || exit 1
 
 echo
 echo ========== package docs ==========
