@@ -17,7 +17,6 @@ cp \
 	html/*.css \
 	html/*.html \
 	html/*.js \
-	html/*.map \
 	html/*.md5 \
 	html/*.png \
 	\
