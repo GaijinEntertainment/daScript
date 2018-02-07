@@ -2,7 +2,7 @@
 
 # .qhp output
 GENERATE_QHP = yes
-QHP_NAMESPACE = "net.sourceforge.uriparser"
+QHP_NAMESPACE = "io.github.uriparser"
 QHP_VIRTUAL_FOLDER = "uriparser-@VERSION@"
 
 # .qch output

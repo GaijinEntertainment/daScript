@@ -7,6 +7,6 @@ Name: liburiparser
 Description: URI parsing and handling library
 
 Version: @VERSION@
-URL: http://uriparser.sourceforge.net/
+URL: https://uriparser.github.io/
 Libs: -L${libdir} -luriparser
 Cflags: -I${includedir}
