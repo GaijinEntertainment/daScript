@@ -5,14 +5,14 @@
       New website: https://uriparser.github.io/
       Please update any links of yours, accordingly. Thank you!
   * Fixed: Memleak in out-of-memory clean-up code
-      of URI normalization, related to bug #28.
+      of URI normalization, related to SF.net bug #28.
       Thanks to Chris Hills for the report!
   * Fixed: Fix compilation of uriparse(1) on FreeBSD
       Thanks to Ed Schouten for the patch!
   * Fixed: Fix C90 compilation errors
       Thanks to Joel Cunningham for the patches!
   * Fixed: Space requirements documented for uriWindowsFilenameToUriStringA
-      given URI "file://server1/file1.txt" (bug #31)
+      given URI "file://server1/file1.txt" (SF.net bug #31)
       Thanks to threedyd for the report!
   * Fixed: Compiler warnings
       Thanks to Joel Cunningham for the patches!
@@ -34,37 +34,38 @@
       length zero as equal, by mistake.
       Thanks to Robert Kausch and his Coverity report.
   * Fixed: Use-after-free in out-of-memory code of uriMakeOwner.
-      Thanks to Chris Hills and his Klocwork-based report (bug #28)
+      Thanks to Chris Hills and his Klocwork-based report (SF.net bug #28)
   * Soname: 1:19:0
 
 2015-04-27 -- 0.8.2
 
-  * Fixed: Broken conversion from/to Windows network shares (bug #21)
+  * Fixed: Broken conversion from/to Windows network shares (SF.net bug #21)
       Thanks to Adam Gross and Dmitry Repkin!
-  * Fixed: Limit uriCompareRange return values to -1/0/1 (bug #24)
+  * Fixed: Limit uriCompareRange return values to -1/0/1 (SF.net bug #24)
       As a side effect, this fixes the test suite for AArch64.
       Thanks to Marcin Juszkiewicz for the patch!
   * Fixed: MinGW Makefile:
-      LIB_DIR fixed from ../../lib leftover to ../../src (bug #27)
+      LIB_DIR fixed from ../../lib leftover to ../../src (SF.net bug #27)
       Thanks to Dmytro Zagashev for the report!
-  * Fixed: Add missing NULL checks to UriStringToFilename (bug #25)
+  * Fixed: Add missing NULL checks to UriStringToFilename (SF.net bug #25)
       Thanks to Jerome Custodio for the report!
   * Changed: Leave inlining decisions to GCC
   * Soname: 1:18:0
 
 2014-10-20 -- 0.8.1
 
-  * Fixed: Sync URI_VER_* preprocessor defines (were at 0.7.6, bug #23)
+  * Fixed: Sync URI_VER_* preprocessor defines (were at 0.7.6, SF.net bug #23)
   * Fixed: Bug in internal function that may flip uriEqualsUri results around
   * Added: Function uriAddBaseUriEx allowing to resolve URIs with
       a scheme identical to that of the base URI to resolve against
       as if the URI to resolve had no scheme specified, when flag
-      URI_RESOLVE_IDENTICAL_SCHEME_COMPAT is specified (feature request #4)
+      URI_RESOLVE_IDENTICAL_SCHEME_COMPAT is specified
+      (SF.net feature request #4)
   * Soname: 1:17:0
 
 2014-07-12 -- 0.8.0.1
 
-  * Fixed: ISO C90 warnings (bug #20)
+  * Fixed: ISO C90 warnings (SF.net bug #20)
   * Changed: No longer ship RFC documents (to make things easier for Debian)
   * Soname: 1:16:0
 
@@ -79,32 +80,32 @@
       Now the absolutePath flag is set to URI_FALSE and an empty
       segment is added as necessary
   * Fixed: .errorCode could end up unset, previously
-      Thanks to Radu Hociung for the patch!  (bug #16)
+      Thanks to Radu Hociung for the patch!  (SF.net bug #16)
   * Fixed: Resolve use of non-POSIX "sed -r" used when building
-     documentation  (bug #18)
+     documentation  (SF.net bug #18)
      Thanks to Ryan Schmidt for reporting!
   * Fixed: Build DLL with -no-undefined on Windows
-      Thanks to Michel Zou for the patch!  (bug #19)
+      Thanks to Michel Zou for the patch!  (SF.net bug #19)
   * Added: Command line tool "uriparse"
-      Thanks to Radu Hociung for coding!  (feature request #3)
+      Thanks to Radu Hociung for coding!  (SF.net feature request #3)
   * Soname: 1:15:0
 
 2013-08-24 -- 0.7.9
 
   * Fixed: Error position ended up as NULL for some syntax errors.
-      Thanks to Daniel Solano Gómez for the patch!  (bug #14)
+      Thanks to Daniel Solano Gómez for the patch!  (SF.net bug #14)
   * Soname: 1:14:0
 
 2013-05-13 -- 0.7.8
 
-  * Fixed: Fix dissection of query string "q=hello&x=&y=" (bug #12)
+  * Fixed: Fix dissection of query string "q=hello&x=&y=" (SF.net bug #12)
       Thanks to Marc Novakowski for reporting!
   * Soname: 1:13:0
 
 2012-04-05 -- 0.7.7
 
   * Fixed: Fix rejection of some valid characters for userinfo
-      section, e.g. "http://%2Fuser:%2F21@host/" (bug #11)
+      section, e.g. "http://%2Fuser:%2F21@host/" (SF.net bug #11)
   * Fixed: Fix rejection of valid double colon in userinfo
       section, e.g. "http://::@host/"
   * Soname: 1:12:0
@@ -122,7 +123,7 @@
       be included by statements like #include <uriparser/....> .
       Thanks to Philip de Nier for reporting!
   * Fixed: Compilation in context of Eclipse + Cygwin + wchar_t
-      (bug #10)
+      (SF.net bug #10)
       Thanks to Gary Mazzaferro for reporting!
   * Fixed: Selection of supported character widths at build
       time: <char *> or <wchar_t *> or both
@@ -148,11 +149,11 @@
 2008-12-23 -- 0.7.4
 
   * Fixed: Null pointer de-referencing when dissecting query
-      strings starting with "&" right after "?" (bug #7).
+      strings starting with "&" right after "?" (SF.net bug #7).
       Thanks to Harvey Vrsalovic for reporting!
-  * Fixed: Memory leak in uriFreeQueryList function (bug #6)
+  * Fixed: Memory leak in uriFreeQueryList function (SF.net bug #6)
       Thanks to Daniel Chapiesky for reporting!
-  * Fixed: Memory leak in uriNormalizeSyntax(Ex) functions (bug #6)
+  * Fixed: Memory leak in uriNormalizeSyntax(Ex) functions (SF.net bug #6)
       Thanks to Daniel Chapiesky for reporting!
   * Improved: Nested configure hacks resolved
   * Soname: 1:9:0
@@ -163,7 +164,7 @@
       Thanks to Sezai Tekin for reporting!
   * Fixed: uriparser now builds on Cygwin
   * Fixed: Now shipping gnulib's config.guess from HEAD
-      which is suitable for Haiku (bug #5)
+      which is suitable for Haiku (SF.net bug #5)
   * Changed: swprintf requirement resolved
   * Changed: Build system changes:
       - configure option --enable-doc added
@@ -189,11 +190,11 @@
 2008-04-27 -- 0.7.1
 
   * Fixed: Bogus syntax error when parsing URIs with port-like
-      passwords, e.g. "http://user:21@host/" (bug #1)
+      passwords, e.g. "http://user:21@host/" (SF.net bug #1)
       Thanks to Friedrich Delgado Friedrichs for reporting!
   * Fixed: Parser did not handle trailing slashes correctly in some cases,
       which also made the structures produced from parsing "http://e.com/"
-      and "http://e.com" indistinguishable. (bug #2)
+      and "http://e.com" indistinguishable. (SF.net bug #2)
       Thanks to Edward Z. Yang for reporting!
 
 2008-04-04 -- 0.7.0
