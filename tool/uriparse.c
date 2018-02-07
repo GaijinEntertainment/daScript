@@ -115,6 +115,10 @@ int main(int argc, char *argv[]) {
 				const char * const absolutePathLabel = "absolutePath: ";
 				printf("%s%s\n", absolutePathLabel,
 						(uri.absolutePath == URI_TRUE) ? "true" : "false");
+				if (uri.hostText.first != NULL) {
+					printf("%*s%s\n", (int)strlen(absolutePathLabel), "",
+							"(always false for URIs with host)");
+				}
 			}
 		}
 		printf("\n");

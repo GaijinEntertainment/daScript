@@ -157,7 +157,8 @@ typedef struct URI_TYPE(UriStruct) {
 	URI_TYPE(PathSegment) * pathTail; /**< Tail of the list behind pathHead */
 	URI_TYPE(TextRange) query; /**< Query without leading "?" */
 	URI_TYPE(TextRange) fragment; /**< Query without leading "#" */
-	UriBool absolutePath; /**< Absolute path flag, distincting "a" and "/a" */
+	UriBool absolutePath; /**< Absolute path flag, distincting "a" and "/a";
+								always <c>URI_FALSE</c> for URIs with host */
 	UriBool owner; /**< Memory owner flag */
 
 	void * reserved; /**< Reserved to the parser */
