@@ -111,7 +111,11 @@ int main(int argc, char *argv[]) {
 			if (uri.fragment.first) {
 				printf("fragment:     %.*s\n", RANGE(uri.fragment));
 			}
-			printf("absolutePath: %s\n", (uri.absolutePath == URI_TRUE) ? "true" : "false");
+			{
+				const char * const absolutePathLabel = "absolutePath: ";
+				printf("%s%s\n", absolutePathLabel,
+						(uri.absolutePath == URI_TRUE) ? "true" : "false");
+			}
 		}
 		printf("\n");
 
