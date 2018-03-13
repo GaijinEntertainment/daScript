@@ -150,7 +150,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 1) URI = scheme ":" hier-part ...   |         |         |         |
    1) "//" authority path-abempty   | "s://"  | true    |   false |   false
                                     | "s:///" | true    |   false | true
-                                    | "s://a" | true    |   false | false
+                                    | "s://a" | true    |   false |   false
                                     | "s://a/"| true    |   false | true
    2) path-absolute                 | "s:/"   |   false | true    |   false
    3) path-rootless                 | "s:a"   |   false |   false |   false
