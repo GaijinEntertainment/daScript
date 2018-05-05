@@ -105,7 +105,7 @@ static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest,
 		}
 		return URI_ERROR_TOSTRING_TOO_LONG;
 	}
-	maxChars--; /* So we don't have to substract 1 for '\0' all the time */
+	maxChars--; /* So we don't have to subtract 1 for '\0' all the time */
 
 	/* [01/19]	result = "" */
 				if (dest != NULL) {
