@@ -177,7 +177,7 @@ typedef struct URI_TYPE(UriStruct) {
  */
 typedef struct URI_TYPE(ParserStateStruct) {
 	URI_TYPE(Uri) * uri; /**< Plug in the %URI structure to be filled while parsing here */
-	int errorCode; /**< Code identifying the occured error */
+	int errorCode; /**< Code identifying the error which occurred */
 	const URI_CHAR * errorPos; /**< Pointer to position in case of a syntax error */
 
 	void * reserved; /**< Reserved to the parser */
@@ -258,8 +258,8 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * @param inFirst           <b>IN</b>: Pointer to first character of the input text
  * @param inAfterLast       <b>IN</b>: Pointer after the last character of the input text
  * @param out               <b>OUT</b>: Encoded text destination
- * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
- * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
+ * @param spaceToPlus       <b>IN</b>: Whether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Whether to convert CR and LF to CR-LF or not.
  * @return                  Position of terminator in output string
  *
  * @see uriEscapeA
@@ -282,8 +282,8 @@ URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
  *
  * @param in                <b>IN</b>: Text source
  * @param out               <b>OUT</b>: Encoded text destination
- * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
- * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
+ * @param spaceToPlus       <b>IN</b>: Whether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Whether to convert CR and LF to CR-LF or not.
  * @return                  Position of terminator in output string
  *
  * @see uriEscapeExA
@@ -612,8 +612,8 @@ int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
  *
  * @param queryList         <b>IN</b>: Query list to measure
  * @param charsRequired     <b>OUT</b>: Length of the string representation in characters <b>excluding</b> terminator
- * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
- * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
+ * @param spaceToPlus       <b>IN</b>: Whether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Whether to convert CR and LF to CR-LF or not.
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryCharsRequiredA
@@ -656,8 +656,8 @@ int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
  * @param queryList         <b>IN</b>: Query list to convert
  * @param maxChars          <b>IN</b>: Maximum number of characters to copy <b>including</b> terminator
  * @param charsWritten      <b>OUT</b>: Number of characters written, can be lower than maxChars even if the query list is too long!
- * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
- * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
+ * @param spaceToPlus       <b>IN</b>: Whether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Whether to convert CR and LF to CR-LF or not.
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryA
@@ -700,8 +700,8 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
  *
  * @param dest              <b>OUT</b>: Output destination
  * @param queryList         <b>IN</b>: Query list to convert
- * @param spaceToPlus       <b>IN</b>: Wether to convert ' ' to '+' or not
- * @param normalizeBreaks   <b>IN</b>: Wether to convert CR and LF to CR-LF or not.
+ * @param spaceToPlus       <b>IN</b>: Whether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Whether to convert CR and LF to CR-LF or not.
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryMallocA
