@@ -1,3 +1,8 @@
+????-??-?? -- ?????
+
+  * Fixed: Documentation typos (GitHub #10)
+      Thanks to Graham Percival!
+
 2018-02-07 -- 0.8.5
 
   * Changed: The uriparser project has moved from SourceForge to GitHub:
