@@ -40,10 +40,10 @@
  * 	uriFreeUriMembersA(&uri);
  * @endcode
  *
- * While the URI object (::UriUriA) holds information about the recogized
+ * While the URI object (::UriUriA) holds information about the recognized
  * parts of the given URI string, the parser state object (::UriParserStateA)
  * keeps error code and position. This information does not belong to
- * the URI itself, which is why there are two seperate objects.
+ * the URI itself, which is why there are two separate objects.
  *
  * You can reuse parser state objects for parsing several URIs like this:
  *
@@ -74,7 +74,7 @@
  *
  * @subsection recomposition Recomposing URIs (from object back to string)
  * According to <a href="http://tools.ietf.org/html/rfc3986#section-5.3" target="_blank">RFC 3986</a>
- * glueing parts of a URI together to form a string is called recomposition.
+ * gluing parts of a URI together to form a string is called recomposition.
  * Before we can recompose a URI object we have to know how much
  * space the resulting string will take:
  *
@@ -141,7 +141,7 @@
  *
  * @subsection shortening Creating References
  * Reference Creation is the inverse process of Reference Resolution: A common base URI
- * is &quot;substracted&quot; from an absolute URI to make a (relative) reference.
+ * is &quot;subtracted&quot; from an absolute URI to make a (relative) reference.
  * If the base URI is not common the remaining URI will still be absolute, i.e. will
  * carry a scheme
  *
@@ -207,7 +207,7 @@
  *
  *
  * @subsection normalization Normalizing URIs
- * Sometimes we come accross unnecessarily long URIs like &quot;http<b></b>://example.org/one/two/../../one&quot;.
+ * Sometimes we come across unnecessarily long URIs like &quot;http<b></b>://example.org/one/two/../../one&quot;.
  * The algorithm we can use to shorten this URI down to &quot;http<b></b>://example.org/one&quot; is called
  * <a href="http://tools.ietf.org/html/rfc3986#section-6.2.2" target="_blank">Syntax-Based Normalization</a>.
  * Note that normalizing a URI does more than just &quot;stripping dot segments&quot;. Please have a look at
@@ -215,7 +215,7 @@
  * for the full description.
  *
  * As we asked uriToStringCharsRequiredA() for the required space when converting
- * a URI object back to a sring, we can ask uriNormalizeSyntaxMaskRequiredA() for
+ * a URI object back to a string, we can ask uriNormalizeSyntaxMaskRequiredA() for
  * the parts of a URI that require normalization and then pass this normalization
  * mask to uriNormalizeSyntaxExA():
  *
