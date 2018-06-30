@@ -1506,8 +1506,12 @@ Rule                                | Example | hostSet | absPath | emptySeg
 	}
 
 	void testFilenameUriConversionHelper(const wchar_t * filename,
-			const wchar_t * uriString, bool forUnix) {
+			const wchar_t * uriString, bool forUnix,
+			const wchar_t * expectedUriString = NULL) {
 		const int prefixLen = forUnix ? 7 : 8;
+		if (! expectedUriString) {
+			expectedUriString = uriString;
+		}
 
 		// Filename to URI string
 		const size_t uriBufferLen = prefixLen + 3 * wcslen(filename) + 1;
@@ -1518,9 +1522,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 			uriWindowsFilenameToUriStringW(filename, uriBuffer);
 		}
 #ifdef HAVE_WPRINTF
-		// wprintf(L"1 [%s][%s]\n", uriBuffer, uriString);
+		// wprintf(L"1 [%s][%s]\n", uriBuffer, expectedUriString);
 #endif
-		TEST_ASSERT(!wcscmp(uriBuffer, uriString));
+		TEST_ASSERT(!wcscmp(uriBuffer, expectedUriString));
 		delete [] uriBuffer;
 
 		// URI string to filename
