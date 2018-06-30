@@ -148,13 +148,13 @@ static URI_INLINE int URI_FUNC(UriStringToFilename)(const URI_CHAR * uriString,
 	}
 
 	{
-		const UriBool file_two_slashes =
+		const UriBool file_two_or_more_slashes =
 				URI_STRNCMP(uriString, _UT("file://"), URI_STRLEN(_UT("file://"))) == 0;
-		const UriBool file_three_slashes = file_two_slashes
+		const UriBool file_three_or_more_slashes = file_two_or_more_slashes
 				&& (URI_STRNCMP(uriString, _UT("file:///"), URI_STRLEN(_UT("file:///"))) == 0);
 
-		const size_t charsToSkip = file_two_slashes
-				? file_three_slashes
+		const size_t charsToSkip = file_two_or_more_slashes
+				? file_three_or_more_slashes
 					? toUnix
 						/* file:///bin/bash */
 						? URI_STRLEN(_UT("file://"))
@@ -167,8 +167,8 @@ static URI_INLINE int URI_FUNC(UriStringToFilename)(const URI_CHAR * uriString,
 
 		const UriBool is_windows_network_with_authority =
 				(toUnix == URI_FALSE)
-				&& file_two_slashes
-				&& ! file_three_slashes;
+				&& file_two_or_more_slashes
+				&& ! file_three_or_more_slashes;
 
 		URI_CHAR * const unescape_target = is_windows_network_with_authority
 				? (filename + 2)
