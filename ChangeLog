@@ -2,6 +2,10 @@
 
   * Fixed: Documentation typos (GitHub #10, #11)
       Thanks to Graham Percival!
+  * Fixed: Make UriStringToUnixFilename and UriStringToWindowsFilename
+      support minimal representation a la RFC 8089, e.g. file:/bin/bash
+      (compare to file:///bin/bash with three slashes) (GitHub #12)
+      Thanks to Zane van Iperen for the report!
 
 2018-02-07 -- 0.8.5
 
