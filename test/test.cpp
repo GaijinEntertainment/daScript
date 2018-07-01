@@ -1506,8 +1506,12 @@ Rule                                | Example | hostSet | absPath | emptySeg
 	}
 
 	void testFilenameUriConversionHelper(const wchar_t * filename,
-			const wchar_t * uriString, bool forUnix) {
+			const wchar_t * uriString, bool forUnix,
+			const wchar_t * expectedUriString = NULL) {
 		const int prefixLen = forUnix ? 7 : 8;
+		if (! expectedUriString) {
+			expectedUriString = uriString;
+		}
 
 		// Filename to URI string
 		const size_t uriBufferLen = prefixLen + 3 * wcslen(filename) + 1;
@@ -1518,9 +1522,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 			uriWindowsFilenameToUriStringW(filename, uriBuffer);
 		}
 #ifdef HAVE_WPRINTF
-		// wprintf(L"1 [%s][%s]\n", uriBuffer, uriString);
+		// wprintf(L"1 [%s][%s]\n", uriBuffer, expectedUriString);
 #endif
-		TEST_ASSERT(!wcscmp(uriBuffer, uriString));
+		TEST_ASSERT(!wcscmp(uriBuffer, expectedUriString));
 		delete [] uriBuffer;
 
 		// URI string to filename
@@ -1542,9 +1546,12 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		const bool FOR_UNIX = true;
 		const bool FOR_WINDOWS = false;
 		testFilenameUriConversionHelper(L"/bin/bash", L"file:///bin/bash", FOR_UNIX);
+		testFilenameUriConversionHelper(L"/bin/bash", L"file:/bin/bash", FOR_UNIX, L"file:///bin/bash");
 		testFilenameUriConversionHelper(L"./configure", L"./configure", FOR_UNIX);
 
 		testFilenameUriConversionHelper(L"E:\\Documents and Settings", L"file:///E:/Documents%20and%20Settings", FOR_WINDOWS);
+		testFilenameUriConversionHelper(L"c:\\path\\to\\file.txt", L"file:c:/path/to/file.txt", FOR_WINDOWS, L"file:///c:/path/to/file.txt");
+
 		testFilenameUriConversionHelper(L".\\Readme.txt", L"./Readme.txt", FOR_WINDOWS);
 
 		testFilenameUriConversionHelper(L"index.htm", L"index.htm", FOR_WINDOWS);
