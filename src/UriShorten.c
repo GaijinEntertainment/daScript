@@ -111,22 +111,12 @@ static URI_INLINE UriBool URI_FUNC(EqualsAuthority)(const URI_TYPE(Uri) * first,
 	/* IPvFuture */
 	if (first->hostData.ipFuture.first != NULL) {
 		return ((second->hostData.ipFuture.first != NULL)
-				&& !URI_STRNCMP(first->hostData.ipFuture.first,
-					second->hostData.ipFuture.first,
-					first->hostData.ipFuture.afterLast
-					- first->hostData.ipFuture.first))
-						? URI_TRUE : URI_FALSE;
+				&& !URI_FUNC(CompareRange)(&first->hostData.ipFuture,
+					&second->hostData.ipFuture)) ? URI_TRUE : URI_FALSE;
 	}
 
-	if (first->hostText.first != NULL) {
-		return ((second->hostText.first != NULL)
-				&& !URI_STRNCMP(first->hostText.first,
-					second->hostText.first,
-					first->hostText.afterLast
-					- first->hostText.first)) ? URI_TRUE : URI_FALSE;
-	}
-
-	return (second->hostText.first == NULL);
+	return !URI_FUNC(CompareRange)(&first->hostText, &second->hostText)
+			? URI_TRUE : URI_FALSE;
 }
 
 
@@ -155,8 +145,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 	}
 
 	/* [01/50]	if (A.scheme != Base.scheme) then */
-				if (URI_STRNCMP(absSource->scheme.first, absBase->scheme.first,
-						absSource->scheme.afterLast - absSource->scheme.first)) {
+				if (URI_FUNC(CompareRange)(&absSource->scheme, &absBase->scheme)) {
 	/* [02/50]	   T.scheme    = A.scheme; */
 					dest->scheme = absSource->scheme;
 	/* [03/50]	   T.authority = A.authority; */
@@ -216,8 +205,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 							dest->absolutePath = URI_FALSE;
 	/* [22/50]	         while (first(A.path) == first(Base.path)) do */
 							while ((sourceSeg != NULL) && (baseSeg != NULL)
-									&& !URI_STRNCMP(sourceSeg->text.first, baseSeg->text.first,
-									sourceSeg->text.afterLast - sourceSeg->text.first)
+									&& !URI_FUNC(CompareRange)(&sourceSeg->text, &baseSeg->text)
 									&& !((sourceSeg->text.first == sourceSeg->text.afterLast)
 										&& ((sourceSeg->next == NULL) != (baseSeg->next == NULL)))) {
 	/* [23/50]	            A.path++; */
