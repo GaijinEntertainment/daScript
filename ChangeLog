@@ -1,11 +1,17 @@
 ????-??-?? -- ?????
 
-  * Fixed: Documentation typos (GitHub #10, #11)
-      Thanks to Graham Percival!
+  * Fixed: Fix uriRemoveBaseUri for case where scheme, host name,
+      IPvFuture address or path segments of the source address were
+      string prefixes of the related counterpart in the base URI.
+      Thanks to Yang Yu for the patch! (GitHub #19, #20)
   * Fixed: Make UriStringToUnixFilename and UriStringToWindowsFilename
       support minimal representation a la RFC 8089, e.g. file:/bin/bash
       (compare to file:///bin/bash with three slashes) (GitHub #12)
       Thanks to Zane van Iperen for the report!
+  * Fixed: Documentation typos (GitHub #10, #11)
+      Thanks to Graham Percival!
+  * Improved: Made API docs of uriRemoveBaseUri more clear
+      (related to GitHub #19)
 
 2018-02-07 -- 0.8.5
 

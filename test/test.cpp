@@ -23,6 +23,7 @@
 #include <cpptest.h>
 #include <memory>
 #include <stdio.h>
+#include <stdlib.h>
 #include <wchar.h>
 
 #include "FourSuite.h"
@@ -106,6 +107,7 @@ public:
 		TEST_ADD(UriSuite::testFreeCrash_Bug20080827)
 		TEST_ADD(UriSuite::testParseInvalid_Bug16)
 		TEST_ADD(UriSuite::testRangeComparison)
+		TEST_ADD(UriSuite::testRangeComparison_RemoveBaseUri_Issue19)
 		TEST_ADD(UriSuite::testEquals)
 	}
 
@@ -1871,6 +1873,81 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testCompareRangeHelper(NULL, "", -1, KEEP_NULL_RANGE);
 		testCompareRangeHelper("", NULL, 1, AVOID_NULL_RANGE);
 		testCompareRangeHelper("", NULL, 1, KEEP_NULL_RANGE);
+	}
+
+	void testRemoveBaseUriHelper(const char * expected,
+								const char * absSourceStr,
+								const char * absBaseStr) {
+		UriParserStateA state;
+		UriUriA absSource;
+		UriUriA absBase;
+		UriUriA dest;
+
+		state.uri = &absSource;
+		TEST_ASSERT(uriParseUriA(&state, absSourceStr) == URI_SUCCESS);
+
+		state.uri = &absBase;
+		TEST_ASSERT(uriParseUriA(&state, absBaseStr) == URI_SUCCESS);
+
+		TEST_ASSERT(uriRemoveBaseUriA(&dest, &absSource, &absBase, URI_FALSE)
+				== URI_SUCCESS);
+
+		int size = 0;
+		TEST_ASSERT(uriToStringCharsRequiredA(&dest, &size) == URI_SUCCESS);
+		char * const buffer = (char *)malloc(size + 1);
+		TEST_ASSERT(buffer);
+		TEST_ASSERT(uriToStringA(buffer, &dest, size + 1, &size)
+															== URI_SUCCESS);
+		if (strcmp(buffer, expected)) {
+			printf("Expected \"%s\" but got \"%s\"\n", expected, buffer);
+			TEST_ASSERT(0);
+		}
+		free(buffer);
+	}
+
+	void testRangeComparison_RemoveBaseUri_Issue19() {
+		// scheme
+		testRemoveBaseUriHelper("scheme://host/source",
+								"scheme://host/source",
+								"schemelonger://host/base");
+		testRemoveBaseUriHelper("schemelonger://host/source",
+								"schemelonger://host/source",
+								"scheme://host/base");
+
+		// hostText
+		testRemoveBaseUriHelper("//host/source",
+								"http://host/source",
+								"http://hostlonger/base");
+		testRemoveBaseUriHelper("//hostlonger/source",
+								"http://hostlonger/source",
+								"http://host/base");
+
+		// hostData.ipFuture
+		testRemoveBaseUriHelper("//[v7.host]/source",
+								"http://[v7.host]/source",
+								"http://[v7.hostlonger]/base");
+		testRemoveBaseUriHelper("//[v7.hostlonger]/source",
+								"http://[v7.hostlonger]/source",
+								"http://host/base");
+
+		// path
+		testRemoveBaseUriHelper("path1",
+								"http://host/path1",
+								"http://host/path111");
+		testRemoveBaseUriHelper("../path1/path2",
+								"http://host/path1/path2",
+								"http://host/path111/path222");
+		testRemoveBaseUriHelper("path111",
+								"http://host/path111",
+								"http://host/path1");
+		testRemoveBaseUriHelper("../path111/path222",
+								"http://host/path111/path222",
+								"http://host/path1/path2");
+
+		// Exact issue #19
+		testRemoveBaseUriHelper("//example/x/abc",
+								"http://example/x/abc",
+								"http://example2/x/y/z");
 	}
 };
 
