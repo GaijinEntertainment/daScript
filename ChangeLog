@@ -10,6 +10,8 @@
       Thanks to Zane van Iperen for the report!
   * Fixed: Documentation typos (GitHub #10, #11)
       Thanks to Graham Percival!
+  * Improved: Made API docs of uriRemoveBaseUri more clear
+      (related to GitHub #19)
 
 2018-02-07 -- 0.8.5
 
