@@ -9,7 +9,7 @@
       Thanks to Yang Yu for the patch! (GitHub #19, #20)
   * Fixed: Make UriStringToUnixFilename and UriStringToWindowsFilename
       support minimal representation a la RFC 8089, e.g. file:/bin/bash
-      (compare to file:///bin/bash with three slashes) (GitHub #12)
+      (compare to file:///bin/bash with three slashes) (GitHub #12, #14)
       Thanks to Zane van Iperen for the report!
   * Fixed: Documentation typos (GitHub #10, #11)
       Thanks to Graham Percival!
