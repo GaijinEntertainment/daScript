@@ -941,6 +941,7 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
  */
 static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
 	if (first >= afterLast) {
+		state->uri->hostText.afterLast = afterLast; /* HOST END */
 		return afterLast;
 	}
 

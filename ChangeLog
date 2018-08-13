@@ -1,5 +1,8 @@
 ????-??-?? -- ?????
 
+  * Fixed: Bad/NULL .hostText.afterLast when parsing certain rather pathologic
+      but well-formed URIs with empty host (e.g. "//:%aa@") (GitHub #15)
+      Thanks to Kurt Schwehr for the report!
   * Fixed: Fix uriRemoveBaseUri for case where scheme, host name,
       IPvFuture address or path segments of the source address were
       string prefixes of the related counterpart in the base URI.
