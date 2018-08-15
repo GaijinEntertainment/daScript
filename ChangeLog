@@ -15,6 +15,7 @@
       Thanks to Graham Percival!
   * Improved: Made API docs of uriRemoveBaseUri more clear
       (related to GitHub #19)
+  * Soname: 1:22:0
 
 2018-02-07 -- 0.8.5
 
