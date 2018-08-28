@@ -15,7 +15,13 @@ namespace yzg
         {   Type::tVoid,        "void"  },
         {   Type::tBool,        "bool"  },
         {   Type::tInt,         "int"   },
+        {   Type::tInt2,        "int2"  },
+        {   Type::tInt3,        "int3"  },
+        {   Type::tInt4,        "int4"  },
         {   Type::tUInt,        "uint"  },
+        {   Type::tUInt2,       "uint2" },
+        {   Type::tUInt3,       "uint3" },
+        {   Type::tUInt4,       "uint4" },
         {   Type::tFloat,       "float" },
         {   Type::tFloat2,      "float2"},
         {   Type::tFloat3,      "float3"},
@@ -32,6 +38,8 @@ namespace yzg
         return g_typeTable.find(name, Type::none);
     }
     
+    // TypeDecl
+    
     ostream& operator<< (ostream& stream, const TypeDecl & decl)
     {
         if ( decl.baseType==Type::tStructure ) {
@@ -46,6 +54,8 @@ namespace yzg
         }
         return stream;
     }
+    
+    // structure
     
     const Structure::FieldDeclaration * Structure::findField ( const string & name ) const
     {
@@ -67,13 +77,46 @@ namespace yzg
         return stream;
     }
 
+    // variable
+    
+    ostream& operator<< (ostream& stream, const Variable & var)
+    {
+        stream << *var.type << " " << var.name;
+        return stream;
+    }
+    
+    // program
+    
+    VariablePtr Program::findVariable ( const string & name ) const
+    {
+        auto it = constants.find(name);
+        if ( it != constants.end() )
+            return it->second;
+        it = globals.find(name);
+        if ( it != globals.end() )
+            return it->second;
+        return nullptr;
+    }
     
     ostream& operator<< (ostream& stream, const Program & program)
     {
         for ( const auto & st : program.structures ) {
             stream << *st.second << "\n";
         }
-        
+        if ( program.constants.size() ) {
+            stream << "(let const\n";
+            for ( auto & pv : program.constants ) {
+                stream << "\t(" <<  *pv.second << ")\n";
+            }
+            stream << ")\n\n";
+        }
+        if ( program.globals.size() ) {
+            stream << "(let\n";
+            for ( auto & pv : program.globals ) {
+                stream << "\t(" <<  *pv.second << ")\n";
+            }
+            stream << ")\n\n";
+        }
         return stream;
     }
     
@@ -158,16 +201,47 @@ namespace yzg
         }
     }
     
+    VariablePtr parseVariable ( const NodePtr & decl, const ProgramPtr & program )
+    {
+        auto pVar = make_shared<Variable>();
+        pVar->type = parseTypeDeclaratoin(decl, program);
+        pVar->name = decl->getTailName();
+        if ( pVar->name.empty() )
+            throw parse_error("variable must have a name", decl);
+        return pVar;
+    }
+    
+    void parseVariableDeclarations ( const NodePtr & root, const ProgramPtr & program )
+    {
+        for ( auto & expr : root->list ) {
+            if ( expr->getName(0)=="let"  ) {
+                int iVar = 1;
+                bool isConst = false;
+                if ( expr->getName(1)=="const" ) {
+                    iVar ++;
+                    isConst = true;
+                }
+                for ( ; iVar != expr->list.size(); ++iVar ) {
+                    auto & vdecl = expr->list[iVar];
+                    auto pVar = parseVariable(vdecl, program);
+                    pVar->constant = isConst;
+                    if ( program->findVariable(pVar->name) )
+                        throw parse_error("variable already declared", vdecl);
+                    auto & cmap = isConst ? program->constants : program->globals;
+                    cmap[pVar->name] = pVar;
+                }
+            }
+        }
+    }
+    
     
     ProgramPtr parse ( const NodePtr & root )
     {
         if ( !root->isList() )
             return nullptr;
-        
         auto program = make_shared<Program>();
-        
         parseStructureDeclarations(root, program);
-        
+        parseVariableDeclarations(root, program);
         return program;
     }
     

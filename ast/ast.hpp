@@ -26,7 +26,13 @@ namespace yzg
         tVoid,
         tBool,
         tInt,
+        tInt2,
+        tInt3,
+        tInt4,
         tUInt,
+        tUInt2,
+        tUInt3,
+        tUInt4,
         tFloat,
         tFloat2,
         tFloat3,
@@ -71,13 +77,29 @@ namespace yzg
     };
     typedef shared_ptr<Structure> StructurePtr;
     
+    class Variable
+    {
+    public:
+        friend ostream& operator<< (ostream& stream, const Variable & var);
+        
+    public:
+        string      name;
+        TypeDeclPtr type;
+        bool        constant = false;
+    };
+    typedef shared_ptr<Variable> VariablePtr;
+    
     class Program
     {
     public:
         friend ostream& operator<< (ostream& stream, const Program & program);
         
+        VariablePtr findVariable ( const string & name ) const;
+        
     public:
-        map<string, StructurePtr>    structures;
+        map<string, StructurePtr>   structures;
+        map<string, VariablePtr>    globals;
+        map<string, VariablePtr>    constants;
     };
     typedef shared_ptr<Program> ProgramPtr;
 
