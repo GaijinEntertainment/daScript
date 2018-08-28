@@ -49,6 +49,7 @@ namespace yzg
     {
     public:
         friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
+        string getMangledName() const;
         
     public:
         Type                baseType;
@@ -89,17 +90,38 @@ namespace yzg
     };
     typedef shared_ptr<Variable> VariablePtr;
     
+    class Function
+    {
+    public:
+        struct Argument
+        {
+            string      name;
+            TypeDeclPtr type;
+        };
+
+        friend ostream& operator<< (ostream& stream, const Function & func);
+        string getMangledName() const;
+        Argument * findArgument(const string & name);
+        
+    public:
+        string              name;
+        vector<Argument>    arguments;
+        TypeDeclPtr         result;
+    };
+    typedef shared_ptr<Function> FunctionPtr;
+    
     class Program
     {
     public:
         friend ostream& operator<< (ostream& stream, const Program & program);
-        
         VariablePtr findVariable ( const string & name ) const;
+        FunctionPtr findFunction ( const string & mangledName ) const;
         
     public:
         map<string, StructurePtr>   structures;
         map<string, VariablePtr>    globals;
         map<string, VariablePtr>    constants;
+        map<string, FunctionPtr>    functions;      // mangled name 2 function name
     };
     typedef shared_ptr<Program> ProgramPtr;
 

@@ -27,4 +27,10 @@
 (let const
     (bool ext_constant))
 
+(defun (int madd)
+    (int a)
+    (int b)
+    (int c)
+    (return
+        (+ (* a b) c)))
 

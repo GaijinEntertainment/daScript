@@ -9,6 +9,8 @@
 #include "ast.hpp"
 #include "enums.h"
 
+#include <sstream>
+
 namespace yzg
 {
     Enum<Type> g_typeTable = {
@@ -55,6 +57,24 @@ namespace yzg
         return stream;
     }
     
+    string TypeDecl::getMangledName() const
+    {
+        stringstream ss;
+        if ( baseType==Type::tStructure ) {
+            ss << structType->name;
+        } else {
+            ss << g_typeTable.find(baseType);
+        }
+        if ( constant )
+            ss << "#const";
+        if ( dim.size() ) {
+            for ( auto d : dim ) {
+                ss << "#" << d;
+            }
+        }
+        return ss.str();
+    }
+    
     // structure
     
     const Structure::FieldDeclaration * Structure::findField ( const string & name ) const
@@ -85,6 +105,39 @@ namespace yzg
         return stream;
     }
     
+    // function
+    
+    ostream& operator<< (ostream& stream, const Function & func)
+    {
+        stream << "(defun (" << *func.result << " " << func.name << ")\n"; // //" << func.getMangledName() << "\n";
+        for ( auto & decl : func.arguments ) {
+            stream << "\t(" << *decl.type << " " << decl.name << ")\n";
+        }
+        stream << ")\n";
+        return stream;
+    }
+    
+    string Function::getMangledName() const
+    {
+        stringstream ss;
+        ss << name;
+        for ( auto & arg : arguments ) {
+            ss << " " << arg.type->getMangledName();
+        }
+        ss << "->" << result->getMangledName();
+        return ss.str();
+    }
+    
+    Function::Argument * Function::findArgument(const string & name) 
+    {
+        for ( auto & arg : arguments ) {
+            if ( arg.name==name ) {
+                return &arg;
+            }
+        }
+        return nullptr;
+    }
+    
     // program
     
     VariablePtr Program::findVariable ( const string & name ) const
@@ -94,6 +147,14 @@ namespace yzg
             return it->second;
         it = globals.find(name);
         if ( it != globals.end() )
+            return it->second;
+        return nullptr;
+    }
+    
+    FunctionPtr Program::findFunction ( const string & mangledName ) const
+    {
+        auto it = functions.find(mangledName);
+        if ( it != functions.end() )
             return it->second;
         return nullptr;
     }
@@ -116,6 +177,9 @@ namespace yzg
                 stream << "\t(" <<  *pv.second << ")\n";
             }
             stream << ")\n\n";
+        }
+        for ( const auto & st : program.functions ) {
+            stream << *st.second << "\n";
         }
         return stream;
     }
@@ -211,6 +275,13 @@ namespace yzg
         return pVar;
     }
     
+    /*
+     (let
+        (Ball g_variable))
+     
+     (let const
+        (bool ext_constant))
+     */
     void parseVariableDeclarations ( const NodePtr & root, const ProgramPtr & program )
     {
         for ( auto & expr : root->list ) {
@@ -234,6 +305,49 @@ namespace yzg
         }
     }
     
+    /*
+     (defun (int mad)
+        (int a)
+        (int b)
+        (int c)
+        (return
+                (+ (* a b) c))
+     */
+    FunctionPtr parseFunction ( const NodePtr & decl, const ProgramPtr & program )
+    {
+        if ( !decl->isListOfAtLeastSize(3) )
+            throw parse_error("function needs name, return type, and body", decl);
+        auto func = make_shared<Function>();
+        func->name = decl->list[1]->getTailName();
+        if ( func->name.empty() )
+            throw parse_error("function must have name", decl);
+        func->result = parseTypeDeclaratoin(decl->list[1], program);
+        for ( int ai = 2; ai < decl->list.size()-1; ++ai ) {
+            auto & arg = decl->list[ai];
+            auto argName = arg->getTailName();
+            if ( argName.empty() )
+                throw parse_error("function argument must have name", arg);
+            if ( func->findArgument(argName) )
+                throw parse_error("function already has argument with this name", arg);
+            auto argType = parseTypeDeclaratoin(arg, program);
+            func->arguments.push_back({argName, argType});
+        }
+        // TODO: parse body
+        return func;
+    }
+    
+    void parseFunctionDeclarations ( const NodePtr & root, const ProgramPtr & program )
+    {
+        for ( auto & expr : root->list ) {
+            if ( expr->getName(0)=="defun"  ) {
+                auto func = parseFunction(expr, program);
+                auto mangledName = func->getMangledName();
+                if ( program->findFunction(mangledName) )
+                    throw parse_error("function already defined", expr);
+                program->functions[mangledName] = func;
+            }
+        }
+    }
     
     ProgramPtr parse ( const NodePtr & root )
     {
@@ -242,6 +356,7 @@ namespace yzg
         auto program = make_shared<Program>();
         parseStructureDeclarations(root, program);
         parseVariableDeclarations(root, program);
+        parseFunctionDeclarations(root, program);
         return program;
     }
     
