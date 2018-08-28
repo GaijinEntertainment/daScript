@@ -1,0 +1,64 @@
+//
+//  enums.h
+//  yzg
+//
+//  Created by Boris Batkin on 8/27/18.
+//  Copyright © 2018 Boris Batkin. All rights reserved.
+//
+
+#ifndef enums_h
+#define enums_h
+
+#include <map>
+#include <string>
+#include <initializer_list>
+
+namespace yzg
+{
+    using namespace std;
+
+    template <typename EE>
+    class Enum
+    {
+    public:
+        struct InitEnum
+        {
+            EE          value;
+            string      name;
+        };
+
+        Enum ( initializer_list<InitEnum> ie ) {
+            for ( const auto & e : ie ) {
+                name2enum[e.name] = e.value;
+                enum2name[e.value] = e.name;
+            }
+        }
+        
+        EE find ( const string & name, EE fail ) const {
+            auto it = name2enum.find(name);
+            return it==name2enum.end() ? fail : it->second;
+        }
+        
+        string find ( EE e ) const {
+            auto it = enum2name.find(e);
+            return it==enum2name.end() ? "" : it->second;
+        }
+        
+        EE parse ( string::const_iterator & it, EE fail ) const {
+            for ( auto & op : name2enum ) {
+                auto & text = op.first;
+                if ( equal(text.begin(), text.end(), it) ) {
+                    it += text.length();
+                    return op.second;
+                }
+            }
+            return fail;
+        }
+        
+    private:
+        map<string, EE>     name2enum;
+        map<EE, string>     enum2name;
+    };
+}
+
+#endif /* enums_h */

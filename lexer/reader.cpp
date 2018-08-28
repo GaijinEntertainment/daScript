@@ -8,36 +8,66 @@
 
 #include "reader.hpp"
 
+#include "enums.h"
+
 #include <regex>
 #include <sstream>
 
 namespace yzg
 {
-    struct OpEntry
-    {
-        Operator op;
-        string text;
-    } g_opTable [] = {
-    // 2-char
-        Operator::addEqu,   "+=",
-        Operator::subEqu,   "-=",
-        Operator::divEqu,   "/=",
-        Operator::mulEqu,   "*=",
-        Operator::eqEq,     "==",
-    // 1-char
-        Operator::add,      "+",
-        Operator::sub,      "-",
-        Operator::div,      "/",
-        Operator::mul,      "*",
-        Operator::eq,       "="
+    Enum<Operator> g_opTable2 = {
+        {   Operator::addEqu,   "+="    },
+        {   Operator::subEqu,   "-="    },
+        {   Operator::divEqu,   "/="    },
+        {   Operator::mulEqu,   "*="    },
+        {   Operator::eqEq,     "=="    },
+    };
+    
+    Enum<Operator> g_opTable1 = {
+        {   Operator::add,      "+"    },
+        {   Operator::sub,      "-"    },
+        {   Operator::div,      "/"    },
+        {   Operator::mul,      "*"    },
+        {   Operator::eq,       "="    },
     };
     
     string to_string ( Operator o ) {
-        for ( auto & op : g_opTable ) {
-            if ( op.op == o )
-                return op.text;
-        }
-        return "";
+        string t = g_opTable2.find(o);
+        if ( t.empty() )
+            t = g_opTable1.find(o);
+        return t;
+    }
+    
+    uint64_t Node::getUnsigned(int n) const
+    {
+        if ( !isListOfAtLeastSize(n+1) )
+            return -1;
+        auto & name = list[n];
+        if ( name->type==NodeType::unumber )
+            return name->unum;
+        if ( name->type==NodeType::inumber && name->inum>=0 )
+            return name->inum;
+        return -1U;
+    }
+    
+    string Node::getName(int n) const
+    {
+        if ( !isListOfAtLeastSize(n+1) )
+            return "";
+        auto & name = list[n];
+        if ( name->type!=NodeType::name )
+            return "";
+        return name->text;
+    }
+    
+    string Node::getTailName() const
+    {
+        if ( !isListOfAtLeastSize(1) )
+            return "";
+        auto & tail = list.back();
+        if ( tail->type!=NodeType::name )
+            return "";
+        return tail->text;
     }
     
     int Node::depth() const
@@ -221,14 +251,12 @@ namespace yzg
             auto found = num.find_first_of(".e");
             return found!=string::npos ? make_unique<Node>(stod(num)) : make_unique<Node>(int64_t(stol(num)));
         } else {
-            // TODO: implement effective operator search
-            for ( auto & op : g_opTable ) {
-                if ( equal(op.text.begin(), op.text.end(), it) ) {
-                    it += op.text.length();
-                    return make_unique<Node>(op.op);
-                }
-            }
-            throw read_error("unexpected character", it);
+            auto op = g_opTable2.parse(it, Operator::none);
+            if ( op==Operator::none )
+                op = g_opTable1.parse(it, Operator::none);
+            if ( op==Operator::none )
+                throw read_error("unexpected character", it);
+            return make_unique<Node>(op);
         }
         return nullptr;
     }

@@ -1,0 +1,16 @@
+(struct AllValidTypes
+    (bool   b)
+    (int    1 i)
+    (uint   1 2 c_ui)
+    (float  1 2 3 f)
+    (float4 f4))
+
+(struct Sphere
+    (float3 center)
+    (float radius))
+
+(struct Ball
+    (Sphere sphere)
+    (int 3  rgb))
+
+

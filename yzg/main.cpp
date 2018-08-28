@@ -9,11 +9,12 @@
 #include <iostream>
 
 #include "reader.hpp"
+#include "ast.hpp"
 
 using namespace std;
 using namespace yzg;
 
-void test ( const string & fn )
+void test_reader ( const string & fn )
 {
     ifstream fs(fn);
     if ( !fs.is_open() )
@@ -22,7 +23,18 @@ void test ( const string & fn )
     cout << *node << "\n";
 }
 
+void test_ast ( const string & fn )
+{
+    ifstream fs(fn);
+    if ( !fs.is_open() )
+        throw "can't open";
+    auto node = read(fs);
+    auto program = parse(node);
+    cout << *program << "\n";
+}
+
 int main(int argc, const char * argv[]) {
-    test("./test/test_1.yzg");
+    //test_reader("./test/test_1.yzg");
+    test_ast("./test/test_2.yzg");
     return 0;
 }

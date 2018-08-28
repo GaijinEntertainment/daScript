@@ -33,6 +33,7 @@ namespace yzg
     
     enum class Operator
     {
+        none,
     // 2-char
         addEqu,
         subEqu,
@@ -73,6 +74,14 @@ namespace yzg
         Node(bool val) : type(NodeType::boolean), b(val) {}
         Node(vector<NodePtr> && ll) : type(NodeType::list), list(move(ll)) {}
         Node(Operator o) : type(NodeType::op), op(o) {}
+        
+        bool isList() const { return type==NodeType::list; }
+        bool isListOfAtLeastSize(int n) const { return type==NodeType::list && list.size()>=n; }
+        bool isName(const string & st) const { return type==NodeType::name && text==st; }
+    
+        uint64_t getUnsigned(int n) const;
+        string getName(int n) const;
+        string getTailName() const;
         
         int depth() const;
         bool isMathNode() const;    // (* (+ a b) c) etc

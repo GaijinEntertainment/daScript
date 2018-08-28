@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04B2409C2133A911007CF8B1 /* ast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04B2409A2133A911007CF8B1 /* ast.cpp */; };
+		04B2409E2134CA31007CF8B1 /* test_2.yzg in Sources */ = {isa = PBXBuildFile; fileRef = 04B2409D2134CA31007CF8B1 /* test_2.yzg */; };
 		04E53445212F0EAC006834F4 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04E53444212F0EAC006834F4 /* main.cpp */; };
 		04E5344E212F0EF0006834F4 /* reader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04E5344C212F0EF0006834F4 /* reader.cpp */; };
 		04E5345121326BA5006834F4 /* test_1.yzg in Sources */ = {isa = PBXBuildFile; fileRef = 04E5345021326BA5006834F4 /* test_1.yzg */; };
@@ -25,6 +27,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		04B2409A2133A911007CF8B1 /* ast.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ast.cpp; sourceTree = "<group>"; };
+		04B2409B2133A911007CF8B1 /* ast.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ast.hpp; sourceTree = "<group>"; };
+		04B2409D2134CA31007CF8B1 /* test_2.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = test_2.yzg; sourceTree = "<group>"; };
+		04B240A02134CBFB007CF8B1 /* enums.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = enums.h; sourceTree = "<group>"; };
 		04E53441212F0EAC006834F4 /* yzg */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = yzg; sourceTree = BUILT_PRODUCTS_DIR; };
 		04E53444212F0EAC006834F4 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		04E5344C212F0EF0006834F4 /* reader.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = reader.cpp; sourceTree = "<group>"; };
@@ -43,9 +49,28 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		04B240992133A8F0007CF8B1 /* ast */ = {
+			isa = PBXGroup;
+			children = (
+				04B2409A2133A911007CF8B1 /* ast.cpp */,
+				04B2409B2133A911007CF8B1 /* ast.hpp */,
+			);
+			path = ast;
+			sourceTree = "<group>";
+		};
+		04B2409F2134CBD0007CF8B1 /* misc */ = {
+			isa = PBXGroup;
+			children = (
+				04B240A02134CBFB007CF8B1 /* enums.h */,
+			);
+			path = misc;
+			sourceTree = "<group>";
+		};
 		04E53438212F0EAC006834F4 = {
 			isa = PBXGroup;
 			children = (
+				04B2409F2134CBD0007CF8B1 /* misc */,
+				04B240992133A8F0007CF8B1 /* ast */,
 				04E5344F21326B80006834F4 /* test */,
 				04E5344B212F0ECA006834F4 /* lexer */,
 				04E53443212F0EAC006834F4 /* yzg */,
@@ -82,6 +107,7 @@
 			isa = PBXGroup;
 			children = (
 				04E5345021326BA5006834F4 /* test_1.yzg */,
+				04B2409D2134CA31007CF8B1 /* test_2.yzg */,
 			);
 			path = test;
 			sourceTree = "<group>";
@@ -142,6 +168,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				04B2409E2134CA31007CF8B1 /* test_2.yzg in Sources */,
+				04B2409C2133A911007CF8B1 /* ast.cpp in Sources */,
 				04E5345121326BA5006834F4 /* test_1.yzg in Sources */,
 				04E5344E212F0EF0006834F4 /* reader.cpp in Sources */,
 				04E53445212F0EAC006834F4 /* main.cpp in Sources */,
