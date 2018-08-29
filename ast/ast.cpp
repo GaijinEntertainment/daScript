@@ -241,6 +241,18 @@ namespace yzg
         stream << ")\n";
     }
     
+    // ExprCall
+    
+    void ExprCall::log(ostream& stream, int depth) const
+    {
+        stream << "(" << name;
+        for ( auto & arg : arguments ) {
+            stream << " ";
+            arg->log(stream, depth);
+        }
+        stream << ")";
+    }
+    
     // program
     
     VariablePtr Program::findVariable ( const string & name ) const
@@ -482,12 +494,18 @@ namespace yzg
                 return let;
             } else if ( head->isName() ) {
                 // function call
+                auto call = make_shared<ExprCall>();
+                call->name = head->text;
+                for ( int i = 1; i != decl->list.size(); ++i ) {
+                    auto arg = parseExpression(decl->list[i], program);
+                    call->arguments.emplace_back(arg);
+                }
+                return call;
             } else {
                 throw parse_error("unrecognized expression", decl);
             }
         } else if ( decl->isName() ) {
             auto pVar = make_shared<ExprVar>();
-            // TODO: find what variable it is
             pVar->name = decl->text;
             return pVar;
         } else if ( decl->isNumericConstant() ) {

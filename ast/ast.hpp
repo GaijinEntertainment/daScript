@@ -198,6 +198,15 @@ namespace yzg
         ExpressionPtr           subexpr;
     };
     
+    class ExprCall : public Expression
+    {
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    public:
+        string                  name;
+        vector<ExpressionPtr>   arguments;
+    };
+    
     class Function
     {
     public:
