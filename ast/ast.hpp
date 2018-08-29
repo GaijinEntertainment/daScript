@@ -90,6 +90,104 @@ namespace yzg
     };
     typedef shared_ptr<Variable> VariablePtr;
     
+    class Expression
+    {
+    public:
+        friend ostream& operator<< (ostream& stream, const Expression & func);
+    public:
+        virtual void log(ostream& stream, int depth) const = 0;
+    };
+    typedef shared_ptr<Expression> ExpressionPtr;
+    
+    class ExprBlock : public Expression
+    {
+    public:
+        vector<ExpressionPtr>   list;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
+    class ExprVar : public Expression
+    {
+    public:
+        string  name;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
+    class ExprOp : public Expression
+    {
+    public:
+        Operator        op;
+    };
+    
+    class ExprOp1 : public ExprOp   // unary    !subexpr
+    {
+    public:
+        ExpressionPtr   subexpr;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
+    class ExprOp2 : public ExprOp   // binary   left < right
+    {
+    public:
+        ExpressionPtr   left, right;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
+    class ExprOp3 : public ExprOp   // trinary  subexpr ? left : right
+    {
+    public:
+        ExpressionPtr   subexpr, left, right;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
+    class ExprReturn : public Expression
+    {
+    public:
+        ExpressionPtr   subexpr;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
+    class ExprConst : public Expression
+    {
+    public:
+    };
+
+    class ExprConstInt : public ExprConst
+    {
+    public:
+        ExprConstInt(int64_t i) : value(i) {}
+    public:
+        int64_t value;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
+    class ExprConstUInt : public ExprConst
+    {
+    public:
+        ExprConstUInt(uint64_t i) : value(i) {}
+    public:
+        uint64_t value;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+
+    class ExprConstDouble : public ExprConst
+    {
+    public:
+        ExprConstDouble(double i) : value(i) {}
+    public:
+        double value;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
     class Function
     {
     public:
@@ -107,6 +205,7 @@ namespace yzg
         string              name;
         vector<Argument>    arguments;
         TypeDeclPtr         result;
+        ExpressionPtr       body;
     };
     typedef shared_ptr<Function> FunctionPtr;
     

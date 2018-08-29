@@ -29,6 +29,9 @@ namespace yzg
         {   Operator::div,      "/"    },
         {   Operator::mul,      "*"    },
         {   Operator::eq,       "="    },
+        {   Operator::is,       "?"    },
+        {   Operator::boolNot,  "!"    },
+        {   Operator::binNot,   "~"    },
     };
     
     string to_string ( Operator o ) {
@@ -37,6 +40,32 @@ namespace yzg
             t = g_opTable1.find(o);
         return t;
     }
+    
+    bool isUnaryOperator ( Operator op )
+    {
+        return
+            (op==Operator::add)
+        ||  (op==Operator::sub)
+        ||  (op==Operator::boolNot)
+        ||  (op==Operator::binNot)
+        ;
+    }
+    
+    bool isBinaryOperator ( Operator op )
+    {
+        return
+            (op!=Operator::is)
+        &&  (op!=Operator::boolNot)
+        &&  (op!=Operator::binNot)
+        ;
+    }
+    
+    bool isTrinaryOperator ( Operator op )
+    {
+        return (op==Operator::is);
+    }
+    
+    // Node
     
     uint64_t Node::getUnsigned(int n) const
     {
@@ -94,6 +123,15 @@ namespace yzg
         return true;
     }
     
+    string to_string_ex ( double dnum )
+    {
+        stringstream ss;
+        ss << dnum;
+        if ( ss.str().find_first_of(".e")==string::npos )
+            ss << ".";
+        return ss.str();
+    }
+    
     void print (ostream & stream, const Node & node, int depth )
     {
         switch(node.type) {
@@ -139,14 +177,7 @@ namespace yzg
                 stream << "0x" << hex << node.unum;
                 break;
             case NodeType::dnumber:
-                {
-                    stringstream ss;
-                    ss << node.dnum;
-                    auto num = ss.str();
-                    stream << node.dnum;
-                    if ( num.find_first_of(".e")==string::npos )
-                        stream << ".";
-                }
+                stream << to_string_ex(node.dnum);
                 break;
             case NodeType::op:
                 stream << to_string(node.op);

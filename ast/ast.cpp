@@ -113,6 +113,7 @@ namespace yzg
         for ( auto & decl : func.arguments ) {
             stream << "\t(" << *decl.type << " " << decl.name << ")\n";
         }
+        stream << "\t" << *func.body;
         stream << ")\n";
         return stream;
     }
@@ -138,6 +139,84 @@ namespace yzg
         return nullptr;
     }
     
+    // expression
+    
+    ostream& operator<< (ostream& stream, const Expression & func)
+    {
+        func.log(stream, 1);
+        return stream;
+    }
+
+    void ExprBlock::log(ostream& stream, int depth) const
+    {
+        stream << "(";
+        for ( int i = 0; i!=list.size(); ++i ) {
+            if ( i )
+                stream << string(depth, '\t');
+            list[i]->log(stream, depth+1);
+            if ( i != list.size()-1 )
+                stream << "\n";
+        }
+        stream << ")\n";
+    }
+    
+    void ExprVar::log(ostream& stream, int depth) const
+    {
+        stream << name;
+    }
+    
+    void ExprOp1::log(ostream& stream, int depth) const
+    {
+        stream << "(" << to_string(op) << " ";
+        subexpr->log(stream, depth);
+        stream << ")";
+    }
+    
+    void ExprOp2::log(ostream& stream, int depth) const
+    {
+        stream << "(" << to_string(op) << " ";
+        left->log(stream, depth);
+        stream << " ";
+        right->log(stream, depth);
+        stream << ")";
+    }
+    
+    void ExprOp3::log(ostream& stream, int depth) const
+    {
+        stream << "(" << to_string(op) << " ";
+        subexpr->log(stream, depth);
+        stream << " ";
+        left->log(stream, depth);
+        stream << " ";
+        right->log(stream, depth);
+        stream << ")";
+    }
+    
+    void ExprReturn::log(ostream& stream, int depth) const
+    {
+        stream << "(return\n";
+        if ( subexpr ) {
+            stream << string(depth+1, '\t');
+            subexpr->log(stream, depth+1);
+            stream << ")\n";
+        }
+    }
+    
+    void ExprConstInt::log(ostream& stream, int depth) const
+    {
+        stream << value;
+    }
+    
+    void ExprConstUInt::log(ostream& stream, int depth) const
+    {
+        stream << "0x" << hex << value;
+    }
+    
+    void ExprConstDouble::log(ostream& stream, int depth) const
+    {
+        stream << to_string_ex(value);
+    }
+
     // program
     
     VariablePtr Program::findVariable ( const string & name ) const
@@ -306,6 +385,92 @@ namespace yzg
     }
     
     /*
+     */
+    ExpressionPtr parseExpression ( const NodePtr & decl, const ProgramPtr & program )
+    {
+        if ( decl->isList() ) {
+            if ( decl->list.size()==0 )
+                throw parse_error("empty list is not a valid expression", decl);
+            auto & head = decl->list[0];
+            if ( head->isList() ) {    // if first element is list, its an expression block
+                auto block = make_shared<ExprBlock>();
+                for ( auto & subExpr : decl->list ) {
+                    if ( !subExpr->isList() )
+                        throw parse_error("expression block must contain full expressions", subExpr);
+                    auto se = parseExpression(subExpr, program);
+                    block->list.emplace_back(se);
+                }
+                return block;
+            } else if ( head->isOperator() ) {
+                auto nOp = decl->list.size() - 1;
+                if ( nOp==0 )
+                    throw parse_error("naked operator", decl);
+                if ( nOp==1 ) {
+                    if ( !isBinaryOperator(head->op) )
+                        throw parse_error("only unary operators can have 1 argument", decl);
+                    auto pOp = make_shared<ExprOp1>();
+                    pOp->op = head->op;
+                    pOp->subexpr = parseExpression(decl->list[1], program);
+                    return pOp;
+                } else if ( nOp==2 ) {
+                    if ( !isBinaryOperator(head->op) )
+                        throw parse_error("only binary operators can have 2 arguments", decl);
+                    auto pOp = make_shared<ExprOp2>();
+                    pOp->op = head->op;
+                    pOp->left = parseExpression(decl->list[1], program);
+                    pOp->right = parseExpression(decl->list[2], program);
+                    return pOp;
+                } else if ( nOp==3 ) {
+                    if ( !isTrinaryOperator(head->op) )
+                        throw parse_error("only trinary operators can have 3 arguments", decl);
+                    auto pOp = make_shared<ExprOp3>();
+                    pOp->op = head->op;
+                    pOp->subexpr = parseExpression(decl->list[1], program);
+                    pOp->left = parseExpression(decl->list[2], program);
+                    pOp->right = parseExpression(decl->list[3], program);
+                    return pOp;
+                } else {
+                    throw parse_error("operator has too many arguments", decl);
+                }
+            } else if ( head->isName("return") ) {
+                auto pRet = make_shared<ExprReturn>();
+                auto nArg = decl->list.size() -  1;
+                if ( nArg == 1 ) {
+                    pRet->subexpr = parseExpression(decl->list[1], program);
+                } else if ( nArg == 0 ) {
+                    // nothing to return
+                } else {
+                    throw parse_error("return has too many operands", decl);
+                }
+                return pRet;
+            } else if ( head->isName() ) {
+                // function call
+            } else {
+                throw parse_error("unrecognized expression", decl);
+            }
+        } else if ( decl->isName() ) {
+            auto pVar = make_shared<ExprVar>();
+            // TODO: find what variable it is
+            pVar->name = decl->text;
+            return pVar;
+            return pVar;
+        } else if ( decl->isNumericConstant() ) {
+            if ( decl->type==NodeType::dnumber ) {
+                return make_shared<ExprConstDouble>(decl->dnum);
+            } else if ( decl->type==NodeType::inumber ) {
+                return make_shared<ExprConstInt>(decl->inum);
+            } else if ( decl->type==NodeType::unumber ) {
+                return make_shared<ExprConstUInt>(decl->unum);
+            } else {
+                throw parse_error("undefined constant type", decl);
+            }
+        } else {
+            throw parse_error("unrecognized expression", decl);
+        }
+        return nullptr;
+    }
+    
+    /*
      (defun (int mad)
         (int a)
         (int b)
@@ -331,6 +496,8 @@ namespace yzg
                 throw parse_error("function already has argument with this name", arg);
             auto argType = parseTypeDeclaratoin(arg, program);
             func->arguments.push_back({argName, argType});
+            // TODO: context and function body
+            func->body = parseExpression(decl->list.back(), program);
         }
         // TODO: parse body
         return func;

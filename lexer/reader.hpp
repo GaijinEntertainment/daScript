@@ -18,6 +18,9 @@ namespace yzg
 {
     using namespace std;
     
+    // double 1 as 1.
+    string to_string_ex ( double dnum );
+    
     enum class NodeType
     {
         nil,
@@ -45,10 +48,16 @@ namespace yzg
         sub,
         div,
         mul,
-        eq
+        eq,
+        is,         // ?
+        boolNot,    // !
+        binNot,     // ~
     };
     
     string to_string ( Operator op );
+    bool isUnaryOperator ( Operator op );
+    bool isBinaryOperator ( Operator op );
+    bool isTrinaryOperator ( Operator op );
     
     struct Node;
     typedef unique_ptr<Node> NodePtr;
@@ -77,7 +86,10 @@ namespace yzg
         
         bool isList() const { return type==NodeType::list; }
         bool isListOfAtLeastSize(int n) const { return type==NodeType::list && list.size()>=n; }
+        bool isName() const { return type==NodeType::name; }
         bool isName(const string & st) const { return type==NodeType::name && text==st; }
+        bool isOperator() const { return type==NodeType::op; }
+        bool isNumericConstant() const { return type==NodeType::inumber || type==NodeType::unumber || type==NodeType::dnumber; }
     
         uint64_t getUnsigned(int n) const;
         string getName(int n) const;
