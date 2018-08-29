@@ -34,3 +34,19 @@
     (return
         (+ (* a b) c)))
 
+(defun (void testVoid)
+    (float const 3 arg1)
+    (float arg2)
+    (   (! 1)
+        (+ 1 2u)
+        (? 1.0 2 3)
+        (let
+            (int x)
+            (int y)
+            (   (= x 3)
+                (= y 4)
+                (+ x y)))
+        (return)))
+
+
+

@@ -188,6 +188,16 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const;
     };
     
+    class ExprLet : public Expression
+    {
+    public:
+        Variable * find ( const string & name ) const;
+        virtual void log(ostream& stream, int depth) const;
+    public:
+        vector<VariablePtr>     variables;
+        ExpressionPtr           subexpr;
+    };
+    
     class Function
     {
     public:

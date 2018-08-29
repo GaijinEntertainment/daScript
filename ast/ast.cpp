@@ -194,11 +194,12 @@ namespace yzg
     
     void ExprReturn::log(ostream& stream, int depth) const
     {
-        stream << "(return\n";
         if ( subexpr ) {
-            stream << string(depth+1, '\t');
+            stream << "(return\n" << string(depth+1, '\t');
             subexpr->log(stream, depth+1);
             stream << ")\n";
+        } else {
+            stream << "(return)\n";
         }
     }
     
@@ -217,6 +218,29 @@ namespace yzg
         stream << to_string_ex(value);
     }
 
+    // ExprLst
+
+    Variable * ExprLet::find(const string & name) const
+    {
+        for ( auto & v : variables ) {
+            if ( v->name==name ) {
+                return v.get();
+            }
+        }
+        return nullptr;
+    }
+    
+    void ExprLet::log(ostream& stream, int depth) const
+    {
+        stream << "(let\n";
+        for ( auto & var : variables ) {
+            stream << string(depth+1, '\t') << "(" << *var << ")\n";
+        }
+        stream << string(depth+1, '\t');
+        subexpr->log(stream, depth+1);
+        stream << ")\n";
+    }
+    
     // program
     
     VariablePtr Program::findVariable ( const string & name ) const
@@ -406,7 +430,7 @@ namespace yzg
                 if ( nOp==0 )
                     throw parse_error("naked operator", decl);
                 if ( nOp==1 ) {
-                    if ( !isBinaryOperator(head->op) )
+                    if ( !isUnaryOperator(head->op) )
                         throw parse_error("only unary operators can have 1 argument", decl);
                     auto pOp = make_shared<ExprOp1>();
                     pOp->op = head->op;
@@ -443,6 +467,19 @@ namespace yzg
                     throw parse_error("return has too many operands", decl);
                 }
                 return pRet;
+            } else if ( head->isName("let") ) {
+                if ( !decl->isListOfAtLeastSize(3) )
+                    throw parse_error("needs at least one variable declaration and expression", decl);
+                auto let = make_shared<ExprLet>();
+                for ( int iVar = 1; iVar != decl->list.size()-1; ++iVar ) {
+                    auto & vdecl = decl->list[iVar];
+                    auto pVar = parseVariable(vdecl, program);
+                    if ( let->find (pVar->name) )
+                        throw parse_error("variable already declared", decl);
+                    let->variables.push_back(pVar);
+                }
+                let->subexpr = parseExpression(decl->list.back(), program);
+                return let;
             } else if ( head->isName() ) {
                 // function call
             } else {
@@ -452,7 +489,6 @@ namespace yzg
             auto pVar = make_shared<ExprVar>();
             // TODO: find what variable it is
             pVar->name = decl->text;
-            return pVar;
             return pVar;
         } else if ( decl->isNumericConstant() ) {
             if ( decl->type==NodeType::dnumber ) {
