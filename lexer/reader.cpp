@@ -16,11 +16,15 @@
 namespace yzg
 {
     Enum<Operator> g_opTable2 = {
-        {   Operator::addEqu,   "+="    },
-        {   Operator::subEqu,   "-="    },
-        {   Operator::divEqu,   "/="    },
-        {   Operator::mulEqu,   "*="    },
-        {   Operator::eqEq,     "=="    },
+        {   Operator::addEqu,       "+="    },
+        {   Operator::subEqu,       "-="    },
+        {   Operator::divEqu,       "/="    },
+        {   Operator::mulEqu,       "*="    },
+        {   Operator::eqEq,         "=="    },
+        {   Operator::lessEqu,      "<="    },
+        {   Operator::greaterEqu,   ">="    },
+        {   Operator::notEqu,       "!="    },
+        {   Operator::binNotEqu,    "~="    },
     };
     
     Enum<Operator> g_opTable1 = {
@@ -32,6 +36,8 @@ namespace yzg
         {   Operator::is,       "?"    },
         {   Operator::boolNot,  "!"    },
         {   Operator::binNot,   "~"    },
+        {   Operator::less,     "<"    },
+        {   Operator::greater,  ">"    },
     };
     
     string to_string ( Operator o ) {

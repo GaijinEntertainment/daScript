@@ -43,6 +43,10 @@ namespace yzg
         divEqu,
         mulEqu,
         eqEq,
+        lessEqu,
+        greaterEqu,
+        notEqu,
+        binNotEqu,
     // 1-char
         add,
         sub,
@@ -52,6 +56,8 @@ namespace yzg
         is,         // ?
         boolNot,    // !
         binNot,     // ~
+        less,
+        greater
     };
     
     string to_string ( Operator op );

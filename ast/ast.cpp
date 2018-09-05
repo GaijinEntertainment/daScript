@@ -217,6 +217,19 @@ namespace yzg
     {
         stream << to_string_ex(value);
     }
+    
+    void ExprIfThenElse::log(ostream& stream, int depth) const
+    {
+        stream << "(if ";
+        cond->log(stream, depth);
+        stream << " ";
+        if_true->log(stream, depth);
+        if ( if_false ) {
+            stream << " ";
+            if_false->log(stream, depth);
+        }
+        stream << ")";
+    }
 
     // ExprLst
 
@@ -468,6 +481,15 @@ namespace yzg
                 } else {
                     throw parse_error("operator has too many arguments", decl);
                 }
+            } else if ( head->isName("if") ) {
+                if ( !decl->isList() && !(decl->list.size()==3 || decl->list.size()==4) )
+                    throw parse_error("only (if cond if_true) or (if cond if_true if_false) are allowed", decl);
+                auto pIfThenElse = make_shared<ExprIfThenElse>();
+                pIfThenElse->cond = parseExpression(decl->list[1], program);
+                pIfThenElse->if_true = parseExpression(decl->list[2], program);
+                if ( decl->list.size()==4 )
+                    pIfThenElse->if_false = parseExpression(decl->list[3], program);
+                return pIfThenElse;
             } else if ( head->isName("return") ) {
                 auto pRet = make_shared<ExprReturn>();
                 auto nArg = decl->list.size() -  1;

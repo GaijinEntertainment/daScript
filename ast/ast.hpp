@@ -207,6 +207,14 @@ namespace yzg
         vector<ExpressionPtr>   arguments;
     };
     
+    class ExprIfThenElse : public Expression
+    {
+    public:
+        ExpressionPtr   cond, if_true, if_false;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
     class Function
     {
     public:
