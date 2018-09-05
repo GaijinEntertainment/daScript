@@ -93,7 +93,7 @@ namespace yzg
         for ( auto & decl : structure.fields ) {
             stream << "\t(" << *decl.type << " " << decl.name << ")\n";
         }
-        stream << ")\n";
+        stream << ")";
         return stream;
     }
 
@@ -157,7 +157,7 @@ namespace yzg
             if ( i != list.size()-1 )
                 stream << "\n";
         }
-        stream << ")\n";
+        stream << ")";
     }
     
     void ExprVar::log(ostream& stream, int depth) const
@@ -197,9 +197,9 @@ namespace yzg
         if ( subexpr ) {
             stream << "(return\n" << string(depth+1, '\t');
             subexpr->log(stream, depth+1);
-            stream << ")\n";
+            stream << ")";
         } else {
-            stream << "(return)\n";
+            stream << "(return)";
         }
     }
     
@@ -210,7 +210,7 @@ namespace yzg
     
     void ExprConstUInt::log(ostream& stream, int depth) const
     {
-        stream << "0x" << hex << value;
+        stream << "0x" << hex << value << dec;
     }
     
     void ExprConstDouble::log(ostream& stream, int depth) const
@@ -218,16 +218,29 @@ namespace yzg
         stream << to_string_ex(value);
     }
     
+    // ExprIfThenElse
+    
     void ExprIfThenElse::log(ostream& stream, int depth) const
     {
-        stream << "(if ";
-        cond->log(stream, depth);
-        stream << " ";
-        if_true->log(stream, depth);
+        stream << "(if\n" << string(depth+1,'\t');
+        cond->log(stream, depth+1);
+        stream << "\n" << string(depth+2,'\t');
+        if_true->log(stream, depth+2);
         if ( if_false ) {
-            stream << " ";
-            if_false->log(stream, depth);
+            stream << "\n" << string(depth+2,'\t');
+            if_false->log(stream, depth+2);
         }
+        stream << ")";
+    }
+    
+    // ExprWhile
+    
+    void ExprWhile::log(ostream& stream, int depth) const
+    {
+        stream << "(while\n"<< string(depth+1,'\t');
+        cond->log(stream, depth+1);
+        stream << "\n" << string(depth+2,'\t');
+        body->log(stream, depth+2);
         stream << ")";
     }
 
@@ -243,15 +256,17 @@ namespace yzg
         return nullptr;
     }
     
+    // ExprLet
+    
     void ExprLet::log(ostream& stream, int depth) const
     {
         stream << "(let\n";
         for ( auto & var : variables ) {
             stream << string(depth+1, '\t') << "(" << *var << ")\n";
         }
-        stream << string(depth+1, '\t');
-        subexpr->log(stream, depth+1);
-        stream << ")\n";
+        stream << string(depth+2, '\t');
+        subexpr->log(stream, depth+2);
+        stream << ")";
     }
     
     // ExprCall
@@ -481,6 +496,13 @@ namespace yzg
                 } else {
                     throw parse_error("operator has too many arguments", decl);
                 }
+            } else if ( head->isName("while") ) {
+                if ( !decl->isListOfAtLeastSize(3) )
+                    throw parse_error("only (while cond body) is allowed", decl);
+                auto pWhile = make_shared<ExprWhile>();
+                pWhile->cond = parseExpression(decl->list[1], program);
+                pWhile->body = parseExpression(decl->list[2], program);
+                return pWhile;
             } else if ( head->isName("if") ) {
                 if ( !decl->isList() && !(decl->list.size()==3 || decl->list.size()==4) )
                     throw parse_error("only (if cond if_true) or (if cond if_true if_false) are allowed", decl);

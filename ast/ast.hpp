@@ -215,6 +215,14 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const;
     };
     
+    class ExprWhile : public Expression
+    {
+    public:
+        ExpressionPtr   cond, body;
+    public:
+        virtual void log(ostream& stream, int depth) const;
+    };
+    
     class Function
     {
     public:

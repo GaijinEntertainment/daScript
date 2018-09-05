@@ -180,7 +180,7 @@ namespace yzg
                 stream << node.inum;
                 break;
             case NodeType::unumber:
-                stream << "0x" << hex << node.unum;
+                stream << "0x" << hex << node.unum << dec;
                 break;
             case NodeType::dnumber:
                 stream << to_string_ex(node.dnum);
