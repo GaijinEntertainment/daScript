@@ -75,6 +75,39 @@ namespace yzg
         return ss.str();
     }
     
+    bool TypeDecl::isSameType ( const TypeDecl & decl, bool constMatters, bool rvalueMatters ) const
+    {
+        if ( baseType!=decl.baseType )
+            return false;
+        if ( baseType==Type::tStructure && structType!=decl.structType )
+            return false;
+        if ( dim!=decl.dim )
+            return false;
+        if ( constMatters )
+            if ( constant!=decl.constant )
+                return false;
+        if ( rvalueMatters )
+            if ( rvalue!=decl.rvalue )
+                return false;
+        return true;
+    }
+    
+    bool TypeDecl::isVoid() const
+    {
+        return (baseType==Type::tVoid) && (dim.size()==0);
+    }
+    
+    bool TypeDecl::isSimpleType ( Type tp ) const
+    {
+        if (    baseType==Type::none
+            ||  baseType==Type::tVoid
+            ||  baseType==Type::tStructure )
+            return false;
+        if ( dim.size() )
+            return false;
+        return true;
+    }
+    
     // structure
     
     const Structure::FieldDeclaration * Structure::findField ( const string & name ) const
@@ -111,7 +144,7 @@ namespace yzg
     {
         stream << "(defun (" << *func.result << " " << func.name << ")\n"; // //" << func.getMangledName() << "\n";
         for ( auto & decl : func.arguments ) {
-            stream << "\t(" << *decl.type << " " << decl.name << ")\n";
+            stream << "\t(" << *decl->type << " " << decl->name << ")\n";
         }
         stream << "\t" << *func.body;
         stream << ")\n";
@@ -123,17 +156,17 @@ namespace yzg
         stringstream ss;
         ss << name;
         for ( auto & arg : arguments ) {
-            ss << " " << arg.type->getMangledName();
+            ss << " " << arg->type->getMangledName();
         }
         ss << "->" << result->getMangledName();
         return ss.str();
     }
     
-    Function::Argument * Function::findArgument(const string & name) 
+    VariablePtr Function::findArgument(const string & name)
     {
         for ( auto & arg : arguments ) {
-            if ( arg.name==name ) {
-                return &arg;
+            if ( arg->name==name ) {
+                return arg;
             }
         }
         return nullptr;
@@ -147,6 +180,8 @@ namespace yzg
         return stream;
     }
 
+    // ExprBlock
+    
     void ExprBlock::log(ostream& stream, int depth) const
     {
         stream << "(";
@@ -160,10 +195,55 @@ namespace yzg
         stream << ")";
     }
     
+    void ExprBlock::inferType(InferTypeContext & context)
+    {
+        type = make_shared<TypeDecl>();
+        for ( auto & ex : list ) {
+            ex->inferType(context);
+        }
+    }
+    
+    // ExprVar
+    
     void ExprVar::log(ostream& stream, int depth) const
     {
         stream << name;
     }
+    
+    void ExprVar::inferType(InferTypeContext & context)
+    {
+        // local (that on the stack)
+        for ( auto it = context.local.rbegin(); it!=context.local.rend(); ++it ) {
+            auto var = *it;
+            if ( var->name==name ) {
+                variable = var;
+                local = true;
+                type = make_shared<TypeDecl>(*var->type);
+                type->rvalue = true;
+                return;
+            }
+        }
+        // function argument
+        for ( auto & arg : context.func->arguments ) {
+            if ( arg->name==name ) {
+                variable = arg;
+                argument = true;
+                type = make_shared<TypeDecl>(*arg->type);
+                // function arguments are read only??
+                // type->rvalue = true;
+                return;
+            }
+        }
+        // global
+        auto var = context.program->findVariable(name);
+        if ( !var )
+            throw semantic_error("can't locate variable " + name);
+        variable = var;
+        type = make_shared<TypeDecl>(*var->type);
+        type->rvalue = true;
+    }
+    
+    // ExprOp1
     
     void ExprOp1::log(ostream& stream, int depth) const
     {
@@ -171,6 +251,17 @@ namespace yzg
         subexpr->log(stream, depth);
         stream << ")";
     }
+    
+    void ExprOp1::inferType(InferTypeContext & context)
+    {
+        subexpr->inferType(context);
+        // TODO:
+        //  find builtin operator and substitute with its return value
+        type = make_shared<TypeDecl>(*subexpr->type);
+        type->rvalue = false;
+    }
+    
+    // ExprOp2
     
     void ExprOp2::log(ostream& stream, int depth) const
     {
@@ -180,6 +271,17 @@ namespace yzg
         right->log(stream, depth);
         stream << ")";
     }
+    
+    void ExprOp2::inferType(InferTypeContext & context)
+    {
+        left->inferType(context);
+        right->inferType(context);
+        // TODO:
+        //  find builtin operator and substitute with its return value
+        type = make_shared<TypeDecl>();
+    }
+    
+    // ExprOp3
     
     void ExprOp3::log(ostream& stream, int depth) const
     {
@@ -192,6 +294,20 @@ namespace yzg
         stream << ")";
     }
     
+    void ExprOp3::inferType(InferTypeContext & context)
+    {
+        subexpr->inferType(context);
+        if ( !subexpr->type->isSimpleType(Type::tBool) )
+            throw semantic_error("cond operator condition must be boolean");
+        left->inferType(context);
+        right->inferType(context);
+        if ( !left->type->isSameType(*right->type) )
+            throw semantic_error("cond operator left and right subexpressions must have same type");
+        type = make_shared<TypeDecl>(*left->type);
+    }
+    
+    // ExprReturn
+    
     void ExprReturn::log(ostream& stream, int depth) const
     {
         if ( subexpr ) {
@@ -203,19 +319,55 @@ namespace yzg
         }
     }
     
+    void ExprReturn::inferType(InferTypeContext & context)
+    {
+        if ( subexpr ) {
+            subexpr->inferType(context);
+            if ( context.func->result->isVoid() )
+                throw semantic_error("return subexpression of void function must be empty");
+            if ( !subexpr->type->isSameType(*context.func->result) )
+                throw semantic_error("return subexpression type must match function return type");
+        } else {
+            if ( !context.func->result->isVoid() )
+                throw semantic_error("only void functions can skip return subexpression");
+        }
+        type = make_shared<TypeDecl>();
+    }
+    
+    // ExprConstInt
+    
     void ExprConstInt::log(ostream& stream, int depth) const
     {
         stream << value;
     }
+    
+    void ExprConstInt::inferType(InferTypeContext & context)
+    {
+        type = make_shared<TypeDecl>(Type::tInt);
+    }
+    
+    // ExprConstUInt
     
     void ExprConstUInt::log(ostream& stream, int depth) const
     {
         stream << "0x" << hex << value << dec;
     }
     
+    void ExprConstUInt::inferType(InferTypeContext & context)
+    {
+        type = make_shared<TypeDecl>(Type::tUInt);
+    }
+    
+    // ExprConstDouble
+    
     void ExprConstDouble::log(ostream& stream, int depth) const
     {
         stream << to_string_ex(value);
+    }
+    
+    void ExprConstDouble::inferType(InferTypeContext & context)
+    {
+        type = make_shared<TypeDecl>(Type::tFloat);
     }
     
     // ExprIfThenElse
@@ -233,7 +385,27 @@ namespace yzg
         stream << ")";
     }
     
+    void ExprIfThenElse::inferType(InferTypeContext & context)
+    {
+        cond->inferType(context);
+        if ( !cond->type->isSimpleType(Type::tBool) )
+            throw semantic_error("if-then-else condition must be boolean");
+        if_true->inferType(context);
+        if ( if_false )
+            if_false->inferType(context);
+        type = make_shared<TypeDecl>();
+    }
+    
     // ExprWhile
+    
+    void ExprWhile::inferType(InferTypeContext & context)
+    {
+        cond->inferType(context);
+        if ( !cond->type->isSimpleType(Type::tBool) )
+            throw semantic_error("while loop condition must be boolean");
+        body->inferType(context);
+        type = make_shared<TypeDecl>();
+    }
     
     void ExprWhile::log(ostream& stream, int depth) const
     {
@@ -244,7 +416,7 @@ namespace yzg
         stream << ")";
     }
 
-    // ExprLst
+    // ExprLet
 
     Variable * ExprLet::find(const string & name) const
     {
@@ -255,9 +427,7 @@ namespace yzg
         }
         return nullptr;
     }
-    
-    // ExprLet
-    
+
     void ExprLet::log(ostream& stream, int depth) const
     {
         stream << "(let\n";
@@ -267,6 +437,15 @@ namespace yzg
         stream << string(depth+2, '\t');
         subexpr->log(stream, depth+2);
         stream << ")";
+    }
+    
+    void ExprLet::inferType(InferTypeContext & context)
+    {
+        auto sz = context.local.size();
+        context.local.insert(context.local.end(), variables.begin(), variables.end());
+        subexpr->inferType(context);
+        context.local.resize(sz);
+        type = make_shared<TypeDecl>();
     }
     
     // ExprCall
@@ -279,6 +458,15 @@ namespace yzg
             arg->log(stream, depth);
         }
         stream << ")";
+    }
+    
+    void ExprCall::inferType(InferTypeContext & context)
+    {
+        for ( auto & ar : arguments )
+            ar->inferType(context);
+        // TODO: locate function by mangled name
+        //  copy its type
+        type = make_shared<TypeDecl>();
     }
     
     // program
@@ -325,6 +513,16 @@ namespace yzg
             stream << *st.second << "\n";
         }
         return stream;
+    }
+    
+    void Program::inferTypes()
+    {
+        for ( auto & fit : functions ) {
+            Expression::InferTypeContext context;
+            context.program = shared_from_this();
+            context.func = fit.second;
+            context.func->body->inferType(context);
+        }
     }
     
     /*
@@ -587,13 +785,14 @@ namespace yzg
         func->result = parseTypeDeclaratoin(decl->list[1], program);
         for ( int ai = 2; ai < decl->list.size()-1; ++ai ) {
             auto & arg = decl->list[ai];
-            auto argName = arg->getTailName();
-            if ( argName.empty() )
+            auto argp = make_shared<Variable>();
+            argp->name = arg->getTailName();
+            if ( argp->name.empty() )
                 throw parse_error("function argument must have name", arg);
-            if ( func->findArgument(argName) )
+            if ( func->findArgument(argp->name) )
                 throw parse_error("function already has argument with this name", arg);
-            auto argType = parseTypeDeclaratoin(arg, program);
-            func->arguments.push_back({argName, argType});
+            argp->type = parseTypeDeclaratoin(arg, program);
+            func->arguments.push_back(argp);
             // TODO: context and function body
             func->body = parseExpression(decl->list.back(), program);
         }
@@ -622,6 +821,7 @@ namespace yzg
         parseStructureDeclarations(root, program);
         parseVariableDeclarations(root, program);
         parseFunctionDeclarations(root, program);
+        program->inferTypes();
         return program;
     }
     

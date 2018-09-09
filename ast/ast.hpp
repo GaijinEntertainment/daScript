@@ -44,18 +44,37 @@ namespace yzg
     Type nameToBasicType(const string & name);
     
     class Structure;
+    typedef shared_ptr<Structure> StructurePtr;
+    
+    class Function;
+    typedef shared_ptr<Function> FunctionPtr;
+    
+    class Variable;
+    typedef shared_ptr<Variable> VariablePtr;
+    
+    class Expression;
+    typedef shared_ptr<Expression> ExpressionPtr;
+    
+    class Program;
+    typedef shared_ptr<Program> ProgramPtr;
     
     class TypeDecl
     {
     public:
+        TypeDecl() = default;
+        TypeDecl(const TypeDecl &) = default;
+        TypeDecl(Type tt) : baseType(tt) {}
         friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
         string getMangledName() const;
-        
+        bool isSameType ( const TypeDecl & decl, bool constMatters = true, bool rvalueMatters = true ) const;
+        bool isSimpleType ( Type tp ) const;
+        bool isVoid() const;
     public:
-        Type                baseType;
+        Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
         vector<uint64_t>    dim;
         bool                constant = false;
+        bool                rvalue = false;
     };
     typedef shared_ptr<TypeDecl> TypeDeclPtr;
     
@@ -67,52 +86,61 @@ namespace yzg
             string      name;
             TypeDeclPtr type;
         };
-        
+    public:
         Structure ( const string & n ) : name(n) {}
         const FieldDeclaration * findField ( const string & name ) const;
         friend ostream& operator<< (ostream& stream, const Structure & structure);
-        
     public:
         string                      name;
         vector<FieldDeclaration>    fields;
     };
-    typedef shared_ptr<Structure> StructurePtr;
     
     class Variable
     {
     public:
         friend ostream& operator<< (ostream& stream, const Variable & var);
-        
     public:
         string      name;
         TypeDeclPtr type;
         bool        constant = false;
     };
-    typedef shared_ptr<Variable> VariablePtr;
     
     class Expression
     {
     public:
-        friend ostream& operator<< (ostream& stream, const Expression & func);
+        struct InferTypeContext
+        {
+            ProgramPtr          program;
+            FunctionPtr         func;
+            vector<VariablePtr> local;
+        };
     public:
+        friend ostream& operator<< (ostream& stream, const Expression & func);
         virtual void log(ostream& stream, int depth) const = 0;
+        virtual void inferType(InferTypeContext & context) = 0;
+    public:
+        TypeDeclPtr type;
     };
-    typedef shared_ptr<Expression> ExpressionPtr;
     
     class ExprBlock : public Expression
     {
     public:
-        vector<ExpressionPtr>   list;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
     public:
-        virtual void log(ostream& stream, int depth) const;
+        vector<ExpressionPtr>   list;
     };
     
     class ExprVar : public Expression
     {
     public:
-        string  name;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
     public:
-        virtual void log(ostream& stream, int depth) const;
+        string      name;
+        VariablePtr variable;
+        bool        local = false;
+        bool        argument = false;
     };
     
     class ExprOp : public Expression
@@ -124,33 +152,37 @@ namespace yzg
     class ExprOp1 : public ExprOp   // unary    !subexpr
     {
     public:
-        ExpressionPtr   subexpr;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual void log(ostream& stream, int depth) const override;
     public:
-        virtual void log(ostream& stream, int depth) const;
+        ExpressionPtr   subexpr;
     };
     
     class ExprOp2 : public ExprOp   // binary   left < right
     {
     public:
-        ExpressionPtr   left, right;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual void log(ostream& stream, int depth) const override;
     public:
-        virtual void log(ostream& stream, int depth) const;
+        ExpressionPtr   left, right;
     };
     
     class ExprOp3 : public ExprOp   // trinary  subexpr ? left : right
     {
     public:
-        ExpressionPtr   subexpr, left, right;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual void log(ostream& stream, int depth) const override;
     public:
-        virtual void log(ostream& stream, int depth) const;
+        ExpressionPtr   subexpr, left, right;
     };
     
     class ExprReturn : public Expression
     {
     public:
-        ExpressionPtr   subexpr;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual void log(ostream& stream, int depth) const override;
     public:
-        virtual void log(ostream& stream, int depth) const;
+        ExpressionPtr   subexpr;
     };
     
     class ExprConst : public Expression
@@ -162,37 +194,38 @@ namespace yzg
     {
     public:
         ExprConstInt(int64_t i) : value(i) {}
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
     public:
         int64_t value;
-    public:
-        virtual void log(ostream& stream, int depth) const;
     };
     
     class ExprConstUInt : public ExprConst
     {
     public:
         ExprConstUInt(uint64_t i) : value(i) {}
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
     public:
         uint64_t value;
-    public:
-        virtual void log(ostream& stream, int depth) const;
     };
 
     class ExprConstDouble : public ExprConst
     {
     public:
         ExprConstDouble(double i) : value(i) {}
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
     public:
         double value;
-    public:
-        virtual void log(ostream& stream, int depth) const;
     };
     
     class ExprLet : public Expression
     {
     public:
         Variable * find ( const string & name ) const;
-        virtual void log(ostream& stream, int depth) const;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
     public:
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
@@ -201,7 +234,8 @@ namespace yzg
     class ExprCall : public Expression
     {
     public:
-        virtual void log(ostream& stream, int depth) const;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
     public:
         string                  name;
         vector<ExpressionPtr>   arguments;
@@ -210,60 +244,64 @@ namespace yzg
     class ExprIfThenElse : public Expression
     {
     public:
-        ExpressionPtr   cond, if_true, if_false;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
     public:
-        virtual void log(ostream& stream, int depth) const;
+        ExpressionPtr   cond, if_true, if_false;
     };
     
     class ExprWhile : public Expression
     {
     public:
-        ExpressionPtr   cond, body;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
     public:
-        virtual void log(ostream& stream, int depth) const;
+        ExpressionPtr   cond, body;
     };
     
     class Function
     {
     public:
-        struct Argument
-        {
-            string      name;
-            TypeDeclPtr type;
-        };
-
         friend ostream& operator<< (ostream& stream, const Function & func);
         string getMangledName() const;
-        Argument * findArgument(const string & name);
-        
+        VariablePtr findArgument(const string & name);
     public:
         string              name;
-        vector<Argument>    arguments;
+        vector<VariablePtr> arguments;
         TypeDeclPtr         result;
         ExpressionPtr       body;
+        bool                builtIn = false;
     };
-    typedef shared_ptr<Function> FunctionPtr;
     
-    class Program
+    class BuiltInFunction : public Function
+    {
+    };
+    
+    class Program : public enable_shared_from_this<Program>
     {
     public:
         friend ostream& operator<< (ostream& stream, const Program & program);
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
-        
+        void inferTypes();
     public:
         map<string, StructurePtr>   structures;
         map<string, VariablePtr>    globals;
         map<string, VariablePtr>    constants;
         map<string, FunctionPtr>    functions;      // mangled name 2 function name
     };
-    typedef shared_ptr<Program> ProgramPtr;
 
     class parse_error : public runtime_error
     {
     public:
         parse_error ( const string & message, const NodePtr & error_at ) : runtime_error(message), at(error_at.get()) {}
         Node * at;
+    };
+    
+    class semantic_error : public runtime_error
+    {
+    public:
+        semantic_error ( const string & message ) : runtime_error(message) {}
     };
     
     ProgramPtr parse ( const NodePtr & root );
