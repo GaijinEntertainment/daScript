@@ -4,6 +4,8 @@
       Thanks to Google Autofuzz team for the report!
   * Fixed: Fix off-by-one in uriComposeQueryCharsRequired* and ...Ex*
       Reported space requirements were 1 byte bigger than necessary
+  * Fixed: Detect integer overflow in uriComposeQuery* and uriComposeQueryEx*
+      Thanks to Google Autofuzz team for the report!
   * TODO BUMP SONAME
 
 2018-08-18 -- 0.8.6

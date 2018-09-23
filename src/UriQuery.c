@@ -68,6 +68,10 @@
 
 
 
+#include <limits.h>
+
+
+
 static int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList,
 		int maxChars, int * charsWritten, int * charsRequired,
@@ -201,9 +205,15 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const URI_CHAR * const value = queryList->value;
 		const int worstCase = (normalizeBreaks == URI_TRUE ? 6 : 3);
 		const int keyLen = (key == NULL) ? 0 : (int)URI_STRLEN(key);
-		const int keyRequiredChars = worstCase * keyLen;
+		int keyRequiredChars;
 		const int valueLen = (value == NULL) ? 0 : (int)URI_STRLEN(value);
-		const int valueRequiredChars = worstCase * valueLen;
+		int valueRequiredChars;
+
+		if ((keyLen >= INT_MAX / worstCase) || (valueLen >= INT_MAX / worstCase)) {
+			return URI_ERROR_OUTPUT_TOO_LARGE;
+		}
+		keyRequiredChars = worstCase * keyLen;
+		valueRequiredChars = worstCase * valueLen;
 
 		if (dest == NULL) {
 			(*charsRequired) += ampersandLen + keyRequiredChars + ((value == NULL)
