@@ -186,7 +186,7 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		int maxChars, int * charsWritten, int * charsRequired,
 		UriBool spaceToPlus, UriBool normalizeBreaks) {
 	UriBool firstItem = URI_TRUE;
-	int ampersandLen = 0;
+	int ampersandLen = 0;  /* increased to 1 from second item on */
 	URI_CHAR * write = dest;
 
 	/* Subtract terminator */
@@ -195,7 +195,7 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 	} else {
 		maxChars--;
 	}
-			
+
 	while (queryList != NULL) {
 		const URI_CHAR * const key = queryList->key;
 		const URI_CHAR * const value = queryList->value;
@@ -206,35 +206,31 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const int valueRequiredChars = worstCase * valueLen;
 
 		if (dest == NULL) {
+			(*charsRequired) += ampersandLen + keyRequiredChars + ((value == NULL)
+						? 0
+						: 1 + valueRequiredChars);
+
 			if (firstItem == URI_TRUE) {
 				ampersandLen = 1;
 				firstItem = URI_FALSE;
 			}
-
-			(*charsRequired) += ampersandLen + keyRequiredChars + ((value == NULL)
-						? 0
-						: 1 + valueRequiredChars);
 		} else {
-			URI_CHAR * afterKey;
-
 			if ((write - dest) + ampersandLen + keyRequiredChars > maxChars) {
 				return URI_ERROR_OUTPUT_TOO_LARGE;
 			}
 
 			/* Copy key */
 			if (firstItem == URI_TRUE) {
+				ampersandLen = 1;
 				firstItem = URI_FALSE;
 			} else {
 				write[0] = _UT('&');
 				write++;
 			}
-			afterKey = URI_FUNC(EscapeEx)(key, key + keyLen,
+			write = URI_FUNC(EscapeEx)(key, key + keyLen,
 					write, spaceToPlus, normalizeBreaks);
-			write += (afterKey - write);
 
 			if (value != NULL) {
-				URI_CHAR * afterValue;
-
 				if ((write - dest) + 1 + valueRequiredChars > maxChars) {
 					return URI_ERROR_OUTPUT_TOO_LARGE;
 				}
@@ -242,9 +238,8 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 				/* Copy value */
 				write[0] = _UT('=');
 				write++;
-				afterValue = URI_FUNC(EscapeEx)(value, value + valueLen,
+				write = URI_FUNC(EscapeEx)(value, value + valueLen,
 						write, spaceToPlus, normalizeBreaks);
-				write += (afterValue - write);
 			}
 		}
 

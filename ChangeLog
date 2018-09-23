@@ -1,3 +1,11 @@
+2018-xx-xx -- x.x.x
+
+  * Fixed: Out-of-bounds write in uriComposeQuery* and uriComposeQueryEx*
+      Thanks to Google Autofuzz team for the report!
+  * Fixed: Fix off-by-one in uriComposeQueryCharsRequired* and ...Ex*
+      Reported space requirements were 1 byte bigger than necessary
+  * TODO BUMP SONAME
+
 2018-08-18 -- 0.8.6
 
   * Fixed: Bad/NULL .hostText.afterLast when parsing certain rather pathologic
