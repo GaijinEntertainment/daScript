@@ -215,8 +215,6 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 				firstItem = URI_FALSE;
 			}
 		} else {
-			URI_CHAR * afterKey;
-
 			if ((write - dest) + ampersandLen + keyRequiredChars > maxChars) {
 				return URI_ERROR_OUTPUT_TOO_LARGE;
 			}
@@ -229,13 +227,10 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 				write[0] = _UT('&');
 				write++;
 			}
-			afterKey = URI_FUNC(EscapeEx)(key, key + keyLen,
+			write = URI_FUNC(EscapeEx)(key, key + keyLen,
 					write, spaceToPlus, normalizeBreaks);
-			write += (afterKey - write);
 
 			if (value != NULL) {
-				URI_CHAR * afterValue;
-
 				if ((write - dest) + 1 + valueRequiredChars > maxChars) {
 					return URI_ERROR_OUTPUT_TOO_LARGE;
 				}
@@ -243,9 +238,8 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 				/* Copy value */
 				write[0] = _UT('=');
 				write++;
-				afterValue = URI_FUNC(EscapeEx)(value, value + valueLen,
+				write = URI_FUNC(EscapeEx)(value, value + valueLen,
 						write, spaceToPlus, normalizeBreaks);
-				write += (afterValue - write);
 			}
 		}
 
