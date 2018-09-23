@@ -195,7 +195,7 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 	} else {
 		maxChars--;
 	}
-			
+
 	while (queryList != NULL) {
 		const URI_CHAR * const key = queryList->key;
 		const URI_CHAR * const value = queryList->value;
