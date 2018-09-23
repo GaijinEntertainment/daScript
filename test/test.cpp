@@ -104,6 +104,7 @@ public:
 		TEST_ADD(UriSuite::testQueryList)
 		TEST_ADD(UriSuite::testQueryListPair)
 		TEST_ADD(UriSuite::testQueryDissection_Bug3590761)
+		TEST_ADD(UriSuite::testQueryCompositionMathWrite_GoogleAutofuzz113244572)
 		TEST_ADD(UriSuite::testFreeCrash_Bug20080827)
 		TEST_ADD(UriSuite::testParseInvalid_Bug16)
 		TEST_ADD(UriSuite::testRangeComparison)
@@ -1747,6 +1748,37 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(! queryList->next->next->next);
 
 		uriFreeQueryListA(queryList);
+	}
+
+	void testQueryCompositionMathWrite_GoogleAutofuzz113244572() {
+		UriQueryListA second = { .key = "\x11", .value = NULL, .next = NULL };
+		UriQueryListA first = { .key = "\x01", .value = "\x02", .next = &second };
+
+		const UriBool spaceToPlus = URI_TRUE;
+		const UriBool normalizeBreaks = URI_FALSE;  /* for factor 3 but 6 */
+
+		const int charsRequired = (3 + 1 + 3) + 1 + (3);
+
+		{
+			// Minimum space to hold everything fine
+			const char * const expected = "%01=%02" "&" "%11";
+			char dest[charsRequired + 1];
+			int charsWritten;
+			TEST_ASSERT(uriComposeQueryExA(dest, &first, sizeof(dest),
+					&charsWritten, spaceToPlus, normalizeBreaks)
+				== URI_SUCCESS);
+			TEST_ASSERT(! strcmp(dest, expected));
+			TEST_ASSERT(charsWritten == strlen(expected) + 1);
+		}
+
+		{
+			// Previous math failed to take ampersand into account
+			char dest[charsRequired + 1 - 1];
+			int charsWritten;
+			TEST_ASSERT(uriComposeQueryExA(dest, &first, sizeof(dest),
+					&charsWritten, spaceToPlus, normalizeBreaks)
+				== URI_ERROR_OUTPUT_TOO_LARGE);
+		}
 	}
 
 	void testFreeCrash_Bug20080827() {
