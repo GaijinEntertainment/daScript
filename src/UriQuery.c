@@ -206,14 +206,14 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		const int valueRequiredChars = worstCase * valueLen;
 
 		if (dest == NULL) {
+			(*charsRequired) += ampersandLen + keyRequiredChars + ((value == NULL)
+						? 0
+						: 1 + valueRequiredChars);
+
 			if (firstItem == URI_TRUE) {
 				ampersandLen = 1;
 				firstItem = URI_FALSE;
 			}
-
-			(*charsRequired) += ampersandLen + keyRequiredChars + ((value == NULL)
-						? 0
-						: 1 + valueRequiredChars);
 		} else {
 			URI_CHAR * afterKey;
 

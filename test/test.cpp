@@ -104,6 +104,7 @@ public:
 		TEST_ADD(UriSuite::testQueryList)
 		TEST_ADD(UriSuite::testQueryListPair)
 		TEST_ADD(UriSuite::testQueryDissection_Bug3590761)
+		TEST_ADD(UriSuite::testQueryCompositionMathCalc)
 		TEST_ADD(UriSuite::testQueryCompositionMathWrite_GoogleAutofuzz113244572)
 		TEST_ADD(UriSuite::testFreeCrash_Bug20080827)
 		TEST_ADD(UriSuite::testParseInvalid_Bug16)
@@ -1748,6 +1749,22 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		TEST_ASSERT(! queryList->next->next->next);
 
 		uriFreeQueryListA(queryList);
+	}
+
+	void testQueryCompositionMathCalc() {
+		UriQueryListA second = { .key = "k2", .value = "v2", .next = NULL };
+		UriQueryListA first = { .key = "k1", .value = "v1", .next = &second };
+
+		int charsRequired;
+		TEST_ASSERT(uriComposeQueryCharsRequiredA(&first, &charsRequired)
+				== URI_SUCCESS);
+
+		const int FACTOR = 6;  /* due to escaping with normalizeBreaks */
+		TEST_ASSERT(charsRequired ==
+			FACTOR * strlen(first.key) + 1 + FACTOR * strlen(first.value)
+			+ 1
+			+ FACTOR * strlen(second.key) + 1 + FACTOR * strlen(second.value)
+		);
 	}
 
 	void testQueryCompositionMathWrite_GoogleAutofuzz113244572() {
