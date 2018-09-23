@@ -186,7 +186,7 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 		int maxChars, int * charsWritten, int * charsRequired,
 		UriBool spaceToPlus, UriBool normalizeBreaks) {
 	UriBool firstItem = URI_TRUE;
-	int ampersandLen = 0;
+	int ampersandLen = 0;  /* increased to 1 from second item on */
 	URI_CHAR * write = dest;
 
 	/* Subtract terminator */
