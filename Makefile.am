@@ -63,7 +63,7 @@ liburiparser_la_SOURCES = \
 if URI_TEST_ENABLED
 test_uriparser_test_LDFLAGS = @GTEST_LIBS@
 
-test_uriparser_test_CFLAGS = @GTEST_CFLAGS@
+test_uriparser_test_CXXFLAGS = @GTEST_CFLAGS@
 
 test_uriparser_test_LDADD = liburiparser.la
 
