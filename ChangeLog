@@ -6,6 +6,7 @@
       Reported space requirements were 1 byte bigger than necessary
   * Fixed: Detect integer overflow in uriComposeQuery* and uriComposeQueryEx*
       Thanks to Google Autofuzz team for the report!
+  * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
   * TODO BUMP SONAME
 
 2018-08-18 -- 0.8.6

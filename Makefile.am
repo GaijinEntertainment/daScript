@@ -61,17 +61,15 @@ liburiparser_la_SOURCES = \
 
 
 if URI_TEST_ENABLED
-test_uriparser_test_LDFLAGS = @CPPTEST_LIBS@
+test_uriparser_test_LDFLAGS = @GTEST_LIBS@
 
-test_uriparser_test_CFLAGS = @CPPTEST_CFLAGS@
+test_uriparser_test_CXXFLAGS = @GTEST_CFLAGS@
 
 test_uriparser_test_LDADD = liburiparser.la
 
 test_uriparser_test_SOURCES = \
 	test/FourSuite.cpp \
-	test/FourSuite.h \
 	test/VersionSuite.cpp \
-	test/VersionSuite.h \
 	test/test.cpp
 endif
 
