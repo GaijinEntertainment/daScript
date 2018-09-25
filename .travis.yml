@@ -13,10 +13,20 @@ addons:
     packages:
       - doxygen
       - graphviz
-      - libgtest-dev
+    # For building gtest:
+      - cmake
 
 script:
   - set -e
+  - GTEST_VERSION=1.8.1
+    ; GTEST_PREFIX=~/.local/
+    ; wget https://github.com/google/googletest/archive/release-${GTEST_VERSION}.tar.gz
+    && tar xf release-${GTEST_VERSION}.tar.gz
+    && ( cd googletest-release-${GTEST_VERSION}/
+      && cmake -DCVF_VERSION=${GTEST_VERSION} -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX} .
+      && make
+      && make install )
+    && export PKG_CONFIG_PATH="$(find "${GTEST_PREFIX}" -type d -name pkgconfig)"
   - ./autogen.sh
   - ./configure
   - make distcheck
