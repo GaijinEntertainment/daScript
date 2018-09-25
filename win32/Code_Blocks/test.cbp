@@ -55,7 +55,6 @@
 		<Unit filename="..\CppTest\utils.h" />
 		<Unit filename="..\CppTest\winconfig.h" />
 		<Unit filename="..\..\test\FourSuite.cpp" />
-		<Unit filename="..\..\test\FourSuite.h" />
 		<Unit filename="..\..\test\test.cpp" />
 		<Extensions>
 			<code_completion />

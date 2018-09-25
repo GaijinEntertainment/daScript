@@ -18,7 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include "VersionSuite.h"
+#include <gtest/gtest.h>
 
 #ifndef _GNU_SOURCE
 # define _GNU_SOURCE  // for asprintf
@@ -30,11 +30,11 @@
 #include <uriparser/UriBase.h>
 
 
-void VersionSuite::ensure_version_defines_in_sync() {
+TEST(VersionSuite, EnsureVersionDefinesInSync) {
 	char * INSIDE_VERSION = NULL;
 	const int bytes_printed = asprintf(&INSIDE_VERSION, "%d.%d.%d%s",
 			URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX_ANSI);
-	TEST_ASSERT(bytes_printed != -1);
+	ASSERT_TRUE(bytes_printed != -1);
 	printf("bytes_printed: %d\n", bytes_printed);
 
 	const bool equal = !strcmp(INSIDE_VERSION, PACKAGE_VERSION);
@@ -44,5 +44,5 @@ void VersionSuite::ensure_version_defines_in_sync() {
 		printf("  Header defines version:  <%s>\n", INSIDE_VERSION);
 	}
 	free(INSIDE_VERSION);
-	TEST_ASSERT(equal);
+	ASSERT_TRUE(equal);
 }

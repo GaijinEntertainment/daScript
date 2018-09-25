@@ -56,7 +56,7 @@ AS_HELP_STRING(
 
 ## Option --disable-test
 AC_ARG_ENABLE(test, [AS_HELP_STRING(
-	[--disable-test], [disable 'make check' and libcpptest dependency]
+	[--disable-test], [disable 'make check' and libgtest dependency]
 )], [
 	URI_TEST_YESNO=${enableval}
 ],[
@@ -65,12 +65,12 @@ AC_ARG_ENABLE(test, [AS_HELP_STRING(
 AM_CONDITIONAL([URI_TEST_ENABLED], [test "${URI_TEST_YESNO}" = "yes"])
 
 
-## Check for CppTest
+## Check for Googletest
 if test "${URI_TEST_YESNO}" = "yes"; then
-	PKG_CHECK_MODULES([CPPTEST], [
-		libcpptest >= 1.1.0
+	PKG_CHECK_MODULES([GTEST], [
+		gtest >= 1.8.1
 	], [], [
-		AC_MSG_ERROR([Please install libcpptest 1.1.0 or later.
+		AC_MSG_ERROR([Please install Googletest 1.8.1 or later.
 			Alternatively, you could pass --disable-test to the call to configure.
 			However, it is not recommended to disable the test suite.])
 	])

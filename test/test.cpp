@@ -20,16 +20,12 @@
  */
 
 #include <uriparser/Uri.h>
-#include <cpptest.h>
+#include <gtest/gtest.h>
 #include <memory>
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
 
-#include "FourSuite.h"
-#include "VersionSuite.h"
-
-using namespace Test;
 using namespace std;
 
 
@@ -42,79 +38,15 @@ int uriCompareRangeA(const UriTextRangeA * a, const UriTextRangeA * b);
 
 
 
-#define URI_TEST_IP_FOUR_FAIL(x) TEST_ASSERT(URI_FALSE == uri_TESTING_ONLY_ParseIpFourA(x))
-#define URI_TEST_IP_FOUR_PASS(x) TEST_ASSERT(URI_TRUE == uri_TESTING_ONLY_ParseIpFourA(x))
+#define URI_TEST_IP_FOUR_FAIL(x) ASSERT_TRUE(URI_FALSE == uri_TESTING_ONLY_ParseIpFourA(x))
+#define URI_TEST_IP_FOUR_PASS(x) ASSERT_TRUE(URI_TRUE == uri_TESTING_ONLY_ParseIpFourA(x))
 
 // Note the closing brackets! TODO
-#define URI_TEST_IP_SIX_FAIL(x) TEST_ASSERT(URI_FALSE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
-#define URI_TEST_IP_SIX_PASS(x) TEST_ASSERT(URI_TRUE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
+#define URI_TEST_IP_SIX_FAIL(x) ASSERT_TRUE(URI_FALSE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
+#define URI_TEST_IP_SIX_PASS(x) ASSERT_TRUE(URI_TRUE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
 
 
-
-class UriSuite : public Suite {
-
-public:
-	UriSuite() {
-		TEST_ADD(UriSuite::testDistinction)
-		TEST_ADD(UriSuite::testIpFour)
-		TEST_ADD(UriSuite::testIpSixPass)
-		TEST_ADD(UriSuite::testIpSixFail)
-		TEST_ADD(UriSuite::testUri)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort1)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort2)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort22_Bug1948038)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_1)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_2)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_3)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_4)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_related_1)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_related_12)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort23_Bug3510198_related_2)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort3)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort4)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort5)
-		TEST_ADD(UriSuite::testUriUserInfoHostPort6)
-		TEST_ADD(UriSuite::testUriHostRegname)
-		TEST_ADD(UriSuite::testUriHostIpFour1)
-		TEST_ADD(UriSuite::testUriHostIpFour2)
-		TEST_ADD(UriSuite::testUriHostIpSix1)
-		TEST_ADD(UriSuite::testUriHostIpSix2)
-		TEST_ADD(UriSuite::testUriHostIpFuture)
-		TEST_ADD(UriSuite::testUriHostEmpty)
-		TEST_ADD(UriSuite::testUriComponents)
-		TEST_ADD(UriSuite::testUriComponents_Bug20070701)
-		TEST_ADD(UriSuite::testEscaping)
-		TEST_ADD(UriSuite::testUnescaping)
-		TEST_ADD(UriSuite::testTrailingSlash)
-		TEST_ADD(UriSuite::testAddBase)
-		TEST_ADD(UriSuite::testToString)
-		TEST_ADD(UriSuite::testToString_Bug1950126)
-		TEST_ADD(UriSuite::testToStringCharsRequired)
-		TEST_ADD(UriSuite::testToStringCharsRequired)
-		TEST_ADD(UriSuite::testNormalizeSyntaxMaskRequired)
-		TEST_ADD(UriSuite::testNormalizeSyntax)
-		TEST_ADD(UriSuite::testNormalizeSyntaxComponents)
-		TEST_ADD(UriSuite::testNormalizeCrash_Bug20080224)
-		TEST_ADD(UriSuite::testFilenameUriConversion)
-		TEST_ADD(UriSuite::testCrash_FreeUriMembers_Bug20080116)
-		TEST_ADD(UriSuite::testCrash_Report2418192)
-		TEST_ADD(UriSuite::testPervertedQueryString);
-		TEST_ADD(UriSuite::testQueryStringEndingInEqualSign_NonBug32);
-		TEST_ADD(UriSuite::testCrash_MakeOwner_Bug20080207)
-		TEST_ADD(UriSuite::testQueryList)
-		TEST_ADD(UriSuite::testQueryListPair)
-		TEST_ADD(UriSuite::testQueryDissection_Bug3590761)
-		TEST_ADD(UriSuite::testQueryCompositionMathCalc)
-		TEST_ADD(UriSuite::testQueryCompositionMathWrite_GoogleAutofuzz113244572)
-		TEST_ADD(UriSuite::testFreeCrash_Bug20080827)
-		TEST_ADD(UriSuite::testParseInvalid_Bug16)
-		TEST_ADD(UriSuite::testRangeComparison)
-		TEST_ADD(UriSuite::testRangeComparison_RemoveBaseUri_Issue19)
-		TEST_ADD(UriSuite::testEquals)
-		TEST_ADD(UriSuite::testHostTextTermination_Issue15)
-	}
-
-private:
+namespace {
 	bool testDistinctionHelper(const char * uriText, bool expectedHostSet,
 			bool expectedAbsPath, bool expectedEmptyTailSegment) {
 		UriParserStateA state;
@@ -146,8 +78,10 @@ private:
 		uriFreeUriMembersA(&uri);
 		return true;
 	}
+}  // namespace
 
-	void testDistinction() {
+
+TEST(UriSuite, TestDistinction) {
 		/*
 ============================================================================
 Rule                                | Example | hostSet | absPath | emptySeg
@@ -171,24 +105,24 @@ Rule                                | Example | hostSet | absPath | emptySeg
    4) path-empty                    | ""      |   false |   false |   false
 ============================================================================
 		*/
-		TEST_ASSERT(testDistinctionHelper("s://", true, false, false));
-		TEST_ASSERT(testDistinctionHelper("s:///", true, false, true));
-		TEST_ASSERT(testDistinctionHelper("s://a", true, false, false));
-		TEST_ASSERT(testDistinctionHelper("s://a/", true, false, true));
-		TEST_ASSERT(testDistinctionHelper("s:/", false, true, false));
-		TEST_ASSERT(testDistinctionHelper("s:a", false, false, false));
-		TEST_ASSERT(testDistinctionHelper("s:a/", false, false, true));
-		TEST_ASSERT(testDistinctionHelper("s:", false, false, false));
+		ASSERT_TRUE(testDistinctionHelper("s://", true, false, false));
+		ASSERT_TRUE(testDistinctionHelper("s:///", true, false, true));
+		ASSERT_TRUE(testDistinctionHelper("s://a", true, false, false));
+		ASSERT_TRUE(testDistinctionHelper("s://a/", true, false, true));
+		ASSERT_TRUE(testDistinctionHelper("s:/", false, true, false));
+		ASSERT_TRUE(testDistinctionHelper("s:a", false, false, false));
+		ASSERT_TRUE(testDistinctionHelper("s:a/", false, false, true));
+		ASSERT_TRUE(testDistinctionHelper("s:", false, false, false));
 
-		TEST_ASSERT(testDistinctionHelper("//", true, false, false));
-		TEST_ASSERT(testDistinctionHelper("///", true, false, true));
-		TEST_ASSERT(testDistinctionHelper("/", false, true, false));
-		TEST_ASSERT(testDistinctionHelper("a", false, false, false));
-		TEST_ASSERT(testDistinctionHelper("a/", false, false, true));
-		TEST_ASSERT(testDistinctionHelper("", false, false, false));
-	}
+		ASSERT_TRUE(testDistinctionHelper("//", true, false, false));
+		ASSERT_TRUE(testDistinctionHelper("///", true, false, true));
+		ASSERT_TRUE(testDistinctionHelper("/", false, true, false));
+		ASSERT_TRUE(testDistinctionHelper("a", false, false, false));
+		ASSERT_TRUE(testDistinctionHelper("a/", false, false, true));
+		ASSERT_TRUE(testDistinctionHelper("", false, false, false));
+}
 
-	void testIpFour() {
+TEST(UriSuite, TestIpFour) {
 		URI_TEST_IP_FOUR_FAIL("01.0.0.0");
 		URI_TEST_IP_FOUR_FAIL("001.0.0.0");
 		URI_TEST_IP_FOUR_FAIL("00.0.0.0");
@@ -210,9 +144,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		URI_TEST_IP_FOUR_PASS("2.0.0.0");
 		URI_TEST_IP_FOUR_PASS("3.0.0.0");
 		URI_TEST_IP_FOUR_PASS("30.0.0.0");
-	}
+}
 
-	void testIpSixPass() {
+TEST(UriSuite, TestIpSixPass) {
 		// Quad length
 		URI_TEST_IP_SIX_PASS("abcd::");
 
@@ -260,9 +194,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		URI_TEST_IP_SIX_PASS("2001:db8:100:f101::1");
 		URI_TEST_IP_SIX_PASS("a:b:c::12:1");
 		URI_TEST_IP_SIX_PASS("a:b::0:1:2:3");
-	}
+}
 
-	void testIpSixFail() {
+TEST(UriSuite, TestIpSixFail) {
 		// 5 char quad
 		URI_TEST_IP_SIX_FAIL("::12345");
 
@@ -306,9 +240,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 		// Nonhex
 		URI_TEST_IP_SIX_FAIL("g:0:0:0:0:0:0");
-	}
+}
 
-	void testUri() {
+TEST(UriSuite, TestUri) {
 		UriParserStateA stateA;
 		UriParserStateW stateW;
 		UriUriA uriA;
@@ -318,65 +252,65 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		stateW.uri = &uriW;
 
 		// On/off for each
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "//user:pass@[::1]:80/segment/index.html?query#frag"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "//user:pass@[::1]:80/segment/index.html?query#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://[::1]:80/segment/index.html?query#frag"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "http://[::1]:80/segment/index.html?query#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://user:pass@[::1]/segment/index.html?query#frag"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "http://user:pass@[::1]/segment/index.html?query#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://user:pass@[::1]:80?query#frag"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "http://user:pass@[::1]:80?query#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://user:pass@[::1]:80/segment/index.html#frag"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "http://user:pass@[::1]:80/segment/index.html#frag"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://user:pass@[::1]:80/segment/index.html?query"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "http://user:pass@[::1]:80/segment/index.html?query"));
 		uriFreeUriMembersA(&uriA);
 
 		// Schema, port, one segment
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "ftp://host:21/gnu/"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "ftp://host:21/gnu/"));
 		uriFreeUriMembersA(&uriA);
 
 		// Relative
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "one/two/three"));
-		TEST_ASSERT(!uriA.absolutePath);
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "one/two/three"));
+		ASSERT_TRUE(!uriA.absolutePath);
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "/one/two/three"));
-		TEST_ASSERT(uriA.absolutePath);
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "/one/two/three"));
+		ASSERT_TRUE(uriA.absolutePath);
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "//user:pass@localhost/one/two/three"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "//user:pass@localhost/one/two/three"));
 		uriFreeUriMembersA(&uriA);
 
 		// ANSI and Unicode
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://www.example.com/"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "http://www.example.com/"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriW(&stateW, L"http://www.example.com/"));
+		ASSERT_TRUE(0 == uriParseUriW(&stateW, L"http://www.example.com/"));
 		uriFreeUriMembersW(&uriW);
 
 		// Real life examples
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://sourceforge.net/projects/uriparser/"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "http://sourceforge.net/projects/uriparser/"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "http://sourceforge.net/project/platformdownload.php?group_id=182840"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "mailto:test@example.com"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "mailto:test@example.com"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "../../"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "../../"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "/"));
-		TEST_ASSERT(uriA.absolutePath)
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "/"));
+		ASSERT_TRUE(uriA.absolutePath);
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, ""));
-		TEST_ASSERT(!uriA.absolutePath)
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, ""));
+		ASSERT_TRUE(!uriA.absolutePath);
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "file:///bin/bash"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "file:///bin/bash"));
 		uriFreeUriMembersA(&uriA);
 
 		// Percent encoding
-		TEST_ASSERT(0 == uriParseUriA(&stateA, "http://www.example.com/name%20with%20spaces/"));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, "http://www.example.com/name%20with%20spaces/"));
 		uriFreeUriMembersA(&uriA);
-		TEST_ASSERT(0 != uriParseUriA(&stateA, "http://www.example.com/name with spaces/"));
+		ASSERT_TRUE(0 != uriParseUriA(&stateA, "http://www.example.com/name with spaces/"));
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriComponents() {
+TEST(UriSuite, TestUriComponents) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
@@ -384,85 +318,85 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		const char * const input = "http" "://" "sourceforge.net" "/" "project" "/"
 		//		 0                   20 01  0              15
 				"platformdownload.php" "?" "group_id=182840";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.scheme.first == input);
-		TEST_ASSERT(uriA.scheme.afterLast == input + 4);
-		TEST_ASSERT(uriA.userInfo.first == NULL);
-		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 15);
-		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(uriA.scheme.first == input);
+		ASSERT_TRUE(uriA.scheme.afterLast == input + 4);
+		ASSERT_TRUE(uriA.userInfo.first == NULL);
+		ASSERT_TRUE(uriA.userInfo.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 15);
+		ASSERT_TRUE(uriA.hostData.ipFuture.first == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.afterLast == NULL);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 
-		TEST_ASSERT(uriA.pathHead->text.first == input + 4 + 3 + 15 + 1);
-		TEST_ASSERT(uriA.pathHead->text.afterLast == input + 4 + 3 + 15 + 1 + 7);
-		TEST_ASSERT(uriA.pathHead->next->text.first == input + 4 + 3 + 15 + 1 + 7 + 1);
-		TEST_ASSERT(uriA.pathHead->next->text.afterLast == input + 4 + 3 + 15 + 1 + 7 + 1 + 20);
-		TEST_ASSERT(uriA.pathHead->next->next == NULL);
-		TEST_ASSERT(uriA.pathTail == uriA.pathHead->next);
+		ASSERT_TRUE(uriA.pathHead->text.first == input + 4 + 3 + 15 + 1);
+		ASSERT_TRUE(uriA.pathHead->text.afterLast == input + 4 + 3 + 15 + 1 + 7);
+		ASSERT_TRUE(uriA.pathHead->next->text.first == input + 4 + 3 + 15 + 1 + 7 + 1);
+		ASSERT_TRUE(uriA.pathHead->next->text.afterLast == input + 4 + 3 + 15 + 1 + 7 + 1 + 20);
+		ASSERT_TRUE(uriA.pathHead->next->next == NULL);
+		ASSERT_TRUE(uriA.pathTail == uriA.pathHead->next);
 
-		TEST_ASSERT(uriA.query.first == input + 4 + 3 + 15 + 1 + 7 + 1 + 20 + 1);
-		TEST_ASSERT(uriA.query.afterLast == input + 4 + 3 + 15 + 1 + 7 + 1 + 20 + 1 + 15);
-		TEST_ASSERT(uriA.fragment.first == NULL);
-		TEST_ASSERT(uriA.fragment.afterLast == NULL);
+		ASSERT_TRUE(uriA.query.first == input + 4 + 3 + 15 + 1 + 7 + 1 + 20 + 1);
+		ASSERT_TRUE(uriA.query.afterLast == input + 4 + 3 + 15 + 1 + 7 + 1 + 20 + 1 + 15);
+		ASSERT_TRUE(uriA.fragment.first == NULL);
+		ASSERT_TRUE(uriA.fragment.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriComponents_Bug20070701() {
+TEST(UriSuite, TestUriComponentsBug20070701) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          01  01  01
 		const char * const input = "a" ":" "b";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.scheme.first == input);
-		TEST_ASSERT(uriA.scheme.afterLast == input + 1);
-		TEST_ASSERT(uriA.userInfo.first == NULL);
-		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
-		TEST_ASSERT(uriA.hostText.first == NULL);
-		TEST_ASSERT(uriA.hostText.afterLast == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(uriA.scheme.first == input);
+		ASSERT_TRUE(uriA.scheme.afterLast == input + 1);
+		ASSERT_TRUE(uriA.userInfo.first == NULL);
+		ASSERT_TRUE(uriA.userInfo.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first == NULL);
+		ASSERT_TRUE(uriA.hostText.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.first == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.afterLast == NULL);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 
-		TEST_ASSERT(uriA.pathHead->text.first == input + 1 + 1);
-		TEST_ASSERT(uriA.pathHead->text.afterLast == input + 1 + 1 + 1);
-		TEST_ASSERT(uriA.pathHead->next == NULL);
-		TEST_ASSERT(uriA.pathTail == uriA.pathHead);
+		ASSERT_TRUE(uriA.pathHead->text.first == input + 1 + 1);
+		ASSERT_TRUE(uriA.pathHead->text.afterLast == input + 1 + 1 + 1);
+		ASSERT_TRUE(uriA.pathHead->next == NULL);
+		ASSERT_TRUE(uriA.pathTail == uriA.pathHead);
 
-		TEST_ASSERT(uriA.query.first == NULL);
-		TEST_ASSERT(uriA.query.afterLast == NULL);
-		TEST_ASSERT(uriA.fragment.first == NULL);
-		TEST_ASSERT(uriA.fragment.afterLast == NULL);
+		ASSERT_TRUE(uriA.query.first == NULL);
+		ASSERT_TRUE(uriA.query.afterLast == NULL);
+		ASSERT_TRUE(uriA.fragment.first == NULL);
+		ASSERT_TRUE(uriA.fragment.afterLast == NULL);
 
-		TEST_ASSERT(!uriA.absolutePath);
+		ASSERT_TRUE(!uriA.absolutePath);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort1() {
+TEST(UriSuite, TestUriUserInfoHostPort1) {
 		// User info with ":", no port
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7  01  0        9
 		const char * const input = "http" "://" "abc:def" "@" "localhost";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
-		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 7 + 1);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(uriA.userInfo.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.userInfo.afterLast == input + 4 + 3 + 7);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3 + 7 + 1);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort2() {
+TEST(UriSuite, TestUriUserInfoHostPort2) {
 		// User info with ":", with port
 		UriParserStateA stateA;
 		UriUriA uriA;
@@ -471,18 +405,18 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		const char * const input = "http" "://" "abc:def" "@" "localhost"
 		//		01   0  3
 				":" "123";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
-		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 7 + 1);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
-		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 7 + 1 + 9 + 1);
-		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 7 + 1 + 9 + 1 + 3);
+		ASSERT_TRUE(uriA.userInfo.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.userInfo.afterLast == input + 4 + 3 + 7);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3 + 7 + 1);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
+		ASSERT_TRUE(uriA.portText.first == input + 4 + 3 + 7 + 1 + 9 + 1);
+		ASSERT_TRUE(uriA.portText.afterLast == input + 4 + 3 + 7 + 1 + 9 + 1 + 3);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort22_Bug1948038() {
+TEST(UriSuite, TestUriUserInfoHostPort22Bug1948038) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
@@ -490,29 +424,29 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int res;
 
 		res = uriParseUriA(&stateA, "http://user:21@host/");
-		TEST_ASSERT(URI_SUCCESS == res);
-		TEST_ASSERT(!memcmp(uriA.userInfo.first, "user:21", 7 * sizeof(char)));
-		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 7);
-		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
-		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(URI_SUCCESS == res);
+		ASSERT_TRUE(!memcmp(uriA.userInfo.first, "user:21", 7 * sizeof(char)));
+		ASSERT_TRUE(uriA.userInfo.afterLast - uriA.userInfo.first == 7);
+		ASSERT_TRUE(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		ASSERT_TRUE(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
 
 		res = uriParseUriA(&stateA, "http://user:1234@192.168.0.1:1234/foo.com");
-		TEST_ASSERT(URI_SUCCESS == res);
+		ASSERT_TRUE(URI_SUCCESS == res);
 		uriFreeUriMembersA(&uriA);
 
 		res = uriParseUriA(&stateA, "http://moo:21@moo:21@moo/");
-		TEST_ASSERT(URI_ERROR_SYNTAX == res);
+		ASSERT_TRUE(URI_ERROR_SYNTAX == res);
 		uriFreeUriMembersA(&uriA);
 
 		res = uriParseUriA(&stateA, "http://moo:21@moo:21@moo:21/");
-		TEST_ASSERT(URI_ERROR_SYNTAX == res);
+		ASSERT_TRUE(URI_ERROR_SYNTAX == res);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort23_Bug3510198_1() {
+TEST(UriSuite, TestUriUserInfoHostPort23Bug3510198One) {
 		// User info with ":", with port, with escaped chars in password
 		UriParserStateA stateA;
 		UriUriA uriA;
@@ -521,18 +455,17 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int res;
 		//                           0   4  0  3  0         10 01  0   4  01
 		res = uriParseUriA(&stateA, "http" "://" "user:%2F21" "@" "host" "/");
-		TEST_ASSERT(URI_SUCCESS == res);
-		TEST_ASSERT(!memcmp(uriA.userInfo.first, "user:%2F21", 10 * sizeof(char)));
-		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 10);
-		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
-		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(URI_SUCCESS == res);
+		ASSERT_TRUE(!memcmp(uriA.userInfo.first, "user:%2F21", 10 * sizeof(char)));
+		ASSERT_TRUE(uriA.userInfo.afterLast - uriA.userInfo.first == 10);
+		ASSERT_TRUE(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		ASSERT_TRUE(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
+}
 
-	}
-
-	void testUriUserInfoHostPort23_Bug3510198_2() {
+TEST(UriSuite, TestUriUserInfoHostPort23Bug3510198Two) {
 		// User info with ":", with port, with escaped chars in user name and password
 		UriParserStateA stateA;
 		UriUriA uriA;
@@ -541,17 +474,17 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int res;
 		//                           0   4  0  3  0            13 01  0   4  01
 		res = uriParseUriA(&stateA, "http" "://" "%2Fuser:%2F21" "@" "host" "/");
-		TEST_ASSERT(URI_SUCCESS == res);
-		TEST_ASSERT(!memcmp(uriA.userInfo.first, "%2Fuser:%2F21", 13 * sizeof(char)));
-		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 13);
-		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
-		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(URI_SUCCESS == res);
+		ASSERT_TRUE(!memcmp(uriA.userInfo.first, "%2Fuser:%2F21", 13 * sizeof(char)));
+		ASSERT_TRUE(uriA.userInfo.afterLast - uriA.userInfo.first == 13);
+		ASSERT_TRUE(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		ASSERT_TRUE(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort23_Bug3510198_3() {
+TEST(UriSuite, TestUriUserInfoHostPort23Bug3510198Three) {
 		// User info with ":", with port, with escaped chars in password
 		UriParserStateA stateA;
 		UriUriA uriA;
@@ -560,18 +493,17 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int res;
 		//                           0   4  0  3  0               16 01  0   4  01
 		res = uriParseUriA(&stateA, "http" "://" "user:!$&'()*+,;=" "@" "host" "/");
-		TEST_ASSERT(URI_SUCCESS == res);
-		TEST_ASSERT(!memcmp(uriA.userInfo.first, "user:!$&'()*+,;=", 16 * sizeof(char)));
-		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 16);
-		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
-		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(URI_SUCCESS == res);
+		ASSERT_TRUE(!memcmp(uriA.userInfo.first, "user:!$&'()*+,;=", 16 * sizeof(char)));
+		ASSERT_TRUE(uriA.userInfo.afterLast - uriA.userInfo.first == 16);
+		ASSERT_TRUE(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		ASSERT_TRUE(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
+}
 
-	}
-
-	void testUriUserInfoHostPort23_Bug3510198_4() {
+TEST(UriSuite, TestUriUserInfoHostPort23Bug3510198Four) {
 		// User info with ":", with port, with escaped chars in user name and password
 		UriParserStateA stateA;
 		UriUriA uriA;
@@ -580,17 +512,17 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int res;
 		//                           0   4  0  3  0                   20 01  0   4  01
 		res = uriParseUriA(&stateA, "http" "://" "!$&'()*+,;=:password" "@" "host" "/");
-		TEST_ASSERT(URI_SUCCESS == res);
-		TEST_ASSERT(!memcmp(uriA.userInfo.first, "!$&'()*+,;=:password", 20 * sizeof(char)));
-		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 20);
-		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
-		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(URI_SUCCESS == res);
+		ASSERT_TRUE(!memcmp(uriA.userInfo.first, "!$&'()*+,;=:password", 20 * sizeof(char)));
+		ASSERT_TRUE(uriA.userInfo.afterLast - uriA.userInfo.first == 20);
+		ASSERT_TRUE(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		ASSERT_TRUE(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort23_Bug3510198_related_1() {
+TEST(UriSuite, TestUriUserInfoHostPort23Bug3510198RelatedOne) {
 		// Empty user info
 		UriParserStateA stateA;
 		UriUriA uriA;
@@ -599,18 +531,18 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int res;
 		//                           0   4  0  3  01  0   4  01
 		res = uriParseUriA(&stateA, "http" "://" "@" "host" "/");
-		TEST_ASSERT(URI_SUCCESS == res);
-		TEST_ASSERT(uriA.userInfo.afterLast != NULL);
-		TEST_ASSERT(uriA.userInfo.first != NULL);
-		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 0);
-		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
-		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(URI_SUCCESS == res);
+		ASSERT_TRUE(uriA.userInfo.afterLast != NULL);
+		ASSERT_TRUE(uriA.userInfo.first != NULL);
+		ASSERT_TRUE(uriA.userInfo.afterLast - uriA.userInfo.first == 0);
+		ASSERT_TRUE(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		ASSERT_TRUE(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort23_Bug3510198_related_12() {
+TEST(UriSuite, TestUriUserInfoHostPort23Bug3510198RelatedOneTwo) {
 		// Empty user info
 		UriParserStateA stateA;
 		UriUriA uriA;
@@ -619,17 +551,17 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int res;
 		//                           0   4  0  3  0      7  01
 		res = uriParseUriA(&stateA, "http" "://" "%2Fhost" "/");
-		TEST_ASSERT(URI_SUCCESS == res);
-		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
-		TEST_ASSERT(uriA.userInfo.first == NULL);
-		TEST_ASSERT(!memcmp(uriA.hostText.first, "%2Fhost", 7 * sizeof(char)));
-		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 7);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(URI_SUCCESS == res);
+		ASSERT_TRUE(uriA.userInfo.afterLast == NULL);
+		ASSERT_TRUE(uriA.userInfo.first == NULL);
+		ASSERT_TRUE(!memcmp(uriA.hostText.first, "%2Fhost", 7 * sizeof(char)));
+		ASSERT_TRUE(uriA.hostText.afterLast - uriA.hostText.first == 7);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort23_Bug3510198_related_2() {
+TEST(UriSuite, TestUriUserInfoHostPort23Bug3510198RelatedTwo) {
 		// Several colons in userinfo
 		UriParserStateA stateA;
 		UriUriA uriA;
@@ -638,35 +570,35 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int res;
 		//                           0   4  0  3  0 2  01  0   4  01
 		res = uriParseUriA(&stateA, "http" "://" "::" "@" "host" "/");
-		TEST_ASSERT(URI_SUCCESS == res);
-		TEST_ASSERT(!memcmp(uriA.userInfo.first, "::", 2 * sizeof(char)));
-		TEST_ASSERT(uriA.userInfo.afterLast - uriA.userInfo.first == 2);
-		TEST_ASSERT(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
-		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 4);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(URI_SUCCESS == res);
+		ASSERT_TRUE(!memcmp(uriA.userInfo.first, "::", 2 * sizeof(char)));
+		ASSERT_TRUE(uriA.userInfo.afterLast - uriA.userInfo.first == 2);
+		ASSERT_TRUE(!memcmp(uriA.hostText.first, "host", 4 * sizeof(char)));
+		ASSERT_TRUE(uriA.hostText.afterLast - uriA.hostText.first == 4);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort3() {
+TEST(UriSuite, TestUriUserInfoHostPort3) {
 		// User info without ":", no port
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7  01  0        9
 		const char * const input = "http" "://" "abcdefg" "@" "localhost";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
-		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 7 + 1);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(uriA.userInfo.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.userInfo.afterLast == input + 4 + 3 + 7);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3 + 7 + 1);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort4() {
+TEST(UriSuite, TestUriUserInfoHostPort4) {
 		// User info without ":", with port
 		UriParserStateA stateA;
 		UriUriA uriA;
@@ -675,160 +607,161 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		const char * const input = "http" "://" "abcdefg" "@" "localhost"
 		//		01   0  3
 				":" "123";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.userInfo.first == input + 4 + 3);
-		TEST_ASSERT(uriA.userInfo.afterLast == input + 4 + 3 + 7);
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 7 + 1);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
-		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 7 + 1 + 9 + 1);
-		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 7 + 1 + 9 + 1 + 3);
+		ASSERT_TRUE(uriA.userInfo.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.userInfo.afterLast == input + 4 + 3 + 7);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3 + 7 + 1);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 7 + 1 + 9);
+		ASSERT_TRUE(uriA.portText.first == input + 4 + 3 + 7 + 1 + 9 + 1);
+		ASSERT_TRUE(uriA.portText.afterLast == input + 4 + 3 + 7 + 1 + 9 + 1 + 3);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort5() {
+TEST(UriSuite, TestUriUserInfoHostPort5) {
 		// No user info, no port
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  0        9
 		const char * const input = "http" "://" "localhost";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.userInfo.first == NULL);
-		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 9);
-		TEST_ASSERT(uriA.portText.first == NULL);
-		TEST_ASSERT(uriA.portText.afterLast == NULL);
+		ASSERT_TRUE(uriA.userInfo.first == NULL);
+		ASSERT_TRUE(uriA.userInfo.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 9);
+		ASSERT_TRUE(uriA.portText.first == NULL);
+		ASSERT_TRUE(uriA.portText.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriUserInfoHostPort6() {
+TEST(UriSuite, TestUriUserInfoHostPort6) {
 		// No user info, with port
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  0        9  01  0  3
 		const char * const input = "http" "://" "localhost" ":" "123";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.userInfo.first == NULL);
-		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 9);
-		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 9 + 1);
-		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 9 + 1 + 3);
+		ASSERT_TRUE(uriA.userInfo.first == NULL);
+		ASSERT_TRUE(uriA.userInfo.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 9);
+		ASSERT_TRUE(uriA.portText.first == input + 4 + 3 + 9 + 1);
+		ASSERT_TRUE(uriA.portText.afterLast == input + 4 + 3 + 9 + 1 + 3);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriHostRegname() {
+TEST(UriSuite, TestUriHostRegname) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  0          11
 		const char * const input = "http" "://" "example.com";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 11);
-		TEST_ASSERT(uriA.hostData.ip4 == NULL);
-		TEST_ASSERT(uriA.hostData.ip6 == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 11);
+		ASSERT_TRUE(uriA.hostData.ip4 == NULL);
+		ASSERT_TRUE(uriA.hostData.ip6 == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.first == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriHostIpFour1() {
+TEST(UriSuite, TestUriHostIpFour1) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7  01  0 2
 		const char * const input = "http" "://" "1.2.3.4" ":" "80";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7);
-		TEST_ASSERT(uriA.hostData.ip4 != NULL);
-		TEST_ASSERT(uriA.hostData.ip6 == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 7);
+		ASSERT_TRUE(uriA.hostData.ip4 != NULL);
+		ASSERT_TRUE(uriA.hostData.ip6 == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.first == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriHostIpFour2() {
+TEST(UriSuite, TestUriHostIpFour2) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  0      7
 		const char * const input = "http" "://" "1.2.3.4";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 7);
-		TEST_ASSERT(uriA.hostData.ip4 != NULL);
-		TEST_ASSERT(uriA.hostData.ip6 == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 7);
+		ASSERT_TRUE(uriA.hostData.ip4 != NULL);
+		ASSERT_TRUE(uriA.hostData.ip6 == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.first == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriHostIpSix1() {
+TEST(UriSuite, TestUriHostIpSix1) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  01  45  01  0 2
 		const char * const input = "http" "://" "[::1]" ":" "80";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 1);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 4);
-		TEST_ASSERT(uriA.hostData.ip4 == NULL);
-		TEST_ASSERT(uriA.hostData.ip6 != NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3 + 1);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 4);
+		ASSERT_TRUE(uriA.hostData.ip4 == NULL);
+		ASSERT_TRUE(uriA.hostData.ip6 != NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.first == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriHostIpSix2() {
+TEST(UriSuite, TestUriHostIpSix2) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  01  45
 		const char * const input = "http" "://" "[::1]";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.hostText.first == input + 4 + 3 + 1);
-		TEST_ASSERT(uriA.hostText.afterLast == input + 4 + 3 + 4);
-		TEST_ASSERT(uriA.hostData.ip4 == NULL);
-		TEST_ASSERT(uriA.hostData.ip6 != NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.first == NULL);
-		TEST_ASSERT(uriA.hostData.ipFuture.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first == input + 4 + 3 + 1);
+		ASSERT_TRUE(uriA.hostText.afterLast == input + 4 + 3 + 4);
+		ASSERT_TRUE(uriA.hostData.ip4 == NULL);
+		ASSERT_TRUE(uriA.hostData.ip6 != NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.first == NULL);
+		ASSERT_TRUE(uriA.hostData.ipFuture.afterLast == NULL);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriHostEmpty() {
+TEST(UriSuite, TestUriHostEmpty) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0   4  0  3  01  0  3
 		const char * const input = "http" "://" ":" "123";
 		const int res = uriParseUriA(&stateA, input);
-		TEST_ASSERT(URI_SUCCESS == res);
-		TEST_ASSERT(uriA.userInfo.first == NULL);
-		TEST_ASSERT(uriA.userInfo.afterLast == NULL);
-		TEST_ASSERT(uriA.hostText.first != NULL);
-		TEST_ASSERT(uriA.hostText.afterLast != NULL);
-		TEST_ASSERT(uriA.hostText.afterLast - uriA.hostText.first == 0);
-		TEST_ASSERT(uriA.portText.first == input + 4 + 3 + 1);
-		TEST_ASSERT(uriA.portText.afterLast == input + 4 + 3 + 1 + 3);
+		ASSERT_TRUE(URI_SUCCESS == res);
+		ASSERT_TRUE(uriA.userInfo.first == NULL);
+		ASSERT_TRUE(uriA.userInfo.afterLast == NULL);
+		ASSERT_TRUE(uriA.hostText.first != NULL);
+		ASSERT_TRUE(uriA.hostText.afterLast != NULL);
+		ASSERT_TRUE(uriA.hostText.afterLast - uriA.hostText.first == 0);
+		ASSERT_TRUE(uriA.portText.first == input + 4 + 3 + 1);
+		ASSERT_TRUE(uriA.portText.afterLast == input + 4 + 3 + 1 + 3);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testUriHostIpFuture() {
+TEST(UriSuite, TestUriHostIpFuture) {
 		// TODO
-	}
+}
 
+namespace {
 	bool testEscapingHelper(const wchar_t * in, const wchar_t * expectedOut,
 			bool spaceToPlus = false, bool normalizeBreaks = false) {
 		wchar_t * const buffer = new wchar_t[(normalizeBreaks ? 6 : 3)
@@ -843,52 +776,54 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		delete [] buffer;
 		return equal;
 	}
+}  // namespace
 
-	void testEscaping() {
+TEST(UriSuite, TestEscaping) {
 		const bool SPACE_TO_PLUS = true;
 		const bool SPACE_TO_PERCENT = false;
 		const bool KEEP_UNMODIFIED = false;
 		const bool NORMALIZE = true;
 
 		// '+' to ' '
-		TEST_ASSERT(testEscapingHelper(L"abc def", L"abc+def", SPACE_TO_PLUS));
-		TEST_ASSERT(testEscapingHelper(L"abc def", L"abc%20def", SPACE_TO_PERCENT));
+		ASSERT_TRUE(testEscapingHelper(L"abc def", L"abc+def", SPACE_TO_PLUS));
+		ASSERT_TRUE(testEscapingHelper(L"abc def", L"abc%20def", SPACE_TO_PERCENT));
 
 		// Percent encoding
-		TEST_ASSERT(testEscapingHelper(L"\x00", L"\0"));
-		TEST_ASSERT(testEscapingHelper(L"\x01", L"%01"));
-		TEST_ASSERT(testEscapingHelper(L"\xff", L"%FF"));
+		ASSERT_TRUE(testEscapingHelper(L"\x00", L"\0"));
+		ASSERT_TRUE(testEscapingHelper(L"\x01", L"%01"));
+		ASSERT_TRUE(testEscapingHelper(L"\xff", L"%FF"));
 
 		// Linebreak normalization
-		TEST_ASSERT(testEscapingHelper(L"\x0d", L"%0D%0A", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"g\x0d", L"g%0D%0A", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"\x0dg", L"%0D%0Ag", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"\x0d", L"%0D", SPACE_TO_PLUS, KEEP_UNMODIFIED));
-		TEST_ASSERT(testEscapingHelper(L"g\x0d", L"g%0D", SPACE_TO_PLUS, KEEP_UNMODIFIED));
-		TEST_ASSERT(testEscapingHelper(L"\x0dg", L"%0Dg", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"\x0d", L"%0D%0A", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"g\x0d", L"g%0D%0A", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"\x0dg", L"%0D%0Ag", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"\x0d", L"%0D", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"g\x0d", L"g%0D", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"\x0dg", L"%0Dg", SPACE_TO_PLUS, KEEP_UNMODIFIED));
 
-		TEST_ASSERT(testEscapingHelper(L"\x0a", L"%0D%0A", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"g\x0a", L"g%0D%0A", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"\x0ag", L"%0D%0Ag", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"\x0a", L"%0A", SPACE_TO_PLUS, KEEP_UNMODIFIED));
-		TEST_ASSERT(testEscapingHelper(L"g\x0a", L"g%0A", SPACE_TO_PLUS, KEEP_UNMODIFIED));
-		TEST_ASSERT(testEscapingHelper(L"\x0ag", L"%0Ag", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"\x0a", L"%0D%0A", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"g\x0a", L"g%0D%0A", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"\x0ag", L"%0D%0Ag", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"\x0a", L"%0A", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"g\x0a", L"g%0A", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"\x0ag", L"%0Ag", SPACE_TO_PLUS, KEEP_UNMODIFIED));
 
-		TEST_ASSERT(testEscapingHelper(L"\x0d\x0a", L"%0D%0A", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"g\x0d\x0a", L"g%0D%0A", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"\x0d\x0ag", L"%0D%0Ag", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"\x0d\x0a", L"%0D%0A", SPACE_TO_PLUS, KEEP_UNMODIFIED));
-		TEST_ASSERT(testEscapingHelper(L"g\x0d\x0a", L"g%0D%0A", SPACE_TO_PLUS, KEEP_UNMODIFIED));
-		TEST_ASSERT(testEscapingHelper(L"\x0d\x0ag", L"%0D%0Ag", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"\x0d\x0a", L"%0D%0A", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"g\x0d\x0a", L"g%0D%0A", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"\x0d\x0ag", L"%0D%0Ag", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"\x0d\x0a", L"%0D%0A", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"g\x0d\x0a", L"g%0D%0A", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"\x0d\x0ag", L"%0D%0Ag", SPACE_TO_PLUS, KEEP_UNMODIFIED));
 
-		TEST_ASSERT(testEscapingHelper(L"\x0a\x0d", L"%0D%0A%0D%0A", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"g\x0a\x0d", L"g%0D%0A%0D%0A", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"\x0a\x0dg", L"%0D%0A%0D%0Ag", SPACE_TO_PLUS, NORMALIZE));
-		TEST_ASSERT(testEscapingHelper(L"\x0a\x0d", L"%0A%0D", SPACE_TO_PLUS, KEEP_UNMODIFIED));
-		TEST_ASSERT(testEscapingHelper(L"g\x0a\x0d", L"g%0A%0D", SPACE_TO_PLUS, KEEP_UNMODIFIED));
-		TEST_ASSERT(testEscapingHelper(L"\x0a\x0dg", L"%0A%0Dg", SPACE_TO_PLUS, KEEP_UNMODIFIED));
-	}
+		ASSERT_TRUE(testEscapingHelper(L"\x0a\x0d", L"%0D%0A%0D%0A", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"g\x0a\x0d", L"g%0D%0A%0D%0A", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"\x0a\x0dg", L"%0D%0A%0D%0Ag", SPACE_TO_PLUS, NORMALIZE));
+		ASSERT_TRUE(testEscapingHelper(L"\x0a\x0d", L"%0A%0D", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"g\x0a\x0d", L"g%0A%0D", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+		ASSERT_TRUE(testEscapingHelper(L"\x0a\x0dg", L"%0A%0Dg", SPACE_TO_PLUS, KEEP_UNMODIFIED));
+}
 
+namespace {
 	bool testUnescapingHelper(const wchar_t * input, const wchar_t * output,
 			bool plusToSpace = false, UriBreakConversion breakConversion = URI_BR_DONT_TOUCH) {
 		wchar_t * working = new wchar_t[URI_STRLEN(input) + 1];
@@ -900,95 +835,97 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		delete[] working;
 		return success;
 	}
+}  // namespace
 
-	void testUnescaping() {
+TEST(UriSuite, TestUnescaping) {
 		const bool PLUS_TO_SPACE = true;
 		const bool PLUS_DONT_TOUCH = false;
 
 
 		// Proper
-		TEST_ASSERT(testUnescapingHelper(L"abc%20%41BC", L"abc ABC"));
-		TEST_ASSERT(testUnescapingHelper(L"%20", L" "));
+		ASSERT_TRUE(testUnescapingHelper(L"abc%20%41BC", L"abc ABC"));
+		ASSERT_TRUE(testUnescapingHelper(L"%20", L" "));
 
 		// Incomplete
-		TEST_ASSERT(testUnescapingHelper(L"%0", L"%0"));
+		ASSERT_TRUE(testUnescapingHelper(L"%0", L"%0"));
 
 		// Nonhex
-		TEST_ASSERT(testUnescapingHelper(L"%0g", L"%0g"));
-		TEST_ASSERT(testUnescapingHelper(L"%G0", L"%G0"));
+		ASSERT_TRUE(testUnescapingHelper(L"%0g", L"%0g"));
+		ASSERT_TRUE(testUnescapingHelper(L"%G0", L"%G0"));
 
 		// No double decoding
-		TEST_ASSERT(testUnescapingHelper(L"%2520", L"%20"));
+		ASSERT_TRUE(testUnescapingHelper(L"%2520", L"%20"));
 
 		// Decoding of '+'
-		TEST_ASSERT(testUnescapingHelper(L"abc+def", L"abc+def", PLUS_DONT_TOUCH));
-		TEST_ASSERT(testUnescapingHelper(L"abc+def", L"abc def", PLUS_TO_SPACE));
+		ASSERT_TRUE(testUnescapingHelper(L"abc+def", L"abc+def", PLUS_DONT_TOUCH));
+		ASSERT_TRUE(testUnescapingHelper(L"abc+def", L"abc def", PLUS_TO_SPACE));
 
 		// Line break conversion
-		TEST_ASSERT(testUnescapingHelper(L"%0d", L"\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0d", L"\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0d", L"\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0d", L"\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d", L"\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d", L"\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d", L"\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d", L"\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
 
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0d", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0d", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0d", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0d", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
-
-
-		TEST_ASSERT(testUnescapingHelper(L"%0a", L"\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0a", L"\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0a", L"\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0a", L"\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
-
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0a", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0d", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0d", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0d", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0d", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
 
 
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a", L"\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a", L"\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a", L"\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a", L"\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a", L"\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a", L"\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a", L"\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a", L"\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
 
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0a", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0a", L"\x0d\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
-
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0d", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0d", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0d", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0d", L"\x0d\x0a\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
-
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0d%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0d%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0d%0a", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0d%0a%0d%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0a", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
 
 
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d", L"\x0a\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a", L"\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a", L"\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a", L"\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a", L"\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
 
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0a", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0a", L"\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0a", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0a", L"\x0d\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
 
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0d", L"\x0a\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0d", L"\x0d\x0a\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0d", L"\x0d\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0d", L"\x0a\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0d", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0d", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0d", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0d", L"\x0d\x0a\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
 
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0a%0d", L"\x0a\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0a%0d", L"\x0d\x0a\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0a%0d", L"\x0d\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
-		TEST_ASSERT(testUnescapingHelper(L"%0a%0d%0a%0d", L"\x0a\x0d\x0a\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
-	}
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0d%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0d%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0d%0a", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0d%0a%0d%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
 
+
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d", L"\x0a\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0a", L"\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0a", L"\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0a", L"\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0a", L"\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0d", L"\x0a\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0d", L"\x0d\x0a\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0d", L"\x0d\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0d", L"\x0a\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0a%0d", L"\x0a\x0a\x0a", PLUS_DONT_TOUCH, URI_BR_TO_UNIX));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0a%0d", L"\x0d\x0a\x0d\x0a\x0d\x0a", PLUS_DONT_TOUCH, URI_BR_TO_WINDOWS));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0a%0d", L"\x0d\x0d\x0d", PLUS_DONT_TOUCH, URI_BR_TO_MAC));
+		ASSERT_TRUE(testUnescapingHelper(L"%0a%0d%0a%0d", L"\x0a\x0d\x0a\x0d", PLUS_DONT_TOUCH, URI_BR_DONT_TOUCH));
+}
+
+namespace {
 	bool testAddBaseHelper(const wchar_t * base, const wchar_t * rel, const wchar_t * expectedResult, bool backward_compatibility = false) {
 		UriParserStateW stateW;
 
@@ -1055,81 +992,83 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		uriFreeUriMembersW(&transformedUri);
 		return equal;
 	}
+}  // namespace
 
-	void testTrailingSlash() {
+TEST(UriSuite, TestTrailingSlash) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
 		//                          0  3  01
 		const char * const input = "abc" "/";
-		TEST_ASSERT(0 == uriParseUriA(&stateA, input));
+		ASSERT_TRUE(0 == uriParseUriA(&stateA, input));
 
-		TEST_ASSERT(uriA.pathHead->text.first == input);
-		TEST_ASSERT(uriA.pathHead->text.afterLast == input + 3);
-		TEST_ASSERT(uriA.pathHead->next->text.first == uriA.pathHead->next->text.afterLast);
-		TEST_ASSERT(uriA.pathHead->next->next == NULL);
-		TEST_ASSERT(uriA.pathTail == uriA.pathHead->next);
+		ASSERT_TRUE(uriA.pathHead->text.first == input);
+		ASSERT_TRUE(uriA.pathHead->text.afterLast == input + 3);
+		ASSERT_TRUE(uriA.pathHead->next->text.first == uriA.pathHead->next->text.afterLast);
+		ASSERT_TRUE(uriA.pathHead->next->next == NULL);
+		ASSERT_TRUE(uriA.pathTail == uriA.pathHead->next);
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
-	void testAddBase() {
+TEST(UriSuite, TestAddBase) {
 		// 5.4.1. Normal Examples
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g:h", L"g:h"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g", L"http://a/b/c/g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"./g", L"http://a/b/c/g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g/", L"http://a/b/c/g/"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/g", L"http://a/g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"//g", L"http://g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"?y", L"http://a/b/c/d;p?y"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g?y", L"http://a/b/c/g?y"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"#s", L"http://a/b/c/d;p?q#s"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g#s", L"http://a/b/c/g#s"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g?y#s", L"http://a/b/c/g?y#s"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L";x", L"http://a/b/c/;x"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g;x", L"http://a/b/c/g;x"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g;x?y#s", L"http://a/b/c/g;x?y#s"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"", L"http://a/b/c/d;p?q"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L".", L"http://a/b/c/"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"./", L"http://a/b/c/"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"..", L"http://a/b/"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../", L"http://a/b/"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../g", L"http://a/b/g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../..", L"http://a/"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../../", L"http://a/"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../../g", L"http://a/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g:h", L"g:h"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g", L"http://a/b/c/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"./g", L"http://a/b/c/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g/", L"http://a/b/c/g/"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/g", L"http://a/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"//g", L"http://g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"?y", L"http://a/b/c/d;p?y"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g?y", L"http://a/b/c/g?y"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"#s", L"http://a/b/c/d;p?q#s"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g#s", L"http://a/b/c/g#s"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g?y#s", L"http://a/b/c/g?y#s"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L";x", L"http://a/b/c/;x"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g;x", L"http://a/b/c/g;x"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g;x?y#s", L"http://a/b/c/g;x?y#s"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"", L"http://a/b/c/d;p?q"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L".", L"http://a/b/c/"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"./", L"http://a/b/c/"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"..", L"http://a/b/"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../", L"http://a/b/"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../g", L"http://a/b/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../..", L"http://a/"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../../", L"http://a/"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../../g", L"http://a/g"));
 
 		// 5.4.2. Abnormal Examples
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../../../g", L"http://a/g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../../../../g", L"http://a/g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/./g", L"http://a/g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/../g", L"http://a/g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g.", L"http://a/b/c/g."));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L".g", L"http://a/b/c/.g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g..", L"http://a/b/c/g.."));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"..g", L"http://a/b/c/..g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"./../g", L"http://a/b/g"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"./g/.", L"http://a/b/c/g/"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g/./h", L"http://a/b/c/g/h"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g/../h", L"http://a/b/c/h"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g;x=1/./y", L"http://a/b/c/g;x=1/y"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g;x=1/../y", L"http://a/b/c/y"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g?y/./x", L"http://a/b/c/g?y/./x"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g?y/../x", L"http://a/b/c/g?y/../x"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g#s/./x", L"http://a/b/c/g#s/./x"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g#s/../x", L"http://a/b/c/g#s/../x"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http:g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../../../g", L"http://a/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"../../../../g", L"http://a/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/./g", L"http://a/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/../g", L"http://a/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g.", L"http://a/b/c/g."));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L".g", L"http://a/b/c/.g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g..", L"http://a/b/c/g.."));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"..g", L"http://a/b/c/..g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"./../g", L"http://a/b/g"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"./g/.", L"http://a/b/c/g/"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g/./h", L"http://a/b/c/g/h"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g/../h", L"http://a/b/c/h"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g;x=1/./y", L"http://a/b/c/g;x=1/y"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g;x=1/../y", L"http://a/b/c/y"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g?y/./x", L"http://a/b/c/g?y/./x"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g?y/../x", L"http://a/b/c/g?y/../x"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g#s/./x", L"http://a/b/c/g#s/./x"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"g#s/../x", L"http://a/b/c/g#s/../x"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http:g"));
 
 		// Backward compatibility (feature request #4, RFC3986 5.4.2)
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http:g", false));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http://a/b/c/g", true));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g?q#f", L"http://a/b/c/g?q#f", true));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"other:g?q#f", L"other:g?q#f", true));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http:g", false));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g", L"http://a/b/c/g", true));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"http:g?q#f", L"http://a/b/c/g?q#f", true));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"other:g?q#f", L"other:g?q#f", true));
 
 		// Bug related to absolutePath flag set despite presence of host
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/", L"http://a/"));
-		TEST_ASSERT(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/g/", L"http://a/g/"));
-	}
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/", L"http://a/"));
+		ASSERT_TRUE(testAddBaseHelper(L"http://a/b/c/d;p?q", L"/g/", L"http://a/g/"));
+}
 
+namespace {
 	bool testToStringHelper(const wchar_t * text) {
 		// Parse
 		UriParserStateW state;
@@ -1176,85 +1115,87 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		uriFreeUriMembersW(&uri);
 		return equals;
 	}
+}  // namespace
 
-	void testToString() {
+TEST(UriSuite, TestToString) {
 		// Scheme
-		TEST_ASSERT(testToStringHelper(L"ftp://localhost/"));
+		ASSERT_TRUE(testToStringHelper(L"ftp://localhost/"));
 		// UserInfo
-		TEST_ASSERT(testToStringHelper(L"http://user:pass@localhost/"));
+		ASSERT_TRUE(testToStringHelper(L"http://user:pass@localhost/"));
 		// IPv4
-		TEST_ASSERT(testToStringHelper(L"http://123.0.1.255/"));
+		ASSERT_TRUE(testToStringHelper(L"http://123.0.1.255/"));
 		// IPv6
-		TEST_ASSERT(testToStringHelper(L"http://[abcd:abcd:abcd:abcd:abcd:abcd:abcd:abcd]/"));
+		ASSERT_TRUE(testToStringHelper(L"http://[abcd:abcd:abcd:abcd:abcd:abcd:abcd:abcd]/"));
 		// IPvFuture
-		TEST_ASSERT(testToStringHelper(L"http://[vA.123456]/"));
+		ASSERT_TRUE(testToStringHelper(L"http://[vA.123456]/"));
 		// Port
-		TEST_ASSERT(testToStringHelper(L"http://example.com:123/"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com:123/"));
 		// Path
-		TEST_ASSERT(testToStringHelper(L"http://example.com"));
-		TEST_ASSERT(testToStringHelper(L"http://example.com/"));
-		TEST_ASSERT(testToStringHelper(L"http://example.com/abc/"));
-		TEST_ASSERT(testToStringHelper(L"http://example.com/abc/def"));
-		TEST_ASSERT(testToStringHelper(L"http://example.com/abc/def/"));
-		TEST_ASSERT(testToStringHelper(L"http://example.com//"));
-		TEST_ASSERT(testToStringHelper(L"http://example.com/./.."));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com/"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com/abc/"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com/abc/def"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com/abc/def/"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com//"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com/./.."));
 		// Query
-		TEST_ASSERT(testToStringHelper(L"http://example.com/?abc"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com/?abc"));
 		// Fragment
-		TEST_ASSERT(testToStringHelper(L"http://example.com/#abc"));
-		TEST_ASSERT(testToStringHelper(L"http://example.com/?def#abc"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com/#abc"));
+		ASSERT_TRUE(testToStringHelper(L"http://example.com/?def#abc"));
 
 		// Relative
-		TEST_ASSERT(testToStringHelper(L"a"));
-		TEST_ASSERT(testToStringHelper(L"a/"));
-		TEST_ASSERT(testToStringHelper(L"/a"));
-		TEST_ASSERT(testToStringHelper(L"/a/"));
-		TEST_ASSERT(testToStringHelper(L"abc"));
-		TEST_ASSERT(testToStringHelper(L"abc/"));
-		TEST_ASSERT(testToStringHelper(L"/abc"));
-		TEST_ASSERT(testToStringHelper(L"/abc/"));
-		TEST_ASSERT(testToStringHelper(L"a/def"));
-		TEST_ASSERT(testToStringHelper(L"a/def/"));
-		TEST_ASSERT(testToStringHelper(L"/a/def"));
-		TEST_ASSERT(testToStringHelper(L"/a/def/"));
-		TEST_ASSERT(testToStringHelper(L"abc/def"));
-		TEST_ASSERT(testToStringHelper(L"abc/def/"));
-		TEST_ASSERT(testToStringHelper(L"/abc/def"));
-		TEST_ASSERT(testToStringHelper(L"/abc/def/"));
-		TEST_ASSERT(testToStringHelper(L"/"));
-		TEST_ASSERT(testToStringHelper(L"//a/"));
-		TEST_ASSERT(testToStringHelper(L"."));
-		TEST_ASSERT(testToStringHelper(L"./"));
-		TEST_ASSERT(testToStringHelper(L"/."));
-		TEST_ASSERT(testToStringHelper(L"/./"));
-		TEST_ASSERT(testToStringHelper(L""));
-		TEST_ASSERT(testToStringHelper(L"./abc/def"));
-		TEST_ASSERT(testToStringHelper(L"?query"));
-		TEST_ASSERT(testToStringHelper(L"#fragment"));
-		TEST_ASSERT(testToStringHelper(L"?query#fragment"));
+		ASSERT_TRUE(testToStringHelper(L"a"));
+		ASSERT_TRUE(testToStringHelper(L"a/"));
+		ASSERT_TRUE(testToStringHelper(L"/a"));
+		ASSERT_TRUE(testToStringHelper(L"/a/"));
+		ASSERT_TRUE(testToStringHelper(L"abc"));
+		ASSERT_TRUE(testToStringHelper(L"abc/"));
+		ASSERT_TRUE(testToStringHelper(L"/abc"));
+		ASSERT_TRUE(testToStringHelper(L"/abc/"));
+		ASSERT_TRUE(testToStringHelper(L"a/def"));
+		ASSERT_TRUE(testToStringHelper(L"a/def/"));
+		ASSERT_TRUE(testToStringHelper(L"/a/def"));
+		ASSERT_TRUE(testToStringHelper(L"/a/def/"));
+		ASSERT_TRUE(testToStringHelper(L"abc/def"));
+		ASSERT_TRUE(testToStringHelper(L"abc/def/"));
+		ASSERT_TRUE(testToStringHelper(L"/abc/def"));
+		ASSERT_TRUE(testToStringHelper(L"/abc/def/"));
+		ASSERT_TRUE(testToStringHelper(L"/"));
+		ASSERT_TRUE(testToStringHelper(L"//a/"));
+		ASSERT_TRUE(testToStringHelper(L"."));
+		ASSERT_TRUE(testToStringHelper(L"./"));
+		ASSERT_TRUE(testToStringHelper(L"/."));
+		ASSERT_TRUE(testToStringHelper(L"/./"));
+		ASSERT_TRUE(testToStringHelper(L""));
+		ASSERT_TRUE(testToStringHelper(L"./abc/def"));
+		ASSERT_TRUE(testToStringHelper(L"?query"));
+		ASSERT_TRUE(testToStringHelper(L"#fragment"));
+		ASSERT_TRUE(testToStringHelper(L"?query#fragment"));
 
 		// Tests for bugs from the past
-		TEST_ASSERT(testToStringHelper(L"f:/.//g"));
-	}
+		ASSERT_TRUE(testToStringHelper(L"f:/.//g"));
+}
 
-	void testToString_Bug1950126() {
+TEST(UriSuite, TestToStringBug1950126) {
 		UriParserStateW state;
 		UriUriW uriOne;
 		UriUriW uriTwo;
 		const wchar_t * const uriOneString = L"http://e.com/";
 		const wchar_t * const uriTwoString = L"http://e.com";
 		state.uri = &uriOne;
-		TEST_ASSERT(URI_SUCCESS == uriParseUriW(&state, uriOneString));
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriW(&state, uriOneString));
 		state.uri = &uriTwo;
-		TEST_ASSERT(URI_SUCCESS == uriParseUriW(&state, uriTwoString));
-		TEST_ASSERT(URI_FALSE == uriEqualsUriW(&uriOne, &uriTwo));
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriW(&state, uriTwoString));
+		ASSERT_TRUE(URI_FALSE == uriEqualsUriW(&uriOne, &uriTwo));
 		uriFreeUriMembersW(&uriOne);
 		uriFreeUriMembersW(&uriTwo);
 
-		TEST_ASSERT(testToStringHelper(uriOneString));
-		TEST_ASSERT(testToStringHelper(uriTwoString));
-	}
+		ASSERT_TRUE(testToStringHelper(uriOneString));
+		ASSERT_TRUE(testToStringHelper(uriTwoString));
+}
 
+namespace {
 	bool testToStringCharsRequiredHelper(const wchar_t * text) {
 		// Parse
 		UriParserStateW state;
@@ -1292,19 +1233,21 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		delete [] buffer;
 		return true;
 	}
+}  // namespace
 
-	void testToStringCharsRequired() {
-		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/"));
-		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com:80/"));
-		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://user:pass@www.example.com/"));
-		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/index.html"));
-		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/?abc"));
-		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/#def"));
-		TEST_ASSERT(testToStringCharsRequiredHelper(L"http://www.example.com/?abc#def"));
-		TEST_ASSERT(testToStringCharsRequiredHelper(L"/test"));
-		TEST_ASSERT(testToStringCharsRequiredHelper(L"test"));
-	}
+TEST(UriSuite, TestToStringCharsRequired) {
+		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/"));
+		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com:80/"));
+		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://user:pass@www.example.com/"));
+		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/index.html"));
+		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc"));
+		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/#def"));
+		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc#def"));
+		ASSERT_TRUE(testToStringCharsRequiredHelper(L"/test"));
+		ASSERT_TRUE(testToStringCharsRequiredHelper(L"test"));
+}
 
+namespace {
 	bool testNormalizeMaskHelper(const wchar_t * uriText, unsigned int expectedMask) {
 		UriParserStateW state;
 		UriUriW uri;
@@ -1335,17 +1278,19 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 		return (maskAfter == URI_NORMALIZED);
 	}
+}  // namespace
 
-	void testNormalizeSyntaxMaskRequired() {
-		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/", URI_NORMALIZED));
-		TEST_ASSERT(testNormalizeMaskHelper(L"httP://localhost/", URI_NORMALIZE_SCHEME));
-		TEST_ASSERT(testNormalizeMaskHelper(L"http://%0d@localhost/", URI_NORMALIZE_USER_INFO));
-		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhosT/", URI_NORMALIZE_HOST));
-		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/./abc", URI_NORMALIZE_PATH));
-		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/?AB%43", URI_NORMALIZE_QUERY));
-		TEST_ASSERT(testNormalizeMaskHelper(L"http://localhost/#AB%43", URI_NORMALIZE_FRAGMENT));
-	}
+TEST(UriSuite, TestNormalizeSyntaxMaskRequired) {
+		ASSERT_TRUE(testNormalizeMaskHelper(L"http://localhost/", URI_NORMALIZED));
+		ASSERT_TRUE(testNormalizeMaskHelper(L"httP://localhost/", URI_NORMALIZE_SCHEME));
+		ASSERT_TRUE(testNormalizeMaskHelper(L"http://%0d@localhost/", URI_NORMALIZE_USER_INFO));
+		ASSERT_TRUE(testNormalizeMaskHelper(L"http://localhosT/", URI_NORMALIZE_HOST));
+		ASSERT_TRUE(testNormalizeMaskHelper(L"http://localhost/./abc", URI_NORMALIZE_PATH));
+		ASSERT_TRUE(testNormalizeMaskHelper(L"http://localhost/?AB%43", URI_NORMALIZE_QUERY));
+		ASSERT_TRUE(testNormalizeMaskHelper(L"http://localhost/#AB%43", URI_NORMALIZE_FRAGMENT));
+}
 
+namespace {
 	bool testNormalizeSyntaxHelper(const wchar_t * uriText, const wchar_t * expectedNormalized,
 			unsigned int mask = static_cast<unsigned int>(-1)) {
 		UriParserStateW stateW;
@@ -1394,122 +1339,124 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		uriFreeUriMembersW(&expectedUri);
 		return equalAfter;
 	}
+}  // namespace
 
-	void testNormalizeSyntax() {
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+TEST(UriSuite, TestNormalizeSyntax) {
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"eXAMPLE://a/./b/../b/%63/%7bfoo%7d",
 				L"example://a/b/c/%7Bfoo%7D"));
 
 		// Testcase by Adrian Manrique
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"http://examp%4Ce.com/",
 				L"http://example.com/"));
 
 		// Testcase by Adrian Manrique
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"http://example.com/a/b/%2E%2E/",
 				L"http://example.com/a/"));
 
 		// Reported by Adrian Manrique
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"http://user:pass@SOMEHOST.COM:123",
 				L"http://user:pass@somehost.com:123"));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"HTTP://a:b@HOST:123/./1/2/../%41?abc#def",
 				L"http://a:b@host:123/1/A?abc#def"));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"../../abc",
 				L"../../abc"));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"../../abc/..",
 				L"../../"));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"../../abc/../def",
 				L"../../def"));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"abc/..",
 				L""));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"abc/../",
 				L""));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"../../abc/./def",
 				L"../../abc/def"));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"./def",
 				L"def"));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"def/.",
 				L"def/"));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"./abc:def",
 				L"./abc:def"));
-	}
+}
 
-	void testNormalizeSyntaxComponents() {
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+TEST(UriSuite, TestNormalizeSyntaxComponents) {
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
 				L"http://%41@EXAMPLE.ORG/../a?%41#%41",
 				URI_NORMALIZE_SCHEME));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
 				L"HTTP://A@EXAMPLE.ORG/../a?%41#%41",
 				URI_NORMALIZE_USER_INFO));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
 				L"HTTP://%41@example.org/../a?%41#%41",
 				URI_NORMALIZE_HOST));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
 				L"HTTP://%41@EXAMPLE.ORG/a?%41#%41",
 				URI_NORMALIZE_PATH));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
 				L"HTTP://%41@EXAMPLE.ORG/../a?A#%41",
 				URI_NORMALIZE_QUERY));
 
-		TEST_ASSERT(testNormalizeSyntaxHelper(
+		ASSERT_TRUE(testNormalizeSyntaxHelper(
 				L"HTTP://%41@EXAMPLE.ORG/../a?%41#%41",
 				L"HTTP://%41@EXAMPLE.ORG/../a?%41#A",
 				URI_NORMALIZE_FRAGMENT));
-	}
+}
 
-	void testNormalizeCrash_Bug20080224() {
+TEST(UriSuite, TestNormalizeCrashBug20080224) {
 		UriParserStateW stateW;
 		int res;
 		UriUriW testUri;
 		stateW.uri = &testUri;
 
 		res = uriParseUriW(&stateW, L"http://example.org/abc//../def");
-		TEST_ASSERT(res == 0);
+		ASSERT_TRUE(res == 0);
 
 		// First call will make us owner of copied memory
 		res = uriNormalizeSyntaxExW(&testUri, URI_NORMALIZE_SCHEME);
-		TEST_ASSERT(res == 0);
+		ASSERT_TRUE(res == 0);
 		res = uriNormalizeSyntaxExW(&testUri, URI_NORMALIZE_HOST);
-		TEST_ASSERT(res == 0);
+		ASSERT_TRUE(res == 0);
 
 		// Frees empty path segment -> crash
 		res = uriNormalizeSyntaxW(&testUri);
-		TEST_ASSERT(res == 0);
+		ASSERT_TRUE(res == 0);
 
 		uriFreeUriMembersW(&testUri);
-	}
+}
 
+namespace {
 	void testFilenameUriConversionHelper(const wchar_t * filename,
 			const wchar_t * uriString, bool forUnix,
 			const wchar_t * expectedUriString = NULL) {
@@ -1529,7 +1476,7 @@ Rule                                | Example | hostSet | absPath | emptySeg
 #ifdef HAVE_WPRINTF
 		// wprintf(L"1 [%s][%s]\n", uriBuffer, expectedUriString);
 #endif
-		TEST_ASSERT(!wcscmp(uriBuffer, expectedUriString));
+		ASSERT_TRUE(!wcscmp(uriBuffer, expectedUriString));
 		delete [] uriBuffer;
 
 		// URI string to filename
@@ -1543,11 +1490,12 @@ Rule                                | Example | hostSet | absPath | emptySeg
 #ifdef HAVE_WPRINTF
 		// wprintf(L"2 [%s][%s]\n", filenameBuffer, filename);
 #endif
-		TEST_ASSERT(!wcscmp(filenameBuffer, filename));
+		ASSERT_TRUE(!wcscmp(filenameBuffer, filename));
 		delete [] filenameBuffer;
 	}
+}  // namespace
 
-	void testFilenameUriConversion() {
+TEST(UriSuite, TestFilenameUriConversion) {
 		const bool FOR_UNIX = true;
 		const bool FOR_WINDOWS = false;
 		testFilenameUriConversionHelper(L"/bin/bash", L"file:///bin/bash", FOR_UNIX);
@@ -1566,9 +1514,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testFilenameUriConversionHelper(L"abc def", L"abc%20def", FOR_UNIX);
 
 		testFilenameUriConversionHelper(L"\\\\Server01\\user\\docs\\Letter.txt", L"file://Server01/user/docs/Letter.txt", FOR_WINDOWS);
-	}
+}
 
-	void testCrash_FreeUriMembers_Bug20080116() {
+TEST(UriSuite, TestCrashFreeUriMembersBug20080116) {
 		// Testcase by Adrian Manrique
 		UriParserStateA state;
 		UriUriA uri;
@@ -1577,19 +1525,23 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		uriNormalizeSyntaxA(&uri);
 		uriFreeUriMembersA(&uri);
 
-		TEST_ASSERT(true);
-	}
+		ASSERT_TRUE(true);
+}
 
-	void testCrash_Report2418192() {
+namespace {
+	void helperTestQueryString(char const * uriString, int pairsExpected);
+}
+
+TEST(UriSuite, TestCrashReport2418192) {
 		// Testcase by Harvey Vrsalovic
 		helperTestQueryString("http://svcs.cnn.com/weather/wrapper.jsp?&csiID=csi1", 1);
-	}
+}
 
-	void testPervertedQueryString() {
+TEST(UriSuite, TestPervertedQueryString) {
 		helperTestQueryString("http://example.org/?&&=&&&=&&&&==&===&====", 5);
-	}
+}
 
-	void testQueryStringEndingInEqualSign_NonBug32() {
+TEST(UriSuite, TestQueryStringEndingInEqualSignNonBug32) {
 		const char * queryString = "firstname=sdsd&lastname=";
 
 		UriQueryListA * queryList = NULL;
@@ -1597,53 +1549,56 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		const int res = uriDissectQueryMallocA(&queryList, &itemCount,
 				queryString, queryString + strlen(queryString));
 
-		TEST_ASSERT(res == URI_SUCCESS);
-		TEST_ASSERT(itemCount == 2);
-		TEST_ASSERT(queryList != NULL);
-		TEST_ASSERT(strcmp(queryList->key, "firstname") == 0);
-		TEST_ASSERT(strcmp(queryList->value, "sdsd") == 0);
-		TEST_ASSERT(strcmp(queryList->next->key, "lastname") == 0);
-		TEST_ASSERT(strcmp(queryList->next->value, "") == 0);
-		TEST_ASSERT(queryList->next->next == NULL);
+		ASSERT_TRUE(res == URI_SUCCESS);
+		ASSERT_TRUE(itemCount == 2);
+		ASSERT_TRUE(queryList != NULL);
+		ASSERT_TRUE(strcmp(queryList->key, "firstname") == 0);
+		ASSERT_TRUE(strcmp(queryList->value, "sdsd") == 0);
+		ASSERT_TRUE(strcmp(queryList->next->key, "lastname") == 0);
+		ASSERT_TRUE(strcmp(queryList->next->value, "") == 0);
+		ASSERT_TRUE(queryList->next->next == NULL);
 
 		uriFreeQueryListA(queryList);
-	}
+}
 
+namespace {
 	void helperTestQueryString(char const * uriString, int pairsExpected) {
 		UriParserStateA state;
 		UriUriA uri;
 		state.uri = &uri;
 		int res = uriParseUriA(&state, uriString);
-		TEST_ASSERT(res == URI_SUCCESS);
+		ASSERT_TRUE(res == URI_SUCCESS);
 
 		UriQueryListA * queryList = NULL;
 		int itemCount = 0;
 
 		res = uriDissectQueryMallocA(&queryList, &itemCount,
 				uri.query.first, uri.query.afterLast);
-		TEST_ASSERT(res == URI_SUCCESS);
-		TEST_ASSERT(queryList != NULL);
-		TEST_ASSERT(itemCount == pairsExpected);
+		ASSERT_TRUE(res == URI_SUCCESS);
+		ASSERT_TRUE(queryList != NULL);
+		ASSERT_TRUE(itemCount == pairsExpected);
 		uriFreeQueryListA(queryList);
 		uriFreeUriMembersA(&uri);
 	}
+}  // namespace
 
-	void testCrash_MakeOwner_Bug20080207() {
+TEST(UriSuite, TestCrashMakeOwnerBug20080207) {
 		// Testcase by Adrian Manrique
 		UriParserStateA state;
 		UriUriA sourceUri;
 		state.uri = &sourceUri;
 		const char * const sourceUriString = "http://user:pass@somehost.com:80/";
 		if (uriParseUriA(&state, sourceUriString) != 0) {
-			TEST_ASSERT(false);
+			ASSERT_TRUE(false);
 		}
 		if (uriNormalizeSyntaxA(&sourceUri) != 0) {
-			TEST_ASSERT(false);
+			ASSERT_TRUE(false);
 		}
 		uriFreeUriMembersA(&sourceUri);
-		TEST_ASSERT(true);
-	}
+		ASSERT_TRUE(true);
+}
 
+namespace {
 	void testQueryListHelper(const wchar_t * input, int expectedItemCount) {
 		int res;
 
@@ -1655,49 +1610,51 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		UriQueryListW * queryList;
 		res = uriDissectQueryMallocExW(&queryList, &itemCount,
 				input, input + wcslen(input), spacePlusConversion, breakConversion);
-		TEST_ASSERT(res == URI_SUCCESS);
-		TEST_ASSERT(itemCount == expectedItemCount);
-		TEST_ASSERT((queryList == NULL) == (expectedItemCount == 0));
+		ASSERT_TRUE(res == URI_SUCCESS);
+		ASSERT_TRUE(itemCount == expectedItemCount);
+		ASSERT_TRUE((queryList == NULL) == (expectedItemCount == 0));
 
 		if (expectedItemCount != 0) {
 			// First
 			int charsRequired;
 			res = uriComposeQueryCharsRequiredExW(queryList, &charsRequired, spacePlusConversion,
 					normalizeBreaks);
-			TEST_ASSERT(res == URI_SUCCESS);
-			TEST_ASSERT(charsRequired >= (int)wcslen(input));
+			ASSERT_TRUE(res == URI_SUCCESS);
+			ASSERT_TRUE(charsRequired >= (int)wcslen(input));
 
 			wchar_t * recomposed = new wchar_t[charsRequired + 1];
 			int charsWritten;
 			res = uriComposeQueryExW(recomposed, queryList, charsRequired + 1,
 					&charsWritten, spacePlusConversion, normalizeBreaks);
-			TEST_ASSERT(res == URI_SUCCESS);
-			TEST_ASSERT(charsWritten <= charsRequired);
-			TEST_ASSERT(charsWritten == (int)wcslen(input) + 1);
-			TEST_ASSERT(!wcscmp(input, recomposed));
+			ASSERT_TRUE(res == URI_SUCCESS);
+			ASSERT_TRUE(charsWritten <= charsRequired);
+			ASSERT_TRUE(charsWritten == (int)wcslen(input) + 1);
+			ASSERT_TRUE(!wcscmp(input, recomposed));
 			delete [] recomposed;
 
 			recomposed = NULL;
 			res = uriComposeQueryMallocW(&recomposed, queryList);
-			TEST_ASSERT(res == URI_SUCCESS);
-			TEST_ASSERT(recomposed != NULL);
-			TEST_ASSERT(charsWritten == (int)wcslen(input) + 1);
-			TEST_ASSERT(!wcscmp(input, recomposed));
+			ASSERT_TRUE(res == URI_SUCCESS);
+			ASSERT_TRUE(recomposed != NULL);
+			ASSERT_TRUE(charsWritten == (int)wcslen(input) + 1);
+			ASSERT_TRUE(!wcscmp(input, recomposed));
 			free(recomposed);
 		}
 
 		uriFreeQueryListW(queryList);
 	}
+}  // namespace
 
-	void testQueryList() {
+TEST(UriSuite, QueryList) {
 		testQueryListHelper(L"one=ONE&two=TWO", 2);
 		testQueryListHelper(L"one=ONE&two=&three=THREE", 3);
 		testQueryListHelper(L"one=ONE&two&three=THREE", 3);
 		testQueryListHelper(L"one=ONE", 1);
 		testQueryListHelper(L"one", 1);
 		testQueryListHelper(L"", 0);
-	}
+}
 
+namespace {
 	void testQueryListPairHelper(const char * pair, const char * unescapedKey,
 			const char * unescapedValue, const char * fixed = NULL) {
 		int res;
@@ -1705,69 +1662,70 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		int itemCount;
 
 		res = uriDissectQueryMallocA(&queryList, &itemCount, pair, pair + strlen(pair));
-		TEST_ASSERT(res == URI_SUCCESS);
-		TEST_ASSERT(queryList != NULL);
-		TEST_ASSERT(itemCount == 1);
-		TEST_ASSERT(!strcmp(queryList->key, unescapedKey));
-		TEST_ASSERT(!strcmp(queryList->value, unescapedValue));
+		ASSERT_TRUE(res == URI_SUCCESS);
+		ASSERT_TRUE(queryList != NULL);
+		ASSERT_TRUE(itemCount == 1);
+		ASSERT_TRUE(!strcmp(queryList->key, unescapedKey));
+		ASSERT_TRUE(!strcmp(queryList->value, unescapedValue));
 
 		char * recomposed;
 		res = uriComposeQueryMallocA(&recomposed, queryList);
-		TEST_ASSERT(res == URI_SUCCESS);
-		TEST_ASSERT(recomposed != NULL);
-		TEST_ASSERT(!strcmp(recomposed, (fixed != NULL) ? fixed : pair));
+		ASSERT_TRUE(res == URI_SUCCESS);
+		ASSERT_TRUE(recomposed != NULL);
+		ASSERT_TRUE(!strcmp(recomposed, (fixed != NULL) ? fixed : pair));
 		free(recomposed);
 		uriFreeQueryListA(queryList);
 	}
+}  // namespace
 
-	void testQueryListPair() {
+TEST(UriSuite, TestQueryListPair) {
 		testQueryListPairHelper("one+two+%26+three=%2B", "one two & three", "+");
 		testQueryListPairHelper("one=two=three", "one", "two=three", "one=two%3Dthree");
 		testQueryListPairHelper("one=two=three=four", "one", "two=three=four", "one=two%3Dthree%3Dfour");
-	}
+}
 
-	void testQueryDissection_Bug3590761() {
+TEST(UriSuite, TestQueryDissectionBug3590761) {
 		int res;
 		UriQueryListA * queryList;
 		int itemCount;
 		const char * const pair = "q=hello&x=&y=";
 
 		res = uriDissectQueryMallocA(&queryList, &itemCount, pair, pair + strlen(pair));
-		TEST_ASSERT(res == URI_SUCCESS);
-		TEST_ASSERT(queryList != NULL);
-		TEST_ASSERT(itemCount == 3);
+		ASSERT_TRUE(res == URI_SUCCESS);
+		ASSERT_TRUE(queryList != NULL);
+		ASSERT_TRUE(itemCount == 3);
 
-		TEST_ASSERT(!strcmp(queryList->key, "q"));
-		TEST_ASSERT(!strcmp(queryList->value, "hello"));
+		ASSERT_TRUE(!strcmp(queryList->key, "q"));
+		ASSERT_TRUE(!strcmp(queryList->value, "hello"));
 
-		TEST_ASSERT(!strcmp(queryList->next->key, "x"));
-		TEST_ASSERT(!strcmp(queryList->next->value, ""));
+		ASSERT_TRUE(!strcmp(queryList->next->key, "x"));
+		ASSERT_TRUE(!strcmp(queryList->next->value, ""));
 
-		TEST_ASSERT(!strcmp(queryList->next->next->key, "y"));
-		TEST_ASSERT(!strcmp(queryList->next->next->value, ""));
+		ASSERT_TRUE(!strcmp(queryList->next->next->key, "y"));
+		ASSERT_TRUE(!strcmp(queryList->next->next->value, ""));
 
-		TEST_ASSERT(! queryList->next->next->next);
+		ASSERT_TRUE(! queryList->next->next->next);
 
 		uriFreeQueryListA(queryList);
-	}
+}
 
-	void testQueryCompositionMathCalc() {
+TEST(UriSuite, TestQueryCompositionMathCalc) {
 		UriQueryListA second = { .key = "k2", .value = "v2", .next = NULL };
 		UriQueryListA first = { .key = "k1", .value = "v1", .next = &second };
 
 		int charsRequired;
-		TEST_ASSERT(uriComposeQueryCharsRequiredA(&first, &charsRequired)
+		ASSERT_TRUE(uriComposeQueryCharsRequiredA(&first, &charsRequired)
 				== URI_SUCCESS);
 
 		const int FACTOR = 6;  /* due to escaping with normalizeBreaks */
-		TEST_ASSERT(charsRequired ==
+		ASSERT_TRUE(charsRequired ==
 			FACTOR * strlen(first.key) + 1 + FACTOR * strlen(first.value)
 			+ 1
 			+ FACTOR * strlen(second.key) + 1 + FACTOR * strlen(second.value)
 		);
-	}
+}
 
-	void testQueryCompositionMathWrite_GoogleAutofuzz113244572() {
+TEST(UriSuite, TestQueryCompositionMathWriteGoogleAutofuzz113244572) {
 		UriQueryListA second = { .key = "\x11", .value = NULL, .next = NULL };
 		UriQueryListA first = { .key = "\x01", .value = "\x02", .next = &second };
 
@@ -1781,24 +1739,24 @@ Rule                                | Example | hostSet | absPath | emptySeg
 			const char * const expected = "%01=%02" "&" "%11";
 			char dest[charsRequired + 1];
 			int charsWritten;
-			TEST_ASSERT(uriComposeQueryExA(dest, &first, sizeof(dest),
+			ASSERT_TRUE(uriComposeQueryExA(dest, &first, sizeof(dest),
 					&charsWritten, spaceToPlus, normalizeBreaks)
 				== URI_SUCCESS);
-			TEST_ASSERT(! strcmp(dest, expected));
-			TEST_ASSERT(charsWritten == strlen(expected) + 1);
+			ASSERT_TRUE(! strcmp(dest, expected));
+			ASSERT_TRUE(charsWritten == strlen(expected) + 1);
 		}
 
 		{
 			// Previous math failed to take ampersand into account
 			char dest[charsRequired + 1 - 1];
 			int charsWritten;
-			TEST_ASSERT(uriComposeQueryExA(dest, &first, sizeof(dest),
+			ASSERT_TRUE(uriComposeQueryExA(dest, &first, sizeof(dest),
 					&charsWritten, spaceToPlus, normalizeBreaks)
 				== URI_ERROR_OUTPUT_TOO_LARGE);
 		}
-	}
+}
 
-	void testFreeCrash_Bug20080827() {
+TEST(UriSuite, TestFreeCrashBug20080827) {
 		char const * const sourceUri = "abc";
 		char const * const baseUri = "http://www.example.org/";
 
@@ -1810,21 +1768,21 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 		state.uri = &relativeSource;
 		res = uriParseUriA(&state, sourceUri);
-		TEST_ASSERT(res == URI_SUCCESS);
+		ASSERT_TRUE(res == URI_SUCCESS);
 
 		state.uri = &absoluteBase;
 		res = uriParseUriA(&state, baseUri);
-		TEST_ASSERT(res == URI_SUCCESS);
+		ASSERT_TRUE(res == URI_SUCCESS);
 
 		res = uriRemoveBaseUriA(&absoluteDest, &relativeSource, &absoluteBase, URI_FALSE);
-		TEST_ASSERT(res == URI_ERROR_REMOVEBASE_REL_SOURCE);
+		ASSERT_TRUE(res == URI_ERROR_REMOVEBASE_REL_SOURCE);
 
 		uriFreeUriMembersA(&relativeSource);
 		uriFreeUriMembersA(&absoluteBase);
 		uriFreeUriMembersA(&absoluteDest); // Crashed here
-	}
+}
 
-	void testParseInvalid_Bug16() {
+TEST(UriSuite, TestInvalidInputBug16) {
 		UriParserStateA stateA;
 		UriUriA uriA;
 		stateA.uri = &uriA;
@@ -1832,27 +1790,29 @@ Rule                                | Example | hostSet | absPath | emptySeg
 
 		const int res = uriParseUriA(&stateA, input);
 
-		TEST_ASSERT(res == URI_ERROR_SYNTAX);
-		TEST_ASSERT(stateA.errorPos == input + 1);
-		TEST_ASSERT(stateA.errorCode == URI_ERROR_SYNTAX);  /* failed previously */
+		ASSERT_TRUE(res == URI_ERROR_SYNTAX);
+		ASSERT_TRUE(stateA.errorPos == input + 1);
+		ASSERT_TRUE(stateA.errorCode == URI_ERROR_SYNTAX);  /* failed previously */
 
 		uriFreeUriMembersA(&uriA);
-	}
+}
 
+namespace {
 	void testEqualsHelper(const char * uri_to_test) {
 		UriParserStateA state;
 		UriUriA uriOne;
 		UriUriA uriTwo;
 		state.uri = &uriOne;
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state, uri_to_test));
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriA(&state, uri_to_test));
 		state.uri = &uriTwo;
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state, uri_to_test));
-		TEST_ASSERT(URI_TRUE == uriEqualsUriA(&uriOne, &uriTwo));
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriA(&state, uri_to_test));
+		ASSERT_TRUE(URI_TRUE == uriEqualsUriA(&uriOne, &uriTwo));
 		uriFreeUriMembersA(&uriOne);
 		uriFreeUriMembersA(&uriTwo);
 	}
+}  // namespace
 
-	void testEquals() {
+TEST(UriSuite, TestEquals) {
 		testEqualsHelper("http://host");
 		testEqualsHelper("http://host:123");
 		testEqualsHelper("http://foo:bar@host:123");
@@ -1867,81 +1827,82 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testEqualsHelper("//path/");
 		testEqualsHelper("//host");
 		testEqualsHelper("//host:123");
-	}
+}
 
-	void testHostTextTermination_Issue15() {
+TEST(UriSuite, TestHostTextTerminationIssue15) {
 		UriParserStateA state;
 		UriUriA uri;
 		state.uri = &uri;
 
 		// Empty host and port
 		const char * const emptyHostWithPortUri = "//:123";
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state, emptyHostWithPortUri));
-		TEST_ASSERT(uri.hostText.first == emptyHostWithPortUri + strlen("//"));
-		TEST_ASSERT(uri.hostText.afterLast == uri.hostText.first + 0);
-		TEST_ASSERT(uri.portText.first == emptyHostWithPortUri
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriA(&state, emptyHostWithPortUri));
+		ASSERT_TRUE(uri.hostText.first == emptyHostWithPortUri + strlen("//"));
+		ASSERT_TRUE(uri.hostText.afterLast == uri.hostText.first + 0);
+		ASSERT_TRUE(uri.portText.first == emptyHostWithPortUri
 															+ strlen("//:"));
-		TEST_ASSERT(uri.portText.afterLast == uri.portText.first
+		ASSERT_TRUE(uri.portText.afterLast == uri.portText.first
 															+ strlen("123"));
 		uriFreeUriMembersA(&uri);
 
 		// Non-empty host and port
 		const char * const hostWithPortUri = "//h:123";
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state, hostWithPortUri));
-		TEST_ASSERT(uri.hostText.first == hostWithPortUri + strlen("//"));
-		TEST_ASSERT(uri.hostText.afterLast == uri.hostText.first
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriA(&state, hostWithPortUri));
+		ASSERT_TRUE(uri.hostText.first == hostWithPortUri + strlen("//"));
+		ASSERT_TRUE(uri.hostText.afterLast == uri.hostText.first
 															+ strlen("h"));
-		TEST_ASSERT(uri.portText.first == hostWithPortUri + strlen("//h:"));
-		TEST_ASSERT(uri.portText.afterLast == uri.portText.first
+		ASSERT_TRUE(uri.portText.first == hostWithPortUri + strlen("//h:"));
+		ASSERT_TRUE(uri.portText.afterLast == uri.portText.first
 															+ strlen("123"));
 		uriFreeUriMembersA(&uri);
 
 		// Empty host, empty user info
 		const char * const emptyHostEmptyUserInfoUri = "//@";
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state,
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriA(&state,
 												emptyHostEmptyUserInfoUri));
-		TEST_ASSERT(uri.userInfo.first == emptyHostEmptyUserInfoUri
+		ASSERT_TRUE(uri.userInfo.first == emptyHostEmptyUserInfoUri
 															+ strlen("//"));
-		TEST_ASSERT(uri.userInfo.afterLast == uri.userInfo.first + 0);
-		TEST_ASSERT(uri.hostText.first == emptyHostEmptyUserInfoUri
+		ASSERT_TRUE(uri.userInfo.afterLast == uri.userInfo.first + 0);
+		ASSERT_TRUE(uri.hostText.first == emptyHostEmptyUserInfoUri
 															+ strlen("//@"));
-		TEST_ASSERT(uri.hostText.afterLast == uri.hostText.first + 0);
+		ASSERT_TRUE(uri.hostText.afterLast == uri.hostText.first + 0);
 		uriFreeUriMembersA(&uri);
 
 		// Non-empty host, empty user info
 		const char * const hostEmptyUserInfoUri = "//@h";
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state, hostEmptyUserInfoUri));
-		TEST_ASSERT(uri.userInfo.first == hostEmptyUserInfoUri + strlen("//"));
-		TEST_ASSERT(uri.userInfo.afterLast == uri.userInfo.first + 0);
-		TEST_ASSERT(uri.hostText.first == hostEmptyUserInfoUri
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriA(&state, hostEmptyUserInfoUri));
+		ASSERT_TRUE(uri.userInfo.first == hostEmptyUserInfoUri + strlen("//"));
+		ASSERT_TRUE(uri.userInfo.afterLast == uri.userInfo.first + 0);
+		ASSERT_TRUE(uri.hostText.first == hostEmptyUserInfoUri
 															+ strlen("//@"));
-		TEST_ASSERT(uri.hostText.afterLast == uri.hostText.first
+		ASSERT_TRUE(uri.hostText.afterLast == uri.hostText.first
 															+ strlen("h"));
 		uriFreeUriMembersA(&uri);
 
 		// Empty host, non-empty user info
 		const char * const emptyHostWithUserInfoUri = "//:@";
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state,
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriA(&state,
 												emptyHostWithUserInfoUri));
-		TEST_ASSERT(uri.userInfo.first == emptyHostWithUserInfoUri
+		ASSERT_TRUE(uri.userInfo.first == emptyHostWithUserInfoUri
 															+ strlen("//"));
-		TEST_ASSERT(uri.userInfo.afterLast == uri.userInfo.first + 1);
-		TEST_ASSERT(uri.hostText.first == emptyHostWithUserInfoUri
+		ASSERT_TRUE(uri.userInfo.afterLast == uri.userInfo.first + 1);
+		ASSERT_TRUE(uri.hostText.first == emptyHostWithUserInfoUri
 															+ strlen("//:@"));
-		TEST_ASSERT(uri.hostText.afterLast == uri.hostText.first + 0);
+		ASSERT_TRUE(uri.hostText.afterLast == uri.hostText.first + 0);
 		uriFreeUriMembersA(&uri);
 
 		// Exact case from issue #15
 		const char * const issue15Uri = "//:%aa@";
-		TEST_ASSERT(URI_SUCCESS == uriParseUriA(&state, issue15Uri));
-		TEST_ASSERT(uri.userInfo.first == issue15Uri + strlen("//"));
-		TEST_ASSERT(uri.userInfo.afterLast == uri.userInfo.first
+		ASSERT_TRUE(URI_SUCCESS == uriParseUriA(&state, issue15Uri));
+		ASSERT_TRUE(uri.userInfo.first == issue15Uri + strlen("//"));
+		ASSERT_TRUE(uri.userInfo.afterLast == uri.userInfo.first
 															+ strlen(":%aa"));
-		TEST_ASSERT(uri.hostText.first == issue15Uri + strlen("//:%aa@"));
-		TEST_ASSERT(uri.hostText.afterLast == uri.hostText.first + 0);
+		ASSERT_TRUE(uri.hostText.first == issue15Uri + strlen("//:%aa@"));
+		ASSERT_TRUE(uri.hostText.afterLast == uri.hostText.first + 0);
 		uriFreeUriMembersA(&uri);
-	}
+}
 
+namespace {
 	void testCompareRangeHelper(const char * a, const char * b, int expected, bool avoidNullRange = true) {
 		UriTextRangeA ra;
 		UriTextRangeA rb;
@@ -1969,10 +1930,11 @@ Rule                                | Example | hostSet | absPath | emptySeg
 			printf("Comparing <%s> to <%s> yields %d, expected %d.\n",
 					a, b, received, expected);
 		}
-		TEST_ASSERT(received == expected);
+		ASSERT_TRUE(received == expected);
 	}
+}  // namespace
 
-	void testRangeComparison() {
+TEST(UriSuite, TestRangeComparison) {
 		testCompareRangeHelper("", "", 0);
 		testCompareRangeHelper("a", "", 1);
 		testCompareRangeHelper("", "a", -1);
@@ -1996,8 +1958,9 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testCompareRangeHelper(NULL, "", -1, KEEP_NULL_RANGE);
 		testCompareRangeHelper("", NULL, 1, AVOID_NULL_RANGE);
 		testCompareRangeHelper("", NULL, 1, KEEP_NULL_RANGE);
-	}
+}
 
+namespace {
 	void testRemoveBaseUriHelper(const char * expected,
 								const char * absSourceStr,
 								const char * absBaseStr) {
@@ -2007,28 +1970,29 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		UriUriA dest;
 
 		state.uri = &absSource;
-		TEST_ASSERT(uriParseUriA(&state, absSourceStr) == URI_SUCCESS);
+		ASSERT_TRUE(uriParseUriA(&state, absSourceStr) == URI_SUCCESS);
 
 		state.uri = &absBase;
-		TEST_ASSERT(uriParseUriA(&state, absBaseStr) == URI_SUCCESS);
+		ASSERT_TRUE(uriParseUriA(&state, absBaseStr) == URI_SUCCESS);
 
-		TEST_ASSERT(uriRemoveBaseUriA(&dest, &absSource, &absBase, URI_FALSE)
+		ASSERT_TRUE(uriRemoveBaseUriA(&dest, &absSource, &absBase, URI_FALSE)
 				== URI_SUCCESS);
 
 		int size = 0;
-		TEST_ASSERT(uriToStringCharsRequiredA(&dest, &size) == URI_SUCCESS);
+		ASSERT_TRUE(uriToStringCharsRequiredA(&dest, &size) == URI_SUCCESS);
 		char * const buffer = (char *)malloc(size + 1);
-		TEST_ASSERT(buffer);
-		TEST_ASSERT(uriToStringA(buffer, &dest, size + 1, &size)
+		ASSERT_TRUE(buffer);
+		ASSERT_TRUE(uriToStringA(buffer, &dest, size + 1, &size)
 															== URI_SUCCESS);
 		if (strcmp(buffer, expected)) {
 			printf("Expected \"%s\" but got \"%s\"\n", expected, buffer);
-			TEST_ASSERT(0);
+			ASSERT_TRUE(0);
 		}
 		free(buffer);
 	}
+}  // namespace
 
-	void testRangeComparison_RemoveBaseUri_Issue19() {
+TEST(UriSuite, TestRangeComparisonRemoveBaseUriIssue19) {
 		// scheme
 		testRemoveBaseUriHelper("scheme://host/source",
 								"scheme://host/source",
@@ -2071,15 +2035,10 @@ Rule                                | Example | hostSet | absPath | emptySeg
 		testRemoveBaseUriHelper("//example/x/abc",
 								"http://example/x/abc",
 								"http://example2/x/y/z");
-	}
-};
+}
 
 
-int main() {
-	Suite suite;
-	suite.add(auto_ptr<Suite>(new UriSuite()));
-	suite.add(auto_ptr<Suite>(new FourSuite()));
-	suite.add(auto_ptr<Suite>(new VersionSuite()));
-	TextOutput output(TextOutput::Verbose);
-	return suite.run(output, false) ? 0 : 1;
+int main(int argc, char ** argv) {
+	::testing::InitGoogleTest(&argc, argv);
+	return RUN_ALL_TESTS();
 }

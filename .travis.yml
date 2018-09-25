@@ -13,7 +13,7 @@ addons:
     packages:
       - doxygen
       - graphviz
-      - libcpptest-dev
+      - libgtest-dev
 
 script:
   - set -e
