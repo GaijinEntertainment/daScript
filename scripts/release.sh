@@ -15,7 +15,6 @@ echo ========== bootstrap ==========
 echo
 echo ========== configure ==========
 configure_flags=(
-    CPPFLAGS=-D_GLIBCXX_USE_CXX11_ABI=0  # to address cpptest link errors
     --enable-doc
 )
 ./configure "${configure_flags[@]}" || exit 1

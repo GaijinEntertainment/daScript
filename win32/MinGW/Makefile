@@ -40,7 +40,6 @@
 CFLAGS = -Wall -Wextra -O3 -s
 
 TEST_DIR = ../../test
-CPP_TEST_DIR = ../CppTest
 LIB_DIR = ../../src
 INCLUDE_DIR = ../../include
 WIN32_DIR = ..
@@ -49,8 +48,7 @@ CXX = g++
 dos = $(subst /,\,$(1))
 
 URIPARSER_OBJECTS := $(patsubst %.c,%.o,$(wildcard $(LIB_DIR)/*.c))
-TEST_OBJECTS := $(patsubst %.cpp,%.o,$(wildcard $(CPP_TEST_DIR)/*.cpp)) \
-		$(patsubst %.cpp,%.o,$(wildcard $(TEST_DIR)/*.cpp))
+TEST_OBJECTS := $(patsubst %.cpp,%.o,$(wildcard $(TEST_DIR)/*.cpp))
 LIBRARY = $(WIN32_DIR)/liburiparser.a
 TEST_SUITE = $(WIN32_DIR)/test.exe
 

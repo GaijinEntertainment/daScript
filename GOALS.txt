@@ -34,8 +34,8 @@
 (10) #include "xxx" for files in same folder.
      #include <xxx> for files from include folders.
 
-(11) Use CppTest for unit testing. 
-     http://sourceforge.net/projects/cpptest
+(11) Use GoogleTest for unit testing.
+     https://github.com/google/googletest
 
 (12) Implement algorithm for reference resolution
 
