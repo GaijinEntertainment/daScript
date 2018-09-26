@@ -27,6 +27,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		04AB28BF215B40F300695531 /* test_3.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = test_3.yzg; sourceTree = "<group>"; };
 		04B2409A2133A911007CF8B1 /* ast.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ast.cpp; sourceTree = "<group>"; };
 		04B2409B2133A911007CF8B1 /* ast.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ast.hpp; sourceTree = "<group>"; };
 		04B2409D2134CA31007CF8B1 /* test_2.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = test_2.yzg; sourceTree = "<group>"; };
@@ -108,6 +109,7 @@
 			children = (
 				04E5345021326BA5006834F4 /* test_1.yzg */,
 				04B2409D2134CA31007CF8B1 /* test_2.yzg */,
+				04AB28BF215B40F300695531 /* test_3.yzg */,
 			);
 			path = test;
 			sourceTree = "<group>";

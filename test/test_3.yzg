@@ -1,0 +1,21 @@
+
+(defun (void testVoid)
+    (float const 3 arg1)
+    (float arg2)
+    (   (! 1)
+        (+ 1 2u)
+        (? 1.0 2 3)
+        (let
+            (int x)
+            (int y)
+            (   (= x 3)
+                (= y 4)
+                (+ x y)
+                (if (< x 5) (= x 5))
+                (if (> y 2) (= y 2) (= y 0))
+                (while
+                    (< x 10)
+                    (= x (x+1))))
+            )
+        (madd 1 2 3)
+        (return)))

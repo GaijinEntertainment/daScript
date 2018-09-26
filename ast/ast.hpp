@@ -20,7 +20,7 @@ namespace yzg
 {
     using namespace std;
     
-    enum class Type
+    enum Type
     {
         none,
         tVoid,
@@ -68,6 +68,7 @@ namespace yzg
         string getMangledName() const;
         bool isSameType ( const TypeDecl & decl, bool constMatters = true, bool rvalueMatters = true ) const;
         bool isSimpleType ( Type tp ) const;
+        bool isArray() const;
         bool isVoid() const;
     public:
         Type                baseType = Type::tVoid;
@@ -143,6 +144,17 @@ namespace yzg
         bool        argument = false;
     };
     
+    class ExprField : public Expression
+    {
+    public:
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+    public:
+        string          name;
+        ExpressionPtr   rvalue;
+        const Structure::FieldDeclaration * field = nullptr;
+    };
+    
     class ExprOp : public Expression
     {
     public:
@@ -165,6 +177,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
     public:
         ExpressionPtr   left, right;
+        FunctionPtr     func;
     };
     
     class ExprOp3 : public ExprOp   // trinary  subexpr ? left : right
@@ -275,6 +288,8 @@ namespace yzg
     
     class BuiltInFunction : public Function
     {
+    public:
+        BuiltInFunction ( const string & fn );
     };
     
     class Program : public enable_shared_from_this<Program>
@@ -283,7 +298,9 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const Program & program);
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
+        void addBuiltIn(FunctionPtr && fn);
         void inferTypes();
+        void addBuiltinOperators();
     public:
         map<string, StructurePtr>   structures;
         map<string, VariablePtr>    globals;

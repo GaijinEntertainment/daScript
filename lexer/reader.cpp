@@ -28,6 +28,7 @@ namespace yzg
     };
     
     Enum<Operator> g_opTable1 = {
+        {   Operator::dot,      "."    },
         {   Operator::add,      "+"    },
         {   Operator::sub,      "-"    },
         {   Operator::div,      "/"    },

@@ -10,6 +10,7 @@
 #include "enums.h"
 
 #include <sstream>
+#include <iostream>
 
 namespace yzg
 {
@@ -67,6 +68,8 @@ namespace yzg
         }
         if ( constant )
             ss << "#const";
+        if ( rvalue )
+            ss << "#rvalue";
         if ( dim.size() ) {
             for ( auto d : dim ) {
                 ss << "#" << d;
@@ -106,6 +109,11 @@ namespace yzg
         if ( dim.size() )
             return false;
         return true;
+    }
+    
+    bool TypeDecl::isArray() const
+    {
+        return dim.size() != 0;
     }
     
     // structure
@@ -158,7 +166,7 @@ namespace yzg
         for ( auto & arg : arguments ) {
             ss << " " << arg->type->getMangledName();
         }
-        ss << "->" << result->getMangledName();
+        // ss << "->" << result->getMangledName();
         return ss.str();
     }
     
@@ -171,6 +179,66 @@ namespace yzg
         }
         return nullptr;
     }
+    
+    // built-in function
+    
+    BuiltInFunction::BuiltInFunction ( const string & fn )
+    {
+        builtIn = true;
+        name = fn;
+    }
+    
+    template <typename TT>  struct ToBasicType;
+    template <> template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
+    template<> struct ToBasicType<int>      { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
+    
+    template <typename TT>
+    TypeDeclPtr makeType()
+    {
+        auto t = make_shared<TypeDecl>();
+        t->baseType = Type(ToBasicType<TT>::type);
+        t->rvalue = is_reference<TT>::value;
+        return t;
+    }
+    
+    template <typename ArgT, typename RetT>
+    class BuiltInOp1 : public BuiltInFunction
+    {
+    public:
+        BuiltInOp1(const string & fn, function<RetT (ArgT)> && fncall) : BuiltInFunction(fn)
+        {
+            call = move(fncall);
+            result = makeType<RetT>();
+            auto arg = make_shared<Variable>();
+            arg->name = "arg";
+            arg->type = makeType<ArgT>();
+            arguments.push_back(arg);
+        }
+    public:
+        function<RetT (ArgT)> call;
+    };
+    
+    template <typename ArgT1, typename ArgT2, typename RetT>
+    class BuiltInOp2 : public BuiltInFunction
+    {
+    public:
+        BuiltInOp2(const string & fn, function<RetT (ArgT1, ArgT2)> && fncall) : BuiltInFunction(fn)
+        {
+            call = move(fncall);
+            result = makeType<RetT>();
+            auto arg1 = make_shared<Variable>();
+            arg1->name = "arg1";
+            arg1->type = makeType<ArgT1>();
+            arguments.push_back(arg1);
+            auto arg2 = make_shared<Variable>();
+            arg2->name = "arg2";
+            arg2->type = makeType<ArgT2>();
+            arguments.push_back(arg2);
+        }
+    public:
+        function<RetT (ArgT1, ArgT2)> call;
+    };
     
     // expression
     
@@ -201,6 +269,29 @@ namespace yzg
         for ( auto & ex : list ) {
             ex->inferType(context);
         }
+    }
+    
+    // ExprField
+    
+    void ExprField::log(ostream& stream, int depth) const
+    {
+        stream << "(. ";
+        rvalue->log(stream,depth+1);
+        stream << " " << name << ")";
+    }
+    
+    void ExprField::inferType(InferTypeContext & context)
+    {
+        rvalue->inferType(context);
+        if ( rvalue->type->baseType!=Type::tStructure )
+            throw semantic_error("expecting structure");
+        if ( rvalue->type->isArray() )
+            throw semantic_error("can't get field of array");
+        field = rvalue->type->structType->findField(name);
+        if ( !field )
+            throw semantic_error("field " + name + " not found");
+        type = make_shared<TypeDecl>(*field->type);
+        type->rvalue = rvalue->type->rvalue;
     }
     
     // ExprVar
@@ -276,9 +367,15 @@ namespace yzg
     {
         left->inferType(context);
         right->inferType(context);
-        // TODO:
-        //  find builtin operator and substitute with its return value
-        type = make_shared<TypeDecl>();
+        // TODO: this needs to be less basic
+        //  current problem - not automatically demoting f& -> f
+        //  need list of functions by name only, and then 'find best matching function'
+        //  if multiple matches can be found - assert
+        string mangledName = to_string(op) + " " + left->type->getMangledName() + " " + right->type->getMangledName();
+        func = context.program->findFunction(mangledName);
+        if ( !func )
+            throw semantic_error("can't find built-in operator");
+        type = make_shared<TypeDecl>(*func->result);
     }
     
     // ExprOp3
@@ -325,7 +422,7 @@ namespace yzg
             subexpr->inferType(context);
             if ( context.func->result->isVoid() )
                 throw semantic_error("return subexpression of void function must be empty");
-            if ( !subexpr->type->isSameType(*context.func->result) )
+            if ( !subexpr->type->isSameType(*context.func->result, false, false) )
                 throw semantic_error("return subexpression type must match function return type");
         } else {
             if ( !context.func->result->isVoid() )
@@ -521,8 +618,30 @@ namespace yzg
             Expression::InferTypeContext context;
             context.program = shared_from_this();
             context.func = fit.second;
-            context.func->body->inferType(context);
+            if ( !context.func->builtIn )
+                context.func->body->inferType(context);
         }
+    }
+    
+    void Program::addBuiltIn(FunctionPtr && func)
+    {
+        auto mangledName = func->getMangledName();
+        if ( findFunction(mangledName) )
+            throw parse_error("builtin function already defined", nullptr);
+        functions[mangledName] = func;
+    }
+    
+    
+    void Program::addBuiltinOperators()
+    {
+        // integer
+        addBuiltIn( make_shared<BuiltInOp1<int, int>>("+",[&](int x){return x;}) );
+        // float
+        addBuiltIn( make_shared<BuiltInOp1<float, float>>("+",[&](float x){return x;}) );
+        addBuiltIn( make_shared<BuiltInOp1<float, float>>("-",[&](float x){return -x;}) );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("=",[&](float & x, float y) -> float & { x = y; return x;}) );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("*",[&](float x, float y){return x * y;}) );
+
     }
     
     /*
@@ -534,6 +653,7 @@ namespace yzg
      */
     TypeDeclPtr parseTypeDeclaratoin ( const NodePtr & decl, const ProgramPtr & program )
     {
+        // cout << *decl << endl;
         auto tdecl = make_shared<TypeDecl>();
         auto typeName = decl->getName(0);
         if ( typeName.empty() )
@@ -677,11 +797,20 @@ namespace yzg
                 } else if ( nOp==2 ) {
                     if ( !isBinaryOperator(head->op) )
                         throw parse_error("only binary operators can have 2 arguments", decl);
-                    auto pOp = make_shared<ExprOp2>();
-                    pOp->op = head->op;
-                    pOp->left = parseExpression(decl->list[1], program);
-                    pOp->right = parseExpression(decl->list[2], program);
-                    return pOp;
+                    if ( head->op==Operator::dot) {
+                        if ( !decl->list[2]->isName() )
+                            throw parse_error("field needs to be specified as a name", decl);
+                        auto pDot = make_shared<ExprField>();
+                        pDot->rvalue = parseExpression(decl->list[1], program);
+                        pDot->name = decl->list[2]->text;
+                        return pDot;
+                    } else {
+                        auto pOp = make_shared<ExprOp2>();
+                        pOp->op = head->op;
+                        pOp->left = parseExpression(decl->list[1], program);
+                        pOp->right = parseExpression(decl->list[2], program);
+                        return pOp;
+                    }
                 } else if ( nOp==3 ) {
                     if ( !isTrinaryOperator(head->op) )
                         throw parse_error("only trinary operators can have 3 arguments", decl);
@@ -821,6 +950,7 @@ namespace yzg
         parseStructureDeclarations(root, program);
         parseVariableDeclarations(root, program);
         parseFunctionDeclarations(root, program);
+        program->addBuiltinOperators();
         program->inferTypes();
         return program;
     }

@@ -48,6 +48,7 @@ namespace yzg
         notEqu,
         binNotEqu,
     // 1-char
+        dot,        // .
         add,
         sub,
         div,
