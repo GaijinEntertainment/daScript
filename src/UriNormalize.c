@@ -79,7 +79,8 @@ static int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsigned int inM
 		unsigned int * outMask);
 
 static UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
-		unsigned int maskTest, URI_TYPE(TextRange) * range);
+		unsigned int maskTest, URI_TYPE(TextRange) * range,
+		UriMemoryManager * memory);
 static UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 		unsigned int * doneMask);
 
@@ -363,8 +364,8 @@ static URI_INLINE UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** f
 
 
 static URI_INLINE UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
-		unsigned int maskTest, URI_TYPE(TextRange) * range) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+		unsigned int maskTest, URI_TYPE(TextRange) * range,
+		UriMemoryManager * memory) {
 	if (((*doneMask & maskTest) == 0)
 			&& (range->first != NULL)
 			&& (range->afterLast != NULL)
@@ -390,13 +391,13 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	URI_TYPE(PathSegment) * walker = uri->pathHead;
 	if (!URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_SCHEME,
-				&(uri->scheme))
+				&(uri->scheme), memory)
 			|| !URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_USER_INFO,
-				&(uri->userInfo))
+				&(uri->userInfo), memory)
 			|| !URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_QUERY,
-				&(uri->query))
+				&(uri->query), memory)
 			|| !URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_FRAGMENT,
-				&(uri->fragment))) {
+				&(uri->fragment), memory)) {
 		return URI_FALSE; /* Raises malloc error */
 	}
 
@@ -407,7 +408,7 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 			if (uri->hostData.ipFuture.first != NULL) {
 				/* IPvFuture */
 				if (!URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_HOST,
-						&(uri->hostData.ipFuture))) {
+						&(uri->hostData.ipFuture), memory)) {
 					return URI_FALSE; /* Raises malloc error */
 				}
 				uri->hostText.first = uri->hostData.ipFuture.first;
@@ -415,7 +416,7 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 			} else if (uri->hostText.first != NULL) {
 				/* Regname */
 				if (!URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_HOST,
-						&(uri->hostText))) {
+						&(uri->hostText), memory)) {
 					return URI_FALSE; /* Raises malloc error */
 				}
 			}
@@ -425,7 +426,7 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 	/* Path */
 	if ((*doneMask & URI_NORMALIZE_PATH) == 0) {
 		while (walker != NULL) {
-			if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(walker->text))) {
+			if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(walker->text), memory)) {
 				/* Free allocations done so far and kill path */
 
 				/* Kill path to one before walker (if any) */
@@ -460,7 +461,7 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 	/* Port text, must come last so we don't have to undo that one if it fails. *
 	 * Otherwise we would need and extra enum flag for it although the port      *
 	 * cannot go unnormalized...                                                */
-	if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(uri->portText))) {
+	if (!URI_FUNC(MakeRangeOwner)(doneMask, 0, &(uri->portText), memory)) {
 		return URI_FALSE; /* Raises malloc error */
 	}
 
