@@ -190,7 +190,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [02/32]		T.scheme = R.scheme; */
 					absDest->scheme = relSource->scheme;
 	/* [03/32]		T.authority = R.authority; */
-					if (!URI_FUNC(CopyAuthority)(absDest, relSource)) {
+					if (!URI_FUNC(CopyAuthority)(absDest, relSource, memory)) {
 						return URI_ERROR_MALLOC;
 					}
 	/* [04/32]		T.path = remove_dot_segments(R.path); */
@@ -207,7 +207,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [07/32]		if defined(R.authority) then */
 					if (URI_FUNC(IsHostSet)(relSource)) {
 	/* [08/32]			T.authority = R.authority; */
-						if (!URI_FUNC(CopyAuthority)(absDest, relSource)) {
+						if (!URI_FUNC(CopyAuthority)(absDest, relSource, memory)) {
 							return URI_ERROR_MALLOC;
 						}
 	/* [09/32]			T.path = remove_dot_segments(R.path); */
@@ -222,7 +222,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [11/32]		else */
 					} else {
 	/* [28/32]			T.authority = Base.authority; */
-						if (!URI_FUNC(CopyAuthority)(absDest, absBase)) {
+						if (!URI_FUNC(CopyAuthority)(absDest, absBase, memory)) {
 							return URI_ERROR_MALLOC;
 						}
 	/* [12/32]			if (R.path == "") then */

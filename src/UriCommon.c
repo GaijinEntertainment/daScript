@@ -473,9 +473,7 @@ UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 
 /* Copies the authority part of an URI over to another. */
 UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
-		const URI_TYPE(Uri) * source) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+		const URI_TYPE(Uri) * source, UriMemoryManager * memory) {
 	/* From this functions usage we know that *
 	 * the dest URI cannot be uri->owner      */
 	

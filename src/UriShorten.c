@@ -153,7 +153,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 	/* [02/50]	   T.scheme    = A.scheme; */
 					dest->scheme = absSource->scheme;
 	/* [03/50]	   T.authority = A.authority; */
-					if (!URI_FUNC(CopyAuthority)(dest, absSource)) {
+					if (!URI_FUNC(CopyAuthority)(dest, absSource, memory)) {
 						return URI_ERROR_MALLOC;
 					}
 	/* [04/50]	   T.path      = A.path; */
@@ -167,7 +167,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 	/* [07/50]	   if (A.authority != Base.authority) then */
 					if (!URI_FUNC(EqualsAuthority)(absSource, absBase)) {
 	/* [08/50]	      T.authority = A.authority; */
-						if (!URI_FUNC(CopyAuthority)(dest, absSource)) {
+						if (!URI_FUNC(CopyAuthority)(dest, absSource, memory)) {
 							return URI_ERROR_MALLOC;
 						}
 	/* [09/50]	      T.path      = A.path; */
