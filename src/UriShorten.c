@@ -194,7 +194,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 							}
 							dest->absolutePath = URI_TRUE;
 
-							if (!URI_FUNC(FixAmbiguity)(dest)) {
+							if (!URI_FUNC(FixAmbiguity)(dest, memory)) {
 								return URI_ERROR_MALLOC;
 							}
 	/* [18/50]	      else */

@@ -271,7 +271,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 									return URI_ERROR_MALLOC;
 								}
 
-								if (!URI_FUNC(FixAmbiguity)(absDest)) {
+								if (!URI_FUNC(FixAmbiguity)(absDest, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 	/* [25/32]				endif; */

@@ -516,9 +516,9 @@ UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 
 
 
-UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri) {
+UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri,
+		UriMemoryManager * memory) {
 	URI_TYPE(PathSegment) * segment;
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 
 	if (	/* Case 1: absolute path, empty first segment */
 			(uri->absolutePath
