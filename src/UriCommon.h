@@ -82,10 +82,12 @@ int URI_FUNC(CompareRange)(
 		const URI_TYPE(TextRange) * a,
 		const URI_TYPE(TextRange) * b);
 
-UriBool URI_FUNC(RemoveDotSegmentsAbsolute)(URI_TYPE(Uri) * uri);
-UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri, UriBool relative);
+UriBool URI_FUNC(RemoveDotSegmentsAbsolute)(URI_TYPE(Uri) * uri,
+		UriMemoryManager * memory);
+UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri, UriBool relative,
+		UriMemoryManager * memory);
 UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
-        UriBool relative, UriBool pathOwned);
+		UriBool relative, UriBool pathOwned, UriMemoryManager * memory);
 
 unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig);
 URI_CHAR URI_FUNC(HexToLetter)(unsigned int value);

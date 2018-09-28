@@ -118,19 +118,18 @@ int URI_FUNC(CompareRange)(
 
 /* Properly removes "." and ".." path segments */
 UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
-		UriBool relative) {
+		UriBool relative, UriMemoryManager * memory) {
 	if (uri == NULL) {
 		return URI_TRUE;
 	}
-	return URI_FUNC(RemoveDotSegmentsEx)(uri, relative, uri->owner);
+	return URI_FUNC(RemoveDotSegmentsEx)(uri, relative, uri->owner, memory);
 }
 
 
 
 UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
-        UriBool relative, UriBool pathOwned) {
+		UriBool relative, UriBool pathOwned, UriMemoryManager * memory) {
 	URI_TYPE(PathSegment) * walker;
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	if ((uri == NULL) || (uri->pathHead == NULL)) {
 		return URI_TRUE;
 	}
@@ -340,9 +339,10 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 
 
 /* Properly removes "." and ".." path segments */
-UriBool URI_FUNC(RemoveDotSegmentsAbsolute)(URI_TYPE(Uri) * uri) {
+UriBool URI_FUNC(RemoveDotSegmentsAbsolute)(URI_TYPE(Uri) * uri,
+		UriMemoryManager * memory) {
 	const UriBool ABSOLUTE = URI_FALSE;
-	return URI_FUNC(RemoveDotSegments)(uri, ABSOLUTE);
+	return URI_FUNC(RemoveDotSegments)(uri, ABSOLUTE, memory);
 }
 
 
