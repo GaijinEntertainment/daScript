@@ -551,9 +551,8 @@ UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri,
 
 
 
-void URI_FUNC(FixEmptyTrailSegment)(URI_TYPE(Uri) * uri) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+void URI_FUNC(FixEmptyTrailSegment)(URI_TYPE(Uri) * uri,
+		UriMemoryManager * memory) {
 	/* Fix path if only one empty segment */
 	if (!uri->absolutePath
 			&& !URI_FUNC(IsHostSet)(uri)

@@ -1336,6 +1336,8 @@ static URI_INLINE void URI_FUNC(OnExitPartHelperTwo)(URI_TYPE(ParserState) * sta
  * [partHelperTwo]-></>[authority][pathAbsEmpty]
  */
 static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		URI_FUNC(OnExitPartHelperTwo)(state);
 		return afterLast;
@@ -1352,7 +1354,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserS
 			}
 			afterPathAbsEmpty = URI_FUNC(ParsePathAbsEmpty)(state, afterAuthority, afterLast);
 
-			URI_FUNC(FixEmptyTrailSegment)(state->uri);
+			URI_FUNC(FixEmptyTrailSegment)(state->uri, memory);
 
 			return afterPathAbsEmpty;
 		}

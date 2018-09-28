@@ -280,7 +280,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 							absDest->query = relSource->query;
 	/* [27/32]			endif; */
 						}
-						URI_FUNC(FixEmptyTrailSegment)(absDest);
+						URI_FUNC(FixEmptyTrailSegment)(absDest, memory);
 	/* [29/32]		endif; */
 					}
 	/* [30/32]		T.scheme = Base.scheme; */

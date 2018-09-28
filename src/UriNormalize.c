@@ -502,6 +502,7 @@ int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri) {
 
 
 static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsigned int inMask, unsigned int * outMask) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	unsigned int doneMask = URI_NORMALIZED;
 	if (uri == NULL) {
 		if (outMask != NULL) {
@@ -671,7 +672,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			URI_FUNC(PreventLeakage)(uri, doneMask);
 			return URI_ERROR_MALLOC;
 		}
-		URI_FUNC(FixEmptyTrailSegment)(uri);
+		URI_FUNC(FixEmptyTrailSegment)(uri, memory);
 	}
 
 	/* Query, fragment */
