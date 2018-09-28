@@ -102,14 +102,12 @@ static UriBool URI_FUNC(LowercaseMalloc)(const URI_CHAR ** first,
 		const URI_CHAR ** afterLast);
 
 static void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
-		unsigned int revertMask);
+		unsigned int revertMask, UriMemoryManager * memory);
 
 
 
 static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
-		unsigned int revertMask) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+		unsigned int revertMask, UriMemoryManager * memory) {
 	if (revertMask & URI_NORMALIZE_SCHEME) {
 		memory->free(memory, (URI_CHAR *)uri->scheme.first);
 		uri->scheme.first = NULL;
@@ -547,7 +545,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 				URI_FUNC(LowercaseInplace)(uri->scheme.first, uri->scheme.afterLast);
 			} else {
 				if (!URI_FUNC(LowercaseMalloc)(&(uri->scheme.first), &(uri->scheme.afterLast))) {
-					URI_FUNC(PreventLeakage)(uri, doneMask);
+					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
 				doneMask |= URI_NORMALIZE_SCHEME;
@@ -564,7 +562,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 				} else {
 					if (!URI_FUNC(LowercaseMalloc)(&(uri->hostData.ipFuture.first),
 							&(uri->hostData.ipFuture.afterLast))) {
-						URI_FUNC(PreventLeakage)(uri, doneMask);
+						URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 						return URI_ERROR_MALLOC;
 					}
 					doneMask |= URI_NORMALIZE_HOST;
@@ -582,7 +580,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 					if (!URI_FUNC(FixPercentEncodingMalloc)(
 							&(uri->hostText.first),
 							&(uri->hostText.afterLast))) {
-						URI_FUNC(PreventLeakage)(uri, doneMask);
+						URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 						return URI_ERROR_MALLOC;
 					}
 					doneMask |= URI_NORMALIZE_HOST;
@@ -608,7 +606,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			} else {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->userInfo.first),
 						&(uri->userInfo.afterLast))) {
-					URI_FUNC(PreventLeakage)(uri, doneMask);
+					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
 				doneMask |= URI_NORMALIZE_USER_INFO;
@@ -656,7 +654,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			while (walker != NULL) {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(walker->text.first),
 						&(walker->text.afterLast))) {
-					URI_FUNC(PreventLeakage)(uri, doneMask);
+					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
 				walker = walker->next;
@@ -669,7 +667,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 				(uri->owner == URI_TRUE)
 				|| ((doneMask & URI_NORMALIZE_PATH) != 0),
 				memory)) {
-			URI_FUNC(PreventLeakage)(uri, doneMask);
+			URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 			return URI_ERROR_MALLOC;
 		}
 		URI_FUNC(FixEmptyTrailSegment)(uri, memory);
@@ -696,7 +694,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			} else {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->query.first),
 						&(uri->query.afterLast))) {
-					URI_FUNC(PreventLeakage)(uri, doneMask);
+					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
 				doneMask |= URI_NORMALIZE_QUERY;
@@ -710,7 +708,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			} else {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->fragment.first),
 						&(uri->fragment.afterLast))) {
-					URI_FUNC(PreventLeakage)(uri, doneMask);
+					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
 				doneMask |= URI_NORMALIZE_FRAGMENT;
@@ -721,7 +719,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 	/* Dup all not duped yet */
 	if ((outMask == NULL) && !uri->owner) {
 		if (!URI_FUNC(MakeOwner)(uri, &doneMask)) {
-			URI_FUNC(PreventLeakage)(uri, doneMask);
+			URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 			return URI_ERROR_MALLOC;
 		}
 		uri->owner = URI_TRUE;
