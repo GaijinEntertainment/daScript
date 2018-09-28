@@ -130,6 +130,7 @@ UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri,
 UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
         UriBool relative, UriBool pathOwned) {
 	URI_TYPE(PathSegment) * walker;
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	if ((uri == NULL) || (uri->pathHead == NULL)) {
 		return URI_TRUE;
 	}
@@ -173,13 +174,13 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 						}
 
 						if (pathOwned && (walker->text.first != walker->text.afterLast)) {
-							free((URI_CHAR *)walker->text.first);
+							memory->free(memory, (URI_CHAR *)walker->text.first);
 						}
-						free(walker);
+						memory->free(memory, walker);
 					} else {
 						/* Last segment */
 						if (pathOwned && (walker->text.first != walker->text.afterLast)) {
-							free((URI_CHAR *)walker->text.first);
+							memory->free(memory, (URI_CHAR *)walker->text.first);
 						}
 
 						if (prev == NULL) {
@@ -189,7 +190,7 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 								walker->text.first = URI_FUNC(SafeToPointTo);
 								walker->text.afterLast = URI_FUNC(SafeToPointTo);
 							} else {
-								free(walker);
+								memory->free(memory, walker);
 
 								uri->pathHead = NULL;
 								uri->pathTail = NULL;
@@ -237,17 +238,17 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 								walker->next->reserved = prevPrev;
 							} else {
 								/* Last segment -> insert "" segment to represent trailing slash, update tail */
-								URI_TYPE(PathSegment) * const segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+								URI_TYPE(PathSegment) * const segment = memory->malloc(memory, 1 * sizeof(URI_TYPE(PathSegment)));
 								if (segment == NULL) {
 									if (pathOwned && (walker->text.first != walker->text.afterLast)) {
-										free((URI_CHAR *)walker->text.first);
+										memory->free(memory, (URI_CHAR *)walker->text.first);
 									}
-									free(walker);
+									memory->free(memory, walker);
 
 									if (pathOwned && (prev->text.first != prev->text.afterLast)) {
-										free((URI_CHAR *)prev->text.first);
+										memory->free(memory, (URI_CHAR *)prev->text.first);
 									}
-									free(prev);
+									memory->free(memory, prev);
 
 									return URI_FALSE; /* Raises malloc error */
 								}
@@ -259,14 +260,14 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 							}
 
 							if (pathOwned && (walker->text.first != walker->text.afterLast)) {
-								free((URI_CHAR *)walker->text.first);
+								memory->free(memory, (URI_CHAR *)walker->text.first);
 							}
-							free(walker);
+							memory->free(memory, walker);
 
 							if (pathOwned && (prev->text.first != prev->text.afterLast)) {
-								free((URI_CHAR *)prev->text.first);
+								memory->free(memory, (URI_CHAR *)prev->text.first);
 							}
-							free(prev);
+							memory->free(memory, prev);
 
 							walker = nextBackup;
 						} else {
@@ -276,14 +277,14 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 								walker->next->reserved = NULL;
 
 								if (pathOwned && (walker->text.first != walker->text.afterLast)) {
-									free((URI_CHAR *)walker->text.first);
+									memory->free(memory, (URI_CHAR *)walker->text.first);
 								}
-								free(walker);
+								memory->free(memory, walker);
 							} else {
 								/* Re-use segment for "" path segment to represent trailing slash, update tail */
 								URI_TYPE(PathSegment) * const segment = walker;
 								if (pathOwned && (segment->text.first != segment->text.afterLast)) {
-									free((URI_CHAR *)segment->text.first);
+									memory->free(memory, (URI_CHAR *)segment->text.first);
 								}
 								segment->text.first = URI_FUNC(SafeToPointTo);
 								segment->text.afterLast = URI_FUNC(SafeToPointTo);
@@ -292,9 +293,9 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 							}
 
 							if (pathOwned && (prev->text.first != prev->text.afterLast)) {
-								free((URI_CHAR *)prev->text.first);
+								memory->free(memory, (URI_CHAR *)prev->text.first);
 							}
-							free(prev);
+							memory->free(memory, prev);
 
 							walker = nextBackup;
 						}
@@ -310,9 +311,9 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 						}
 
 						if (pathOwned && (walker->text.first != walker->text.afterLast)) {
-							free((URI_CHAR *)walker->text.first);
+							memory->free(memory, (URI_CHAR *)walker->text.first);
 						}
-						free(walker);
+						memory->free(memory, walker);
 
 						walker = anotherNextBackup;
 					}
@@ -430,6 +431,8 @@ UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri) {
 /* Copies the path segment list from one URI to another. */
 UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * source) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (source->pathHead == NULL) {
 		/* No path component */
 		dest->pathHead = NULL;
@@ -439,7 +442,7 @@ UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 		URI_TYPE(PathSegment) * sourceWalker = source->pathHead;
 		URI_TYPE(PathSegment) * destPrev = NULL;
 		do {
-			URI_TYPE(PathSegment) * cur = malloc(sizeof(URI_TYPE(PathSegment)));
+			URI_TYPE(PathSegment) * cur = memory->malloc(memory, sizeof(URI_TYPE(PathSegment)));
 			if (cur == NULL) {
 				/* Fix broken list */
 				if (destPrev != NULL) {
@@ -473,9 +476,11 @@ UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
 /* Copies the authority part of an URI over to another. */
 UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * source) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	/* From this functions usage we know that *
 	 * the dest URI cannot be uri->owner      */
-
+	
 	/* Copy userInfo */
 	dest->userInfo = source->userInfo;
 
@@ -484,7 +489,7 @@ UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 
 	/* Copy hostData */
 	if (source->hostData.ip4 != NULL) {
-		dest->hostData.ip4 = malloc(sizeof(UriIp4));
+		dest->hostData.ip4 = memory->malloc(memory, sizeof(UriIp4));
 		if (dest->hostData.ip4 == NULL) {
 			return URI_FALSE; /* Raises malloc error */
 		}
@@ -494,7 +499,7 @@ UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 		dest->hostData.ipFuture.afterLast = NULL;
 	} else if (source->hostData.ip6 != NULL) {
 		dest->hostData.ip4 = NULL;
-		dest->hostData.ip6 = malloc(sizeof(UriIp6));
+		dest->hostData.ip6 = memory->malloc(memory, sizeof(UriIp6));
 		if (dest->hostData.ip6 == NULL) {
 			return URI_FALSE; /* Raises malloc error */
 		}
@@ -517,6 +522,7 @@ UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
 
 UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri) {
 	URI_TYPE(PathSegment) * segment;
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 
 	if (	/* Case 1: absolute path, empty first segment */
 			(uri->absolutePath
@@ -534,7 +540,7 @@ UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri) {
 		return URI_TRUE;
 	}
 
-	segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+	segment = memory->malloc(memory, 1 * sizeof(URI_TYPE(PathSegment)));
 	if (segment == NULL) {
 		return URI_FALSE; /* Raises malloc error */
 	}
@@ -550,13 +556,15 @@ UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri) {
 
 
 void URI_FUNC(FixEmptyTrailSegment)(URI_TYPE(Uri) * uri) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	/* Fix path if only one empty segment */
 	if (!uri->absolutePath
 			&& !URI_FUNC(IsHostSet)(uri)
 			&& (uri->pathHead != NULL)
 			&& (uri->pathHead->next == NULL)
 			&& (uri->pathHead->text.first == uri->pathHead->text.afterLast)) {
-		free(uri->pathHead);
+		memory->free(memory, uri->pathHead);
 		uri->pathHead = NULL;
 		uri->pathTail = NULL;
 	}

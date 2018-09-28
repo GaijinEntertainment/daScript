@@ -511,6 +511,8 @@ static const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(ParserState) * state, c
  * [ipLit2]->[IPv6address2]
  */
 static URI_INLINE const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		URI_FUNC(StopSyntax)(state, first);
 		return NULL;
@@ -535,7 +537,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(ParserState) *
 	case _UT(':'):
 	case _UT(']'):
 	case URI_SET_HEXDIG:
-		state->uri->hostData.ip6 = malloc(1 * sizeof(UriIp6)); /* Freed when stopping on parse error */
+		state->uri->hostData.ip6 = memory->malloc(memory, 1 * sizeof(UriIp6)); /* Freed when stopping on parse error */
 		if (state->uri->hostData.ip6 == NULL) {
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
@@ -965,17 +967,19 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) 
 
 
 static URI_INLINE UriBool URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	state->uri->hostText.afterLast = first; /* HOST END */
 
 	/* Valid IPv4 or just a regname? */
-	state->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+	state->uri->hostData.ip4 = memory->malloc(memory, 1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
 	if (state->uri->hostData.ip4 == NULL) {
 		return URI_FALSE; /* Raises malloc error */
 	}
 	if (URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
 			state->uri->hostText.first, state->uri->hostText.afterLast)) {
 		/* Not IPv4 */
-		free(state->uri->hostData.ip4);
+		memory->free(memory, state->uri->hostData.ip4);
 		state->uri->hostData.ip4 = NULL;
 	}
 	return URI_TRUE; /* Success */
@@ -1036,19 +1040,21 @@ static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, c
 
 
 static URI_INLINE UriBool URI_FUNC(OnExitOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	state->uri->hostText.first = state->uri->userInfo.first; /* Host instead of userInfo, update */
 	state->uri->userInfo.first = NULL; /* Not a userInfo, reset */
 	state->uri->hostText.afterLast = first; /* HOST END */
 
 	/* Valid IPv4 or just a regname? */
-	state->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+	state->uri->hostData.ip4 = memory->malloc(memory, 1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
 	if (state->uri->hostData.ip4 == NULL) {
 		return URI_FALSE; /* Raises malloc error */
 	}
 	if (URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
 			state->uri->hostText.first, state->uri->hostText.afterLast)) {
 		/* Not IPv4 */
-		free(state->uri->hostData.ip4);
+		memory->free(memory, state->uri->hostData.ip4);
 		state->uri->hostData.ip4 = NULL;
 	}
 	return URI_TRUE; /* Success */
@@ -1161,19 +1167,21 @@ static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) *
 
 
 static URI_INLINE UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	state->uri->hostText.first = state->uri->userInfo.first; /* Host instead of userInfo, update */
 	state->uri->userInfo.first = NULL; /* Not a userInfo, reset */
 	state->uri->portText.afterLast = first; /* PORT END */
 
 	/* Valid IPv4 or just a regname? */
-	state->uri->hostData.ip4 = malloc(1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
+	state->uri->hostData.ip4 = memory->malloc(memory, 1 * sizeof(UriIp4)); /* Freed when stopping on parse error */
 	if (state->uri->hostData.ip4 == NULL) {
 		return URI_FALSE; /* Raises malloc error */
 	}
 	if (URI_FUNC(ParseIpFourAddress)(state->uri->hostData.ip4->data,
 			state->uri->hostText.first, state->uri->hostText.afterLast)) {
 		/* Not IPv4 */
-		free(state->uri->hostData.ip4);
+		memory->free(memory, state->uri->hostData.ip4);
 		state->uri->hostData.ip4 = NULL;
 	}
 	return URI_TRUE; /* Success */
@@ -2032,7 +2040,9 @@ static URI_INLINE void URI_FUNC(ResetParserStateExceptUri)(URI_TYPE(ParserState)
 
 
 static URI_INLINE UriBool URI_FUNC(PushPathSegment)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	URI_TYPE(PathSegment) * segment = malloc(1 * sizeof(URI_TYPE(PathSegment)));
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
+	URI_TYPE(PathSegment) * segment = memory->malloc(memory, 1 * sizeof(URI_TYPE(PathSegment)));
 	if (segment == NULL) {
 		return URI_FALSE; /* Raises malloc error */
 	}
@@ -2099,6 +2109,8 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state, const URI_CHAR * text) {
 
 
 void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (uri == NULL) {
 		return;
 	}
@@ -2107,7 +2119,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 		/* Scheme */
 		if (uri->scheme.first != NULL) {
 			if (uri->scheme.first != uri->scheme.afterLast) {
-				free((URI_CHAR *)uri->scheme.first);
+				memory->free(memory, (URI_CHAR *)uri->scheme.first);
 			}
 			uri->scheme.first = NULL;
 			uri->scheme.afterLast = NULL;
@@ -2116,7 +2128,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 		/* User info */
 		if (uri->userInfo.first != NULL) {
 			if (uri->userInfo.first != uri->userInfo.afterLast) {
-				free((URI_CHAR *)uri->userInfo.first);
+				memory->free(memory, (URI_CHAR *)uri->userInfo.first);
 			}
 			uri->userInfo.first = NULL;
 			uri->userInfo.afterLast = NULL;
@@ -2125,7 +2137,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 		/* Host data - IPvFuture */
 		if (uri->hostData.ipFuture.first != NULL) {
 			if (uri->hostData.ipFuture.first != uri->hostData.ipFuture.afterLast) {
-				free((URI_CHAR *)uri->hostData.ipFuture.first);
+				memory->free(memory, (URI_CHAR *)uri->hostData.ipFuture.first);
 			}
 			uri->hostData.ipFuture.first = NULL;
 			uri->hostData.ipFuture.afterLast = NULL;
@@ -2139,7 +2151,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 				&& (uri->hostData.ip6 == NULL)) {
 			/* Real regname */
 			if (uri->hostText.first != uri->hostText.afterLast) {
-				free((URI_CHAR *)uri->hostText.first);
+				memory->free(memory, (URI_CHAR *)uri->hostText.first);
 			}
 			uri->hostText.first = NULL;
 			uri->hostText.afterLast = NULL;
@@ -2148,20 +2160,20 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 
 	/* Host data - IPv4 */
 	if (uri->hostData.ip4 != NULL) {
-		free(uri->hostData.ip4);
+		memory->free(memory, uri->hostData.ip4);
 		uri->hostData.ip4 = NULL;
 	}
 
 	/* Host data - IPv6 */
 	if (uri->hostData.ip6 != NULL) {
-		free(uri->hostData.ip6);
+		memory->free(memory, uri->hostData.ip6);
 		uri->hostData.ip6 = NULL;
 	}
 
 	/* Port text */
 	if (uri->owner && (uri->portText.first != NULL)) {
 		if (uri->portText.first != uri->portText.afterLast) {
-			free((URI_CHAR *)uri->portText.first);
+			memory->free(memory, (URI_CHAR *)uri->portText.first);
 		}
 		uri->portText.first = NULL;
 		uri->portText.afterLast = NULL;
@@ -2174,9 +2186,9 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 			URI_TYPE(PathSegment) * const next = segWalk->next;
 			if (uri->owner && (segWalk->text.first != NULL)
 					&& (segWalk->text.first < segWalk->text.afterLast)) {
-				free((URI_CHAR *)segWalk->text.first);
+				memory->free(memory, (URI_CHAR *)segWalk->text.first);
 			}
-			free(segWalk);
+			memory->free(memory, segWalk);
 			segWalk = next;
 		}
 		uri->pathHead = NULL;
@@ -2187,7 +2199,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 		/* Query */
 		if (uri->query.first != NULL) {
 			if (uri->query.first != uri->query.afterLast) {
-				free((URI_CHAR *)uri->query.first);
+				memory->free(memory, (URI_CHAR *)uri->query.first);
 			}
 			uri->query.first = NULL;
 			uri->query.afterLast = NULL;
@@ -2196,7 +2208,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 		/* Fragment */
 		if (uri->fragment.first != NULL) {
 			if (uri->fragment.first != uri->fragment.afterLast) {
-				free((URI_CHAR *)uri->fragment.first);
+				memory->free(memory, (URI_CHAR *)uri->fragment.first);
 			}
 			uri->fragment.first = NULL;
 			uri->fragment.afterLast = NULL;
@@ -2207,6 +2219,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 
 
 UriBool URI_FUNC(_TESTING_ONLY_ParseIpSix)(const URI_CHAR * text) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	URI_TYPE(Uri) uri;
 	URI_TYPE(ParserState) parser;
 	const URI_CHAR * const afterIpSix = text + URI_STRLEN(text);
@@ -2215,7 +2228,7 @@ UriBool URI_FUNC(_TESTING_ONLY_ParseIpSix)(const URI_CHAR * text) {
 	URI_FUNC(ResetUri)(&uri);
 	parser.uri = &uri;
 	URI_FUNC(ResetParserStateExceptUri)(&parser);
-	parser.uri->hostData.ip6 = malloc(1 * sizeof(UriIp6));
+	parser.uri->hostData.ip6 = memory->malloc(memory, 1 * sizeof(UriIp6));
 	res = URI_FUNC(ParseIPv6address2)(&parser, text, afterIpSix);
 	URI_FUNC(FreeUriMembers)(&uri);
 	return res == afterIpSix ? URI_TRUE : URI_FALSE;

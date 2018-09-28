@@ -108,14 +108,16 @@ static void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 
 static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 		unsigned int revertMask) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (revertMask & URI_NORMALIZE_SCHEME) {
-		free((URI_CHAR *)uri->scheme.first);
+		memory->free(memory, (URI_CHAR *)uri->scheme.first);
 		uri->scheme.first = NULL;
 		uri->scheme.afterLast = NULL;
 	}
 
 	if (revertMask & URI_NORMALIZE_USER_INFO) {
-		free((URI_CHAR *)uri->userInfo.first);
+		memory->free(memory, (URI_CHAR *)uri->userInfo.first);
 		uri->userInfo.first = NULL;
 		uri->userInfo.afterLast = NULL;
 	}
@@ -123,7 +125,7 @@ static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 	if (revertMask & URI_NORMALIZE_HOST) {
 		if (uri->hostData.ipFuture.first != NULL) {
 			/* IPvFuture */
-			free((URI_CHAR *)uri->hostData.ipFuture.first);
+			memory->free(memory, (URI_CHAR *)uri->hostData.ipFuture.first);
 			uri->hostData.ipFuture.first = NULL;
 			uri->hostData.ipFuture.afterLast = NULL;
 			uri->hostText.first = NULL;
@@ -132,7 +134,7 @@ static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 				&& (uri->hostData.ip4 == NULL)
 				&& (uri->hostData.ip6 == NULL)) {
 			/* Regname */
-			free((URI_CHAR *)uri->hostText.first);
+			memory->free(memory, (URI_CHAR *)uri->hostText.first);
 			uri->hostText.first = NULL;
 			uri->hostText.afterLast = NULL;
 		}
@@ -145,9 +147,9 @@ static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 		while (walker != NULL) {
 			URI_TYPE(PathSegment) * const next = walker->next;
 			if (walker->text.afterLast > walker->text.first) {
-				free((URI_CHAR *)walker->text.first);
+				memory->free(memory, (URI_CHAR *)walker->text.first);
 			}
-			free(walker);
+			memory->free(memory, walker);
 			walker = next;
 		}
 		uri->pathHead = NULL;
@@ -155,13 +157,13 @@ static URI_INLINE void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 	}
 
 	if (revertMask & URI_NORMALIZE_QUERY) {
-		free((URI_CHAR *)uri->query.first);
+		memory->free(memory, (URI_CHAR *)uri->query.first);
 		uri->query.first = NULL;
 		uri->query.afterLast = NULL;
 	}
 
 	if (revertMask & URI_NORMALIZE_FRAGMENT) {
-		free((URI_CHAR *)uri->fragment.first);
+		memory->free(memory, (URI_CHAR *)uri->fragment.first);
 		uri->fragment.first = NULL;
 		uri->fragment.afterLast = NULL;
 	}
@@ -231,6 +233,7 @@ static URI_INLINE void URI_FUNC(LowercaseInplace)(const URI_CHAR * first,
 
 static URI_INLINE UriBool URI_FUNC(LowercaseMalloc)(const URI_CHAR ** first,
 		const URI_CHAR ** afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	int lenInChars;
 	const int lowerUpperDiff = (_UT('a') - _UT('A'));
 	URI_CHAR * buffer;
@@ -248,7 +251,7 @@ static URI_INLINE UriBool URI_FUNC(LowercaseMalloc)(const URI_CHAR ** first,
 		return URI_FALSE;
 	}
 
-	buffer = malloc(lenInChars * sizeof(URI_CHAR));
+	buffer = memory->malloc(memory, lenInChars * sizeof(URI_CHAR));
 	if (buffer == NULL) {
 		return URI_FALSE;
 	}
@@ -331,6 +334,7 @@ static URI_INLINE void URI_FUNC(FixPercentEncodingInplace)(const URI_CHAR * firs
 
 static URI_INLINE UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** first,
 		const URI_CHAR ** afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	int lenInChars;
 	URI_CHAR * buffer;
 
@@ -349,7 +353,7 @@ static URI_INLINE UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** f
 	}
 
 	/* New buffer */
-	buffer = malloc(lenInChars * sizeof(URI_CHAR));
+	buffer = memory->malloc(memory, lenInChars * sizeof(URI_CHAR));
 	if (buffer == NULL) {
 		return URI_FALSE;
 	}
@@ -364,13 +368,14 @@ static URI_INLINE UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** f
 
 static URI_INLINE UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
 		unsigned int maskTest, URI_TYPE(TextRange) * range) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	if (((*doneMask & maskTest) == 0)
 			&& (range->first != NULL)
 			&& (range->afterLast != NULL)
 			&& (range->afterLast > range->first)) {
 		const int lenInChars = (int)(range->afterLast - range->first);
 		const int lenInBytes = lenInChars * sizeof(URI_CHAR);
-		URI_CHAR * dup = malloc(lenInBytes);
+		URI_CHAR * dup = memory->malloc(memory, lenInBytes);
 		if (dup == NULL) {
 			return URI_FALSE; /* Raises malloc error */
 		}
@@ -386,6 +391,7 @@ static URI_INLINE UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
 
 static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 		unsigned int * doneMask) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	URI_TYPE(PathSegment) * walker = uri->pathHead;
 	if (!URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_SCHEME,
 				&(uri->scheme))
@@ -433,16 +439,16 @@ static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 					if ((ranger->text.first != NULL)
 							&& (ranger->text.afterLast != NULL)
 							&& (ranger->text.afterLast > ranger->text.first)) {
-						free((URI_CHAR *)ranger->text.first);
+						memory->free(memory, (URI_CHAR *)ranger->text.first);
 					}
-					free(ranger);
+					memory->free(memory, ranger);
 					ranger = next;
 				}
 
 				/* Kill path from walker */
 				while (walker != NULL) {
 					URI_TYPE(PathSegment) * const next = walker->next;
-					free(walker);
+					memory->free(memory, walker);
 					walker = next;
 				}
 

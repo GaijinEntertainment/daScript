@@ -72,6 +72,7 @@
  * the absolute URI is replaced. */
 static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 		const URI_TYPE(Uri) * relAppend) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	URI_TYPE(PathSegment) * sourceWalker;
 	URI_TYPE(PathSegment) * destPrev;
 	if (relAppend->pathHead == NULL) {
@@ -80,7 +81,7 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 
 	/* Replace last segment ("" if trailing slash) with first of append chain */
 	if (absWork->pathHead == NULL) {
-		URI_TYPE(PathSegment) * const dup = malloc(sizeof(URI_TYPE(PathSegment)));
+		URI_TYPE(PathSegment) * const dup = memory->malloc(memory, sizeof(URI_TYPE(PathSegment)));
 		if (dup == NULL) {
 			return URI_FALSE; /* Raises malloc error */
 		}
@@ -99,7 +100,7 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 	destPrev = absWork->pathTail;
 
 	for (;;) {
-		URI_TYPE(PathSegment) * const dup = malloc(sizeof(URI_TYPE(PathSegment)));
+		URI_TYPE(PathSegment) * const dup = memory->malloc(memory, sizeof(URI_TYPE(PathSegment)));
 		if (dup == NULL) {
 			destPrev->next = NULL;
 			absWork->pathTail = destPrev;
@@ -122,6 +123,8 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 
 
 static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (absWork == NULL) {
 		return URI_ERROR_NULL;
 	}
@@ -129,7 +132,7 @@ static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork) {
 	if (URI_FUNC(IsHostSet)(absWork) && absWork->absolutePath) {
 		/* Empty segment needed, instead? */
 		if (absWork->pathHead == NULL) {
-			URI_TYPE(PathSegment) * const segment = malloc(sizeof(URI_TYPE(PathSegment)));
+			URI_TYPE(PathSegment) * const segment = memory->malloc(memory, sizeof(URI_TYPE(PathSegment)));
 			if (segment == NULL) {
 				return URI_ERROR_MALLOC;
 			}
