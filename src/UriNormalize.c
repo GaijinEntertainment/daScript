@@ -86,7 +86,7 @@ static UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
 static void URI_FUNC(FixPercentEncodingInplace)(const URI_CHAR * first,
 		const URI_CHAR ** afterLast);
 static UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** first,
-		const URI_CHAR ** afterLast);
+		const URI_CHAR ** afterLast, UriMemoryManager * memory);
 static void URI_FUNC(FixPercentEncodingEngine)(
 		const URI_CHAR * inFirst, const URI_CHAR * inAfterLast,
 		const URI_CHAR * outFirst, const URI_CHAR ** outAfterLast);
@@ -330,8 +330,7 @@ static URI_INLINE void URI_FUNC(FixPercentEncodingInplace)(const URI_CHAR * firs
 
 
 static URI_INLINE UriBool URI_FUNC(FixPercentEncodingMalloc)(const URI_CHAR ** first,
-		const URI_CHAR ** afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+		const URI_CHAR ** afterLast, UriMemoryManager * memory) {
 	int lenInChars;
 	URI_CHAR * buffer;
 
@@ -578,7 +577,8 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 				} else {
 					if (!URI_FUNC(FixPercentEncodingMalloc)(
 							&(uri->hostText.first),
-							&(uri->hostText.afterLast))) {
+							&(uri->hostText.afterLast),
+							memory)) {
 						URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 						return URI_ERROR_MALLOC;
 					}
@@ -604,7 +604,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 				URI_FUNC(FixPercentEncodingInplace)(uri->userInfo.first, &(uri->userInfo.afterLast));
 			} else {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->userInfo.first),
-						&(uri->userInfo.afterLast))) {
+						&(uri->userInfo.afterLast), memory)) {
 					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
@@ -652,7 +652,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 		} else {
 			while (walker != NULL) {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(walker->text.first),
-						&(walker->text.afterLast))) {
+						&(walker->text.afterLast), memory)) {
 					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
@@ -692,7 +692,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 				URI_FUNC(FixPercentEncodingInplace)(uri->query.first, &(uri->query.afterLast));
 			} else {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->query.first),
-						&(uri->query.afterLast))) {
+						&(uri->query.afterLast), memory)) {
 					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
@@ -706,7 +706,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 				URI_FUNC(FixPercentEncodingInplace)(uri->fragment.first, &(uri->fragment.afterLast));
 			} else {
 				if (!URI_FUNC(FixPercentEncodingMalloc)(&(uri->fragment.first),
-						&(uri->fragment.afterLast))) {
+						&(uri->fragment.afterLast), memory)) {
 					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
