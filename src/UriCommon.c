@@ -430,9 +430,7 @@ UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri) {
 
 /* Copies the path segment list from one URI to another. */
 UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest,
-		const URI_TYPE(Uri) * source) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+		const URI_TYPE(Uri) * source, UriMemoryManager * memory) {
 	if (source->pathHead == NULL) {
 		/* No path component */
 		dest->pathHead = NULL;

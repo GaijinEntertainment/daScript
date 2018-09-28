@@ -127,6 +127,8 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absSource,
 		const URI_TYPE(Uri) * absBase,
 		UriBool domainRootMode) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (dest == NULL) {
 		return URI_ERROR_NULL;
 	}
@@ -155,7 +157,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 						return URI_ERROR_MALLOC;
 					}
 	/* [04/50]	   T.path      = A.path; */
-					if (!URI_FUNC(CopyPath)(dest, absSource)) {
+					if (!URI_FUNC(CopyPath)(dest, absSource, memory)) {
 						return URI_ERROR_MALLOC;
 					}
 	/* [05/50]	else */
@@ -169,7 +171,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 							return URI_ERROR_MALLOC;
 						}
 	/* [09/50]	      T.path      = A.path; */
-						if (!URI_FUNC(CopyPath)(dest, absSource)) {
+						if (!URI_FUNC(CopyPath)(dest, absSource, memory)) {
 							return URI_ERROR_MALLOC;
 						}
 	/* [10/50]	   else */
@@ -187,7 +189,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 	/* [16/50]	            T.path   = A.path; */
 								/* GROUPED */
 	/* [17/50]	         endif; */
-							if (!URI_FUNC(CopyPath)(dest, absSource)) {
+							if (!URI_FUNC(CopyPath)(dest, absSource, memory)) {
 								return URI_ERROR_MALLOC;
 							}
 							dest->absolutePath = URI_TRUE;

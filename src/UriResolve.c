@@ -155,6 +155,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource,
 		const URI_TYPE(Uri) * absBase,
 		UriResolutionOptions options) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	UriBool relSourceHasScheme;
 
 	if (absDest == NULL) {
@@ -193,7 +194,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 						return URI_ERROR_MALLOC;
 					}
 	/* [04/32]		T.path = remove_dot_segments(R.path); */
-					if (!URI_FUNC(CopyPath)(absDest, relSource)) {
+					if (!URI_FUNC(CopyPath)(absDest, relSource, memory)) {
 						return URI_ERROR_MALLOC;
 					}
 					if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
@@ -210,7 +211,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 							return URI_ERROR_MALLOC;
 						}
 	/* [09/32]			T.path = remove_dot_segments(R.path); */
-						if (!URI_FUNC(CopyPath)(absDest, relSource)) {
+						if (!URI_FUNC(CopyPath)(absDest, relSource, memory)) {
 							return URI_ERROR_MALLOC;
 						}
 						if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
@@ -227,7 +228,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [12/32]			if (R.path == "") then */
 						if (relSource->pathHead == NULL && !relSource->absolutePath) {
 	/* [13/32]				T.path = Base.path; */
-							if (!URI_FUNC(CopyPath)(absDest, absBase)) {
+							if (!URI_FUNC(CopyPath)(absDest, absBase, memory)) {
 								return URI_ERROR_MALLOC;
 							}
 	/* [14/32]				if defined(R.query) then */
@@ -246,7 +247,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 							if (relSource->absolutePath) {
 								int res;
 	/* [21/32]					T.path = remove_dot_segments(R.path); */
-								if (!URI_FUNC(CopyPath)(absDest, relSource)) {
+								if (!URI_FUNC(CopyPath)(absDest, relSource, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 								res = URI_FUNC(ResolveAbsolutePathFlag)(absDest);
@@ -259,7 +260,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [22/32]				else */
 							} else {
 	/* [23/32]					T.path = merge(Base.path, R.path); */
-								if (!URI_FUNC(CopyPath)(absDest, absBase)) {
+								if (!URI_FUNC(CopyPath)(absDest, absBase, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 								if (!URI_FUNC(MergePath)(absDest, relSource)) {
