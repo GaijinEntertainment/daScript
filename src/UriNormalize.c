@@ -82,7 +82,7 @@ static UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
 		unsigned int maskTest, URI_TYPE(TextRange) * range,
 		UriMemoryManager * memory);
 static UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
-		unsigned int * doneMask);
+		unsigned int * doneMask, UriMemoryManager * memory);
 
 static void URI_FUNC(FixPercentEncodingInplace)(const URI_CHAR * first,
 		const URI_CHAR ** afterLast);
@@ -387,8 +387,7 @@ static URI_INLINE UriBool URI_FUNC(MakeRangeOwner)(unsigned int * doneMask,
 
 
 static URI_INLINE UriBool URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri,
-		unsigned int * doneMask) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+		unsigned int * doneMask, UriMemoryManager * memory) {
 	URI_TYPE(PathSegment) * walker = uri->pathHead;
 	if (!URI_FUNC(MakeRangeOwner)(doneMask, URI_NORMALIZE_SCHEME,
 				&(uri->scheme), memory)
@@ -718,7 +717,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 
 	/* Dup all not duped yet */
 	if ((outMask == NULL) && !uri->owner) {
-		if (!URI_FUNC(MakeOwner)(uri, &doneMask)) {
+		if (!URI_FUNC(MakeOwner)(uri, &doneMask, memory)) {
 			URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 			return URI_ERROR_MALLOC;
 		}
