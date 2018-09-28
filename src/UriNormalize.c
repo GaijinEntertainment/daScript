@@ -99,7 +99,7 @@ static UriBool URI_FUNC(ContainsUglyPercentEncoding)(const URI_CHAR * first,
 static void URI_FUNC(LowercaseInplace)(const URI_CHAR * first,
 		const URI_CHAR * afterLast);
 static UriBool URI_FUNC(LowercaseMalloc)(const URI_CHAR ** first,
-		const URI_CHAR ** afterLast);
+		const URI_CHAR ** afterLast, UriMemoryManager * memory);
 
 static void URI_FUNC(PreventLeakage)(URI_TYPE(Uri) * uri,
 		unsigned int revertMask, UriMemoryManager * memory);
@@ -230,8 +230,7 @@ static URI_INLINE void URI_FUNC(LowercaseInplace)(const URI_CHAR * first,
 
 
 static URI_INLINE UriBool URI_FUNC(LowercaseMalloc)(const URI_CHAR ** first,
-		const URI_CHAR ** afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+		const URI_CHAR ** afterLast, UriMemoryManager * memory) {
 	int lenInChars;
 	const int lowerUpperDiff = (_UT('a') - _UT('A'));
 	URI_CHAR * buffer;
@@ -544,7 +543,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 			if (uri->owner) {
 				URI_FUNC(LowercaseInplace)(uri->scheme.first, uri->scheme.afterLast);
 			} else {
-				if (!URI_FUNC(LowercaseMalloc)(&(uri->scheme.first), &(uri->scheme.afterLast))) {
+				if (!URI_FUNC(LowercaseMalloc)(&(uri->scheme.first), &(uri->scheme.afterLast), memory)) {
 					URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 					return URI_ERROR_MALLOC;
 				}
@@ -561,7 +560,7 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri, unsig
 							uri->hostData.ipFuture.afterLast);
 				} else {
 					if (!URI_FUNC(LowercaseMalloc)(&(uri->hostData.ipFuture.first),
-							&(uri->hostData.ipFuture.afterLast))) {
+							&(uri->hostData.ipFuture.afterLast), memory)) {
 						URI_FUNC(PreventLeakage)(uri, doneMask, memory);
 						return URI_ERROR_MALLOC;
 					}
