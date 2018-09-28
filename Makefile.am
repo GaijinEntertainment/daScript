@@ -48,6 +48,7 @@ liburiparser_la_SOURCES = \
 	src/UriIp4.c \
 	src/UriIp4Base.c \
 	src/UriIp4Base.h \
+	src/UriMemory.c \
 	src/UriNormalize.c \
 	src/UriNormalizeBase.c \
 	src/UriNormalizeBase.h \

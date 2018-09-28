@@ -153,6 +153,20 @@ typedef struct UriIp6Struct {
 } UriIp6; /**< @copydoc UriIp6Struct */
 
 
+struct UriMemoryManagerStruct;
+
+typedef void * (*UriFuncMalloc)(struct UriMemoryManagerStruct *, size_t);
+typedef void * (*UriFuncRealloc)(struct UriMemoryManagerStruct *, void *, size_t);
+typedef void (*UriFuncFree)(struct UriMemoryManagerStruct *, void *);
+
+
+typedef struct UriMemoryManagerStruct {
+	UriFuncMalloc malloc;
+	UriFuncRealloc realloc;
+	UriFuncFree free;
+	void * userData;
+} UriMemoryManager; /**< @copydoc UriMemoryManagerStruct */
+
 
 /**
  * Specifies a line break conversion mode.
