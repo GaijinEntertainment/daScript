@@ -171,7 +171,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) *
 static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
-static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePathRootless)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePchar)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -1372,7 +1372,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(
 			if (afterAuthority == NULL) {
 				return NULL;
 			}
-			afterPathAbsEmpty = URI_FUNC(ParsePathAbsEmpty)(state, afterAuthority, afterLast);
+			afterPathAbsEmpty = URI_FUNC(ParsePathAbsEmpty)(state, afterAuthority, afterLast, memory);
 
 			URI_FUNC(FixEmptyTrailSegment)(state->uri, memory);
 
@@ -1391,9 +1391,9 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(
  * [pathAbsEmpty]-></>[segment][pathAbsEmpty]
  * [pathAbsEmpty]-><NULL>
  */
-static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		return afterLast;
 	}
@@ -1410,7 +1410,7 @@ static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * stat
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
-			return URI_FUNC(ParsePathAbsEmpty)(state, afterSegment, afterLast);
+			return URI_FUNC(ParsePathAbsEmpty)(state, afterSegment, afterLast, memory);
 		}
 
 	default:
