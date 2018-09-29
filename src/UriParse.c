@@ -155,7 +155,7 @@
 
 
 
-static const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseAuthorityTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseHexZero)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseHierPart)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -226,9 +226,9 @@ static URI_INLINE void URI_FUNC(StopMalloc)(URI_TYPE(ParserState) * state) {
  * [authority]->[ownHostUserInfoNz]
  * [authority]-><NULL>
  */
-static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthority)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		/* "" regname host */
 		state->uri->hostText.first = URI_FUNC(SafeToPointTo);
@@ -1355,7 +1355,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserS
 	case _UT('/'):
 		{
 			const URI_CHAR * const afterAuthority
-					= URI_FUNC(ParseAuthority)(state, first + 1, afterLast);
+					= URI_FUNC(ParseAuthority)(state, first + 1, afterLast, memory);
 			const URI_CHAR * afterPathAbsEmpty;
 			if (afterAuthority == NULL) {
 				return NULL;
