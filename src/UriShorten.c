@@ -64,6 +64,7 @@
 #ifndef URI_DOXYGEN
 # include <uriparser/Uri.h>
 # include "UriCommon.h"
+# include "UriMemory.h"
 #endif
 
 
@@ -296,7 +297,18 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absSource,
 		const URI_TYPE(Uri) * absBase,
 		UriBool domainRootMode) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	UriMemoryManager * const memory = &defaultMemoryManager;
+	return URI_FUNC(RemoveBaseUriMm)(dest, absSource, absBase, domainRootMode,
+			memory);
+}
+
+
+
+int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * absSource,
+		const URI_TYPE(Uri) * absBase,
+		UriBool domainRootMode, UriMemoryManager * memory) {
+	/* TODO check memory manager for completeness */
 	const int res = URI_FUNC(RemoveBaseUriImpl)(dest, absSource,
 			absBase, domainRootMode, memory);
 	if ((res != URI_SUCCESS) && (dest != NULL)) {

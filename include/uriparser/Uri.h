@@ -385,6 +385,7 @@ int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
  * relative if the absolute %URI and base %UI share both scheme and authority.
  * If that is not the case, the result will still be
  * an absolute URI (with scheme part if necessary).
+ * Uses default libc-based memory manager.
  * NOTE: On success you have to call uriFreeUriMembersA on
  * \p dest manually later.
  *
@@ -394,13 +395,39 @@ int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
  * @param domainRootMode   <b>IN</b>: Create %URI with path relative to domain root
  * @return                 Error code or 0 on success
  *
- * @see uriAddBaseUriA, uriAddBaseUriExA
+ * @see uriRemoveBaseUriMm, uriAddBaseUriA, uriAddBaseUriExA
  * @since 0.5.2
  */
 int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absoluteSource,
 		const URI_TYPE(Uri) * absoluteBase,
 		UriBool domainRootMode);
+
+
+
+/**
+ * Tries to make a relative %URI (a reference) from an
+ * absolute %URI and a given base %URI. The resulting %URI is going to be
+ * relative if the absolute %URI and base %UI share both scheme and authority.
+ * If that is not the case, the result will still be
+ * an absolute URI (with scheme part if necessary).
+ * NOTE: On success you have to call uriFreeUriMembersA on
+ * \p dest manually later.
+ *
+ * @param dest             <b>OUT</b>: Result %URI
+ * @param absoluteSource   <b>IN</b>: Absolute %URI to make relative
+ * @param absoluteBase     <b>IN</b>: Base %URI
+ * @param domainRootMode   <b>IN</b>: Create %URI with path relative to domain root
+ * @param memory           <b>IN</b>: Memory manager to use
+ * @return                 Error code or 0 on success
+ *
+ * @see uriRemoveBaseUri, uriAddBaseUriA, uriAddBaseUriExA
+ * @since 0.8.7
+ */
+int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * absoluteSource,
+		const URI_TYPE(Uri) * absoluteBase,
+		UriBool domainRootMode, UriMemoryManager * memory);
 
 
 
