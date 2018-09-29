@@ -125,9 +125,7 @@ static URI_INLINE UriBool URI_FUNC(EqualsAuthority)(const URI_TYPE(Uri) * first,
 static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absSource,
 		const URI_TYPE(Uri) * absBase,
-		UriBool domainRootMode) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+		UriBool domainRootMode, UriMemoryManager * memory) {
 	if (dest == NULL) {
 		return URI_ERROR_NULL;
 	}
@@ -298,8 +296,9 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absSource,
 		const URI_TYPE(Uri) * absBase,
 		UriBool domainRootMode) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	const int res = URI_FUNC(RemoveBaseUriImpl)(dest, absSource,
-			absBase, domainRootMode);
+			absBase, domainRootMode, memory);
 	if ((res != URI_SUCCESS) && (dest != NULL)) {
 		URI_FUNC(FreeUriMembers)(dest);
 	}
