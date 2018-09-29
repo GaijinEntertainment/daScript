@@ -167,8 +167,8 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
 static const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
-static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
-static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
+static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -269,7 +269,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthority)(
 	case URI_SET_DIGIT:
 	case URI_SET_ALPHA:
 		state->uri->userInfo.first = first; /* USERINFO BEGIN */
-		return URI_FUNC(ParseOwnHostUserInfoNz)(state, first, afterLast);
+		return URI_FUNC(ParseOwnHostUserInfoNz)(state, first, afterLast, memory);
 
 	default:
 		/* "" regname host */
@@ -1108,7 +1108,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(
 	case _UT('='):
 	case URI_SET_DIGIT:
 	case URI_SET_ALPHA:
-		return URI_FUNC(ParseOwnHostUserInfoNz)(state, first, afterLast);
+		return URI_FUNC(ParseOwnHostUserInfoNz)(state, first, afterLast, memory);
 
 	default:
 		if (!URI_FUNC(OnExitOwnHostUserInfo)(state, first, memory)) {
@@ -1126,9 +1126,9 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(
  * [ownHostUserInfoNz]-><:>[ownPortUserInfo]
  * [ownHostUserInfoNz]-><@>[ownHost]
  */
-static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		URI_FUNC(StopSyntax)(state, first);
 		return NULL;
@@ -1165,7 +1165,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) *
 	case _UT(':'):
 		state->uri->hostText.afterLast = first; /* HOST END */
 		state->uri->portText.first = first + 1; /* PORT BEGIN */
-		return URI_FUNC(ParseOwnPortUserInfo)(state, first + 1, afterLast);
+		return URI_FUNC(ParseOwnPortUserInfo)(state, first + 1, afterLast, memory);
 
 	case _UT('@'):
 		state->uri->userInfo.afterLast = first; /* USERINFO END */
@@ -1216,9 +1216,9 @@ static URI_INLINE UriBool URI_FUNC(OnExitOwnPortUserInfo)(
  * [ownPortUserInfo]-><@>[ownHost]
  * [ownPortUserInfo]-><NULL>
  */
-static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		if (!URI_FUNC(OnExitOwnPortUserInfo)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
@@ -1254,7 +1254,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 		return URI_FUNC(ParseOwnUserInfo)(state, first + 1, afterLast);
 
 	case URI_SET_DIGIT:
-		return URI_FUNC(ParseOwnPortUserInfo)(state, first + 1, afterLast);
+		return URI_FUNC(ParseOwnPortUserInfo)(state, first + 1, afterLast, memory);
 
 	case _UT('%'):
 		state->uri->portText.first = NULL; /* Not a port, reset */
