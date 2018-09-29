@@ -165,7 +165,7 @@ static const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(ParserState) * state, con
 static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
-static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -968,7 +968,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(
 		}
 
 	default:
-		return URI_FUNC(ParseOwnHost2)(state, first, afterLast);
+		return URI_FUNC(ParseOwnHost2)(state, first, afterLast, memory);
 	}
 }
 
@@ -999,9 +999,9 @@ static URI_INLINE UriBool URI_FUNC(OnExitOwnHost2)(
  * [ownHost2]->[authorityTwo] // can take <NULL>
  * [ownHost2]->[pctSubUnres][ownHost2]
  */
-static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static const URI_CHAR * URI_FUNC(ParseOwnHost2)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		if (!URI_FUNC(OnExitOwnHost2)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
@@ -1035,7 +1035,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, c
 			if (afterPctSubUnres == NULL) {
 				return NULL;
 			}
-			return URI_FUNC(ParseOwnHost2)(state, afterPctSubUnres, afterLast);
+			return URI_FUNC(ParseOwnHost2)(state, afterPctSubUnres, afterLast, memory);
 		}
 
 	default:
