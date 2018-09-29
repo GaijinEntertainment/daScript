@@ -195,7 +195,9 @@ static void URI_FUNC(OnExitPartHelperTwo)(URI_TYPE(ParserState) * state);
 
 static void URI_FUNC(ResetParserStateExceptUri)(URI_TYPE(ParserState) * state);
 
-static UriBool URI_FUNC(PushPathSegment)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static UriBool URI_FUNC(PushPathSegment)(URI_TYPE(ParserState) * state,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		UriMemoryManager * memory);
 
 static void URI_FUNC(StopSyntax)(URI_TYPE(ParserState) * state, const URI_CHAR * errorPos);
 static void URI_FUNC(StopMalloc)(URI_TYPE(ParserState) * state);
@@ -860,8 +862,10 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(ParserState) * stat
  * [mustBeSegmentNzNc]-><@>[mustBeSegmentNzNc]
  */
 static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
-		if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first)) { /* SEGMENT BOTH */
+		if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first, memory)) { /* SEGMENT BOTH */
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
 		}
@@ -904,7 +908,7 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
 		{
 			const URI_CHAR * afterZeroMoreSlashSegs;
 			const URI_CHAR * afterSegment;
-			if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first)) { /* SEGMENT BOTH */
+			if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first, memory)) { /* SEGMENT BOTH */
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
@@ -913,7 +917,7 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
 			if (afterSegment == NULL) {
 				return NULL;
 			}
-			if (!URI_FUNC(PushPathSegment)(state, first + 1, afterSegment)) { /* SEGMENT BOTH */
+			if (!URI_FUNC(PushPathSegment)(state, first + 1, afterSegment, memory)) { /* SEGMENT BOTH */
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
@@ -926,7 +930,7 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
 		}
 
 	default:
-		if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first)) { /* SEGMENT BOTH */
+		if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first, memory)) { /* SEGMENT BOTH */
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
 		}
@@ -1372,6 +1376,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserS
  * [pathAbsEmpty]-><NULL>
  */
 static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		return afterLast;
 	}
@@ -1384,7 +1390,7 @@ static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * stat
 			if (afterSegment == NULL) {
 				return NULL;
 			}
-			if (!URI_FUNC(PushPathSegment)(state, first + 1, afterSegment)) { /* SEGMENT BOTH */
+			if (!URI_FUNC(PushPathSegment)(state, first + 1, afterSegment, memory)) { /* SEGMENT BOTH */
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
@@ -1403,6 +1409,8 @@ static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * stat
  * [pathAbsNoLeadSlash]-><NULL>
  */
 static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		return afterLast;
 	}
@@ -1434,7 +1442,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(URI_TYPE(Pa
 			if (afterSegmentNz == NULL) {
 				return NULL;
 			}
-			if (!URI_FUNC(PushPathSegment)(state, first, afterSegmentNz)) { /* SEGMENT BOTH */
+			if (!URI_FUNC(PushPathSegment)(state, first, afterSegmentNz, memory)) { /* SEGMENT BOTH */
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
@@ -1452,12 +1460,14 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(URI_TYPE(Pa
  * [pathRootless]->[segmentNz][zeroMoreSlashSegs]
  */
 static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathRootless)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	const URI_CHAR * const afterSegmentNz
 			= URI_FUNC(ParseSegmentNz)(state, first, afterLast);
 	if (afterSegmentNz == NULL) {
 		return NULL;
 	} else {
-		if (!URI_FUNC(PushPathSegment)(state, first, afterSegmentNz)) { /* SEGMENT BOTH */
+		if (!URI_FUNC(PushPathSegment)(state, first, afterSegmentNz, memory)) { /* SEGMENT BOTH */
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
 		}
@@ -1740,7 +1750,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseSegmentNz)(URI_TYPE(ParserState
 
 
 static URI_INLINE UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first) {
-	if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first)) { /* SEGMENT BOTH */
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first, memory)) { /* SEGMENT BOTH */
 		return URI_FALSE; /* Raises malloc error*/
 	}
 	state->uri->scheme.first = NULL; /* Not a scheme, reset */
@@ -1774,6 +1785,8 @@ static URI_INLINE UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(URI_TYPE(ParserSt
  * [segmentNzNcOrScheme2]-><->[segmentNzNcOrScheme2]
  */
 static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		if (!URI_FUNC(OnExitSegmentNzNcOrScheme2)(state, first)) {
 			URI_FUNC(StopMalloc)(state);
@@ -1823,12 +1836,12 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState
 			if (afterSegment == NULL) {
 				return NULL;
 			}
-			if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first)) { /* SEGMENT BOTH */
+			if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first, memory)) { /* SEGMENT BOTH */
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
 			state->uri->scheme.first = NULL; /* Not a scheme, reset */
-			if (!URI_FUNC(PushPathSegment)(state, first + 1, afterSegment)) { /* SEGMENT BOTH */
+			if (!URI_FUNC(PushPathSegment)(state, first + 1, afterSegment, memory)) { /* SEGMENT BOTH */
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
@@ -2007,6 +2020,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(ParserStat
  * [zeroMoreSlashSegs]-><NULL>
  */
 static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		return afterLast;
 	}
@@ -2019,7 +2034,7 @@ static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) *
 			if (afterSegment == NULL) {
 				return NULL;
 			}
-			if (!URI_FUNC(PushPathSegment)(state, first + 1, afterSegment)) { /* SEGMENT BOTH */
+			if (!URI_FUNC(PushPathSegment)(state, first + 1, afterSegment, memory)) { /* SEGMENT BOTH */
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
@@ -2041,9 +2056,9 @@ static URI_INLINE void URI_FUNC(ResetParserStateExceptUri)(URI_TYPE(ParserState)
 
 
 
-static URI_INLINE UriBool URI_FUNC(PushPathSegment)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static URI_INLINE UriBool URI_FUNC(PushPathSegment)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	URI_TYPE(PathSegment) * segment = memory->malloc(memory, 1 * sizeof(URI_TYPE(PathSegment)));
 	if (segment == NULL) {
 		return URI_FALSE; /* Raises malloc error */
