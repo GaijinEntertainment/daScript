@@ -187,7 +187,7 @@ static const URI_CHAR * URI_FUNC(ParseUriTail)(URI_TYPE(ParserState) * state, co
 static const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 
-static UriBool URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first);
+static UriBool URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
 static UriBool URI_FUNC(OnExitOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first);
 static UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first);
 static UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first);
@@ -974,9 +974,9 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(
 
 
 
-static URI_INLINE UriBool URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static URI_INLINE UriBool URI_FUNC(OnExitOwnHost2)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		UriMemoryManager * memory) {
 	state->uri->hostText.afterLast = first; /* HOST END */
 
 	/* Valid IPv4 or just a regname? */
@@ -1000,8 +1000,10 @@ static URI_INLINE UriBool URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state
  * [ownHost2]->[pctSubUnres][ownHost2]
  */
 static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
-		if (!URI_FUNC(OnExitOwnHost2)(state, first)) {
+		if (!URI_FUNC(OnExitOwnHost2)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
 		}
@@ -1037,7 +1039,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, c
 		}
 
 	default:
-		if (!URI_FUNC(OnExitOwnHost2)(state, first)) {
+		if (!URI_FUNC(OnExitOwnHost2)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
 		}
