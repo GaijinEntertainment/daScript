@@ -71,8 +71,7 @@
 /* Appends a relative URI to an absolute. The last path segment of
  * the absolute URI is replaced. */
 static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
-		const URI_TYPE(Uri) * relAppend) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+		const URI_TYPE(Uri) * relAppend, UriMemoryManager * memory) {
 	URI_TYPE(PathSegment) * sourceWalker;
 	URI_TYPE(PathSegment) * destPrev;
 	if (relAppend->pathHead == NULL) {
@@ -263,7 +262,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 								if (!URI_FUNC(CopyPath)(absDest, absBase, memory)) {
 									return URI_ERROR_MALLOC;
 								}
-								if (!URI_FUNC(MergePath)(absDest, relSource)) {
+								if (!URI_FUNC(MergePath)(absDest, relSource, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 	/* [24/32]					T.path = remove_dot_segments(T.path); */
