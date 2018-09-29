@@ -80,7 +80,8 @@ static int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 static UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
 		int * itemCount, const URI_CHAR * keyFirst, const URI_CHAR * keyAfter,
 		const URI_CHAR * valueFirst, const URI_CHAR * valueAfter,
-		UriBool plusToSpace, UriBreakConversion breakConversion);
+		UriBool plusToSpace, UriBreakConversion breakConversion,
+		UriMemoryManager * memory);
 
 
 
@@ -272,8 +273,8 @@ int URI_FUNC(ComposeQueryEngine)(URI_CHAR * dest,
 UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
 		int * itemCount, const URI_CHAR * keyFirst, const URI_CHAR * keyAfter,
 		const URI_CHAR * valueFirst, const URI_CHAR * valueAfter,
-		UriBool plusToSpace, UriBreakConversion breakConversion) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+		UriBool plusToSpace, UriBreakConversion breakConversion,
+		UriMemoryManager * memory) {
 	const int keyLen = (int)(keyAfter - keyFirst);
 	const int valueLen = (int)(valueAfter - valueFirst);
 	URI_CHAR * key;
@@ -371,6 +372,7 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 	const URI_CHAR * walk = first;
 	const URI_CHAR * keyFirst = first;
 	const URI_CHAR * keyAfter = NULL;
@@ -403,7 +405,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 
 			if (URI_FUNC(AppendQueryItem)(prevNext, itemsAppended,
 					keyFirst, keyAfter, valueFirst, valueAfter,
-					plusToSpace, breakConversion)
+					plusToSpace, breakConversion, memory)
 					== URI_FALSE) {
 				/* Free list we built */
 				*itemsAppended = 0;
@@ -452,7 +454,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 	}
 
 	if (URI_FUNC(AppendQueryItem)(prevNext, itemsAppended, keyFirst, keyAfter,
-			valueFirst, valueAfter, plusToSpace, breakConversion)
+			valueFirst, valueAfter, plusToSpace, breakConversion, memory)
 			== URI_FALSE) {
 		/* Free list we built */
 		*itemsAppended = 0;
