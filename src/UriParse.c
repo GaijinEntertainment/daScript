@@ -190,7 +190,7 @@ static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) *
 static UriBool URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
 static UriBool URI_FUNC(OnExitOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
 static UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
-static UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first);
+static UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
 static void URI_FUNC(OnExitPartHelperTwo)(URI_TYPE(ParserState) * state);
 
 static void URI_FUNC(ResetParserStateExceptUri)(URI_TYPE(ParserState) * state);
@@ -1765,8 +1765,9 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseSegmentNz)(URI_TYPE(ParserState
 
 
 
-static URI_INLINE UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+static URI_INLINE UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		UriMemoryManager * memory) {
 	if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first, memory)) { /* SEGMENT BOTH */
 		return URI_FALSE; /* Raises malloc error*/
 	}
@@ -1804,7 +1805,7 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState
 	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 
 	if (first >= afterLast) {
-		if (!URI_FUNC(OnExitSegmentNzNcOrScheme2)(state, first)) {
+		if (!URI_FUNC(OnExitSegmentNzNcOrScheme2)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
 		}
@@ -1881,7 +1882,7 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState
 		}
 
 	default:
-		if (!URI_FUNC(OnExitSegmentNzNcOrScheme2)(state, first)) {
+		if (!URI_FUNC(OnExitSegmentNzNcOrScheme2)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
 		}
