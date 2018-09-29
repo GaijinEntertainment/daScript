@@ -166,7 +166,7 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(ParserState) * stat
 static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
-static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -1076,9 +1076,9 @@ static URI_INLINE UriBool URI_FUNC(OnExitOwnHostUserInfo)(
  * [ownHostUserInfo]->[ownHostUserInfoNz]
  * [ownHostUserInfo]-><NULL>
  */
-static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		if (!URI_FUNC(OnExitOwnHostUserInfo)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
@@ -1159,7 +1159,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) *
 			if (afterPctSubUnres == NULL) {
 				return NULL;
 			}
-			return URI_FUNC(ParseOwnHostUserInfo)(state, afterPctSubUnres, afterLast);
+			return URI_FUNC(ParseOwnHostUserInfo)(state, afterPctSubUnres, afterLast, memory);
 		}
 
 	case _UT(':'):
