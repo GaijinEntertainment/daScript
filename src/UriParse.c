@@ -181,7 +181,7 @@ static const URI_CHAR * URI_FUNC(ParsePort)(URI_TYPE(ParserState) * state, const
 static const URI_CHAR * URI_FUNC(ParseQueryFrag)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseSegment)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseSegmentNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
-static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseUriTail)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -1801,9 +1801,9 @@ static URI_INLINE UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(
  * [segmentNzNcOrScheme2]-><'>[mustBeSegmentNzNc]
  * [segmentNzNcOrScheme2]-><->[segmentNzNcOrScheme2]
  */
-static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		if (!URI_FUNC(OnExitSegmentNzNcOrScheme2)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
@@ -1818,7 +1818,7 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState
 	case _UT('-'):
 	case URI_SET_ALPHA:
 	case URI_SET_DIGIT:
-		return URI_FUNC(ParseSegmentNzNcOrScheme2)(state, first + 1, afterLast);
+		return URI_FUNC(ParseSegmentNzNcOrScheme2)(state, first + 1, afterLast, memory);
 
 	case _UT('%'):
 		{
@@ -1915,7 +1915,7 @@ static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(ParserState) * stat
 	switch (*first) {
 	case URI_SET_ALPHA:
 		state->uri->scheme.first = first; /* SCHEME BEGIN */
-		return URI_FUNC(ParseSegmentNzNcOrScheme2)(state, first + 1, afterLast);
+		return URI_FUNC(ParseSegmentNzNcOrScheme2)(state, first + 1, afterLast, memory);
 
 	case URI_SET_DIGIT:
 	case _UT('!'):
