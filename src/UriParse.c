@@ -185,7 +185,7 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState
 static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseUriTail)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
-static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 
 static UriBool URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
 static UriBool URI_FUNC(OnExitOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
@@ -926,7 +926,7 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(
 				return NULL;
 			}
 			afterZeroMoreSlashSegs
-					= URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegment, afterLast);
+					= URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegment, afterLast, memory);
 			if (afterZeroMoreSlashSegs == NULL) {
 				return NULL;
 			}
@@ -1462,7 +1462,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
-			return URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegmentNz, afterLast);
+			return URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegmentNz, afterLast, memory);
 		}
 
 	default:
@@ -1488,7 +1488,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathRootless)(
 			return NULL;
 		}
 	}
-	return URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegmentNz, afterLast);
+	return URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegmentNz, afterLast, memory);
 }
 
 
@@ -1863,7 +1863,7 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(
 				return NULL;
 			}
 			afterZeroMoreSlashSegs
-					= URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegment, afterLast);
+					= URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegment, afterLast, memory);
 			if (afterZeroMoreSlashSegs == NULL) {
 				return NULL;
 			}
@@ -2038,9 +2038,9 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseUriTailTwo)(URI_TYPE(ParserStat
  * [zeroMoreSlashSegs]-></>[segment][zeroMoreSlashSegs]
  * [zeroMoreSlashSegs]-><NULL>
  */
-static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		return afterLast;
 	}
@@ -2057,7 +2057,7 @@ static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) *
 				URI_FUNC(StopMalloc)(state);
 				return NULL;
 			}
-			return URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegment, afterLast);
+			return URI_FUNC(ParseZeroMoreSlashSegs)(state, afterSegment, afterLast, memory);
 		}
 
 	default:
