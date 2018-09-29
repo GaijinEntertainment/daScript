@@ -189,7 +189,7 @@ static const URI_CHAR * URI_FUNC(ParseZeroMoreSlashSegs)(URI_TYPE(ParserState) *
 
 static UriBool URI_FUNC(OnExitOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
 static UriBool URI_FUNC(OnExitOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
-static UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first);
+static UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, UriMemoryManager * memory);
 static UriBool URI_FUNC(OnExitSegmentNzNcOrScheme2)(URI_TYPE(ParserState) * state, const URI_CHAR * first);
 static void URI_FUNC(OnExitPartHelperTwo)(URI_TYPE(ParserState) * state);
 
@@ -1180,9 +1180,9 @@ static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) *
 
 
 
-static URI_INLINE UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static URI_INLINE UriBool URI_FUNC(OnExitOwnPortUserInfo)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		UriMemoryManager * memory) {
 	state->uri->hostText.first = state->uri->userInfo.first; /* Host instead of userInfo, update */
 	state->uri->userInfo.first = NULL; /* Not a userInfo, reset */
 	state->uri->portText.afterLast = first; /* PORT END */
@@ -1220,7 +1220,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
 
 	if (first >= afterLast) {
-		if (!URI_FUNC(OnExitOwnPortUserInfo)(state, first)) {
+		if (!URI_FUNC(OnExitOwnPortUserInfo)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
 		}
@@ -1275,7 +1275,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 		return URI_FUNC(ParseOwnHost)(state, first + 1, afterLast, memory);
 
 	default:
-		if (!URI_FUNC(OnExitOwnPortUserInfo)(state, first)) {
+		if (!URI_FUNC(OnExitOwnPortUserInfo)(state, first, memory)) {
 			URI_FUNC(StopMalloc)(state);
 			return NULL;
 		}
