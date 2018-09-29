@@ -121,9 +121,8 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 }
 
 
-static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork,
+		UriMemoryManager * memory) {
 	if (absWork == NULL) {
 		return URI_ERROR_NULL;
 	}
@@ -248,7 +247,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 								if (!URI_FUNC(CopyPath)(absDest, relSource, memory)) {
 									return URI_ERROR_MALLOC;
 								}
-								res = URI_FUNC(ResolveAbsolutePathFlag)(absDest);
+								res = URI_FUNC(ResolveAbsolutePathFlag)(absDest, memory);
 								if (res != URI_SUCCESS) {
 									return res;
 								}
