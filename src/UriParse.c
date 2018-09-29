@@ -161,7 +161,7 @@ static const URI_CHAR * URI_FUNC(ParseHexZero)(URI_TYPE(ParserState) * state, co
 static const URI_CHAR * URI_FUNC(ParseHierPart)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseIpFutLoop)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseIpFutStopGo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
-static const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -227,6 +227,8 @@ static URI_INLINE void URI_FUNC(StopMalloc)(URI_TYPE(ParserState) * state) {
  * [authority]-><NULL>
  */
 static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		/* "" regname host */
 		state->uri->hostText.first = URI_FUNC(SafeToPointTo);
@@ -238,7 +240,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseAuthority)(URI_TYPE(ParserState
 	case _UT('['):
 		{
 			const URI_CHAR * const afterIpLit2
-					= URI_FUNC(ParseIpLit2)(state, first + 1, afterLast);
+					= URI_FUNC(ParseIpLit2)(state, first + 1, afterLast, memory);
 			if (afterIpLit2 == NULL) {
 				return NULL;
 			}
@@ -512,9 +514,9 @@ static const URI_CHAR * URI_FUNC(ParseIpFuture)(URI_TYPE(ParserState) * state, c
  * [ipLit2]->[ipFuture]<]>
  * [ipLit2]->[IPv6address2]
  */
-static URI_INLINE const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static URI_INLINE const URI_CHAR * URI_FUNC(ParseIpLit2)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		URI_FUNC(StopSyntax)(state, first);
 		return NULL;
@@ -946,6 +948,8 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(
  * [ownHost]->[ownHost2] // can take <NULL>
  */
 static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		state->uri->hostText.afterLast = afterLast; /* HOST END */
 		return afterLast;
@@ -955,7 +959,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) 
 	case _UT('['):
 		{
 			const URI_CHAR * const afterIpLit2
-					= URI_FUNC(ParseIpLit2)(state, first + 1, afterLast);
+					= URI_FUNC(ParseIpLit2)(state, first + 1, afterLast, memory);
 			if (afterIpLit2 == NULL) {
 				return NULL;
 			}
