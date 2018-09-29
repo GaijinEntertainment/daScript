@@ -153,8 +153,7 @@ static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork) {
 static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource,
 		const URI_TYPE(Uri) * absBase,
-		UriResolutionOptions options) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+		UriResolutionOptions options, UriMemoryManager * memory) {
 	UriBool relSourceHasScheme;
 
 	if (absDest == NULL) {
@@ -297,7 +296,8 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase) {
-	const int res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, URI_RESOLVE_STRICTLY);
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	const int res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, URI_RESOLVE_STRICTLY, memory);
 	if ((res != URI_SUCCESS) && (absDest != NULL)) {
 		URI_FUNC(FreeUriMembers)(absDest);
 	}
@@ -309,7 +309,8 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase,
 		UriResolutionOptions options) {
-	const int res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, options);
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	const int res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, options, memory);
 	if ((res != URI_SUCCESS) && (absDest != NULL)) {
 		URI_FUNC(FreeUriMembers)(absDest);
 	}
