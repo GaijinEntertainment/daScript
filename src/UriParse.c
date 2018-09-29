@@ -164,7 +164,7 @@ static const URI_CHAR * URI_FUNC(ParseIpFutStopGo)(URI_TYPE(ParserState) * state
 static const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
-static const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -947,9 +947,9 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(
  * [ownHost]-><[>[ipLit2][authorityTwo]
  * [ownHost]->[ownHost2] // can take <NULL>
  */
-static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHost)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		state->uri->hostText.afterLast = afterLast; /* HOST END */
 		return afterLast;
@@ -1123,6 +1123,8 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(Parse
  * [ownHostUserInfoNz]-><@>[ownHost]
  */
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		URI_FUNC(StopSyntax)(state, first);
 		return NULL;
@@ -1164,7 +1166,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) *
 	case _UT('@'):
 		state->uri->userInfo.afterLast = first; /* USERINFO END */
 		state->uri->hostText.first = first + 1; /* HOST BEGIN */
-		return URI_FUNC(ParseOwnHost)(state, first + 1, afterLast);
+		return URI_FUNC(ParseOwnHost)(state, first + 1, afterLast, memory);
 
 	default:
 		URI_FUNC(StopSyntax)(state, first);
@@ -1211,6 +1213,8 @@ static URI_INLINE UriBool URI_FUNC(OnExitOwnPortUserInfo)(URI_TYPE(ParserState) 
  * [ownPortUserInfo]-><NULL>
  */
 static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		if (!URI_FUNC(OnExitOwnPortUserInfo)(state, first)) {
 			URI_FUNC(StopMalloc)(state);
@@ -1264,7 +1268,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
 		state->uri->portText.first = NULL; /* Not a port, reset */
 		state->uri->userInfo.afterLast = first; /* USERINFO END */
 		state->uri->hostText.first = first + 1; /* HOST BEGIN */
-		return URI_FUNC(ParseOwnHost)(state, first + 1, afterLast);
+		return URI_FUNC(ParseOwnHost)(state, first + 1, afterLast, memory);
 
 	default:
 		if (!URI_FUNC(OnExitOwnPortUserInfo)(state, first)) {
@@ -1283,6 +1287,8 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * s
  * [ownUserInfo]-><@>[ownHost]
  */
 static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		URI_FUNC(StopSyntax)(state, first);
 		return NULL;
@@ -1323,7 +1329,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state
 		/* SURE */
 		state->uri->userInfo.afterLast = first; /* USERINFO END */
 		state->uri->hostText.first = first + 1; /* HOST BEGIN */
-		return URI_FUNC(ParseOwnHost)(state, first + 1, afterLast);
+		return URI_FUNC(ParseOwnHost)(state, first + 1, afterLast, memory);
 
 	default:
 		URI_FUNC(StopSyntax)(state, first);
