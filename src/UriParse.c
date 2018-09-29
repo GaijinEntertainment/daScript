@@ -170,7 +170,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(ParserState) * s
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
-static const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePathRootless)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -335,6 +335,8 @@ static const URI_CHAR * URI_FUNC(ParseHexZero)(URI_TYPE(ParserState) * state, co
  * [hierPart]-><NULL>
  */
 static URI_INLINE const URI_CHAR * URI_FUNC(ParseHierPart)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		return afterLast;
 	}
@@ -363,7 +365,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseHierPart)(URI_TYPE(ParserState)
 		return URI_FUNC(ParsePathRootless)(state, first, afterLast);
 
 	case _UT('/'):
-		return URI_FUNC(ParsePartHelperTwo)(state, first + 1, afterLast);
+		return URI_FUNC(ParsePartHelperTwo)(state, first + 1, afterLast, memory);
 
 	default:
 		return first;
@@ -1353,9 +1355,9 @@ static URI_INLINE void URI_FUNC(OnExitPartHelperTwo)(URI_TYPE(ParserState) * sta
  * [partHelperTwo]->[pathAbsNoLeadSlash] // can take <NULL>
  * [partHelperTwo]-></>[authority][pathAbsEmpty]
  */
-static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static URI_INLINE const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		URI_FUNC(OnExitPartHelperTwo)(state);
 		return afterLast;
@@ -1948,7 +1950,7 @@ static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(ParserState) * stat
 	case _UT('/'):
 		{
 			const URI_CHAR * const afterPartHelperTwo
-					= URI_FUNC(ParsePartHelperTwo)(state, first + 1, afterLast);
+					= URI_FUNC(ParsePartHelperTwo)(state, first + 1, afterLast, memory);
 			if (afterPartHelperTwo == NULL) {
 				return NULL;
 			}
