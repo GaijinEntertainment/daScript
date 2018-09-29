@@ -173,7 +173,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state
 static const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
-static const URI_CHAR * URI_FUNC(ParsePathRootless)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParsePathRootless)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParsePchar)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePctEncoded)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePctSubUnres)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -362,7 +362,7 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseHierPart)(
 	case _UT('='):
 	case URI_SET_DIGIT:
 	case URI_SET_ALPHA:
-		return URI_FUNC(ParsePathRootless)(state, first, afterLast);
+		return URI_FUNC(ParsePathRootless)(state, first, afterLast, memory);
 
 	case _UT('/'):
 		return URI_FUNC(ParsePartHelperTwo)(state, first + 1, afterLast, memory);
@@ -1475,9 +1475,9 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(
 /*
  * [pathRootless]->[segmentNz][zeroMoreSlashSegs]
  */
-static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathRootless)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static URI_INLINE const URI_CHAR * URI_FUNC(ParsePathRootless)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	const URI_CHAR * const afterSegmentNz
 			= URI_FUNC(ParseSegmentNz)(state, first, afterLast);
 	if (afterSegmentNz == NULL) {
