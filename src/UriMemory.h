@@ -37,42 +37,10 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @file UriMemory.c
- * Holds memory manager implementation.
- */
-
 #ifndef URI_DOXYGEN
-# include "UriMemory.h"
+# include <uriparser/Uri.h>
 #endif
 
 
 
-static void * uriDefaultMalloc(
-        struct UriMemoryManagerStruct * URI_UNUSED(memory), size_t size) {
-    return malloc(size);
-}
-
-
-
-static void * uriDefaultRealloc(
-        struct UriMemoryManagerStruct * URI_UNUSED(memory),
-        void * ptr, size_t size) {
-    return realloc(ptr, size);
-}
-
-
-
-static void uriDefaultFree(struct UriMemoryManagerStruct * URI_UNUSED(memory),
-        void * ptr) {
-    free(ptr);
-}
-
-
-
-/*extern*/ UriMemoryManager defaultMemoryManager = {
-    uriDefaultMalloc,
-    uriDefaultRealloc,
-    uriDefaultFree,
-    NULL  /* userData */
-};
+extern UriMemoryManager defaultMemoryManager;
