@@ -163,7 +163,7 @@ static const URI_CHAR * URI_FUNC(ParseIpFutLoop)(URI_TYPE(ParserState) * state, 
 static const URI_CHAR * URI_FUNC(ParseIpFutStopGo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseIpLit2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
-static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHost)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -861,9 +861,9 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(URI_TYPE(ParserState) * stat
  * [mustBeSegmentNzNc]-></>[segment][zeroMoreSlashSegs][uriTail]
  * [mustBeSegmentNzNc]-><@>[mustBeSegmentNzNc]
  */
-static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		if (!URI_FUNC(PushPathSegment)(state, state->uri->scheme.first, first, memory)) { /* SEGMENT BOTH */
 			URI_FUNC(StopMalloc)(state);
@@ -881,7 +881,7 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
 			if (afterPctEncoded == NULL) {
 				return NULL;
 			}
-			return URI_FUNC(ParseMustBeSegmentNzNc)(state, afterPctEncoded, afterLast);
+			return URI_FUNC(ParseMustBeSegmentNzNc)(state, afterPctEncoded, afterLast, memory);
 		}
 
 	case _UT('@'):
@@ -902,7 +902,7 @@ static const URI_CHAR * URI_FUNC(ParseMustBeSegmentNzNc)(URI_TYPE(ParserState) *
 	case _UT('~'):
 	case URI_SET_DIGIT:
 	case URI_SET_ALPHA:
-		return URI_FUNC(ParseMustBeSegmentNzNc)(state, first + 1, afterLast);
+		return URI_FUNC(ParseMustBeSegmentNzNc)(state, first + 1, afterLast, memory);
 
 	case _UT('/'):
 		{
@@ -1810,7 +1810,7 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState
 			if (afterPctEncoded == NULL) {
 				return NULL;
 			}
-			return URI_FUNC(ParseMustBeSegmentNzNc)(state, afterPctEncoded, afterLast);
+			return URI_FUNC(ParseMustBeSegmentNzNc)(state, afterPctEncoded, afterLast, memory);
 		}
 
 	case _UT('!'):
@@ -1826,7 +1826,7 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState
 	case _UT('~'):
 	case _UT('='):
 	case _UT('\''):
-		return URI_FUNC(ParseMustBeSegmentNzNc)(state, first + 1, afterLast);
+		return URI_FUNC(ParseMustBeSegmentNzNc)(state, first + 1, afterLast, memory);
 
 	case _UT('/'):
 		{
@@ -1889,6 +1889,8 @@ static const URI_CHAR * URI_FUNC(ParseSegmentNzNcOrScheme2)(URI_TYPE(ParserState
  * [uriReference]-><->[mustBeSegmentNzNc]
  */
 static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
+	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+
 	if (first >= afterLast) {
 		return afterLast;
 	}
@@ -1916,7 +1918,7 @@ static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(ParserState) * stat
 	case _UT('-'):
 	case _UT('@'):
 		state->uri->scheme.first = first; /* SEGMENT BEGIN, ABUSE SCHEME POINTER */
-		return URI_FUNC(ParseMustBeSegmentNzNc)(state, first + 1, afterLast);
+		return URI_FUNC(ParseMustBeSegmentNzNc)(state, first + 1, afterLast, memory);
 
 	case _UT('%'):
 		{
@@ -1926,7 +1928,7 @@ static const URI_CHAR * URI_FUNC(ParseUriReference)(URI_TYPE(ParserState) * stat
 				return NULL;
 			}
 			state->uri->scheme.first = first; /* SEGMENT BEGIN, ABUSE SCHEME POINTER */
-			return URI_FUNC(ParseMustBeSegmentNzNc)(state, afterPctEncoded, afterLast);
+			return URI_FUNC(ParseMustBeSegmentNzNc)(state, afterPctEncoded, afterLast, memory);
 		}
 
 	case _UT('/'):
