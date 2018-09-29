@@ -69,9 +69,8 @@
 
 
 static URI_INLINE UriBool URI_FUNC(AppendSegment)(URI_TYPE(Uri) * uri,
-		const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		UriMemoryManager * memory) {
 	/* Create segment */
 	URI_TYPE(PathSegment) * segment = memory->malloc(memory, 1 * sizeof(URI_TYPE(PathSegment)));
 	if (segment == NULL) {
@@ -224,7 +223,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 								baseSeg = baseSeg->next;
 	/* [28/50]	            T.path += "../"; */
 								if (!URI_FUNC(AppendSegment)(dest, URI_FUNC(ConstParent),
-										URI_FUNC(ConstParent) + 2)) {
+										URI_FUNC(ConstParent) + 2, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 	/* [29/50]	            pathNaked = false; */
@@ -248,14 +247,14 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 									if (containsColon) {
 	/* [34/50]	                  T.path += "./"; */
 										if (!URI_FUNC(AppendSegment)(dest, URI_FUNC(ConstPwd),
-												URI_FUNC(ConstPwd) + 1)) {
+												URI_FUNC(ConstPwd) + 1, memory)) {
 											return URI_ERROR_MALLOC;
 										}
 	/* [35/50]	               elseif (first(A.path) == "") then */
 									} else if (sourceSeg->text.first == sourceSeg->text.afterLast) {
 	/* [36/50]	                  T.path += "/."; */
 										if (!URI_FUNC(AppendSegment)(dest, URI_FUNC(ConstPwd),
-												URI_FUNC(ConstPwd) + 1)) {
+												URI_FUNC(ConstPwd) + 1, memory)) {
 											return URI_ERROR_MALLOC;
 										}
 	/* [37/50]	               endif; */
@@ -264,7 +263,7 @@ static int URI_FUNC(RemoveBaseUriImpl)(URI_TYPE(Uri) * dest,
 								}
 	/* [39/50]	            T.path += first(A.path); */
 								if (!URI_FUNC(AppendSegment)(dest, sourceSeg->text.first,
-										sourceSeg->text.afterLast)) {
+										sourceSeg->text.afterLast, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 	/* [40/50]	            pathNaked = false; */
