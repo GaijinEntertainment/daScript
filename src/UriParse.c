@@ -169,7 +169,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnHost2)(URI_TYPE(ParserState) * state, c
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnHostUserInfoNz)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
-static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
+static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast, UriMemoryManager * memory);
 static const URI_CHAR * URI_FUNC(ParsePartHelperTwo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePathAbsEmpty)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
 static const URI_CHAR * URI_FUNC(ParsePathAbsNoLeadSlash)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -1251,7 +1251,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(
 	case URI_SET_ALPHA:
 		state->uri->hostText.afterLast = NULL; /* Not a host, reset */
 		state->uri->portText.first = NULL; /* Not a port, reset */
-		return URI_FUNC(ParseOwnUserInfo)(state, first + 1, afterLast);
+		return URI_FUNC(ParseOwnUserInfo)(state, first + 1, afterLast, memory);
 
 	case URI_SET_DIGIT:
 		return URI_FUNC(ParseOwnPortUserInfo)(state, first + 1, afterLast, memory);
@@ -1264,7 +1264,7 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(
 			if (afterPct == NULL) {
 				return NULL;
 			}
-			return URI_FUNC(ParseOwnUserInfo)(state, afterPct, afterLast);
+			return URI_FUNC(ParseOwnUserInfo)(state, afterPct, afterLast, memory);
 		}
 
 	case _UT('@'):
@@ -1290,9 +1290,9 @@ static const URI_CHAR * URI_FUNC(ParseOwnPortUserInfo)(
  * [ownUserInfo]-><:>[ownUserInfo]
  * [ownUserInfo]-><@>[ownHost]
  */
-static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-
+static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(
+		URI_TYPE(ParserState) * state, const URI_CHAR * first,
+		const URI_CHAR * afterLast, UriMemoryManager * memory) {
 	if (first >= afterLast) {
 		URI_FUNC(StopSyntax)(state, first);
 		return NULL;
@@ -1323,11 +1323,11 @@ static const URI_CHAR * URI_FUNC(ParseOwnUserInfo)(URI_TYPE(ParserState) * state
 			if (afterPctSubUnres == NULL) {
 				return NULL;
 			}
-			return URI_FUNC(ParseOwnUserInfo)(state, afterPctSubUnres, afterLast);
+			return URI_FUNC(ParseOwnUserInfo)(state, afterPctSubUnres, afterLast, memory);
 		}
 
 	case _UT(':'):
-		return URI_FUNC(ParseOwnUserInfo)(state, first + 1, afterLast);
+		return URI_FUNC(ParseOwnUserInfo)(state, first + 1, afterLast, memory);
 
 	case _UT('@'):
 		/* SURE */
