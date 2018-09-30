@@ -34,6 +34,14 @@
     (return
         (+ (* a b) c)))
 
+(defun (int xmadd)
+    (int a)
+    (int b)
+    (int c)
+    (int d)
+    (return
+        (madd a b (* c d))))
+
 (defun (float calcVolume)
     (Sphere s)
     (let
@@ -47,7 +55,5 @@
         )
     )
 )
-
-
 
 

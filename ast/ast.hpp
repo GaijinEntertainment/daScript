@@ -66,7 +66,7 @@ namespace yzg
         TypeDecl(Type tt) : baseType(tt) {}
         friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
         string getMangledName() const;
-        bool isSameType ( const TypeDecl & decl, bool constMatters = true, bool rvalueMatters = true ) const;
+        bool isSameType ( const TypeDecl & decl, bool rvalueMatters = true ) const;
         bool isSimpleType ( Type tp ) const;
         bool isArray() const;
         bool isVoid() const;
@@ -74,7 +74,6 @@ namespace yzg
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
         vector<uint64_t>    dim;
-        bool                constant = false;
         bool                rvalue = false;
     };
     typedef shared_ptr<TypeDecl> TypeDeclPtr;
@@ -159,6 +158,7 @@ namespace yzg
     {
     public:
         Operator        op;
+        FunctionPtr     func;
     };
     
     class ExprOp1 : public ExprOp   // unary    !subexpr
@@ -177,7 +177,6 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
     public:
         ExpressionPtr   left, right;
-        FunctionPtr     func;
     };
     
     class ExprOp3 : public ExprOp   // trinary  subexpr ? left : right
@@ -252,6 +251,7 @@ namespace yzg
     public:
         string                  name;
         vector<ExpressionPtr>   arguments;
+        FunctionPtr             func;
     };
     
     class ExprIfThenElse : public Expression
@@ -301,6 +301,7 @@ namespace yzg
         void addBuiltIn(FunctionPtr && fn);
         void inferTypes();
         void addBuiltinOperators();
+        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
     public:
         map<string, StructurePtr>   structures;
         map<string, VariablePtr>    globals;

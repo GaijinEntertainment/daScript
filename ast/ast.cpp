@@ -50,8 +50,6 @@ namespace yzg
         } else {
             stream << to_string(decl.baseType);
         }
-        if ( decl.constant )
-            stream << " const";
         for ( auto d : decl.dim ) {
             stream << " " << d;
         }
@@ -66,8 +64,6 @@ namespace yzg
         } else {
             ss << g_typeTable.find(baseType);
         }
-        if ( constant )
-            ss << "#const";
         if ( rvalue )
             ss << "#rvalue";
         if ( dim.size() ) {
@@ -78,7 +74,7 @@ namespace yzg
         return ss.str();
     }
     
-    bool TypeDecl::isSameType ( const TypeDecl & decl, bool constMatters, bool rvalueMatters ) const
+    bool TypeDecl::isSameType ( const TypeDecl & decl, bool rvalueMatters ) const
     {
         if ( baseType!=decl.baseType )
             return false;
@@ -86,9 +82,6 @@ namespace yzg
             return false;
         if ( dim!=decl.dim )
             return false;
-        if ( constMatters )
-            if ( constant!=decl.constant )
-                return false;
         if ( rvalueMatters )
             if ( rvalue!=decl.rvalue )
                 return false;
@@ -190,6 +183,7 @@ namespace yzg
     
     template <typename TT>  struct ToBasicType;
     template <> template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
+    template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
     template<> struct ToBasicType<int>      { enum { type = Type::tInt }; };
     template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
     
@@ -206,26 +200,22 @@ namespace yzg
     class BuiltInOp1 : public BuiltInFunction
     {
     public:
-        BuiltInOp1(const string & fn, function<RetT (ArgT)> && fncall) : BuiltInFunction(fn)
+        BuiltInOp1(const string & fn) : BuiltInFunction(fn)
         {
-            call = move(fncall);
             result = makeType<RetT>();
             auto arg = make_shared<Variable>();
             arg->name = "arg";
             arg->type = makeType<ArgT>();
             arguments.push_back(arg);
         }
-    public:
-        function<RetT (ArgT)> call;
     };
     
     template <typename ArgT1, typename ArgT2, typename RetT>
     class BuiltInOp2 : public BuiltInFunction
     {
     public:
-        BuiltInOp2(const string & fn, function<RetT (ArgT1, ArgT2)> && fncall) : BuiltInFunction(fn)
+        BuiltInOp2(const string & fn) : BuiltInFunction(fn)
         {
-            call = move(fncall);
             result = makeType<RetT>();
             auto arg1 = make_shared<Variable>();
             arg1->name = "arg1";
@@ -236,8 +226,6 @@ namespace yzg
             arg2->type = makeType<ArgT2>();
             arguments.push_back(arg2);
         }
-    public:
-        function<RetT (ArgT1, ArgT2)> call;
     };
     
     // expression
@@ -346,10 +334,14 @@ namespace yzg
     void ExprOp1::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
-        // TODO:
-        //  find builtin operator and substitute with its return value
-        type = make_shared<TypeDecl>(*subexpr->type);
-        type->rvalue = false;
+        vector<TypeDeclPtr> types = { subexpr->type };
+        auto functions = context.program->findMatchingFunctions(to_string(op), types);
+        if ( functions.size()==0 )
+            throw semantic_error("no matching function");
+        if ( functions.size()>1 )
+            throw semantic_error("too many matching functions");
+        func = functions[0];
+        type = make_shared<TypeDecl>(*func->result);
     }
     
     // ExprOp2
@@ -367,14 +359,13 @@ namespace yzg
     {
         left->inferType(context);
         right->inferType(context);
-        // TODO: this needs to be less basic
-        //  current problem - not automatically demoting f& -> f
-        //  need list of functions by name only, and then 'find best matching function'
-        //  if multiple matches can be found - assert
-        string mangledName = to_string(op) + " " + left->type->getMangledName() + " " + right->type->getMangledName();
-        func = context.program->findFunction(mangledName);
-        if ( !func )
-            throw semantic_error("can't find built-in operator");
+        vector<TypeDeclPtr> types = { left->type, right->type };
+        auto functions = context.program->findMatchingFunctions(to_string(op), types);
+        if ( functions.size()==0 )
+            throw semantic_error("no matching function");
+        if ( functions.size()>1 )
+            throw semantic_error("too many matching functions");
+        func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
     }
     
@@ -398,9 +389,14 @@ namespace yzg
             throw semantic_error("cond operator condition must be boolean");
         left->inferType(context);
         right->inferType(context);
-        if ( !left->type->isSameType(*right->type) )
-            throw semantic_error("cond operator left and right subexpressions must have same type");
-        type = make_shared<TypeDecl>(*left->type);
+        vector<TypeDeclPtr> types = { subexpr->type, left->type, right->type };
+        auto functions = context.program->findMatchingFunctions(to_string(op), types);
+        if ( functions.size()==0 )
+            throw semantic_error("no matching function");
+        if ( functions.size()>1 )
+            throw semantic_error("too many matching functions");
+        func = functions[0];
+        type = make_shared<TypeDecl>(*func->result);
     }
     
     // ExprReturn
@@ -422,7 +418,7 @@ namespace yzg
             subexpr->inferType(context);
             if ( context.func->result->isVoid() )
                 throw semantic_error("return subexpression of void function must be empty");
-            if ( !subexpr->type->isSameType(*context.func->result, false, false) )
+            if ( !subexpr->type->isSameType(*context.func->result, false) )
                 throw semantic_error("return subexpression type must match function return type");
         } else {
             if ( !context.func->result->isVoid() )
@@ -559,11 +555,19 @@ namespace yzg
     
     void ExprCall::inferType(InferTypeContext & context)
     {
-        for ( auto & ar : arguments )
+        vector<TypeDeclPtr> types;
+        types.reserve(arguments.size());
+        for ( auto & ar : arguments ) {
             ar->inferType(context);
-        // TODO: locate function by mangled name
-        //  copy its type
-        type = make_shared<TypeDecl>();
+            types.push_back(ar->type);
+        }
+        auto functions = context.program->findMatchingFunctions(name, types);
+        if ( functions.size()==0 )
+            throw semantic_error("no matching function");
+        if ( functions.size()>1 )
+            throw semantic_error("too many matching functions");
+        func = functions[0];
+        type = make_shared<TypeDecl>(*func->result);
     }
     
     // program
@@ -607,7 +611,9 @@ namespace yzg
             stream << ")\n\n";
         }
         for ( const auto & st : program.functions ) {
-            stream << *st.second << "\n";
+            if ( !st.second->builtIn ) {
+                stream << *st.second << "\n";
+            }
         }
         return stream;
     }
@@ -634,14 +640,71 @@ namespace yzg
     
     void Program::addBuiltinOperators()
     {
+        // boolean
+        addBuiltIn( make_shared<BuiltInOp1<bool, bool>>("!") );   // unary !
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("==") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("!=") );
         // integer
-        addBuiltIn( make_shared<BuiltInOp1<int, int>>("+",[&](int x){return x;}) );
+        addBuiltIn( make_shared<BuiltInOp1<int, int>>("+") );   // unary +
+        addBuiltIn( make_shared<BuiltInOp1<int, int>>("-") );   // unary -
+        addBuiltIn( make_shared<BuiltInOp1<int, int>>("~") );   // unary ~
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("+") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("-") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("*") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("/") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("==") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("!=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>(">=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("<=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>(">") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("<") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("+=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("-=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("*=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("/=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("~=") );
         // float
-        addBuiltIn( make_shared<BuiltInOp1<float, float>>("+",[&](float x){return x;}) );
-        addBuiltIn( make_shared<BuiltInOp1<float, float>>("-",[&](float x){return -x;}) );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("=",[&](float & x, float y) -> float & { x = y; return x;}) );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("*",[&](float x, float y){return x * y;}) );
-
+        addBuiltIn( make_shared<BuiltInOp1<float, float>>("+") );   // unary +
+        addBuiltIn( make_shared<BuiltInOp1<float, float>>("-") );   // unary -
+        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("+") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("-") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("*") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("/") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>("==") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>("!=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>(">=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>("<=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>(">") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>("<") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("=") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("+=") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("-=") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("*=") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("/=") );
+    }
+    
+    vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const
+    {
+        vector<FunctionPtr> result;
+        for ( auto & it : functions ) {
+            if ( it.second->name == name ) {
+                auto & pFn = it.second;
+                if ( pFn->arguments.size() == types.size() ) {
+                    bool typesCompatible = true;
+                    for ( int ai = 0; ai != types.size(); ++ai ) {
+                        if ( !pFn->arguments[ai]->type->isSameType(*types[ai], false) ) {
+                            typesCompatible = false;
+                            break;
+                        }
+                    }
+                    if ( typesCompatible ) {
+                        result.push_back(pFn);
+                    }
+                }
+            }
+        }
+        return result;
     }
     
     /*
@@ -666,12 +729,8 @@ namespace yzg
             tdecl->baseType = Type::tStructure;
             tdecl->structType = it->second.get();
         }
-        int iDim = 1;
-        if ( decl->getName(1)=="const" ) {
-            tdecl->constant = true;
-            iDim ++;
-        }
-        for ( ; iDim != decl->list.size()-1; ++iDim ) {
+        // todo: support rvalue for arguments?
+        for ( int iDim = 1; iDim != decl->list.size()-1; ++iDim ) {
             uint64_t dim = decl->getUnsigned(iDim);
             if ( dim == -1U )
                 throw parse_error("expecting dimension", decl);
@@ -716,8 +775,6 @@ namespace yzg
                     if ( decl->findField(name) )
                         throw parse_error("structure field already declared", field);
                     auto typeDecl = parseTypeDeclaratoin(field, program);
-                    if ( typeDecl->constant )
-                        throw parse_error("structure field can't be constant", field);
                     if ( typeDecl->baseType==Type::tVoid )
                         throw parse_error("structure field can't be void", field);
                     decl->fields.push_back({name, typeDecl});
