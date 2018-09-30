@@ -43,4 +43,19 @@
 
 
 
+#define URI_CHECK_MEMORY_MANAGER(memory)  \
+	do { \
+		if (memory == NULL) { \
+			memory = &defaultMemoryManager; \
+		} else { \
+			if (uriMemoryManagerIsComplete(memory) != URI_TRUE) { \
+				return URI_ERROR_MEMORY_MANAGER_INCOMPLETE; \
+			} \
+		} \
+	} while (0)
+
+
+
 extern UriMemoryManager defaultMemoryManager;
+
+UriBool uriMemoryManagerIsComplete(const UriMemoryManager * memory);

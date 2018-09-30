@@ -109,6 +109,17 @@ static void uriDefaultFree(struct UriMemoryManagerStruct * URI_UNUSED(memory),
 
 
 
+UriBool uriMemoryManagerIsComplete(const UriMemoryManager * memory) {
+    return (memory
+            && memory->malloc
+            && memory->calloc
+            && memory->realloc
+            && memory->reallocarray
+            && memory->free) ? URI_TRUE : URI_FALSE;
+}
+
+
+
 /*extern*/ UriMemoryManager defaultMemoryManager = {
     uriDefaultMalloc,
     uriDefaultCalloc,

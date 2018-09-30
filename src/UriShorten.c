@@ -297,9 +297,8 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absSource,
 		const URI_TYPE(Uri) * absBase,
 		UriBool domainRootMode) {
-	UriMemoryManager * const memory = &defaultMemoryManager;
-	return URI_FUNC(RemoveBaseUriMm)(dest, absSource, absBase, domainRootMode,
-			memory);
+	return URI_FUNC(RemoveBaseUriMm)(dest, absSource, absBase,
+			domainRootMode, NULL);
 }
 
 
@@ -308,8 +307,11 @@ int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absSource,
 		const URI_TYPE(Uri) * absBase,
 		UriBool domainRootMode, UriMemoryManager * memory) {
-	/* TODO check memory manager for completeness */
-	const int res = URI_FUNC(RemoveBaseUriImpl)(dest, absSource,
+	int res;
+
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
+
+	res = URI_FUNC(RemoveBaseUriImpl)(dest, absSource,
 			absBase, domainRootMode, memory);
 	if ((res != URI_SUCCESS) && (dest != NULL)) {
 		URI_FUNC(FreeUriMembers)(dest);

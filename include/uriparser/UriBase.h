@@ -113,6 +113,7 @@ typedef int UriBool; /**< Boolean type */
 #define URI_ERROR_OUTPUT_TOO_LARGE         4 /* Some output is to large for the receiving buffer */
 #define URI_ERROR_NOT_IMPLEMENTED          8 /* The called function is not implemented yet */
 #define URI_ERROR_RANGE_INVALID            9 /* The parameters passed contained invalid ranges */
+#define URI_ERROR_MEMORY_MANAGER_INCOMPLETE  10 /* The UriMemoryManager passed does not implement all needed functions */
 
 
 /* Errors specific to ToString */
