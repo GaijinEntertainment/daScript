@@ -237,7 +237,7 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 								walker->next->reserved = prevPrev;
 							} else {
 								/* Last segment -> insert "" segment to represent trailing slash, update tail */
-								URI_TYPE(PathSegment) * const segment = memory->malloc(memory, 1 * sizeof(URI_TYPE(PathSegment)));
+								URI_TYPE(PathSegment) * const segment = memory->calloc(memory, 1, sizeof(URI_TYPE(PathSegment)));
 								if (segment == NULL) {
 									if (pathOwned && (walker->text.first != walker->text.afterLast)) {
 										memory->free(memory, (URI_CHAR *)walker->text.first);
@@ -251,7 +251,6 @@ UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
 
 									return URI_FALSE; /* Raises malloc error */
 								}
-								memset(segment, 0, sizeof(URI_TYPE(PathSegment)));
 								segment->text.first = URI_FUNC(SafeToPointTo);
 								segment->text.afterLast = URI_FUNC(SafeToPointTo);
 								prevPrev->next = segment;
