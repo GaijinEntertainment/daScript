@@ -158,7 +158,7 @@ AC_CONFIG_FILES([
 	doc/Doxyfile
 ])
 AC_CONFIG_FILES([doc/release.sh], [chmod a+x doc/release.sh])
-AC_CONFIG_HEADERS([test/config.h])
+AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT
 
 cat <<CONFIG
