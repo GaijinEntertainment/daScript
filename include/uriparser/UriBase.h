@@ -156,13 +156,17 @@ typedef struct UriIp6Struct {
 struct UriMemoryManagerStruct;
 
 typedef void * (*UriFuncMalloc)(struct UriMemoryManagerStruct *, size_t);
+typedef void * (*UriFuncCalloc)(struct UriMemoryManagerStruct *, size_t, size_t);
 typedef void * (*UriFuncRealloc)(struct UriMemoryManagerStruct *, void *, size_t);
+typedef void * (*UriFuncReallocarray)(struct UriMemoryManagerStruct *, void *, size_t, size_t);
 typedef void (*UriFuncFree)(struct UriMemoryManagerStruct *, void *);
 
 
 typedef struct UriMemoryManagerStruct {
 	UriFuncMalloc malloc;
+	UriFuncCalloc calloc;
 	UriFuncRealloc realloc;
+	UriFuncReallocarray reallocarray;
 	UriFuncFree free;
 	void * userData;
 } UriMemoryManager; /**< @copydoc UriMemoryManagerStruct */

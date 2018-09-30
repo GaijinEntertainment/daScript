@@ -42,6 +42,17 @@
  * Holds memory manager implementation.
  */
 
+#include "../config.h"
+
+#if HAVE_REALLOCARRAY
+# define _GNU_SOURCE
+#endif
+
+#include <errno.h>
+#include <stdlib.h>
+
+
+
 #ifndef URI_DOXYGEN
 # include "UriMemory.h"
 #endif
@@ -55,10 +66,38 @@ static void * uriDefaultMalloc(
 
 
 
+static void * uriDefaultCalloc(
+        struct UriMemoryManagerStruct * URI_UNUSED(memory),
+        size_t nmemb, size_t size) {
+    return calloc(nmemb, size);
+}
+
+
+
 static void * uriDefaultRealloc(
         struct UriMemoryManagerStruct * URI_UNUSED(memory),
         void * ptr, size_t size) {
     return realloc(ptr, size);
+}
+
+
+
+static void * uriDefaultReallocarray(
+        struct UriMemoryManagerStruct * URI_UNUSED(memory),
+        void * ptr, size_t nmemb, size_t size) {
+#if HAVE_REALLOCARRAY
+    return reallocarray(ptr, nmemb, size);
+#else
+    const size_t total_size = nmemb * size;
+
+    /* check for unsigned overflow */
+    if ((nmemb != 0) && (total_size / nmemb != size)) {
+        errno = ENOMEM;
+        return NULL;
+    }
+
+    return realloc(ptr, total_size);
+#endif
 }
 
 
@@ -72,7 +111,9 @@ static void uriDefaultFree(struct UriMemoryManagerStruct * URI_UNUSED(memory),
 
 /*extern*/ UriMemoryManager defaultMemoryManager = {
     uriDefaultMalloc,
+    uriDefaultCalloc,
     uriDefaultRealloc,
+    uriDefaultReallocarray,
     uriDefaultFree,
     NULL  /* userData */
 };

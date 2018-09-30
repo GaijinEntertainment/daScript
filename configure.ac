@@ -37,6 +37,25 @@ AC_LINK_IFELSE([AC_LANG_SOURCE([
 ])
 
 
+## Check for reallocarray
+AC_MSG_CHECKING(for reallocarray)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([
+    #define _GNU_SOURCE  /* for reallocarray */
+    #include <stdlib.h>
+
+    int main() {
+        reallocarray(NULL, 0, 0);
+        return 0;
+    }
+])],[
+    AC_DEFINE([HAVE_REALLOCARRAY], 1,
+        [Define to 1 if you have function reallocarray])
+    AC_MSG_RESULT(yes)
+], [
+    AC_MSG_RESULT(no)
+])
+
+
 ## Option for URI_SIZEDOWN
 AC_ARG_ENABLE(sizedown, [
 ==============================================================================
