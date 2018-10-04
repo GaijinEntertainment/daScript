@@ -14,6 +14,8 @@
 
 namespace yzg
 {
+    bool g_logTypes = false;
+    
     Enum<Type> g_typeTable = {
         {   Type::tVoid,        "void"  },
         {   Type::tBool,        "bool"  },
@@ -53,6 +55,8 @@ namespace yzg
         for ( auto d : decl.dim ) {
             stream << " " << d;
         }
+        if ( decl.rvalue )
+            stream << " &";
         return stream;
     }
     
@@ -182,7 +186,7 @@ namespace yzg
     }
     
     template <typename TT>  struct ToBasicType;
-    template <> template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
+    template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
     template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
     template<> struct ToBasicType<int>      { enum { type = Type::tInt }; };
     template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
@@ -230,9 +234,15 @@ namespace yzg
     
     // expression
     
-    ostream& operator<< (ostream& stream, const Expression & func)
+    void Expression::logType(ostream& stream) const
     {
-        func.log(stream, 1);
+        if ( g_logTypes )
+            stream << "$ (" << *type << ") ";
+    }
+    
+    ostream& operator<< (ostream& stream, const Expression & expr)
+    {
+        expr.log(stream, 1);
         return stream;
     }
 
@@ -263,6 +273,7 @@ namespace yzg
     
     void ExprField::log(ostream& stream, int depth) const
     {
+        logType(stream);
         stream << "(. ";
         rvalue->log(stream,depth+1);
         stream << " " << name << ")";
@@ -286,6 +297,7 @@ namespace yzg
     
     void ExprVar::log(ostream& stream, int depth) const
     {
+        logType(stream);
         stream << name;
     }
     
@@ -326,6 +338,7 @@ namespace yzg
     
     void ExprOp1::log(ostream& stream, int depth) const
     {
+        logType(stream);
         stream << "(" << to_string(op) << " ";
         subexpr->log(stream, depth);
         stream << ")";
@@ -348,6 +361,7 @@ namespace yzg
     
     void ExprOp2::log(ostream& stream, int depth) const
     {
+        logType(stream);
         stream << "(" << to_string(op) << " ";
         left->log(stream, depth);
         stream << " ";
@@ -373,6 +387,7 @@ namespace yzg
     
     void ExprOp3::log(ostream& stream, int depth) const
     {
+        logType(stream);
         stream << "(" << to_string(op) << " ";
         subexpr->log(stream, depth);
         stream << " ";
@@ -545,6 +560,7 @@ namespace yzg
     
     void ExprCall::log(ostream& stream, int depth) const
     {
+        logType(stream);
         stream << "(" << name;
         for ( auto & arg : arguments ) {
             stream << " ";
@@ -644,6 +660,13 @@ namespace yzg
         addBuiltIn( make_shared<BuiltInOp1<bool, bool>>("!") );   // unary !
         addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("==") );
         addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("!=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("&") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("|") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("^") );
+        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&>>("=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&>>("&=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&>>("|=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&>>("^=") );
         // integer
         addBuiltIn( make_shared<BuiltInOp1<int, int>>("+") );   // unary +
         addBuiltIn( make_shared<BuiltInOp1<int, int>>("-") );   // unary -
@@ -652,6 +675,9 @@ namespace yzg
         addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("-") );
         addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("*") );
         addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("/") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("&") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("|") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("^") );
         addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("==") );
         addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("!=") );
         addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>(">=") );
@@ -664,6 +690,9 @@ namespace yzg
         addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("*=") );
         addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("/=") );
         addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("~=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("&=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("|=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("^=") );
         // float
         addBuiltIn( make_shared<BuiltInOp1<float, float>>("+") );   // unary +
         addBuiltIn( make_shared<BuiltInOp1<float, float>>("-") );   // unary -
@@ -686,6 +715,11 @@ namespace yzg
     
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const
     {
+        /*
+         TODO:
+            default arguments
+            arguments by name?
+         */
         vector<FunctionPtr> result;
         for ( auto & it : functions ) {
             if ( it.second->name == name ) {
@@ -693,7 +727,9 @@ namespace yzg
                 if ( pFn->arguments.size() == types.size() ) {
                     bool typesCompatible = true;
                     for ( int ai = 0; ai != types.size(); ++ai ) {
-                        if ( !pFn->arguments[ai]->type->isSameType(*types[ai], false) ) {
+                        auto & argType = pFn->arguments[ai]->type;
+                        auto & passType = types[ai];
+                        if ( (argType->rvalue && !passType->rvalue) || !argType->isSameType(*passType, false) ) {
                             typesCompatible = false;
                             break;
                         }
@@ -729,12 +765,15 @@ namespace yzg
             tdecl->baseType = Type::tStructure;
             tdecl->structType = it->second.get();
         }
-        // todo: support rvalue for arguments?
-        for ( int iDim = 1; iDim != decl->list.size()-1; ++iDim ) {
-            uint64_t dim = decl->getUnsigned(iDim);
-            if ( dim == -1U )
-                throw parse_error("expecting dimension", decl);
-            tdecl->dim.push_back(dim);
+        if ( decl->list.size()==3 && decl->list[1]->isOperator(Operator::binand) ) {
+            tdecl->rvalue = true;
+        } else {
+            for ( int iDim = 1; iDim != decl->list.size() - 1; ++iDim ) {
+                uint64_t dim = decl->getUnsigned(iDim);
+                if ( dim == -1U )
+                    throw parse_error("expecting dimension", decl);
+                tdecl->dim.push_back(dim);
+            }
         }
         return tdecl;
     }
@@ -777,6 +816,8 @@ namespace yzg
                     auto typeDecl = parseTypeDeclaratoin(field, program);
                     if ( typeDecl->baseType==Type::tVoid )
                         throw parse_error("structure field can't be void", field);
+                    if ( typeDecl->rvalue )
+                        throw parse_error("structure field can't be reference", field);
                     decl->fields.push_back({name, typeDecl});
                 }
             }

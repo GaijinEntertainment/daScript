@@ -32,6 +32,7 @@
     (int b)
     (int c)
     (return
+        $ "result is a * b + c"
         (+ (* a b) c)))
 
 (defun (int xmadd)

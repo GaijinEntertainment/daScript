@@ -1,0 +1,17 @@
+parser
+    support default values in let
+    support default function arguments (in type inference as well)
+    support auto in let
+    support for array indexing
+    line + position error reporting. 'context' error reporting
+    add 'deref'
+
+optimization \ ast massage
+    flatten nested blocks
+    eliminate dead code (after break and after return)
+    flatten conditions
+    support break and return to be last statement
+
+interpreter
+    get started
+

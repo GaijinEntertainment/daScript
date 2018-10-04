@@ -11,6 +11,9 @@ false
 name
 some_name
 _alsoName2
+$ "this is comment"
+$ ( this is also comment )
+$ any $ node $ "after $ is comment"
 "string"
 'other string'
 ('list' 'with' 4 "elements")

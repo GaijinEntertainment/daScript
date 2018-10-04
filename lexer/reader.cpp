@@ -25,6 +25,9 @@ namespace yzg
         {   Operator::greaterEqu,   ">="    },
         {   Operator::notEqu,       "!="    },
         {   Operator::binNotEqu,    "~="    },
+        {   Operator::andEqu,       "&="    },
+        {   Operator::orEqu,        "|="    },
+        {   Operator::xorEqu,       "^="    },
     };
     
     Enum<Operator> g_opTable1 = {
@@ -39,6 +42,9 @@ namespace yzg
         {   Operator::binNot,   "~"    },
         {   Operator::less,     "<"    },
         {   Operator::greater,  ">"    },
+        {   Operator::binand,   "&"    },
+        {   Operator::binor,    "|"    },
+        {   Operator::binxor,   "^"    },
     };
     
     string to_string ( Operator o ) {
@@ -267,6 +273,10 @@ namespace yzg
         } else if ( *it=='(' ) {
             ++ it;
             return make_unique<Node>(readNodes(it, end, true));
+        } else if ( *it=='$' ) {
+            ++ it;
+            readNode(it, end, isList);  // skip node, and return next one
+            return readNode(it, end, isList);
         } else if ( *it=='"' || *it=='\'') {
             stit at = it;
             it = parseString(it,end,*it);

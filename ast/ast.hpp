@@ -118,6 +118,7 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const Expression & func);
         virtual void log(ostream& stream, int depth) const = 0;
         virtual void inferType(InferTypeContext & context) = 0;
+        void logType(ostream& stream) const;
     public:
         TypeDeclPtr type;
     };

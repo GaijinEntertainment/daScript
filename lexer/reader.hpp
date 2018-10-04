@@ -42,6 +42,9 @@ namespace yzg
         subEqu,
         divEqu,
         mulEqu,
+        andEqu,
+        orEqu,
+        xorEqu,
         eqEq,
         lessEqu,
         greaterEqu,
@@ -49,6 +52,9 @@ namespace yzg
         binNotEqu,
     // 1-char
         dot,        // .
+        binand,
+        binor,
+        binxor,
         add,
         sub,
         div,
@@ -96,6 +102,7 @@ namespace yzg
         bool isName() const { return type==NodeType::name; }
         bool isName(const string & st) const { return type==NodeType::name && text==st; }
         bool isOperator() const { return type==NodeType::op; }
+        bool isOperator(Operator opr) const { return type==NodeType::op && op==opr; }
         bool isNumericConstant() const { return type==NodeType::inumber || type==NodeType::unumber || type==NodeType::dnumber; }
     
         uint64_t getUnsigned(int n) const;
