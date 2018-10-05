@@ -113,6 +113,11 @@ namespace yzg
         return dim.size() != 0;
     }
     
+    bool TypeDecl::isRValue() const
+    {
+        return rvalue || baseType==Type::tStructure;
+    }
+    
     // structure
     
     const Structure::FieldDeclaration * Structure::findField ( const string & name ) const
@@ -234,6 +239,20 @@ namespace yzg
     
     // expression
     
+    ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr )
+    {
+        if ( expr->type->isRValue() ) {
+            auto ar2l = make_shared<ExprR2L>();
+            ar2l->subexpr = expr;
+            ar2l->at = expr->at;
+            ar2l->type = make_shared<TypeDecl>(*expr->type);
+            ar2l->type->rvalue = false;
+            return ar2l;
+        } else {
+            return expr;
+        }
+    }
+    
     void Expression::logType(ostream& stream) const
     {
         if ( g_logTypes )
@@ -244,6 +263,22 @@ namespace yzg
     {
         expr.log(stream, 1);
         return stream;
+    }
+    
+    // ExprR2L
+    
+    void ExprR2L::log(ostream& stream, int depth) const
+    {
+        stream << "(-> " << *subexpr << ")";
+    }
+    
+    void ExprR2L::inferType(InferTypeContext & context)
+    {
+        subexpr->inferType(context);
+        if ( !subexpr->type->isRValue() )
+            throw semantic_error("can only dereference rvalue", at);
+        type = make_shared<TypeDecl>(*subexpr->type);
+        type->rvalue = false;
     }
 
     // ExprBlock
@@ -290,7 +325,7 @@ namespace yzg
         if ( !field )
             throw semantic_error("field " + name + " not found", at);
         type = make_shared<TypeDecl>(*field->type);
-        type->rvalue = rvalue->type->rvalue;
+        type->rvalue = rvalue->type->isRValue();
     }
     
     // ExprVar
@@ -320,8 +355,6 @@ namespace yzg
                 variable = arg;
                 argument = true;
                 type = make_shared<TypeDecl>(*arg->type);
-                // function arguments are read only??
-                // type->rvalue = true;
                 return;
             }
         }
@@ -355,6 +388,8 @@ namespace yzg
             throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
+        if ( !func->arguments[0]->type->isRValue() )
+            subexpr = autoDereference(subexpr);
     }
     
     // ExprOp2
@@ -381,6 +416,10 @@ namespace yzg
             throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
+        if ( !func->arguments[0]->type->isRValue() )
+            left = autoDereference(left);
+        if ( !func->arguments[1]->type->isRValue() )
+            right = autoDereference(right);
     }
     
     // ExprOp3
@@ -412,6 +451,12 @@ namespace yzg
             throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
+        if ( !func->arguments[0]->type->isRValue() )
+            subexpr = autoDereference(subexpr);
+        if ( !func->arguments[1]->type->isRValue() )
+            left = autoDereference(left);
+        if ( !func->arguments[2]->type->isRValue() )
+            right = autoDereference(right);
     }
     
     // ExprReturn
@@ -440,6 +485,8 @@ namespace yzg
                 throw semantic_error("only void functions can skip return subexpression", at);
         }
         type = make_shared<TypeDecl>();
+        if ( subexpr && !context.func->result->isRValue() )
+            subexpr = autoDereference(subexpr);
     }
     
     // ExprConstInt
@@ -555,6 +602,7 @@ namespace yzg
             var->init->inferType(context);
             if ( !var->type->isSameType(*var->init->type,false) )
                 throw semantic_error("variable initialization type mismatch", var->at );
+            var->init = autoDereference(var->init);
         }
         subexpr->inferType(context);
         context.local.resize(sz);
@@ -589,6 +637,9 @@ namespace yzg
             throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
+        for ( int iA = 0; iA != arguments.size(); ++iA )
+            if ( !func->arguments[iA]->type->isRValue() )
+                arguments[iA] = autoDereference(arguments[iA]);
     }
     
     // program
@@ -724,7 +775,7 @@ namespace yzg
                     for ( int ai = 0; ai != types.size(); ++ai ) {
                         auto & argType = pFn->arguments[ai]->type;
                         auto & passType = types[ai];
-                        if ( (argType->rvalue && !passType->rvalue) || !argType->isSameType(*passType, false) ) {
+                        if ( (argType->isRValue() && !passType->isRValue()) || !argType->isSameType(*passType, false) ) {
                             typesCompatible = false;
                             break;
                         }
@@ -890,13 +941,20 @@ namespace yzg
                 if ( nOp==0 )
                     throw parse_error("naked operator", decl);
                 if ( nOp==1 ) {
-                    if ( !isUnaryOperator(head->op) )
-                        throw parse_error("only unary operators can have 1 argument", decl);
-                    auto pOp = make_shared<ExprOp1>();
-                    pOp->at = decl.get();
-                    pOp->op = head->op;
-                    pOp->subexpr = parseExpression(decl->list[1], program);
-                    return pOp;
+                    if ( head->op==Operator::r2l ) {
+                        auto pR2L = make_shared<ExprR2L>();
+                        pR2L->at = decl.get();
+                        pR2L->subexpr = parseExpression(decl->list[1], program);
+                        return pR2L;
+                    } else {
+                        if ( !isUnaryOperator(head->op) )
+                            throw parse_error("only unary operators can have 1 argument", decl);
+                        auto pOp = make_shared<ExprOp1>();
+                        pOp->at = decl.get();
+                        pOp->op = head->op;
+                        pOp->subexpr = parseExpression(decl->list[1], program);
+                        return pOp;
+                    }
                 } else if ( nOp==2 ) {
                     if ( !isBinaryOperator(head->op) )
                         throw parse_error("only binary operators can have 2 arguments", decl);
@@ -1009,6 +1067,7 @@ namespace yzg
         } else {
             throw parse_error("unrecognized expression", decl);
         }
+        throw parse_error("internal error", decl);
         return nullptr;
     }
     

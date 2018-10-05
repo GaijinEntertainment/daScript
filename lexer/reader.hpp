@@ -37,6 +37,7 @@ namespace yzg
     {
         none,
     // 2-char
+        r2l,
         addEqu,
         subEqu,
         divEqu,

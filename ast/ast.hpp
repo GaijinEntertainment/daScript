@@ -70,6 +70,7 @@ namespace yzg
         bool isSimpleType ( Type tp ) const;
         bool isArray() const;
         bool isVoid() const;
+        bool isRValue() const;
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -123,9 +124,19 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const = 0;
         virtual void inferType(InferTypeContext & context) = 0;
         void logType(ostream& stream) const;
+        static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
     public:
         TypeDeclPtr type;
         Node *      at = nullptr;
+    };
+    
+    class ExprR2L : public Expression
+    {
+    public:
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+    public:
+        ExpressionPtr   subexpr;
     };
     
     class ExprBlock : public Expression
