@@ -75,6 +75,7 @@ namespace yzg
         Structure *         structType = nullptr;
         vector<uint64_t>    dim;
         bool                rvalue = false;
+        Node *              at = nullptr;
     };
     typedef shared_ptr<TypeDecl> TypeDeclPtr;
     
@@ -85,6 +86,7 @@ namespace yzg
         {
             string      name;
             TypeDeclPtr type;
+            Node *      at = nullptr;
         };
     public:
         Structure ( const string & n ) : name(n) {}
@@ -93,6 +95,7 @@ namespace yzg
     public:
         string                      name;
         vector<FieldDeclaration>    fields;
+        Node *                      at = nullptr;
     };
     
     class Variable
@@ -103,6 +106,7 @@ namespace yzg
         string      name;
         TypeDeclPtr type;
         bool        constant = false;
+        Node *      at = nullptr;
     };
     
     class Expression
@@ -121,6 +125,7 @@ namespace yzg
         void logType(ostream& stream) const;
     public:
         TypeDeclPtr type;
+        Node *      at = nullptr;
     };
     
     class ExprBlock : public Expression
@@ -314,13 +319,14 @@ namespace yzg
     {
     public:
         parse_error ( const string & message, const NodePtr & error_at ) : runtime_error(message), at(error_at.get()) {}
-        Node * at;
+        Node * at = nullptr;
     };
     
     class semantic_error : public runtime_error
     {
     public:
-        semantic_error ( const string & message ) : runtime_error(message) {}
+        semantic_error ( const string & message, Node * error_at ) : runtime_error(message), at(error_at) {}
+        Node * at = nullptr;
     };
     
     ProgramPtr parse ( const NodePtr & root );

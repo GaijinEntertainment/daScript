@@ -12,7 +12,6 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include <fstream>
 
 namespace yzg
 {
@@ -88,14 +87,16 @@ namespace yzg
             double      dnum;
             Operator    op;
         };
-        Node() : type(NodeType::nil) {}
-        Node(NodeType nt, const string & st) : type(nt), text(st) {}
-        Node(int64_t val) : type(NodeType::inumber), inum(val) {}
-        Node(uint64_t val) : type(NodeType::unumber), unum(val) {}
-        Node(double val) : type(NodeType::dnumber), dnum(val) {}
-        Node(bool val) : type(NodeType::boolean), b(val) {}
-        Node(vector<NodePtr> && ll) : type(NodeType::list), list(move(ll)) {}
-        Node(Operator o) : type(NodeType::op), op(o) {}
+        string::const_iterator at;
+        
+        Node(string::const_iterator & AT) : at(AT), type(NodeType::nil) {}
+        Node(NodeType nt, const string & st, string::const_iterator & AT) : at(AT), type(nt), text(st) {}
+        Node(int64_t val, string::const_iterator & AT) : at(AT), type(NodeType::inumber), inum(val) {}
+        Node(uint64_t val, string::const_iterator & AT) : at(AT), type(NodeType::unumber), unum(val) {}
+        Node(double val, string::const_iterator & AT) : at(AT), type(NodeType::dnumber), dnum(val) {}
+        Node(bool val, string::const_iterator & AT) : at(AT), type(NodeType::boolean), b(val) {}
+        Node(vector<NodePtr> && ll, string::const_iterator & AT) : at(AT), type(NodeType::list), list(move(ll)) {}
+        Node(Operator o, string::const_iterator & AT) : at(AT), type(NodeType::op), op(o) {}
         
         bool isList() const { return type==NodeType::list; }
         bool isListOfAtLeastSize(int n) const { return type==NodeType::list && list.size()>=n; }
@@ -123,7 +124,8 @@ namespace yzg
     };
     
     NodePtr read ( const string & st );
-    NodePtr read ( ifstream & t );
+    
+    void reportError ( const string & st, const string::const_iterator & at, const string & message );
 }
 
 #endif /* reader_hpp */

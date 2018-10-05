@@ -12,6 +12,7 @@
 
 #include <regex>
 #include <sstream>
+#include <iostream>
 
 namespace yzg
 {
@@ -233,7 +234,9 @@ namespace yzg
         {
             if ( *pos==quotes )
                 return pos + 1;
-            if ( *pos=='\\' )
+            else if ( *pos=='\n' )
+                throw read_error("string constant exceeds line", pos );
+            else if ( *pos=='\\' )
                 pos += 2;
             else
                 ++ pos;
@@ -261,6 +264,7 @@ namespace yzg
     {
         smatch what;
         it = skipWhiteSpace(it, end);
+        stit at = it;
         if ( it==end ) {
             if ( isList )
                 throw read_error("list exceeds file", it);
@@ -272,60 +276,73 @@ namespace yzg
             return nullptr;
         } else if ( *it=='(' ) {
             ++ it;
-            return make_unique<Node>(readNodes(it, end, true));
+            return make_unique<Node>(readNodes(it, end, true), at);
         } else if ( *it=='$' ) {
             ++ it;
             readNode(it, end, isList);  // skip node, and return next one
             return readNode(it, end, isList);
         } else if ( *it=='"' || *it=='\'') {
-            stit at = it;
             it = parseString(it,end,*it);
-            return make_unique<Node>(NodeType::string, string(at+1,it-1));
+            return make_unique<Node>(NodeType::string, string(at+1,it-1), at);
         } else if ( regex_search(it,end,what,REG_boolean,continues) ) {
             it += what.length();
-            return make_unique<Node>(what[1].str()=="true");
+            return make_unique<Node>(what[1].str()=="true", at);
         } else if ( regex_search(it,end,what,REG_name,continues) ) {
             it += what.length();
-            return make_unique<Node>(NodeType::name, what[1].str());
+            return make_unique<Node>(NodeType::name, what[1].str(), at);
         } else if ( regex_search(it,end,what,REG_hex,continues) ) {
             it += what.length();
-            return make_unique<Node>(uint64_t(stoul(what[1].str(), 0, 16)));
+            return make_unique<Node>(uint64_t(stoul(what[1].str(), 0, 16)), at);
         } else if ( regex_search(it,end,what,REG_uint,continues) ) {
             it += what.length();
-            return make_unique<Node>(uint64_t(stoul(what[1].str())));
+            return make_unique<Node>(uint64_t(stoul(what[1].str())), at);
         } else if ( regex_search(it,end,what,REG_number_exp,continues) || regex_search(it,end,what,REG_number,continues) ) {
             it += what.length();
             string num = what[1].str();
             auto found = num.find_first_of(".e");
-            return found!=string::npos ? make_unique<Node>(stod(num)) : make_unique<Node>(int64_t(stol(num)));
+            return found!=string::npos ? make_unique<Node>(stod(num), at) : make_unique<Node>(int64_t(stol(num)), at);
         } else {
             auto op = g_opTable2.parse(it, Operator::none);
             if ( op==Operator::none )
                 op = g_opTable1.parse(it, Operator::none);
             if ( op==Operator::none )
                 throw read_error("unexpected character", it);
-            return make_unique<Node>(op);
+            return make_unique<Node>(op, at);
         }
         return nullptr;
     }
     
     NodePtr read ( stit it, stit end )
     {
-        return make_unique<Node>(readNodes(it, end, false));
+        return make_unique<Node>(readNodes(it, end, false), it);
+    }
+    
+    void reportError ( const string & st, const string::const_iterator & at, const string & message )
+    {
+        int col = 1, row = 1;
+        auto text = st.begin();
+        auto it = st.begin();
+        while ( it != at && it != st.end() ) {
+            if ( *it=='\n' ) {
+                text = it + 1;
+                row ++;
+                col = 1;
+            }
+            ++ it;
+            col ++;
+        }
+        auto endtext = text;
+        while ( *endtext!='\n' && endtext!=st.end() )
+            ++endtext;
+        cout
+            << "error at line " << row << "\n"
+            << string(text, endtext) << "\n"
+            << string(max(col-2,0), ' ') << "^" << "\n"
+            << message << "\n";
     }
     
     NodePtr read ( const string & st )
     {
         return read(st.begin(), st.end());
-    }
-    
-    NodePtr read ( ifstream & t )
-    {
-        string str;
-        t.seekg(0, ios::end);
-        str.reserve(t.tellg());
-        t.seekg(0, ios::beg);
-        str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-        return read(str);
     }
 }

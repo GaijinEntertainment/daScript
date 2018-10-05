@@ -3,7 +3,6 @@ parser
     support default function arguments (in type inference as well)
     support auto in let
     support for array indexing
-    line + position error reporting. 'context' error reporting
     add 'deref'
 
 optimization \ ast massage

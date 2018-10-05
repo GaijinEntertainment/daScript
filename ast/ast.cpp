@@ -283,12 +283,12 @@ namespace yzg
     {
         rvalue->inferType(context);
         if ( rvalue->type->baseType!=Type::tStructure )
-            throw semantic_error("expecting structure");
+            throw semantic_error("expecting structure", at);
         if ( rvalue->type->isArray() )
-            throw semantic_error("can't get field of array");
+            throw semantic_error("can't get field of array", at);
         field = rvalue->type->structType->findField(name);
         if ( !field )
-            throw semantic_error("field " + name + " not found");
+            throw semantic_error("field " + name + " not found", at);
         type = make_shared<TypeDecl>(*field->type);
         type->rvalue = rvalue->type->rvalue;
     }
@@ -328,7 +328,7 @@ namespace yzg
         // global
         auto var = context.program->findVariable(name);
         if ( !var )
-            throw semantic_error("can't locate variable " + name);
+            throw semantic_error("can't locate variable " + name, at);
         variable = var;
         type = make_shared<TypeDecl>(*var->type);
         type->rvalue = true;
@@ -350,9 +350,9 @@ namespace yzg
         vector<TypeDeclPtr> types = { subexpr->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 )
-            throw semantic_error("no matching function");
+            throw semantic_error("no matching function", at);
         if ( functions.size()>1 )
-            throw semantic_error("too many matching functions");
+            throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
     }
@@ -376,9 +376,9 @@ namespace yzg
         vector<TypeDeclPtr> types = { left->type, right->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 )
-            throw semantic_error("no matching function");
+            throw semantic_error("no matching function", at);
         if ( functions.size()>1 )
-            throw semantic_error("too many matching functions");
+            throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
     }
@@ -401,15 +401,15 @@ namespace yzg
     {
         subexpr->inferType(context);
         if ( !subexpr->type->isSimpleType(Type::tBool) )
-            throw semantic_error("cond operator condition must be boolean");
+            throw semantic_error("cond operator condition must be boolean", at);
         left->inferType(context);
         right->inferType(context);
         vector<TypeDeclPtr> types = { subexpr->type, left->type, right->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 )
-            throw semantic_error("no matching function");
+            throw semantic_error("no matching function", at);
         if ( functions.size()>1 )
-            throw semantic_error("too many matching functions");
+            throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
     }
@@ -432,12 +432,12 @@ namespace yzg
         if ( subexpr ) {
             subexpr->inferType(context);
             if ( context.func->result->isVoid() )
-                throw semantic_error("return subexpression of void function must be empty");
+                throw semantic_error("return subexpression of void function must be empty", at);
             if ( !subexpr->type->isSameType(*context.func->result, false) )
-                throw semantic_error("return subexpression type must match function return type");
+                throw semantic_error("return subexpression type must match function return type", at);
         } else {
             if ( !context.func->result->isVoid() )
-                throw semantic_error("only void functions can skip return subexpression");
+                throw semantic_error("only void functions can skip return subexpression", at);
         }
         type = make_shared<TypeDecl>();
     }
@@ -497,7 +497,7 @@ namespace yzg
     {
         cond->inferType(context);
         if ( !cond->type->isSimpleType(Type::tBool) )
-            throw semantic_error("if-then-else condition must be boolean");
+            throw semantic_error("if-then-else condition must be boolean", at);
         if_true->inferType(context);
         if ( if_false )
             if_false->inferType(context);
@@ -510,7 +510,7 @@ namespace yzg
     {
         cond->inferType(context);
         if ( !cond->type->isSimpleType(Type::tBool) )
-            throw semantic_error("while loop condition must be boolean");
+            throw semantic_error("while loop condition must be boolean", at);
         body->inferType(context);
         type = make_shared<TypeDecl>();
     }
@@ -579,9 +579,9 @@ namespace yzg
         }
         auto functions = context.program->findMatchingFunctions(name, types);
         if ( functions.size()==0 )
-            throw semantic_error("no matching function");
+            throw semantic_error("no matching function", at);
         if ( functions.size()>1 )
-            throw semantic_error("too many matching functions");
+            throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
     }
@@ -649,7 +649,7 @@ namespace yzg
     {
         auto mangledName = func->getMangledName();
         if ( findFunction(mangledName) )
-            throw parse_error("builtin function already defined", nullptr);
+            throw parse_error("builtin function already defined " + mangledName, nullptr);
         functions[mangledName] = func;
     }
     
@@ -754,6 +754,7 @@ namespace yzg
     {
         // cout << *decl << endl;
         auto tdecl = make_shared<TypeDecl>();
+        tdecl->at = decl.get();
         auto typeName = decl->getName(0);
         if ( typeName.empty() )
             throw parse_error("expecting basic type", decl);
@@ -797,7 +798,9 @@ namespace yzg
                     throw parse_error("structure must have a name", expr);
                 if ( program->structures.find(name) != program->structures.end() )
                     throw parse_error("structure is already declared", expr);
-                program->structures[name] = make_shared<Structure>(name);
+                auto st = make_shared<Structure>(name);
+                st->at = expr.get();
+                program->structures[name] = st;
             }
         }
         // go through all structures, parse fields
@@ -818,7 +821,7 @@ namespace yzg
                         throw parse_error("structure field can't be void", field);
                     if ( typeDecl->rvalue )
                         throw parse_error("structure field can't be reference", field);
-                    decl->fields.push_back({name, typeDecl});
+                    decl->fields.push_back({name, typeDecl, field.get()});
                 }
             }
         }
@@ -874,6 +877,7 @@ namespace yzg
             auto & head = decl->list[0];
             if ( head->isList() ) {    // if first element is list, its an expression block
                 auto block = make_shared<ExprBlock>();
+                block->at = decl.get();
                 for ( auto & subExpr : decl->list ) {
                     if ( !subExpr->isList() )
                         throw parse_error("expression block must contain full expressions", subExpr);
@@ -889,6 +893,7 @@ namespace yzg
                     if ( !isUnaryOperator(head->op) )
                         throw parse_error("only unary operators can have 1 argument", decl);
                     auto pOp = make_shared<ExprOp1>();
+                    pOp->at = decl.get();
                     pOp->op = head->op;
                     pOp->subexpr = parseExpression(decl->list[1], program);
                     return pOp;
@@ -899,11 +904,13 @@ namespace yzg
                         if ( !decl->list[2]->isName() )
                             throw parse_error("field needs to be specified as a name", decl);
                         auto pDot = make_shared<ExprField>();
+                        pDot->at = decl.get();
                         pDot->rvalue = parseExpression(decl->list[1], program);
                         pDot->name = decl->list[2]->text;
                         return pDot;
                     } else {
                         auto pOp = make_shared<ExprOp2>();
+                        pOp->at = decl.get();
                         pOp->op = head->op;
                         pOp->left = parseExpression(decl->list[1], program);
                         pOp->right = parseExpression(decl->list[2], program);
@@ -913,6 +920,7 @@ namespace yzg
                     if ( !isTrinaryOperator(head->op) )
                         throw parse_error("only trinary operators can have 3 arguments", decl);
                     auto pOp = make_shared<ExprOp3>();
+                    pOp->at = decl.get();
                     pOp->op = head->op;
                     pOp->subexpr = parseExpression(decl->list[1], program);
                     pOp->left = parseExpression(decl->list[2], program);
@@ -925,6 +933,7 @@ namespace yzg
                 if ( !decl->isListOfAtLeastSize(3) )
                     throw parse_error("only (while cond body) is allowed", decl);
                 auto pWhile = make_shared<ExprWhile>();
+                pWhile->at = decl.get();
                 pWhile->cond = parseExpression(decl->list[1], program);
                 pWhile->body = parseExpression(decl->list[2], program);
                 return pWhile;
@@ -932,6 +941,7 @@ namespace yzg
                 if ( !decl->isList() && !(decl->list.size()==3 || decl->list.size()==4) )
                     throw parse_error("only (if cond if_true) or (if cond if_true if_false) are allowed", decl);
                 auto pIfThenElse = make_shared<ExprIfThenElse>();
+                pIfThenElse->at = decl.get();
                 pIfThenElse->cond = parseExpression(decl->list[1], program);
                 pIfThenElse->if_true = parseExpression(decl->list[2], program);
                 if ( decl->list.size()==4 )
@@ -939,6 +949,7 @@ namespace yzg
                 return pIfThenElse;
             } else if ( head->isName("return") ) {
                 auto pRet = make_shared<ExprReturn>();
+                pRet->at = decl.get();
                 auto nArg = decl->list.size() -  1;
                 if ( nArg == 1 ) {
                     pRet->subexpr = parseExpression(decl->list[1], program);
@@ -952,6 +963,7 @@ namespace yzg
                 if ( !decl->isListOfAtLeastSize(3) )
                     throw parse_error("needs at least one variable declaration and expression", decl);
                 auto let = make_shared<ExprLet>();
+                let->at = decl.get();
                 for ( int iVar = 1; iVar != decl->list.size()-1; ++iVar ) {
                     auto & vdecl = decl->list[iVar];
                     auto pVar = parseVariable(vdecl, program);
@@ -964,6 +976,7 @@ namespace yzg
             } else if ( head->isName() ) {
                 // function call
                 auto call = make_shared<ExprCall>();
+                call->at = decl.get();
                 call->name = head->text;
                 for ( int i = 1; i != decl->list.size(); ++i ) {
                     auto arg = parseExpression(decl->list[i], program);
@@ -975,18 +988,22 @@ namespace yzg
             }
         } else if ( decl->isName() ) {
             auto pVar = make_shared<ExprVar>();
+            pVar->at = decl.get();
             pVar->name = decl->text;
             return pVar;
         } else if ( decl->isNumericConstant() ) {
+            ExpressionPtr pconst;
             if ( decl->type==NodeType::dnumber ) {
-                return make_shared<ExprConstDouble>(decl->dnum);
+                pconst = make_shared<ExprConstDouble>(decl->dnum);
             } else if ( decl->type==NodeType::inumber ) {
-                return make_shared<ExprConstInt>(decl->inum);
+                pconst = make_shared<ExprConstInt>(decl->inum);
             } else if ( decl->type==NodeType::unumber ) {
-                return make_shared<ExprConstUInt>(decl->unum);
+                pconst = make_shared<ExprConstUInt>(decl->unum);
             } else {
                 throw parse_error("undefined constant type", decl);
             }
+            pconst->at = decl.get();
+            return pconst;
         } else {
             throw parse_error("unrecognized expression", decl);
         }
@@ -1043,7 +1060,7 @@ namespace yzg
     ProgramPtr parse ( const NodePtr & root )
     {
         if ( !root->isList() )
-            return nullptr;
+            throw parse_error("expecting a list", root);
         auto program = make_shared<Program>();
         parseStructureDeclarations(root, program);
         parseVariableDeclarations(root, program);
