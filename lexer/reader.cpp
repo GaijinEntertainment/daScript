@@ -103,11 +103,11 @@ namespace yzg
         return name->text;
     }
     
-    string Node::getTailName() const
+    string Node::getTailName(int nField) const
     {
-        if ( !isListOfAtLeastSize(1) )
+        if ( !isListOfAtLeastSize(1 + nField) )
             return "";
-        auto & tail = list.back();
+        auto & tail = list[list.size()-1-nField];
         if ( tail->type!=NodeType::name )
             return "";
         return tail->text;

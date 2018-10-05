@@ -540,7 +540,7 @@ namespace yzg
     {
         stream << "(let\n";
         for ( auto & var : variables ) {
-            stream << string(depth+1, '\t') << "(" << *var << ")\n";
+            stream << string(depth+1, '\t') << "(" << *var << " " << *var->init << ")\n";
         }
         stream << string(depth+2, '\t');
         subexpr->log(stream, depth+2);
@@ -550,7 +550,12 @@ namespace yzg
     void ExprLet::inferType(InferTypeContext & context)
     {
         auto sz = context.local.size();
-        context.local.insert(context.local.end(), variables.begin(), variables.end());
+        for ( auto & var : variables ) {
+            context.local.push_back(var);
+            var->init->inferType(context);
+            if ( !var->type->isSameType(*var->init->type,false) )
+                throw semantic_error("variable initialization type mismatch", var->at );
+        }
         subexpr->inferType(context);
         context.local.resize(sz);
         type = make_shared<TypeDecl>();
@@ -590,10 +595,7 @@ namespace yzg
     
     VariablePtr Program::findVariable ( const string & name ) const
     {
-        auto it = constants.find(name);
-        if ( it != constants.end() )
-            return it->second;
-        it = globals.find(name);
+        auto it = globals.find(name);
         if ( it != globals.end() )
             return it->second;
         return nullptr;
@@ -611,13 +613,6 @@ namespace yzg
     {
         for ( const auto & st : program.structures ) {
             stream << *st.second << "\n";
-        }
-        if ( program.constants.size() ) {
-            stream << "(let const\n";
-            for ( auto & pv : program.constants ) {
-                stream << "\t(" <<  *pv.second << ")\n";
-            }
-            stream << ")\n\n";
         }
         if ( program.globals.size() ) {
             stream << "(let\n";
@@ -743,6 +738,9 @@ namespace yzg
         return result;
     }
     
+    // expression parser forward declaration
+    ExpressionPtr parseExpression ( const NodePtr & decl, const ProgramPtr & program );
+    
     /*
         (int ...)               // integer
         (float 2 ...)           // float[2]
@@ -750,7 +748,7 @@ namespace yzg
         (uint const 3 4 ...)    // const uint [3][4]
         (Sphere ...)
      */
-    TypeDeclPtr parseTypeDeclaratoin ( const NodePtr & decl, const ProgramPtr & program )
+    TypeDeclPtr parseTypeDeclaratoin ( const NodePtr & decl, const ProgramPtr & program, int nFields = 0 )
     {
         // cout << *decl << endl;
         auto tdecl = make_shared<TypeDecl>();
@@ -766,10 +764,10 @@ namespace yzg
             tdecl->baseType = Type::tStructure;
             tdecl->structType = it->second.get();
         }
-        if ( decl->list.size()==3 && decl->list[1]->isOperator(Operator::binand) ) {
+        if ( decl->list.size()==(3+nFields) && decl->list[1]->isOperator(Operator::binand) ) {
             tdecl->rvalue = true;
         } else {
-            for ( int iDim = 1; iDim != decl->list.size() - 1; ++iDim ) {
+            for ( int iDim = 1; iDim != decl->list.size() - 1 - nFields; ++iDim ) {
                 uint64_t dim = decl->getUnsigned(iDim);
                 if ( dim == -1U )
                     throw parse_error("expecting dimension", decl);
@@ -827,13 +825,23 @@ namespace yzg
         }
     }
     
-    VariablePtr parseVariable ( const NodePtr & decl, const ProgramPtr & program )
+    VariablePtr parseVariable ( const NodePtr & decl, const ProgramPtr & program, bool needInit, bool canHaveInit )
     {
         auto pVar = make_shared<Variable>();
-        pVar->type = parseTypeDeclaratoin(decl, program);
         pVar->name = decl->getTailName();
-        if ( pVar->name.empty() )
-            throw parse_error("variable must have a name", decl);
+        if ( pVar->name.empty() ) {
+            if ( !canHaveInit )
+                throw parse_error("variable can't have initializer", decl);
+            pVar->name = decl->getTailName(1);
+            if ( pVar->name.empty() )
+                throw parse_error("variable must have a name", decl);
+            pVar->init = parseExpression(decl->list.back(), program);
+            pVar->type = parseTypeDeclaratoin(decl, program, 1);
+        } else {
+            if ( needInit )
+                throw parse_error("variable must be initialized", decl);
+            pVar->type = parseTypeDeclaratoin(decl, program);
+        }
         return pVar;
     }
     
@@ -848,20 +856,12 @@ namespace yzg
     {
         for ( auto & expr : root->list ) {
             if ( expr->getName(0)=="let"  ) {
-                int iVar = 1;
-                bool isConst = false;
-                if ( expr->getName(1)=="const" ) {
-                    iVar ++;
-                    isConst = true;
-                }
-                for ( ; iVar != expr->list.size(); ++iVar ) {
+                for ( int iVar = 1; iVar != expr->list.size(); ++iVar ) {
                     auto & vdecl = expr->list[iVar];
-                    auto pVar = parseVariable(vdecl, program);
-                    pVar->constant = isConst;
+                    auto pVar = parseVariable(vdecl, program, false, false);    // can global be initialized?
                     if ( program->findVariable(pVar->name) )
                         throw parse_error("variable already declared", vdecl);
-                    auto & cmap = isConst ? program->constants : program->globals;
-                    cmap[pVar->name] = pVar;
+                    program->globals[pVar->name] = pVar;
                 }
             }
         }
@@ -966,9 +966,11 @@ namespace yzg
                 let->at = decl.get();
                 for ( int iVar = 1; iVar != decl->list.size()-1; ++iVar ) {
                     auto & vdecl = decl->list[iVar];
-                    auto pVar = parseVariable(vdecl, program);
+                    auto pVar = parseVariable(vdecl, program, true, true);
                     if ( let->find (pVar->name) )
                         throw parse_error("variable already declared", decl);
+                    if ( pVar->type->rvalue )
+                        throw parse_error("local variable can't be reference", decl);
                     let->variables.push_back(pVar);
                 }
                 let->subexpr = parseExpression(decl->list.back(), program);

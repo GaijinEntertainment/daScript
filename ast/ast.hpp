@@ -103,10 +103,10 @@ namespace yzg
     public:
         friend ostream& operator<< (ostream& stream, const Variable & var);
     public:
-        string      name;
-        TypeDeclPtr type;
-        bool        constant = false;
-        Node *      at = nullptr;
+        string          name;
+        TypeDeclPtr     type;
+        ExpressionPtr   init;
+        Node *          at = nullptr;
     };
     
     class Expression
@@ -311,7 +311,6 @@ namespace yzg
     public:
         map<string, StructurePtr>   structures;
         map<string, VariablePtr>    globals;
-        map<string, VariablePtr>    constants;
         map<string, FunctionPtr>    functions;      // mangled name 2 function name
     };
 

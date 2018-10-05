@@ -108,7 +108,7 @@ namespace yzg
     
         uint64_t getUnsigned(int n) const;
         string getName(int n) const;
-        string getTailName() const;
+        string getTailName(int nField = 0) const;
         
         int depth() const;
         bool isMathNode() const;    // (* (+ a b) c) etc

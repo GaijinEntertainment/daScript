@@ -1,9 +1,11 @@
 parser
-    support default values in let
     support default function arguments (in type inference as well)
     support auto in let
     support for array indexing
     add 'deref'
+
+misc
+    support 'clone' for expressions
 
 optimization \ ast massage
     flatten nested blocks

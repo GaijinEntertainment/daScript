@@ -24,9 +24,6 @@
 (let
     (Ball g_variable))
 
-(let const
-    (bool ext_constant))
-
 (defun (int madd)
     (int a)
     (int b)
@@ -46,10 +43,10 @@
 (defun (float calcVolume)
     (Sphere s)
     (let
-        (float r)
-        (float r3)
-        (float v)
-        (   (=  r   (.  s   radius))
+        (float r  (. s radius))
+        (float r3 0.0)
+        (float v  0.0)
+        (
             (=  r3  (*  r   (*  r   r)))
             (=  v   (* 4.188 r3))
             (return v)
