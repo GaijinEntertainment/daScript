@@ -46,9 +46,10 @@
 
 #if HAVE_REALLOCARRAY
 # define _GNU_SOURCE
+#else
+# include <errno.h>
 #endif
 
-#include <errno.h>
 #include <stdlib.h>
 
 
