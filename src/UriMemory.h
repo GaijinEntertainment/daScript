@@ -47,10 +47,8 @@
 	do { \
 		if (memory == NULL) { \
 			memory = &defaultMemoryManager; \
-		} else { \
-			if (uriMemoryManagerIsComplete(memory) != URI_TRUE) { \
-				return URI_ERROR_MEMORY_MANAGER_INCOMPLETE; \
-			} \
+		} else if (uriMemoryManagerIsComplete(memory) != URI_TRUE) { \
+			return URI_ERROR_MEMORY_MANAGER_INCOMPLETE; \
 		} \
 	} while (0)
 
