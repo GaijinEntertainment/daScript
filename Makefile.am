@@ -71,6 +71,7 @@ test_uriparser_test_LDADD = liburiparser.la
 
 test_uriparser_test_SOURCES = \
 	test/FourSuite.cpp \
+	test/MemoryManagerSuite.cpp \
 	test/VersionSuite.cpp \
 	test/test.cpp
 endif
