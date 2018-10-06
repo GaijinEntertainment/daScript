@@ -60,31 +60,28 @@
 
 
 
-static void * uriDefaultMalloc(
-        struct UriMemoryManagerStruct * URI_UNUSED(memory), size_t size) {
+static void * uriDefaultMalloc(UriMemoryManager * URI_UNUSED(memory),
+        size_t size) {
     return malloc(size);
 }
 
 
 
-static void * uriDefaultCalloc(
-        struct UriMemoryManagerStruct * URI_UNUSED(memory),
+static void * uriDefaultCalloc(UriMemoryManager * URI_UNUSED(memory),
         size_t nmemb, size_t size) {
     return calloc(nmemb, size);
 }
 
 
 
-static void * uriDefaultRealloc(
-        struct UriMemoryManagerStruct * URI_UNUSED(memory),
+static void * uriDefaultRealloc(UriMemoryManager * URI_UNUSED(memory),
         void * ptr, size_t size) {
     return realloc(ptr, size);
 }
 
 
 
-static void * uriDefaultReallocarray(
-        struct UriMemoryManagerStruct * URI_UNUSED(memory),
+static void * uriDefaultReallocarray(UriMemoryManager * URI_UNUSED(memory),
         void * ptr, size_t nmemb, size_t size) {
 #if HAVE_REALLOCARRAY
     return reallocarray(ptr, nmemb, size);
@@ -103,7 +100,7 @@ static void * uriDefaultReallocarray(
 
 
 
-static void uriDefaultFree(struct UriMemoryManagerStruct * URI_UNUSED(memory),
+static void uriDefaultFree(UriMemoryManager * URI_UNUSED(memory),
         void * ptr) {
     free(ptr);
 }
