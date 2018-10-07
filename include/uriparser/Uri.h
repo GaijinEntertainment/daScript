@@ -203,6 +203,7 @@ typedef struct URI_TYPE(QueryListStruct) {
 
 /**
  * Parses a RFC 3986 %URI.
+ * Uses default libc-based memory manager.
  *
  * @param state       <b>INOUT</b>: Parser state with set output %URI, must not be NULL
  * @param first       <b>IN</b>: Pointer to the first character to parse, must not be NULL
@@ -210,6 +211,7 @@ typedef struct URI_TYPE(QueryListStruct) {
  * @return            0 on success, error code otherwise
  *
  * @see uriParseUriA
+ * @see uriParseUriExMmA
  * @see uriToStringA
  * @since 0.3.0
  */
@@ -221,11 +223,33 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 /**
  * Parses a RFC 3986 %URI.
  *
+ * @param state       <b>INOUT</b>: Parser state with set output %URI, must not be NULL
+ * @param first       <b>IN</b>: Pointer to the first character to parse, must not be NULL
+ * @param afterLast   <b>IN</b>: Pointer to the character after the last to parse, must not be NULL
+ * @param memory      <b>IN</b>: Memory manager to use
+ * @return            0 on success, error code otherwise
+ *
+ * @see uriParseUriA
+ * @see uriParseUriExA
+ * @see uriToStringA
+ * @since 0.8.7
+ */
+int URI_FUNC(ParseUriExMm)(URI_TYPE(ParserState) * state,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		UriMemoryManager * memory);
+
+
+
+/**
+ * Parses a RFC 3986 %URI.
+ * Uses default libc-based memory manager.
+ *
  * @param state   <b>INOUT</b>: Parser state with set output %URI, must not be NULL
  * @param text    <b>IN</b>: Text to parse, must not be NULL
  * @return        0 on success, error code otherwise
  *
  * @see uriParseUriExA
+ * @see uriParseUriExMmA
  * @see uriToStringA
  * @since 0.3.0
  */

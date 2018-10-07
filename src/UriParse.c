@@ -2107,8 +2107,16 @@ static URI_INLINE UriBool URI_FUNC(PushPathSegment)(
 
 
 
-int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state, const URI_CHAR * first, const URI_CHAR * afterLast) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
+		const URI_CHAR * first, const URI_CHAR * afterLast) {
+	return URI_FUNC(ParseUriExMm)(state, first, afterLast, NULL);
+}
+
+
+
+int URI_FUNC(ParseUriExMm)(URI_TYPE(ParserState) * state,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		UriMemoryManager * memory) {
 	const URI_CHAR * afterUriReference;
 	URI_TYPE(Uri) * uri;
 
@@ -2116,6 +2124,8 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state, const URI_CHAR * first, 
 	if ((state == NULL) || (first == NULL) || (afterLast == NULL)) {
 		return URI_ERROR_NULL;
 	}
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
+
 	uri = state->uri;
 
 	/* Init parser */

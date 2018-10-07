@@ -226,6 +226,21 @@ TEST(FailingMemoryManagerSuite, NormalizeSyntaxExMm) {
 
 
 
+TEST(FailingMemoryManagerSuite, ParseUriExMm) {
+	UriParserStateA state;
+	UriUriA uri;
+	state.uri = &uri;
+	const char * const first = "k1=v1&k2=v2";
+	const char * const afterLast = first + strlen(first);
+	FailingMemoryManager failingMemoryManager;
+
+	ASSERT_EQ(uriParseUriExMmA(&state, first, afterLast,
+			&failingMemoryManager),
+			URI_ERROR_MALLOC);
+}
+
+
+
 TEST(FailingMemoryManagerSuite, RemoveBaseUriMm) {
 	UriUriA dest;
 	UriUriA absoluteSource = parse("http://example.org/a/b/c/");
