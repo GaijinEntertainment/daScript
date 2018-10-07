@@ -202,7 +202,7 @@ typedef struct URI_TYPE(QueryListStruct) {
 
 
 /**
- * Parses a RFC 3986 URI.
+ * Parses a RFC 3986 %URI.
  *
  * @param state       <b>INOUT</b>: Parser state with set output %URI, must not be NULL
  * @param first       <b>IN</b>: Pointer to the first character to parse, must not be NULL
