@@ -342,6 +342,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 /**
  * Performs reference resolution as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
+ * Uses default libc-based memory manager.
  * NOTE: On success you have to call uriFreeUriMembersA on \p absoluteDest manually later.
  *
  * @param absoluteDest     <b>OUT</b>: Result %URI
@@ -351,11 +352,36 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
  *
  * @see uriRemoveBaseUriA
  * @see uriAddBaseUriExA
+ * @see uriAddBaseUriExMmA
  * @since 0.4.0
  */
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
 		const URI_TYPE(Uri) * absoluteBase);
+
+
+
+/**
+ * Performs reference resolution as described in
+ * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
+ * Uses default libc-based memory manager.
+ * NOTE: On success you have to call uriFreeUriMembersA on \p absoluteDest manually later.
+ *
+ * @param absoluteDest     <b>OUT</b>: Result %URI
+ * @param relativeSource   <b>IN</b>: Reference to resolve
+ * @param absoluteBase     <b>IN</b>: Base %URI to apply
+ * @param options          <b>IN</b>: Configuration to apply
+ * @return                 Error code or 0 on success
+ *
+ * @see uriRemoveBaseUriA
+ * @see uriAddBaseUriA
+ * @see uriAddBaseUriExMmA
+ * @since 0.8.1
+ */
+int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
+		const URI_TYPE(Uri) * relativeSource,
+		const URI_TYPE(Uri) * absoluteBase,
+		UriResolutionOptions options);
 
 
 
@@ -368,16 +394,18 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
  * @param relativeSource   <b>IN</b>: Reference to resolve
  * @param absoluteBase     <b>IN</b>: Base %URI to apply
  * @param options          <b>IN</b>: Configuration to apply
+ * @param memory           <b>IN</b>: Memory manager to use
  * @return                 Error code or 0 on success
  *
  * @see uriRemoveBaseUriA
  * @see uriAddBaseUriA
- * @since 0.8.1
+ * @see uriAddBaseUriExA
+ * @since 0.8.7
  */
-int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
+int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
 		const URI_TYPE(Uri) * absoluteBase,
-		UriResolutionOptions options);
+		UriResolutionOptions options, UriMemoryManager * memory);
 
 
 

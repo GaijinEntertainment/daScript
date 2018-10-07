@@ -64,6 +64,7 @@
 #ifndef URI_DOXYGEN
 # include <uriparser/Uri.h>
 # include "UriCommon.h"
+# include "UriMemory.h"
 #endif
 
 
@@ -304,8 +305,19 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase,
 		UriResolutionOptions options) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-	const int res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, options, memory);
+	return URI_FUNC(AddBaseUriExMm)(absDest, relSource, absBase, options, NULL);
+}
+
+
+
+int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absDest,
+		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase,
+		UriResolutionOptions options, UriMemoryManager * memory) {
+	int res;
+
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
+
+	res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, options, memory);
 	if ((res != URI_SUCCESS) && (absDest != NULL)) {
 		URI_FUNC(FreeUriMembers)(absDest);
 	}

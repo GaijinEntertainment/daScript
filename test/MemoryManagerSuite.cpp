@@ -84,6 +84,22 @@ static UriMemoryManager failingMemoryManager = {
 
 
 
+TEST(FailingMemoryManagerSuite, AddBaseUriExMm) {
+	UriUriA absoluteDest;
+	UriUriA relativeSource = parse("foo");
+	UriUriA absoluteBase = parse("http://example.org/bar");
+	const UriResolutionOptions options = URI_RESOLVE_STRICTLY;
+
+	ASSERT_EQ(uriAddBaseUriExMmA(&absoluteDest, &relativeSource,
+			&absoluteBase, options, &failingMemoryManager),
+			URI_ERROR_MALLOC);
+
+	uriFreeUriMembersA(&relativeSource);
+	uriFreeUriMembersA(&absoluteBase);
+}
+
+
+
 TEST(FailingMemoryManagerSuite, NormalizeSyntaxExMm) {
 	UriUriA uri = parse("hTTp://example.org/path");
 	const unsigned int mask = URI_NORMALIZE_SCHEME;  // anything but URI_NORMALIZED
