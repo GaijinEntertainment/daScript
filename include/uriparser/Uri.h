@@ -493,9 +493,26 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
  * @return      Normalization job mask
  *
  * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxMaskRequiredExA
  * @since 0.5.0
  */
 unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
+
+
+
+/**
+ * Determines the components of a %URI that are not normalized.
+ *
+ * @param uri      <b>IN</b>: %URI to check
+ * @param outMask  <b>OUT</b>: Normalization job mask
+ * @return         Error code or 0 on success
+ *
+ * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxMaskRequiredA
+ * @since 0.8.7
+ */
+int URI_FUNC(NormalizeSyntaxMaskRequiredEx)(const URI_TYPE(Uri) * uri,
+		unsigned int * outMask);
 
 
 
