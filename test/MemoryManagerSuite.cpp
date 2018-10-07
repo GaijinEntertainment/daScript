@@ -118,6 +118,17 @@ static UriUriA parse(const char * sourceUriString) {
 	return uri;
 }
 
+
+
+static UriQueryListA * parseQueryList(const char * queryString) {
+	UriQueryListA * queryList;
+	const char * const first = queryString;
+	const char * const afterLast = first + strlen(first);
+	assert(uriDissectQueryMallocA(&queryList, NULL, first, afterLast)
+			== URI_SUCCESS);
+	return queryList;
+}
+
 }  // namespace
 
 
