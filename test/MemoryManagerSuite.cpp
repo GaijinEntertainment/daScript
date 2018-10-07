@@ -154,6 +154,22 @@ TEST(FailingMemoryManagerSuite, AddBaseUriExMm) {
 
 
 
+TEST(FailingMemoryManagerSuite, ComposeQueryMallocExMm) {
+	char * dest = NULL;
+	UriQueryListA * const queryList = parseQueryList("k1=v1");
+	UriBool spaceToPlus = URI_TRUE;  // not of interest
+	UriBool normalizeBreaks = URI_TRUE;  // not of interest
+	FailingMemoryManager failingMemoryManager;
+
+	ASSERT_EQ(uriComposeQueryMallocExMmA(&dest, queryList,
+			spaceToPlus, normalizeBreaks, &failingMemoryManager),
+			URI_ERROR_MALLOC);
+
+	uriFreeQueryListA(queryList);
+}
+
+
+
 TEST(FailingMemoryManagerSuite, FreeQueryListMm) {
 	UriQueryListA * const queryList = parseQueryList("k1=v1");
 	FailingMemoryManager failingMemoryManager;

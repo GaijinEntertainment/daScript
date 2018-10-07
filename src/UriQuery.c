@@ -151,7 +151,16 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
 int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
 		const URI_TYPE(QueryList) * queryList,
 		UriBool spaceToPlus, UriBool normalizeBreaks) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	return URI_FUNC(ComposeQueryMallocExMm)(dest, queryList, spaceToPlus,
+			normalizeBreaks, NULL);
+}
+
+
+
+int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
+		const URI_TYPE(QueryList) * queryList,
+		UriBool spaceToPlus, UriBool normalizeBreaks,
+		UriMemoryManager * memory) {
 	int charsRequired;
 	int res;
 	URI_CHAR * queryString;
@@ -159,6 +168,8 @@ int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
 	if (dest == NULL) {
 		return URI_ERROR_NULL;
 	}
+
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
 
 	/* Calculate space */
 	res = URI_FUNC(ComposeQueryCharsRequiredEx)(queryList, &charsRequired,

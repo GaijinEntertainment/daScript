@@ -782,12 +782,14 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
  * The composed string does not start with '?',
  * on the way ' ' is converted to '+' and line breaks are
  * normalized to "%0D%0A".
+ * Uses default libc-based memory manager.
  *
  * @param dest              <b>OUT</b>: Output destination
  * @param queryList         <b>IN</b>: Query list to convert
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryMallocExA
+ * @see uriComposeQueryMallocExMmA
  * @see uriComposeQueryA
  * @see uriDissectQueryMallocA
  * @since 0.7.0
@@ -801,6 +803,7 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
  * Converts a query list structure back to a query string.
  * Memory for this string is allocated internally.
  * The composed string does not start with '?'.
+ * Uses default libc-based memory manager.
  *
  * @param dest              <b>OUT</b>: Output destination
  * @param queryList         <b>IN</b>: Query list to convert
@@ -809,6 +812,7 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryMallocA
+ * @see uriComposeQueryMallocExMmA
  * @see uriComposeQueryExA
  * @see uriDissectQueryMallocExA
  * @since 0.7.0
@@ -816,6 +820,31 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
 int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
 		const URI_TYPE(QueryList) * queryList,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
+
+
+
+/**
+ * Converts a query list structure back to a query string.
+ * Memory for this string is allocated internally.
+ * The composed string does not start with '?'.
+ *
+ * @param dest              <b>OUT</b>: Output destination
+ * @param queryList         <b>IN</b>: Query list to convert
+ * @param spaceToPlus       <b>IN</b>: Whether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Whether to convert CR and LF to CR-LF or not.
+ * @param memory            <b>IN</b>: Memory manager to use
+ * @return                  Error code or 0 on success
+ *
+ * @see uriComposeQueryMallocA
+ * @see uriComposeQueryMallocExA
+ * @see uriComposeQueryExA
+ * @see uriDissectQueryMallocExA
+ * @since 0.8.7
+ */
+int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
+		const URI_TYPE(QueryList) * queryList,
+		UriBool spaceToPlus, UriBool normalizeBreaks,
+		UriMemoryManager * memory);
 
 
 
