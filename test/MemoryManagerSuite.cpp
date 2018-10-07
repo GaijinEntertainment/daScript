@@ -27,37 +27,86 @@
 
 namespace {
 
-static void * failingMalloc(UriMemoryManager * URI_UNUSED(memory),
-		size_t size) {
+class CallCountLog {
+public:
+	unsigned int callCountMalloc;
+	unsigned int callCountCalloc;
+	unsigned int callCountRealloc;
+	unsigned int callCountReallocarray;
+	unsigned int callCountFree;
+
+	CallCountLog() : callCountMalloc(0), callCountCalloc(0),
+			callCountRealloc(0), callCountReallocarray(0), callCountFree(0) {
+		// no-op
+	}
+};
+
+
+
+static void * failingMalloc(UriMemoryManager * memory, size_t size) {
+	static_cast<CallCountLog *>(memory->userData)->callCountMalloc++;
 	return NULL;
 }
 
 
 
-static void * failingCalloc(UriMemoryManager * URI_UNUSED(memory),
+static void * failingCalloc(UriMemoryManager * memory,
 		size_t nmemb, size_t size) {
+	static_cast<CallCountLog *>(memory->userData)->callCountCalloc++;
 	return NULL;
 }
 
 
 
-static void * failingRealloc(UriMemoryManager * URI_UNUSED(memory),
+static void * failingRealloc(UriMemoryManager * memory,
 		void * ptr, size_t size) {
+	static_cast<CallCountLog *>(memory->userData)->callCountRealloc++;
 	return NULL;
 }
 
 
 
-static void * failingReallocarray(UriMemoryManager * URI_UNUSED(memory),
+static void * failingReallocarray(UriMemoryManager * memory,
 		void * ptr, size_t nmemb, size_t size) {
+	static_cast<CallCountLog *>(memory->userData)->callCountReallocarray++;
 	return NULL;
 }
 
 
 
-static void failingFree(UriMemoryManager * URI_UNUSED(memory), void * ptr) {
+static void failingFree(UriMemoryManager * memory, void * ptr) {
+	static_cast<CallCountLog *>(memory->userData)->callCountFree++;
 	/* no-op */
 }
+
+
+
+class FailingMemoryManager : public UriMemoryManager {
+public:
+	FailingMemoryManager() {
+		this->malloc = failingMalloc;
+		this->calloc = failingCalloc,
+		this->realloc = failingRealloc,
+		this->reallocarray = failingReallocarray,
+		this->free = failingFree,
+
+		this->userData = new CallCountLog();
+
+		// Fail fast if deriving from C struct turns out a problem
+		// Move from inheritance to composition in that case
+		assert(sizeof(FailingMemoryManager) == sizeof(UriMemoryManager));
+	}
+
+	~FailingMemoryManager() {
+		delete getCallCountLog();
+		this->userData = NULL;
+	}
+
+private:
+	const CallCountLog * getCallCountLog() const {
+		return static_cast<CallCountLog *>(this->userData);
+	}
+};
 
 
 
@@ -69,17 +118,6 @@ static UriUriA parse(const char * sourceUriString) {
 	return uri;
 }
 
-
-
-static UriMemoryManager failingMemoryManager = {
-	failingMalloc,
-	failingCalloc,
-	failingRealloc,
-	failingReallocarray,
-	failingFree,
-	NULL  /* userData */
-};
-
 }  // namespace
 
 
@@ -89,6 +127,7 @@ TEST(FailingMemoryManagerSuite, AddBaseUriExMm) {
 	UriUriA relativeSource = parse("foo");
 	UriUriA absoluteBase = parse("http://example.org/bar");
 	const UriResolutionOptions options = URI_RESOLVE_STRICTLY;
+	FailingMemoryManager failingMemoryManager;
 
 	ASSERT_EQ(uriAddBaseUriExMmA(&absoluteDest, &relativeSource,
 			&absoluteBase, options, &failingMemoryManager),
@@ -103,6 +142,7 @@ TEST(FailingMemoryManagerSuite, AddBaseUriExMm) {
 TEST(FailingMemoryManagerSuite, NormalizeSyntaxExMm) {
 	UriUriA uri = parse("hTTp://example.org/path");
 	const unsigned int mask = URI_NORMALIZE_SCHEME;  // anything but URI_NORMALIZED
+	FailingMemoryManager failingMemoryManager;
 
 	ASSERT_EQ(uriNormalizeSyntaxExMmA(&uri, mask, &failingMemoryManager),
 			URI_ERROR_MALLOC);
