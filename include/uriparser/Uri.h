@@ -499,12 +499,14 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
  *
  * NOTE: If necessary the %URI becomes owner of all memory
  * behind the text pointed to. Text is duplicated in that case.
+ * Uses default libc-based memory manager.
  *
  * @param uri    <b>INOUT</b>: %URI to normalize
  * @param mask   <b>IN</b>: Normalization mask
  * @return       Error code or 0 on success
  *
  * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxExMmA
  * @see uriNormalizeSyntaxMaskRequiredA
  * @since 0.5.0
  */
@@ -513,15 +515,39 @@ int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
 
 
 /**
+ * Normalizes a %URI using a normalization mask.
+ * The normalization mask decides what components are normalized.
+ *
+ * NOTE: If necessary the %URI becomes owner of all memory
+ * behind the text pointed to. Text is duplicated in that case.
+ *
+ * @param uri    <b>INOUT</b>: %URI to normalize
+ * @param mask   <b>IN</b>: Normalization mask
+ * @param memory <b>IN</b>: Memory manager to use
+ * @return       Error code or 0 on success
+ *
+ * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxExA
+ * @see uriNormalizeSyntaxMaskRequiredA
+ * @since 0.8.7
+ */
+int URI_FUNC(NormalizeSyntaxExMm)(URI_TYPE(Uri) * uri, unsigned int mask,
+		UriMemoryManager * memory);
+
+
+
+/**
  * Normalizes all components of a %URI.
  *
  * NOTE: If necessary the %URI becomes owner of all memory
  * behind the text pointed to. Text is duplicated in that case.
+ * Uses default libc-based memory manager.
  *
  * @param uri   <b>INOUT</b>: %URI to normalize
  * @return      Error code or 0 on success
  *
  * @see uriNormalizeSyntaxExA
+ * @see uriNormalizeSyntaxExMmA
  * @see uriNormalizeSyntaxMaskRequiredA
  * @since 0.5.0
  */

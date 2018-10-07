@@ -71,6 +71,7 @@
 # include <uriparser/Uri.h>
 # include "UriNormalizeBase.h"
 # include "UriCommon.h"
+# include "UriMemory.h"
 #endif
 
 
@@ -487,7 +488,14 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri) {
 
 
 int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	return URI_FUNC(NormalizeSyntaxExMm)(uri, mask, NULL);
+}
+
+
+
+int URI_FUNC(NormalizeSyntaxExMm)(URI_TYPE(Uri) * uri, unsigned int mask,
+		UriMemoryManager * memory) {
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
 	return URI_FUNC(NormalizeSyntaxEngine)(uri, mask, NULL, memory);
 }
 
