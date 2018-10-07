@@ -867,9 +867,26 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
  *
  * @param queryList   <b>INOUT</b>: Query list to free
  *
+ * @see uriFreeQueryListMmA
  * @since 0.7.0
  */
 void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
+
+
+
+/**
+ * Frees all memory associated with the given query list.
+ * The structure itself is freed as well.
+ *
+ * @param queryList  <b>INOUT</b>: Query list to free
+ * @param memory     <b>IN</b>: Memory manager to use
+ * @return           Error code or 0 on success
+ *
+ * @see uriFreeQueryListA
+ * @since 0.8.7
+ */
+int URI_FUNC(FreeQueryListMm)(URI_TYPE(QueryList) * queryList,
+		UriMemoryManager * memory);
 
 
 

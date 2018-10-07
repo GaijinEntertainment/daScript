@@ -102,6 +102,10 @@ public:
 		this->userData = NULL;
 	}
 
+	unsigned int getCallCountFree() const {
+		return this->getCallCountLog()->callCountFree;
+	}
+
 private:
 	const CallCountLog * getCallCountLog() const {
 		return static_cast<CallCountLog *>(this->userData);
@@ -146,6 +150,19 @@ TEST(FailingMemoryManagerSuite, AddBaseUriExMm) {
 
 	uriFreeUriMembersA(&relativeSource);
 	uriFreeUriMembersA(&absoluteBase);
+}
+
+
+
+TEST(FailingMemoryManagerSuite, FreeQueryListMm) {
+	UriQueryListA * const queryList = parseQueryList("k1=v1");
+	FailingMemoryManager failingMemoryManager;
+	ASSERT_EQ(failingMemoryManager.getCallCountFree(), 0);
+
+	uriFreeQueryListMmA(queryList, &failingMemoryManager);
+
+	ASSERT_GE(failingMemoryManager.getCallCountFree(), 1);
+	uriFreeQueryListA(queryList);
 }
 
 

@@ -64,6 +64,7 @@
 #ifndef URI_DOXYGEN
 # include <uriparser/Uri.h>
 # include "UriCommon.h"
+# include "UriMemory.h"
 #endif
 
 
@@ -346,7 +347,14 @@ UriBool URI_FUNC(AppendQueryItem)(URI_TYPE(QueryList) ** prevNext,
 
 
 void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	URI_FUNC(FreeQueryListMm)(queryList, NULL);
+}
+
+
+
+int URI_FUNC(FreeQueryListMm)(URI_TYPE(QueryList) * queryList,
+		UriMemoryManager * memory) {
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
 	while (queryList != NULL) {
 		URI_TYPE(QueryList) * nextBackup = queryList->next;
 		memory->free(memory, (URI_CHAR *)queryList->key); /* const cast */
@@ -354,6 +362,7 @@ void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList) {
 		memory->free(memory, queryList);
 		queryList = nextBackup;
 	}
+	return URI_SUCCESS;
 }
 
 
