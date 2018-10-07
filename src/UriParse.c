@@ -2274,7 +2274,7 @@ int URI_FUNC(FreeUriMembersMm)(URI_TYPE(Uri) * uri, UriMemoryManager * memory) {
 
 
 UriBool URI_FUNC(_TESTING_ONLY_ParseIpSix)(const URI_CHAR * text) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	UriMemoryManager * const memory = &defaultMemoryManager;
 	URI_TYPE(Uri) uri;
 	URI_TYPE(ParserState) parser;
 	const URI_CHAR * const afterIpSix = text + URI_STRLEN(text);
