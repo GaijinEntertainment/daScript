@@ -349,7 +349,8 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
  * @param absoluteBase     <b>IN</b>: Base %URI to apply
  * @return                 Error code or 0 on success
  *
- * @see uriRemoveBaseUriA, uriAddBaseUriExA
+ * @see uriRemoveBaseUriA
+ * @see uriAddBaseUriExA
  * @since 0.4.0
  */
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
@@ -369,7 +370,8 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
  * @param options          <b>IN</b>: Configuration to apply
  * @return                 Error code or 0 on success
  *
- * @see uriRemoveBaseUriA, uriAddBaseUriA
+ * @see uriRemoveBaseUriA
+ * @see uriAddBaseUriA
  * @since 0.8.1
  */
 int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
@@ -395,7 +397,9 @@ int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
  * @param domainRootMode   <b>IN</b>: Create %URI with path relative to domain root
  * @return                 Error code or 0 on success
  *
- * @see uriRemoveBaseUriMm, uriAddBaseUriA, uriAddBaseUriExA
+ * @see uriRemoveBaseUriMm
+ * @see uriAddBaseUriA
+ * @see uriAddBaseUriExA
  * @since 0.5.2
  */
 int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
@@ -421,7 +425,9 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
  * @param memory           <b>IN</b>: Memory manager to use
  * @return                 Error code or 0 on success
  *
- * @see uriRemoveBaseUri, uriAddBaseUriA, uriAddBaseUriExA
+ * @see uriRemoveBaseUri
+ * @see uriAddBaseUriA
+ * @see uriAddBaseUriExA
  * @since 0.8.7
  */
 int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
