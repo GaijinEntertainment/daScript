@@ -295,12 +295,8 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
-	const int res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, URI_RESOLVE_STRICTLY, memory);
-	if ((res != URI_SUCCESS) && (absDest != NULL)) {
-		URI_FUNC(FreeUriMembers)(absDest);
-	}
-	return res;
+	const UriResolutionOptions options = URI_RESOLVE_STRICTLY;
+	return URI_FUNC(AddBaseUriEx)(absDest, relSource, absBase, options);
 }
 
 
