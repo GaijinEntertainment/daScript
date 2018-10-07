@@ -71,6 +71,7 @@
 # include <uriparser/Uri.h>
 # include <uriparser/UriIp4.h>
 # include "UriCommon.h"
+# include "UriMemory.h"
 # include "UriParseBase.h"
 #endif
 
@@ -2145,11 +2146,17 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state, const URI_CHAR * text) {
 
 
 void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	URI_FUNC(FreeUriMembersMm)(uri, NULL);
+}
 
+
+
+int URI_FUNC(FreeUriMembersMm)(URI_TYPE(Uri) * uri, UriMemoryManager * memory) {
 	if (uri == NULL) {
-		return;
+		return URI_ERROR_NULL;
 	}
+
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
 
 	if (uri->owner) {
 		/* Scheme */
@@ -2250,6 +2257,8 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 			uri->fragment.afterLast = NULL;
 		}
 	}
+
+	return URI_SUCCESS;
 }
 
 

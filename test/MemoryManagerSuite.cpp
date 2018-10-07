@@ -200,6 +200,19 @@ TEST(FailingMemoryManagerSuite, FreeQueryListMm) {
 
 
 
+TEST(FailingMemoryManagerSuite, FreeUriMembersMm) {
+	UriUriA uri = parse("http://example.org/");
+	FailingMemoryManager failingMemoryManager;
+	ASSERT_EQ(failingMemoryManager.getCallCountFree(), 0);
+
+	uriFreeUriMembersMmA(&uri, &failingMemoryManager);
+
+	ASSERT_GE(failingMemoryManager.getCallCountFree(), 1);
+	uriFreeUriMembersA(&uri);
+}
+
+
+
 TEST(FailingMemoryManagerSuite, NormalizeSyntaxExMm) {
 	UriUriA uri = parse("hTTp://example.org/path");
 	const unsigned int mask = URI_NORMALIZE_SCHEME;  // anything but URI_NORMALIZED

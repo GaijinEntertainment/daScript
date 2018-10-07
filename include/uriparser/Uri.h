@@ -238,12 +238,31 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
  * Frees all memory associated with the members
  * of the %URI structure. Note that the structure
  * itself is not freed, only its members.
+ * Uses default libc-based memory manager.
  *
  * @param uri   <b>INOUT</b>: %URI structure whose members should be freed
  *
+ * @see uriFreeUriMembersMmA
  * @since 0.3.0
  */
 void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
+
+
+
+/**
+ * Frees all memory associated with the members
+ * of the %URI structure. Note that the structure
+ * itself is not freed, only its members.
+ *
+ * @param uri     <b>INOUT</b>: %URI structure whose members should be freed
+ * @param memory  <b>IN</b>: Memory manager to use
+ * @return        0 on success, error code otherwise
+ *
+ * @see uriFreeUriMembersA
+ * @since 0.8.7
+ */
+int URI_FUNC(FreeUriMembersMm)(URI_TYPE(Uri) * uri,
+		UriMemoryManager * memory);
 
 
 
