@@ -392,7 +392,16 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion) {
-	UriMemoryManager * memory = NULL;  /* BROKEN TODO */
+	return URI_FUNC(DissectQueryMallocExMm)(dest, itemCount, first, afterLast,
+			plusToSpace, breakConversion, NULL);
+}
+
+
+
+int URI_FUNC(DissectQueryMallocExMm)(URI_TYPE(QueryList) ** dest, int * itemCount,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		UriBool plusToSpace, UriBreakConversion breakConversion,
+		UriMemoryManager * memory) {
 	const URI_CHAR * walk = first;
 	const URI_CHAR * keyFirst = first;
 	const URI_CHAR * keyAfter = NULL;
@@ -409,6 +418,8 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
 	if (first > afterLast) {
 		return URI_ERROR_RANGE_INVALID;
 	}
+
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
 
 	*dest = NULL;
 	*itemsAppended = 0;

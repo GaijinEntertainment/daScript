@@ -851,6 +851,7 @@ int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
 /**
  * Constructs a query list from the raw query string of a given URI.
  * On the way '+' is converted back to ' ', line breaks are not modified.
+ * Uses default libc-based memory manager.
  *
  * @param dest              <b>OUT</b>: Output destination
  * @param itemCount         <b>OUT</b>: Number of items found, can be NULL
@@ -859,12 +860,37 @@ int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
  * @return                  Error code or 0 on success
  *
  * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @see uriComposeQueryA
  * @see uriFreeQueryListA
  * @since 0.7.0
  */
 int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
+
+
+
+/**
+ * Constructs a query list from the raw query string of a given URI.
+ * Uses default libc-based memory manager.
+ *
+ * @param dest              <b>OUT</b>: Output destination
+ * @param itemCount         <b>OUT</b>: Number of items found, can be NULL
+ * @param first             <b>IN</b>: Pointer to first character <b>after</b> '?'
+ * @param afterLast         <b>IN</b>: Pointer to character after the last one still in
+ * @param plusToSpace       <b>IN</b>: Whether to convert '+' to ' ' or not
+ * @param breakConversion   <b>IN</b>: Line break conversion mode
+ * @return                  Error code or 0 on success
+ *
+ * @see uriDissectQueryMallocA
+ * @see uriDissectQueryMallocExMmA
+ * @see uriComposeQueryExA
+ * @see uriFreeQueryListA
+ * @since 0.7.0
+ */
+int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		UriBool plusToSpace, UriBreakConversion breakConversion);
 
 
 
@@ -877,16 +903,19 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * @param afterLast         <b>IN</b>: Pointer to character after the last one still in
  * @param plusToSpace       <b>IN</b>: Whether to convert '+' to ' ' or not
  * @param breakConversion   <b>IN</b>: Line break conversion mode
+ * @param memory            <b>IN</b>: Memory manager to use
  * @return                  Error code or 0 on success
  *
  * @see uriDissectQueryMallocA
+ * @see uriDissectQueryMallocExA
  * @see uriComposeQueryExA
  * @see uriFreeQueryListA
- * @since 0.7.0
+ * @since 0.8.7
  */
-int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
+int URI_FUNC(DissectQueryMallocExMm)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
-		UriBool plusToSpace, UriBreakConversion breakConversion);
+		UriBool plusToSpace, UriBreakConversion breakConversion,
+		UriMemoryManager * memory);
 
 
 

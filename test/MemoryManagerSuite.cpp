@@ -170,6 +170,23 @@ TEST(FailingMemoryManagerSuite, ComposeQueryMallocExMm) {
 
 
 
+TEST(FailingMemoryManagerSuite, DissectQueryMallocExMm) {
+	UriQueryListA * queryList;
+	int itemCount;
+	const char * const first = "k1=v1&k2=v2";
+	const char * const afterLast = first + strlen(first);
+	const UriBool plusToSpace = URI_TRUE;  // not of interest
+	const UriBreakConversion breakConversion = URI_BR_DONT_TOUCH;  // not o. i.
+	FailingMemoryManager failingMemoryManager;
+
+	ASSERT_EQ(uriDissectQueryMallocExMmA(&queryList, &itemCount,
+			first, afterLast, plusToSpace, breakConversion,
+			&failingMemoryManager),
+			URI_ERROR_MALLOC);
+}
+
+
+
 TEST(FailingMemoryManagerSuite, FreeQueryListMm) {
 	UriQueryListA * const queryList = parseQueryList("k1=v1");
 	FailingMemoryManager failingMemoryManager;
