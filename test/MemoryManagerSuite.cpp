@@ -75,9 +75,9 @@ static void * failingReallocarray(UriMemoryManager * memory,
 
 
 
-static void failingFree(UriMemoryManager * memory, void * URI_UNUSED(ptr)) {
+static void failingFree(UriMemoryManager * memory, void * ptr) {
 	static_cast<CallCountLog *>(memory->userData)->callCountFree++;
-	/* no-op */
+	free(ptr);
 }
 
 
@@ -196,7 +196,6 @@ TEST(FailingMemoryManagerSuite, FreeQueryListMm) {
 	uriFreeQueryListMmA(queryList, &failingMemoryManager);
 
 	ASSERT_GE(failingMemoryManager.getCallCountFree(), 1);
-	uriFreeQueryListA(queryList);
 }
 
 
