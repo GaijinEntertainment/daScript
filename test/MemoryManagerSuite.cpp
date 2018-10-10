@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 #include <uriparser/Uri.h>
+#include "../src/UriMemory.h"
 
 
 namespace {
@@ -127,6 +128,41 @@ static UriQueryListA * parseQueryList(const char * queryString) {
 }
 
 }  // namespace
+
+
+
+TEST(MiscMemoryManagerSuite, MemoryManagerIsComplete) {
+	UriUriA uri = parse("whatever");
+	UriMemoryManager memory;
+
+	memcpy(&memory, &defaultMemoryManager, sizeof(UriMemoryManager));
+	memory.malloc = NULL;
+	ASSERT_EQ(uriFreeUriMembersMmA(&uri, &memory),
+			  URI_ERROR_MEMORY_MANAGER_INCOMPLETE);
+
+	memcpy(&memory, &defaultMemoryManager, sizeof(UriMemoryManager));
+	memory.calloc = NULL;
+	ASSERT_EQ(uriFreeUriMembersMmA(&uri, &memory),
+			  URI_ERROR_MEMORY_MANAGER_INCOMPLETE);
+
+	memcpy(&memory, &defaultMemoryManager, sizeof(UriMemoryManager));
+	memory.realloc = NULL;
+	ASSERT_EQ(uriFreeUriMembersMmA(&uri, &memory),
+			  URI_ERROR_MEMORY_MANAGER_INCOMPLETE);
+
+	memcpy(&memory, &defaultMemoryManager, sizeof(UriMemoryManager));
+	memory.reallocarray = NULL;
+	ASSERT_EQ(uriFreeUriMembersMmA(&uri, &memory),
+			  URI_ERROR_MEMORY_MANAGER_INCOMPLETE);
+
+	memcpy(&memory, &defaultMemoryManager, sizeof(UriMemoryManager));
+	memory.free = NULL;
+	ASSERT_EQ(uriFreeUriMembersMmA(&uri, &memory),
+			  URI_ERROR_MEMORY_MANAGER_INCOMPLETE);
+
+	memcpy(&memory, &defaultMemoryManager, sizeof(UriMemoryManager));
+	ASSERT_EQ(uriFreeUriMembersMmA(&uri, &memory), URI_SUCCESS);
+}
 
 
 
