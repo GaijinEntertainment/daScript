@@ -43,7 +43,7 @@ public:
 
 
 
-static void * failingMalloc(UriMemoryManager * memory, size_t size) {
+static void * failingMalloc(UriMemoryManager * memory, size_t URI_UNUSED(size)) {
 	static_cast<CallCountLog *>(memory->userData)->callCountMalloc++;
 	return NULL;
 }
@@ -51,7 +51,7 @@ static void * failingMalloc(UriMemoryManager * memory, size_t size) {
 
 
 static void * failingCalloc(UriMemoryManager * memory,
-		size_t nmemb, size_t size) {
+		size_t URI_UNUSED(nmemb), size_t URI_UNUSED(size)) {
 	static_cast<CallCountLog *>(memory->userData)->callCountCalloc++;
 	return NULL;
 }
@@ -59,7 +59,7 @@ static void * failingCalloc(UriMemoryManager * memory,
 
 
 static void * failingRealloc(UriMemoryManager * memory,
-		void * ptr, size_t size) {
+		void * URI_UNUSED(ptr), size_t URI_UNUSED(size)) {
 	static_cast<CallCountLog *>(memory->userData)->callCountRealloc++;
 	return NULL;
 }
@@ -67,14 +67,15 @@ static void * failingRealloc(UriMemoryManager * memory,
 
 
 static void * failingReallocarray(UriMemoryManager * memory,
-		void * ptr, size_t nmemb, size_t size) {
+		void * URI_UNUSED(ptr), size_t URI_UNUSED(nmemb),
+		size_t URI_UNUSED(size)) {
 	static_cast<CallCountLog *>(memory->userData)->callCountReallocarray++;
 	return NULL;
 }
 
 
 
-static void failingFree(UriMemoryManager * memory, void * ptr) {
+static void failingFree(UriMemoryManager * memory, void * URI_UNUSED(ptr)) {
 	static_cast<CallCountLog *>(memory->userData)->callCountFree++;
 	/* no-op */
 }
