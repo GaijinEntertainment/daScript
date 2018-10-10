@@ -5,7 +5,7 @@
   * Fixed: Detect integer overflow in uriComposeQuery* and uriComposeQueryEx*
       Thanks to Google Autofuzz team for the report!
   * Fixed: Protect uriResetUri* against acting on NULL input
-  * Fixed: Be fully compliant to C89
+  * Fixed: Be fully compliant to C89 (and C++98 in test code)
   * Fixed: Fix off-by-one in uriComposeQueryCharsRequired* and ...Ex*
       Reported space requirements were 1 byte bigger than necessary
   * Added: Support for custom memory managers (see Uri.h or Doxygen output)

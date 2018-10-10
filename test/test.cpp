@@ -1710,8 +1710,8 @@ TEST(UriSuite, TestQueryDissectionBug3590761) {
 }
 
 TEST(UriSuite, TestQueryCompositionMathCalc) {
-		UriQueryListA second = { .key = "k2", .value = "v2", .next = NULL };
-		UriQueryListA first = { .key = "k1", .value = "v1", .next = &second };
+		UriQueryListA second = { /*.key =*/ "k2", /*.value =*/ "v2", /*.next =*/ NULL };
+		UriQueryListA first = { /*.key =*/ "k1", /*.value =*/ "v1", /*.next =*/ &second };
 
 		int charsRequired;
 		ASSERT_TRUE(uriComposeQueryCharsRequiredA(&first, &charsRequired)
@@ -1726,8 +1726,8 @@ TEST(UriSuite, TestQueryCompositionMathCalc) {
 }
 
 TEST(UriSuite, TestQueryCompositionMathWriteGoogleAutofuzz113244572) {
-		UriQueryListA second = { .key = "\x11", .value = NULL, .next = NULL };
-		UriQueryListA first = { .key = "\x01", .value = "\x02", .next = &second };
+		UriQueryListA second = { /*.key =*/ "\x11", /*.value =*/ NULL, /*.next =*/ NULL };
+		UriQueryListA first = { /*.key =*/ "\x01", /*.value =*/ "\x02", /*.next =*/ &second };
 
 		const UriBool spaceToPlus = URI_TRUE;
 		const UriBool normalizeBreaks = URI_FALSE;  /* for factor 3 but 6 */
