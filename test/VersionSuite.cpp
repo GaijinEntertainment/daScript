@@ -35,7 +35,6 @@ TEST(VersionSuite, EnsureVersionDefinesInSync) {
 	const int bytes_printed = asprintf(&INSIDE_VERSION, "%d.%d.%d%s",
 			URI_VER_MAJOR, URI_VER_MINOR, URI_VER_RELEASE, URI_VER_SUFFIX_ANSI);
 	ASSERT_TRUE(bytes_printed != -1);
-	printf("bytes_printed: %d\n", bytes_printed);
 
 	const bool equal = !strcmp(INSIDE_VERSION, PACKAGE_VERSION);
 	if (! equal) {
