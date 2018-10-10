@@ -6,6 +6,29 @@
       Reported space requirements were 1 byte bigger than necessary
   * Fixed: Detect integer overflow in uriComposeQuery* and uriComposeQueryEx*
       Thanks to Google Autofuzz team for the report!
+  * Fixed: Protect uriResetUri* against acting on NULL input
+  * Added: Support for custom memory managers (see Uri.h or Doxygen output)
+      New functions:
+        uriAddBaseUriExMm[AW]
+        uriComposeQueryMallocExMm[AW]
+        uriDissectQueryMallocExMm[AW]
+        uriFreeQueryListMm[AW]
+        uriFreeUriMembersMm[AW]
+        uriNormalizeSyntaxExMm[AW]
+        uriParseUriExMm[AW]
+        uriRemoveBaseUriMm[AW]
+      New error codes:
+        URI_ERROR_MEMORY_MANAGER_INCOMPLETE
+      New types:
+        UriMemoryManager
+        UriFuncMalloc
+        UriFuncCalloc
+        UriFuncRealloc
+        UriFuncReallocarray
+        UriFuncFree
+  * Added: Add non-void versions of uriNormalizeSyntaxMaskRequired*
+      New functions:
+        uriNormalizeSyntaxMaskRequiredEx[AW]
   * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
   * TODO BUMP SONAME
 
