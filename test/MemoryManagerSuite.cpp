@@ -75,34 +75,27 @@ static void countingFree(UriMemoryManager * memory, void * ptr) {
 
 
 
-class FailingMemoryManager : public UriMemoryManager {
+class FailingMemoryManager {
+private:
+	UriMemoryManager memoryManager;
+	CallCountLog callCountLog;
+
 public:
 	FailingMemoryManager() {
-		this->malloc = failingMalloc;
-		this->calloc = failingCalloc,
-		this->realloc = failingRealloc,
-		this->reallocarray = failingReallocarray,
-		this->free = countingFree,
-
-		this->userData = new CallCountLog();
-
-		// Fail fast if deriving from C struct turns out a problem
-		// Move from inheritance to composition in that case
-		assert(sizeof(FailingMemoryManager) == sizeof(UriMemoryManager));
+		this->memoryManager.malloc = failingMalloc;
+		this->memoryManager.calloc = failingCalloc;
+		this->memoryManager.realloc = failingRealloc;
+		this->memoryManager.reallocarray = failingReallocarray;
+		this->memoryManager.free = countingFree;
+		this->memoryManager.userData = &(this->callCountLog);
 	}
 
-	~FailingMemoryManager() {
-		delete getCallCountLog();
-		this->userData = NULL;
+	UriMemoryManager * operator&() {
+		return &(this->memoryManager);
 	}
 
 	unsigned int getCallCountFree() const {
-		return this->getCallCountLog()->callCountFree;
-	}
-
-private:
-	const CallCountLog * getCallCountLog() const {
-		return static_cast<CallCountLog *>(this->userData);
+		return this->callCountLog.callCountFree;
 	}
 };
 
