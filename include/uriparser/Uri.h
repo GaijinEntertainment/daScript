@@ -226,7 +226,7 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
  * @param state       <b>INOUT</b>: Parser state with set output %URI, must not be NULL
  * @param first       <b>IN</b>: Pointer to the first character to parse, must not be NULL
  * @param afterLast   <b>IN</b>: Pointer to the character after the last to parse, must not be NULL
- * @param memory      <b>IN</b>: Memory manager to use
+ * @param memory      <b>IN</b>: Memory manager to use, NULL for default libc
  * @return            0 on success, error code otherwise
  *
  * @see uriParseUriA
@@ -279,7 +279,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * itself is not freed, only its members.
  *
  * @param uri     <b>INOUT</b>: %URI structure whose members should be freed
- * @param memory  <b>IN</b>: Memory manager to use
+ * @param memory  <b>IN</b>: Memory manager to use, NULL for default libc
  * @return        0 on success, error code otherwise
  *
  * @see uriFreeUriMembersA
@@ -437,7 +437,7 @@ int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
  * @param relativeSource   <b>IN</b>: Reference to resolve
  * @param absoluteBase     <b>IN</b>: Base %URI to apply
  * @param options          <b>IN</b>: Configuration to apply
- * @param memory           <b>IN</b>: Memory manager to use
+ * @param memory           <b>IN</b>: Memory manager to use, NULL for default libc
  * @return                 Error code or 0 on success
  *
  * @see uriRemoveBaseUriA
@@ -493,7 +493,7 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
  * @param absoluteSource   <b>IN</b>: Absolute %URI to make relative
  * @param absoluteBase     <b>IN</b>: Base %URI
  * @param domainRootMode   <b>IN</b>: Create %URI with path relative to domain root
- * @param memory           <b>IN</b>: Memory manager to use
+ * @param memory           <b>IN</b>: Memory manager to use, NULL for default libc
  * @return                 Error code or 0 on success
  *
  * @see uriRemoveBaseUri
@@ -617,7 +617,7 @@ int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
  *
  * @param uri    <b>INOUT</b>: %URI to normalize
  * @param mask   <b>IN</b>: Normalization mask
- * @param memory <b>IN</b>: Memory manager to use
+ * @param memory <b>IN</b>: Memory manager to use, NULL for default libc
  * @return       Error code or 0 on success
  *
  * @see uriNormalizeSyntaxA
@@ -875,7 +875,7 @@ int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
  * @param queryList         <b>IN</b>: Query list to convert
  * @param spaceToPlus       <b>IN</b>: Whether to convert ' ' to '+' or not
  * @param normalizeBreaks   <b>IN</b>: Whether to convert CR and LF to CR-LF or not.
- * @param memory            <b>IN</b>: Memory manager to use
+ * @param memory            <b>IN</b>: Memory manager to use, NULL for default libc
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryMallocA
@@ -946,7 +946,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * @param afterLast         <b>IN</b>: Pointer to character after the last one still in
  * @param plusToSpace       <b>IN</b>: Whether to convert '+' to ' ' or not
  * @param breakConversion   <b>IN</b>: Line break conversion mode
- * @param memory            <b>IN</b>: Memory manager to use
+ * @param memory            <b>IN</b>: Memory manager to use, NULL for default libc
  * @return                  Error code or 0 on success
  *
  * @see uriDissectQueryMallocA
@@ -980,7 +980,7 @@ void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
  * The structure itself is freed as well.
  *
  * @param queryList  <b>INOUT</b>: Query list to free
- * @param memory     <b>IN</b>: Memory manager to use
+ * @param memory     <b>IN</b>: Memory manager to use, NULL for default libc
  * @return           Error code or 0 on success
  *
  * @see uriFreeQueryListA
