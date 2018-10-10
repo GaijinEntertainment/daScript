@@ -4,13 +4,14 @@
 language: cpp
 dist: trusty
 
-env:
-  global:
-    - CFLAGS='-g -pipe'
-
 addons:
   apt:
+    sources:
+    # Clang 7:
+      - llvm-toolchain-trusty-7
+      - ubuntu-toolchain-r-test
     packages:
+      - clang-7
       - doxygen
       - graphviz
     # For building gtest:
@@ -27,6 +28,30 @@ script:
       && make
       && make install )
     && export PKG_CONFIG_PATH="$(find "${GTEST_PREFIX}" -type d -name pkgconfig)"
+  - sed 's,-I,-isystem ,g' -i "${PKG_CONFIG_PATH}"/gtest.pc  # suppress compile warnings
   - ./autogen.sh
-  - ./configure
-  - make distcheck
+  - compile_flags=(
+        -pipe
+
+        -O1
+        -g
+        -fsanitize=address
+        -fno-omit-frame-pointer
+
+        -Wall
+        -Wextra
+        -pedantic
+
+        -Werror
+    )
+    && configure_args=(
+        CC=clang-7
+        CXX=clang++-7
+        CFLAGS="${compile_flags[*]} -std=c89"
+        CXXFLAGS="${compile_flags[*]} -std=c++98"
+        LDFLAGS='-g -fsanitize=address'
+    )
+    && ./configure "${configure_args[@]}"
+  - make
+  - make check && cat test/uriparser_test.log
+  - make distcheck  # without Address Sanitizer
