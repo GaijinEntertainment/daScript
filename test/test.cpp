@@ -1989,6 +1989,10 @@ namespace {
 			ASSERT_TRUE(0);
 		}
 		free(buffer);
+
+		uriFreeUriMembersA(&absSource);
+		uriFreeUriMembersA(&absBase);
+		uriFreeUriMembersA(&dest);
 	}
 }  // namespace
 
