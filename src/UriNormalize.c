@@ -485,13 +485,20 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri) {
 int URI_FUNC(NormalizeSyntaxMaskRequiredEx)(const URI_TYPE(Uri) * uri,
 		unsigned int * outMask) {
 	UriMemoryManager * const memory = NULL;  /* no use of memory manager */
+
+#if defined(__GNUC__) && ((__GNUC__ > 4) \
+		|| ((__GNUC__ == 4) && defined(__GNUC_MINOR__) && (__GNUC_MINOR__ >= 2)))
+	/* Slower code that fixes a warning, not sure if this is a smart idea */
+	URI_TYPE(Uri) writeableClone;
+#endif
+
 	if ((uri == NULL) || (outMask == NULL)) {
 		return URI_ERROR_NULL;
 	}
+
 #if defined(__GNUC__) && ((__GNUC__ > 4) \
-        || ((__GNUC__ == 4) && defined(__GNUC_MINOR__) && (__GNUC_MINOR__ >= 2)))
-    /* Slower code that fixes a warning, not sure if this is a smart idea */
-	URI_TYPE(Uri) writeableClone;
+		|| ((__GNUC__ == 4) && defined(__GNUC_MINOR__) && (__GNUC_MINOR__ >= 2)))
+	/* Slower code that fixes a warning, not sure if this is a smart idea */
 	memcpy(&writeableClone, uri, 1 * sizeof(URI_TYPE(Uri)));
 	URI_FUNC(NormalizeSyntaxEngine)(&writeableClone, 0, outMask, memory);
 #else
