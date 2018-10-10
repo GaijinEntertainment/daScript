@@ -61,68 +61,68 @@
 
 
 static void * uriDefaultMalloc(UriMemoryManager * URI_UNUSED(memory),
-        size_t size) {
-    return malloc(size);
+		size_t size) {
+	return malloc(size);
 }
 
 
 
 static void * uriDefaultCalloc(UriMemoryManager * URI_UNUSED(memory),
-        size_t nmemb, size_t size) {
-    return calloc(nmemb, size);
+		size_t nmemb, size_t size) {
+	return calloc(nmemb, size);
 }
 
 
 
 static void * uriDefaultRealloc(UriMemoryManager * URI_UNUSED(memory),
-        void * ptr, size_t size) {
-    return realloc(ptr, size);
+		void * ptr, size_t size) {
+	return realloc(ptr, size);
 }
 
 
 
 static void * uriDefaultReallocarray(UriMemoryManager * URI_UNUSED(memory),
-        void * ptr, size_t nmemb, size_t size) {
+		void * ptr, size_t nmemb, size_t size) {
 #if HAVE_REALLOCARRAY
-    return reallocarray(ptr, nmemb, size);
+	return reallocarray(ptr, nmemb, size);
 #else
-    const size_t total_size = nmemb * size;
+	const size_t total_size = nmemb * size;
 
-    /* check for unsigned overflow */
-    if ((nmemb != 0) && (total_size / nmemb != size)) {
-        errno = ENOMEM;
-        return NULL;
-    }
+	/* check for unsigned overflow */
+	if ((nmemb != 0) && (total_size / nmemb != size)) {
+		errno = ENOMEM;
+		return NULL;
+	}
 
-    return realloc(ptr, total_size);
+	return realloc(ptr, total_size);
 #endif
 }
 
 
 
 static void uriDefaultFree(UriMemoryManager * URI_UNUSED(memory),
-        void * ptr) {
-    free(ptr);
+		void * ptr) {
+	free(ptr);
 }
 
 
 
 UriBool uriMemoryManagerIsComplete(const UriMemoryManager * memory) {
-    return (memory
-            && memory->malloc
-            && memory->calloc
-            && memory->realloc
-            && memory->reallocarray
-            && memory->free) ? URI_TRUE : URI_FALSE;
+	return (memory
+			&& memory->malloc
+			&& memory->calloc
+			&& memory->realloc
+			&& memory->reallocarray
+			&& memory->free) ? URI_TRUE : URI_FALSE;
 }
 
 
 
 /*extern*/ UriMemoryManager defaultMemoryManager = {
-    uriDefaultMalloc,
-    uriDefaultCalloc,
-    uriDefaultRealloc,
-    uriDefaultReallocarray,
-    uriDefaultFree,
-    NULL  /* userData */
+	uriDefaultMalloc,
+	uriDefaultCalloc,
+	uriDefaultRealloc,
+	uriDefaultReallocarray,
+	uriDefaultFree,
+	NULL  /* userData */
 };
