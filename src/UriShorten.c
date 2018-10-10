@@ -314,7 +314,7 @@ int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
 	res = URI_FUNC(RemoveBaseUriImpl)(dest, absSource,
 			absBase, domainRootMode, memory);
 	if ((res != URI_SUCCESS) && (dest != NULL)) {
-		URI_FUNC(FreeUriMembers)(dest);
+		URI_FUNC(FreeUriMembersMm)(dest, memory);
 	}
 	return res;
 }

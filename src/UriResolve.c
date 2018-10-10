@@ -319,7 +319,7 @@ int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absDest,
 
 	res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, options, memory);
 	if ((res != URI_SUCCESS) && (absDest != NULL)) {
-		URI_FUNC(FreeUriMembers)(absDest);
+		URI_FUNC(FreeUriMembersMm)(absDest, memory);
 	}
 	return res;
 }
