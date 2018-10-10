@@ -468,7 +468,7 @@ int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absoluteDest,
  * @param domainRootMode   <b>IN</b>: Create %URI with path relative to domain root
  * @return                 Error code or 0 on success
  *
- * @see uriRemoveBaseUriMm
+ * @see uriRemoveBaseUriMmA
  * @see uriAddBaseUriA
  * @see uriAddBaseUriExA
  * @since 0.5.2
@@ -496,7 +496,7 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
  * @param memory           <b>IN</b>: Memory manager to use, NULL for default libc
  * @return                 Error code or 0 on success
  *
- * @see uriRemoveBaseUri
+ * @see uriRemoveBaseUriA
  * @see uriAddBaseUriA
  * @see uriAddBaseUriExA
  * @since 0.8.7
