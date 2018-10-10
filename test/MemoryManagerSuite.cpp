@@ -29,53 +29,45 @@ namespace {
 
 class CallCountLog {
 public:
-	unsigned int callCountMalloc;
-	unsigned int callCountCalloc;
-	unsigned int callCountRealloc;
-	unsigned int callCountReallocarray;
 	unsigned int callCountFree;
 
-	CallCountLog() : callCountMalloc(0), callCountCalloc(0),
-			callCountRealloc(0), callCountReallocarray(0), callCountFree(0) {
+	CallCountLog() : callCountFree(0) {
 		// no-op
 	}
 };
 
 
 
-static void * failingMalloc(UriMemoryManager * memory, size_t URI_UNUSED(size)) {
-	static_cast<CallCountLog *>(memory->userData)->callCountMalloc++;
+static void * failingMalloc(UriMemoryManager * URI_UNUSED(memory),
+		size_t URI_UNUSED(size)) {
 	return NULL;
 }
 
 
 
-static void * failingCalloc(UriMemoryManager * memory,
+static void * failingCalloc(UriMemoryManager * URI_UNUSED(memory),
 		size_t URI_UNUSED(nmemb), size_t URI_UNUSED(size)) {
-	static_cast<CallCountLog *>(memory->userData)->callCountCalloc++;
 	return NULL;
 }
 
 
 
-static void * failingRealloc(UriMemoryManager * memory,
+static void * failingRealloc(UriMemoryManager * URI_UNUSED(memory),
 		void * URI_UNUSED(ptr), size_t URI_UNUSED(size)) {
-	static_cast<CallCountLog *>(memory->userData)->callCountRealloc++;
 	return NULL;
 }
 
 
 
-static void * failingReallocarray(UriMemoryManager * memory,
+static void * failingReallocarray(UriMemoryManager * URI_UNUSED(memory),
 		void * URI_UNUSED(ptr), size_t URI_UNUSED(nmemb),
 		size_t URI_UNUSED(size)) {
-	static_cast<CallCountLog *>(memory->userData)->callCountReallocarray++;
 	return NULL;
 }
 
 
 
-static void failingFree(UriMemoryManager * memory, void * ptr) {
+static void countingFree(UriMemoryManager * memory, void * ptr) {
 	static_cast<CallCountLog *>(memory->userData)->callCountFree++;
 	free(ptr);
 }
@@ -89,7 +81,7 @@ public:
 		this->calloc = failingCalloc,
 		this->realloc = failingRealloc,
 		this->reallocarray = failingReallocarray,
-		this->free = failingFree,
+		this->free = countingFree,
 
 		this->userData = new CallCountLog();
 
