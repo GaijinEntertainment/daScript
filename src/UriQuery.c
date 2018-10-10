@@ -440,7 +440,7 @@ int URI_FUNC(DissectQueryMallocExMm)(URI_TYPE(QueryList) ** dest, int * itemCoun
 					== URI_FALSE) {
 				/* Free list we built */
 				*itemsAppended = 0;
-				URI_FUNC(FreeQueryList)(*dest);
+				URI_FUNC(FreeQueryListMm)(*dest, memory);
 				return URI_ERROR_MALLOC;
 			}
 
@@ -489,7 +489,7 @@ int URI_FUNC(DissectQueryMallocExMm)(URI_TYPE(QueryList) ** dest, int * itemCoun
 			== URI_FALSE) {
 		/* Free list we built */
 		*itemsAppended = 0;
-		URI_FUNC(FreeQueryList)(*dest);
+		URI_FUNC(FreeQueryListMm)(*dest, memory);
 		return URI_ERROR_MALLOC;
 	}
 
