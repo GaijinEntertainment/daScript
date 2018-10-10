@@ -144,7 +144,10 @@ typedef struct URI_TYPE(HostDataStruct) {
  * Missing components can be {NULL, NULL} ranges.
  *
  * @see uriParseUriA
+ * @see uriParseUriExA
+ * @see uriParseUriExMmA
  * @see uriFreeUriMembersA
+ * @see uriFreeUriMembersMmA
  * @see UriParserStateA
  * @since 0.3.0
  */
@@ -173,6 +176,7 @@ typedef struct URI_TYPE(UriStruct) {
  * a components absence.
  *
  * @see uriFreeUriMembersA
+ * @see uriFreeUriMembersMmA
  * @since 0.3.0
  */
 typedef struct URI_TYPE(ParserStateStruct) {
@@ -394,6 +398,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
  * @return                 Error code or 0 on success
  *
  * @see uriRemoveBaseUriA
+ * @see uriRemoveBaseUriMmA
  * @see uriAddBaseUriExA
  * @see uriAddBaseUriExMmA
  * @since 0.4.0
@@ -441,6 +446,7 @@ int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
  * @return                 Error code or 0 on success
  *
  * @see uriRemoveBaseUriA
+ * @see uriRemoveBaseUriMmA
  * @see uriAddBaseUriA
  * @see uriAddBaseUriExA
  * @since 0.8.7
@@ -471,6 +477,7 @@ int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absoluteDest,
  * @see uriRemoveBaseUriMmA
  * @see uriAddBaseUriA
  * @see uriAddBaseUriExA
+ * @see uriAddBaseUriExMmA
  * @since 0.5.2
  */
 int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
@@ -499,6 +506,7 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
  * @see uriRemoveBaseUriA
  * @see uriAddBaseUriA
  * @see uriAddBaseUriExA
+ * @see uriAddBaseUriExMmA
  * @since 0.8.7
  */
 int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
@@ -564,6 +572,8 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
  * @return      Normalization job mask
  *
  * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxExA
+ * @see uriNormalizeSyntaxExMmA
  * @see uriNormalizeSyntaxMaskRequiredExA
  * @since 0.5.0
  */
@@ -579,6 +589,8 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
  * @return         Error code or 0 on success
  *
  * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxExA
+ * @see uriNormalizeSyntaxExMmA
  * @see uriNormalizeSyntaxMaskRequiredA
  * @since 0.8.7
  */
@@ -786,8 +798,12 @@ int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
  *
  * @see uriComposeQueryExA
  * @see uriComposeQueryMallocA
+ * @see uriComposeQueryMallocExA
+ * @see uriComposeQueryMallocExMmA
  * @see uriComposeQueryCharsRequiredA
  * @see uriDissectQueryMallocA
+ * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
@@ -808,9 +824,13 @@ int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryA
+ * @see uriComposeQueryMallocA
  * @see uriComposeQueryMallocExA
+ * @see uriComposeQueryMallocExMmA
  * @see uriComposeQueryCharsRequiredExA
+ * @see uriDissectQueryMallocA
  * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
@@ -835,6 +855,8 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
  * @see uriComposeQueryMallocExMmA
  * @see uriComposeQueryA
  * @see uriDissectQueryMallocA
+ * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
@@ -857,7 +879,9 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
  * @see uriComposeQueryMallocA
  * @see uriComposeQueryMallocExMmA
  * @see uriComposeQueryExA
+ * @see uriDissectQueryMallocA
  * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
@@ -881,7 +905,9 @@ int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
  * @see uriComposeQueryMallocA
  * @see uriComposeQueryMallocExA
  * @see uriComposeQueryExA
+ * @see uriDissectQueryMallocA
  * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @since 0.8.7
  */
 int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
@@ -906,6 +932,7 @@ int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
  * @see uriDissectQueryMallocExMmA
  * @see uriComposeQueryA
  * @see uriFreeQueryListA
+ * @see uriFreeQueryListMmA
  * @since 0.7.0
  */
 int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
@@ -953,6 +980,7 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * @see uriDissectQueryMallocExA
  * @see uriComposeQueryExA
  * @see uriFreeQueryListA
+ * @see uriFreeQueryListMmA
  * @since 0.8.7
  */
 int URI_FUNC(DissectQueryMallocExMm)(URI_TYPE(QueryList) ** dest, int * itemCount,
