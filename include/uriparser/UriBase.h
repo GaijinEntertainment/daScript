@@ -154,22 +154,45 @@ typedef struct UriIp6Struct {
 } UriIp6; /**< @copydoc UriIp6Struct */
 
 
-struct UriMemoryManagerStruct;
+struct UriMemoryManagerStruct;  /* foward declaration to break loop */
 
+
+/**
+ * Function signature that custom malloc(3) functions must conform to
+ */
 typedef void * (*UriFuncMalloc)(struct UriMemoryManagerStruct *, size_t);
+
+/**
+ * Function signature that custom calloc(3) functions must conform to
+ */
 typedef void * (*UriFuncCalloc)(struct UriMemoryManagerStruct *, size_t, size_t);
+
+/**
+ * Function signature that custom realloc(3) functions must conform to
+ */
 typedef void * (*UriFuncRealloc)(struct UriMemoryManagerStruct *, void *, size_t);
+
+/**
+ * Function signature that custom reallocarray(3) functions must conform to
+ */
 typedef void * (*UriFuncReallocarray)(struct UriMemoryManagerStruct *, void *, size_t, size_t);
+
+/**
+ * Function signature that custom free(3) functions must conform to
+ */
 typedef void (*UriFuncFree)(struct UriMemoryManagerStruct *, void *);
 
 
+/**
+ * Class-like interface of custom memory managers
+ */
 typedef struct UriMemoryManagerStruct {
-	UriFuncMalloc malloc;
-	UriFuncCalloc calloc;
-	UriFuncRealloc realloc;
-	UriFuncReallocarray reallocarray;
-	UriFuncFree free;
-	void * userData;
+	UriFuncMalloc malloc; /**< Pointer to custom malloc(3) */
+	UriFuncCalloc calloc; /**< Pointer to custom calloc(3); emulate using malloc and memset if needed */
+	UriFuncRealloc realloc; /**< Pointer to custom realloc(3) */
+	UriFuncReallocarray reallocarray; /**< Pointer to custom reallocarray(3); emulate using realloc if needed */
+	UriFuncFree free; /**< Pointer to custom free(3) */
+	void * userData; /**< Pointer to data that the other function members need access to */
 } UriMemoryManager; /**< @copydoc UriMemoryManagerStruct */
 
 
