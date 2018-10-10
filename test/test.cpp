@@ -1718,7 +1718,7 @@ TEST(UriSuite, TestQueryCompositionMathCalc) {
 				== URI_SUCCESS);
 
 		const int FACTOR = 6;  /* due to escaping with normalizeBreaks */
-		ASSERT_TRUE(charsRequired ==
+		ASSERT_TRUE((unsigned)charsRequired ==
 			FACTOR * strlen(first.key) + 1 + FACTOR * strlen(first.value)
 			+ 1
 			+ FACTOR * strlen(second.key) + 1 + FACTOR * strlen(second.value)
