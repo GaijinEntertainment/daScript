@@ -436,7 +436,7 @@ int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
 /**
  * Performs reference resolution as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
- * NOTE: On success you have to call uriFreeUriMembersA on \p absoluteDest manually later.
+ * NOTE: On success you have to call uriFreeUriMembersMmA on \p absoluteDest manually later.
  *
  * @param absoluteDest     <b>OUT</b>: Result %URI
  * @param relativeSource   <b>IN</b>: Reference to resolve
@@ -493,7 +493,7 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
  * relative if the absolute %URI and base %UI share both scheme and authority.
  * If that is not the case, the result will still be
  * an absolute URI (with scheme part if necessary).
- * NOTE: On success you have to call uriFreeUriMembersA on
+ * NOTE: On success you have to call uriFreeUriMembersMmA on
  * \p dest manually later.
  *
  * @param dest             <b>OUT</b>: Result %URI
