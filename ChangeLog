@@ -2,11 +2,11 @@
 
   * Fixed: Out-of-bounds write in uriComposeQuery* and uriComposeQueryEx*
       Thanks to Google Autofuzz team for the report!
-  * Fixed: Fix off-by-one in uriComposeQueryCharsRequired* and ...Ex*
-      Reported space requirements were 1 byte bigger than necessary
   * Fixed: Detect integer overflow in uriComposeQuery* and uriComposeQueryEx*
       Thanks to Google Autofuzz team for the report!
   * Fixed: Protect uriResetUri* against acting on NULL input
+  * Fixed: Fix off-by-one in uriComposeQueryCharsRequired* and ...Ex*
+      Reported space requirements were 1 byte bigger than necessary
   * Added: Support for custom memory managers (see Uri.h or Doxygen output)
       New functions:
         uriAddBaseUriExMm[AW]
