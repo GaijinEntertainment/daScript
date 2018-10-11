@@ -22,15 +22,15 @@
         uriRemoveBaseUriMm[AW]
         uriTestMemoryManager
       New error codes:
-        URI_ERROR_MEMORY_MANAGER_INCOMPLETE
         URI_ERROR_MEMORY_MANAGER_FAULTY
+        URI_ERROR_MEMORY_MANAGER_INCOMPLETE
       New types:
-        UriMemoryManager
-        UriFuncMalloc
         UriFuncCalloc
+        UriFuncFree
+        UriFuncMalloc
         UriFuncRealloc
         UriFuncReallocarray
-        UriFuncFree
+        UriMemoryManager
   * Added: Add non-void versions of uriNormalizeSyntaxMaskRequired*
       New functions:
         uriNormalizeSyntaxMaskRequiredEx[AW]
