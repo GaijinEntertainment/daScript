@@ -207,7 +207,7 @@ typedef struct UriMemoryManagerStruct {
 	UriFuncMalloc malloc; /**< Pointer to custom malloc(3) */
 	UriFuncCalloc calloc; /**< Pointer to custom calloc(3); to emulate using malloc and memset see uriEmulateCalloc */
 	UriFuncRealloc realloc; /**< Pointer to custom realloc(3) */
-	UriFuncReallocarray reallocarray; /**< Pointer to custom reallocarray(3); to emulate using realloc uriEmulateReallocarray */
+	UriFuncReallocarray reallocarray; /**< Pointer to custom reallocarray(3); to emulate using realloc see uriEmulateReallocarray */
 	UriFuncFree free; /**< Pointer to custom free(3) */
 	void * userData; /**< Pointer to data that the other function members need access to */
 } UriMemoryManager; /**< @copydoc UriMemoryManagerStruct */
