@@ -23,6 +23,7 @@
         uriTestMemoryManager
       New error codes:
         URI_ERROR_MEMORY_MANAGER_INCOMPLETE
+        URI_ERROR_MEMORY_MANAGER_FAULTY
       New types:
         UriMemoryManager
         UriFuncMalloc
