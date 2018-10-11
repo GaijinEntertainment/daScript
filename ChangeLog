@@ -13,11 +13,14 @@
         uriAddBaseUriExMm[AW]
         uriComposeQueryMallocExMm[AW]
         uriDissectQueryMallocExMm[AW]
+        uriEmulateCalloc
+        uriEmulateReallocarray
         uriFreeQueryListMm[AW]
         uriFreeUriMembersMm[AW]
         uriNormalizeSyntaxExMm[AW]
         uriParseUriExMm[AW]
         uriRemoveBaseUriMm[AW]
+        uriTestMemoryManager
       New error codes:
         URI_ERROR_MEMORY_MANAGER_INCOMPLETE
       New types:

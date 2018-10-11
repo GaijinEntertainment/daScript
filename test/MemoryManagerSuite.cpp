@@ -20,6 +20,7 @@
  */
 
 #include <cassert>
+#include <cstring>  // memcpy
 #include <gtest/gtest.h>
 
 #include <uriparser/Uri.h>
@@ -155,6 +156,49 @@ TEST(MiscMemoryManagerSuite, MemoryManagerIsComplete) {
 
 	memcpy(&memory, &defaultMemoryManager, sizeof(UriMemoryManager));
 	ASSERT_EQ(uriFreeUriMembersMmA(&uri, &memory), URI_SUCCESS);
+}
+
+
+
+TEST(MemoryManagerTestingSuite, DefaultMemoryManager) {
+	ASSERT_EQ(uriTestMemoryManager(&defaultMemoryManager), URI_SUCCESS);
+}
+
+
+
+TEST(MemoryManagerTestingSuite, EmulateCalloc) {
+	UriMemoryManager partialEmulationMemoryManager;
+	memcpy(&partialEmulationMemoryManager, &defaultMemoryManager,
+			sizeof(UriMemoryManager));
+	partialEmulationMemoryManager.calloc = uriEmulateCalloc;
+
+	ASSERT_EQ(uriTestMemoryManager(&partialEmulationMemoryManager),
+			URI_SUCCESS);
+}
+
+
+
+TEST(MemoryManagerTestingSuite, EmulateReallocarray) {
+	UriMemoryManager partialEmulationMemoryManager;
+	memcpy(&partialEmulationMemoryManager, &defaultMemoryManager,
+			sizeof(UriMemoryManager));
+	partialEmulationMemoryManager.reallocarray = uriEmulateReallocarray;
+
+	ASSERT_EQ(uriTestMemoryManager(&partialEmulationMemoryManager),
+			URI_SUCCESS);
+}
+
+
+
+TEST(MemoryManagerTestingSuite, EmulateCallocAndReallocarray) {
+	UriMemoryManager partialEmulationMemoryManager;
+	memcpy(&partialEmulationMemoryManager, &defaultMemoryManager,
+			sizeof(UriMemoryManager));
+	partialEmulationMemoryManager.calloc = uriEmulateCalloc;
+	partialEmulationMemoryManager.reallocarray = uriEmulateReallocarray;
+
+	ASSERT_EQ(uriTestMemoryManager(&partialEmulationMemoryManager),
+			URI_SUCCESS);
 }
 
 

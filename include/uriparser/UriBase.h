@@ -126,6 +126,8 @@ typedef int UriBool; /**< Boolean type */
 #define URI_ERROR_REMOVEBASE_REL_BASE      6 /* Given base is not absolute */
 #define URI_ERROR_REMOVEBASE_REL_SOURCE    7 /* Given base is not absolute */
 
+/* Error specific to uriTestMemoryManager */
+#define URI_ERROR_MEMORY_MANAGER_FAULTY   11 /* The UriMemoryManager given did not pass the test suite */
 
 
 #ifndef URI_DOXYGEN
@@ -185,12 +187,16 @@ typedef void (*UriFuncFree)(struct UriMemoryManagerStruct *, void *);
 
 /**
  * Class-like interface of custom memory managers
+ *
+ * @see uriEmulateCalloc
+ * @see uriEmulateReallocarray
+ * @see uriTestMemoryManager
  */
 typedef struct UriMemoryManagerStruct {
 	UriFuncMalloc malloc; /**< Pointer to custom malloc(3) */
-	UriFuncCalloc calloc; /**< Pointer to custom calloc(3); emulate using malloc and memset if needed */
+	UriFuncCalloc calloc; /**< Pointer to custom calloc(3); to emulate using malloc and memset see uriEmulateCalloc */
 	UriFuncRealloc realloc; /**< Pointer to custom realloc(3) */
-	UriFuncReallocarray reallocarray; /**< Pointer to custom reallocarray(3); emulate using realloc if needed */
+	UriFuncReallocarray reallocarray; /**< Pointer to custom reallocarray(3); to emulate using realloc uriEmulateReallocarray */
 	UriFuncFree free; /**< Pointer to custom free(3) */
 	void * userData; /**< Pointer to data that the other function members need access to */
 } UriMemoryManager; /**< @copydoc UriMemoryManagerStruct */
@@ -233,6 +239,64 @@ typedef enum UriResolutionOptionsEnum {
 	URI_RESOLVE_STRICTLY = 0, /**< Full RFC conformance */
 	URI_RESOLVE_IDENTICAL_SCHEME_COMPAT = 1 << 0 /**< Treat %URI to resolve with identical scheme as having no scheme */
 } UriResolutionOptions; /**< @copydoc UriResolutionOptionsEnum */
+
+
+
+/**
+ * Offers emulation of calloc(3) based on memory->malloc and memset.
+ * See "man 3 calloc" as well.
+ *
+ * @param memory  <b>IN</b>: Memory manager to use, should not be NULL
+ * @param nmemb   <b>IN</b>: Number of elements to allocate
+ * @param size    <b>IN</b>: Size in bytes per element
+ * @return        Pointer to allocated memory or NULL
+ *
+ * @see uriEmulateReallocarray
+ * @see UriMemoryManager
+ * @since 0.8.7
+ */
+void * uriEmulateCalloc(UriMemoryManager * memory,
+		size_t nmemb, size_t size);
+
+
+
+/**
+ * Offers emulation of reallocarray(3) based on memory->realloc.
+ * See "man 3 reallocarray" as well.
+ *
+ * @param memory  <b>IN</b>: Memory manager to use, should not be NULL
+ * @param ptr     <b>IN</b>: Pointer allocated using memory->malloc/... or NULL
+ * @param nmemb   <b>IN</b>: Number of elements to allocate
+ * @param size    <b>IN</b>: Size in bytes per element
+ * @return        Pointer to allocated memory or NULL
+ *
+ * @see uriEmulateCalloc
+ * @see UriMemoryManager
+ * @since 0.8.7
+ */
+void * uriEmulateReallocarray(UriMemoryManager * memory,
+		void * ptr, size_t nmemb, size_t size);
+
+
+
+/**
+ * Run multiple tests against a given memory manager.
+ * For example, one test
+ * 1. allocates a small amount of memory,
+ * 2. writes some magic bytes to it,
+ * 3. reallocates it,
+ * 4. checks that previous values are still present,
+ * 5. and frees that memory.
+ *
+ * @param memory  <b>IN</b>: Memory manager to use, should not be NULL
+ * @return        Error code or 0 on success
+ *
+ * @see uriEmulateCalloc
+ * @see uriEmulateReallocarray
+ * @see UriMemoryManager
+ * @since 0.8.7
+ */
+int uriTestMemoryManager(UriMemoryManager * memory);
 
 
 
