@@ -113,7 +113,7 @@ typedef int UriBool; /**< Boolean type */
 #define URI_ERROR_OUTPUT_TOO_LARGE         4 /* Some output is to large for the receiving buffer */
 #define URI_ERROR_NOT_IMPLEMENTED          8 /* The called function is not implemented yet */
 #define URI_ERROR_RANGE_INVALID            9 /* The parameters passed contained invalid ranges */
-#define URI_ERROR_MEMORY_MANAGER_INCOMPLETE  10 /* The UriMemoryManager passed does not implement all needed functions */
+#define URI_ERROR_MEMORY_MANAGER_INCOMPLETE  10 /* [>=0.8.7] The UriMemoryManager passed does not implement all needed functions */
 
 
 /* Errors specific to ToString */
@@ -127,7 +127,7 @@ typedef int UriBool; /**< Boolean type */
 #define URI_ERROR_REMOVEBASE_REL_SOURCE    7 /* Given base is not absolute */
 
 /* Error specific to uriTestMemoryManager */
-#define URI_ERROR_MEMORY_MANAGER_FAULTY   11 /* The UriMemoryManager given did not pass the test suite */
+#define URI_ERROR_MEMORY_MANAGER_FAULTY   11 /* [>=0.8.7] The UriMemoryManager given did not pass the test suite */
 
 
 #ifndef URI_DOXYGEN
@@ -161,26 +161,36 @@ struct UriMemoryManagerStruct;  /* foward declaration to break loop */
 
 /**
  * Function signature that custom malloc(3) functions must conform to
+ *
+ * @since 0.8.7
  */
 typedef void * (*UriFuncMalloc)(struct UriMemoryManagerStruct *, size_t);
 
 /**
  * Function signature that custom calloc(3) functions must conform to
+ *
+ * @since 0.8.7
  */
 typedef void * (*UriFuncCalloc)(struct UriMemoryManagerStruct *, size_t, size_t);
 
 /**
  * Function signature that custom realloc(3) functions must conform to
+ *
+ * @since 0.8.7
  */
 typedef void * (*UriFuncRealloc)(struct UriMemoryManagerStruct *, void *, size_t);
 
 /**
  * Function signature that custom reallocarray(3) functions must conform to
+ *
+ * @since 0.8.7
  */
 typedef void * (*UriFuncReallocarray)(struct UriMemoryManagerStruct *, void *, size_t, size_t);
 
 /**
  * Function signature that custom free(3) functions must conform to
+ *
+ * @since 0.8.7
  */
 typedef void (*UriFuncFree)(struct UriMemoryManagerStruct *, void *);
 
@@ -191,6 +201,7 @@ typedef void (*UriFuncFree)(struct UriMemoryManagerStruct *, void *);
  * @see uriEmulateCalloc
  * @see uriEmulateReallocarray
  * @see uriTestMemoryManager
+ * @since 0.8.7
  */
 typedef struct UriMemoryManagerStruct {
 	UriFuncMalloc malloc; /**< Pointer to custom malloc(3) */
