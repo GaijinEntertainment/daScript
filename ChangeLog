@@ -37,7 +37,7 @@
       New functions:
         uriNormalizeSyntaxMaskRequiredEx[AW]
   * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
-  * TODO BUMP SONAME
+  * Soname: 1:23:0
 
 2018-08-18 -- 0.8.6
 
