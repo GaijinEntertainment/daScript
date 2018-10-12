@@ -60,6 +60,17 @@
 
 
 
+#define URI_CHECK_ALLOC_OVERFLOW(total_size, nmemb, size) \
+		do { \
+			/* check for unsigned overflow */ \
+			if ((nmemb != 0) && (total_size / nmemb != size)) { \
+				errno = ENOMEM; \
+				return NULL; \
+			} \
+		} while (0)
+
+
+
 static void * uriDefaultMalloc(UriMemoryManager * URI_UNUSED(memory),
 		size_t size) {
 	return malloc(size);
@@ -88,11 +99,7 @@ static void * uriDefaultReallocarray(UriMemoryManager * URI_UNUSED(memory),
 #else
 	const size_t total_size = nmemb * size;
 
-	/* check for unsigned overflow */
-	if ((nmemb != 0) && (total_size / nmemb != size)) {
-		errno = ENOMEM;
-		return NULL;
-	}
+	URI_CHECK_ALLOC_OVERFLOW(total_size, nmemb, size);  /* may return */
 
 	return realloc(ptr, total_size);
 #endif
@@ -127,11 +134,7 @@ void * uriEmulateCalloc(UriMemoryManager * memory, size_t nmemb, size_t size) {
 		return NULL;
 	}
 
-	/* check for unsigned overflow */
-	if ((nmemb != 0) && (total_size / nmemb != size)) {
-		errno = ENOMEM;
-		return NULL;
-	}
+	URI_CHECK_ALLOC_OVERFLOW(total_size, nmemb, size);  /* may return */
 
 	buffer = memory->malloc(memory, total_size);
 	if (buffer == NULL) {
@@ -152,11 +155,7 @@ void * uriEmulateReallocarray(UriMemoryManager * memory,
 		return NULL;
 	}
 
-	/* check for unsigned overflow */
-	if ((nmemb != 0) && (total_size / nmemb != size)) {
-		errno = ENOMEM;
-		return NULL;
-	}
+	URI_CHECK_ALLOC_OVERFLOW(total_size, nmemb, size);  /* may return */
 
 	return memory->realloc(memory, ptr, total_size);
 }
