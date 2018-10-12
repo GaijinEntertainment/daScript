@@ -1,10 +1,12 @@
 2018-xx-xx -- x.x.x
 
+>>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   * Fixed: Out-of-bounds write in uriComposeQuery* and uriComposeQueryEx*
       Thanks to Google Autofuzz team for the report!
   * Fixed: Detect integer overflow in uriComposeQuery* and uriComposeQueryEx*
       Thanks to Google Autofuzz team for the report!
   * Fixed: Protect uriResetUri* against acting on NULL input
+>>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   * Fixed: Be fully compliant to C89 (Gitub #28) and C++98 in test code
   * Fixed: Fix off-by-one in uriComposeQueryCharsRequired* and ...Ex*
       Reported space requirements were 1 byte bigger than necessary
