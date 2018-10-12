@@ -20,6 +20,7 @@
  */
 
 #include <cassert>
+#include <cerrno>
 #include <cstring>  // memcpy
 #include <gtest/gtest.h>
 
@@ -186,6 +187,28 @@ TEST(MemoryManagerTestingSuite, EmulateReallocarray) {
 
 	ASSERT_EQ(uriTestMemoryManager(&partialEmulationMemoryManager),
 			URI_SUCCESS);
+}
+
+
+
+TEST(MemoryManagerTestingOverflowDetectionSuite, EmulateCalloc) {
+	EXPECT_GT(2 * sizeof(size_t), sizeof(void *));
+
+	errno = 0;
+	ASSERT_EQ(NULL, uriEmulateCalloc(
+			&defaultMemoryManager, (size_t)-1, (size_t)-1));
+	ASSERT_EQ(errno, ENOMEM);
+}
+
+
+
+TEST(MemoryManagerTestingOverflowDetectionSuite, EmulateReallocarray) {
+	EXPECT_GT(2 * sizeof(size_t), sizeof(void *));
+
+	errno = 0;
+	ASSERT_EQ(NULL, uriEmulateReallocarray(
+			&defaultMemoryManager, NULL, (size_t)-1, (size_t)-1));
+	ASSERT_EQ(errno, ENOMEM);
 }
 
 
