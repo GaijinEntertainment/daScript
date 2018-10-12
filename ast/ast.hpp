@@ -123,6 +123,7 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const Expression & func);
         virtual void log(ostream& stream, int depth) const = 0;
         virtual void inferType(InferTypeContext & context) = 0;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
         void logType(ostream& stream) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
     public:
@@ -135,6 +136,7 @@ namespace yzg
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         ExpressionPtr   subexpr;
     };
@@ -144,6 +146,7 @@ namespace yzg
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         vector<ExpressionPtr>   list;
     };
@@ -153,6 +156,7 @@ namespace yzg
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         string      name;
         VariablePtr variable;
@@ -165,6 +169,7 @@ namespace yzg
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         string          name;
         ExpressionPtr   rvalue;
@@ -173,6 +178,8 @@ namespace yzg
     
     class ExprOp : public Expression
     {
+    public:
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         Operator        op;
         FunctionPtr     func;
@@ -183,6 +190,7 @@ namespace yzg
     public:
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         ExpressionPtr   subexpr;
     };
@@ -192,6 +200,7 @@ namespace yzg
     public:
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         ExpressionPtr   left, right;
     };
@@ -201,6 +210,7 @@ namespace yzg
     public:
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         ExpressionPtr   subexpr, left, right;
     };
@@ -210,6 +220,7 @@ namespace yzg
     public:
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         ExpressionPtr   subexpr;
     };
@@ -222,9 +233,10 @@ namespace yzg
     class ExprConstInt : public ExprConst
     {
     public:
-        ExprConstInt(int64_t i) : value(i) {}
+        ExprConstInt(int64_t i = 0) : value(i) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         int64_t value;
     };
@@ -232,9 +244,10 @@ namespace yzg
     class ExprConstUInt : public ExprConst
     {
     public:
-        ExprConstUInt(uint64_t i) : value(i) {}
+        ExprConstUInt(uint64_t i = 0) : value(i) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         uint64_t value;
     };
@@ -242,9 +255,10 @@ namespace yzg
     class ExprConstDouble : public ExprConst
     {
     public:
-        ExprConstDouble(double i) : value(i) {}
+        ExprConstDouble(double i = 0.0) : value(i) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         double value;
     };
@@ -255,6 +269,7 @@ namespace yzg
         Variable * find ( const string & name ) const;
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
@@ -265,6 +280,7 @@ namespace yzg
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         string                  name;
         vector<ExpressionPtr>   arguments;
@@ -276,6 +292,7 @@ namespace yzg
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         ExpressionPtr   cond, if_true, if_false;
     };
@@ -285,6 +302,7 @@ namespace yzg
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         ExpressionPtr   cond, body;
     };

@@ -10,12 +10,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "ast/ast.cpp"
-            timestampString = "560461158.138011"
+            timestampString = "561001794.615224"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "824"
-            endingLineNumber = "824"
-            landmarkName = "parseTypeDeclaratoin ( const NodePtr &amp; decl, const ProgramPtr &amp; program, int nFields = 0 )"
+            startingLineNumber = "978"
+            endingLineNumber = "978"
+            landmarkName = "operator&lt;&lt; (ostream&amp; stream, const Program &amp; program)"
             landmarkType = "9">
          </BreakpointContent>
       </BreakpointProxy>

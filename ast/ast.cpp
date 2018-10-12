@@ -239,6 +239,23 @@ namespace yzg
     
     // expression
     
+    template <typename ExprType, typename SuperType = Expression>
+    shared_ptr<ExprType> clonePtr ( const ExpressionPtr & expr )
+    {
+        auto cexpr =  expr ? static_pointer_cast<ExprType>(expr) : make_shared<ExprType>();
+        (*cexpr).SuperType::clone(cexpr);
+        return cexpr;
+    }
+    
+    ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const
+    {
+        if ( !expr )
+            throw semantic_error("unsupported expression", at);
+        expr->at = at;
+        expr->type = make_shared<TypeDecl>(*type);
+        return expr;
+    }
+    
     ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr )
     {
         if ( expr->type->isRValue() ) {
@@ -267,6 +284,13 @@ namespace yzg
     
     // ExprR2L
     
+    ExpressionPtr ExprR2L::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprR2L>(expr);
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
+    
     void ExprR2L::log(ostream& stream, int depth) const
     {
         stream << "(-> " << *subexpr << ")";
@@ -282,6 +306,15 @@ namespace yzg
     }
 
     // ExprBlock
+    
+    ExpressionPtr ExprBlock::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprBlock>(expr);
+        for ( auto & subexpr : list ) {
+            cexpr->list.push_back(subexpr->clone());
+        }
+        return cexpr;
+    }
     
     void ExprBlock::log(ostream& stream, int depth) const
     {
@@ -306,6 +339,15 @@ namespace yzg
     
     // ExprField
     
+    ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprField>(expr);
+        cexpr->name = name;
+        cexpr->rvalue = rvalue->clone();
+        cexpr->field = field;
+        return cexpr;
+    }
+    
     void ExprField::log(ostream& stream, int depth) const
     {
         logType(stream);
@@ -329,6 +371,16 @@ namespace yzg
     }
     
     // ExprVar
+    
+    ExpressionPtr ExprVar::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprVar>(expr);
+        cexpr->name = name;
+        cexpr->variable = variable; // todo: lookup again?
+        cexpr->local = local;
+        cexpr->argument = argument;
+        return cexpr;
+    }
     
     void ExprVar::log(ostream& stream, int depth) const
     {
@@ -367,7 +419,26 @@ namespace yzg
         type->rvalue = true;
     }
     
+    // ExprOp
+    
+    ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const
+    {
+        if ( !expr )
+            throw semantic_error("can't clone ExprOp", at);
+        auto cexpr = static_pointer_cast<ExprOp>(expr);
+        cexpr->op = op;
+        cexpr->func = func;
+        return cexpr;
+    }
+    
     // ExprOp1
+    
+    ExpressionPtr ExprOp1::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprOp1,ExprOp>(expr);
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
     
     void ExprOp1::log(ostream& stream, int depth) const
     {
@@ -393,6 +464,14 @@ namespace yzg
     }
     
     // ExprOp2
+    
+    ExpressionPtr ExprOp2::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprOp2,ExprOp>(expr);
+        cexpr->left = left->clone();
+        cexpr->right = right->clone();
+        return cexpr;
+    }
     
     void ExprOp2::log(ostream& stream, int depth) const
     {
@@ -423,6 +502,15 @@ namespace yzg
     }
     
     // ExprOp3
+    
+    ExpressionPtr ExprOp3::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprOp3,ExprOp>(expr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->left = left->clone();
+        cexpr->right = right->clone();
+        return cexpr;
+    }
     
     void ExprOp3::log(ostream& stream, int depth) const
     {
@@ -461,6 +549,13 @@ namespace yzg
     
     // ExprReturn
     
+    ExpressionPtr ExprReturn::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprReturn>(expr);
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
+    
     void ExprReturn::log(ostream& stream, int depth) const
     {
         if ( subexpr ) {
@@ -491,6 +586,13 @@ namespace yzg
     
     // ExprConstInt
     
+    ExpressionPtr ExprConstInt::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprConstInt,ExprConst>(expr);
+        cexpr->value = value;
+        return cexpr;
+    }
+    
     void ExprConstInt::log(ostream& stream, int depth) const
     {
         stream << value;
@@ -502,6 +604,13 @@ namespace yzg
     }
     
     // ExprConstUInt
+    
+    ExpressionPtr ExprConstUInt::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprConstUInt,ExprConst>(expr);
+        cexpr->value = value;
+        return cexpr;
+    }
     
     void ExprConstUInt::log(ostream& stream, int depth) const
     {
@@ -515,6 +624,13 @@ namespace yzg
     
     // ExprConstDouble
     
+    ExpressionPtr ExprConstDouble::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprConstDouble,ExprConst>(expr);
+        cexpr->value = value;
+        return cexpr;
+    }
+    
     void ExprConstDouble::log(ostream& stream, int depth) const
     {
         stream << to_string_ex(value);
@@ -526,6 +642,16 @@ namespace yzg
     }
     
     // ExprIfThenElse
+    
+    ExpressionPtr ExprIfThenElse::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprIfThenElse>(expr);
+        cexpr->cond = cond->clone();
+        cexpr->if_true = if_true->clone();
+        if ( if_false )
+            cexpr->if_false = if_false->clone();
+        return cexpr;
+    }
     
     void ExprIfThenElse::log(ostream& stream, int depth) const
     {
@@ -553,6 +679,14 @@ namespace yzg
     
     // ExprWhile
     
+    ExpressionPtr ExprWhile::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprWhile>(expr);
+        cexpr->cond = cond->clone();
+        cexpr->body = body->clone();
+        return cexpr;
+    }
+    
     void ExprWhile::inferType(InferTypeContext & context)
     {
         cond->inferType(context);
@@ -572,6 +706,15 @@ namespace yzg
     }
 
     // ExprLet
+    
+    ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprLet>(expr);
+        for ( auto & var : variables )
+            cexpr->variables.push_back(var);    // TODO: clone variable???
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
 
     Variable * ExprLet::find(const string & name) const
     {
@@ -610,6 +753,17 @@ namespace yzg
     }
     
     // ExprCall
+    
+    ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprCall>(expr);
+        cexpr->name = name;
+        for ( auto & arg : arguments ) {
+            cexpr->arguments.push_back(arg->clone());
+        }
+        cexpr->func = func;
+        return cexpr;
+    }
     
     void ExprCall::log(ostream& stream, int depth) const
     {
@@ -1067,7 +1221,6 @@ namespace yzg
         } else {
             throw parse_error("unrecognized expression", decl);
         }
-        throw parse_error("internal error", decl);
         return nullptr;
     }
     

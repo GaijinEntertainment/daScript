@@ -4,7 +4,7 @@ parser
     support for array indexing
 
 misc
-    support 'clone' for expressions
+    support 'clone' for variables, redo name lookup upstream during cloning?
 
 optimization \ ast massage
     flatten nested blocks
