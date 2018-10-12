@@ -154,7 +154,10 @@ namespace yzg
     {
         stream << "(defun (" << *func.result << " " << func.name << ")\n"; // //" << func.getMangledName() << "\n";
         for ( auto & decl : func.arguments ) {
-            stream << "\t(" << *decl->type << " " << decl->name << ")\n";
+            stream << "\t(" << *decl->type << " " << decl->name;
+            if ( decl->init )
+                stream << " " << *decl->init;
+            stream << ")\n";
         }
         stream << "\t" << *func.body;
         stream << ")\n";
@@ -252,7 +255,7 @@ namespace yzg
         if ( !expr )
             throw semantic_error("unsupported expression", at);
         expr->at = at;
-        expr->type = make_shared<TypeDecl>(*type);
+        expr->type = type ? make_shared<TypeDecl>(*type) : nullptr;
         return expr;
     }
     
@@ -791,6 +794,12 @@ namespace yzg
             throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
+        for ( int iT = arguments.size(); iT != func->arguments.size(); ++iT ) {
+            auto newArg = func->arguments[iT]->init->clone();
+            if ( !newArg->type )
+                newArg->inferType(context);
+            arguments.push_back(newArg);
+        }
         for ( int iA = 0; iA != arguments.size(); ++iA )
             if ( !func->arguments[iA]->type->isRValue() )
                 arguments[iA] = autoDereference(arguments[iA]);
@@ -840,8 +849,17 @@ namespace yzg
             Expression::InferTypeContext context;
             context.program = shared_from_this();
             context.func = fit.second;
-            if ( !context.func->builtIn )
+            if ( !context.func->builtIn ) {
+                for ( auto & arg : context.func->arguments ) {
+                    if ( arg->init ) {
+                        arg->init->inferType(context);
+                        if ( !arg->type->isSameType(*arg->init->type, true) ) {
+                            throw semantic_error("function argument default value type mismatch", arg->init->at);
+                        }
+                    }
+                }
                 context.func->body->inferType(context);
+            }
         }
     }
     
@@ -917,14 +935,13 @@ namespace yzg
     {
         /*
          TODO:
-            default arguments
             arguments by name?
          */
         vector<FunctionPtr> result;
         for ( auto & it : functions ) {
             if ( it.second->name == name ) {
                 auto & pFn = it.second;
-                if ( pFn->arguments.size() == types.size() ) {
+                if ( pFn->arguments.size() >= types.size() ) {
                     bool typesCompatible = true;
                     for ( int ai = 0; ai != types.size(); ++ai ) {
                         auto & argType = pFn->arguments[ai]->type;
@@ -934,7 +951,13 @@ namespace yzg
                             break;
                         }
                     }
-                    if ( typesCompatible ) {
+                    bool tailCompatible = true;
+                    for ( int ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
+                        if ( !pFn->arguments[ti]->init ) {
+                            tailCompatible = false;
+                        }
+                    }
+                    if ( typesCompatible && tailCompatible ) {
                         result.push_back(pFn);
                     }
                 }
@@ -1242,19 +1265,24 @@ namespace yzg
             throw parse_error("function must have name", decl);
         func->result = parseTypeDeclaratoin(decl->list[1], program);
         for ( int ai = 2; ai < decl->list.size()-1; ++ai ) {
+            int hasDefault = 1;
             auto & arg = decl->list[ai];
             auto argp = make_shared<Variable>();
-            argp->name = arg->getTailName();
-            if ( argp->name.empty() )
-                throw parse_error("function argument must have name", arg);
+            argp->name = arg->getTailName(1);
+            if ( argp->name.empty() || arg->list.size()==2 ) {
+                hasDefault = 0;
+                argp->name = arg->getTailName();
+                if ( argp->name.empty() )
+                    throw parse_error("function argument must have name", arg);
+            }
             if ( func->findArgument(argp->name) )
                 throw parse_error("function already has argument with this name", arg);
-            argp->type = parseTypeDeclaratoin(arg, program);
+            argp->type = parseTypeDeclaratoin(arg, program, hasDefault);
+            if ( hasDefault )
+                argp->init = parseExpression(arg->list.back(), program);
             func->arguments.push_back(argp);
-            // TODO: context and function body
-            func->body = parseExpression(decl->list.back(), program);
         }
-        // TODO: parse body
+        func->body = parseExpression(decl->list.back(), program);
         return func;
     }
     

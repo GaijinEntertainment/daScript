@@ -35,10 +35,14 @@
 (defun (int xmadd)
     (int a)
     (int b)
-    (int c)
-    (int d)
+    (int c 13)
+    (int d 17)
     (return
         (madd a b (* c d))))
+
+(defun (int test_mad)
+    (return
+        (xmadd 1 2)))
 
 (defun (float calcVolume)
     (Sphere s)
