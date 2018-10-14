@@ -115,7 +115,12 @@ namespace yzg
     
     bool TypeDecl::isRValue() const
     {
-        return rvalue || baseType==Type::tStructure;
+        return rvalue || baseType==Type::tStructure || dim.size();
+    }
+    
+    bool TypeDecl::isIndex() const
+    {
+        return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
     }
     
     // structure
@@ -306,6 +311,37 @@ namespace yzg
             throw semantic_error("can only dereference rvalue", at);
         type = make_shared<TypeDecl>(*subexpr->type);
         type->rvalue = false;
+    }
+    
+    // ExprAt
+    
+    void ExprAt::log(ostream& stream, int depth) const
+    {
+        stream << "(@ " << *subexpr << " " << *index << ")";
+    }
+    
+    void ExprAt::inferType(InferTypeContext & context)
+    {
+        subexpr->inferType(context);
+        if ( !subexpr->type->isRValue() )
+            throw semantic_error("can only index rvalue", subexpr->at);
+        if ( !subexpr->type->dim.size() )
+            throw semantic_error("can only index arrays", subexpr->at);
+        index->inferType(context);
+        index = autoDereference(index);
+        if ( !index->type->isIndex() )
+            throw semantic_error("index is int or uint", index->at);
+        type = make_shared<TypeDecl>(*subexpr->type);
+        type->rvalue = true;
+        type->dim.pop_back();
+    }
+    
+    ExpressionPtr ExprAt::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprAt>(expr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->index = index->clone();
+        return cexpr;
     }
 
     // ExprBlock
@@ -1135,7 +1171,12 @@ namespace yzg
                 } else if ( nOp==2 ) {
                     if ( !isBinaryOperator(head->op) )
                         throw parse_error("only binary operators can have 2 arguments", decl);
-                    if ( head->op==Operator::dot) {
+                    if ( head->op==Operator::at ) {
+                        auto pAt = make_shared<ExprAt>();
+                        pAt->subexpr = parseExpression(decl->list[1], program);
+                        pAt->index = parseExpression(decl->list[2], program);
+                        return pAt;
+                    } else if ( head->op==Operator::dot) {
                         if ( !decl->list[2]->isName() )
                             throw parse_error("field needs to be specified as a name", decl);
                         auto pDot = make_shared<ExprField>();

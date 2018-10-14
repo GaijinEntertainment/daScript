@@ -71,6 +71,7 @@ namespace yzg
         bool isArray() const;
         bool isVoid() const;
         bool isRValue() const;
+        bool isIndex() const;
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -141,6 +142,17 @@ namespace yzg
         ExpressionPtr   subexpr;
     };
     
+    class ExprAt : public Expression
+    {
+    public:
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+    public:
+        ExpressionPtr   subexpr;
+        ExpressionPtr   index;
+    };
+
     class ExprBlock : public Expression
     {
     public:

@@ -33,6 +33,7 @@ namespace yzg
     };
     
     Enum<Operator> g_opTable1 = {
+        {   Operator::at,       "@"    },
         {   Operator::dot,      "."    },
         {   Operator::add,      "+"    },
         {   Operator::sub,      "-"    },

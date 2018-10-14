@@ -32,6 +32,13 @@
         $ "result is a * b + c"
         (+ (* a b) c)))
 
+(defun (float getRad)
+    (Sphere 10 balls)
+    (float 10 extra)
+    (int idx)
+    (return
+        (+(@ extra idx) (. (@ balls idx) radius))))
+
 (defun (int xmadd)
     (int a)
     (int b)

@@ -51,6 +51,7 @@ namespace yzg
         notEqu,
         binNotEqu,
     // 1-char
+        at,         // @
         dot,        // .
         binand,
         binor,

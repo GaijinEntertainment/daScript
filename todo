@@ -1,6 +1,5 @@
 parser
     support auto in let
-    support for array indexing
 
 misc
     support 'clone' for variables, redo name lookup upstream during cloning?
