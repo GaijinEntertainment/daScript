@@ -493,7 +493,7 @@ namespace yzg
         vector<TypeDeclPtr> types = { subexpr->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 )
-            throw semantic_error("no matching function", at);
+            throw semantic_error("no matching function " + to_string(op) + " " + subexpr->type->getMangledName(), at);
         if ( functions.size()>1 )
             throw semantic_error("too many matching functions", at);
         func = functions[0];
@@ -529,7 +529,8 @@ namespace yzg
         vector<TypeDeclPtr> types = { left->type, right->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 )
-            throw semantic_error("no matching function", at);
+            throw semantic_error("no matching function " + to_string(op)
+                + " " + left->type->getMangledName() + " " + right->type->getMangledName(), at);
         if ( functions.size()>1 )
             throw semantic_error("too many matching functions", at);
         func = functions[0];
@@ -573,7 +574,9 @@ namespace yzg
         vector<TypeDeclPtr> types = { subexpr->type, left->type, right->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 )
-            throw semantic_error("no matching function", at);
+            throw semantic_error("no matching function " + to_string(op)
+                + " " + subexpr->type->getMangledName() + " "
+                    + left->type->getMangledName() + " " + right->type->getMangledName(), at);
         if ( functions.size()>1 )
             throw semantic_error("too many matching functions", at);
         func = functions[0];
@@ -932,12 +935,12 @@ namespace yzg
         addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("&") );
         addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("|") );
         addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("^") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("==") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("!=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>(">=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("<=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>(">") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, int, int>>("<") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>("==") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>("!=") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>(">=") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>("<=") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>(">") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>("<") );
         addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("=") );
         addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("+=") );
         addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("-=") );
@@ -954,12 +957,12 @@ namespace yzg
         addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("-") );
         addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("*") );
         addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("/") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>("==") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>("!=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>(">=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>("<=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>(">") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, float, float>>("<") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>("==") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>("!=") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>(">=") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>("<=") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>(">") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>("<") );
         addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("=") );
         addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("+=") );
         addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("-=") );

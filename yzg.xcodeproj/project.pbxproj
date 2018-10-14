@@ -28,6 +28,7 @@
 
 /* Begin PBXFileReference section */
 		04A56F8921666FEB00DB3482 /* todo */ = {isa = PBXFileReference; lastKnownFileType = text; path = todo; sourceTree = "<group>"; };
+		04A56F8B2173B6E800DB3482 /* profile_array_of_structures.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = profile_array_of_structures.yzg; sourceTree = "<group>"; };
 		04AB28BF215B40F300695531 /* test_3.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = test_3.yzg; sourceTree = "<group>"; };
 		04B2409A2133A911007CF8B1 /* ast.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ast.cpp; sourceTree = "<group>"; };
 		04B2409B2133A911007CF8B1 /* ast.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ast.hpp; sourceTree = "<group>"; };
@@ -112,6 +113,7 @@
 				04E5345021326BA5006834F4 /* test_1.yzg */,
 				04B2409D2134CA31007CF8B1 /* test_2.yzg */,
 				04AB28BF215B40F300695531 /* test_3.yzg */,
+				04A56F8B2173B6E800DB3482 /* profile_array_of_structures.yzg */,
 			);
 			path = test;
 			sourceTree = "<group>";

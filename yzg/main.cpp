@@ -68,6 +68,8 @@ void test_ast ( const string & fn )
 
 int main(int argc, const char * argv[]) {
     // test_reader("./test/test_1.yzg");
-    test_ast("./test/test_2.yzg");
+    // test_ast("./test/test_2.yzg");
+    
+    test_ast("./test/profile_array_of_structures.yzg");
     return 0;
 }

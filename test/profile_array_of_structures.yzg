@@ -1,0 +1,22 @@
+(struct Object
+    (float 3 position)
+    (float 3 velocity)
+)
+
+(let
+    (Object 10000 objects)
+)
+
+(defun (void test)
+    (let
+        (int index 0)
+            (while (< index 10000)
+                (
+                    (+= (@ (. (@ objects index) position) 0) (@ (. (@ objects index) velocity) 0) )
+                    (+= (@ (. (@ objects index) position) 1) (@ (. (@ objects index) velocity) 1) )
+                    (+= (@ (. (@ objects index) position) 2) (@ (. (@ objects index) velocity) 2) )
+                    (+= index 1)
+                )
+            )
+    )
+)
