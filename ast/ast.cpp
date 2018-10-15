@@ -123,7 +123,39 @@ namespace yzg
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
     }
     
+    int TypeDecl::getSizeOf() const
+    {
+        switch ( baseType ) {
+            case tBool:     return sizeof(bool);
+            case tInt:      return sizeof(int);
+            case tInt2:     return sizeof(int) * 2;
+            case tInt3:     return sizeof(int) * 3;
+            case tInt4:     return sizeof(int) * 4;
+            case tUInt:     return sizeof(uint);
+            case tUInt2:    return sizeof(uint) * 2;
+            case tUInt3:    return sizeof(uint) * 3;
+            case tUInt4:    return sizeof(uint) * 4;
+            case tFloat:    return sizeof(float);
+            case tFloat2:   return sizeof(float) * 2;
+            case tFloat3:   return sizeof(float) * 3;
+            case tFloat4:   return sizeof(float) * 4;
+            case tStructure:
+                return structType->getSizeOf();
+            default:
+                return 0;
+        }
+    }
+    
     // structure
+    
+    int Structure::getSizeOf() const
+    {
+        int size = 0;
+        for ( const auto & fd : fields ) {
+            size += fd.type->getSizeOf();
+        }
+        return size;
+    }
     
     const Structure::FieldDeclaration * Structure::findField ( const string & name ) const
     {
@@ -398,10 +430,13 @@ namespace yzg
     
     SimNode * ExprBlock::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        auto block = context.makeNode<SimNode_Block>();
+        block->total = int(list.size());
+        block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
+        for ( int i = 0; i != block->total; ++i )
+            block->list[i] = list[i]->simulate(context);
+        return block;
     }
-
     
     // ExprField
     

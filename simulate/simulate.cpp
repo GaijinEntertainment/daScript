@@ -10,12 +10,13 @@
 
 namespace yzg
 {
+    Context::Context()
+    {
+        linearAllocator = linearAllocatorBase = (char *) _mm_malloc(linearAllocatorSize, 16);
+    }
+    
     Context::~Context()
     {
-        for ( auto pn : nodes ) {
-            SimNode * pNode = pn;
-            delete pNode;
-        }
-        nodes.clear();
+        _mm_free(linearAllocatorBase);
     }
 }

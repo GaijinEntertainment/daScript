@@ -3,6 +3,7 @@ parser
     support late binding of default arguments
     support auto in function default arguments
     support auto in function arguments
+    type sizoef()
 
 misc
     support 'clone' for variables, redo name lookup upstream during cloning?
@@ -14,7 +15,7 @@ optimization \ ast massage
     support break and return to be last statement
 
 interpreter
-    implement fast node allocator
+    implement stack
     implement simulate for expressions
     implement 'call' for context
     implement sse policy for float2, float3, float4

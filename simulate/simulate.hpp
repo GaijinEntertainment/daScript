@@ -18,23 +18,34 @@ namespace yzg
     
     struct SimNode;
     
-    struct Context
+    class Context
     {
-        template<typename TT, typename... Params>
-        TT * makeNode(Params... args) {
-            auto pNode = new TT(args...);   // TODO: allocate linearly
-            nodes.push_back(pNode);
-            return pNode;
+    public:
+        Context();
+        ~Context();
+        
+        inline void * allocate ( int size ) {
+            size = (size + 0x0f) & ~0x0f;
+            if ( linearAllocator - linearAllocatorBase + size > linearAllocatorSize )
+                throw runtime_error("out of linear allocator space");
+            void * result = linearAllocator;
+            linearAllocator += size;
+            return result;
         }
         
-        ~Context();
+        template<typename TT, typename... Params>
+        inline TT * makeNode(Params... args) {
+            return new (allocate(sizeof(TT))) TT(args...);
+        }
 
-        vector<SimNode *> nodes;    // TODO: use linear allocator and sinlge delete
+    protected:
+        int linearAllocatorSize = 1*1024*1024;
+        char * linearAllocator = nullptr;
+        char * linearAllocatorBase = nullptr;
     };
     
     struct SimNode
     {
-        virtual ~SimNode() = default;
         virtual __m128 eval ( Context & ) = 0;
     };
     
@@ -49,6 +60,17 @@ namespace yzg
     
     template <typename TT> inline TT * ptr_cast_to ( __m128 a )     { return ((TT **)&a)[0]; }
     template <typename TT> inline __m128 ptr_cast_from ( TT * p )   { __m128 x; ((TT **)&x)[0] = p; return x; }
+    
+    // BLOCK
+    struct SimNode_Block : SimNode {
+        virtual __m128 eval ( Context & context ) override {
+            for ( int i = 0; i != total; ++i )
+                list[i]->eval(context);
+            return _mm_setzero_ps();
+        }
+        SimNode ** list = nullptr;
+        int total = 0;
+    };
     
     // IF-THEN
     struct SimNode_IfThen : SimNode {

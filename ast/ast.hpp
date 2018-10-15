@@ -73,6 +73,7 @@ namespace yzg
         bool isVoid() const;
         bool isRValue() const;
         bool isIndex() const;
+        int getSizeOf() const;
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -95,6 +96,7 @@ namespace yzg
         Structure ( const string & n ) : name(n) {}
         const FieldDeclaration * findField ( const string & name ) const;
         friend ostream& operator<< (ostream& stream, const Structure & structure);
+        int getSizeOf() const;
     public:
         string                      name;
         vector<FieldDeclaration>    fields;
