@@ -213,7 +213,7 @@ namespace yzg
         return t;
     }
     
-    template <typename ArgT, typename RetT>
+    template <typename ArgT, typename RetT, typename SimT>
     class BuiltInOp1 : public BuiltInFunction
     {
     public:
@@ -225,9 +225,13 @@ namespace yzg
             arg->type = makeType<ArgT>();
             arguments.push_back(arg);
         }
+        
+        virtual SimNode * simulate ( Context & context ) {
+            return context.makeNode<SimT>();
+        }
     };
     
-    template <typename ArgT1, typename ArgT2, typename RetT>
+    template <typename ArgT1, typename ArgT2, typename RetT, typename SimT>
     class BuiltInOp2 : public BuiltInFunction
     {
     public:
@@ -242,6 +246,10 @@ namespace yzg
             arg2->name = "arg2";
             arg2->type = makeType<ArgT2>();
             arguments.push_back(arg2);
+        }
+        
+        virtual SimNode * simulate ( Context & context ) {
+            return context.makeNode<SimT>();
         }
     };
     
@@ -313,6 +321,12 @@ namespace yzg
         type->rvalue = false;
     }
     
+    SimNode * ExprR2L::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
+    }
+
     // ExprAt
     
     void ExprAt::log(ostream& stream, int depth) const
@@ -342,6 +356,12 @@ namespace yzg
         cexpr->subexpr = subexpr->clone();
         cexpr->index = index->clone();
         return cexpr;
+    }
+
+    SimNode * ExprAt::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
     }
 
     // ExprBlock
@@ -376,6 +396,13 @@ namespace yzg
         }
     }
     
+    SimNode * ExprBlock::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
+    }
+
+    
     // ExprField
     
     ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const
@@ -407,6 +434,12 @@ namespace yzg
             throw semantic_error("field " + name + " not found", at);
         type = make_shared<TypeDecl>(*field->type);
         type->rvalue = rvalue->type->isRValue();
+    }
+    
+    SimNode * ExprField::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
     }
     
     // ExprVar
@@ -458,6 +491,13 @@ namespace yzg
         type->rvalue = true;
     }
     
+    SimNode * ExprVar::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
+    }
+
+    
     // ExprOp
     
     ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const
@@ -497,9 +537,19 @@ namespace yzg
         if ( functions.size()>1 )
             throw semantic_error("too many matching functions", at);
         func = functions[0];
+        if ( !func->builtIn )
+            throw semantic_error("operator must point to built-in function every time", at);
         type = make_shared<TypeDecl>(*func->result);
         if ( !func->arguments[0]->type->isRValue() )
             subexpr = autoDereference(subexpr);
+    }
+    
+    SimNode * ExprOp1::simulate (Context & context) const
+    {
+        auto pBuiltInFunction = static_pointer_cast<BuiltInFunction>(func);
+        auto pSimOp1 = static_cast<SimNode_Op1 *>(pBuiltInFunction->simulate(context));
+        pSimOp1->x = subexpr->simulate(context);
+        return pSimOp1;
     }
     
     // ExprOp2
@@ -534,6 +584,8 @@ namespace yzg
         if ( functions.size()>1 )
             throw semantic_error("too many matching functions", at);
         func = functions[0];
+        if ( !func->builtIn )
+            throw semantic_error("operator must point to built-in function every time", at);
         type = make_shared<TypeDecl>(*func->result);
         if ( !func->arguments[0]->type->isRValue() )
             left = autoDereference(left);
@@ -541,6 +593,15 @@ namespace yzg
             right = autoDereference(right);
     }
     
+    SimNode * ExprOp2::simulate (Context & context) const
+    {
+        auto pBuiltInFunction = static_pointer_cast<BuiltInFunction>(func);
+        auto pSimOp2 = static_cast<SimNode_Op2 *>(pBuiltInFunction->simulate(context));
+        pSimOp2->l = left->simulate(context);
+        pSimOp2->r = right->simulate(context);
+        return pSimOp2;
+    }
+
     // ExprOp3
     
     ExpressionPtr ExprOp3::clone( const ExpressionPtr & expr ) const
@@ -589,6 +650,12 @@ namespace yzg
             right = autoDereference(right);
     }
     
+    SimNode * ExprOp3::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
+    }
+    
     // ExprReturn
     
     ExpressionPtr ExprReturn::clone( const ExpressionPtr & expr ) const
@@ -626,6 +693,13 @@ namespace yzg
             subexpr = autoDereference(subexpr);
     }
     
+    SimNode * ExprReturn::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
+    }
+
+    
     // ExprConstInt
     
     ExpressionPtr ExprConstInt::clone( const ExpressionPtr & expr ) const
@@ -643,6 +717,12 @@ namespace yzg
     void ExprConstInt::inferType(InferTypeContext & context)
     {
         type = make_shared<TypeDecl>(Type::tInt);
+    }
+    
+    SimNode * ExprConstInt::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
     }
     
     // ExprConstUInt
@@ -664,6 +744,12 @@ namespace yzg
         type = make_shared<TypeDecl>(Type::tUInt);
     }
     
+    SimNode * ExprConstUInt::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
+    }
+    
     // ExprConstDouble
     
     ExpressionPtr ExprConstDouble::clone( const ExpressionPtr & expr ) const
@@ -683,6 +769,12 @@ namespace yzg
         type = make_shared<TypeDecl>(Type::tFloat);
     }
     
+    SimNode * ExprConstDouble::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
+    }
+
     // ExprIfThenElse
     
     ExpressionPtr ExprIfThenElse::clone( const ExpressionPtr & expr ) const
@@ -719,6 +811,14 @@ namespace yzg
         type = make_shared<TypeDecl>();
     }
     
+    SimNode * ExprIfThenElse::simulate (Context & context) const
+    {
+        if ( if_false )
+            return context.makeNode<SimNode_IfThenElse>(cond->simulate(context), if_true->simulate(context), if_false->simulate(context));
+        else
+            return context.makeNode<SimNode_IfThen>(cond->simulate(context), if_true->simulate(context));
+    }
+
     // ExprWhile
     
     ExpressionPtr ExprWhile::clone( const ExpressionPtr & expr ) const
@@ -747,6 +847,11 @@ namespace yzg
         stream << ")";
     }
 
+    SimNode * ExprWhile::simulate (Context & context) const
+    {
+        return context.makeNode<SimNode_While>(cond->simulate(context),body->simulate(context));
+    }
+    
     // ExprLet
     
     ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const
@@ -794,6 +899,12 @@ namespace yzg
         type = make_shared<TypeDecl>();
     }
     
+    SimNode * ExprLet::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
+    }
+    
     // ExprCall
     
     ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const
@@ -833,17 +944,23 @@ namespace yzg
             throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
-        for ( int iT = arguments.size(); iT != func->arguments.size(); ++iT ) {
+        for ( size_t iT = arguments.size(); iT != func->arguments.size(); ++iT ) {
             auto newArg = func->arguments[iT]->init->clone();
             if ( !newArg->type )
                 newArg->inferType(context);
             arguments.push_back(newArg);
         }
-        for ( int iA = 0; iA != arguments.size(); ++iA )
+        for ( size_t iA = 0; iA != arguments.size(); ++iA )
             if ( !func->arguments[iA]->type->isRValue() )
                 arguments[iA] = autoDereference(arguments[iA]);
     }
     
+    SimNode * ExprCall::simulate (Context & context) const
+    {
+        assert(0 && "implement");
+        return nullptr;
+    }
+
     // program
     
     VariablePtr Program::findVariable ( const string & name ) const
@@ -914,60 +1031,59 @@ namespace yzg
     void Program::addBuiltinOperators()
     {
         // boolean
-        addBuiltIn( make_shared<BuiltInOp1<bool, bool>>("!") );   // unary !
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("==") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("!=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("&") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("|") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool>>("^") );
-        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&>>("=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&>>("&=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&>>("|=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&>>("^=") );
+        addBuiltIn( make_shared<BuiltInOp1<bool, bool, Sim_BoolNot<SimPolicy_Bool>>>("!") );   // unary !
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_Equ<SimPolicy_Bool>>>("==") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_NotEqu<SimPolicy_Bool>>>("!=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_BoolAnd<SimPolicy_Bool>>>("&") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_BoolOr<SimPolicy_Bool>>>("|") );
+        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_BoolXor<SimPolicy_Bool>>>("^") );
+        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&, Sim_Set<SimPolicy_Bool>>>("=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&, Sim_SetBoolAnd<SimPolicy_Bool>>>("&=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&, Sim_SetBoolOr<SimPolicy_Bool>>>("|=") );
+        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&, Sim_SetBoolXor<SimPolicy_Bool>>>("^=") );
         // integer
-        addBuiltIn( make_shared<BuiltInOp1<int, int>>("+") );   // unary +
-        addBuiltIn( make_shared<BuiltInOp1<int, int>>("-") );   // unary -
-        addBuiltIn( make_shared<BuiltInOp1<int, int>>("~") );   // unary ~
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("+") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("-") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("*") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("/") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("&") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("|") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int>>("^") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>("==") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>("!=") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>(">=") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>("<=") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>(">") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool>>("<") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("+=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("-=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("*=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("/=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("~=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("&=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("|=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&>>("^=") );
+        addBuiltIn( make_shared<BuiltInOp1<int, int, Sim_Unp<SimPolicy_Int>>>("+") );      // unary +
+        addBuiltIn( make_shared<BuiltInOp1<int, int, Sim_Unm<SimPolicy_Int>>>("-") );      // unary -
+        addBuiltIn( make_shared<BuiltInOp1<int, int, Sim_BinNot<SimPolicy_Int>>>("~") );   // unary ~
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_Add<SimPolicy_Int>>>("+") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_Sub<SimPolicy_Int>>>("-") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_Mul<SimPolicy_Int>>>("*") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_Div<SimPolicy_Int>>>("/") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_BinAnd<SimPolicy_Int>>>("&") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_BinOr<SimPolicy_Int>>>("|") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_BinXor<SimPolicy_Int>>>("^") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_Equ<SimPolicy_Int>>>("==") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_NotEqu<SimPolicy_Int>>>("!=") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_GtEqu<SimPolicy_Int>>>(">=") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_LessEqu<SimPolicy_Int>>>("<=") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_Gt<SimPolicy_Int>>>(">") );
+        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_Less<SimPolicy_Int>>>("<") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_Set<SimPolicy_Int>>>("=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetAdd<SimPolicy_Int>>>("+=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetSub<SimPolicy_Int>>>("-=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetMul<SimPolicy_Int>>>("*=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetDiv<SimPolicy_Int>>>("/=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetBinAnd<SimPolicy_Int>>>("&=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetBinOr<SimPolicy_Int>>>("|=") );
+        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetBinXor<SimPolicy_Int>>>("^=") );
         // float
-        addBuiltIn( make_shared<BuiltInOp1<float, float>>("+") );   // unary +
-        addBuiltIn( make_shared<BuiltInOp1<float, float>>("-") );   // unary -
-        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("+") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("-") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("*") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, float>>("/") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>("==") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>("!=") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>(">=") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>("<=") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>(">") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool>>("<") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("=") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("+=") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("-=") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("*=") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&>>("/=") );
+        addBuiltIn( make_shared<BuiltInOp1<float, float, Sim_Unp<SimPolicy_Float>>>("+") );   // unary +
+        addBuiltIn( make_shared<BuiltInOp1<float, float, Sim_Unm<SimPolicy_Float>>>("-") );   // unary -
+        addBuiltIn( make_shared<BuiltInOp2<float, float, float, Sim_Add<SimPolicy_Float>>>("+") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, float, Sim_Sub<SimPolicy_Float>>>("-") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, float, Sim_Mul<SimPolicy_Float>>>("*") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, float, Sim_Div<SimPolicy_Float>>>("/") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_Equ<SimPolicy_Float>>>("==") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_NotEqu<SimPolicy_Float>>>("!=") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_GtEqu<SimPolicy_Float>>>(">=") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_LessEqu<SimPolicy_Float>>>("<=") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_Gt<SimPolicy_Float>>>(">") );
+        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_Less<SimPolicy_Float>>>("<") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_Set<SimPolicy_Float>>>("=") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_SetAdd<SimPolicy_Float>>>("+=") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_SetSub<SimPolicy_Float>>>("-=") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_SetMul<SimPolicy_Float>>>("*=") );
+        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_SetDiv<SimPolicy_Float>>>("/=") );
     }
     
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const

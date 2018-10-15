@@ -10,6 +10,7 @@
 #define ast_hpp
 
 #include "reader.hpp"
+#include "simulate.hpp"
 
 #include <memory>
 #include <vector>
@@ -127,6 +128,7 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
         void logType(ostream& stream) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
+        virtual SimNode * simulate (Context & context) const = 0;
     public:
         TypeDeclPtr type;
         Node *      at = nullptr;
@@ -138,6 +140,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   subexpr;
     };
@@ -148,6 +151,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   subexpr;
         ExpressionPtr   index;
@@ -159,6 +163,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         vector<ExpressionPtr>   list;
     };
@@ -169,6 +174,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         string      name;
         VariablePtr variable;
@@ -182,6 +188,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         string          name;
         ExpressionPtr   rvalue;
@@ -194,7 +201,7 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         Operator        op;
-        FunctionPtr     func;
+        FunctionPtr     func;   // always built-in function
     };
     
     class ExprOp1 : public ExprOp   // unary    !subexpr
@@ -203,6 +210,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   subexpr;
     };
@@ -213,6 +221,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   left, right;
     };
@@ -223,6 +232,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   subexpr, left, right;
     };
@@ -233,6 +243,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   subexpr;
     };
@@ -249,6 +260,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         int64_t value;
     };
@@ -260,6 +272,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         uint64_t value;
     };
@@ -271,6 +284,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         double value;
     };
@@ -282,6 +296,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
@@ -293,6 +308,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         string                  name;
         vector<ExpressionPtr>   arguments;
@@ -305,6 +321,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   cond, if_true, if_false;
     };
@@ -315,6 +332,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   cond, body;
     };
@@ -337,6 +355,7 @@ namespace yzg
     {
     public:
         BuiltInFunction ( const string & fn );
+        virtual SimNode * simulate ( Context & context ) = 0;
     };
     
     class Program : public enable_shared_from_this<Program>
