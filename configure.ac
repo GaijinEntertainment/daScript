@@ -39,7 +39,7 @@ AC_LINK_IFELSE([AC_LANG_SOURCE([
 
 ## Check for reallocarray
 AC_MSG_CHECKING(for reallocarray)
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([
+AC_LINK_IFELSE([AC_LANG_SOURCE([
     #define _GNU_SOURCE  /* for reallocarray */
     #include <stdlib.h>
 
