@@ -936,23 +936,57 @@ namespace yzg
     
     void ExprLet::inferType(InferTypeContext & context)
     {
+        auto sp = context.stackTop;
         auto sz = context.local.size();
+        totalInit = 0;
         for ( auto & var : variables ) {
             context.local.push_back(var);
-            var->init->inferType(context);
-            if ( !var->type->isSameType(*var->init->type,false) )
-                throw semantic_error("variable initialization type mismatch", var->at );
-            var->init = autoDereference(var->init);
+            if ( var->init ) {
+                var->init->inferType(context);
+                if ( !var->type->isSameType(*var->init->type,false) )
+                    throw semantic_error("variable initialization type mismatch", var->at );
+                var->init = autoDereference(var->init);
+                totalInit ++;
+            }
+            var->stackTop = context.stackTop;
+            context.stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
         }
         subexpr->inferType(context);
+        context.func->totalStackSize = max(context.func->totalStackSize, sp);
+        context.stackTop = sp;
         context.local.resize(sz);
         type = make_shared<TypeDecl>();
     }
     
+    
     SimNode * ExprLet::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        auto let = context.makeNode<SimNode_Let>();
+        let->total = totalInit;
+        let->list = (SimNode **) context.allocate(let->total * sizeof(SimNode*));
+        int vi = 0;
+        for ( auto & var : variables ) {
+            if ( var->init ) {
+                SimNode * copy = nullptr;
+                auto init = var->init->simulate(context);
+                auto get = context.makeNode<SimNode_GetLocal>(var->stackTop);
+                int size = var->type->getSizeOf();
+                if ( var->init->type->isRValue() ) {
+                    copy = context.makeNode<SimNode_CopyRValue>(get, init, size);
+                } else {
+                    switch ( var->type->baseType ) {
+                        case Type::tInt:    copy = context.makeNode<SimNode_CopyLValue<int64_t>>(get, init);    break;
+                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyLValue<uint64_t>>(get, init);   break;
+                        case Type::tFloat:  copy = context.makeNode<SimNode_CopyLValue<float>>(get, init);      break;
+                        default:
+                            throw runtime_error("unsupported? can't assign initial value");
+                    }
+                }
+                let->list[vi++] = copy;
+            }
+        }
+        let->subexpr = subexpr->simulate(context);
+        return let;
     }
     
     // ExprCall

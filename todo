@@ -1,4 +1,6 @@
 parser
+    support no initilization in local let
+    support initialization in global let
     support auto in let
     support late binding of default arguments
     support auto in function default arguments
@@ -7,6 +9,7 @@ parser
 
 misc
     support 'clone' for variables, redo name lookup upstream during cloning?
+    simplify builtin initialization
 
 optimization \ ast massage
     flatten nested blocks

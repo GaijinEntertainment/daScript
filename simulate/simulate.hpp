@@ -67,6 +67,8 @@ namespace yzg
         char * linearAllocatorExecuteBase = nullptr;
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
+    public:
+        char * stackTop = nullptr;
     };
     
     struct SimNode
@@ -78,13 +80,52 @@ namespace yzg
     template <typename TT> inline __m128 cast_from ( TT v );
     template <> inline bool cast_to ( __m128 x )    { return ((int *)&x)[0] != 0; }
     template <> inline __m128 cast_from ( bool x )  { return _mm_set1_epi32(x); }
-    template <> inline int cast_to ( __m128 x )     { return ((int *)&x)[0]; }
-    template <> inline __m128 cast_from ( int x )   { return _mm_set1_epi32(x); }
+    template <> inline int64_t cast_to ( __m128 x )     { return ((int64_t *)&x)[0]; }
+    template <> inline __m128 cast_from ( int64_t x )   { __m128 a; ((int64_t *)&a)[0] = x; return a; }
     template <> inline float cast_to ( __m128 x )   { return ((float *)&x)[0]; }
     template <> inline __m128 cast_from ( float x ) { return _mm_set_ss(x); }
     
     template <typename TT> inline TT * ptr_cast_to ( __m128 a )     { return ((TT **)&a)[0]; }
     template <typename TT> inline __m128 ptr_cast_from ( TT * p )   { __m128 x; ((TT **)&x)[0] = p; return x; }
+    
+    // COPY R-VALUE
+    struct SimNode_CopyRValue : SimNode {
+        SimNode_CopyRValue(SimNode * ll, SimNode * rr, int sz) : l(ll), r(rr), size(sz) {};
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ll = l->eval(context);
+            __m128 rr = r->eval(context);
+            auto pl = ptr_cast_to<void>(ll);
+            auto pr = ptr_cast_to<void>(rr);
+            memcpy ( pl, pr, size );
+            return ll;
+        }
+        SimNode * l, * r;
+        int size;
+    };
+    
+    // COPY L-VALUE
+    template <typename TT>
+    struct SimNode_CopyLValue : SimNode {
+        SimNode_CopyLValue(SimNode * ll, SimNode * rr) : l(ll), r(rr) {};
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ll = l->eval(context);
+            __m128 rr = r->eval(context);
+            TT * pl = ptr_cast_to<TT>(ll);
+            TT * pr = (TT *) &rr;
+            *pl = *pr;
+            return ll;
+        }
+        SimNode * l, * r;
+    };
+    
+    // LOCAL VARIABLE "GET"
+    struct SimNode_GetLocal : SimNode {
+        SimNode_GetLocal(int sp) : stackTop(sp) {}
+        virtual __m128 eval ( Context & context ) override {
+            return ptr_cast_from(context.stackTop + stackTop);
+        }
+        int stackTop;
+    };
     
     // BLOCK
     struct SimNode_Block : SimNode {
@@ -95,6 +136,16 @@ namespace yzg
         }
         SimNode ** list = nullptr;
         int total = 0;
+    };
+    
+    // LET
+    struct SimNode_Let : SimNode_Block {
+        virtual __m128 eval ( Context & context ) override {
+            for ( int i = 0; i != total; ++i )
+                list[i]->eval(context);
+            return subexpr->eval(context);
+        }
+        SimNode * subexpr = nullptr;
     };
     
     // IF-THEN
@@ -187,11 +238,11 @@ namespace yzg
         static inline __m128 SetBinXor ( __m128 a, __m128 b ) { *ptr_cast_to<TT>(a) ^= cast_to<TT>(b); return a; }
     };
     
-    struct SimPolicy_Int : SimPolicy_Bin<int>
+    struct SimPolicy_Int : SimPolicy_Bin<int64_t>
     {
     };
     
-    struct SimPolicy_Uint : SimPolicy_Bin<unsigned int>
+    struct SimPolicy_Uint : SimPolicy_Bin<uint64_t>
     {
     };
     

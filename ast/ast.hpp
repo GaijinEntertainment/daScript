@@ -114,6 +114,7 @@ namespace yzg
         ExpressionPtr   init;
         Node *          at = nullptr;
         int             index = -1;
+        int             stackTop = 0;
     };
     
     class Expression
@@ -124,6 +125,7 @@ namespace yzg
             ProgramPtr          program;
             FunctionPtr         func;
             vector<VariablePtr> local;
+            int                 stackTop = 0;
         };
     public:
         friend ostream& operator<< (ostream& stream, const Expression & func);
@@ -304,6 +306,7 @@ namespace yzg
     public:
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
+        int                     totalInit = 0;
     };
     
     class ExprCall : public Expression
