@@ -41,17 +41,18 @@ script:
         -Wall
         -Wextra
         -pedantic
-
-        -Werror
     )
+    && CFLAGS="${compile_flags[*]} -std=c89"
+    && CXXFLAGS="${compile_flags[*]} -std=c++98"
     && configure_args=(
         CC=clang-7
         CXX=clang++-7
-        CFLAGS="${compile_flags[*]} -std=c89"
-        CXXFLAGS="${compile_flags[*]} -std=c++98"
+        CFLAGS="${CFLAGS}"
+        CXXFLAGS="${CXXFLAGS}"
         LDFLAGS='-g -fsanitize=address'
     )
-    && ./configure "${configure_args[@]}"
-  - make
-  - make check && cat test/uriparser_test.log
+    && ./configure "${configure_args[@]}"  # -Werror would fail configure checks!
+  - make CFLAGS="${CFLAGS} -Werror" CXXFLAGS="${CXXFLAGS} -Werror" all
+  - make CFLAGS="${CFLAGS} -Werror" CXXFLAGS="${CXXFLAGS} -Werror" check
+  - cat test/uriparser_test.log
   - make distcheck  # without Address Sanitizer
