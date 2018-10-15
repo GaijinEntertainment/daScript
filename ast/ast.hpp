@@ -74,6 +74,7 @@ namespace yzg
         bool isRValue() const;
         bool isIndex() const;
         int getSizeOf() const;
+        int getBaseSizeOf() const;
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -112,6 +113,7 @@ namespace yzg
         TypeDeclPtr     type;
         ExpressionPtr   init;
         Node *          at = nullptr;
+        int             index = -1;
     };
     
     class Expression
@@ -345,12 +347,15 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const Function & func);
         string getMangledName() const;
         VariablePtr findArgument(const string & name);
+        SimNode * simulate (Context & context) const;
     public:
         string              name;
         vector<VariablePtr> arguments;
         TypeDeclPtr         result;
         ExpressionPtr       body;
         bool                builtIn = false;
+        int                 index = -1;
+        int                 totalStackSize = -1;
     };
     
     class BuiltInFunction : public Function
@@ -370,10 +375,12 @@ namespace yzg
         void inferTypes();
         void addBuiltinOperators();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
+        void simulate ( Context & context );
     public:
         map<string, StructurePtr>   structures;
         map<string, VariablePtr>    globals;
         map<string, FunctionPtr>    functions;      // mangled name 2 function name
+        int                         totalFunctions = 0;
     };
 
     class parse_error : public runtime_error

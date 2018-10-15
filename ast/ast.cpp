@@ -123,7 +123,7 @@ namespace yzg
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
     }
     
-    int TypeDecl::getSizeOf() const
+    int TypeDecl::getBaseSizeOf() const
     {
         switch ( baseType ) {
             case tBool:     return sizeof(bool);
@@ -144,6 +144,14 @@ namespace yzg
             default:
                 return 0;
         }
+    }
+    
+    int TypeDecl::getSizeOf() const
+    {
+        int size = 1;
+        for ( auto i : dim )
+            size *= i;
+        return getBaseSizeOf() * size;
     }
     
     // structure
@@ -220,6 +228,13 @@ namespace yzg
             }
         }
         return nullptr;
+    }
+    
+    SimNode * Function::simulate (Context & context) const
+    {
+        if ( builtIn )
+            throw runtime_error("can only simulate non built-in function");
+        return body->simulate(context);
     }
     
     // built-in function
@@ -1036,11 +1051,20 @@ namespace yzg
     
     void Program::inferTypes()
     {
+        // global variables
+        int gvi = 0;
+        for ( auto & it : globals ) {
+            auto pvar = it.second;
+            pvar->index = gvi ++;
+        }
+        // functions
+        totalFunctions = 0;
         for ( auto & fit : functions ) {
             Expression::InferTypeContext context;
             context.program = shared_from_this();
             context.func = fit.second;
             if ( !context.func->builtIn ) {
+                context.func->index = totalFunctions ++;
                 for ( auto & arg : context.func->arguments ) {
                     if ( arg->init ) {
                         arg->init->inferType(context);
@@ -1133,7 +1157,7 @@ namespace yzg
                 auto & pFn = it.second;
                 if ( pFn->arguments.size() >= types.size() ) {
                     bool typesCompatible = true;
-                    for ( int ai = 0; ai != types.size(); ++ai ) {
+                    for ( auto ai = 0; ai != types.size(); ++ai ) {
                         auto & argType = pFn->arguments[ai]->type;
                         auto & passType = types[ai];
                         if ( (argType->isRValue() && !passType->isRValue()) || !argType->isSameType(*passType, false) ) {
@@ -1142,7 +1166,7 @@ namespace yzg
                         }
                     }
                     bool tailCompatible = true;
-                    for ( int ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
+                    for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
                         if ( !pFn->arguments[ti]->init ) {
                             tailCompatible = false;
                         }
@@ -1155,6 +1179,31 @@ namespace yzg
         }
         return result;
     }
+    
+    void Program::simulate ( Context & context )
+    {
+        context.globalVariables = (GlobalVariable *) context.allocate( globals.size()*sizeof(GlobalVariable) );
+        for ( auto & it : globals ) {
+            auto pvar = it.second;
+            auto & gvar = context.globalVariables[pvar->index];
+            gvar.name = context.allocateName(pvar->name);
+            gvar.size = pvar->type->getSizeOf();
+            void * data = context.allocate(gvar.size);
+            gvar.value = ptr_cast_from(data);
+        }
+        context.functions = (SimFunction *) context.allocate( totalFunctions*sizeof(SimFunction) );
+        for ( auto & it : functions ) {
+            auto pfun = it.second;
+            if ( pfun->index==-1 )
+                continue;
+            auto & gfun = context.functions[pfun->index];
+            gfun.name = context.allocateName(pfun->name);
+            gfun.code = pfun->simulate(context);
+        }
+        context.linearAllocatorExecuteBase = context.linearAllocator;
+    }
+    
+    // PARSER
     
     // expression parser forward declaration
     ExpressionPtr parseExpression ( const NodePtr & decl, const ProgramPtr & program );

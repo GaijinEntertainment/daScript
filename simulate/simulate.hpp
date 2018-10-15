@@ -11,6 +11,7 @@
 
 #include <xmmintrin.h>
 #include <vector>
+#include <string>
 
 namespace yzg
 {
@@ -18,19 +19,40 @@ namespace yzg
     
     struct SimNode;
     
+    struct GlobalVariable
+    {
+        char *  name;
+        __m128  value;
+        size_t  size;
+    };
+    
+    struct SimFunction
+    {
+        char *      name;
+        SimNode *   code;
+    };
+    
     class Context
     {
+        friend class Program;
     public:
         Context();
         ~Context();
         
-        inline void * allocate ( int size ) {
+        inline void * allocate ( size_t size ) {
             size = (size + 0x0f) & ~0x0f;
             if ( linearAllocator - linearAllocatorBase + size > linearAllocatorSize )
                 throw runtime_error("out of linear allocator space");
             void * result = linearAllocator;
             linearAllocator += size;
             return result;
+        }
+        
+        inline char * allocateName ( const string & name ) {
+            auto size = name.length() + 1;
+            char * str = (char *) allocate(size+1);
+            memcpy ( str, name.c_str(), size );
+            return str;
         }
         
         template<typename TT, typename... Params>
@@ -42,6 +64,9 @@ namespace yzg
         int linearAllocatorSize = 1*1024*1024;
         char * linearAllocator = nullptr;
         char * linearAllocatorBase = nullptr;
+        char * linearAllocatorExecuteBase = nullptr;
+        GlobalVariable * globalVariables = nullptr;
+        SimFunction * functions = nullptr;
     };
     
     struct SimNode

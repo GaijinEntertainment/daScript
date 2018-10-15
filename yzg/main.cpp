@@ -55,6 +55,10 @@ void test_ast ( const string & fn )
         auto node = read(str);
         auto program = parse(node);
         cout << *program << "\n";
+        
+        Context ctx;
+        program->simulate(ctx);
+        
 #if REPORT_ERRORS
     } catch ( const read_error & error ) {
         reportError ( str, error.at, error.what() );
