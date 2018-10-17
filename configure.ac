@@ -1,5 +1,6 @@
 AC_PREREQ(2.61)
-AC_INIT([uriparser], [0.8.6])
+AC_INIT([uriparser], [0.8.6], [https://github.com/uriparser/uriparser/issues],
+		[uriparser], [https://uriparser.github.io/])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.10.1 foreign dist-zip dist-bzip2 no-dist-gzip subdir-objects])
 
