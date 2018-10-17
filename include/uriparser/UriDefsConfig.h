@@ -76,7 +76,7 @@
 
 
 /* Function inlining, not ANSI/ISO C! */
-#if (defined(URI_DOXYGEN) || defined(URI_SIZEDOWN))
+#if defined(URI_DOXYGEN)
 # define URI_INLINE
 #elif defined(__INTEL_COMPILER)
 /* Intel C/C++ */

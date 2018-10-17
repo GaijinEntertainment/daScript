@@ -27,25 +27,11 @@ AC_CHECK_FUNCS([wprintf])
 AC_CHECK_FUNCS([reallocarray])  # needs AC_USE_SYSTEM_EXTENSIONS (#define _GNU_SOURCE)
 
 
-## Option for URI_SIZEDOWN
-AC_ARG_ENABLE(sizedown, [
+## Option --disable-test
+AC_ARG_ENABLE(test, [
 ==============================================================================
 Extra options:
 AS_HELP_STRING(
-	[--enable-sizedown], [save space whereever possible])
-AS_HELP_STRING(
-	[], [(resulting in slower code)])], [
-	URI_SIZE_DOWN_YESNO=${enableval}
-	if test ${enableval} = yes ; then
-		CPPFLAGS="${CPPFLAGS} -DURI_SIZEDOWN"
-	fi
-],[
-	URI_SIZE_DOWN_YESNO=no
-])
-
-
-## Option --disable-test
-AC_ARG_ENABLE(test, [AS_HELP_STRING(
 	[--disable-test], [disable 'make check' and libgtest dependency]
 )], [
 	URI_TEST_YESNO=${enableval}
@@ -156,7 +142,6 @@ cat <<INFO
 
 Configuration
   Prefix ............... ${prefix}
-  Size down ............ ${URI_SIZE_DOWN_YESNO}
   Code for char * ...... ${CHAR_YESNO}
   Code for wchar_t * ... ${WCHAR_T_YESNO}
   Test suite ........... ${URI_TEST_YESNO}
