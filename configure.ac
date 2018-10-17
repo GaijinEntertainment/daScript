@@ -5,6 +5,7 @@ AM_INIT_AUTOMAKE([1.10.1 foreign dist-zip dist-bzip2 no-dist-gzip subdir-objects
 
 AC_CONFIG_MACRO_DIR([m4])
 
+AC_USE_SYSTEM_EXTENSIONS
 AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_LIBTOOL
@@ -38,22 +39,7 @@ AC_LINK_IFELSE([AC_LANG_SOURCE([
 
 
 ## Check for reallocarray
-AC_MSG_CHECKING(for reallocarray)
-AC_LINK_IFELSE([AC_LANG_SOURCE([
-    #define _GNU_SOURCE  /* for reallocarray */
-    #include <stdlib.h>
-
-    int main() {
-        reallocarray(NULL, 0, 0);
-        return 0;
-    }
-])],[
-    AC_DEFINE([HAVE_REALLOCARRAY], 1,
-        [Define to 1 if you have function reallocarray])
-    AC_MSG_RESULT(yes)
-], [
-    AC_MSG_RESULT(no)
-])
+AC_CHECK_FUNCS([reallocarray])  # needs AC_USE_SYSTEM_EXTENSIONS (#define _GNU_SOURCE)
 
 
 ## Option for URI_SIZEDOWN
