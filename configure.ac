@@ -151,7 +151,7 @@ AC_CONFIG_FILES([doc/release.sh], [chmod a+x doc/release.sh])
 AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT
 
-cat <<CONFIG
+cat <<INFO
 ===========================================================================
 
 Configuration
@@ -162,9 +162,6 @@ Configuration
   Test suite ........... ${URI_TEST_YESNO}
   Documentation ........ ${URI_DOC_YESNO}
 
-CONFIG
-
-cat <<"INFO"
 Continue with
   make
   make check
