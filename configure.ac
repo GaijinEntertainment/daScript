@@ -22,24 +22,8 @@ esac
 AM_CONDITIONAL([WIN32], test "$WIN32" = "yes")
 
 
-## Check for wprintf
-AC_MSG_CHECKING(for wprintf)
-AC_LINK_IFELSE([AC_LANG_SOURCE([
-	#include <stdio.h>
-	#include <wchar.h>
-	int main() {
-	    wprintf((wchar_t *)0, 0);
-	    return 0;
-	}
-])],[
-	AC_DEFINE([HAVE_WPRINTF],, [Define if your C runtime provides the wprintf function.])
-	AC_MSG_RESULT(yes)
-],[
-	AC_MSG_RESULT(no)
-])
-
-
-## Check for reallocarray
+## Check for functions
+AC_CHECK_FUNCS([wprintf])
 AC_CHECK_FUNCS([reallocarray])  # needs AC_USE_SYSTEM_EXTENSIONS (#define _GNU_SOURCE)
 
 
