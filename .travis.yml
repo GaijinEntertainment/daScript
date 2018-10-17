@@ -30,6 +30,8 @@ script:
     && export PKG_CONFIG_PATH="$(find "${GTEST_PREFIX}" -type d -name pkgconfig)"
   - sed 's,-I,-isystem ,g' -i "${PKG_CONFIG_PATH}"/gtest.pc  # suppress compile warnings
   - ./autogen.sh
+  - mkdir build
+  - pushd build
   - compile_flags=(
         -pipe
 
@@ -51,8 +53,9 @@ script:
         CXXFLAGS="${CXXFLAGS}"
         LDFLAGS='-g -fsanitize=address'
     )
-    && ./configure "${configure_args[@]}"  # -Werror would fail configure checks!
+    && ../configure "${configure_args[@]}"  # -Werror would fail configure checks!
   - make CFLAGS="${CFLAGS} -Werror" CXXFLAGS="${CXXFLAGS} -Werror" all
   - make CFLAGS="${CFLAGS} -Werror" CXXFLAGS="${CXXFLAGS} -Werror" check
   - cat test/uriparser_test.log
   - make distcheck  # without Address Sanitizer
+  - popd
