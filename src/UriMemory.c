@@ -47,7 +47,9 @@
 #endif
 
 #if HAVE_REALLOCARRAY
-# define _GNU_SOURCE
+# ifndef _GNU_SOURCE
+#  define _GNU_SOURCE 1
+# endif
 #endif
 
 #include <errno.h>
