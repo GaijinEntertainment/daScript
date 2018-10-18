@@ -141,6 +141,7 @@ void * uriEmulateCalloc(UriMemoryManager * memory, size_t nmemb, size_t size) {
 
 	buffer = memory->malloc(memory, total_size);
 	if (buffer == NULL) {
+		/* errno set by malloc */
 		return NULL;
 	}
 	memset(buffer, 0, total_size);
