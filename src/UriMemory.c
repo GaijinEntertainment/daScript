@@ -166,6 +166,127 @@ void * uriEmulateReallocarray(UriMemoryManager * memory,
 
 
 
+static void * uriDecorateMalloc(UriMemoryManager * memory,
+		size_t size) {
+	UriMemoryManager * backend;
+	const size_t extraBytes = sizeof(size_t);
+	void * buffer;
+
+	if (memory == NULL) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	/* check for unsigned overflow */
+	if (size > ((size_t)-1) - extraBytes) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	backend = (UriMemoryManager *)memory->userData;
+	if (backend == NULL) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	buffer = backend->malloc(backend, extraBytes + size);
+	if (buffer == NULL) {
+		return NULL;
+	}
+
+	*(size_t *)buffer = size;
+
+	return (char *)buffer + extraBytes;
+}
+
+
+
+static void * uriDecorateRealloc(UriMemoryManager * memory,
+		void * ptr, size_t size) {
+	void * newBuffer;
+	size_t prevSize;
+
+	if (memory == NULL) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	/* man realloc: "If ptr is NULL, then the call is equivalent to
+	 * malloc(size), for *all* values of size" */
+	if (ptr == NULL) {
+		return memory->malloc(memory, size);
+	}
+
+	/* man realloc: "If size is equal to zero, and ptr is *not* NULL,
+	 * then the call is equivalent to free(ptr)." */
+	if (size == 0) {
+		memory->free(memory, ptr);
+		return NULL;
+	}
+
+	prevSize = *((size_t *)((char *)ptr - sizeof(size_t)));
+
+	/* Anything to do? */
+	if (size <= prevSize) {
+		return ptr;
+	}
+
+	newBuffer = memory->malloc(memory, size);
+	if (newBuffer == NULL) {
+		/* errno set by malloc */
+		return NULL;
+	}
+
+	memcpy(newBuffer, ptr, prevSize);
+
+	memory->free(memory, ptr);
+
+	return newBuffer;
+}
+
+
+
+static void uriDecorateFree(UriMemoryManager * memory, void * ptr) {
+	UriMemoryManager * backend;
+
+	if ((ptr == NULL) || (memory == NULL)) {
+		return;
+	}
+
+	backend = (UriMemoryManager *)memory->userData;
+	if (backend == NULL) {
+		return;
+	}
+
+	backend->free(backend, (char *)ptr - sizeof(size_t));
+}
+
+
+
+int uriCompleteMemoryManager(UriMemoryManager * memory,
+		UriMemoryManager * backend) {
+	if ((memory == NULL) || (backend == NULL)) {
+		return URI_ERROR_NULL;
+	}
+
+	if ((backend->malloc == NULL) || (backend->free == NULL)) {
+		return URI_ERROR_MEMORY_MANAGER_INCOMPLETE;
+	}
+
+	memory->calloc = uriEmulateCalloc;
+	memory->reallocarray = uriEmulateReallocarray;
+
+	memory->malloc = uriDecorateMalloc;
+	memory->realloc = uriDecorateRealloc;
+	memory->free = uriDecorateFree;
+
+	memory->userData = backend;
+
+	return URI_SUCCESS;
+}
+
+
+
 int uriTestMemoryManager(UriMemoryManager * memory) {
 	const size_t mallocSize = 7;
 	const size_t callocNmemb = 3;

@@ -167,6 +167,16 @@ TEST(MemoryManagerTestingSuite, DefaultMemoryManager) {
 
 
 
+TEST(MemoryManagerTestingSuite, CompleteMemoryManager) {
+	UriMemoryManager memory;
+	ASSERT_EQ(uriCompleteMemoryManager(&memory, &defaultMemoryManager),
+			URI_SUCCESS);
+
+	ASSERT_EQ(uriTestMemoryManager(&memory), URI_SUCCESS);
+}
+
+
+
 TEST(MemoryManagerTestingSuite, EmulateCalloc) {
 	UriMemoryManager partialEmulationMemoryManager;
 	memcpy(&partialEmulationMemoryManager, &defaultMemoryManager,

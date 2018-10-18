@@ -198,6 +198,7 @@ typedef void (*UriFuncFree)(struct UriMemoryManagerStruct *, void *);
 /**
  * Class-like interface of custom memory managers
  *
+ * @see uriCompleteMemoryManager
  * @see uriEmulateCalloc
  * @see uriEmulateReallocarray
  * @see uriTestMemoryManager
@@ -254,6 +255,40 @@ typedef enum UriResolutionOptionsEnum {
 
 
 /**
+ * Wraps a memory manager backend that only provides malloc and free
+ * to make a complete memory manager ready to be used.
+ *
+ * The core feature of this wrapper is that you don't need to implement
+ * realloc if you don't want to.  The wrapped memory manager uses
+ * backend->malloc, memcpy, and backend->free and soieof(size_t) extra
+ * bytes per allocation to emulate fallback realloc for you.
+ *
+ * memory->calloc is uriEmulateCalloc.
+ * memory->free uses backend->free and handles the size header.
+ * memory->malloc uses backend->malloc and adds a size header.
+ * memory->realloc uses memory->malloc, memcpy, and memory->free and reads
+ *                 the size header.
+ * memory->reallocarray is uriEmulateReallocarray.
+ *
+ * The internal workings behind memory->free, memory->malloc, and
+ * memory->realloc may change so the functions exposed by these function
+ * pointer sshould be consided internal and not public API.
+ *
+ * @param memory   <b>OUT</b>: Where to write the wrapped memory manager to
+ * @param backend  <b>IN</b>: Memory manager to use as a backend
+ * @return          Error code or 0 on success
+ *
+ * @see uriEmulateCalloc
+ * @see uriEmulateReallocarray
+ * @see UriMemoryManager
+ * @since 0.9.0
+ */
+int uriCompleteMemoryManager(UriMemoryManager * memory,
+		UriMemoryManager * backend);
+
+
+
+/**
  * Offers emulation of calloc(3) based on memory->malloc and memset.
  * See "man 3 calloc" as well.
  *
@@ -262,6 +297,7 @@ typedef enum UriResolutionOptionsEnum {
  * @param size    <b>IN</b>: Size in bytes per element
  * @return        Pointer to allocated memory or NULL
  *
+ * @see uriCompleteMemoryManager
  * @see uriEmulateReallocarray
  * @see UriMemoryManager
  * @since 0.9.0
@@ -281,6 +317,7 @@ void * uriEmulateCalloc(UriMemoryManager * memory,
  * @param size    <b>IN</b>: Size in bytes per element
  * @return        Pointer to allocated memory or NULL
  *
+ * @see uriCompleteMemoryManager
  * @see uriEmulateCalloc
  * @see UriMemoryManager
  * @since 0.9.0

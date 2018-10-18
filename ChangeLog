@@ -16,6 +16,7 @@
   * Added: Support for custom memory managers (GitHub #26, #35), see Doxygen
       New functions:
         uriAddBaseUriExMm[AW]
+        uriCompleteMemoryManager
         uriComposeQueryMallocExMm[AW]
         uriDissectQueryMallocExMm[AW]
         uriEmulateCalloc
