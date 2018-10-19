@@ -126,7 +126,7 @@ static UriQueryListA * parseQueryList(const char * queryString) {
 
 
 
-TEST(MiscMemoryManagerSuite, MemoryManagerIsComplete) {
+TEST(MemoryManagerCompletenessSuite, AllFunctionMembersRequired) {
 	UriUriA uri = parse("whatever");
 	UriMemoryManager memory;
 
@@ -157,6 +157,23 @@ TEST(MiscMemoryManagerSuite, MemoryManagerIsComplete) {
 
 	memcpy(&memory, &defaultMemoryManager, sizeof(UriMemoryManager));
 	ASSERT_EQ(uriFreeUriMembersMmA(&uri, &memory), URI_SUCCESS);
+}
+
+
+
+TEST(MemoryManagerCompletenessSuite, MallocAndFreeRequiredOnly) {
+	UriMemoryManager memory;
+	UriMemoryManager backend;
+
+	memcpy(&backend, &defaultMemoryManager, sizeof(UriMemoryManager));
+	backend.malloc = NULL;
+	ASSERT_EQ(uriCompleteMemoryManager(&memory, &backend),
+			  URI_ERROR_MEMORY_MANAGER_INCOMPLETE);
+
+	memcpy(&backend, &defaultMemoryManager, sizeof(UriMemoryManager));
+	backend.free = NULL;
+	ASSERT_EQ(uriCompleteMemoryManager(&memory, &backend),
+			  URI_ERROR_MEMORY_MANAGER_INCOMPLETE);
 }
 
 
