@@ -19,6 +19,7 @@ Makefile.in
 /m4
 /liburiparser.pc
 /libtool
+/stamp-h1
 /uriparser-*.tar.bz2
 /uriparser-*.zip
 /uriparse
