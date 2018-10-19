@@ -336,6 +336,9 @@ void * uriEmulateReallocarray(UriMemoryManager * memory,
  * 4. checks that previous values are still present,
  * 5. and frees that memory.
  *
+ * It is recommended to compile with Address Sanitizer enabled
+ * to take full advantage of uriTestMemoryManager.
+ *
  * @param memory  <b>IN</b>: Memory manager to use, should not be NULL
  * @return        Error code or 0 on success
  *
