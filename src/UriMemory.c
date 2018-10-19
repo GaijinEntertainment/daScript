@@ -351,7 +351,7 @@ int uriTestMemoryManager(UriMemoryManager * memory) {
 	memory->free(memory, buffer);
 	buffer = NULL;
 
-	/* malloc + realloc size=0 (equals free) */
+	/* malloc + realloc ptr!=NULL size==0 (equals free) */
 	buffer = memory->malloc(memory, mallocSize);
 	if (buffer == NULL) {
 		return URI_ERROR_MEMORY_MANAGER_FAULTY;
@@ -360,7 +360,7 @@ int uriTestMemoryManager(UriMemoryManager * memory) {
 	memory->realloc(memory, buffer, 0);
 	buffer = NULL;
 
-	/* realloc ptr=NULL (equals malloc) + free */
+	/* realloc ptr==NULL size!=0 (equals malloc) + free */
 	buffer = memory->realloc(memory, NULL, mallocSize);
 	if (buffer == NULL) {
 		return URI_ERROR_MEMORY_MANAGER_FAULTY;
@@ -368,6 +368,13 @@ int uriTestMemoryManager(UriMemoryManager * memory) {
 	buffer[mallocSize - 1] = '\xF6';
 	memory->free(memory, buffer);
 	buffer = NULL;
+
+	/* realloc ptr==NULL size==0 (equals malloc) + free */
+	buffer = memory->realloc(memory, NULL, 0);
+	if (buffer != NULL) {
+		memory->free(memory, buffer);
+		buffer = NULL;
+	}
 
 	/* malloc + reallocarray + free */
 	buffer = memory->malloc(memory, mallocSize);
@@ -391,7 +398,7 @@ int uriTestMemoryManager(UriMemoryManager * memory) {
 	memory->free(memory, buffer);
 	buffer = NULL;
 
-	/* malloc + reallocarray nmemb=0 (equals free) */
+	/* malloc + reallocarray ptr!=NULL nmemb==0 size!=0 (equals free) */
 	buffer = memory->malloc(memory, mallocSize);
 	if (buffer == NULL) {
 		return URI_ERROR_MEMORY_MANAGER_FAULTY;
@@ -400,7 +407,7 @@ int uriTestMemoryManager(UriMemoryManager * memory) {
 	memory->reallocarray(memory, buffer, 0, reallocarraySize);
 	buffer = NULL;
 
-	/* malloc + reallocarray size=0 (equals free) */
+	/* malloc + reallocarray ptr!=NULL nmemb!=0 size==0 (equals free) */
 	buffer = memory->malloc(memory, mallocSize);
 	if (buffer == NULL) {
 		return URI_ERROR_MEMORY_MANAGER_FAULTY;
@@ -409,14 +416,44 @@ int uriTestMemoryManager(UriMemoryManager * memory) {
 	memory->reallocarray(memory, buffer, reallocarrayNmemb, 0);
 	buffer = NULL;
 
-	/* reallocarray ptr=NULL (equals malloc) + free */
+	/* malloc + reallocarray ptr!=NULL nmemb==0 size==0 (equals free) */
+	buffer = memory->malloc(memory, mallocSize);
+	if (buffer == NULL) {
+		return URI_ERROR_MEMORY_MANAGER_FAULTY;
+	}
+	buffer[mallocSize - 1] = '\xFB';
+	memory->reallocarray(memory, buffer, 0, 0);
+	buffer = NULL;
+
+	/* reallocarray ptr==NULL nmemb!=0 size!=0 (equals malloc) + free */
 	buffer = memory->reallocarray(memory, NULL, callocNmemb, callocSize);
 	if (buffer == NULL) {
 		return URI_ERROR_MEMORY_MANAGER_FAULTY;
 	}
-	buffer[callocTotalSize - 1] = '\xFB';
+	buffer[callocTotalSize - 1] = '\xFC';
 	memory->free(memory, buffer);
 	buffer = NULL;
+
+	/* reallocarray ptr==NULL nmemb==0 size!=0 (equals malloc) + free */
+	buffer = memory->reallocarray(memory, NULL, 0, callocSize);
+	if (buffer != NULL) {
+		memory->free(memory, buffer);
+		buffer = NULL;
+	}
+
+	/* reallocarray ptr==NULL nmemb!=0 size==0 (equals malloc) + free */
+	buffer = memory->reallocarray(memory, NULL, callocNmemb, 0);
+	if (buffer != NULL) {
+		memory->free(memory, buffer);
+		buffer = NULL;
+	}
+
+	/* reallocarray ptr==NULL nmemb==0 size==0 (equals malloc) + free */
+	buffer = memory->reallocarray(memory, NULL, 0, 0);
+	if (buffer != NULL) {
+		memory->free(memory, buffer);
+		buffer = NULL;
+	}
 
 	return URI_SUCCESS;
 }
