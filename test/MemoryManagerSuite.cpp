@@ -169,7 +169,13 @@ TEST(MemoryManagerTestingSuite, DefaultMemoryManager) {
 
 TEST(MemoryManagerTestingSuite, CompleteMemoryManager) {
 	UriMemoryManager memory;
-	ASSERT_EQ(uriCompleteMemoryManager(&memory, &defaultMemoryManager),
+	UriMemoryManager backend;
+
+	memset(&backend, 0, sizeof(UriMemoryManager));
+	backend.malloc = defaultMemoryManager.malloc;
+	backend.free = defaultMemoryManager.free;
+
+	ASSERT_EQ(uriCompleteMemoryManager(&memory, &backend),
 			URI_SUCCESS);
 
 	ASSERT_EQ(uriTestMemoryManager(&memory), URI_SUCCESS);
