@@ -2186,6 +2186,51 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state, const URI_CHAR * text) {
 
 
 
+int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
+		const URI_CHAR ** errorPos) {
+	if (text == NULL) {
+		return URI_ERROR_NULL;
+	}
+	return URI_FUNC(ParseSingleUriEx)(uri, text, text + URI_STRLEN(text),
+			errorPos);
+}
+
+
+
+int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		const URI_CHAR ** errorPos) {
+	return URI_FUNC(ParseSingleUriExMm)(uri, first, afterLast, errorPos, NULL);
+}
+
+
+
+int URI_FUNC(ParseSingleUriExMm)(URI_TYPE(Uri) * uri,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		const URI_CHAR ** errorPos, UriMemoryManager * memory) {
+	URI_TYPE(ParserState) state;
+	int res;
+
+	/* Check params */
+	if ((uri == NULL) || (first == NULL) || (afterLast == NULL)) {
+		return URI_ERROR_NULL;
+	}
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
+
+	res = URI_FUNC(ParseUriExMm)(&state, first, afterLast, memory);
+
+	if (res != URI_SUCCESS) {
+		if (errorPos != NULL) {
+			*errorPos = state.errorPos;
+		}
+		URI_FUNC(FreeUriMembersMm)(uri, memory);
+	}
+
+	return res;
+}
+
+
+
 void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri) {
 	URI_FUNC(FreeUriMembersMm)(uri, NULL);
 }

@@ -262,6 +262,21 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
 
 
 
+
+
+int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
+		const URI_CHAR ** errorPos);
+
+int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		const URI_CHAR ** errorPos);
+
+int URI_FUNC(ParseSingleUriExMm)(URI_TYPE(Uri) * uri,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		const URI_CHAR ** errorPos, UriMemoryManager * memory);
+
+
+
 /**
  * Frees all memory associated with the members
  * of the %URI structure. Note that the structure
