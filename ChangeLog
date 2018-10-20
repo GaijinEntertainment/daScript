@@ -14,18 +14,19 @@
   * Fixed: Fix off-by-one in uriComposeQueryCharsRequired* and ...Ex*
       Reported space requirements were 1 byte bigger than necessary
   * Added: Support for custom memory managers (GitHub #26, #35), see Doxygen
-      New functions:
+      New functions (as extension of existing ones):
         uriAddBaseUriExMm[AW]
-        uriCompleteMemoryManager
         uriComposeQueryMallocExMm[AW]
         uriDissectQueryMallocExMm[AW]
-        uriEmulateCalloc
-        uriEmulateReallocarray
         uriFreeQueryListMm[AW]
         uriFreeUriMembersMm[AW]
         uriNormalizeSyntaxExMm[AW]
         uriParseUriExMm[AW]
         uriRemoveBaseUriMm[AW]
+      New functions (for convenience):
+        uriCompleteMemoryManager
+        uriEmulateCalloc
+        uriEmulateReallocarray
         uriTestMemoryManager
       New error codes:
         URI_ERROR_MEMORY_MANAGER_FAULTY
