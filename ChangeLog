@@ -40,6 +40,9 @@
   * Added: Add non-void versions of uriNormalizeSyntaxMaskRequired*
       New functions:
         uriNormalizeSyntaxMaskRequiredEx[AW]
+  * Changed: Marked as deprecated:
+      Deprecated functions:
+        uriNormalizeSyntaxMaskRequired[AW]
   * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
   * Removed: Pointless define URI_SIZEDOWN / configure option --enable-sizedown
   * Soname: 1:23:0

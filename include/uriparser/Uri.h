@@ -576,6 +576,7 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
  * @see uriNormalizeSyntaxExMmA
  * @see uriNormalizeSyntaxMaskRequiredExA
  * @since 0.5.0
+ * @deprecated Deprecated since 0.9.0, please migrate to uriNormalizeSyntaxMaskRequiredExA (with "Ex").
  */
 unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
 
