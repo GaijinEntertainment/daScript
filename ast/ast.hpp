@@ -68,13 +68,15 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
         string getMangledName() const;
         bool isSameType ( const TypeDecl & decl, bool rvalueMatters = true ) const;
-        bool isSimpleType ( Type tp ) const;
+        bool isSimpleType () const;
+        bool isSimpleType ( Type typ ) const;
         bool isArray() const;
         bool isVoid() const;
         bool isRValue() const;
         bool isIndex() const;
         int getSizeOf() const;
         int getBaseSizeOf() const;
+        int getStride() const;
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -114,7 +116,7 @@ namespace yzg
         ExpressionPtr   init;
         Node *          at = nullptr;
         int             index = -1;
-        int             stackTop = 0;
+        size_t          stackTop = 0;
     };
     
     class Expression
@@ -125,7 +127,7 @@ namespace yzg
             ProgramPtr          program;
             FunctionPtr         func;
             vector<VariablePtr> local;
-            int                 stackTop = 0;
+            size_t              stackTop = 0;
         };
     public:
         friend ostream& operator<< (ostream& stream, const Expression & func);
@@ -186,6 +188,7 @@ namespace yzg
         VariablePtr variable;
         bool        local = false;
         bool        argument = false;
+        int         argumentIndex = -1;
     };
     
     class ExprField : public Expression
@@ -358,7 +361,7 @@ namespace yzg
         ExpressionPtr       body;
         bool                builtIn = false;
         int                 index = -1;
-        int                 totalStackSize = -1;
+        size_t              totalStackSize = 0;
     };
     
     class BuiltInFunction : public Function

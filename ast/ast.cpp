@@ -97,7 +97,7 @@ namespace yzg
         return (baseType==Type::tVoid) && (dim.size()==0);
     }
     
-    bool TypeDecl::isSimpleType ( Type tp ) const
+    bool TypeDecl::isSimpleType() const
     {
         if (    baseType==Type::none
             ||  baseType==Type::tVoid
@@ -106,6 +106,11 @@ namespace yzg
         if ( dim.size() )
             return false;
         return true;
+    }
+    
+    bool TypeDecl::isSimpleType(Type typ) const
+    {
+        return baseType==typ && isSimpleType();
     }
     
     bool TypeDecl::isArray() const
@@ -151,6 +156,16 @@ namespace yzg
         int size = 1;
         for ( auto i : dim )
             size *= i;
+        return getBaseSizeOf() * size;
+    }
+    
+    int TypeDecl::getStride() const
+    {
+        int size = 1;
+        if ( dim.size() > 1 ) {
+            for ( size_t i=0; i!=dim.size()-1; ++i )
+                size *= dim[i];
+        }
         return getBaseSizeOf() * size;
     }
     
@@ -249,6 +264,9 @@ namespace yzg
     template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
     template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
     template<> struct ToBasicType<int>      { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<int64_t>  { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<uint>     { enum { type = Type::tUInt }; };
+    template<> struct ToBasicType<uint64_t> { enum { type = Type::tUInt }; };
     template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
     
     template <typename TT>
@@ -364,14 +382,21 @@ namespace yzg
         subexpr->inferType(context);
         if ( !subexpr->type->isRValue() )
             throw semantic_error("can only dereference rvalue", at);
+        if ( !subexpr->type->isSimpleType() )
+            throw semantic_error("can only dereference an simple type", at);
         type = make_shared<TypeDecl>(*subexpr->type);
         type->rvalue = false;
     }
     
     SimNode * ExprR2L::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        switch ( type->baseType ) {
+            case Type::tInt:    return context.makeNode<SimNode_R2L<int64_t>>(subexpr->simulate(context));
+            case Type::tUInt:   return context.makeNode<SimNode_R2L<uint64_t>>(subexpr->simulate(context));
+            case Type::tBool:   return context.makeNode<SimNode_R2L<bool>>(subexpr->simulate(context));
+            case Type::tFloat:  return context.makeNode<SimNode_R2L<float>>(subexpr->simulate(context));
+            default:            throw runtime_error("can't dereference type");
+        }
     }
 
     // ExprAt
@@ -407,8 +432,10 @@ namespace yzg
 
     SimNode * ExprAt::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        auto prv = subexpr->simulate(context);
+        auto pidx = index->simulate(context);
+        int stride = subexpr->type->getStride();
+        return context.makeNode<SimNode_At>(prv, pidx, stride);
     }
 
     // ExprBlock
@@ -524,6 +551,7 @@ namespace yzg
             }
         }
         // function argument
+        argumentIndex = 0;
         for ( auto & arg : context.func->arguments ) {
             if ( arg->name==name ) {
                 variable = arg;
@@ -531,6 +559,7 @@ namespace yzg
                 type = make_shared<TypeDecl>(*arg->type);
                 return;
             }
+            argumentIndex ++;
         }
         // global
         auto var = context.program->findVariable(name);
@@ -543,8 +572,13 @@ namespace yzg
     
     SimNode * ExprVar::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        if ( local ) {
+            return context.makeNode<SimNode_GetLocal>(variable->stackTop);
+        } else if ( argument) {
+            return context.makeNode<SimNode_GetArgument>(argumentIndex);
+        } else {
+            return context.makeNode<SimNode_GetGlobal>(variable->index);
+        }
     }
 
     
@@ -771,8 +805,7 @@ namespace yzg
     
     SimNode * ExprConstInt::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        return context.makeNode<SimNode_ConstValue<int64_t>>(value);
     }
     
     // ExprConstUInt
@@ -796,8 +829,7 @@ namespace yzg
     
     SimNode * ExprConstUInt::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        return context.makeNode<SimNode_ConstValue<uint64_t>>(value);
     }
     
     // ExprConstDouble
@@ -821,8 +853,8 @@ namespace yzg
     
     SimNode * ExprConstDouble::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        return context.makeNode<SimNode_ConstValue<float>>(value);
+
     }
 
     // ExprIfThenElse
@@ -1041,8 +1073,19 @@ namespace yzg
     
     SimNode * ExprCall::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        auto pCall = context.makeNode<SimNode_Call>();
+        pCall->fnIndex = func->index;
+        if ( int nArg = (int) arguments.size() ) {
+            pCall->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
+            pCall->argValues = (__m128 *) context.allocate(nArg * sizeof(__m128));
+            for ( int a=0; a!=nArg; ++a ) {
+                pCall->arguments[a] = arguments[a]->simulate(context);
+            }
+        } else {
+            pCall->arguments = nullptr;
+            pCall->argValues = nullptr;
+        }
+        return pCall;
     }
 
     // program
@@ -1120,63 +1163,77 @@ namespace yzg
         functions[mangledName] = func;
     }
     
+    // basic operations
+    template <typename TT, typename SimPolicy_TT>
+    void addBuiltInBasic(Program & prg)
+    {
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_Set<SimPolicy_TT>>>("=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, bool, Sim_Equ<SimPolicy_TT>>>("==") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, bool, Sim_NotEqu<SimPolicy_TT>>>("!=") );
+    }
+    
+    // numeric types
+    template <typename TT, typename SimPolicy_TT>
+    void addBuiltInNumeric(Program & prg)
+    {
+        prg.addBuiltIn( make_shared<BuiltInOp1<TT,  TT, Sim_Unp<SimPolicy_TT>>>("+") );
+        prg.addBuiltIn( make_shared<BuiltInOp1<TT,  TT, Sim_Unm<SimPolicy_TT>>>("-") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_Add<SimPolicy_TT>>>("+") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_Sub<SimPolicy_TT>>>("-") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_Mul<SimPolicy_TT>>>("*") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_Div<SimPolicy_TT>>>("/") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, bool, Sim_GtEqu<SimPolicy_TT>>>(">=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, bool, Sim_LessEqu<SimPolicy_TT>>>("<=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, bool, Sim_Gt<SimPolicy_TT>>>(">") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, bool, Sim_Less<SimPolicy_TT>>>("<") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetAdd<SimPolicy_TT>>>("+=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetSub<SimPolicy_TT>>>("-=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetMul<SimPolicy_TT>>>("*=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetDiv<SimPolicy_TT>>>("/=") );
+    }
+    
+    // built-in numeric types
+    template <typename TT, typename SimPolicy_TT>
+    void addBuiltInBit(Program & prg)
+    {
+        prg.addBuiltIn( make_shared<BuiltInOp1<TT,  TT, Sim_BinNot<SimPolicy_TT>>>("~") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_BinAnd<SimPolicy_TT>>>("&") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_BinOr<SimPolicy_TT>>>("|") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_BinXor<SimPolicy_TT>>>("^") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetBinAnd<SimPolicy_TT>>>("&=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetBinOr<SimPolicy_TT>>>("|=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetBinXor<SimPolicy_TT>>>("^=") );
+    }
+    
+    // built-in boolean types
+    template <typename TT, typename SimPolicy_TT>
+    void addBuiltInBoolean(Program & prg)
+    {
+        prg.addBuiltIn( make_shared<BuiltInOp1<TT,  TT, Sim_BoolNot<SimPolicy_Bool>>>("!") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_BoolAnd<SimPolicy_Bool>>>("&") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_BoolOr<SimPolicy_Bool>>>("|") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, TT, Sim_BoolXor<SimPolicy_Bool>>>("^") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetBoolAnd<SimPolicy_Bool>>>("&=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetBoolOr<SimPolicy_Bool>>>("|=") );
+        prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_SetBoolXor<SimPolicy_Bool>>>("^=") );
+    }
     
     void Program::addBuiltinOperators()
     {
         // boolean
-        addBuiltIn( make_shared<BuiltInOp1<bool, bool, Sim_BoolNot<SimPolicy_Bool>>>("!") );   // unary !
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_Equ<SimPolicy_Bool>>>("==") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_NotEqu<SimPolicy_Bool>>>("!=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_BoolAnd<SimPolicy_Bool>>>("&") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_BoolOr<SimPolicy_Bool>>>("|") );
-        addBuiltIn( make_shared<BuiltInOp2<bool, bool, bool, Sim_BoolXor<SimPolicy_Bool>>>("^") );
-        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&, Sim_Set<SimPolicy_Bool>>>("=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&, Sim_SetBoolAnd<SimPolicy_Bool>>>("&=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&, Sim_SetBoolOr<SimPolicy_Bool>>>("|=") );
-        addBuiltIn( make_shared<BuiltInOp2<bool&, bool, bool&, Sim_SetBoolXor<SimPolicy_Bool>>>("^=") );
-        // integer
-        addBuiltIn( make_shared<BuiltInOp1<int, int, Sim_Unp<SimPolicy_Int>>>("+") );      // unary +
-        addBuiltIn( make_shared<BuiltInOp1<int, int, Sim_Unm<SimPolicy_Int>>>("-") );      // unary -
-        addBuiltIn( make_shared<BuiltInOp1<int, int, Sim_BinNot<SimPolicy_Int>>>("~") );   // unary ~
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_Add<SimPolicy_Int>>>("+") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_Sub<SimPolicy_Int>>>("-") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_Mul<SimPolicy_Int>>>("*") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_Div<SimPolicy_Int>>>("/") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_BinAnd<SimPolicy_Int>>>("&") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_BinOr<SimPolicy_Int>>>("|") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, int, Sim_BinXor<SimPolicy_Int>>>("^") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_Equ<SimPolicy_Int>>>("==") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_NotEqu<SimPolicy_Int>>>("!=") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_GtEqu<SimPolicy_Int>>>(">=") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_LessEqu<SimPolicy_Int>>>("<=") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_Gt<SimPolicy_Int>>>(">") );
-        addBuiltIn( make_shared<BuiltInOp2<int, int, bool, Sim_Less<SimPolicy_Int>>>("<") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_Set<SimPolicy_Int>>>("=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetAdd<SimPolicy_Int>>>("+=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetSub<SimPolicy_Int>>>("-=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetMul<SimPolicy_Int>>>("*=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetDiv<SimPolicy_Int>>>("/=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetBinAnd<SimPolicy_Int>>>("&=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetBinOr<SimPolicy_Int>>>("|=") );
-        addBuiltIn( make_shared<BuiltInOp2<int&, int, int&, Sim_SetBinXor<SimPolicy_Int>>>("^=") );
+        addBuiltInBasic<bool, SimPolicy_Bool>(*this);
+        addBuiltInBoolean<bool, SimPolicy_Bool>(*this);
+        // int64
+        addBuiltInBasic<int64_t, SimPolicy_Int>(*this);
+        addBuiltInNumeric<int64_t, SimPolicy_Int>(*this);
+        addBuiltInBit<int64_t, SimPolicy_Int>(*this);
+        // uint64
+        addBuiltInBasic<uint64_t, SimPolicy_UInt>(*this);
+        addBuiltInNumeric<uint64_t, SimPolicy_UInt>(*this);
+        addBuiltInBit<uint64_t, SimPolicy_UInt>(*this);
         // float
-        addBuiltIn( make_shared<BuiltInOp1<float, float, Sim_Unp<SimPolicy_Float>>>("+") );   // unary +
-        addBuiltIn( make_shared<BuiltInOp1<float, float, Sim_Unm<SimPolicy_Float>>>("-") );   // unary -
-        addBuiltIn( make_shared<BuiltInOp2<float, float, float, Sim_Add<SimPolicy_Float>>>("+") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, float, Sim_Sub<SimPolicy_Float>>>("-") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, float, Sim_Mul<SimPolicy_Float>>>("*") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, float, Sim_Div<SimPolicy_Float>>>("/") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_Equ<SimPolicy_Float>>>("==") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_NotEqu<SimPolicy_Float>>>("!=") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_GtEqu<SimPolicy_Float>>>(">=") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_LessEqu<SimPolicy_Float>>>("<=") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_Gt<SimPolicy_Float>>>(">") );
-        addBuiltIn( make_shared<BuiltInOp2<float, float, bool, Sim_Less<SimPolicy_Float>>>("<") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_Set<SimPolicy_Float>>>("=") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_SetAdd<SimPolicy_Float>>>("+=") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_SetSub<SimPolicy_Float>>>("-=") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_SetMul<SimPolicy_Float>>>("*=") );
-        addBuiltIn( make_shared<BuiltInOp2<float&, float, float&, Sim_SetDiv<SimPolicy_Float>>>("/=") );
+        addBuiltInBasic<float, SimPolicy_Float>(*this);
+        addBuiltInNumeric<float, SimPolicy_Float>(*this);
     }
     
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const
@@ -1233,6 +1290,7 @@ namespace yzg
             auto & gfun = context.functions[pfun->index];
             gfun.name = context.allocateName(pfun->name);
             gfun.code = pfun->simulate(context);
+            gfun.stackSize = pfun->totalStackSize;
         }
         context.linearAllocatorExecuteBase = context.linearAllocator;
     }

@@ -17,6 +17,7 @@ namespace yzg
 {
     using namespace std;
     
+    struct Context;
     struct SimNode;
     
     struct GlobalVariable
@@ -30,11 +31,20 @@ namespace yzg
     {
         char *      name;
         SimNode *   code;
+        size_t      stackSize;
+    };
+    
+    struct SimNode
+    {
+        virtual __m128 eval ( Context & ) = 0;
     };
     
     class Context
     {
         friend class Program;
+        friend class SimNode_GetGlobal;
+        friend class SimNode_GetLocal;
+        friend class SimNode_GetArgument;
     public:
         Context();
         ~Context();
@@ -59,6 +69,21 @@ namespace yzg
         inline TT * makeNode(Params... args) {
             return new (allocate(sizeof(TT))) TT(args...);
         }
+        
+        inline __m128 call ( int fnIndex, __m128 * args ) {
+            auto & fn = functions[fnIndex];
+            // PUSH
+            __m128 * pushArg = arguments;
+            char * pushStack = stackTop;
+            arguments = args;
+            stackTop += fn.stackSize;   // TODO: check for stack overflow
+            // CALL
+            __m128 result = fn.code->eval(*this);
+            // POP
+            stackTop = pushStack;
+            arguments = pushArg;
+            return result;
+        }
 
     protected:
         int linearAllocatorSize = 1*1024*1024;
@@ -67,13 +92,8 @@ namespace yzg
         char * linearAllocatorExecuteBase = nullptr;
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
-    public:
         char * stackTop = nullptr;
-    };
-    
-    struct SimNode
-    {
-        virtual __m128 eval ( Context & ) = 0;
+        __m128 * arguments = nullptr;
     };
     
     template <typename TT> inline TT cast_to ( __m128 x );
@@ -82,11 +102,90 @@ namespace yzg
     template <> inline __m128 cast_from ( bool x )  { return _mm_set1_epi32(x); }
     template <> inline int64_t cast_to ( __m128 x )     { return ((int64_t *)&x)[0]; }
     template <> inline __m128 cast_from ( int64_t x )   { __m128 a; ((int64_t *)&a)[0] = x; return a; }
+    template <> inline uint64_t cast_to ( __m128 x )    { return ((uint64_t *)&x)[0]; }
+    template <> inline __m128 cast_from ( uint64_t x )  { __m128 a; ((uint64_t *)&a)[0] = x; return a; }
     template <> inline float cast_to ( __m128 x )   { return ((float *)&x)[0]; }
     template <> inline __m128 cast_from ( float x ) { return _mm_set_ss(x); }
     
     template <typename TT> inline TT * ptr_cast_to ( __m128 a )     { return ((TT **)&a)[0]; }
     template <typename TT> inline __m128 ptr_cast_from ( TT * p )   { __m128 x; ((TT **)&x)[0] = p; return x; }
+    
+    // AT (INDEX)
+    struct SimNode_At : SimNode {
+        virtual __m128 eval ( Context & context ) override {
+            char * pValue = ptr_cast_to<char>(rvalue->eval(context));
+            uint64_t idx = cast_to<uint64_t>(index->eval(context));
+            return ptr_cast_from<char>(pValue + idx*stride);    // TODO: add range check
+            
+        }
+        SimNode_At ( SimNode * rv, SimNode * idx, int strd ) : rvalue(rv), index(idx), stride(strd) {}
+        SimNode * rvalue;
+        SimNode * index;
+        int       stride;
+    };
+    
+    // FUNCTION CALL
+    struct SimNode_Call : SimNode {
+        virtual __m128 eval ( Context & context ) override {
+            for ( int i=0; i!=nArguments; ++i ) {
+                argValues[i] = arguments[i]->eval(context);
+            }
+            return context.call(fnIndex, argValues);
+        }
+        int fnIndex;
+        int nArguments;
+        SimNode ** arguments;
+        __m128 * argValues;
+    };
+    
+    // LOCAL VARIABLE "GET"
+    struct SimNode_GetLocal : SimNode {
+        SimNode_GetLocal(size_t sp) : stackTop(sp) {}
+        virtual __m128 eval ( Context & context ) override {
+            return ptr_cast_from(context.stackTop + stackTop);
+        }
+        size_t stackTop;
+    };
+    
+    // ARGUMENT VARIABLE "GET"
+    struct SimNode_GetArgument : SimNode {
+        SimNode_GetArgument ( int i ) : index(i) {}
+        virtual __m128 eval ( Context & context ) override {
+            return context.arguments[index];
+        }
+        int index;
+    };
+    
+    // GLOBAL VARIABLE "GET"
+    struct SimNode_GetGlobal : SimNode {
+        SimNode_GetGlobal ( int i ) : index(i) {}
+        virtual __m128 eval ( Context & context ) override {
+            return context.globalVariables[index].value;
+        }
+        int index;
+    };
+    
+    // R2L
+    template <typename TT>
+    struct SimNode_R2L : SimNode {
+        SimNode_R2L ( SimNode * s ) : subexpr(s) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ptr = subexpr->eval(context);
+            TT * pR = ptr_cast_to<TT>(ptr);
+            return cast_from<TT>(*pR);
+        }
+        SimNode * subexpr;
+    };
+    
+    // CONST-VALUE
+    template <typename TT>
+    struct SimNode_ConstValue : SimNode {
+        SimNode_ConstValue(TT c) : value(cast_from<TT>(c)) {}
+        virtual __m128 eval ( Context & context ) override {
+            return value;
+        }
+        __m128 value;
+    };
     
     // COPY R-VALUE
     struct SimNode_CopyRValue : SimNode {
@@ -116,15 +215,6 @@ namespace yzg
             return ll;
         }
         SimNode * l, * r;
-    };
-    
-    // LOCAL VARIABLE "GET"
-    struct SimNode_GetLocal : SimNode {
-        SimNode_GetLocal(int sp) : stackTop(sp) {}
-        virtual __m128 eval ( Context & context ) override {
-            return ptr_cast_from(context.stackTop + stackTop);
-        }
-        int stackTop;
     };
     
     // BLOCK
@@ -242,7 +332,7 @@ namespace yzg
     {
     };
     
-    struct SimPolicy_Uint : SimPolicy_Bin<uint64_t>
+    struct SimPolicy_UInt : SimPolicy_Bin<uint64_t>
     {
     };
     
