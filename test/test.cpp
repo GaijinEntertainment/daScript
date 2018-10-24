@@ -2041,6 +2041,56 @@ TEST(UriSuite, TestRangeComparisonRemoveBaseUriIssue19) {
 								"http://example2/x/y/z");
 }
 
+TEST(UriParseSingleSuite, Success) {
+	UriUriA uri;
+
+	EXPECT_EQ(uriParseSingleUriA(&uri, "file:///home/user/song.mp3", NULL),
+			URI_SUCCESS);
+
+	uriFreeUriMembersA(&uri);
+}
+
+TEST(UriParseSingleSuite, ErrorSyntaxParseErrorSetsErrorPos) {
+	UriUriA uri;
+	const char * errorPos;
+	const char * const uriString = "abc{}def";
+
+	EXPECT_EQ(uriParseSingleUriA(&uri, uriString, &errorPos),
+			URI_ERROR_SYNTAX);
+	EXPECT_EQ(errorPos, uriString + strlen("abc"));
+
+	uriFreeUriMembersA(&uri);
+}
+
+TEST(UriParseSingleSuite, ErrorNullFirstDetected) {
+	UriUriA uri;
+	const char * errorPos;
+
+	EXPECT_EQ(uriParseSingleUriExA(&uri, NULL, "notnull", &errorPos),
+			URI_ERROR_NULL);
+}
+
+TEST(UriParseSingleSuite, ErrorNullAfterLastDetected) {
+	UriUriA uri;
+	const char * errorPos;
+
+	EXPECT_EQ(uriParseSingleUriExA(&uri, "foo", NULL, &errorPos),
+			URI_ERROR_NULL);
+}
+
+TEST(UriParseSingleSuite, ErrorNullMemoryManagerDetected) {
+	UriUriA uri;
+	const char * errorPos;
+	const char * const uriString = "somethingwellformed";
+
+	EXPECT_EQ(uriParseSingleUriExMmA(&uri,
+			uriString,
+			uriString + strlen(uriString),
+			&errorPos, NULL), URI_SUCCESS);
+
+	EXPECT_EQ(uriFreeUriMembersMmA(&uri, NULL), URI_SUCCESS);
+}
+
 
 int main(int argc, char ** argv) {
 	::testing::InitGoogleTest(&argc, argv);

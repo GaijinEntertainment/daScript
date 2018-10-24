@@ -2217,6 +2217,8 @@ int URI_FUNC(ParseSingleUriExMm)(URI_TYPE(Uri) * uri,
 	}
 	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
 
+	state.uri = uri;
+
 	res = URI_FUNC(ParseUriExMm)(&state, first, afterLast, memory);
 
 	if (res != URI_SUCCESS) {
