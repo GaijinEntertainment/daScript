@@ -145,7 +145,6 @@ typedef struct URI_TYPE(HostDataStruct) {
  *
  * @see uriParseUriA
  * @see uriParseUriExA
- * @see uriParseUriExMmA
  * @see uriFreeUriMembersA
  * @see uriFreeUriMembersMmA
  * @see UriParserStateA
@@ -215,32 +214,11 @@ typedef struct URI_TYPE(QueryListStruct) {
  * @return            0 on success, error code otherwise
  *
  * @see uriParseUriA
- * @see uriParseUriExMmA
  * @see uriToStringA
  * @since 0.3.0
  */
 int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
-
-
-
-/**
- * Parses a RFC 3986 %URI.
- *
- * @param state       <b>INOUT</b>: Parser state with set output %URI, must not be NULL
- * @param first       <b>IN</b>: Pointer to the first character to parse, must not be NULL
- * @param afterLast   <b>IN</b>: Pointer to the character after the last to parse, must not be NULL
- * @param memory      <b>IN</b>: Memory manager to use, NULL for default libc
- * @return            0 on success, error code otherwise
- *
- * @see uriParseUriA
- * @see uriParseUriExA
- * @see uriToStringA
- * @since 0.9.0
- */
-int URI_FUNC(ParseUriExMm)(URI_TYPE(ParserState) * state,
-		const URI_CHAR * first, const URI_CHAR * afterLast,
-		UriMemoryManager * memory);
 
 
 
@@ -253,7 +231,6 @@ int URI_FUNC(ParseUriExMm)(URI_TYPE(ParserState) * state,
  * @return        0 on success, error code otherwise
  *
  * @see uriParseUriExA
- * @see uriParseUriExMmA
  * @see uriToStringA
  * @since 0.3.0
  */
@@ -276,7 +253,6 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
  *
  * @see uriParseUriA
  * @see uriParseUriExA
- * @see uriParseUriExMmA
  * @see uriParseSingleUriExA
  * @see uriParseSingleUriExMmA
  * @see uriToStringA
@@ -301,7 +277,6 @@ int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
  *
  * @see uriParseUriA
  * @see uriParseUriExA
- * @see uriParseUriExMmA
  * @see uriParseSingleUriA
  * @see uriParseSingleUriExMmA
  * @see uriToStringA
@@ -327,7 +302,6 @@ int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
  *
  * @see uriParseUriA
  * @see uriParseUriExA
- * @see uriParseUriExMmA
  * @see uriParseSingleUriA
  * @see uriParseSingleUriExA
  * @see uriToStringA

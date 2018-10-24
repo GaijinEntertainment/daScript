@@ -203,6 +203,10 @@ static UriBool URI_FUNC(PushPathSegment)(URI_TYPE(ParserState) * state,
 static void URI_FUNC(StopSyntax)(URI_TYPE(ParserState) * state, const URI_CHAR * errorPos, UriMemoryManager * memory);
 static void URI_FUNC(StopMalloc)(URI_TYPE(ParserState) * state, UriMemoryManager * memory);
 
+static int URI_FUNC(ParseUriExMm)(URI_TYPE(ParserState) * state,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		UriMemoryManager * memory);
+
 
 
 static URI_INLINE void URI_FUNC(StopSyntax)(URI_TYPE(ParserState) * state,
@@ -2145,7 +2149,7 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 
 
 
-int URI_FUNC(ParseUriExMm)(URI_TYPE(ParserState) * state,
+static int URI_FUNC(ParseUriExMm)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		UriMemoryManager * memory) {
 	const URI_CHAR * afterUriReference;

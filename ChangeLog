@@ -27,7 +27,6 @@
         uriFreeUriMembersMm[AW]
         uriNormalizeSyntaxExMm[AW]
         uriParseSingleUriExMm[AW]
-        uriParseUriExMm[AW]
         uriRemoveBaseUriMm[AW]
       New functions (for convenience):
         uriCompleteMemoryManager
