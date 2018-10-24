@@ -2188,11 +2188,7 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state, const URI_CHAR * text) {
 
 int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
 		const URI_CHAR ** errorPos) {
-	if (text == NULL) {
-		return URI_ERROR_NULL;
-	}
-	return URI_FUNC(ParseSingleUriEx)(uri, text, text + URI_STRLEN(text),
-			errorPos);
+	return URI_FUNC(ParseSingleUriEx)(uri, text, NULL, errorPos);
 }
 
 
@@ -2200,6 +2196,9 @@ int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
 int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		const URI_CHAR ** errorPos) {
+    if ((afterLast == NULL) && (first != NULL)) {
+		afterLast = first + URI_STRLEN(first);
+	}
 	return URI_FUNC(ParseSingleUriExMm)(uri, first, afterLast, errorPos, NULL);
 }
 

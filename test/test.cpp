@@ -2072,10 +2072,10 @@ TEST(UriParseSingleSuite, ErrorNullFirstDetected) {
 
 TEST(UriParseSingleSuite, ErrorNullAfterLastDetected) {
 	UriUriA uri;
-	const char * errorPos;
 
-	EXPECT_EQ(uriParseSingleUriExA(&uri, "foo", NULL, &errorPos),
-			URI_ERROR_NULL);
+	EXPECT_EQ(uriParseSingleUriExA(&uri, "foo", NULL, NULL), URI_SUCCESS);
+
+	uriFreeUriMembersA(&uri);
 }
 
 TEST(UriParseSingleSuite, ErrorNullMemoryManagerDetected) {
