@@ -49,6 +49,8 @@
   * Changed: Marked as deprecated:
       Deprecated functions:
         uriNormalizeSyntaxMaskRequired[AW]
+        uriParseUri[AW]
+        uriParseUriEx[AW]
   * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
   * Removed: Pointless define URI_SIZEDOWN / configure option --enable-sizedown
   * Soname: 1:23:0

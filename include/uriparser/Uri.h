@@ -143,8 +143,6 @@ typedef struct URI_TYPE(HostDataStruct) {
  * Represents an RFC 3986 %URI.
  * Missing components can be {NULL, NULL} ranges.
  *
- * @see uriParseUriA
- * @see uriParseUriExA
  * @see uriFreeUriMembersA
  * @see uriFreeUriMembersMmA
  * @see UriParserStateA
@@ -218,6 +216,7 @@ typedef struct URI_TYPE(QueryListStruct) {
  * @see uriParseSingleUriExA
  * @see uriToStringA
  * @since 0.3.0
+ * @deprecated Deprecated since 0.9.0, please migrate to uriParseSingleUriExA (with "Single").
  */
 int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -237,6 +236,7 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
  * @see uriParseSingleUriExA
  * @see uriToStringA
  * @since 0.3.0
+ * @deprecated Deprecated since 0.9.0, please migrate to uriParseSingleUriA (with "Single").
  */
 int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * text);
@@ -255,8 +255,6 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
  *                                only set when  URI_ERROR_SYNTAX was returned
  * @return            0 on success, error code otherwise
  *
- * @see uriParseUriA
- * @see uriParseUriExA
  * @see uriParseSingleUriExA
  * @see uriParseSingleUriExMmA
  * @see uriToStringA
@@ -279,8 +277,6 @@ int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
  *                               (to use first + strlen(first))
  * @return            0 on success, error code otherwise
  *
- * @see uriParseUriA
- * @see uriParseUriExA
  * @see uriParseSingleUriA
  * @see uriParseSingleUriExMmA
  * @see uriToStringA
@@ -304,8 +300,6 @@ int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
  * @param memory      <b>IN</b>: Memory manager to use, NULL for default libc
  * @return            0 on success, error code otherwise
  *
- * @see uriParseUriA
- * @see uriParseUriExA
  * @see uriParseSingleUriA
  * @see uriParseSingleUriExA
  * @see uriToStringA
