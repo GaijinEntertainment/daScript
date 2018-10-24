@@ -13,6 +13,11 @@
   * Fixed: Be fully compliant to C89 (Gitub #28) and C++98 in test code
   * Fixed: Fix off-by-one in uriComposeQueryCharsRequired* and ...Ex*
       Reported space requirements were 1 byte bigger than necessary
+  * Changed: Marked as deprecated:
+      Deprecated functions:
+        uriNormalizeSyntaxMaskRequired[AW]
+        uriParseUri[AW]
+        uriParseUriEx[AW]
   * Added: Add convenience functions to ease user code to parse a single URI
       New functions:
         uriParseSingleUri[AW]
@@ -46,11 +51,6 @@
   * Added: Add non-void versions of uriNormalizeSyntaxMaskRequired*
       New functions:
         uriNormalizeSyntaxMaskRequiredEx[AW]
-  * Changed: Marked as deprecated:
-      Deprecated functions:
-        uriNormalizeSyntaxMaskRequired[AW]
-        uriParseUri[AW]
-        uriParseUriEx[AW]
   * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
   * Removed: Pointless define URI_SIZEDOWN / configure option --enable-sizedown
   * Soname: 1:23:0
