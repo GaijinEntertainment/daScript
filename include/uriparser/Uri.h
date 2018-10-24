@@ -262,15 +262,77 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
 
 
 
-
-
+/**
+ * Parses a single RFC 3986 %URI.
+ * Uses default libc-based memory manager.
+ *
+ * @param uri         <b>OUT</b>: Output %URI, must not be NULL
+ * @param text        <b>IN</b>: Pointer to the first character to parse,
+ *                               must not be NULL
+ * @param errorPos    <b>OUT</b>: Pointer to a pointer to the first character
+ *                                causing a syntax error, can be NULL;
+ *                                only set when  URI_ERROR_SYNTAX was returned
+ * @return            0 on success, error code otherwise
+ *
+ * @see uriParseUriA
+ * @see uriParseUriExA
+ * @see uriParseUriExMmA
+ * @see uriParseSingleUriExA
+ * @see uriParseSingleUriExMmA
+ * @see uriToStringA
+ * @since 0.9.0
+ */
 int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
 		const URI_CHAR ** errorPos);
 
+
+
+/**
+ * Parses a single RFC 3986 %URI.
+ * Uses default libc-based memory manager.
+ *
+ * @param uri         <b>OUT</b>: Output %URI, must not be NULL
+ * @param first       <b>IN</b>: Pointer to the first character to parse,
+ *                               must not be NULL
+ * @param afterLast   <b>IN</b>: Pointer to the character after the last to
+ *                               parse, can be NULL
+ *                               (to use first + strlen(first))
+ * @return            0 on success, error code otherwise
+ *
+ * @see uriParseUriA
+ * @see uriParseUriExA
+ * @see uriParseUriExMmA
+ * @see uriParseSingleUriA
+ * @see uriParseSingleUriExMmA
+ * @see uriToStringA
+ * @since 0.9.0
+ */
 int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		const URI_CHAR ** errorPos);
 
+
+
+/**
+ * Parses a single RFC 3986 %URI.
+ *
+ * @param uri         <b>OUT</b>: Output %URI, must not be NULL
+ * @param first       <b>IN</b>: Pointer to the first character to parse,
+ *                               must not be NULL
+ * @param afterLast   <b>IN</b>: Pointer to the character after the last to
+ *                               parse, can be NULL
+ *                               (to use first + strlen(first))
+ * @param memory      <b>IN</b>: Memory manager to use, NULL for default libc
+ * @return            0 on success, error code otherwise
+ *
+ * @see uriParseUriA
+ * @see uriParseUriExA
+ * @see uriParseUriExMmA
+ * @see uriParseSingleUriA
+ * @see uriParseSingleUriExA
+ * @see uriToStringA
+ * @since 0.9.0
+ */
 int URI_FUNC(ParseSingleUriExMm)(URI_TYPE(Uri) * uri,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		const URI_CHAR ** errorPos, UriMemoryManager * memory);
