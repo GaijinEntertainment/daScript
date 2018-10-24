@@ -347,15 +347,13 @@ TEST(FailingMemoryManagerSuite, NormalizeSyntaxExMm) {
 
 
 
-TEST(FailingMemoryManagerSuite, ParseUriExMm) {
-	UriParserStateA state;
+TEST(FailingMemoryManagerSuite, ParseSingleUriExMm) {
 	UriUriA uri;
-	state.uri = &uri;
 	const char * const first = "k1=v1&k2=v2";
 	const char * const afterLast = first + strlen(first);
 	FailingMemoryManager failingMemoryManager;
 
-	ASSERT_EQ(uriParseUriExMmA(&state, first, afterLast,
+	ASSERT_EQ(uriParseSingleUriExMmA(&uri, first, afterLast, NULL,
 			&failingMemoryManager),
 			URI_ERROR_MALLOC);
 }
