@@ -214,6 +214,8 @@ typedef struct URI_TYPE(QueryListStruct) {
  * @return            0 on success, error code otherwise
  *
  * @see uriParseUriA
+ * @see uriParseSingleUriA
+ * @see uriParseSingleUriExA
  * @see uriToStringA
  * @since 0.3.0
  */
@@ -231,6 +233,8 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
  * @return        0 on success, error code otherwise
  *
  * @see uriParseUriExA
+ * @see uriParseSingleUriA
+ * @see uriParseSingleUriExA
  * @see uriToStringA
  * @since 0.3.0
  */
