@@ -58,7 +58,8 @@ NOTE: uriparser is looking for help with a few things:
   * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
   * Improved: Make test suite free of memory leaks (#31)
       Thanks to AddressSanitizer!
-  * Removed: Pointless define URI_SIZEDOWN / configure option --enable-sizedown
+  * Removed: Support for pointless define URI_SIZEDOWN (#29)
+      Related configure option --enable-sizedown has also been removed.
   * Soname: 1:23:0
 
 2018-08-18 -- 0.8.6
