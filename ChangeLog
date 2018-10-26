@@ -56,9 +56,9 @@ NOTE: uriparser is looking for help with a few things:
       New functions:
         uriNormalizeSyntaxMaskRequiredEx[AW]
   * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
-  * Improved: Make test suite free of memory leaks (#31)
+  * Improved: Make test suite free of memory leaks (GitHub #31)
       Thanks to AddressSanitizer!
-  * Removed: Support for pointless define URI_SIZEDOWN (#29)
+  * Removed: Support for pointless define URI_SIZEDOWN (GitHub #29)
       Related configure option --enable-sizedown has also been removed.
   * Soname: 1:23:0
 
