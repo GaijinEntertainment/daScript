@@ -52,7 +52,8 @@
       New functions:
         uriNormalizeSyntaxMaskRequiredEx[AW]
   * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
-  * Improved: Make test suite free of memory leaks, thanks to AddressSanitizer
+  * Improved: Make test suite free of memory leaks (#31)
+      Thanks to AddressSanitizer!
   * Removed: Pointless define URI_SIZEDOWN / configure option --enable-sizedown
   * Soname: 1:23:0
 
