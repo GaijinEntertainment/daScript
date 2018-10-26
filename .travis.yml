@@ -57,5 +57,5 @@ script:
   - make CFLAGS="${CFLAGS} -Werror" CXXFLAGS="${CXXFLAGS} -Werror" all
   - make CFLAGS="${CFLAGS} -Werror" CXXFLAGS="${CXXFLAGS} -Werror" check
   - cat test/uriparser_test.log
-  - make distcheck  # without Address Sanitizer
+  - make distcheck  # without AddressSanitizer
   - popd
