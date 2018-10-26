@@ -64,6 +64,7 @@
 #ifndef URI_DOXYGEN
 # include <uriparser/Uri.h>
 # include "UriCommon.h"
+# include "UriMemory.h"
 #endif
 
 
@@ -71,7 +72,7 @@
 /* Appends a relative URI to an absolute. The last path segment of
  * the absolute URI is replaced. */
 static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
-		const URI_TYPE(Uri) * relAppend) {
+		const URI_TYPE(Uri) * relAppend, UriMemoryManager * memory) {
 	URI_TYPE(PathSegment) * sourceWalker;
 	URI_TYPE(PathSegment) * destPrev;
 	if (relAppend->pathHead == NULL) {
@@ -80,7 +81,7 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 
 	/* Replace last segment ("" if trailing slash) with first of append chain */
 	if (absWork->pathHead == NULL) {
-		URI_TYPE(PathSegment) * const dup = malloc(sizeof(URI_TYPE(PathSegment)));
+		URI_TYPE(PathSegment) * const dup = memory->malloc(memory, sizeof(URI_TYPE(PathSegment)));
 		if (dup == NULL) {
 			return URI_FALSE; /* Raises malloc error */
 		}
@@ -99,7 +100,7 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 	destPrev = absWork->pathTail;
 
 	for (;;) {
-		URI_TYPE(PathSegment) * const dup = malloc(sizeof(URI_TYPE(PathSegment)));
+		URI_TYPE(PathSegment) * const dup = memory->malloc(memory, sizeof(URI_TYPE(PathSegment)));
 		if (dup == NULL) {
 			destPrev->next = NULL;
 			absWork->pathTail = destPrev;
@@ -121,7 +122,8 @@ static URI_INLINE UriBool URI_FUNC(MergePath)(URI_TYPE(Uri) * absWork,
 }
 
 
-static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork) {
+static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork,
+		UriMemoryManager * memory) {
 	if (absWork == NULL) {
 		return URI_ERROR_NULL;
 	}
@@ -129,7 +131,7 @@ static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork) {
 	if (URI_FUNC(IsHostSet)(absWork) && absWork->absolutePath) {
 		/* Empty segment needed, instead? */
 		if (absWork->pathHead == NULL) {
-			URI_TYPE(PathSegment) * const segment = malloc(sizeof(URI_TYPE(PathSegment)));
+			URI_TYPE(PathSegment) * const segment = memory->malloc(memory, sizeof(URI_TYPE(PathSegment)));
 			if (segment == NULL) {
 				return URI_ERROR_MALLOC;
 			}
@@ -151,7 +153,7 @@ static int URI_FUNC(ResolveAbsolutePathFlag)(URI_TYPE(Uri) * absWork) {
 static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource,
 		const URI_TYPE(Uri) * absBase,
-		UriResolutionOptions options) {
+		UriResolutionOptions options, UriMemoryManager * memory) {
 	UriBool relSourceHasScheme;
 
 	if (absDest == NULL) {
@@ -186,14 +188,14 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [02/32]		T.scheme = R.scheme; */
 					absDest->scheme = relSource->scheme;
 	/* [03/32]		T.authority = R.authority; */
-					if (!URI_FUNC(CopyAuthority)(absDest, relSource)) {
+					if (!URI_FUNC(CopyAuthority)(absDest, relSource, memory)) {
 						return URI_ERROR_MALLOC;
 					}
 	/* [04/32]		T.path = remove_dot_segments(R.path); */
-					if (!URI_FUNC(CopyPath)(absDest, relSource)) {
+					if (!URI_FUNC(CopyPath)(absDest, relSource, memory)) {
 						return URI_ERROR_MALLOC;
 					}
-					if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
+					if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest, memory)) {
 						return URI_ERROR_MALLOC;
 					}
 	/* [05/32]		T.query = R.query; */
@@ -203,14 +205,14 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [07/32]		if defined(R.authority) then */
 					if (URI_FUNC(IsHostSet)(relSource)) {
 	/* [08/32]			T.authority = R.authority; */
-						if (!URI_FUNC(CopyAuthority)(absDest, relSource)) {
+						if (!URI_FUNC(CopyAuthority)(absDest, relSource, memory)) {
 							return URI_ERROR_MALLOC;
 						}
 	/* [09/32]			T.path = remove_dot_segments(R.path); */
-						if (!URI_FUNC(CopyPath)(absDest, relSource)) {
+						if (!URI_FUNC(CopyPath)(absDest, relSource, memory)) {
 							return URI_ERROR_MALLOC;
 						}
-						if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
+						if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest, memory)) {
 							return URI_ERROR_MALLOC;
 						}
 	/* [10/32]			T.query = R.query; */
@@ -218,13 +220,13 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 	/* [11/32]		else */
 					} else {
 	/* [28/32]			T.authority = Base.authority; */
-						if (!URI_FUNC(CopyAuthority)(absDest, absBase)) {
+						if (!URI_FUNC(CopyAuthority)(absDest, absBase, memory)) {
 							return URI_ERROR_MALLOC;
 						}
 	/* [12/32]			if (R.path == "") then */
 						if (relSource->pathHead == NULL && !relSource->absolutePath) {
 	/* [13/32]				T.path = Base.path; */
-							if (!URI_FUNC(CopyPath)(absDest, absBase)) {
+							if (!URI_FUNC(CopyPath)(absDest, absBase, memory)) {
 								return URI_ERROR_MALLOC;
 							}
 	/* [14/32]				if defined(R.query) then */
@@ -243,31 +245,31 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 							if (relSource->absolutePath) {
 								int res;
 	/* [21/32]					T.path = remove_dot_segments(R.path); */
-								if (!URI_FUNC(CopyPath)(absDest, relSource)) {
+								if (!URI_FUNC(CopyPath)(absDest, relSource, memory)) {
 									return URI_ERROR_MALLOC;
 								}
-								res = URI_FUNC(ResolveAbsolutePathFlag)(absDest);
+								res = URI_FUNC(ResolveAbsolutePathFlag)(absDest, memory);
 								if (res != URI_SUCCESS) {
 									return res;
 								}
-								if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
+								if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 	/* [22/32]				else */
 							} else {
 	/* [23/32]					T.path = merge(Base.path, R.path); */
-								if (!URI_FUNC(CopyPath)(absDest, absBase)) {
+								if (!URI_FUNC(CopyPath)(absDest, absBase, memory)) {
 									return URI_ERROR_MALLOC;
 								}
-								if (!URI_FUNC(MergePath)(absDest, relSource)) {
+								if (!URI_FUNC(MergePath)(absDest, relSource, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 	/* [24/32]					T.path = remove_dot_segments(T.path); */
-								if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest)) {
+								if (!URI_FUNC(RemoveDotSegmentsAbsolute)(absDest, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 
-								if (!URI_FUNC(FixAmbiguity)(absDest)) {
+								if (!URI_FUNC(FixAmbiguity)(absDest, memory)) {
 									return URI_ERROR_MALLOC;
 								}
 	/* [25/32]				endif; */
@@ -276,7 +278,7 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 							absDest->query = relSource->query;
 	/* [27/32]			endif; */
 						}
-						URI_FUNC(FixEmptyTrailSegment)(absDest);
+						URI_FUNC(FixEmptyTrailSegment)(absDest, memory);
 	/* [29/32]		endif; */
 					}
 	/* [30/32]		T.scheme = Base.scheme; */
@@ -294,11 +296,8 @@ static int URI_FUNC(AddBaseUriImpl)(URI_TYPE(Uri) * absDest,
 
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase) {
-	const int res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, URI_RESOLVE_STRICTLY);
-	if ((res != URI_SUCCESS) && (absDest != NULL)) {
-		URI_FUNC(FreeUriMembers)(absDest);
-	}
-	return res;
+	const UriResolutionOptions options = URI_RESOLVE_STRICTLY;
+	return URI_FUNC(AddBaseUriEx)(absDest, relSource, absBase, options);
 }
 
 
@@ -306,9 +305,21 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absDest,
 int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absDest,
 		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase,
 		UriResolutionOptions options) {
-	const int res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, options);
+	return URI_FUNC(AddBaseUriExMm)(absDest, relSource, absBase, options, NULL);
+}
+
+
+
+int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absDest,
+		const URI_TYPE(Uri) * relSource, const URI_TYPE(Uri) * absBase,
+		UriResolutionOptions options, UriMemoryManager * memory) {
+	int res;
+
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
+
+	res = URI_FUNC(AddBaseUriImpl)(absDest, relSource, absBase, options, memory);
 	if ((res != URI_SUCCESS) && (absDest != NULL)) {
-		URI_FUNC(FreeUriMembers)(absDest);
+		URI_FUNC(FreeUriMembersMm)(absDest, memory);
 	}
 	return res;
 }

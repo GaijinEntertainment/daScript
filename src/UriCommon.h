@@ -82,10 +82,12 @@ int URI_FUNC(CompareRange)(
 		const URI_TYPE(TextRange) * a,
 		const URI_TYPE(TextRange) * b);
 
-UriBool URI_FUNC(RemoveDotSegmentsAbsolute)(URI_TYPE(Uri) * uri);
-UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri, UriBool relative);
+UriBool URI_FUNC(RemoveDotSegmentsAbsolute)(URI_TYPE(Uri) * uri,
+		UriMemoryManager * memory);
+UriBool URI_FUNC(RemoveDotSegments)(URI_TYPE(Uri) * uri, UriBool relative,
+		UriMemoryManager * memory);
 UriBool URI_FUNC(RemoveDotSegmentsEx)(URI_TYPE(Uri) * uri,
-        UriBool relative, UriBool pathOwned);
+		UriBool relative, UriBool pathOwned, UriMemoryManager * memory);
 
 unsigned char URI_FUNC(HexdigToInt)(URI_CHAR hexdig);
 URI_CHAR URI_FUNC(HexToLetter)(unsigned int value);
@@ -93,11 +95,14 @@ URI_CHAR URI_FUNC(HexToLetterEx)(unsigned int value, UriBool uppercase);
 
 UriBool URI_FUNC(IsHostSet)(const URI_TYPE(Uri) * uri);
 
-UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest, const URI_TYPE(Uri) * source);
-UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest, const URI_TYPE(Uri) * source);
+UriBool URI_FUNC(CopyPath)(URI_TYPE(Uri) * dest, const URI_TYPE(Uri) * source,
+		UriMemoryManager * memory);
+UriBool URI_FUNC(CopyAuthority)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * source, UriMemoryManager * memory);
 
-UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri);
-void URI_FUNC(FixEmptyTrailSegment)(URI_TYPE(Uri) * uri);
+UriBool URI_FUNC(FixAmbiguity)(URI_TYPE(Uri) * uri, UriMemoryManager * memory);
+void URI_FUNC(FixEmptyTrailSegment)(URI_TYPE(Uri) * uri,
+		UriMemoryManager * memory);
 
 
 #endif

@@ -27,50 +27,24 @@
  * Parsing a URI with uriparser looks like this:
  *
  * @code
- * 	UriParserStateA state;
  * 	UriUriA uri;
+ * 	const char * const uriString = "file:///home/user/song.mp3";
+ * 	const char * errorPos;
  *
- * 	state.uri = &uri;
- * 	if (uriParseUriA(&state, "file:///home/user/song.mp3") != URI_SUCCESS) {
- * 		/COMMENT_HACK* Failure *COMMENT_HACK/
- * 		uriFreeUriMembersA(&uri);
+ * 	if (uriParseSingleUriA(&uri, uriString, &errorPos) != URI_SUCCESS) {
+ * 		/COMMENT_HACK* Failure (no need to call uriFreeUriMembersA) *COMMENT_HACK/
  * 		...
+ * 		return ...;
  * 	}
+ *
+ * 	/COMMENT_HACK* Success *COMMENT_HACK/
  * 	...
  * 	uriFreeUriMembersA(&uri);
  * @endcode
  *
  * While the URI object (::UriUriA) holds information about the recognized
- * parts of the given URI string, the parser state object (::UriParserStateA)
- * keeps error code and position. This information does not belong to
- * the URI itself, which is why there are two separate objects.
- *
- * You can reuse parser state objects for parsing several URIs like this:
- *
- * @code
- * 	UriParserStateA state;
- * 	UriUriA uriOne;
- * 	UriUriA uriTwo;
- *
- * 	state.uri = &uriOne;
- * 	if (uriParseUriA(&state, "file:///home/user/one") != URI_SUCCESS) {
- * 		/COMMENT_HACK* Failure *COMMENT_HACK/
- * 		uriFreeUriMembersA(&uriOne);
- * 		...
- * 	}
- * 	...
- * 	state.uri = &uriTwo;
- * 	if (uriParseUriA(&state, "file:///home/user/two") != URI_SUCCESS) {
- * 		/COMMENT_HACK* Failure *COMMENT_HACK/
- * 		uriFreeUriMembersA(&uriOne);
- * 		uriFreeUriMembersA(&uriTwo);
- * 		...
- * 	}
- * 	...
- * 	uriFreeUriMembersA(&uriOne);
- * 	uriFreeUriMembersA(&uriTwo);
- * @endcode
- *
+ * parts of the given URI string, in case of <c>URI_ERROR_SYNTAX</c>,
+ * <c>errorPos</c> points to the first character starting invalid syntax.
  *
  * @subsection recomposition Recomposing URIs (from object back to string)
  * According to <a href="http://tools.ietf.org/html/rfc3986#section-5.3" target="_blank">RFC 3986</a>
@@ -311,8 +285,8 @@
  * uriparser comes with two versions of every structure and function:
  * one handling Ansi text (char *) and one working with Unicode text (wchar_t *),
  * for instance
- * - uriParseUriA() for Ansi and
- * - uriParseUriW() for Unicode.
+ * - uriParseSingleUriA() for Ansi and
+ * - uriParseSingleUriW() for Unicode.
  *
  * This tutorial only shows the usage of the Ansi editions but
  * their Unicode counterparts work in the very same way.
@@ -322,18 +296,18 @@
  * You can use the code below to make <c>./configure</c> test for presence
  * of uriparser 0.6.4 or later.
  *
- *<div class="fragment"><pre class="fragment">URIPARSER_MISSING=<span class="stringliteral">"Please install uriparser 0.6.4 or later.
+ *<div class="fragment"><pre class="fragment">URIPARSER_MISSING=<span class="stringliteral">"Please install uriparser 0.9.0 or later.
  *   On a Debian-based system enter 'sudo apt-get install liburiparser-dev'."</span>
- *AC_CHECK_LIB(uriparser, uriParseUriA,, AC_MSG_ERROR(${URIPARSER_MISSING}))
+ *AC_CHECK_LIB(uriparser, uriParseSingleUriA,, AC_MSG_ERROR(${URIPARSER_MISSING}))
  *AC_CHECK_HEADER(uriparser/Uri.h,, AC_MSG_ERROR(${URIPARSER_MISSING}))
  *<b></b>
- *URIPARSER_TOO_OLD=<span class="stringliteral">"uriparser 0.6.4 or later is required, your copy is too old."</span>
+ *URIPARSER_TOO_OLD=<span class="stringliteral">"uriparser 0.9.0 or later is required, your copy is too old."</span>
  *AC_COMPILE_IFELSE([
  *<span class="preprocessor">\#include <uriparser/Uri.h>
  *\#if (defined(URI_VER_MAJOR) && defined(URI_VER_MINOR) && defined(URI_VER_RELEASE) \\<b></b>
  *&& ((URI_VER_MAJOR > 0) \\<b></b>
- *|| ((URI_VER_MAJOR == 0) && (URI_VER_MINOR > 6)) \\<b></b>
- *|| ((URI_VER_MAJOR == 0) && (URI_VER_MINOR == 6) && (URI_VER_RELEASE >= 4)) \\<b></b>
+ *|| ((URI_VER_MAJOR == 0) && (URI_VER_MINOR > 9)) \\<b></b>
+ *|| ((URI_VER_MAJOR == 0) && (URI_VER_MINOR == 9) && (URI_VER_RELEASE >= 0)) \\<b></b>
  *))</span>
  *<span class="comment"><b></b>/<b></b>* FINE *<b></b>/</span>
  *<span class="preprocessor">\#else

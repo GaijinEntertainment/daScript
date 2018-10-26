@@ -1,13 +1,60 @@
-2018-xx-xx -- x.x.x
+2018-10-27 -- 0.9.0
 
+>>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   * Fixed: Out-of-bounds write in uriComposeQuery* and uriComposeQueryEx*
+      Commit 864f5d4c127def386dd5cc926ad96934b297f04e
       Thanks to Google Autofuzz team for the report!
+  * Fixed: Detect integer overflow in uriComposeQuery* and uriComposeQueryEx*
+      Commit f76275d4a91b28d687250525d3a0c5509bbd666f
+      Thanks to Google Autofuzz team for the report!
+  * Fixed: Protect uriResetUri* against acting on NULL input
+      Commit f58c25069cf4a986fe17a80c5b38687e31feb539
+>>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  * Fixed: Be fully compliant to C89 (Gitub #28) and C++98 in test code
   * Fixed: Fix off-by-one in uriComposeQueryCharsRequired* and ...Ex*
       Reported space requirements were 1 byte bigger than necessary
-  * Fixed: Detect integer overflow in uriComposeQuery* and uriComposeQueryEx*
-      Thanks to Google Autofuzz team for the report!
+  * Changed: Marked as deprecated:
+      Deprecated functions:
+        uriNormalizeSyntaxMaskRequired[AW]
+        uriParseUri[AW]
+        uriParseUriEx[AW]
+  * Added: Add convenience functions to ease user code to parse a single URI
+      New functions:
+        uriParseSingleUri[AW]
+        uriParseSingleUriEx[AW]
+        uriParseSingleUriExMm[AW]
+  * Added: Support for custom memory managers (GitHub #26, #35), see Doxygen
+      New functions (as extension of existing ones):
+        uriAddBaseUriExMm[AW]
+        uriComposeQueryMallocExMm[AW]
+        uriDissectQueryMallocExMm[AW]
+        uriFreeQueryListMm[AW]
+        uriFreeUriMembersMm[AW]
+        uriNormalizeSyntaxExMm[AW]
+        uriParseSingleUriExMm[AW]
+        uriRemoveBaseUriMm[AW]
+      New functions (for convenience):
+        uriCompleteMemoryManager
+        uriEmulateCalloc
+        uriEmulateReallocarray
+        uriTestMemoryManager
+      New error codes:
+        URI_ERROR_MEMORY_MANAGER_FAULTY
+        URI_ERROR_MEMORY_MANAGER_INCOMPLETE
+      New types:
+        UriFuncCalloc
+        UriFuncFree
+        UriFuncMalloc
+        UriFuncRealloc
+        UriFuncReallocarray
+        UriMemoryManager
+  * Added: Add non-void versions of uriNormalizeSyntaxMaskRequired*
+      New functions:
+        uriNormalizeSyntaxMaskRequiredEx[AW]
   * Changed: Migrate test suite from CppTest to GoogleTest 1.8.1
-  * TODO BUMP SONAME
+  * Improved: Make test suite free of memory leaks, thanks to AddressSanitizer
+  * Removed: Pointless define URI_SIZEDOWN / configure option --enable-sizedown
+  * Soname: 1:23:0
 
 2018-08-18 -- 0.8.6
 

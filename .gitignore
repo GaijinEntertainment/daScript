@@ -5,6 +5,9 @@
 /aclocal.m4
 Makefile
 Makefile.in
+/config.h.in
+/config.h.in~
+/config.h
 /config.log
 /config.guess
 /config.status
@@ -16,6 +19,8 @@ Makefile.in
 /m4
 /liburiparser.pc
 /libtool
+/stamp-h1
+/test-suite.log
 /uriparser-*.tar.bz2
 /uriparser-*.zip
 /uriparse

@@ -34,7 +34,7 @@ pkginclude_HEADERS = \
 	include/uriparser/UriIp4.h
 
 
-liburiparser_la_LDFLAGS = -version-info 1:22:0
+liburiparser_la_LDFLAGS = -version-info 1:23:0
 if WIN32
 liburiparser_la_LDFLAGS += -no-undefined
 endif
@@ -48,6 +48,8 @@ liburiparser_la_SOURCES = \
 	src/UriIp4.c \
 	src/UriIp4Base.c \
 	src/UriIp4Base.h \
+	src/UriMemory.c \
+	src/UriMemory.h \
 	src/UriNormalize.c \
 	src/UriNormalizeBase.c \
 	src/UriNormalizeBase.h \
@@ -69,6 +71,7 @@ test_uriparser_test_LDADD = liburiparser.la
 
 test_uriparser_test_SOURCES = \
 	test/FourSuite.cpp \
+	test/MemoryManagerSuite.cpp \
 	test/VersionSuite.cpp \
 	test/test.cpp
 endif

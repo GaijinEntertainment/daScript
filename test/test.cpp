@@ -1710,15 +1710,15 @@ TEST(UriSuite, TestQueryDissectionBug3590761) {
 }
 
 TEST(UriSuite, TestQueryCompositionMathCalc) {
-		UriQueryListA second = { .key = "k2", .value = "v2", .next = NULL };
-		UriQueryListA first = { .key = "k1", .value = "v1", .next = &second };
+		UriQueryListA second = { /*.key =*/ "k2", /*.value =*/ "v2", /*.next =*/ NULL };
+		UriQueryListA first = { /*.key =*/ "k1", /*.value =*/ "v1", /*.next =*/ &second };
 
 		int charsRequired;
 		ASSERT_TRUE(uriComposeQueryCharsRequiredA(&first, &charsRequired)
 				== URI_SUCCESS);
 
 		const int FACTOR = 6;  /* due to escaping with normalizeBreaks */
-		ASSERT_TRUE(charsRequired ==
+		ASSERT_TRUE((unsigned)charsRequired ==
 			FACTOR * strlen(first.key) + 1 + FACTOR * strlen(first.value)
 			+ 1
 			+ FACTOR * strlen(second.key) + 1 + FACTOR * strlen(second.value)
@@ -1726,8 +1726,8 @@ TEST(UriSuite, TestQueryCompositionMathCalc) {
 }
 
 TEST(UriSuite, TestQueryCompositionMathWriteGoogleAutofuzz113244572) {
-		UriQueryListA second = { .key = "\x11", .value = NULL, .next = NULL };
-		UriQueryListA first = { .key = "\x01", .value = "\x02", .next = &second };
+		UriQueryListA second = { /*.key =*/ "\x11", /*.value =*/ NULL, /*.next =*/ NULL };
+		UriQueryListA first = { /*.key =*/ "\x01", /*.value =*/ "\x02", /*.next =*/ &second };
 
 		const UriBool spaceToPlus = URI_TRUE;
 		const UriBool normalizeBreaks = URI_FALSE;  /* for factor 3 but 6 */
@@ -1989,6 +1989,10 @@ namespace {
 			ASSERT_TRUE(0);
 		}
 		free(buffer);
+
+		uriFreeUriMembersA(&absSource);
+		uriFreeUriMembersA(&absBase);
+		uriFreeUriMembersA(&dest);
 	}
 }  // namespace
 
@@ -2035,6 +2039,73 @@ TEST(UriSuite, TestRangeComparisonRemoveBaseUriIssue19) {
 		testRemoveBaseUriHelper("//example/x/abc",
 								"http://example/x/abc",
 								"http://example2/x/y/z");
+}
+
+TEST(UriParseSingleSuite, Success) {
+	UriUriA uri;
+
+	EXPECT_EQ(uriParseSingleUriA(&uri, "file:///home/user/song.mp3", NULL),
+			URI_SUCCESS);
+
+	uriFreeUriMembersA(&uri);
+}
+
+TEST(UriParseSingleSuite, ErrorSyntaxParseErrorSetsErrorPos) {
+	UriUriA uri;
+	const char * errorPos;
+	const char * const uriString = "abc{}def";
+
+	EXPECT_EQ(uriParseSingleUriA(&uri, uriString, &errorPos),
+			URI_ERROR_SYNTAX);
+	EXPECT_EQ(errorPos, uriString + strlen("abc"));
+
+	uriFreeUriMembersA(&uri);
+}
+
+TEST(UriParseSingleSuite, ErrorNullFirstDetected) {
+	UriUriA uri;
+	const char * errorPos;
+
+	EXPECT_EQ(uriParseSingleUriExA(&uri, NULL, "notnull", &errorPos),
+			URI_ERROR_NULL);
+}
+
+TEST(UriParseSingleSuite, ErrorNullAfterLastDetected) {
+	UriUriA uri;
+
+	EXPECT_EQ(uriParseSingleUriExA(&uri, "foo", NULL, NULL), URI_SUCCESS);
+
+	uriFreeUriMembersA(&uri);
+}
+
+TEST(UriParseSingleSuite, ErrorNullMemoryManagerDetected) {
+	UriUriA uri;
+	const char * errorPos;
+	const char * const uriString = "somethingwellformed";
+
+	EXPECT_EQ(uriParseSingleUriExMmA(&uri,
+			uriString,
+			uriString + strlen(uriString),
+			&errorPos, NULL), URI_SUCCESS);
+
+	EXPECT_EQ(uriFreeUriMembersMmA(&uri, NULL), URI_SUCCESS);
+}
+
+TEST(FreeUriMembersSuite, MultiFreeWorksFine) {
+	UriUriA uri;
+
+	EXPECT_EQ(uriParseSingleUriA(&uri, "file:///home/user/song.mp3", NULL),
+			URI_SUCCESS);
+
+	UriUriA uriBackup = uri;
+	EXPECT_EQ(memcmp(&uriBackup, &uri, sizeof(UriUriA)), 0);
+
+	uriFreeUriMembersA(&uri);
+
+	// Did some pointers change (to NULL)?
+	EXPECT_NE(memcmp(&uriBackup, &uri, sizeof(UriUriA)), 0);
+
+	uriFreeUriMembersA(&uri);  // second time
 }
 
 

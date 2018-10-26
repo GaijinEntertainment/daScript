@@ -1,4 +1,4 @@
-/* 5afca6d8abb5d1a22b4e28c912538e6729692afc98f089d9e538ca01c43ab805 (0.8.6+)
+/* c071c0bd2264218705abd9e6b19250adb67d6fefa4866d705b9d2f2672281001 (0.9.0+)
  *
  * uriparser - RFC 3986 URI parsing library
  *
@@ -143,8 +143,8 @@ typedef struct URI_TYPE(HostDataStruct) {
  * Represents an RFC 3986 %URI.
  * Missing components can be {NULL, NULL} ranges.
  *
- * @see uriParseUriA
  * @see uriFreeUriMembersA
+ * @see uriFreeUriMembersMmA
  * @see UriParserStateA
  * @since 0.3.0
  */
@@ -173,6 +173,7 @@ typedef struct URI_TYPE(UriStruct) {
  * a components absence.
  *
  * @see uriFreeUriMembersA
+ * @see uriFreeUriMembersMmA
  * @since 0.3.0
  */
 typedef struct URI_TYPE(ParserStateStruct) {
@@ -202,7 +203,8 @@ typedef struct URI_TYPE(QueryListStruct) {
 
 
 /**
- * Parses a RFC 3986 URI.
+ * Parses a RFC 3986 %URI.
+ * Uses default libc-based memory manager.
  *
  * @param state       <b>INOUT</b>: Parser state with set output %URI, must not be NULL
  * @param first       <b>IN</b>: Pointer to the first character to parse, must not be NULL
@@ -210,8 +212,11 @@ typedef struct URI_TYPE(QueryListStruct) {
  * @return            0 on success, error code otherwise
  *
  * @see uriParseUriA
+ * @see uriParseSingleUriA
+ * @see uriParseSingleUriExA
  * @see uriToStringA
  * @since 0.3.0
+ * @deprecated Deprecated since 0.9.0, please migrate to uriParseSingleUriExA (with "Single").
  */
 int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
@@ -220,17 +225,110 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 
 /**
  * Parses a RFC 3986 %URI.
+ * Uses default libc-based memory manager.
  *
  * @param state   <b>INOUT</b>: Parser state with set output %URI, must not be NULL
  * @param text    <b>IN</b>: Text to parse, must not be NULL
  * @return        0 on success, error code otherwise
  *
  * @see uriParseUriExA
+ * @see uriParseSingleUriA
+ * @see uriParseSingleUriExA
  * @see uriToStringA
  * @since 0.3.0
+ * @deprecated Deprecated since 0.9.0, please migrate to uriParseSingleUriA (with "Single").
  */
 int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * text);
+
+
+
+/**
+ * Parses a single RFC 3986 %URI.
+ * Uses default libc-based memory manager.
+ *
+ * @param uri         <b>OUT</b>: Output %URI, must not be NULL
+ * @param text        <b>IN</b>: Pointer to the first character to parse,
+ *                               must not be NULL
+ * @param errorPos    <b>OUT</b>: Pointer to a pointer to the first character
+ *                                causing a syntax error, can be NULL;
+ *                                only set when URI_ERROR_SYNTAX was returned
+ * @return            0 on success, error code otherwise
+ *
+ * @see uriParseSingleUriExA
+ * @see uriParseSingleUriExMmA
+ * @see uriToStringA
+ * @since 0.9.0
+ */
+int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
+		const URI_CHAR ** errorPos);
+
+
+
+/**
+ * Parses a single RFC 3986 %URI.
+ * Uses default libc-based memory manager.
+ *
+ * @param uri         <b>OUT</b>: Output %URI, must not be NULL
+ * @param first       <b>IN</b>: Pointer to the first character to parse,
+ *                               must not be NULL
+ * @param afterLast   <b>IN</b>: Pointer to the character after the last to
+ *                               parse, can be NULL
+ *                               (to use first + strlen(first))
+ * @param errorPos    <b>OUT</b>: Pointer to a pointer to the first character
+ *                                causing a syntax error, can be NULL;
+ *                                only set when URI_ERROR_SYNTAX was returned
+ * @return            0 on success, error code otherwise
+ *
+ * @see uriParseSingleUriA
+ * @see uriParseSingleUriExMmA
+ * @see uriToStringA
+ * @since 0.9.0
+ */
+int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		const URI_CHAR ** errorPos);
+
+
+
+/**
+ * Parses a single RFC 3986 %URI.
+ *
+ * @param uri         <b>OUT</b>: Output %URI, must not be NULL
+ * @param first       <b>IN</b>: Pointer to the first character to parse,
+ *                               must not be NULL
+ * @param afterLast   <b>IN</b>: Pointer to the character after the last to
+ *                               parse, can be NULL
+ *                               (to use first + strlen(first))
+ * @param errorPos    <b>OUT</b>: Pointer to a pointer to the first character
+ *                                causing a syntax error, can be NULL;
+ *                                only set when URI_ERROR_SYNTAX was returned
+ * @param memory      <b>IN</b>: Memory manager to use, NULL for default libc
+ * @return            0 on success, error code otherwise
+ *
+ * @see uriParseSingleUriA
+ * @see uriParseSingleUriExA
+ * @see uriToStringA
+ * @since 0.9.0
+ */
+int URI_FUNC(ParseSingleUriExMm)(URI_TYPE(Uri) * uri,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		const URI_CHAR ** errorPos, UriMemoryManager * memory);
+
+
+
+/**
+ * Frees all memory associated with the members
+ * of the %URI structure. Note that the structure
+ * itself is not freed, only its members.
+ * Uses default libc-based memory manager.
+ *
+ * @param uri   <b>INOUT</b>: %URI structure whose members should be freed
+ *
+ * @see uriFreeUriMembersMmA
+ * @since 0.3.0
+ */
+void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 
 
 
@@ -239,11 +337,15 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
  * of the %URI structure. Note that the structure
  * itself is not freed, only its members.
  *
- * @param uri   <b>INOUT</b>: %URI structure whose members should be freed
+ * @param uri     <b>INOUT</b>: %URI structure whose members should be freed
+ * @param memory  <b>IN</b>: Memory manager to use, NULL for default libc
+ * @return        0 on success, error code otherwise
  *
- * @since 0.3.0
+ * @see uriFreeUriMembersA
+ * @since 0.9.0
  */
-void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
+int URI_FUNC(FreeUriMembersMm)(URI_TYPE(Uri) * uri,
+		UriMemoryManager * memory);
 
 
 
@@ -342,6 +444,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 /**
  * Performs reference resolution as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
+ * Uses default libc-based memory manager.
  * NOTE: On success you have to call uriFreeUriMembersA on \p absoluteDest manually later.
  *
  * @param absoluteDest     <b>OUT</b>: Result %URI
@@ -349,7 +452,10 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
  * @param absoluteBase     <b>IN</b>: Base %URI to apply
  * @return                 Error code or 0 on success
  *
- * @see uriRemoveBaseUriA, uriAddBaseUriExA
+ * @see uriRemoveBaseUriA
+ * @see uriRemoveBaseUriMmA
+ * @see uriAddBaseUriExA
+ * @see uriAddBaseUriExMmA
  * @since 0.4.0
  */
 int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
@@ -361,6 +467,7 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
 /**
  * Performs reference resolution as described in
  * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
+ * Uses default libc-based memory manager.
  * NOTE: On success you have to call uriFreeUriMembersA on \p absoluteDest manually later.
  *
  * @param absoluteDest     <b>OUT</b>: Result %URI
@@ -369,7 +476,9 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
  * @param options          <b>IN</b>: Configuration to apply
  * @return                 Error code or 0 on success
  *
- * @see uriRemoveBaseUriA, uriAddBaseUriA
+ * @see uriRemoveBaseUriA
+ * @see uriAddBaseUriA
+ * @see uriAddBaseUriExMmA
  * @since 0.8.1
  */
 int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
@@ -380,11 +489,37 @@ int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
 
 
 /**
+ * Performs reference resolution as described in
+ * <a href="http://tools.ietf.org/html/rfc3986#section-5.2.2">section 5.2.2 of RFC 3986</a>.
+ * NOTE: On success you have to call uriFreeUriMembersMmA on \p absoluteDest manually later.
+ *
+ * @param absoluteDest     <b>OUT</b>: Result %URI
+ * @param relativeSource   <b>IN</b>: Reference to resolve
+ * @param absoluteBase     <b>IN</b>: Base %URI to apply
+ * @param options          <b>IN</b>: Configuration to apply
+ * @param memory           <b>IN</b>: Memory manager to use, NULL for default libc
+ * @return                 Error code or 0 on success
+ *
+ * @see uriRemoveBaseUriA
+ * @see uriRemoveBaseUriMmA
+ * @see uriAddBaseUriA
+ * @see uriAddBaseUriExA
+ * @since 0.9.0
+ */
+int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absoluteDest,
+		const URI_TYPE(Uri) * relativeSource,
+		const URI_TYPE(Uri) * absoluteBase,
+		UriResolutionOptions options, UriMemoryManager * memory);
+
+
+
+/**
  * Tries to make a relative %URI (a reference) from an
  * absolute %URI and a given base %URI. The resulting %URI is going to be
  * relative if the absolute %URI and base %UI share both scheme and authority.
  * If that is not the case, the result will still be
  * an absolute URI (with scheme part if necessary).
+ * Uses default libc-based memory manager.
  * NOTE: On success you have to call uriFreeUriMembersA on
  * \p dest manually later.
  *
@@ -394,13 +529,45 @@ int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
  * @param domainRootMode   <b>IN</b>: Create %URI with path relative to domain root
  * @return                 Error code or 0 on success
  *
- * @see uriAddBaseUriA, uriAddBaseUriExA
+ * @see uriRemoveBaseUriMmA
+ * @see uriAddBaseUriA
+ * @see uriAddBaseUriExA
+ * @see uriAddBaseUriExMmA
  * @since 0.5.2
  */
 int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absoluteSource,
 		const URI_TYPE(Uri) * absoluteBase,
 		UriBool domainRootMode);
+
+
+
+/**
+ * Tries to make a relative %URI (a reference) from an
+ * absolute %URI and a given base %URI. The resulting %URI is going to be
+ * relative if the absolute %URI and base %UI share both scheme and authority.
+ * If that is not the case, the result will still be
+ * an absolute URI (with scheme part if necessary).
+ * NOTE: On success you have to call uriFreeUriMembersMmA on
+ * \p dest manually later.
+ *
+ * @param dest             <b>OUT</b>: Result %URI
+ * @param absoluteSource   <b>IN</b>: Absolute %URI to make relative
+ * @param absoluteBase     <b>IN</b>: Base %URI
+ * @param domainRootMode   <b>IN</b>: Create %URI with path relative to domain root
+ * @param memory           <b>IN</b>: Memory manager to use, NULL for default libc
+ * @return                 Error code or 0 on success
+ *
+ * @see uriRemoveBaseUriA
+ * @see uriAddBaseUriA
+ * @see uriAddBaseUriExA
+ * @see uriAddBaseUriExMmA
+ * @since 0.9.0
+ */
+int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
+		const URI_TYPE(Uri) * absoluteSource,
+		const URI_TYPE(Uri) * absoluteBase,
+		UriBool domainRootMode, UriMemoryManager * memory);
 
 
 
@@ -460,9 +627,52 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
  * @return      Normalization job mask
  *
  * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxExA
+ * @see uriNormalizeSyntaxExMmA
+ * @see uriNormalizeSyntaxMaskRequiredExA
  * @since 0.5.0
+ * @deprecated Deprecated since 0.9.0, please migrate to uriNormalizeSyntaxMaskRequiredExA (with "Ex").
  */
 unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
+
+
+
+/**
+ * Determines the components of a %URI that are not normalized.
+ *
+ * @param uri      <b>IN</b>: %URI to check
+ * @param outMask  <b>OUT</b>: Normalization job mask
+ * @return         Error code or 0 on success
+ *
+ * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxExA
+ * @see uriNormalizeSyntaxExMmA
+ * @see uriNormalizeSyntaxMaskRequiredA
+ * @since 0.9.0
+ */
+int URI_FUNC(NormalizeSyntaxMaskRequiredEx)(const URI_TYPE(Uri) * uri,
+		unsigned int * outMask);
+
+
+
+/**
+ * Normalizes a %URI using a normalization mask.
+ * The normalization mask decides what components are normalized.
+ *
+ * NOTE: If necessary the %URI becomes owner of all memory
+ * behind the text pointed to. Text is duplicated in that case.
+ * Uses default libc-based memory manager.
+ *
+ * @param uri    <b>INOUT</b>: %URI to normalize
+ * @param mask   <b>IN</b>: Normalization mask
+ * @return       Error code or 0 on success
+ *
+ * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxExMmA
+ * @see uriNormalizeSyntaxMaskRequiredA
+ * @since 0.5.0
+ */
+int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
 
 
 
@@ -475,13 +685,16 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
  *
  * @param uri    <b>INOUT</b>: %URI to normalize
  * @param mask   <b>IN</b>: Normalization mask
+ * @param memory <b>IN</b>: Memory manager to use, NULL for default libc
  * @return       Error code or 0 on success
  *
  * @see uriNormalizeSyntaxA
+ * @see uriNormalizeSyntaxExA
  * @see uriNormalizeSyntaxMaskRequiredA
- * @since 0.5.0
+ * @since 0.9.0
  */
-int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
+int URI_FUNC(NormalizeSyntaxExMm)(URI_TYPE(Uri) * uri, unsigned int mask,
+		UriMemoryManager * memory);
 
 
 
@@ -490,11 +703,13 @@ int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
  *
  * NOTE: If necessary the %URI becomes owner of all memory
  * behind the text pointed to. Text is duplicated in that case.
+ * Uses default libc-based memory manager.
  *
  * @param uri   <b>INOUT</b>: %URI to normalize
  * @return      Error code or 0 on success
  *
  * @see uriNormalizeSyntaxExA
+ * @see uriNormalizeSyntaxExMmA
  * @see uriNormalizeSyntaxMaskRequiredA
  * @since 0.5.0
  */
@@ -639,8 +854,12 @@ int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
  *
  * @see uriComposeQueryExA
  * @see uriComposeQueryMallocA
+ * @see uriComposeQueryMallocExA
+ * @see uriComposeQueryMallocExMmA
  * @see uriComposeQueryCharsRequiredA
  * @see uriDissectQueryMallocA
+ * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
@@ -661,9 +880,13 @@ int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryA
+ * @see uriComposeQueryMallocA
  * @see uriComposeQueryMallocExA
+ * @see uriComposeQueryMallocExMmA
  * @see uriComposeQueryCharsRequiredExA
+ * @see uriDissectQueryMallocA
  * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
@@ -678,18 +901,48 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
  * The composed string does not start with '?',
  * on the way ' ' is converted to '+' and line breaks are
  * normalized to "%0D%0A".
+ * Uses default libc-based memory manager.
  *
  * @param dest              <b>OUT</b>: Output destination
  * @param queryList         <b>IN</b>: Query list to convert
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryMallocExA
+ * @see uriComposeQueryMallocExMmA
  * @see uriComposeQueryA
  * @see uriDissectQueryMallocA
+ * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
 int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
 		const URI_TYPE(QueryList) * queryList);
+
+
+
+/**
+ * Converts a query list structure back to a query string.
+ * Memory for this string is allocated internally.
+ * The composed string does not start with '?'.
+ * Uses default libc-based memory manager.
+ *
+ * @param dest              <b>OUT</b>: Output destination
+ * @param queryList         <b>IN</b>: Query list to convert
+ * @param spaceToPlus       <b>IN</b>: Whether to convert ' ' to '+' or not
+ * @param normalizeBreaks   <b>IN</b>: Whether to convert CR and LF to CR-LF or not.
+ * @return                  Error code or 0 on success
+ *
+ * @see uriComposeQueryMallocA
+ * @see uriComposeQueryMallocExMmA
+ * @see uriComposeQueryExA
+ * @see uriDissectQueryMallocA
+ * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
+ * @since 0.7.0
+ */
+int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
+		const URI_TYPE(QueryList) * queryList,
+		UriBool spaceToPlus, UriBool normalizeBreaks);
 
 
 
@@ -702,22 +955,28 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
  * @param queryList         <b>IN</b>: Query list to convert
  * @param spaceToPlus       <b>IN</b>: Whether to convert ' ' to '+' or not
  * @param normalizeBreaks   <b>IN</b>: Whether to convert CR and LF to CR-LF or not.
+ * @param memory            <b>IN</b>: Memory manager to use, NULL for default libc
  * @return                  Error code or 0 on success
  *
  * @see uriComposeQueryMallocA
+ * @see uriComposeQueryMallocExA
  * @see uriComposeQueryExA
+ * @see uriDissectQueryMallocA
  * @see uriDissectQueryMallocExA
- * @since 0.7.0
+ * @see uriDissectQueryMallocExMmA
+ * @since 0.9.0
  */
-int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
+int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
 		const URI_TYPE(QueryList) * queryList,
-		UriBool spaceToPlus, UriBool normalizeBreaks);
+		UriBool spaceToPlus, UriBool normalizeBreaks,
+		UriMemoryManager * memory);
 
 
 
 /**
  * Constructs a query list from the raw query string of a given URI.
  * On the way '+' is converted back to ' ', line breaks are not modified.
+ * Uses default libc-based memory manager.
  *
  * @param dest              <b>OUT</b>: Output destination
  * @param itemCount         <b>OUT</b>: Number of items found, can be NULL
@@ -726,12 +985,38 @@ int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
  * @return                  Error code or 0 on success
  *
  * @see uriDissectQueryMallocExA
+ * @see uriDissectQueryMallocExMmA
  * @see uriComposeQueryA
  * @see uriFreeQueryListA
+ * @see uriFreeQueryListMmA
  * @since 0.7.0
  */
 int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
+
+
+
+/**
+ * Constructs a query list from the raw query string of a given URI.
+ * Uses default libc-based memory manager.
+ *
+ * @param dest              <b>OUT</b>: Output destination
+ * @param itemCount         <b>OUT</b>: Number of items found, can be NULL
+ * @param first             <b>IN</b>: Pointer to first character <b>after</b> '?'
+ * @param afterLast         <b>IN</b>: Pointer to character after the last one still in
+ * @param plusToSpace       <b>IN</b>: Whether to convert '+' to ' ' or not
+ * @param breakConversion   <b>IN</b>: Line break conversion mode
+ * @return                  Error code or 0 on success
+ *
+ * @see uriDissectQueryMallocA
+ * @see uriDissectQueryMallocExMmA
+ * @see uriComposeQueryExA
+ * @see uriFreeQueryListA
+ * @since 0.7.0
+ */
+int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
+		const URI_CHAR * first, const URI_CHAR * afterLast,
+		UriBool plusToSpace, UriBreakConversion breakConversion);
 
 
 
@@ -744,16 +1029,20 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * @param afterLast         <b>IN</b>: Pointer to character after the last one still in
  * @param plusToSpace       <b>IN</b>: Whether to convert '+' to ' ' or not
  * @param breakConversion   <b>IN</b>: Line break conversion mode
+ * @param memory            <b>IN</b>: Memory manager to use, NULL for default libc
  * @return                  Error code or 0 on success
  *
  * @see uriDissectQueryMallocA
+ * @see uriDissectQueryMallocExA
  * @see uriComposeQueryExA
  * @see uriFreeQueryListA
- * @since 0.7.0
+ * @see uriFreeQueryListMmA
+ * @since 0.9.0
  */
-int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
+int URI_FUNC(DissectQueryMallocExMm)(URI_TYPE(QueryList) ** dest, int * itemCount,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
-		UriBool plusToSpace, UriBreakConversion breakConversion);
+		UriBool plusToSpace, UriBreakConversion breakConversion,
+		UriMemoryManager * memory);
 
 
 
@@ -763,9 +1052,26 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
  *
  * @param queryList   <b>INOUT</b>: Query list to free
  *
+ * @see uriFreeQueryListMmA
  * @since 0.7.0
  */
 void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
+
+
+
+/**
+ * Frees all memory associated with the given query list.
+ * The structure itself is freed as well.
+ *
+ * @param queryList  <b>INOUT</b>: Query list to free
+ * @param memory     <b>IN</b>: Memory manager to use, NULL for default libc
+ * @return           Error code or 0 on success
+ *
+ * @see uriFreeQueryListA
+ * @since 0.9.0
+ */
+int URI_FUNC(FreeQueryListMm)(URI_TYPE(QueryList) * queryList,
+		UriMemoryManager * memory);
 
 
 
