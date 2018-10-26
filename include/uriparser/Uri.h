@@ -252,7 +252,7 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
  *                               must not be NULL
  * @param errorPos    <b>OUT</b>: Pointer to a pointer to the first character
  *                                causing a syntax error, can be NULL;
- *                                only set when  URI_ERROR_SYNTAX was returned
+ *                                only set when URI_ERROR_SYNTAX was returned
  * @return            0 on success, error code otherwise
  *
  * @see uriParseSingleUriExA
@@ -275,6 +275,9 @@ int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
  * @param afterLast   <b>IN</b>: Pointer to the character after the last to
  *                               parse, can be NULL
  *                               (to use first + strlen(first))
+ * @param errorPos    <b>OUT</b>: Pointer to a pointer to the first character
+ *                                causing a syntax error, can be NULL;
+ *                                only set when URI_ERROR_SYNTAX was returned
  * @return            0 on success, error code otherwise
  *
  * @see uriParseSingleUriA
@@ -297,6 +300,9 @@ int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
  * @param afterLast   <b>IN</b>: Pointer to the character after the last to
  *                               parse, can be NULL
  *                               (to use first + strlen(first))
+ * @param errorPos    <b>OUT</b>: Pointer to a pointer to the first character
+ *                                causing a syntax error, can be NULL;
+ *                                only set when URI_ERROR_SYNTAX was returned
  * @param memory      <b>IN</b>: Memory manager to use, NULL for default libc
  * @return            0 on success, error code otherwise
  *
