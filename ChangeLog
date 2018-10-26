@@ -1,4 +1,4 @@
-2018-xx-xx -- x.x.x
+2018-10-27 -- 0.9.0
 
 >>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   * Fixed: Out-of-bounds write in uriComposeQuery* and uriComposeQueryEx*
