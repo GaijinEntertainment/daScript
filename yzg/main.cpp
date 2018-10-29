@@ -70,6 +70,28 @@ void test_ast ( const string & fn )
 #endif
 }
 
+#pragma pack(1)
+struct Object
+{
+    float   pos[3];
+    float   vel[3];
+};
+#pragma pack()
+
+__attribute__((noinline)) void updateObject ( Object & obj )
+{
+    obj.pos[0] += obj.vel[0];
+    obj.pos[1] += obj.vel[1];
+    obj.pos[2] += obj.vel[2];
+}
+
+__attribute__((noinline)) void updateTest ( Object * objects )
+{
+    for ( int i=0; i<10000; ++i ) {
+        updateObject(objects[i]);
+    }
+}
+
 void unit_test ( const string & fn )
 {
     string str;
@@ -92,7 +114,6 @@ void unit_test ( const string & fn )
         ctx.call(ctx.findFunction("init"), nullptr);
         
         // NOTE: this demonstrates particular shader
-        /*
         float * objects = ptr_cast_to<float> ( ctx.getVariable( ctx.findVariable("objects") ) );
         float * var = objects;
         cout << "before:\n";
@@ -101,7 +122,6 @@ void unit_test ( const string & fn )
             cout << "object[" << i << "].velocity = " << var[3] << "," << var[4] << "," << var[5] << "\n";
             var += 6;
         }
-        */
         
         clock_t t0 = clock();
         int numIter = 100;
@@ -109,8 +129,12 @@ void unit_test ( const string & fn )
             ctx.call(ctx.findFunction("test"), nullptr);
         clock_t t1 = clock();
         
+        clock_t t2 = clock();
+        for ( int i=0; i < numIter; ++i )
+            updateTest((Object *)objects);
+        clock_t t3 = clock();
+        
         // NOTE: this demonstrates result of particular shader
-        /*
         var = objects;
         cout << "after:\n";
         for ( int i=0; i!=5; ++i ) {
@@ -118,9 +142,13 @@ void unit_test ( const string & fn )
             cout << "object[" << i << "].velocity = " << var[3] << "," << var[4] << "," << var[5] << "\n";
             var += 6;
         }
-        */
         
-        cout << "iterations took:" << double(t1-t0) / (CLOCKS_PER_SEC * numIter) << "\n";
+        double simT = double(t1-t0) / (CLOCKS_PER_SEC * numIter);
+        double cT = double(t3-t2) / (CLOCKS_PER_SEC * numIter);
+        
+        cout << "iterations took:" << simT << "\n";
+        cout << "c++ version took:" << cT << "\n";
+        cout << "ratio " << simT / cT << "\n";
         
 #if REPORT_ERRORS
     } catch ( const read_error & error ) {
