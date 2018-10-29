@@ -94,6 +94,7 @@ namespace yzg
             string      name;
             TypeDeclPtr type;
             Node *      at = nullptr;
+            int         offset = 0;
         };
     public:
         Structure ( const string & n ) : name(n) {}
@@ -354,6 +355,7 @@ namespace yzg
         string getMangledName() const;
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
+        virtual SimNode * makeSimNode ( Context & context ) { return context.makeNode<SimNode_Call>(); }
     public:
         string              name;
         vector<VariablePtr> arguments;
@@ -368,7 +370,6 @@ namespace yzg
     {
     public:
         BuiltInFunction ( const string & fn );
-        virtual SimNode * simulate ( Context & context ) = 0;
     };
     
     class Program : public enable_shared_from_this<Program>

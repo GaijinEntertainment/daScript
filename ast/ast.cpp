@@ -268,6 +268,7 @@ namespace yzg
     template<> struct ToBasicType<uint>     { enum { type = Type::tUInt }; };
     template<> struct ToBasicType<uint64_t> { enum { type = Type::tUInt }; };
     template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
+    template<> struct ToBasicType<void>     { enum { type = Type::tVoid }; };
     
     template <typename TT>
     TypeDeclPtr makeType()
@@ -291,7 +292,7 @@ namespace yzg
             arguments.push_back(arg);
         }
         
-        virtual SimNode * simulate ( Context & context ) {
+        virtual SimNode * makeSimNode ( Context & context ) override {
             return context.makeNode<SimT>();
         }
     };
@@ -313,7 +314,7 @@ namespace yzg
             arguments.push_back(arg2);
         }
         
-        virtual SimNode * simulate ( Context & context ) {
+        virtual SimNode * makeSimNode ( Context & context ) override {
             return context.makeNode<SimT>();
         }
     };
@@ -515,8 +516,7 @@ namespace yzg
     
     SimNode * ExprField::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        return context.makeNode<SimNode_Field>(rvalue->simulate(context), field->offset);
     }
     
     // ExprVar
@@ -630,8 +630,7 @@ namespace yzg
     
     SimNode * ExprOp1::simulate (Context & context) const
     {
-        auto pBuiltInFunction = static_pointer_cast<BuiltInFunction>(func);
-        auto pSimOp1 = static_cast<SimNode_Op1 *>(pBuiltInFunction->simulate(context));
+        auto pSimOp1 = static_cast<SimNode_Op1 *>(func->makeSimNode(context));
         pSimOp1->x = subexpr->simulate(context);
         return pSimOp1;
     }
@@ -679,8 +678,7 @@ namespace yzg
     
     SimNode * ExprOp2::simulate (Context & context) const
     {
-        auto pBuiltInFunction = static_pointer_cast<BuiltInFunction>(func);
-        auto pSimOp2 = static_cast<SimNode_Op2 *>(pBuiltInFunction->simulate(context));
+        auto pSimOp2 = static_cast<SimNode_Op2 *>(func->makeSimNode(context));
         pSimOp2->l = left->simulate(context);
         pSimOp2->r = right->simulate(context);
         return pSimOp2;
@@ -984,7 +982,7 @@ namespace yzg
             context.stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
         }
         subexpr->inferType(context);
-        context.func->totalStackSize = max(context.func->totalStackSize, sp);
+        context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
         context.stackTop = sp;
         context.local.resize(sz);
         type = make_shared<TypeDecl>();
@@ -1073,16 +1071,18 @@ namespace yzg
     
     SimNode * ExprCall::simulate (Context & context) const
     {
-        auto pCall = context.makeNode<SimNode_Call>();
+        SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
         pCall->fnIndex = func->index;
         if ( int nArg = (int) arguments.size() ) {
             pCall->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
+            pCall->nArguments = nArg;
             pCall->argValues = (__m128 *) context.allocate(nArg * sizeof(__m128));
             for ( int a=0; a!=nArg; ++a ) {
                 pCall->arguments[a] = arguments[a]->simulate(context);
             }
         } else {
             pCall->arguments = nullptr;
+            pCall->nArguments = 0;
             pCall->argValues = nullptr;
         }
         return pCall;
@@ -1128,6 +1128,15 @@ namespace yzg
     
     void Program::inferTypes()
     {
+        // structure declarations (precompute offsets of fields)
+        for ( auto & ist : structures ) {
+            auto & st = ist.second;
+            int offset = 0;
+            for ( auto & fi : st->fields ) {
+                fi.offset = offset;
+                offset += fi.type->getSizeOf();
+            }
+        }
         // global variables
         int gvi = 0;
         for ( auto & it : globals ) {
@@ -1167,6 +1176,7 @@ namespace yzg
     template <typename TT, typename SimPolicy_TT>
     void addBuiltInBasic(Program & prg)
     {
+        prg.addBuiltIn ( make_shared<BuiltInOp1<TT, TT, SimNode_Debug<TT>>>("debug") );
         prg.addBuiltIn( make_shared<BuiltInOp2<TT&, TT, TT&, Sim_Set<SimPolicy_TT>>>("=") );
         prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, bool, Sim_Equ<SimPolicy_TT>>>("==") );
         prg.addBuiltIn( make_shared<BuiltInOp2<TT,  TT, bool, Sim_NotEqu<SimPolicy_TT>>>("!=") );
@@ -1234,6 +1244,8 @@ namespace yzg
         // float
         addBuiltInBasic<float, SimPolicy_Float>(*this);
         addBuiltInNumeric<float, SimPolicy_Float>(*this);
+        
+        addBuiltIn ( make_shared<BuiltInOp1<int, float, SimNode_Cast<float,int64_t>>>("int2float") );
     }
     
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const
@@ -1282,7 +1294,9 @@ namespace yzg
             void * data = context.allocate(gvar.size);
             gvar.value = ptr_cast_from(data);
         }
+        context.totalVariables = (int) globals.size();
         context.functions = (SimFunction *) context.allocate( totalFunctions*sizeof(SimFunction) );
+        context.totalFunctions = totalFunctions;
         for ( auto & it : functions ) {
             auto pfun = it.second;
             if ( pfun->index==-1 )

@@ -12,6 +12,7 @@
 #include <xmmintrin.h>
 #include <vector>
 #include <string>
+#include <iostream>
 
 namespace yzg
 {
@@ -84,7 +85,12 @@ namespace yzg
             arguments = pushArg;
             return result;
         }
-
+        
+        inline __m128 getVariable ( int index ) const { return globalVariables[index].value; }
+        
+        int findFunction ( const char * name ) const;
+        int findVariable ( const char * name ) const;
+        
     protected:
         int linearAllocatorSize = 1*1024*1024;
         char * linearAllocator = nullptr;
@@ -93,7 +99,10 @@ namespace yzg
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
         char * stackTop = nullptr;
+        int stackSize = 16*1024;
         __m128 * arguments = nullptr;
+        int totalVariables = 0;
+        int totalFunctions = 0;
     };
     
     template <typename TT> inline TT cast_to ( __m128 x );
@@ -109,6 +118,17 @@ namespace yzg
     
     template <typename TT> inline TT * ptr_cast_to ( __m128 a )     { return ((TT **)&a)[0]; }
     template <typename TT> inline __m128 ptr_cast_from ( TT * p )   { __m128 x; ((TT **)&x)[0] = p; return x; }
+    
+    // field
+    struct SimNode_Field : SimNode {
+        SimNode_Field ( SimNode * rv, int of ) : rvalue(rv), offset(of) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 rv = rvalue->eval(context);
+            return ptr_cast_from( ptr_cast_to<char>(rv) + offset );
+        }
+        SimNode *   rvalue;
+        int         offset;
+    };
     
     // AT (INDEX)
     struct SimNode_At : SimNode {
@@ -136,6 +156,27 @@ namespace yzg
         int nArguments;
         SimNode ** arguments;
         __m128 * argValues;
+    };
+    
+    // CAST
+    template <typename CastTo, typename CastFrom>
+    struct SimNode_Cast : SimNode_Call {
+        virtual __m128 eval ( Context & context ) override {
+            __m128 res = arguments[0]->eval(context);
+            CastTo value = (CastTo) cast_to<CastFrom>(res);
+            return cast_from(value);
+        }
+    };
+    
+    // "DEBUG"
+    template <typename TT>
+    struct SimNode_Debug : SimNode_Call {
+        virtual __m128 eval ( Context & context ) override {
+            __m128 res = arguments[0]->eval(context);
+            auto value = cast_to<TT>(res);
+            cout << "debug: " << value << "\n";
+            return res;
+        }
     };
     
     // LOCAL VARIABLE "GET"
