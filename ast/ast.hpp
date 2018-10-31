@@ -372,6 +372,45 @@ namespace yzg
         BuiltInFunction ( const string & fn );
     };
     
+    template <typename TT>  struct ToBasicType;
+    template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
+    template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
+    template<> struct ToBasicType<int>      { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<int64_t>  { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<uint>     { enum { type = Type::tUInt }; };
+    template<> struct ToBasicType<uint64_t> { enum { type = Type::tUInt }; };
+    template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
+    template<> struct ToBasicType<void>     { enum { type = Type::tVoid }; };
+    
+    template <typename TT>
+    inline TypeDeclPtr makeType()
+    {
+        auto t = make_shared<TypeDecl>();
+        t->baseType = Type(ToBasicType<TT>::type);
+        t->rvalue = is_reference<TT>::value;
+        return t;
+    }
+    
+    template  <typename SimT, typename RetT, typename ...Args>
+    class BuiltInFn : public BuiltInFunction
+    {
+    public:
+        BuiltInFn(const string & fn) : BuiltInFunction(fn)
+        {
+            this->result = makeType<RetT>();
+            vector<TypeDeclPtr> args = { makeType<Args>()... };
+            for ( int argi=0; argi != args.size(); ++argi ) {
+                auto arg = make_shared<Variable>();
+                arg->name = "arg" + std::to_string(argi);
+                arg->type = args[argi];
+                this->arguments.push_back(arg);
+            }
+        }
+        virtual SimNode * makeSimNode ( Context & context ) override {
+            return context.makeNode<SimT>();
+        }
+    };
+    
     class Program : public enable_shared_from_this<Program>
     {
     public:

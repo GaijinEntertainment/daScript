@@ -33,7 +33,7 @@
     (Object a)
     (
         (let
-            (float oi (int2float index))
+            (float oi (float index))
             (float ii (* oi 2.0))
                 (
                 (= (@ (. a position) 0) (+ oi 0.1))
