@@ -18,6 +18,9 @@ uriparse_SOURCES = tool/uriparse.c
 uriparse_CFLAGS = -Iinclude
 uriparse_LDADD = $(top_builddir)/liburiparser.la
 uriparse_DEPENDENCIES = $(top_builddir)/liburiparser.la
+if WIN32
+uriparse_LDADD += -lws2_32
+endif
 
 
 pkgconfig_DATA = liburiparser.pc

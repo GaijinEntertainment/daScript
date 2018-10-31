@@ -36,12 +36,20 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include <sys/socket.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <uriparser/Uri.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
+
+#ifdef _WIN32
+# include <winsock2.h>
+# include <ws2tcpip.h>
+WINSOCK_API_LINKAGE const char WSAAPI inet_ntop(
+		int af, const void *src, char *dst, socklen_t size);
+#else
+# include <sys/socket.h>
+# include <arpa/inet.h>
+# include <netinet/in.h>
+#endif
 
 
 #define RANGE(x)  (int)((x).afterLast-(x).first), ((x).first)
