@@ -76,7 +76,8 @@ int main(int argc, char *argv[]) {
 						: (state.errorCode == URI_ERROR_MALLOC)
 							? "not enough memory"
 							: "liburiparser bug (please report)",
-					state.errorPos, state.errorPos - argv[i]);
+					state.errorPos,
+					(long unsigned int)(state.errorPos - argv[i]));
 			retval = EXIT_FAILURE;
 		} else {
 			if (uri.scheme.first) {
