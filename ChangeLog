@@ -2,6 +2,12 @@ NOTE: uriparser is looking for help with a few things:
       https://github.com/uriparser/uriparser/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
+201x-xx-xx -- x.x.x
+
+  * Fixed: Compilation with MinGW
+      Thanks to Sandro Mani for the patch!
+  * Soname: TODO
+
 2018-10-27 -- 0.9.0
 
 >>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
