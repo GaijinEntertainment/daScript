@@ -425,7 +425,8 @@ namespace yzg
     public:
         map<string, StructurePtr>   structures;
         map<string, VariablePtr>    globals;
-        map<string, FunctionPtr>    functions;      // mangled name 2 function name
+        map<string, FunctionPtr>    functions;                  // mangled name 2 function name
+        map<string, vector<FunctionPtr>>    functionsByName;    // all functions of the same name
         int                         totalFunctions = 0;
     };
 

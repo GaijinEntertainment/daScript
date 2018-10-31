@@ -1111,6 +1111,7 @@ namespace yzg
         if ( findFunction(mangledName) )
             throw parse_error("builtin function already defined " + mangledName, nullptr);
         functions[mangledName] = func;
+        functionsByName[func->name].push_back(func);
     }
     
     // basic operations
@@ -1204,28 +1205,29 @@ namespace yzg
             arguments by name?
          */
         vector<FunctionPtr> result;
-        for ( auto & it : functions ) {
-            if ( it.second->name == name ) {
-                auto & pFn = it.second;
-                if ( pFn->arguments.size() >= types.size() ) {
-                    bool typesCompatible = true;
-                    for ( auto ai = 0; ai != types.size(); ++ai ) {
-                        auto & argType = pFn->arguments[ai]->type;
-                        auto & passType = types[ai];
-                        if ( (argType->isRValue() && !passType->isRValue()) || !argType->isSameType(*passType, false) ) {
-                            typesCompatible = false;
-                            break;
-                        }
+        auto itFnList = functionsByName.find(name);
+        if ( itFnList == functionsByName.end() )
+            return result;
+        auto & goodFunctions = itFnList->second;
+        for ( auto & pFn : goodFunctions ) {
+            if ( pFn->arguments.size() >= types.size() ) {
+                bool typesCompatible = true;
+                for ( auto ai = 0; ai != types.size(); ++ai ) {
+                    auto & argType = pFn->arguments[ai]->type;
+                    auto & passType = types[ai];
+                    if ( (argType->isRValue() && !passType->isRValue()) || !argType->isSameType(*passType, false) ) {
+                        typesCompatible = false;
+                        break;
                     }
-                    bool tailCompatible = true;
-                    for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
-                        if ( !pFn->arguments[ti]->init ) {
-                            tailCompatible = false;
-                        }
+                }
+                bool tailCompatible = true;
+                for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
+                    if ( !pFn->arguments[ti]->init ) {
+                        tailCompatible = false;
                     }
-                    if ( typesCompatible && tailCompatible ) {
-                        result.push_back(pFn);
-                    }
+                }
+                if ( typesCompatible && tailCompatible ) {
+                    result.push_back(pFn);
                 }
             }
         }
@@ -1594,6 +1596,7 @@ namespace yzg
                 if ( program->findFunction(mangledName) )
                     throw parse_error("function already defined", expr);
                 program->functions[mangledName] = func;
+                program->functionsByName[func->name].push_back(func);
             }
         }
     }
