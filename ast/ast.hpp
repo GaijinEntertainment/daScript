@@ -444,7 +444,7 @@ namespace yzg
         Node * at = nullptr;
     };
     
-    ProgramPtr parse ( const NodePtr & root );
+    ProgramPtr parse ( const NodePtr & root, function<void (const ProgramPtr & prg)> && defineContext );
 }
 
 #endif /* ast_hpp */

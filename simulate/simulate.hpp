@@ -146,10 +146,13 @@ namespace yzg
     
     // FUNCTION CALL
     struct SimNode_Call : SimNode {
-        virtual __m128 eval ( Context & context ) override {
+        inline void evalArgs ( Context & context ) {
             for ( int i=0; i!=nArguments; ++i ) {
                 argValues[i] = arguments[i]->eval(context);
             }
+        }
+        virtual __m128 eval ( Context & context ) override {
+            evalArgs(context);
             return context.call(fnIndex, argValues);
         }
         int fnIndex;

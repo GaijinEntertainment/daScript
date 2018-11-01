@@ -28,6 +28,18 @@
     )
 )
 
+(defun (void interopTest)
+    (let
+        (int index 0)
+            (while (< index 10000)
+                (
+                    (interopUpdate (@ objects index))
+                    (+= index 1)
+                )
+            )
+    )
+)
+
 (defun (void initObj)
     (int index)
     (Object a)

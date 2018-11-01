@@ -1601,7 +1601,7 @@ namespace yzg
         }
     }
     
-    ProgramPtr parse ( const NodePtr & root )
+    ProgramPtr parse ( const NodePtr & root, function<void (const ProgramPtr & prg)> && defineContext )
     {
         if ( !root->isList() )
             throw parse_error("expecting a list", root);
@@ -1610,6 +1610,7 @@ namespace yzg
         parseVariableDeclarations(root, program);
         parseFunctionDeclarations(root, program);
         program->addBuiltinOperators();
+        defineContext(program);
         program->inferTypes();
         return program;
     }

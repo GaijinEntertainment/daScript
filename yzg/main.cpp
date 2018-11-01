@@ -53,7 +53,7 @@ void test_ast ( const string & fn )
         t.seekg(0, ios::beg);
         str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
         auto node = read(str);
-        auto program = parse(node);
+        auto program = parse(node, [&](const ProgramPtr & prog){});
         cout << *program << "\n";
         
         Context ctx;
@@ -92,6 +92,40 @@ __attribute__((noinline)) void updateTest ( Object * objects )
     }
 }
 
+//////////////////
+// interop example
+// TODO:
+//  this can be 100% generated via appropriate variadic templates
+//  at some point we need to replace it so that we don't type as much
+
+struct SimNode_InteropUpdate : public SimNode_Call
+{
+        virtual __m128 eval ( Context & context ) override {
+            evalArgs(context);
+            Object * pObject = ptr_cast_to<Object>(argValues[0]);
+            updateObject(*pObject);
+            return _mm_setzero_ps();
+        }
+};
+
+class BuiltInFunction_IteropUpdate : public BuiltInFunction
+{
+public:
+    BuiltInFunction_IteropUpdate(const TypeDeclPtr & objType) : BuiltInFunction("interopUpdate") {
+        auto arg = make_shared<Variable>();
+        arg->name = "obj";
+        arg->type = objType;
+        this->arguments.push_back(arg);
+        result = make_shared<TypeDecl>();
+    }
+    virtual SimNode * makeSimNode ( Context & context ) override {
+        return context.makeNode<SimNode_InteropUpdate>();
+    }
+};
+
+// end of interop example
+/////////////////////////
+
 void unit_test ( const string & fn )
 {
     string str;
@@ -106,7 +140,13 @@ void unit_test ( const string & fn )
         t.seekg(0, ios::beg);
         str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
         auto node = read(str);
-        auto program = parse(node);
+        auto program = parse(node, [&](const ProgramPtr & prog){
+            auto structType = prog->structures["Object"].get();
+            auto objType = make_shared<TypeDecl>(Type::tStructure);
+            objType->structType = structType;
+            objType->at = structType->at;
+            prog->addBuiltIn(make_shared<BuiltInFunction_IteropUpdate>(objType));
+        });
         cout << *program << "\n";
         
         Context ctx;
@@ -134,6 +174,11 @@ void unit_test ( const string & fn )
             updateTest((Object *)objects);
         clock_t t3 = clock();
         
+        clock_t t4 = clock();
+        for ( int i=0; i < numIter; ++i )
+            ctx.call(ctx.findFunction("interopTest"), nullptr);
+        clock_t t5 = clock();
+        
         // NOTE: this demonstrates result of particular shader
         var = objects;
         cout << "after:\n";
@@ -145,10 +190,14 @@ void unit_test ( const string & fn )
         
         double simT = double(t1-t0) / (CLOCKS_PER_SEC * numIter);
         double cT = double(t3-t2) / (CLOCKS_PER_SEC * numIter);
+        double intT = double(t5-t4) / (CLOCKS_PER_SEC * numIter);
         
         cout << "iterations took:" << simT << "\n";
         cout << "c++ version took:" << cT << "\n";
-        cout << "ratio " << simT / cT << "\n";
+        cout << "interop version took:" << simT << "\n";
+        cout << "ratio sim / c: " << simT / cT << "\n";
+        cout << "ratio interop / c: " << intT / cT << "\n";
+        cout << "ratio sim / interop: " << simT / intT << "\n";
         
 #if REPORT_ERRORS
     } catch ( const read_error & error ) {
