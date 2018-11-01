@@ -210,6 +210,11 @@ void unit_test ( const string & fn )
             ctx.call(fnfTest, nullptr);
         });
         
+        int fnfiTest = ctx.findFunction("foreachIteropTest");
+        double intFT = profileBlock(numIter, [&](){
+            ctx.call(fnfiTest, nullptr);
+        });
+        
         // NOTE: this demonstrates result of particular shader
         cout << "after:\n";
         for ( int i=0; i!=5; ++i ) {
@@ -223,10 +228,12 @@ void unit_test ( const string & fn )
         cout << "foreach iterations took:" << simFT << "\n";
         cout << "c++ version took:" << cT << "\n";
         cout << "interop version took:" << intT << "\n";
+        cout << "foreach interop version took:" << intFT << "\n";
         cout << "10000-interop version took:" << manyT << "\n";
         cout << "ratio sim / c: " << simT / cT << "\n";
         cout << "ratio foreach sim / c: " << simFT / cT << "\n";
         cout << "ratio interop / c: " << intT / cT << "\n";
+        cout << "ratio foreach interop / c: " << intFT / cT << "\n";
         cout << "ratio 10000-interop / c: " << manyT / cT << "\n";
         cout << "ratio sim / interop: " << simT / intT << "\n";
         
