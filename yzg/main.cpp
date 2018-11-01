@@ -126,6 +126,23 @@ public:
 // end of interop example
 /////////////////////////
 
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+
+template <typename TT>
+inline double profileBlock ( int numIter, TT && block ) {
+    uint64_t minT = -1;
+    for ( int i = 0; i != numIter; ++i ) {
+        uint64_t t0 = mach_absolute_time();
+        block();
+        uint64_t t1 = mach_absolute_time();
+        minT = min(t1-t0, minT);
+    }
+    mach_timebase_info_data_t s_timebase_info;
+    mach_timebase_info(&s_timebase_info);
+    return minT * s_timebase_info.numer / (1000000000.0 * s_timebase_info.denom);
+}
+
 void unit_test ( const string & fn )
 {
     string str;
@@ -163,38 +180,35 @@ void unit_test ( const string & fn )
             cout << "object[" << i << "].velocity = " << var->vel[0] << "," << var->vel[1] << "," << var->vel[2] << "\n";
         }
         
-        clock_t t0 = clock();
+        
         int numIter = 100;
-        for ( int i=0; i < numIter; ++i )
-            ctx.call(ctx.findFunction("test"), nullptr);
-        clock_t t1 = clock();
         
-        clock_t t2 = clock();
-        for ( int i=0; i < numIter; ++i )
+        int fnTest = ctx.findFunction("test");
+        double simT = profileBlock(numIter, [&](){
+            ctx.call(fnTest, nullptr);
+        });
+        
+        double cT = profileBlock(numIter, [&](){
             updateTest((Object *)objects);
-        clock_t t3 = clock();
+        });
         
-        clock_t t4 = clock();
-        for ( int i=0; i < numIter; ++i )
-            ctx.call(ctx.findFunction("interopTest"), nullptr);
-        clock_t t5 = clock();
-        
-        clock_t t6 = clock();
-        {
-            int updateFn = ctx.findFunction("update");
-            for ( int i=0; i < numIter; ++i ) {
-                for ( int oi=0; oi != 10000; ++oi ) {
-                    __m128 args[1] = { ptr_cast_from(objects+oi) };
-                    ctx.call(updateFn,  args);
-                }
+        int fniTest = ctx.findFunction("interopTest");
+        double intT = profileBlock(numIter, [&](){
+            ctx.call(fniTest, nullptr);
+        });
+
+        int updateFn = ctx.findFunction("update");
+        double manyT = profileBlock(numIter, [&](){
+            for ( int oi=0; oi != 10000; ++oi ) {
+                __m128 args[1] = { ptr_cast_from(objects+oi) };
+                ctx.call(updateFn,  args);
             }
-        }
-        clock_t t7 = clock();
+        });
         
-        clock_t t8 = clock();
-        for ( int i=0; i < numIter; ++i )
-            ctx.call(ctx.findFunction("foreachTest"), nullptr);
-        clock_t t9 = clock();
+        int fnfTest = ctx.findFunction("foreachTest");
+        double simFT = profileBlock(numIter, [&](){
+            ctx.call(fnfTest, nullptr);
+        });
         
         // NOTE: this demonstrates result of particular shader
         cout << "after:\n";
@@ -203,12 +217,6 @@ void unit_test ( const string & fn )
             cout << "object[" << i << "].position = " << var->pos[0] << "," << var->pos[1] << "," << var->pos[2] << "\n";
             cout << "object[" << i << "].velocity = " << var->vel[0] << "," << var->vel[1] << "," << var->vel[2] << "\n";
         }
-        
-        double simT = double(t1-t0) / (CLOCKS_PER_SEC * numIter);
-        double cT = double(t3-t2) / (CLOCKS_PER_SEC * numIter);
-        double intT = double(t5-t4) / (CLOCKS_PER_SEC * numIter);
-        double manyT = double(t7-t6) / (CLOCKS_PER_SEC * numIter);
-        double simFT = double(t9-t8) / (CLOCKS_PER_SEC * numIter);
         
         cout << fixed;
         cout << "iterations took:" << simT << "\n";
