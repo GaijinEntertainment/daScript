@@ -154,13 +154,12 @@ void unit_test ( const string & fn )
         ctx.call(ctx.findFunction("init"), nullptr);
         
         // NOTE: this demonstrates particular shader
-        float * objects = ptr_cast_to<float> ( ctx.getVariable( ctx.findVariable("objects") ) );
-        float * var = objects;
+        Object * objects = ptr_cast_to<Object> ( ctx.getVariable( ctx.findVariable("objects") ) );
         cout << "before:\n";
         for ( int i=0; i!=5; ++i ) {
-            cout << "object[" << i << "].position = " << var[0] << "," << var[1] << "," << var[2] << "\n";
-            cout << "object[" << i << "].velocity = " << var[3] << "," << var[4] << "," << var[5] << "\n";
-            var += 6;
+            Object * var = objects + i;
+            cout << "object[" << i << "].position = " << var->pos[0] << "," << var->pos[1] << "," << var->pos[2] << "\n";
+            cout << "object[" << i << "].velocity = " << var->vel[0] << "," << var->vel[1] << "," << var->vel[2] << "\n";
         }
         
         clock_t t0 = clock();
@@ -179,24 +178,39 @@ void unit_test ( const string & fn )
             ctx.call(ctx.findFunction("interopTest"), nullptr);
         clock_t t5 = clock();
         
+        clock_t t6 = clock();
+        {
+            int updateFn = ctx.findFunction("update");
+            for ( int i=0; i < numIter; ++i ) {
+                for ( int oi=0; oi != 10000; ++oi ) {
+                    __m128 args[1] = { ptr_cast_from(objects+oi) };
+                    ctx.call(updateFn,  args);
+                }
+            }
+        }
+        clock_t t7 = clock();
+        
         // NOTE: this demonstrates result of particular shader
-        var = objects;
         cout << "after:\n";
         for ( int i=0; i!=5; ++i ) {
-            cout << "object[" << i << "].position = " << var[0] << "," << var[1] << "," << var[2] << "\n";
-            cout << "object[" << i << "].velocity = " << var[3] << "," << var[4] << "," << var[5] << "\n";
-            var += 6;
+            Object * var = objects + i;
+            cout << "object[" << i << "].position = " << var->pos[0] << "," << var->pos[1] << "," << var->pos[2] << "\n";
+            cout << "object[" << i << "].velocity = " << var->vel[0] << "," << var->vel[1] << "," << var->vel[2] << "\n";
         }
         
         double simT = double(t1-t0) / (CLOCKS_PER_SEC * numIter);
         double cT = double(t3-t2) / (CLOCKS_PER_SEC * numIter);
         double intT = double(t5-t4) / (CLOCKS_PER_SEC * numIter);
+        double manyT = double(t7-t6) / (CLOCKS_PER_SEC * numIter);
         
+        cout << fixed;
         cout << "iterations took:" << simT << "\n";
         cout << "c++ version took:" << cT << "\n";
         cout << "interop version took:" << intT << "\n";
+        cout << "10000-interop version took:" << manyT << "\n";
         cout << "ratio sim / c: " << simT / cT << "\n";
         cout << "ratio interop / c: " << intT / cT << "\n";
+        cout << "ratio 10000-interop / c: " << manyT / cT << "\n";
         cout << "ratio sim / interop: " << simT / intT << "\n";
         
 #if REPORT_ERRORS
