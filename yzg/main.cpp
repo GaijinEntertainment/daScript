@@ -194,7 +194,7 @@ void unit_test ( const string & fn )
         
         cout << "iterations took:" << simT << "\n";
         cout << "c++ version took:" << cT << "\n";
-        cout << "interop version took:" << simT << "\n";
+        cout << "interop version took:" << intT << "\n";
         cout << "ratio sim / c: " << simT / cT << "\n";
         cout << "ratio interop / c: " << intT / cT << "\n";
         cout << "ratio sim / interop: " << simT / intT << "\n";
