@@ -1,15 +1,15 @@
 parser
-    support no initilization in local let
+    support no initilization in local let, by verifying initialization for basic types?
     support initialization in global let
     support auto in let
     support late binding of default arguments
     support auto in function default arguments
     support auto in function arguments
-    type sizoef()
 
 misc
     support 'clone' for variables, redo name lookup upstream during cloning?
     simplify builtin initialization
+    support multi-dimensional array foreach
 
 optimization \ ast massage
     flatten nested blocks
@@ -18,9 +18,6 @@ optimization \ ast massage
     support break and return to be last statement
 
 interpreter
-    implement stack
-    implement simulate for expressions
-    implement 'call' for context
     implement sse policy for float2, float3, float4
     delcare sse builtin operations
 

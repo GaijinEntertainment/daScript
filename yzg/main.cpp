@@ -155,6 +155,7 @@ void unit_test ( const string & fn )
         
         // NOTE: this demonstrates particular shader
         Object * objects = ptr_cast_to<Object> ( ctx.getVariable( ctx.findVariable("objects") ) );
+        cout << "objects at " << hex << uint64_t(objects) << endl;
         cout << "before:\n";
         for ( int i=0; i!=5; ++i ) {
             Object * var = objects + i;
@@ -190,6 +191,11 @@ void unit_test ( const string & fn )
         }
         clock_t t7 = clock();
         
+        clock_t t8 = clock();
+        for ( int i=0; i < numIter; ++i )
+            ctx.call(ctx.findFunction("foreachTest"), nullptr);
+        clock_t t9 = clock();
+        
         // NOTE: this demonstrates result of particular shader
         cout << "after:\n";
         for ( int i=0; i!=5; ++i ) {
@@ -202,13 +208,16 @@ void unit_test ( const string & fn )
         double cT = double(t3-t2) / (CLOCKS_PER_SEC * numIter);
         double intT = double(t5-t4) / (CLOCKS_PER_SEC * numIter);
         double manyT = double(t7-t6) / (CLOCKS_PER_SEC * numIter);
+        double simFT = double(t9-t8) / (CLOCKS_PER_SEC * numIter);
         
         cout << fixed;
         cout << "iterations took:" << simT << "\n";
+        cout << "foreach iterations took:" << simFT << "\n";
         cout << "c++ version took:" << cT << "\n";
         cout << "interop version took:" << intT << "\n";
         cout << "10000-interop version took:" << manyT << "\n";
         cout << "ratio sim / c: " << simT / cT << "\n";
+        cout << "ratio foreach sim / c: " << simFT / cT << "\n";
         cout << "ratio interop / c: " << intT / cT << "\n";
         cout << "ratio 10000-interop / c: " << manyT / cT << "\n";
         cout << "ratio sim / interop: " << simT / intT << "\n";

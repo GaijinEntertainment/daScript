@@ -68,6 +68,7 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
         string getMangledName() const;
         bool isSameType ( const TypeDecl & decl, bool rvalueMatters = true ) const;
+        bool isIteratorType ( const TypeDecl & decl ) const;
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;
         bool isArray() const;
@@ -346,6 +347,17 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   cond, body;
+    };
+    
+    class ExprForeach : public Expression
+    {
+    public:
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr   head, iter, body;
     };
     
     class Function

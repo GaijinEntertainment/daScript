@@ -92,6 +92,19 @@ namespace yzg
         return true;
     }
     
+    bool TypeDecl::isIteratorType ( const TypeDecl & decl ) const
+    {
+        if ( baseType!=decl.baseType )
+            return false;
+        if ( baseType==Type::tStructure && structType!=decl.structType )
+            return false;
+        if ( decl.dim.size() )
+            return false;
+        if ( !decl.isRValue() )
+            return false;
+        return true;
+    }
+    
     bool TypeDecl::isVoid() const
     {
         return (baseType==Type::tVoid) && (dim.size()==0);
@@ -873,6 +886,48 @@ namespace yzg
         return context.makeNode<SimNode_While>(cond->simulate(context),body->simulate(context));
     }
     
+    // ExprForeach
+    
+    ExpressionPtr ExprForeach::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprForeach>(expr);
+        cexpr->head = head->clone();
+        cexpr->iter = iter->clone();
+        cexpr->body = body->clone();
+        return cexpr;
+    }
+    
+    void ExprForeach::inferType(InferTypeContext & context)
+    {
+        head->inferType(context);
+        iter->inferType(context);
+        if ( head->type->dim.size()!=1 )    // TODO: support multi-array
+            throw semantic_error("can only iterate through a 1-d array", at);
+        if ( !head->type->isIteratorType(*iter->type) )
+            throw semantic_error("iterator type does not match", at);
+        body->inferType(context);
+        type = make_shared<TypeDecl>();
+    }
+    
+    void ExprForeach::log(ostream& stream, int depth) const
+    {
+        stream << "(foreach\n"<< string(depth+1,'\t');
+        head->log(stream, depth+1);
+        stream << " " << *iter;
+        stream << "\n" << string(depth+2,'\t');
+        body->log(stream, depth+2);
+        stream << ")";
+    }
+    
+    SimNode * ExprForeach::simulate (Context & context) const
+    {
+        return context.makeNode<SimNode_Foreach>(head->simulate(context),
+                                                 iter->simulate(context),
+                                                 body->simulate(context),
+                                                 head->type->dim[0],
+                                                 iter->type->getSizeOf());
+    }
+    
     // ExprLet
     
     ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const
@@ -898,7 +953,10 @@ namespace yzg
     {
         stream << "(let\n";
         for ( auto & var : variables ) {
-            stream << string(depth+1, '\t') << "(" << *var << " " << *var->init << ")\n";
+            if ( var->init )
+                stream << string(depth+1, '\t') << "(" << *var << " " << *var->init << ")\n";
+            else
+                stream << string(depth+1, '\t') << "(" << *var << ")\n";
         }
         stream << string(depth+2, '\t');
         subexpr->log(stream, depth+2);
@@ -1473,6 +1531,15 @@ namespace yzg
                 pWhile->cond = parseExpression(decl->list[1], program);
                 pWhile->body = parseExpression(decl->list[2], program);
                 return pWhile;
+            } else if ( head->isName("foreach") ) {
+                if ( !decl->isListOfAtLeastSize(4) )
+                    throw parse_error("only (foreach container iterator body) is allowed", decl);
+                auto pForeach = make_shared<ExprForeach>();
+                pForeach->at = decl.get();
+                pForeach->head = parseExpression(decl->list[1], program);
+                pForeach->iter = parseExpression(decl->list[2], program);
+                pForeach->body = parseExpression(decl->list[3], program);
+                return pForeach;
             } else if ( head->isName("if") ) {
                 if ( !decl->isList() && !(decl->list.size()==3 || decl->list.size()==4) )
                     throw parse_error("only (if cond if_true) or (if cond if_true if_false) are allowed", decl);
@@ -1502,7 +1569,7 @@ namespace yzg
                 let->at = decl.get();
                 for ( int iVar = 1; iVar != decl->list.size()-1; ++iVar ) {
                     auto & vdecl = decl->list[iVar];
-                    auto pVar = parseVariable(vdecl, program, true, true);
+                    auto pVar = parseVariable(vdecl, program, false, true);
                     if ( let->find (pVar->name) )
                         throw parse_error("variable already declared", decl);
                     if ( pVar->type->rvalue )

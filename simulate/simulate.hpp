@@ -320,6 +320,24 @@ namespace yzg
         SimNode * cond, * body;
     };
     
+    // FOREACH
+    struct SimNode_Foreach : SimNode {
+        SimNode_Foreach ( SimNode * h, SimNode * i, SimNode * b, int sz, int st )
+            : head(h), iter(i), body(b), size(sz), stride(st) {}
+        virtual __m128 eval ( Context & context ) override {
+            char * ph = ptr_cast_to<char>(head->eval(context));
+            __m128 * pi = ptr_cast_to<__m128>(iter->eval(context));
+            for ( int i=0; i!=size; ++i ) {
+                *pi = ptr_cast_from(ph);
+                body->eval(context);
+                ph += stride;
+            }
+            return _mm_setzero_ps();
+        }
+        SimNode * head, * iter, * body;
+        int size, stride;
+    };
+    
     // POLICY BASED OPERATIONS
     
     template <typename TT>
@@ -387,7 +405,6 @@ namespace yzg
         static inline __m128 Sub ( __m128 a, __m128 b ) { return _mm_sub_ss(a,b); }
         static inline __m128 Div ( __m128 a, __m128 b ) { return _mm_div_ss(a,b); }
         static inline __m128 Mul ( __m128 a, __m128 b ) { return _mm_mul_ss(a,b); }
-
     };
 
     // op1 policies

@@ -28,6 +28,15 @@
     )
 )
 
+(defun (void foreachTest)
+    (let
+        (Object obj)
+            (foreach objects obj
+                (update obj)
+            )
+    )
+)
+
 (defun (void interopTest)
     (let
         (int index 0)
