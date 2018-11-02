@@ -1,0 +1,85 @@
+(struct Object
+    (float3 position)
+    (float3 velocity)
+)
+
+(let
+    (Object 10000 objects)
+)
+
+(defun (void update)
+    (Object a)
+    (
+        (+= (. a position) (. a velocity))
+    )
+)
+
+(defun (void test)
+    (let
+        (int index 0)
+            (while (< index 10000)
+                (
+                    (update (@ objects index))
+                    (+= index 1)
+                )
+            )
+    )
+)
+
+(defun (void foreachTest)
+    (let
+        (Object obj)
+            (foreach objects obj
+                (update obj)
+            )
+    )
+)
+
+(defun (void foreachIteropTest)
+    (let
+        (Object obj)
+            (foreach objects obj
+                (interopUpdate obj)
+            )
+    )
+)
+
+(defun (void interopTest)
+    (let
+        (int index 0)
+            (while (< index 10000)
+                (
+                    (interopUpdate (@ objects index))
+                    (+= index 1)
+                )
+            )
+    )
+)
+
+(defun (void initObj)
+    (int index)
+    (Object a)
+    (
+        (let
+            (float oi (float index))
+            (float ii (* oi 2.0))
+                (
+                (= (. a position) (float3 (+ oi 0.1) (+ oi 0.2) (+ oi 0.3)))
+                (= (. a velocity) (float3 (+ ii 1.0) (+ ii 2.0) (+ ii 3.0)))
+                )
+        )
+    )
+)
+
+(defun (void init)
+    (let
+        (int index 0)
+            (while (< index 10000)
+                (
+                    (initObj index (@ objects index))
+                    (+= index 1)
+                )
+            )
+    )
+)
+

@@ -350,6 +350,9 @@ namespace yzg
             case Type::tUInt:   return context.makeNode<SimNode_R2L<uint64_t>>(subexpr->simulate(context));
             case Type::tBool:   return context.makeNode<SimNode_R2L<bool>>(subexpr->simulate(context));
             case Type::tFloat:  return context.makeNode<SimNode_R2L<float>>(subexpr->simulate(context));
+            case Type::tFloat2: return context.makeNode<SimNode_R2L<float2>>(subexpr->simulate(context));
+            case Type::tFloat3: return context.makeNode<SimNode_R2L<float3>>(subexpr->simulate(context));
+            case Type::tFloat4: return context.makeNode<SimNode_R2L<float4>>(subexpr->simulate(context));
             default:            throw runtime_error("can't dereference type");
         }
     }
@@ -924,7 +927,7 @@ namespace yzg
         return context.makeNode<SimNode_Foreach>(head->simulate(context),
                                                  iter->simulate(context),
                                                  body->simulate(context),
-                                                 head->type->dim[0],
+                                                 (int) head->type->dim[0],
                                                  iter->type->getSizeOf());
     }
     
@@ -1171,91 +1174,7 @@ namespace yzg
         functions[mangledName] = func;
         functionsByName[func->name].push_back(func);
     }
-    
-    // basic operations
-    template <typename TT, typename SimPolicy_TT>
-    void addBuiltInBasic(Program & prg)
-    {
-        //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<SimNode_Debug<TT>,            TT,   TT>       >("debug") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Set<SimPolicy_TT>,        TT&,  TT&, TT>  >("=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Equ<SimPolicy_TT>,        bool, TT,  TT>  >("==") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_NotEqu<SimPolicy_TT>,     bool, TT,  TT>  >("!=") );
-    }
-    
-    // numeric types
-    template <typename TT, typename SimPolicy_TT>
-    void addBuiltInNumeric(Program & prg)
-    {
-        //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Unp<SimPolicy_TT>,        TT,   TT>       >("+") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Unm<SimPolicy_TT>,        TT,   TT>       >("-") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Add<SimPolicy_TT>,        TT,   TT,  TT>  >("+") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Sub<SimPolicy_TT>,        TT,   TT,  TT>  >("-") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Mul<SimPolicy_TT>,        TT,   TT,  TT>  >("*") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Div<SimPolicy_TT>,        TT,   TT,  TT>  >("/") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_GtEqu<SimPolicy_TT>,      bool, TT,  TT>  >(">=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_LessEqu<SimPolicy_TT>,    bool, TT,  TT>  >("<=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Gt<SimPolicy_TT>,         bool, TT,  TT>  >(">") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Less<SimPolicy_TT>,       bool, TT,  TT>  >("<") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetAdd<SimPolicy_TT>,     TT&,  TT&, TT>  >("+=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     TT&,  TT&, TT>  >("-=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetMul<SimPolicy_TT>,     TT&,  TT&, TT>  >("*=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetDiv<SimPolicy_TT>,     TT&,  TT&, TT>  >("/=") );
-    }
-    
-    // built-in numeric types
-    template <typename TT, typename SimPolicy_TT>
-    void addBuiltInBit(Program & prg)
-    {
-        //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BinNot<SimPolicy_TT>,     TT,   TT>       >("~") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BinAnd<SimPolicy_TT>,     TT,   TT,  TT>  >("&") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BinOr<SimPolicy_TT>,      TT,   TT,  TT>  >("|") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BinXor<SimPolicy_TT>,     TT,   TT,  TT>  >("^") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBinAnd<SimPolicy_TT>,  TT&,  TT,  TT&> >("&=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBinOr<SimPolicy_TT>,   TT&,  TT,  TT&> >("|=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBinXor<SimPolicy_TT>,  TT&,  TT,  TT&> >("^=") );
-    }
-    
-    // built-in boolean types
-    template <typename TT, typename SimPolicy_TT>
-    void addBuiltInBoolean(Program & prg)
-    {
-        //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolNot<SimPolicy_Bool>,  TT,   TT>       >("!") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolAnd<SimPolicy_Bool>,  TT,   TT,  TT>  >("&") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolOr<SimPolicy_Bool>,   TT,   TT,  TT>  >("|") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolXor<SimPolicy_Bool>,  TT,   TT,  TT>  >("^") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBoolAnd<SimPolicy_Bool>,TT&, TT&, TT>  >("&=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBoolOr<SimPolicy_Bool>, TT&, TT&, TT>  >("|=") );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBoolXor<SimPolicy_Bool>,TT&, TT&, TT>  >("^=") );
-    }
-    
-    void Program::addBuiltinOperators()
-    {
-        // boolean
-        addBuiltInBasic<bool, SimPolicy_Bool>(*this);
-        addBuiltInBoolean<bool, SimPolicy_Bool>(*this);
-        // int64
-        addBuiltInBasic<int64_t, SimPolicy_Int>(*this);
-        addBuiltInNumeric<int64_t, SimPolicy_Int>(*this);
-        addBuiltInBit<int64_t, SimPolicy_Int>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<int64_t,float>,int64_t,float>>("int") );
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<int64_t,uint64_t>,int64_t,uint64_t>>("int") );
-        // uint64
-        addBuiltInBasic<uint64_t, SimPolicy_UInt>(*this);
-        addBuiltInNumeric<uint64_t, SimPolicy_UInt>(*this);
-        addBuiltInBit<uint64_t, SimPolicy_UInt>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<uint64_t,float>,uint64_t,float>>("uint") );
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<uint64_t,int64_t>,uint64_t,int64_t>>("uint") );
-        // float
-        addBuiltInBasic<float, SimPolicy_Float>(*this);
-        addBuiltInNumeric<float, SimPolicy_Float>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,int64_t>,float,int64_t>>("float") );
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,uint64_t>,float,uint64_t>>("float") );
-    }
-    
+        
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const
     {
         /*

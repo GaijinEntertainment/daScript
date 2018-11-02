@@ -12,6 +12,8 @@
 #include "reader.hpp"
 #include "simulate.hpp"
 
+#include "vectypes.h"
+
 #include <memory>
 #include <vector>
 #include <map>
@@ -86,6 +88,28 @@ namespace yzg
         Node *              at = nullptr;
     };
     typedef shared_ptr<TypeDecl> TypeDeclPtr;
+    
+    template <typename TT>  struct ToBasicType;
+    template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
+    template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
+    template<> struct ToBasicType<int>      { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<int64_t>  { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<uint>     { enum { type = Type::tUInt }; };
+    template<> struct ToBasicType<uint64_t> { enum { type = Type::tUInt }; };
+    template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
+    template<> struct ToBasicType<void>     { enum { type = Type::tVoid }; };
+    template<> struct ToBasicType<float2>   { enum { type = Type::tFloat2 }; };
+    template<> struct ToBasicType<float3>   { enum { type = Type::tFloat3 }; };
+    template<> struct ToBasicType<float4>   { enum { type = Type::tFloat4 }; };
+
+    template <typename TT>
+    inline TypeDeclPtr makeType()
+    {
+        auto t = make_shared<TypeDecl>();
+        t->baseType = Type(ToBasicType<TT>::type);
+        t->rvalue = is_reference<TT>::value;
+        return t;
+    }
     
     class Structure
     {
@@ -383,25 +407,6 @@ namespace yzg
     public:
         BuiltInFunction ( const string & fn );
     };
-    
-    template <typename TT>  struct ToBasicType;
-    template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
-    template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
-    template<> struct ToBasicType<int>      { enum { type = Type::tInt }; };
-    template<> struct ToBasicType<int64_t>  { enum { type = Type::tInt }; };
-    template<> struct ToBasicType<uint>     { enum { type = Type::tUInt }; };
-    template<> struct ToBasicType<uint64_t> { enum { type = Type::tUInt }; };
-    template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
-    template<> struct ToBasicType<void>     { enum { type = Type::tVoid }; };
-    
-    template <typename TT>
-    inline TypeDeclPtr makeType()
-    {
-        auto t = make_shared<TypeDecl>();
-        t->baseType = Type(ToBasicType<TT>::type);
-        t->rvalue = is_reference<TT>::value;
-        return t;
-    }
     
     template  <typename SimT, typename RetT, typename ...Args>
     class BuiltInFn : public BuiltInFunction

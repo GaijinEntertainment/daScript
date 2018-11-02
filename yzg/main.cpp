@@ -252,6 +252,7 @@ int main(int argc, const char * argv[]) {
     // test_reader("./test/test_1.yzg");
     // test_ast("./test/test_2.yzg");
     // test_ast("./test/profile_array_of_structures.yzg");
-    unit_test("./test/profile_array_of_structures.yzg");
+    // unit_test("./test/profile_array_of_structures.yzg");
+    unit_test("./test/profile_array_of_structures_vec.yzg");
     return 0;
 }
