@@ -152,7 +152,7 @@ namespace yzg
     {
         switch(node.type) {
             case NodeType::nil:
-                throw "implement";
+                stream << "nil";
                 break;
             case NodeType::list:
                 if ( depth==0 || (node.depth()>2 && !node.isMathNode()) ) {
@@ -291,7 +291,10 @@ namespace yzg
             return make_unique<Node>(what[1].str()=="true", at);
         } else if ( regex_search(it,end,what,REG_name,continues) ) {
             it += what.length();
-            return make_unique<Node>(NodeType::name, what[1].str(), at);
+            if ( what[1].str()=="nil" )
+                return make_unique<Node>(at);
+            else
+                return make_unique<Node>(NodeType::name, what[1].str(), at);
         } else if ( regex_search(it,end,what,REG_hex,continues) ) {
             it += what.length();
             return make_unique<Node>(uint64_t(stoul(what[1].str(), 0, 16)), at);

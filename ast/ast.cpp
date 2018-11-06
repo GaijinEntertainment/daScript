@@ -18,6 +18,7 @@ namespace yzg
     
     Enum<Type> g_typeTable = {
         {   Type::tVoid,        "void"  },
+        {   Type::tNull,        "null"   },
         {   Type::tBool,        "bool"  },
         {   Type::tInt,         "int"   },
         {   Type::tInt2,        "int2"  },
@@ -113,6 +114,7 @@ namespace yzg
     bool TypeDecl::isSimpleType() const
     {
         if (    baseType==Type::none
+            ||  baseType==Type::tNull
             ||  baseType==Type::tVoid
             ||  baseType==Type::tStructure )
             return false;
@@ -188,6 +190,7 @@ namespace yzg
     {
         int size = 0;
         for ( const auto & fd : fields ) {
+            
             size += fd.type->getSizeOf();
         }
         return size;
@@ -392,8 +395,9 @@ namespace yzg
     {
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
-        int stride = subexpr->type->getStride();
-        return context.makeNode<SimNode_At>(prv, pidx, stride);
+        uint64_t stride = subexpr->type->getStride();
+        uint64_t range = subexpr->type->dim.back();
+        return context.makeNode<SimNode_At>(prv, pidx, stride, range);
     }
 
     // ExprBlock
@@ -931,6 +935,37 @@ namespace yzg
                                                  iter->type->getSizeOf());
     }
     
+    // ExprTryCatch
+    
+    ExpressionPtr ExprTryCatch::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprTryCatch>(expr);
+        cexpr->try_this = try_this->clone();
+        cexpr->catch_that = catch_that->clone();
+        return cexpr;
+    }
+    
+    void ExprTryCatch::inferType(InferTypeContext & context)
+    {
+        try_this->inferType(context);
+        catch_that->inferType(context);
+        type = make_shared<TypeDecl>();
+    }
+    
+    void ExprTryCatch::log(ostream& stream, int depth) const
+    {
+        stream << "(try\n"<< string(depth+1,'\t');
+        try_this->log(stream, depth+1);
+        stream << "\n" << string(depth+2,'\t');
+        catch_that->log(stream, depth+2);
+        stream << ")";
+    }
+    
+    SimNode * ExprTryCatch::simulate (Context & context) const
+    {
+        return context.makeNode<SimNode_TryCatch>(try_this->simulate(context),catch_that->simulate(context));
+    }
+    
     // ExprLet
     
     ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const
@@ -1265,6 +1300,8 @@ namespace yzg
             tdecl->baseType = Type::tStructure;
             tdecl->structType = it->second.get();
         }
+        if ( tdecl->baseType==Type::tNull )
+            throw parse_error("can't have null type", decl);
         if ( decl->list.size()==(3+nFields) && decl->list[1]->isOperator(Operator::binand) ) {
             tdecl->rvalue = true;
         } else {
@@ -1442,6 +1479,14 @@ namespace yzg
                 } else {
                     throw parse_error("operator has too many arguments", decl);
                 }
+            } else if ( head->isName("try") ) {
+                if ( !decl->isListOfAtLeastSize(3) )
+                    throw parse_error("only (try expr catch) is allowed", decl);
+                auto pTry = make_shared<ExprTryCatch>();
+                pTry->at = decl.get();
+                pTry->try_this = parseExpression(decl->list[1], program);
+                pTry->catch_that = parseExpression(decl->list[2], program);
+                return pTry;
             } else if ( head->isName("while") ) {
                 if ( !decl->isListOfAtLeastSize(3) )
                     throw parse_error("only (while cond body) is allowed", decl);
@@ -1596,7 +1641,8 @@ namespace yzg
         parseVariableDeclarations(root, program);
         parseFunctionDeclarations(root, program);
         program->addBuiltinOperators();
-        defineContext(program);
+        if ( defineContext )
+            defineContext(program);
         program->inferTypes();
         return program;
     }

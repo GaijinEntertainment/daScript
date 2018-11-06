@@ -49,6 +49,7 @@ namespace yzg
         friend class SimNode_GetGlobal;
         friend class SimNode_GetLocal;
         friend class SimNode_GetArgument;
+        friend class SimNode_TryCatch;
     public:
         Context();
         ~Context();
@@ -130,13 +131,16 @@ namespace yzg
     
     // field
     struct SimNode_Field : SimNode {
-        SimNode_Field ( SimNode * rv, int of ) : rvalue(rv), offset(of) {}
+        SimNode_Field ( SimNode * rv, uint64_t of ) : rvalue(rv), offset(of) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 rv = rvalue->eval(context);
-            return ptr_cast_from( ptr_cast_to<char>(rv) + offset );
+            char * prv = ptr_cast_to<char>(rv);
+            if ( !prv )
+                throw runtime_error("dereferencing nil pointer");
+            return ptr_cast_from( prv + offset );
         }
         SimNode *   rvalue;
-        int         offset;
+        uint64_t    offset;
     };
     
     // AT (INDEX)
@@ -144,13 +148,15 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             char * pValue = ptr_cast_to<char>(rvalue->eval(context));
             uint64_t idx = cast_to<uint64_t>(index->eval(context));
+            if ( idx >= range )
+                throw runtime_error("index out of range");
             return ptr_cast_from<char>(pValue + idx*stride);    // TODO: add range check
             
         }
-        SimNode_At ( SimNode * rv, SimNode * idx, int strd ) : rvalue(rv), index(idx), stride(strd) {}
-        SimNode * rvalue;
-        SimNode * index;
-        int       stride;
+        SimNode_At ( SimNode * rv, SimNode * idx, uint64_t strd, uint64_t rng )
+            : rvalue(rv), index(idx), stride(strd), range(rng) {}
+        SimNode * rvalue, * index;
+        uint64_t  stride, range;
     };
     
     // FUNCTION CALL
@@ -244,6 +250,8 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
             TT * pR = ptr_cast_to<TT>(ptr);
+            if ( !pR )
+                throw runtime_error("dereferencing nil pointer");
             return cast_from<TT>(*pR);
         }
         SimNode * subexpr;
@@ -346,6 +354,24 @@ namespace yzg
             return _mm_setzero_ps();
         }
         SimNode * cond, * body;
+    };
+    
+    // TRY-CATCH
+    struct SimNode_TryCatch : SimNode {
+        SimNode_TryCatch ( SimNode * t, SimNode * c ) : try_this(t), catch_that(c) {}
+        virtual __m128 eval ( Context & context ) override {
+            try {
+                auto sp = context.stackTop;
+                auto ar = context.arguments;
+                try_this->eval(context);
+                context.arguments = ar;
+                context.stackTop = sp;
+            } catch ( const runtime_error & err ) {
+                catch_that->eval(context);
+            }
+            return _mm_setzero_ps();
+        }
+        SimNode * try_this, * catch_that;
     };
     
     // FOREACH

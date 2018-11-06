@@ -17,59 +17,6 @@ using namespace yzg;
 
 #define REPORT_ERRORS 1
 
-void test_reader ( const string & fn )
-{
-    string str;
-#if REPORT_ERRORS
-    try {
-#endif
-        ifstream t(fn);
-        if ( !t.is_open() )
-            throw "can't open";
-        t.seekg(0, ios::end);
-        str.reserve(t.tellg());
-        t.seekg(0, ios::beg);
-        str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-        auto node = read(str);
-        cout << *node << "\n";
-#if REPORT_ERRORS
-    } catch ( const read_error & error ) {
-        reportError ( str, error.at, error.what() );
-    }
-#endif
-}
-
-void test_ast ( const string & fn )
-{
-    string str;
-#if REPORT_ERRORS
-    try {
-#endif
-        ifstream t(fn);
-        if ( !t.is_open() )
-            throw "can't open";
-        t.seekg(0, ios::end);
-        str.reserve(t.tellg());
-        t.seekg(0, ios::beg);
-        str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-        auto node = read(str);
-        auto program = parse(node, [&](const ProgramPtr & prog){});
-        cout << *program << "\n";
-        
-        Context ctx;
-        program->simulate(ctx);
-        
-#if REPORT_ERRORS
-    } catch ( const read_error & error ) {
-        reportError ( str, error.at, error.what() );
-    } catch ( const parse_error & error ) {
-        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
-    } catch ( const semantic_error & error ) {
-        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
-    }
-#endif
-}
-
 #pragma pack(1)
 struct Object
 {
@@ -157,6 +104,48 @@ void unit_test ( const string & fn )
         t.seekg(0, ios::beg);
         str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
         auto node = read(str);
+        auto program = parse(node, nullptr);
+        cout << *program << "\n";
+        
+        Context ctx;
+        program->simulate(ctx);
+        int numIter = 100;
+        
+        int fnTest = ctx.findFunction("test");
+        double simT = profileBlock(numIter, [&](){
+            ctx.call(fnTest, nullptr);
+        });
+        
+        cout << fixed;
+        cout << fn << " took:" << simT << "\n";
+        
+        
+#if REPORT_ERRORS
+    } catch ( const read_error & error ) {
+        reportError ( str, error.at, error.what() );
+    } catch ( const parse_error & error ) {
+        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
+    } catch ( const semantic_error & error ) {
+        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
+    }
+#endif
+}
+    
+
+void unit_test_array_of_structures ( const string & fn )
+{
+    string str;
+#if REPORT_ERRORS
+    try {
+#endif
+        ifstream t(fn);
+        if ( !t.is_open() )
+            throw "can't open";
+        t.seekg(0, ios::end);
+        str.reserve(t.tellg());
+        t.seekg(0, ios::beg);
+        str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
+        auto node = read(str);
         auto program = parse(node, [&](const ProgramPtr & prog){
             auto structType = prog->structures["Object"].get();
             auto objType = make_shared<TypeDecl>(Type::tStructure);
@@ -172,7 +161,7 @@ void unit_test ( const string & fn )
         
         // NOTE: this demonstrates particular shader
         Object * objects = ptr_cast_to<Object> ( ctx.getVariable( ctx.findVariable("objects") ) );
-        cout << "objects at " << hex << uint64_t(objects) << endl;
+        cout << "objects at " << hex << uint64_t(objects) << dec << endl;
         cout << "before:\n";
         for ( int i=0; i!=5; ++i ) {
             Object * var = objects + i;
@@ -249,10 +238,8 @@ void unit_test ( const string & fn )
 }
 
 int main(int argc, const char * argv[]) {
-    // test_reader("./test/test_1.yzg");
-    // test_ast("./test/test_2.yzg");
-    // test_ast("./test/profile_array_of_structures.yzg");
-    // unit_test("./test/profile_array_of_structures.yzg");
-    unit_test("./test/profile_array_of_structures_vec.yzg");
+    unit_test_array_of_structures("./test/profile_array_of_structures.yzg");
+    unit_test_array_of_structures("./test/profile_array_of_structures_vec.yzg");
+    unit_test("./test/try_catch.yzg");
     return 0;
 }
