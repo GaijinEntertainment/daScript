@@ -15,8 +15,7 @@ namespace yzg
 {
     // convert arguments into a tuple of appropriate types
     template <typename ArgumentsType, size_t... I>
-    __forceinline auto cast_args (__m128 * args, index_sequence<I...> )
-    {
+    __forceinline auto cast_args (__m128 * args, index_sequence<I...> ) {
         return make_tuple( cast< typename tuple_element<I, ArgumentsType>::type  >::to ( args[ I ] )... );
     }
     
@@ -36,7 +35,6 @@ namespace yzg
     struct SimNode_ExtFuncCallImpl : public SimNode_Call
     {
         virtual __m128 eval ( Context & context ) override {
-            
             using FunctionTrait = function_traits<FuncT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
             using Indices = make_index_sequence<nargs>;
@@ -53,7 +51,6 @@ namespace yzg
     struct SimNode_ExtFuncCallImpl<FuncT,void> : public SimNode_Call
     {
         virtual __m128 eval ( Context & context ) override {
-            
             using FunctionTrait = function_traits<FuncT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
             using Indices = make_index_sequence<nargs>;

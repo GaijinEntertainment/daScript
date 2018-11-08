@@ -11,8 +11,9 @@
 
 #include "reader.hpp"
 #include "simulate.hpp"
-
 #include "vectypes.h"
+#include "function_traits.h"
+#include "interop.h"
 
 #include <memory>
 #include <vector>
@@ -104,12 +105,19 @@ namespace yzg
     template<> struct ToBasicType<float4>   { enum { type = Type::tFloat4 }; };
 
     template <typename TT>
-    inline TypeDeclPtr makeType()
+    struct typeFactory {
+        static TypeDeclPtr make(const Program &) {
+            auto t = make_shared<TypeDecl>();
+            t->baseType = Type(ToBasicType<TT>::type);
+            t->rvalue = is_reference<TT>::value;
+            return t;
+        }
+    };
+    
+    template <typename TT>
+    __forceinline TypeDeclPtr makeType(const Program & ctx)
     {
-        auto t = make_shared<TypeDecl>();
-        t->baseType = Type(ToBasicType<TT>::type);
-        t->rvalue = is_reference<TT>::value;
-        return t;
+        return typeFactory<TT>::make(ctx);
     }
     
     class Structure
@@ -424,10 +432,10 @@ namespace yzg
     class BuiltInFn : public BuiltInFunction
     {
     public:
-        BuiltInFn(const string & fn) : BuiltInFunction(fn)
+        BuiltInFn(const string & fn, const Program & prg) : BuiltInFunction(fn)
         {
-            this->result = makeType<RetT>();
-            vector<TypeDeclPtr> args = { makeType<Args>()... };
+            this->result = makeType<RetT>(prg);
+            vector<TypeDeclPtr> args = { makeType<Args>(prg)... };
             for ( int argi=0; argi != args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
                 arg->name = "arg" + std::to_string(argi);
@@ -440,12 +448,46 @@ namespace yzg
         }
     };
     
+    template  <typename FuncT>
+    class ExternalFn : public BuiltInFunction
+    {
+        template <typename ArgumentsType, size_t... I>
+        __forceinline vector<TypeDeclPtr> makeArgs ( const Program & prg, index_sequence<I...> ) {
+            return { makeType< typename tuple_element<I, ArgumentsType>::type>(prg)... };
+        }
+    public:
+        ExternalFn(FuncT * pfn, const string & fn, const Program & prg) : BuiltInFunction(fn)
+        {
+            funcPtr = pfn;
+            using FunctionTrait = function_traits<FuncT>;
+            const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
+            using Indices = make_index_sequence<nargs>;
+            using Arguments = typename FunctionTrait::arguments;
+            using Result  = typename FunctionTrait::return_type;
+            auto args = makeArgs<Arguments>(prg, Indices());
+            for ( int argi=0; argi!=nargs; ++argi ) {
+                auto arg = make_shared<Variable>();
+                arg->name = "arg" + std::to_string(argi);
+                arg->type = args[argi];
+                this->arguments.push_back(arg);
+            }
+            this->result = makeType<Result>(prg);
+        }
+        virtual SimNode * makeSimNode ( Context & context ) override {
+            return context.makeNode<SimNode_ExtFuncCall<FuncT>>(funcPtr);
+        }
+    protected:
+        FuncT * funcPtr = nullptr;
+    };
+    
     class Program : public enable_shared_from_this<Program>
     {
     public:
         friend ostream& operator<< (ostream& stream, const Program & program);
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
+        StructurePtr findStructure ( const string & name ) const;
+        TypeDeclPtr makeStructureType ( const string & name ) const;
         void addBuiltIn(FunctionPtr && fn);
         void inferTypes();
         void addBuiltinOperators();

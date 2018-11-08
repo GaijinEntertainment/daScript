@@ -42,29 +42,13 @@ __attribute__((noinline)) void updateTest ( Object * objects )
     }
 }
 
-//////////////////
-// interop example
-// TODO:
-//  this can be 100% generated via appropriate variadic templates
-//  at some point we need to replace it so that we don't type as much
-
-class BuiltInFunction_IteropUpdate : public BuiltInFunction
-{
-public:
-    BuiltInFunction_IteropUpdate(const TypeDeclPtr & objType) : BuiltInFunction("interopUpdate") {
-        auto arg = make_shared<Variable>();
-        arg->name = "obj";
-        arg->type = objType;
-        this->arguments.push_back(arg);
-        result = make_shared<TypeDecl>();
-    }
-    virtual SimNode * makeSimNode ( Context & context ) override {
-        return context.makeNode<SimNode_ExtFuncCall<typeof(updateObject)>>(updateObject);
+// this is how we declare type
+template <>
+struct typeFactory<Object *> {
+    static TypeDeclPtr make(const Program & prg) {
+        return prg.makeStructureType("Object");
     }
 };
-
-// end of interop example
-/////////////////////////
 
 #include <mach/mach.h>
 #include <mach/mach_time.h>
@@ -140,11 +124,8 @@ void unit_test_array_of_structures ( const string & fn )
         str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
         auto node = read(str);
         auto program = parse(node, [&](const ProgramPtr & prog){
-            auto structType = prog->structures["Object"].get();
-            auto objType = make_shared<TypeDecl>(Type::tStructure);
-            objType->structType = structType;
-            objType->at = structType->at;
-            prog->addBuiltIn(make_shared<BuiltInFunction_IteropUpdate>(objType));
+            // this is how we declare external function
+            prog->addBuiltIn(make_shared<ExternalFn<typeof(updateObject)>>(&updateObject, "interopUpdate", *prog));
         });
         cout << *program << "\n";
         

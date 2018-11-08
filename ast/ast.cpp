@@ -1127,6 +1127,14 @@ namespace yzg
 
     // program
     
+    StructurePtr Program::findStructure ( const string & name ) const
+    {
+        auto it = structures.find(name);
+        if ( it != structures.end() )
+            return it->second;
+        return nullptr;
+    }
+    
     VariablePtr Program::findVariable ( const string & name ) const
     {
         auto it = globals.find(name);
@@ -1270,6 +1278,16 @@ namespace yzg
             gfun.stackSize = pfun->totalStackSize;
         }
         context.linearAllocatorExecuteBase = context.linearAllocator;
+    }
+    
+    TypeDeclPtr Program::makeStructureType ( const string & name ) const
+    {
+        auto t = make_shared<TypeDecl>();
+        t->baseType = Type::tStructure;
+        t->structType = findStructure(name).get();
+        if ( !t->structType )
+            throw runtime_error("can't make structure type " + name);
+        return t;
     }
     
     // PARSER
