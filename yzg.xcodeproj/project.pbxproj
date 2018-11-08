@@ -34,6 +34,8 @@
 		0458A5F3218BD06E00DEB8A0 /* platform.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = platform.h; sourceTree = "<group>"; };
 		0458A5F5218BD9B700DEB8A0 /* profile_array_of_structures_vec.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = profile_array_of_structures_vec.yzg; sourceTree = "<group>"; };
 		0458A5F621910BE300DEB8A0 /* try_catch.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = try_catch.yzg; sourceTree = "<group>"; };
+		0458A5F72193EFDA00DEB8A0 /* function_traits.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = function_traits.h; sourceTree = "<group>"; };
+		0458A5F82193F69900DEB8A0 /* interop.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = interop.h; sourceTree = "<group>"; };
 		04A56F8921666FEB00DB3482 /* todo */ = {isa = PBXFileReference; lastKnownFileType = text; path = todo; sourceTree = "<group>"; };
 		04A56F8B2173B6E800DB3482 /* profile_array_of_structures.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = profile_array_of_structures.yzg; sourceTree = "<group>"; };
 		04A56F8D2174130400DB3482 /* simulate.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = simulate.cpp; sourceTree = "<group>"; };
@@ -66,6 +68,7 @@
 			children = (
 				04A56F8D2174130400DB3482 /* simulate.cpp */,
 				04A56F8E2174130400DB3482 /* simulate.hpp */,
+				0458A5F82193F69900DEB8A0 /* interop.h */,
 			);
 			path = simulate;
 			sourceTree = "<group>";
@@ -86,6 +89,7 @@
 				04B240A02134CBFB007CF8B1 /* enums.h */,
 				0458A5F0218BCC7E00DEB8A0 /* vectypes.h */,
 				0458A5F3218BD06E00DEB8A0 /* platform.h */,
+				0458A5F72193EFDA00DEB8A0 /* function_traits.h */,
 			);
 			path = misc;
 			sourceTree = "<group>";

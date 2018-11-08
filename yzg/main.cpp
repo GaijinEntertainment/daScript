@@ -9,8 +9,11 @@
 #include <iostream>
 #include <fstream>
 
+#include "function_traits.h"
+
 #include "reader.hpp"
 #include "ast.hpp"
+#include "interop.h"
 
 using namespace std;
 using namespace yzg;
@@ -25,48 +28,25 @@ struct Object
 };
 #pragma pack()
 
-__attribute__((noinline)) void updateObject ( Object & obj )
+__attribute__((noinline)) void updateObject ( Object * obj )
 {
-    obj.pos[0] += obj.vel[0];
-    obj.pos[1] += obj.vel[1];
-    obj.pos[2] += obj.vel[2];
+    obj->pos[0] += obj->vel[0];
+    obj->pos[1] += obj->vel[1];
+    obj->pos[2] += obj->vel[2];
 }
 
 __attribute__((noinline)) void updateTest ( Object * objects )
 {
     for ( int i=0; i<10000; ++i ) {
-        updateObject(objects[i]);
+        updateObject(objects + i);
     }
 }
-
-template <typename FuncT, typename RetT, typename ...Args>
-struct SimNode_ExtFuncCall;
-
-template <typename FuncT, typename ...Args>
-struct SimNode_ExtFuncCall<FuncT,void,Args...> : public SimNode_Call
-{
-    virtual __m128 eval ( Context & context ) override {
-        evalArgs(context);
-        return _mm_setzero_ps();
-    }
-};
-
 
 //////////////////
 // interop example
 // TODO:
 //  this can be 100% generated via appropriate variadic templates
 //  at some point we need to replace it so that we don't type as much
-
-struct SimNode_InteropUpdate : public SimNode_Call
-{
-    virtual __m128 eval ( Context & context ) override {
-        evalArgs(context);
-        Object * pObject = cast<Object *>::to(argValues[0]);
-        updateObject(*pObject);
-        return _mm_setzero_ps();
-    }
-};
 
 class BuiltInFunction_IteropUpdate : public BuiltInFunction
 {
@@ -79,7 +59,7 @@ public:
         result = make_shared<TypeDecl>();
     }
     virtual SimNode * makeSimNode ( Context & context ) override {
-        return context.makeNode<SimNode_InteropUpdate>();
+        return context.makeNode<SimNode_ExtFuncCall<typeof(updateObject)>>(updateObject);
     }
 };
 
