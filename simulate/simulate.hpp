@@ -109,35 +109,66 @@ namespace yzg
         int totalFunctions = 0;
     };
     
-    template <typename TT> __forceinline TT cast_to ( __m128 x );
-    template <typename TT> __forceinline __m128 cast_from ( TT v );
-    template <> __forceinline bool cast_to ( __m128 x )    { return *((int *)&x) != 0; }
-    template <> __forceinline __m128 cast_from ( bool x )  { return _mm_set1_epi32(x); }
-    template <> __forceinline int64_t cast_to ( __m128 x )     { return *((int64_t *)&x); }
-    template <> __forceinline __m128 cast_from ( int64_t x )   { __m128 a; *((int64_t *)&a) = x; return a; }
-    template <> __forceinline uint64_t cast_to ( __m128 x )    { return *((uint64_t *)&x); }
-    template <> __forceinline __m128 cast_from ( uint64_t x )  { __m128 a; *((uint64_t *)&a) = x; return a; }
-    template <> __forceinline float cast_to ( __m128 x )   { return *((float *)&x); }
-    template <> __forceinline __m128 cast_from ( float x ) { return _mm_set_ss(x); }
-    template <> __forceinline float2 cast_to ( __m128 x ) { return *((float2 *)&x); }
-    template <> __forceinline __m128 cast_from ( float2 x ) { return _mm_loadu_ps(&x.x); }
-    template <> __forceinline float3 cast_to ( __m128 x ) { return *((float3 *)&x); }
-    template <> __forceinline __m128 cast_from ( float3 x ) {  return _mm_loadu_ps(&x.x); }
-    template <> __forceinline float4 cast_to ( __m128 x ) { return *((float4 *)&x); }
-    template <> __forceinline __m128 cast_from ( float4 x ) { return _mm_loadu_ps(&x.x); }
-
-    template <typename TT> __forceinline TT * ptr_cast_to ( __m128 a )     { return ((TT **)&a)[0]; }
-    template <typename TT> __forceinline __m128 ptr_cast_from ( TT * p )   { __m128 x; ((TT **)&x)[0] = p; return x; }
+    template <typename TT>
+    struct cast;
+    
+    template <typename TT>
+    struct cast <TT *> {
+        static __forceinline TT * to ( __m128 a )               { return ((TT **)&a)[0]; }
+        static __forceinline __m128 from ( TT * p )             { __m128 x; ((TT **)&x)[0] = p; return x; }
+    };
+    
+    template <>
+    struct cast <bool> {
+        static __forceinline bool to ( __m128 x )               { return *((int *)&x) != 0; }
+        static __forceinline __m128 from ( bool x )             { return _mm_set1_epi32(x); }
+    };
+    
+    template <>
+    struct cast <int64_t> {
+        static __forceinline int64_t to ( __m128 x )            { return *((int64_t *)&x); }
+        static __forceinline __m128 from ( int64_t x )          { __m128 a; *((int64_t *)&a) = x; return a; }
+    };
+    
+    template <>
+    struct cast <uint64_t> {
+        static __forceinline uint64_t to ( __m128 x )           { return *((uint64_t *)&x); }
+        static __forceinline __m128 from ( uint64_t x )         { __m128 a; *((uint64_t *)&a) = x; return a; }
+    };
+    
+    template <>
+    struct cast <float> {
+        static __forceinline float to ( __m128 x )              { return *((float *)&x); }
+        static __forceinline __m128 from ( float x )            { return _mm_set_ss(x); }
+    };
+    
+    template <>
+    struct cast <float2> {
+        static __forceinline float2 to ( __m128 x )             { return *((float2 *)&x); }
+        static __forceinline __m128 from ( const float2 & x )   { return _mm_loadu_ps(&x.x); }
+    };
+    
+    template <>
+    struct cast <float3> {
+        static __forceinline float3 to ( __m128 x )             { return *((float3 *)&x); }
+        static __forceinline __m128 from ( const float3 & x )   { return _mm_loadu_ps(&x.x); }
+    };
+    
+    template <>
+    struct cast <float4> {
+        static __forceinline float4 to ( __m128 x )             { return *((float4 *)&x); }
+        static __forceinline __m128 from ( const float4 & x )   { return _mm_loadu_ps(&x.x); }
+    };
     
     // field
     struct SimNode_Field : SimNode {
         SimNode_Field ( SimNode * rv, uint64_t of ) : rvalue(rv), offset(of) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 rv = rvalue->eval(context);
-            char * prv = ptr_cast_to<char>(rv);
+            char * prv = cast<char *>::to(rv);
             if ( !prv )
                 throw runtime_error("dereferencing nil pointer");
-            return ptr_cast_from( prv + offset );
+            return cast<char *>::from( prv + offset );
         }
         SimNode *   rvalue;
         uint64_t    offset;
@@ -146,11 +177,11 @@ namespace yzg
     // AT (INDEX)
     struct SimNode_At : SimNode {
         virtual __m128 eval ( Context & context ) override {
-            char * pValue = ptr_cast_to<char>(rvalue->eval(context));
-            uint64_t idx = cast_to<uint64_t>(index->eval(context));
+            char * pValue = cast<char *>::to(rvalue->eval(context));
+            uint64_t idx = cast<uint64_t>::to(index->eval(context));
             if ( idx >= range )
                 throw runtime_error("index out of range");
-            return ptr_cast_from<char>(pValue + idx*stride);    // TODO: add range check
+            return cast<char *>::from(pValue + idx*stride);    // TODO: add range check
             
         }
         SimNode_At ( SimNode * rv, SimNode * idx, uint64_t strd, uint64_t rng )
@@ -181,8 +212,8 @@ namespace yzg
     struct SimNode_Cast : SimNode_Call {
         virtual __m128 eval ( Context & context ) override {
             __m128 res = arguments[0]->eval(context);
-            CastTo value = (CastTo) cast_to<CastFrom>(res);
-            return cast_from(value);
+            CastTo value = (CastTo) cast<CastFrom>::to(res);
+            return cast<CastTo>::from(value);
         }
     };
     
@@ -192,14 +223,14 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             evalArgs(context);
             if ( vecS==2 )
-                return _mm_setr_ps(cast_to<float>(argValues[0]),cast_to<float>(argValues[1]),
+                return _mm_setr_ps(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
                                    0.0f,0.0f);
             else if ( vecS==3 )
-                return _mm_setr_ps(cast_to<float>(argValues[0]),cast_to<float>(argValues[1]),
-                                   cast_to<float>(argValues[2]),0.0f);
+                return _mm_setr_ps(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
+                                   cast<float>::to(argValues[2]),0.0f);
             else if ( vecS==4 )
-                return _mm_setr_ps(cast_to<float>(argValues[0]),cast_to<float>(argValues[1]),
-                                   cast_to<float>(argValues[2]),cast_to<float>(argValues[3]));
+                return _mm_setr_ps(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
+                                   cast<float>::to(argValues[2]),cast<float>::to(argValues[3]));
             else
                 return _mm_setzero_ps();
         }
@@ -210,8 +241,8 @@ namespace yzg
     struct SimNode_Debug : SimNode_Call {
         virtual __m128 eval ( Context & context ) override {
             __m128 res = arguments[0]->eval(context);
-            auto value = cast_to<TT>(res);
-            cout << "debug: " << value << "\n";
+            auto value = cast<TT>::to(res);
+            cout << "debug: " << value << "\n"; // TODO: remove extra literals
             return res;
         }
     };
@@ -220,7 +251,7 @@ namespace yzg
     struct SimNode_GetLocal : SimNode {
         SimNode_GetLocal(size_t sp) : stackTop(sp) {}
         virtual __m128 eval ( Context & context ) override {
-            return ptr_cast_from(context.stackTop + stackTop);
+            return cast<char *>::from(context.stackTop + stackTop);
         }
         size_t stackTop;
     };
@@ -249,10 +280,10 @@ namespace yzg
         SimNode_R2L ( SimNode * s ) : subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
-            TT * pR = ptr_cast_to<TT>(ptr);
+            TT * pR = cast<TT *>::to(ptr);
             if ( !pR )
                 throw runtime_error("dereferencing nil pointer");
-            return cast_from<TT>(*pR);
+            return cast<TT>::from(*pR);
         }
         SimNode * subexpr;
     };
@@ -260,7 +291,7 @@ namespace yzg
     // CONST-VALUE
     template <typename TT>
     struct SimNode_ConstValue : SimNode {
-        SimNode_ConstValue(TT c) : value(cast_from<TT>(c)) {}
+        SimNode_ConstValue(TT c) : value(cast<TT>::from(c)) {}
         virtual __m128 eval ( Context & context ) override {
             return value;
         }
@@ -273,8 +304,8 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
             __m128 rr = r->eval(context);
-            auto pl = ptr_cast_to<void>(ll);
-            auto pr = ptr_cast_to<void>(rr);
+            auto pl = cast<void *>::to(ll);
+            auto pr = cast<void *>::to(rr);
             memcpy ( pl, pr, size );
             return ll;
         }
@@ -289,7 +320,7 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
             __m128 rr = r->eval(context);
-            TT * pl = ptr_cast_to<TT>(ll);
+            TT * pl = cast<TT *>::to(ll);
             TT * pr = (TT *) &rr;
             *pl = *pr;
             return ll;
@@ -322,7 +353,7 @@ namespace yzg
     struct SimNode_IfThen : SimNode {
         SimNode_IfThen ( SimNode * c, SimNode * t ) : cond(c), if_true(t) {}
         virtual __m128 eval ( Context & context ) override {
-            if ( cast_to<bool>(cond->eval(context)) ) {
+            if ( cast<bool>::to(cond->eval(context)) ) {
                 if_true->eval(context);
             }
             return _mm_setzero_ps();
@@ -334,7 +365,7 @@ namespace yzg
     struct SimNode_IfThenElse : SimNode {
         SimNode_IfThenElse ( SimNode * c, SimNode * t, SimNode * f ) : cond(c), if_true(t), if_false(f) {}
         virtual __m128 eval ( Context & context ) override {
-            if ( cast_to<bool>(cond->eval(context)) ) {
+            if ( cast<bool>::to(cond->eval(context)) ) {
                 if_true->eval(context);
             } else {
                 if_false->eval(context);
@@ -348,7 +379,7 @@ namespace yzg
     struct SimNode_While : SimNode {
         SimNode_While ( SimNode * c, SimNode * b ) : cond(c), body(b) {}
         virtual __m128 eval ( Context & context ) override {
-            while ( cast_to<bool>(cond->eval(context)) ) {
+            while ( cast<bool>::to(cond->eval(context)) ) {
                 body->eval(context);
             }
             return _mm_setzero_ps();
@@ -379,10 +410,10 @@ namespace yzg
         SimNode_Foreach ( SimNode * h, SimNode * i, SimNode * b, int sz, int st )
             : head(h), iter(i), body(b), size(sz), stride(st) {}
         virtual __m128 eval ( Context & context ) override {
-            char * ph = ptr_cast_to<char>(head->eval(context));
-            __m128 * pi = ptr_cast_to<__m128>(iter->eval(context));
+            char * ph = cast<char *>::to(head->eval(context));
+            __m128 * pi = cast<__m128 *>::to(iter->eval(context));
             for ( int i=0; i!=size; ++i ) {
-                *pi = ptr_cast_from(ph);
+                *pi = cast<char *>::from(ph);
                 body->eval(context);
                 ph += stride;
             }
@@ -397,9 +428,9 @@ namespace yzg
     template <typename TT>
     struct SimPolicy_CoreType
     {
-        static __forceinline __m128 Set     ( __m128 a, __m128 b ) { *ptr_cast_to<TT>(a) =  cast_to<TT>(b); return a; }
-        static __forceinline __m128 Equ     ( __m128 a, __m128 b ) { return cast_from<bool>(cast_to<TT>(a)==cast_to<TT>(b));  }
-        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b ) { return cast_from<bool>(cast_to<TT>(a)!=cast_to<TT>(b));  }
+        static __forceinline __m128 Set     ( __m128 a, __m128 b ) { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
+        static __forceinline __m128 Equ     ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)==cast<TT>::to(b));  }
+        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)!=cast<TT>::to(b));  }
     };
     
     template <typename TT>
@@ -407,43 +438,46 @@ namespace yzg
     {
         // numeric
         static __forceinline __m128 Unp ( __m128 x ) { return x; }
-        static __forceinline __m128 Unm ( __m128 x ) { return cast_from<TT>( -cast_to<TT>(x)); }
-        static __forceinline __m128 Add ( __m128 a, __m128 b ) { return cast_from<TT>(cast_to<TT>(a)+cast_to<TT>(b)); }
-        static __forceinline __m128 Sub ( __m128 a, __m128 b ) { return cast_from<TT>(cast_to<TT>(a)-cast_to<TT>(b)); }
-        static __forceinline __m128 Div ( __m128 a, __m128 b ) { return cast_from<TT>(cast_to<TT>(a)/cast_to<TT>(b)); }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return cast_from<TT>(cast_to<TT>(a)*cast_to<TT>(b)); }
-        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b ) { *ptr_cast_to<TT>(a) += cast_to<TT>(b); return a; }
-        static __forceinline __m128 SetSub  ( __m128 a, __m128 b ) { *ptr_cast_to<TT>(a) -= cast_to<TT>(b); return a; }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b ) { *ptr_cast_to<TT>(a) *= cast_to<TT>(b); return a; }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b ) { *ptr_cast_to<TT>(a) /= cast_to<TT>(b); return a; }
+        static __forceinline __m128 Unm ( __m128 x ) { return cast<TT>::from( -cast<TT>::to(x)); }
+        static __forceinline __m128 Add ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)+cast<TT>::to(b)); }
+        static __forceinline __m128 Sub ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)-cast<TT>::to(b)); }
+        static __forceinline __m128 Div ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)/cast<TT>::to(b)); }
+        static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)*cast<TT>::to(b)); }
+        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) += cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetSub  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) -= cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) *= cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetMul  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) /= cast<TT>::to(b); return a; }
         // ordered
-        static __forceinline __m128 LessEqu ( __m128 a, __m128 b ) { return cast_from<bool>(cast_to<TT>(a)<=cast_to<TT>(b));  }
-        static __forceinline __m128 GtEqu   ( __m128 a, __m128 b ) { return cast_from<bool>(cast_to<TT>(a)>=cast_to<TT>(b));  }
-        static __forceinline __m128 Less    ( __m128 a, __m128 b ) { return cast_from<bool>(cast_to<TT>(a)<cast_to<TT>(b));  }
-        static __forceinline __m128 Gt      ( __m128 a, __m128 b ) { return cast_from<bool>(cast_to<TT>(a)>cast_to<TT>(b));  }
+        static __forceinline __m128 LessEqu ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)<=cast<TT>::to(b));  }
+        static __forceinline __m128 GtEqu   ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)>=cast<TT>::to(b));  }
+        static __forceinline __m128 Less    ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)<cast<TT>::to(b));  }
+        static __forceinline __m128 Gt      ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)>cast<TT>::to(b));  }
     };
     
     struct SimPolicy_Bool : SimPolicy_CoreType<bool>
     {
-        static __forceinline __m128 BoolNot ( __m128 x ) { return cast_from<bool>( !cast_to<bool>(x)); }
-        static __forceinline __m128 BoolAnd ( __m128 a, __m128 b ) { return cast_from<bool>(cast_to<bool>(a) && cast_to<bool>(b)); }
-        static __forceinline __m128 BoolOr  ( __m128 a, __m128 b ) { return cast_from<bool>(cast_to<bool>(a) || cast_to<bool>(b)); }
-        static __forceinline __m128 BoolXor ( __m128 a, __m128 b ) { return cast_from<bool>(cast_to<bool>(a) != cast_to<bool>(b)); }
-        static __forceinline __m128 SetBoolAnd  ( __m128 a, __m128 b ) { auto pa = ptr_cast_to<bool>(a); *pa = *pa && cast_to<bool>(b); return a; }
-        static __forceinline __m128 SetBoolOr   ( __m128 a, __m128 b ) { auto pa = ptr_cast_to<bool>(a); *pa = *pa || cast_to<bool>(b); return a; }
-        static __forceinline __m128 SetBoolXor  ( __m128 a, __m128 b ) { auto pa = ptr_cast_to<bool>(a); *pa = *pa != cast_to<bool>(b); return a; }
+        static __forceinline __m128 BoolNot ( __m128 x ) { return cast<bool>::from( !cast<bool>::to(x)); }
+        static __forceinline __m128 BoolAnd ( __m128 a, __m128 b ) { return cast<bool>::from(cast<bool>::to(a) && cast<bool>::to(b)); }
+        static __forceinline __m128 BoolOr  ( __m128 a, __m128 b ) { return cast<bool>::from(cast<bool>::to(a) || cast<bool>::to(b)); }
+        static __forceinline __m128 BoolXor ( __m128 a, __m128 b ) { return cast<bool>::from(cast<bool>::to(a) != cast<bool>::to(b)); }
+        static __forceinline __m128 SetBoolAnd  ( __m128 a, __m128 b )
+            { auto pa = cast<bool *>::to(a); *pa = *pa && cast<bool>::to(b); return a; }
+        static __forceinline __m128 SetBoolOr   ( __m128 a, __m128 b )
+            { auto pa = cast<bool *>::to(a); *pa = *pa || cast<bool>::to(b); return a; }
+        static __forceinline __m128 SetBoolXor  ( __m128 a, __m128 b )
+            { auto pa = cast<bool *>::to(a); *pa = *pa != cast<bool>::to(b); return a; }
     };
     
     template <typename TT>
     struct SimPolicy_Bin : SimPolicy_Type<TT>
     {
-        static __forceinline __m128 BinNot ( __m128 x ) { return cast_from<TT>( ~cast_to<TT>(x)); }
-        static __forceinline __m128 BinAnd ( __m128 a, __m128 b ) { return cast_from<TT>(cast_to<TT>(a) & cast_to<TT>(b)); }
-        static __forceinline __m128 BinOr  ( __m128 a, __m128 b ) { return cast_from<TT>(cast_to<TT>(a) | cast_to<TT>(b)); }
-        static __forceinline __m128 BinXor ( __m128 a, __m128 b ) { return cast_from<TT>(cast_to<TT>(a) ^ cast_to<TT>(b)); }
-        static __forceinline __m128 SetBinAnd ( __m128 a, __m128 b ) { *ptr_cast_to<TT>(a) &= cast_to<TT>(b); return a; }
-        static __forceinline __m128 SetBinOr  ( __m128 a, __m128 b ) { *ptr_cast_to<TT>(a) |= cast_to<TT>(b); return a; }
-        static __forceinline __m128 SetBinXor ( __m128 a, __m128 b ) { *ptr_cast_to<TT>(a) ^= cast_to<TT>(b); return a; }
+        static __forceinline __m128 BinNot ( __m128 x ) { return cast<TT>::from( ~cast<TT>::to(x)); }
+        static __forceinline __m128 BinAnd ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a) & cast<TT>::to(b)); }
+        static __forceinline __m128 BinOr  ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a) | cast<TT>::to(b)); }
+        static __forceinline __m128 BinXor ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a) ^ cast<TT>::to(b)); }
+        static __forceinline __m128 SetBinAnd ( __m128 a, __m128 b ) { *cast<TT *>::to(a) &= cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetBinOr  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) |= cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetBinXor ( __m128 a, __m128 b ) { *cast<TT *>::to(a) ^= cast<TT>::to(b); return a; }
     };
     
     struct SimPolicy_Int : SimPolicy_Bin<int64_t>
@@ -467,11 +501,11 @@ namespace yzg
     {
         // basic
         static __forceinline __m128 Set     ( __m128 a, __m128 b )
-            { *ptr_cast_to<TT>(a) =  cast_to<TT>(b); return a; }
+            { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
         static __forceinline __m128 Equ     ( __m128 a, __m128 b )
-            { return cast_from<bool>( (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)==mask ); }
+            { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)==mask ); }
         static __forceinline __m128 NotEqu  ( __m128 a, __m128 b )
-            { return cast_from<bool>( (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)!=mask ); }
+            { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)!=mask ); }
         // numeric
         static __forceinline __m128 Unp ( __m128 x ) { return x; }
         static __forceinline __m128 Unm ( __m128 x ) { return _mm_sub_ps(_mm_setzero_ps(), x); }    // todo: optimize?
@@ -480,13 +514,13 @@ namespace yzg
         static __forceinline __m128 Div ( __m128 a, __m128 b ) { return _mm_div_ps(a,b); }
         static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return _mm_mul_ps(a,b); }
         static __forceinline __m128 SetAdd  ( __m128 a, __m128 b )
-            {   TT * pa = ptr_cast_to<TT>(a);   *pa = cast_to<TT> ( _mm_add_ps(cast_from(*pa), b)); return a;   }
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_add_ps(cast<TT>::from(*pa), b)); return a;   }
         static __forceinline __m128 SetSub  ( __m128 a, __m128 b )
-            {   TT * pa = ptr_cast_to<TT>(a);   *pa = cast_to<TT> ( _mm_sub_ps(cast_from(*pa), b)); return a;   }
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_sub_ps(cast<TT>::from(*pa), b)); return a;   }
         static __forceinline __m128 SetDiv  ( __m128 a, __m128 b )
-            {   TT * pa = ptr_cast_to<TT>(a);   *pa = cast_to<TT> ( _mm_div_ps(cast_from(*pa), b)); return a;   }
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_div_ps(cast<TT>::from(*pa), b)); return a;   }
         static __forceinline __m128 SetMul  ( __m128 a, __m128 b )
-            {   TT * pa = ptr_cast_to<TT>(a);   *pa = cast_to<TT> ( _mm_mul_ps(cast_from(*pa), b)); return a;   }
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_ps(cast<TT>::from(*pa), b)); return a;   }
     };
 
     // op1 policies

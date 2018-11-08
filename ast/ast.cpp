@@ -1255,7 +1255,7 @@ namespace yzg
             gvar.name = context.allocateName(pvar->name);
             gvar.size = pvar->type->getSizeOf();
             void * data = context.allocate(gvar.size);
-            gvar.value = ptr_cast_from(data);
+            gvar.value = cast<void *>::from(data);
         }
         context.totalVariables = (int) globals.size();
         context.functions = (SimFunction *) context.allocate( totalFunctions*sizeof(SimFunction) );

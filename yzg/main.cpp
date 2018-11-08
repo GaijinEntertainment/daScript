@@ -39,6 +39,19 @@ __attribute__((noinline)) void updateTest ( Object * objects )
     }
 }
 
+template <typename FuncT, typename RetT, typename ...Args>
+struct SimNode_ExtFuncCall;
+
+template <typename FuncT, typename ...Args>
+struct SimNode_ExtFuncCall<FuncT,void,Args...> : public SimNode_Call
+{
+    virtual __m128 eval ( Context & context ) override {
+        evalArgs(context);
+        return _mm_setzero_ps();
+    }
+};
+
+
 //////////////////
 // interop example
 // TODO:
@@ -47,12 +60,12 @@ __attribute__((noinline)) void updateTest ( Object * objects )
 
 struct SimNode_InteropUpdate : public SimNode_Call
 {
-        virtual __m128 eval ( Context & context ) override {
-            evalArgs(context);
-            Object * pObject = ptr_cast_to<Object>(argValues[0]);
-            updateObject(*pObject);
-            return _mm_setzero_ps();
-        }
+    virtual __m128 eval ( Context & context ) override {
+        evalArgs(context);
+        Object * pObject = cast<Object *>::to(argValues[0]);
+        updateObject(*pObject);
+        return _mm_setzero_ps();
+    }
 };
 
 class BuiltInFunction_IteropUpdate : public BuiltInFunction
@@ -160,7 +173,7 @@ void unit_test_array_of_structures ( const string & fn )
         ctx.call(ctx.findFunction("init"), nullptr);
         
         // NOTE: this demonstrates particular shader
-        Object * objects = ptr_cast_to<Object> ( ctx.getVariable( ctx.findVariable("objects") ) );
+        Object * objects = cast<Object *>::to ( ctx.getVariable( ctx.findVariable("objects") ) );
         cout << "objects at " << hex << uint64_t(objects) << dec << endl;
         cout << "before:\n";
         for ( int i=0; i!=5; ++i ) {
@@ -189,7 +202,7 @@ void unit_test_array_of_structures ( const string & fn )
         int updateFn = ctx.findFunction("update");
         double manyT = profileBlock(numIter, [&](){
             for ( int oi=0; oi != 10000; ++oi ) {
-                __m128 args[1] = { ptr_cast_from(objects+oi) };
+                __m128 args[1] = { cast<Object *>::from(objects+oi) };
                 ctx.call(updateFn,  args);
             }
         });
