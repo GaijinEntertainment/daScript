@@ -125,7 +125,7 @@ void unit_test_array_of_structures ( const string & fn )
         auto node = read(str);
         auto program = parse(node, [&](const ProgramPtr & prog){
             // this is how we declare external function
-            prog->addBuiltIn(make_shared<ExternalFn<typeof(updateObject)>>(&updateObject, "interopUpdate", *prog));
+            prog->addExtern(&updateObject, "interopUpdate");
         });
         cout << *program << "\n";
         

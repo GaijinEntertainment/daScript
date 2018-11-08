@@ -493,6 +493,12 @@ namespace yzg
         void addBuiltinOperators();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         void simulate ( Context & context );
+        
+        template <typename FuncT>
+        void addExtern ( FuncT * func, const string & name ) {
+            addBuiltIn(make_shared<ExternalFn<FuncT>>(func, name, *this));
+        }
+        
     public:
         map<string, StructurePtr>   structures;
         map<string, VariablePtr>    globals;
