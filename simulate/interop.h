@@ -15,20 +15,20 @@ namespace yzg
 {
     // convert arguments into a tuple of appropriate types
     template <typename ArgumentsType, size_t... I>
-    auto cast_args (__m128 * args, index_sequence<I...> )
+    __forceinline auto cast_args (__m128 * args, index_sequence<I...> )
     {
         return make_tuple( cast< typename tuple_element<I, ArgumentsType>::type  >::to ( args[ I ] )... );
     }
     
     // void static function or lambda
     template <typename FunctionType, typename TupleType, size_t... I>
-    void callStaticVoidFunction(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
+    __forceinline void callStaticVoidFunction(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
         fn(get<I>(forward<TupleType>(args))...);
     }
     
     // void static function or lambda
     template <typename FunctionType, typename TupleType, size_t... I>
-    auto callStaticFunction(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
+    __forceinline auto callStaticFunction(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
         return fn(get<I>(forward<TupleType>(args))...);
     }
     
@@ -41,10 +41,10 @@ namespace yzg
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
             using Indices = make_index_sequence<nargs>;
             using Arguments = typename FunctionTrait::arguments;
+            using Result  = typename FunctionTrait::result_type;
             evalArgs(context);
             auto cpp_args = cast_args<Arguments>(argValues, Indices());
-            callStaticFunction(*fn, move(cpp_args), Indices());
-            return _mm_setzero_ps();
+            return cast<Result>::from ( callStaticFunction(*fn, move(cpp_args), Indices()) );
         }
         FuncT * fn;
     };
