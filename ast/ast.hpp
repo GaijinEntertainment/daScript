@@ -101,6 +101,12 @@ namespace yzg
     template<> struct ToBasicType<float2>   { enum { type = Type::tFloat2 }; };
     template<> struct ToBasicType<float3>   { enum { type = Type::tFloat3 }; };
     template<> struct ToBasicType<float4>   { enum { type = Type::tFloat4 }; };
+    template<> struct ToBasicType<int2>   { enum { type = Type::tInt2 }; };
+    template<> struct ToBasicType<int3>   { enum { type = Type::tInt3 }; };
+    template<> struct ToBasicType<int4>   { enum { type = Type::tInt4 }; };
+    template<> struct ToBasicType<uint2>   { enum { type = Type::tUInt2 }; };
+    template<> struct ToBasicType<uint3>   { enum { type = Type::tUInt3 }; };
+    template<> struct ToBasicType<uint4>   { enum { type = Type::tUInt4 }; };
 
     template <typename TT>
     struct typeFactory {

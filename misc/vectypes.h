@@ -15,35 +15,47 @@ namespace yzg
 {
     using namespace std;
     
-    struct float2
+    template <typename TT>
+    struct vec2
     {
-        float   x, y;
-        
-        inline friend ostream& operator<< (ostream& stream, const float2 & vec) {
+        TT   x, y;
+        inline friend ostream& operator<< (ostream& stream, const vec2<TT> & vec) {
             stream << vec.x << "," << vec.y;
             return stream;
         }
     };
     
-    struct float3
+    template <typename TT>
+    struct vec3
     {
-        float   x, y, z;
-        
-        inline friend ostream& operator<< (ostream& stream, const float3 & vec) {
+        TT   x, y, z;
+        inline friend ostream& operator<< (ostream& stream, const vec3<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z;
             return stream;
         }
     };
     
-    struct float4
+    template <typename TT>
+    struct vec4
     {
-        float   x, y, z, w;
-        
-        inline friend ostream& operator<< (ostream& stream, const float4 & vec) {
+        TT  x, y, z, w;
+        inline friend ostream& operator<< (ostream& stream, const vec4<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z << "," << vec.w;
             return stream;
         }
     };
+    
+    typedef vec2<float> float2;
+    typedef vec3<float> float3;
+    typedef vec4<float> float4;
+    
+    typedef vec2<int32_t> int2;
+    typedef vec3<int32_t> int3;
+    typedef vec4<int32_t> int4;
+    
+    typedef vec2<uint32_t> uint2;
+    typedef vec3<uint32_t> uint3;
+    typedef vec4<uint32_t> uint4;
 }
 
 #endif /* vectypes_h */

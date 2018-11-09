@@ -114,6 +114,30 @@ namespace yzg
         addBuiltInBasic<float4, SimPolicy_Vec<float4,3>>(*this);
         addBuiltInNumeric<float4, SimPolicy_Vec<float4,3>>(*this);
         addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<4>,float4,float,float,float,float>>("float4",*this) );
+        // int2
+        addBuiltInBasic<int2, SimPolicy_iVec<int2,3>>(*this);
+        addBuiltInNumeric<int2, SimPolicy_iVec<int2,3>>(*this);
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<2>,int2,int32_t,int32_t>>("int2",*this) );
+        // int3
+        addBuiltInBasic<int3, SimPolicy_iVec<int3,7>>(*this);
+        addBuiltInNumeric<int3, SimPolicy_iVec<int3,7>>(*this);
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<3>,int3,int32_t,int32_t,int32_t>>("int3",*this) );
+        // int4
+        addBuiltInBasic<int4, SimPolicy_iVec<int4,3>>(*this);
+        addBuiltInNumeric<int4, SimPolicy_iVec<int4,3>>(*this);
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<4>,int4,int32_t,int32_t,int32_t,int32_t>>("int4",*this) );
+        // uint2
+        addBuiltInBasic<uint2, SimPolicy_uVec<uint2,3>>(*this);
+        addBuiltInNumeric<uint2, SimPolicy_uVec<uint2,3>>(*this);
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<2>,uint2,uint32_t,uint32_t>>("uint2",*this) );
+        // uint3
+        addBuiltInBasic<uint3, SimPolicy_uVec<uint3,7>>(*this);
+        addBuiltInNumeric<uint3, SimPolicy_uVec<uint3,7>>(*this);
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<3>,uint3,uint32_t,uint32_t,uint32_t>>("uint3",*this) );
+        // uint4
+        addBuiltInBasic<uint4, SimPolicy_uVec<uint4,3>>(*this);
+        addBuiltInNumeric<uint4, SimPolicy_uVec<uint4,3>>(*this);
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<4>,uint4,uint32_t,uint32_t,uint32_t,uint32_t>>("uint4",*this) );
     }
 
 }

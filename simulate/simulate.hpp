@@ -472,6 +472,62 @@ namespace yzg
         static __forceinline __m128 SetMul  ( __m128 a, __m128 b )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_ps(cast<TT>::from(*pa), b)); return a;   }
     };
+    
+    template <typename TT, int mask>
+    struct SimPolicy_iVec
+    {
+        // this is missing in SSE2 (but exists in SSE4?)
+        static __forceinline __m128 _mm_mul_epi32 ( __m128 a, __m128 b ) {
+            __m128i A = a, B = b, C;
+            C[0] = A[0]*B[0];   C[1] = A[1]*B[1];   C[2] = A[2]*B[2];   C[3] = A[3]*B[3];
+            return C;
+        }
+        static __forceinline __m128 _mm_div_epi32 ( __m128 a, __m128 b ) {
+            __m128i A = a, B = b, C;
+            C[0] = A[0]/B[0];   C[1] = A[1]/B[1];   C[2] = A[2]/B[2];   C[3] = A[3]/B[3];
+            return C;
+        }
+        // basic
+        static __forceinline __m128 Set     ( __m128 a, __m128 b )
+            { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
+        static __forceinline __m128 Equ     ( __m128 a, __m128 b )
+            { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_epi32(a,b)) & mask)==mask ); }            // todo: verify
+        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b )
+            { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_epi32(a,b)) & mask)!=mask ); }            // todo: verify
+        // numeric
+        static __forceinline __m128 Unp ( __m128 x ) { return x; }
+        static __forceinline __m128 Unm ( __m128 x ) { return _mm_sub_epi32(_mm_setzero_si128(), x); }      // todo: optimize?
+        static __forceinline __m128 Add ( __m128 a, __m128 b ) { return _mm_add_epi32(a,b); }
+        static __forceinline __m128 Sub ( __m128 a, __m128 b ) { return _mm_sub_epi32(a,b); }
+        static __forceinline __m128 Div ( __m128 a, __m128 b ) { return _mm_div_epi32(a,b); }
+        static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return _mm_mul_epi32(a,b); }
+        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b )
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_add_epi32(cast<TT>::from(*pa), b)); return a;   }
+        static __forceinline __m128 SetSub  ( __m128 a, __m128 b )
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_sub_epi32(cast<TT>::from(*pa), b)); return a;   }
+        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b )
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_div_epi32(cast<TT>::from(*pa), b)); return a;   }
+        static __forceinline __m128 SetMul  ( __m128 a, __m128 b )
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_epi32(cast<TT>::from(*pa), b)); return a;   }
+    };
+    
+    template <typename TT, int mask>
+    struct SimPolicy_uVec : SimPolicy_iVec<TT,mask>
+    {
+        // this is missing in SSE2 (but exists in SSE4?)
+        static __forceinline __m128 _mm_div_epu32 ( __m128 a, __m128 b) {
+            __m128 c;  uint32_t * A = (uint32_t *)&a, * B = (uint32_t *)&b, * C = (uint32_t *)&c;
+            C[0] = A[0]/B[0];   C[1] = A[1]/B[1];   C[2] = A[2]/B[2];   C[3] = A[3]/B[3];
+            return c;
+        }
+        // swappmin some numeric operations
+        static __forceinline __m128 Div ( __m128 a, __m128 b ) { return _mm_div_epu32(a,b); }
+        static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return _mm_mul_epu32(a,b); }
+        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b )
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_div_epu32(cast<TT>::from(*pa), b)); return a;   }
+        static __forceinline __m128 SetMul  ( __m128 a, __m128 b )
+            {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_epu32(cast<TT>::from(*pa), b)); return a;   }
+    };
 
     // op1 policies
     

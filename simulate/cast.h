@@ -46,23 +46,29 @@ namespace yzg
         static __forceinline __m128 from ( float x )            { return _mm_set_ss(x); }
     };
     
-    template <>
-    struct cast <float2> {
-        static __forceinline float2 to ( __m128 x )             { return *((float2 *)&x); }
-        static __forceinline __m128 from ( const float2 & x )   { return _mm_loadu_ps(&x.x); }
+    template <typename TT>
+    struct cast_fVec {
+        static __forceinline TT to ( __m128 x )                 { return *((TT *)&x); }
+        static __forceinline __m128 from ( const TT & x )       { return _mm_loadu_ps(&x.x); }
     };
     
-    template <>
-    struct cast <float3> {
-        static __forceinline float3 to ( __m128 x )             { return *((float3 *)&x); }
-        static __forceinline __m128 from ( const float3 & x )   { return _mm_loadu_ps(&x.x); }
+    template <> struct cast <float2>  : cast_fVec<float2> {};
+    template <> struct cast <float3>  : cast_fVec<float3> {};
+    template <> struct cast <float4>  : cast_fVec<float4> {};
+    
+    template <typename TT>
+    struct cast_iVec {
+        static __forceinline TT to ( __m128 x )                 { return *((TT *)&x); }
+        static __forceinline __m128 from ( const TT & x )       { return _mm_loadu_si128((__m128i*)&x.x); }
     };
     
-    template <>
-    struct cast <float4> {
-        static __forceinline float4 to ( __m128 x )             { return *((float4 *)&x); }
-        static __forceinline __m128 from ( const float4 & x )   { return _mm_loadu_ps(&x.x); }
-    };
+    template <> struct cast <int2>  : cast_iVec<int2> {};
+    template <> struct cast <int3>  : cast_iVec<int3> {};
+    template <> struct cast <int4>  : cast_iVec<int4> {};
+    
+    template <> struct cast <uint2>  : cast_iVec<uint2> {};
+    template <> struct cast <uint3>  : cast_iVec<uint3> {};
+    template <> struct cast <uint4>  : cast_iVec<uint4> {};
 }
 
 #endif /* cast_h */
