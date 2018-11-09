@@ -85,7 +85,7 @@ namespace yzg
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
-        vector<uint64_t>    dim;
+        vector<uint32_t>    dim;
         bool                rvalue = false;
         Node *              at = nullptr;
     };
@@ -94,10 +94,8 @@ namespace yzg
     template <typename TT>  struct ToBasicType;
     template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
     template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
-    template<> struct ToBasicType<int>      { enum { type = Type::tInt }; };
-    template<> struct ToBasicType<int64_t>  { enum { type = Type::tInt }; };
-    template<> struct ToBasicType<uint>     { enum { type = Type::tUInt }; };
-    template<> struct ToBasicType<uint64_t> { enum { type = Type::tUInt }; };
+    template<> struct ToBasicType<int32_t>  { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<uint32_t> { enum { type = Type::tUInt }; };
     template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
     template<> struct ToBasicType<void>     { enum { type = Type::tVoid }; };
     template<> struct ToBasicType<float2>   { enum { type = Type::tFloat2 }; };
@@ -300,25 +298,25 @@ namespace yzg
     class ExprConstInt : public ExprConst
     {
     public:
-        ExprConstInt(int64_t i = 0) : value(i) {}
+        ExprConstInt(int32_t i = 0) : value(i) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     public:
-        int64_t value;
+        int32_t value;
     };
     
     class ExprConstUInt : public ExprConst
     {
     public:
-        ExprConstUInt(uint64_t i = 0) : value(i) {}
+        ExprConstUInt(uint32_t i = 0) : value(i) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     public:
-        uint64_t value;
+        uint32_t value;
     };
 
     class ExprConstDouble : public ExprConst

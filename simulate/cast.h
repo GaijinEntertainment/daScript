@@ -29,15 +29,15 @@ namespace yzg
     };
     
     template <>
-    struct cast <int64_t> {
-        static __forceinline int64_t to ( __m128 x )            { return *((int64_t *)&x); }
-        static __forceinline __m128 from ( int64_t x )          { __m128 a; *((int64_t *)&a) = x; return a; }
+    struct cast <int32_t> {
+        static __forceinline int32_t to ( __m128 x )            { return *((int32_t *)&x); }
+        static __forceinline __m128 from ( int32_t x )          { __m128 a; *((int32_t *)&a) = x; return a; }
     };
     
     template <>
-    struct cast <uint64_t> {
-        static __forceinline uint64_t to ( __m128 x )           { return *((uint64_t *)&x); }
-        static __forceinline __m128 from ( uint64_t x )         { __m128 a; *((uint64_t *)&a) = x; return a; }
+    struct cast <uint32_t> {
+        static __forceinline uint32_t to ( __m128 x )           { return *((uint32_t *)&x); }
+        static __forceinline __m128 from ( uint32_t x )         { __m128 a; *((uint32_t *)&a) = x; return a; }
     };
     
     template <>

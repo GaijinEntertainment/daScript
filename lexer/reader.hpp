@@ -84,8 +84,8 @@ namespace yzg
         union
         {
             bool        b;
-            int64_t     inum;
-            uint64_t    unum;
+            int32_t     inum;
+            uint32_t    unum;
             double      dnum;
             Operator    op;
         };
@@ -93,8 +93,8 @@ namespace yzg
         
         Node(string::const_iterator & AT) : at(AT), type(NodeType::nil) {}
         Node(NodeType nt, const string & st, string::const_iterator & AT) : at(AT), type(nt), text(st) {}
-        Node(int64_t val, string::const_iterator & AT) : at(AT), type(NodeType::inumber), inum(val) {}
-        Node(uint64_t val, string::const_iterator & AT) : at(AT), type(NodeType::unumber), unum(val) {}
+        Node(int32_t val, string::const_iterator & AT) : at(AT), type(NodeType::inumber), inum(val) {}
+        Node(uint32_t val, string::const_iterator & AT) : at(AT), type(NodeType::unumber), unum(val) {}
         Node(double val, string::const_iterator & AT) : at(AT), type(NodeType::dnumber), dnum(val) {}
         Node(bool val, string::const_iterator & AT) : at(AT), type(NodeType::boolean), b(val) {}
         Node(vector<NodePtr> && ll, string::const_iterator & AT) : at(AT), type(NodeType::list), list(move(ll)) {}
@@ -108,7 +108,7 @@ namespace yzg
         bool isOperator(Operator opr) const { return type==NodeType::op && op==opr; }
         bool isNumericConstant() const { return type==NodeType::inumber || type==NodeType::unumber || type==NodeType::dnumber; }
     
-        uint64_t getUnsigned(int n) const;
+        uint32_t getUnsigned(int n) const;
         string getName(int n) const;
         string getTailName(int nField = 0) const;
         

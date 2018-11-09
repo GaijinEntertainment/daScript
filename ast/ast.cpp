@@ -349,8 +349,8 @@ namespace yzg
     SimNode * ExprR2L::simulate (Context & context) const
     {
         switch ( type->baseType ) {
-            case Type::tInt:    return context.makeNode<SimNode_R2L<int64_t>>(subexpr->simulate(context));
-            case Type::tUInt:   return context.makeNode<SimNode_R2L<uint64_t>>(subexpr->simulate(context));
+            case Type::tInt:    return context.makeNode<SimNode_R2L<int32_t>>(subexpr->simulate(context));
+            case Type::tUInt:   return context.makeNode<SimNode_R2L<uint32_t>>(subexpr->simulate(context));
             case Type::tBool:   return context.makeNode<SimNode_R2L<bool>>(subexpr->simulate(context));
             case Type::tFloat:  return context.makeNode<SimNode_R2L<float>>(subexpr->simulate(context));
             case Type::tFloat2: return context.makeNode<SimNode_R2L<float2>>(subexpr->simulate(context));
@@ -395,8 +395,8 @@ namespace yzg
     {
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
-        uint64_t stride = subexpr->type->getStride();
-        uint64_t range = subexpr->type->dim.back();
+        uint32_t stride = subexpr->type->getStride();
+        uint32_t range = subexpr->type->dim.back();
         return context.makeNode<SimNode_At>(prv, pidx, stride, range);
     }
 
@@ -764,7 +764,7 @@ namespace yzg
     
     SimNode * ExprConstInt::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_ConstValue<int64_t>>(value);
+        return context.makeNode<SimNode_ConstValue<int32_t>>(value);
     }
     
     // ExprConstUInt
@@ -788,7 +788,7 @@ namespace yzg
     
     SimNode * ExprConstUInt::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_ConstValue<uint64_t>>(value);
+        return context.makeNode<SimNode_ConstValue<uint32_t>>(value);
     }
     
     // ExprConstDouble
@@ -1042,8 +1042,8 @@ namespace yzg
                     copy = context.makeNode<SimNode_CopyRValue>(get, init, size);
                 } else {
                     switch ( var->type->baseType ) {
-                        case Type::tInt:    copy = context.makeNode<SimNode_CopyLValue<int64_t>>(get, init);    break;
-                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyLValue<uint64_t>>(get, init);   break;
+                        case Type::tInt:    copy = context.makeNode<SimNode_CopyLValue<int32_t>>(get, init);    break;
+                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyLValue<uint32_t>>(get, init);   break;
                         case Type::tFloat:  copy = context.makeNode<SimNode_CopyLValue<float>>(get, init);      break;
                         default:
                             throw runtime_error("unsupported? can't assign initial value");
@@ -1324,7 +1324,7 @@ namespace yzg
             tdecl->rvalue = true;
         } else {
             for ( int iDim = 1; iDim != decl->list.size() - 1 - nFields; ++iDim ) {
-                uint64_t dim = decl->getUnsigned(iDim);
+                uint32_t dim = decl->getUnsigned(iDim);
                 if ( dim == -1U )
                     throw parse_error("expecting dimension", decl);
                 tdecl->dim.push_back(dim);

@@ -83,7 +83,7 @@ namespace yzg
     
     // Node
     
-    uint64_t Node::getUnsigned(int n) const
+    uint32_t Node::getUnsigned(int n) const
     {
         if ( !isListOfAtLeastSize(n+1) )
             return -1;
@@ -297,15 +297,15 @@ namespace yzg
                 return make_unique<Node>(NodeType::name, what[1].str(), at);
         } else if ( regex_search(it,end,what,REG_hex,continues) ) {
             it += what.length();
-            return make_unique<Node>(uint64_t(stoul(what[1].str(), 0, 16)), at);
+            return make_unique<Node>(uint32_t(stoul(what[1].str(), 0, 16)), at);
         } else if ( regex_search(it,end,what,REG_uint,continues) ) {
             it += what.length();
-            return make_unique<Node>(uint64_t(stoul(what[1].str())), at);
+            return make_unique<Node>(uint32_t(stoul(what[1].str())), at);
         } else if ( regex_search(it,end,what,REG_number_exp,continues) || regex_search(it,end,what,REG_number,continues) ) {
             it += what.length();
             string num = what[1].str();
             auto found = num.find_first_of(".e");
-            return found!=string::npos ? make_unique<Node>(stod(num), at) : make_unique<Node>(int64_t(stol(num)), at);
+            return found!=string::npos ? make_unique<Node>(stod(num), at) : make_unique<Node>(int32_t(stol(num)), at);
         } else {
             auto op = g_opTable2.parse(it, Operator::none);
             if ( op==Operator::none )

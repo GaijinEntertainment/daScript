@@ -82,26 +82,26 @@ namespace yzg
         // boolean
         addBuiltInBasic<bool, SimPolicy_Bool>(*this);
         addBuiltInBoolean<bool, SimPolicy_Bool>(*this);
-        // int64
-        addBuiltInBasic<int64_t, SimPolicy_Int>(*this);
-        addBuiltInNumeric<int64_t, SimPolicy_Int>(*this);
-        addBuiltInOrdered<int64_t, SimPolicy_Int>(*this);
-        addBuiltInBit<int64_t, SimPolicy_Int>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<int64_t,float>,int64_t,float>>("int",*this) );
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<int64_t,uint64_t>,int64_t,uint64_t>>("int",*this) );
-        // uint64
-        addBuiltInBasic<uint64_t, SimPolicy_UInt>(*this);
-        addBuiltInNumeric<uint64_t, SimPolicy_UInt>(*this);
-        addBuiltInOrdered<uint64_t, SimPolicy_UInt>(*this);
-        addBuiltInBit<uint64_t, SimPolicy_UInt>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<uint64_t,float>,uint64_t,float>>("uint",*this) );
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<uint64_t,int64_t>,uint64_t,int64_t>>("uint",*this) );
+        // int32
+        addBuiltInBasic<int32_t, SimPolicy_Int>(*this);
+        addBuiltInNumeric<int32_t, SimPolicy_Int>(*this);
+        addBuiltInOrdered<int32_t, SimPolicy_Int>(*this);
+        addBuiltInBit<int32_t, SimPolicy_Int>(*this);
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<int32_t,float>,int32_t,float>>("int",*this) );
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<int32_t,uint32_t>,int32_t,uint32_t>>("int",*this) );
+        // uint32
+        addBuiltInBasic<uint32_t, SimPolicy_UInt>(*this);
+        addBuiltInNumeric<uint32_t, SimPolicy_UInt>(*this);
+        addBuiltInOrdered<uint32_t, SimPolicy_UInt>(*this);
+        addBuiltInBit<uint32_t, SimPolicy_UInt>(*this);
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,float>,uint32_t,float>>("uint",*this) );
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,int32_t>,uint32_t,int32_t>>("uint",*this) );
         // float
         addBuiltInBasic<float, SimPolicy_Float>(*this);
         addBuiltInNumeric<float, SimPolicy_Float>(*this);
         addBuiltInOrdered<float, SimPolicy_Float>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,int64_t>,float,int64_t>>("float",*this) );
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,uint64_t>,float,uint64_t>>("float",*this) );
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,int32_t>,float,int32_t>>("float",*this) );
+        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,uint32_t>,float,uint32_t>>("float",*this) );
         // float2
         addBuiltInBasic<float2, SimPolicy_Vec<float2,3>>(*this);
         addBuiltInNumeric<float2, SimPolicy_Vec<float2,3>>(*this);

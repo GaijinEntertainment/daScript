@@ -112,7 +112,7 @@ namespace yzg
     
     // field
     struct SimNode_Field : SimNode {
-        SimNode_Field ( SimNode * rv, uint64_t of ) : rvalue(rv), offset(of) {}
+        SimNode_Field ( SimNode * rv, uint32_t of ) : rvalue(rv), offset(of) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 rv = rvalue->eval(context);
             char * prv = cast<char *>::to(rv);
@@ -121,23 +121,23 @@ namespace yzg
             return cast<char *>::from( prv + offset );
         }
         SimNode *   rvalue;
-        uint64_t    offset;
+        uint32_t    offset;
     };
     
     // AT (INDEX)
     struct SimNode_At : SimNode {
         virtual __m128 eval ( Context & context ) override {
             char * pValue = cast<char *>::to(rvalue->eval(context));
-            uint64_t idx = cast<uint64_t>::to(index->eval(context));
+            uint32_t idx = cast<uint32_t>::to(index->eval(context));
             if ( idx >= range )
                 throw runtime_error("index out of range");
             return cast<char *>::from(pValue + idx*stride);    // TODO: add range check
             
         }
-        SimNode_At ( SimNode * rv, SimNode * idx, uint64_t strd, uint64_t rng )
+        SimNode_At ( SimNode * rv, SimNode * idx, uint32_t strd, uint32_t rng )
             : rvalue(rv), index(idx), stride(strd), range(rng) {}
         SimNode * rvalue, * index;
-        uint64_t  stride, range;
+        uint32_t  stride, range;
     };
     
     // FUNCTION CALL
@@ -430,11 +430,11 @@ namespace yzg
         static __forceinline __m128 SetBinXor ( __m128 a, __m128 b ) { *cast<TT *>::to(a) ^= cast<TT>::to(b); return a; }
     };
     
-    struct SimPolicy_Int : SimPolicy_Bin<int64_t>
+    struct SimPolicy_Int : SimPolicy_Bin<int32_t>
     {
     };
     
-    struct SimPolicy_UInt : SimPolicy_Bin<uint64_t>
+    struct SimPolicy_UInt : SimPolicy_Bin<uint32_t>
     {
     };
     
