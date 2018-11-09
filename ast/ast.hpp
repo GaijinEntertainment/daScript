@@ -448,7 +448,7 @@ namespace yzg
         }
     };
     
-    template  <typename FuncT>
+    template  <typename FuncT, FuncT fn>
     class ExternalFn : public BuiltInFunction
     {
         template <typename ArgumentsType, size_t... I>
@@ -456,9 +456,8 @@ namespace yzg
             return { makeType< typename tuple_element<I, ArgumentsType>::type>(prg)... };
         }
     public:
-        ExternalFn(FuncT * pfn, const string & fn, const Program & prg) : BuiltInFunction(fn)
+        ExternalFn(const string & name, const Program & prg) : BuiltInFunction(name)
         {
-            funcPtr = pfn;
             using FunctionTrait = function_traits<FuncT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
             using Indices = make_index_sequence<nargs>;
@@ -474,10 +473,8 @@ namespace yzg
             this->result = makeType<Result>(prg);
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
-            return context.makeNode<SimNode_ExtFuncCall<FuncT>>(funcPtr);
+            return context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>();
         }
-    protected:
-        FuncT * funcPtr = nullptr;
     };
     
     class Program : public enable_shared_from_this<Program>
@@ -494,9 +491,9 @@ namespace yzg
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         void simulate ( Context & context );
         
-        template <typename FuncT>
-        void addExtern ( FuncT * func, const string & name ) {
-            addBuiltIn(make_shared<ExternalFn<FuncT>>(func, name, *this));
+        template <typename FuncT, FuncT fn>
+        void addExtern ( const string & name ) {
+            addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, *this));
         }
         
     public:

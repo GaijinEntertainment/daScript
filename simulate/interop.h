@@ -31,7 +31,7 @@ namespace yzg
         return fn(get<I>(forward<TupleType>(args))...);
     }
     
-    template <typename FuncT, typename RetT>
+    template <typename FuncT, FuncT fn, typename RetT>
     struct SimNode_ExtFuncCallImpl : public SimNode_Call
     {
         virtual __m128 eval ( Context & context ) override {
@@ -44,11 +44,10 @@ namespace yzg
             auto cpp_args = cast_args<Arguments>(argValues, Indices());
             return cast<Result>::from ( callStaticFunction(*fn, move(cpp_args), Indices()) );
         }
-        FuncT * fn;
     };
     
-    template <typename FuncT>
-    struct SimNode_ExtFuncCallImpl<FuncT,void> : public SimNode_Call
+    template <typename FuncT, FuncT fn>
+    struct SimNode_ExtFuncCallImpl<FuncT,fn,void> : public SimNode_Call
     {
         virtual __m128 eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;
@@ -60,13 +59,11 @@ namespace yzg
             callStaticVoidFunction(*fn, move(cpp_args), Indices());
             return _mm_setzero_ps();
         }
-        FuncT * fn;
     };
     
-    template <typename FuncT>
-    struct SimNode_ExtFuncCall : public SimNode_ExtFuncCallImpl<FuncT, typename function_traits<FuncT>::return_type>
+    template <typename FuncT, FuncT fn>
+    struct SimNode_ExtFuncCall : public SimNode_ExtFuncCallImpl<FuncT, fn, typename function_traits<FuncT>::return_type>
     {
-        SimNode_ExtFuncCall ( FuncT * func ) { this->fn = func; }
     };
 }
 
