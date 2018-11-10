@@ -42,6 +42,7 @@ namespace yzg
         tFloat2,
         tFloat3,
         tFloat4,
+        tString,
         tStructure
     };
     
@@ -93,6 +94,11 @@ namespace yzg
     
     template <typename TT>  struct ToBasicType;
     template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
+    template <typename QQ> struct ToBasicType<const QQ &> : ToBasicType<QQ> {};
+    template <typename QQ> struct ToBasicType<QQ *> : ToBasicType<QQ> {};
+    template <typename QQ> struct ToBasicType<const QQ *> : ToBasicType<QQ> {};
+    template<> struct ToBasicType<char *>   { enum { type = Type::tString }; };
+    template<> struct ToBasicType<string>   { enum { type = Type::tString }; };
     template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
     template<> struct ToBasicType<int32_t>  { enum { type = Type::tInt }; };
     template<> struct ToBasicType<uint32_t> { enum { type = Type::tUInt }; };
@@ -180,6 +186,13 @@ namespace yzg
         TypeDeclPtr type;
         Node *      at = nullptr;
     };
+    
+    template <typename ExprType, typename SuperType = Expression>
+    __forceinline shared_ptr<ExprType> clonePtr ( const ExpressionPtr & expr ) {
+        auto cexpr =  expr ? static_pointer_cast<ExprType>(expr) : make_shared<ExprType>();
+        (*cexpr).SuperType::clone(cexpr);
+        return cexpr;
+    }
     
     class ExprR2L : public Expression
     {
@@ -296,45 +309,65 @@ namespace yzg
         ExpressionPtr   subexpr;
     };
     
+    template <typename TT, typename ExprConstExt>
     class ExprConst : public Expression
     {
     public:
+        ExprConst(TT val = TT()) : value(val) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
+            auto cexpr = clonePtr<ExprConstExt,ExprConst<TT,ExprConstExt>>(expr);
+            cexpr->value = value;
+            return cexpr;
+        }
+        virtual void inferType(InferTypeContext & context) override {
+            type = make_shared<TypeDecl>((Type)ToBasicType<TT>::type);
+        }
+        virtual SimNode * simulate (Context & context) const override {
+            return context.makeNode<SimNode_ConstValue<TT>>(value);
+        }
+        virtual void log(ostream& stream, int depth) const override {
+            stream << value;
+        }
+    protected:
+        TT  value;
     };
 
-    class ExprConstInt : public ExprConst
+    class ExprConstInt : public ExprConst<int32_t,ExprConstInt>
     {
     public:
-        ExprConstInt(int32_t i = 0) : value(i) {}
-        virtual void log(ostream& stream, int depth) const override;
-        virtual void inferType(InferTypeContext & context) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-    public:
-        int32_t value;
+        ExprConstInt(int32_t i = 0)  : ExprConst(i) {}
     };
     
-    class ExprConstUInt : public ExprConst
+    class ExprConstUInt : public ExprConst<uint32_t,ExprConstUInt>
     {
     public:
-        ExprConstUInt(uint32_t i = 0) : value(i) {}
-        virtual void log(ostream& stream, int depth) const override;
-        virtual void inferType(InferTypeContext & context) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
+        ExprConstUInt(uint32_t i = 0) : ExprConst(i) {}
+        virtual void log(ostream& stream, int depth) const override {  stream << "0x" << hex << value << dec; }
+    };
+    
+    class ExprConstBool : public ExprConst<bool,ExprConstBool>
+    {
     public:
-        uint32_t value;
+        ExprConstBool(bool i = false) : ExprConst(i) {}
+        virtual void log(ostream& stream, int depth) const override {  stream << (value ? "true" : "false"); }
     };
 
-    class ExprConstDouble : public ExprConst
+    class ExprConstFloat : public ExprConst<float,ExprConstFloat>
     {
     public:
-        ExprConstDouble(double i = 0.0) : value(i) {}
-        virtual void log(ostream& stream, int depth) const override;
-        virtual void inferType(InferTypeContext & context) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
+        ExprConstFloat(float i = 0.0f) : ExprConst(i) {}
+        virtual void log(ostream& stream, int depth) const override { stream << to_string_ex(value); }
+    };
+    
+    class ExprConstString : public ExprConst<string,ExprConstString>
+    {
     public:
-        double value;
+        ExprConstString(const string & str = string()) : ExprConst(unescapeString(str)) {}
+        virtual SimNode * simulate (Context & context) const override {
+            char * str = context.allocateName(value);
+            return context.makeNode<SimNode_ConstValue<char *>>(str);
+        }
+        virtual void log(ostream& stream, int depth) const override {  stream << "\"" << value << "\""; }   // todo: escape string
     };
     
     class ExprLet : public Expression
@@ -358,6 +391,8 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+    protected:
+        string describe() const;
     public:
         string                  name;
         vector<ExpressionPtr>   arguments;
@@ -492,6 +527,7 @@ namespace yzg
         void addBuiltIn(FunctionPtr && fn);
         void inferTypes();
         void addBuiltinOperators();
+        void addBuiltinFunctions();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         void simulate ( Context & context );
         

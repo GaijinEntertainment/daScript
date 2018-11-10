@@ -51,6 +51,7 @@ namespace yzg
         friend class SimNode_GetLocal;
         friend class SimNode_GetArgument;
         friend class SimNode_TryCatch;
+        friend class SimNode_Call;
     public:
         Context();
         ~Context();
@@ -76,6 +77,17 @@ namespace yzg
             return new (allocate(sizeof(TT))) TT(args...);
         }
         
+        __forceinline __m128 getVariable ( int index ) const { return globalVariables[index].value; }
+        
+        int findFunction ( const char * name ) const;
+        int findVariable ( const char * name ) const;
+        
+        __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
+            linearAllocator = linearAllocatorExecuteBase;
+            return call(fnIndex, args);
+        }
+        
+    protected:
         __forceinline __m128 call ( int fnIndex, __m128 * args ) {
             auto & fn = functions[fnIndex];
             // PUSH
@@ -91,11 +103,6 @@ namespace yzg
             return result;
         }
         
-        __forceinline __m128 getVariable ( int index ) const { return globalVariables[index].value; }
-        
-        int findFunction ( const char * name ) const;
-        int findVariable ( const char * name ) const;
-        
     protected:
         int linearAllocatorSize = 1*1024*1024;
         char * linearAllocator = nullptr;
@@ -109,6 +116,8 @@ namespace yzg
         int totalVariables = 0;
         int totalFunctions = 0;
     };
+    
+    string unescapeString ( const string & input );
     
     // field
     struct SimNode_Field : SimNode {
@@ -192,7 +201,7 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             __m128 res = arguments[0]->eval(context);
             auto value = cast<TT>::to(res);
-            cout << "debug: " << value << "\n"; // TODO: remove extra literals
+            cout << value;
             return res;
         }
     };
@@ -527,6 +536,26 @@ namespace yzg
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_div_epu32(cast<TT>::from(*pa), b)); return a;   }
         static __forceinline __m128 SetMul  ( __m128 a, __m128 b )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_epu32(cast<TT>::from(*pa), b)); return a;   }
+    };
+    
+    // todo: expand comparisons
+    struct SimPolicy_String {
+        // bsasic
+        static __forceinline __m128 Set     ( __m128 a, __m128 b )
+            { *cast<char **>::to(a) =  cast<char *>::to(b); return a; }
+        static __forceinline __m128 Equ     ( __m128 a, __m128 b )
+            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))==0); }
+        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b )
+            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))!=0); }
+        static __forceinline __m128 LessEqu ( __m128 a, __m128 b )
+        // ordered
+            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))<=0); }
+        static __forceinline __m128 GtEqu   ( __m128 a, __m128 b )
+            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))>=0); }
+        static __forceinline __m128 Less    ( __m128 a, __m128 b )
+            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))<0); }
+        static __forceinline __m128 Gt      ( __m128 a, __m128 b )
+            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))>0); }
     };
 
     // op1 policies

@@ -20,6 +20,7 @@ namespace yzg
         {   Type::tVoid,        "void"  },
         {   Type::tNull,        "null"   },
         {   Type::tBool,        "bool"  },
+        {   Type::tString,      "string" },
         {   Type::tInt,         "int"   },
         {   Type::tInt2,        "int2"  },
         {   Type::tInt3,        "int3"  },
@@ -146,6 +147,7 @@ namespace yzg
     int TypeDecl::getBaseSizeOf() const
     {
         switch ( baseType ) {
+            case tString:   return sizeof(char *);
             case tBool:     return sizeof(bool);
             case tInt:      return sizeof(int);
             case tInt2:     return sizeof(int) * 2;
@@ -162,6 +164,7 @@ namespace yzg
             case tStructure:
                 return structType->getSizeOf();
             default:
+                throw runtime_error("not implemented");
                 return 0;
         }
     }
@@ -278,14 +281,6 @@ namespace yzg
     
     // expression
     
-    template <typename ExprType, typename SuperType = Expression>
-    shared_ptr<ExprType> clonePtr ( const ExpressionPtr & expr )
-    {
-        auto cexpr =  expr ? static_pointer_cast<ExprType>(expr) : make_shared<ExprType>();
-        (*cexpr).SuperType::clone(cexpr);
-        return cexpr;
-    }
-    
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const
     {
         if ( !expr )
@@ -352,10 +347,17 @@ namespace yzg
             case Type::tInt:    return context.makeNode<SimNode_R2L<int32_t>>(subexpr->simulate(context));
             case Type::tUInt:   return context.makeNode<SimNode_R2L<uint32_t>>(subexpr->simulate(context));
             case Type::tBool:   return context.makeNode<SimNode_R2L<bool>>(subexpr->simulate(context));
+            case Type::tString: return context.makeNode<SimNode_R2L<char *>>(subexpr->simulate(context));
             case Type::tFloat:  return context.makeNode<SimNode_R2L<float>>(subexpr->simulate(context));
             case Type::tFloat2: return context.makeNode<SimNode_R2L<float2>>(subexpr->simulate(context));
             case Type::tFloat3: return context.makeNode<SimNode_R2L<float3>>(subexpr->simulate(context));
             case Type::tFloat4: return context.makeNode<SimNode_R2L<float4>>(subexpr->simulate(context));
+            case Type::tInt2:   return context.makeNode<SimNode_R2L<int2>>(subexpr->simulate(context));
+            case Type::tInt3:   return context.makeNode<SimNode_R2L<int3>>(subexpr->simulate(context));
+            case Type::tInt4:   return context.makeNode<SimNode_R2L<int4>>(subexpr->simulate(context));
+            case Type::tUInt2:  return context.makeNode<SimNode_R2L<uint2>>(subexpr->simulate(context));
+            case Type::tUInt3:  return context.makeNode<SimNode_R2L<uint3>>(subexpr->simulate(context));
+            case Type::tUInt4:  return context.makeNode<SimNode_R2L<uint4>>(subexpr->simulate(context));
             default:            throw runtime_error("can't dereference type");
         }
     }
@@ -742,80 +744,6 @@ namespace yzg
         return nullptr;
     }
 
-    
-    // ExprConstInt
-    
-    ExpressionPtr ExprConstInt::clone( const ExpressionPtr & expr ) const
-    {
-        auto cexpr = clonePtr<ExprConstInt,ExprConst>(expr);
-        cexpr->value = value;
-        return cexpr;
-    }
-    
-    void ExprConstInt::log(ostream& stream, int depth) const
-    {
-        stream << value;
-    }
-    
-    void ExprConstInt::inferType(InferTypeContext & context)
-    {
-        type = make_shared<TypeDecl>(Type::tInt);
-    }
-    
-    SimNode * ExprConstInt::simulate (Context & context) const
-    {
-        return context.makeNode<SimNode_ConstValue<int32_t>>(value);
-    }
-    
-    // ExprConstUInt
-    
-    ExpressionPtr ExprConstUInt::clone( const ExpressionPtr & expr ) const
-    {
-        auto cexpr = clonePtr<ExprConstUInt,ExprConst>(expr);
-        cexpr->value = value;
-        return cexpr;
-    }
-    
-    void ExprConstUInt::log(ostream& stream, int depth) const
-    {
-        stream << "0x" << hex << value << dec;
-    }
-    
-    void ExprConstUInt::inferType(InferTypeContext & context)
-    {
-        type = make_shared<TypeDecl>(Type::tUInt);
-    }
-    
-    SimNode * ExprConstUInt::simulate (Context & context) const
-    {
-        return context.makeNode<SimNode_ConstValue<uint32_t>>(value);
-    }
-    
-    // ExprConstDouble
-    
-    ExpressionPtr ExprConstDouble::clone( const ExpressionPtr & expr ) const
-    {
-        auto cexpr = clonePtr<ExprConstDouble,ExprConst>(expr);
-        cexpr->value = value;
-        return cexpr;
-    }
-    
-    void ExprConstDouble::log(ostream& stream, int depth) const
-    {
-        stream << to_string_ex(value);
-    }
-    
-    void ExprConstDouble::inferType(InferTypeContext & context)
-    {
-        type = make_shared<TypeDecl>(Type::tFloat);
-    }
-    
-    SimNode * ExprConstDouble::simulate (Context & context) const
-    {
-        return context.makeNode<SimNode_ConstValue<float>>(value);
-
-    }
-
     // ExprIfThenElse
     
     ExpressionPtr ExprIfThenElse::clone( const ExpressionPtr & expr ) const
@@ -1042,9 +970,11 @@ namespace yzg
                     copy = context.makeNode<SimNode_CopyRValue>(get, init, size);
                 } else {
                     switch ( var->type->baseType ) {
+                        case Type::tBool:   copy = context.makeNode<SimNode_CopyLValue<bool>>(get, init);       break;
                         case Type::tInt:    copy = context.makeNode<SimNode_CopyLValue<int32_t>>(get, init);    break;
                         case Type::tUInt:   copy = context.makeNode<SimNode_CopyLValue<uint32_t>>(get, init);   break;
                         case Type::tFloat:  copy = context.makeNode<SimNode_CopyLValue<float>>(get, init);      break;
+                        case Type::tString: copy = context.makeNode<SimNode_CopyLValue<char *>>(get, init);     break;
                         default:
                             throw runtime_error("unsupported? can't assign initial value");
                     }
@@ -1069,6 +999,17 @@ namespace yzg
         return cexpr;
     }
     
+    string ExprCall::describe() const
+    {
+        stringstream stream;
+        stream << "(" << name;
+        for ( auto & arg : arguments ) {
+            stream << " " << *arg->type;
+        }
+        stream << ")";
+        return stream.str();
+    }
+    
     void ExprCall::log(ostream& stream, int depth) const
     {
         logType(stream);
@@ -1090,9 +1031,9 @@ namespace yzg
         }
         auto functions = context.program->findMatchingFunctions(name, types);
         if ( functions.size()==0 )
-            throw semantic_error("no matching function", at);
+            throw semantic_error("no matching function " + describe(), at);
         if ( functions.size()>1 )
-            throw semantic_error("too many matching functions", at);
+            throw semantic_error("too many matching functions " + describe(), at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
         for ( size_t iT = arguments.size(); iT != func->arguments.size(); ++iT ) {
@@ -1581,7 +1522,7 @@ namespace yzg
         } else if ( decl->isNumericConstant() ) {
             ExpressionPtr pconst;
             if ( decl->type==NodeType::dnumber ) {
-                pconst = make_shared<ExprConstDouble>(decl->dnum);
+                pconst = make_shared<ExprConstFloat>(decl->dnum);
             } else if ( decl->type==NodeType::inumber ) {
                 pconst = make_shared<ExprConstInt>(decl->inum);
             } else if ( decl->type==NodeType::unumber ) {
@@ -1591,6 +1532,10 @@ namespace yzg
             }
             pconst->at = decl.get();
             return pconst;
+        } else if ( decl->isString() ) {
+            return make_shared<ExprConstString>(decl->text);
+        } else if ( decl->isBoolean() ) {
+            return make_shared<ExprConstBool>(decl->b);
         } else {
             throw parse_error("unrecognized expression", decl);
         }
@@ -1659,6 +1604,7 @@ namespace yzg
         parseVariableDeclarations(root, program);
         parseFunctionDeclarations(root, program);
         program->addBuiltinOperators();
+        program->addBuiltinFunctions();
         if ( defineContext )
             defineContext(program);
         program->inferTypes();

@@ -23,6 +23,14 @@ namespace yzg
     };
     
     template <>
+    struct cast <string> {
+        static __forceinline string to ( __m128 x )             { return cast<char *>::to(x); }
+        static __forceinline __m128 from ( const string & x )   { return cast<char *>::from((char *)x.c_str()); }
+    };
+    template<> struct cast <string &> : cast<string> {};
+    template<> struct cast <const string &> : cast<string> {};
+    
+    template <>
     struct cast <bool> {
         static __forceinline bool to ( __m128 x )               { return *((int *)&x) != 0; }
         static __forceinline __m128 from ( bool x )             { return _mm_set1_epi32(x); }

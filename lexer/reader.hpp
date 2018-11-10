@@ -101,6 +101,8 @@ namespace yzg
         Node(Operator o, string::const_iterator & AT) : at(AT), type(NodeType::op), op(o) {}
         
         bool isList() const { return type==NodeType::list; }
+        bool isString() const { return type==NodeType::string; }
+        bool isBoolean() const { return type==NodeType::boolean; }
         bool isListOfAtLeastSize(int n) const { return type==NodeType::list && list.size()>=n; }
         bool isName() const { return type==NodeType::name; }
         bool isName(const string & st) const { return type==NodeType::name && text==st; }

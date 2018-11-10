@@ -10,6 +10,22 @@
 
 namespace yzg
 {
+    void builtin_assert ( bool expr ) {
+        if ( !expr )
+            throw runtime_error("assert failed");
+    }
+    
+    void builtin_assert2 ( bool expr, string comment ) {
+        if ( !expr )
+            throw runtime_error("assert failed: " + comment);
+    }
+    
+    void Program::addBuiltinFunctions()
+    {
+        addExtern<decltype(builtin_assert),builtin_assert>("assert");
+        addExtern<decltype(builtin_assert2),builtin_assert2>("assert");
+    }
+    
     // basic operations
     template <typename TT, typename SimPolicy_TT>
     void addBuiltInBasic(Program & prg)
@@ -79,6 +95,9 @@ namespace yzg
     
     void Program::addBuiltinOperators()
     {
+        // string
+        addBuiltInBasic<char *,SimPolicy_String>(*this);
+        addBuiltInOrdered<char *, SimPolicy_String>(*this);
         // boolean
         addBuiltInBasic<bool, SimPolicy_Bool>(*this);
         addBuiltInBoolean<bool, SimPolicy_Bool>(*this);
