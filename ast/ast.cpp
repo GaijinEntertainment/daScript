@@ -438,6 +438,38 @@ namespace yzg
         int32_t size = typeexpr->getSizeOf();
         return context.makeNode<SimNode_ConstValue<int32_t>>(size);
     }
+    
+    // ExprNew
+    
+    ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprNew>(expr);
+        cexpr->typeexpr = typeexpr;
+        return cexpr;
+    }
+    
+    void ExprNew::log(ostream& stream, int depth) const
+    {
+        stream << "(new (" << *typeexpr << "))";
+    }
+    
+    void ExprNew::inferType(InferTypeContext & context)
+    {
+        if ( typeexpr->baseType != Type::tStructure )
+            throw semantic_error("can only new structures (for now)", typeexpr->at );
+        if ( typeexpr->rvalue )
+            throw semantic_error("can't new an rvalue", typeexpr->at);
+        if ( typeexpr->dim.size() )
+            throw semantic_error("can only new single object", typeexpr->at );
+        type = make_shared<TypeDecl>(Type::tPointer);
+        type->ptrType = typeexpr;
+    }
+    
+    SimNode * ExprNew::simulate (Context & context) const
+    {
+        int32_t bytes = typeexpr->getSizeOf();
+        return context.makeNode<SimNode_New>(bytes);
+    }
 
     // ExprAt
     
@@ -1601,9 +1633,16 @@ namespace yzg
                         pSizeOf->subexpr = parseExpression(decl->list[1], program);
                     }
                 } else {
-                    throw parse_error("return has too many operands", decl);
+                    throw parse_error("sizeof has too many operands", decl);
                 }
                 return pSizeOf;
+            } else if ( head->isName("new") ) {
+                auto pNew = make_shared<ExprNew>();
+                pNew->at = decl.get();
+                if ( decl->list.size()!=2 )
+                    throw parse_error("new has too many operands", decl);
+                pNew->typeexpr = parseTypeDeclaratoin(decl->list[1], program);
+                return pNew;
             } else if ( head->isName() ) {
                 // function call
                 auto call = make_shared<ExprCall>();

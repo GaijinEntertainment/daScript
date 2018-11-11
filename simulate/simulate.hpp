@@ -273,6 +273,17 @@ namespace yzg
         SimNode * subexpr;
     };
     
+    // NEW
+    struct SimNode_New : SimNode {
+        SimNode_New(int32_t b) : bytes(b) {}
+        virtual __m128 eval ( Context & context ) override {
+            void * ptr = context.allocate(bytes);
+            memset ( ptr, 0, bytes );
+            return cast<void *>::from(ptr);
+        }
+        int32_t     bytes;
+    };
+    
     // CONST-VALUE
     template <typename TT>
     struct SimNode_ConstValue : SimNode {
@@ -582,6 +593,10 @@ namespace yzg
             { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))<0); }
         static __forceinline __m128 Gt      ( __m128 a, __m128 b )
             { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))>0); }
+    };
+    
+    struct SimPolicy_Pointer : SimPolicy_CoreType<void *>
+    {        
     };
 
     // op1 policies

@@ -232,6 +232,17 @@ namespace yzg
         TypeDeclPtr     typeexpr;
     };
     
+    class ExprNew : public Expression
+    {
+    public:
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        TypeDeclPtr     typeexpr;
+    };
+    
     class ExprAt : public Expression
     {
     public:

@@ -11,6 +11,9 @@ misc
     simplify builtin initialization
     support multi-dimensional array foreach
 
+    assert2 - need node, so that if ( !a ) b and not a,b, if
+    &&, || - need nodes
+
 optimization \ ast massage
     flatten nested blocks
     eliminate dead code (after break and after return)

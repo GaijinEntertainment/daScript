@@ -19,21 +19,11 @@ namespace yzg
         if ( !expr )
             throw runtime_error("assert failed: " + comment);
     }
-    
-    void builtin_debugPtr ( void * ptr )
-    {
-        if ( ptr ) {
-            cout << hex << "0x" << uint64_t(ptr) << dec;
-        } else {
-            cout << "null";
-        }
-    }
-    
+
     void Program::addBuiltinFunctions()
     {
         addExtern<decltype(builtin_assert),builtin_assert>("assert");
         addExtern<decltype(builtin_assert2),builtin_assert2>("assert");
-        addExtern<decltype(builtin_debugPtr),builtin_debugPtr>("debug");
     }
     
     // basic operations
@@ -105,6 +95,8 @@ namespace yzg
     
     void Program::addBuiltinOperators()
     {
+        // pointer
+        addBuiltInBasic<void *,SimPolicy_Pointer>(*this);
         // string
         addBuiltInBasic<char *,SimPolicy_String>(*this);
         addBuiltInOrdered<char *, SimPolicy_String>(*this);
