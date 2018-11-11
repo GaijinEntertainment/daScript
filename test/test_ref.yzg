@@ -1,0 +1,50 @@
+(defun (void add1) (int & x)
+    (+= x 1)
+)
+
+(struct bar
+    (int    x)
+    (int    y)
+    (int    z)
+)
+
+(struct foo
+    (bar    a)
+    (bar *  b)
+)
+
+(defun (void print_bar)
+    (string prefix)
+    (bar t)
+    (
+        (debug prefix)(debug "\n")
+        (debug "x = ")(debug  (. t x))(debug "\n")
+        (debug "y = ")(debug  (. t y))(debug "\n")
+        (debug "z = ")(debug  (. t z))(debug "\n")
+    )
+)
+
+(defun (void test)
+    (
+        (let
+            (int x 100)
+            (
+                (add1 x)
+                (assert (== x 101) "supposed to be 101")
+            )
+        )
+
+        (assert (== (sizeof (bar)) 12) "supposed to be 3*sizeof(int)==12")
+        (assert (== (sizeof (foo)) 20) "supposed to be sizeof(bar)+sizeof(bar &)==20")
+        (let
+            (foo    t)
+            (
+                (dump_bar t)
+                (=  (.  (=> (.  t   b))  x)  1)
+                (=  (.  (=> (.  t   b))  y)  2)
+                (=  (.  (=> (.  t   b))  z)  3)
+                (print_bar "t.b" (=> (.t b)))
+            )
+        )
+    )
+)

@@ -235,14 +235,40 @@ namespace yzg
     
     // R2L
     template <typename TT>
-    struct SimNode_R2L : SimNode {
+    struct SimNode_R2L : SimNode {      // rvalue -> lvalue
+        SimNode_R2L ( SimNode * s ) : subexpr(s) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ptr = subexpr->eval(context);
+            TT * pR = cast<TT *>::to(ptr);  // never null
+            return cast<TT>::from(*pR);
+        }
+        SimNode * subexpr;
+    };
+    
+    template <>
+    struct SimNode_R2L<void *> : SimNode {      // rvalue -> lvalue
+        using TT = void *;
         SimNode_R2L ( SimNode * s ) : subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
             TT * pR = cast<TT *>::to(ptr);
-            if ( !pR )
-                throw runtime_error("dereferencing nil pointer");
+            // never null, why bother testing?
+            // if ( pR == nullptr )
+            //  throw runtime_error("dereferencing nil pointer");
             return cast<TT>::from(*pR);
+        }
+        SimNode * subexpr;
+    };
+    
+    // P2R
+    struct SimNode_P2R : SimNode {      // ptr -> rvalue
+        SimNode_P2R ( SimNode * s ) : subexpr(s) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ptr = subexpr->eval(context);
+            void * p = cast<void *>::to(ptr);
+            if ( p == nullptr )
+                throw runtime_error("dereferencing nil pointer");
+            return ptr;
         }
         SimNode * subexpr;
     };

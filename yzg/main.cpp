@@ -210,10 +210,71 @@ void unit_test_array_of_structures ( const string & fn )
 #endif
 }
 
+struct bar { int x, y, z; };
+struct foo { bar a; bar * b; };
+
+// this is how we declare type
+template <>
+struct typeFactory<foo *> {
+    static TypeDeclPtr make(const Program & prg) {
+        return prg.makeStructureType("foo");
+    }
+};
+
+void dump_bar ( foo * pFoo )
+{
+    cout << "{" << hex << uint64_t(pFoo->b) << dec << "}\n";
+}
+
+void unit_test_ref ( const string & fn, int numIter = 100 )
+{
+    string str;
+#if REPORT_ERRORS
+    try {
+#endif
+        ifstream t(fn);
+        if ( !t.is_open() )
+            throw "can't open";
+        t.seekg(0, ios::end);
+        str.reserve(t.tellg());
+        t.seekg(0, ios::beg);
+        str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
+        auto node = read(str);
+        auto program = parse(node, [&](const ProgramPtr & prog){
+            prog->addExtern<decltype(dump_bar),dump_bar>("dump_bar");
+        });
+        cout << *program << "\n";
+        
+        Context ctx;
+        program->simulate(ctx);
+        
+        int fnTest = ctx.findFunction("test");
+        double simT = profileBlock(numIter, [&](){
+            ctx.eval(fnTest, nullptr);
+        });
+        
+        cout << fixed;
+        cout << fn << " took:" << simT << "\n";
+        
+        
+#if REPORT_ERRORS
+    } catch ( const read_error & error ) {
+        reportError ( str, error.at, error.what() );
+    } catch ( const parse_error & error ) {
+        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
+    } catch ( const semantic_error & error ) {
+        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
+    }
+#endif
+}
+
 int main(int argc, const char * argv[]) {
+    /*
     unit_test_array_of_structures("./test/profile_array_of_structures.yzg");
     unit_test_array_of_structures("./test/profile_array_of_structures_vec.yzg");
     unit_test("./test/try_catch.yzg");
     unit_test("./test/type_string.yzg", 1);
+    */
+    unit_test_ref("./test/test_ref.yzg", 1);
     return 0;
 }

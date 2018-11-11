@@ -15,7 +15,6 @@
                 (assert (<= a a)            "string <=")
                 (assert (> b a)             "string >")
                 (assert (>= b b)            "string >=")
-
             )
         )
     )

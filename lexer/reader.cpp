@@ -18,6 +18,7 @@ namespace yzg
 {
     Enum<Operator> g_opTable2 = {
         {   Operator::r2l,          "->"    },
+        {   Operator::p2r,          "=>"    },
         {   Operator::addEqu,       "+="    },
         {   Operator::subEqu,       "-="    },
         {   Operator::divEqu,       "/="    },

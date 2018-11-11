@@ -21,6 +21,7 @@ namespace yzg
         {   Type::tNull,        "null"   },
         {   Type::tBool,        "bool"  },
         {   Type::tString,      "string" },
+        {   Type::tPointer,     "pointer" },
         {   Type::tInt,         "int"   },
         {   Type::tInt2,        "int2"  },
         {   Type::tInt3,        "int3"  },
@@ -49,11 +50,15 @@ namespace yzg
     
     ostream& operator<< (ostream& stream, const TypeDecl & decl)
     {
-        if ( decl.baseType==Type::tStructure ) {
-            stream << decl.structType->name;
+        bool isPointer = decl.baseType==Type::tPointer;
+        const TypeDecl * baseTypeDecl = isPointer ? decl.ptrType.get() : &decl;
+        if ( baseTypeDecl->baseType==Type::tStructure ) {
+            stream << baseTypeDecl->structType->name;
         } else {
-            stream << to_string(decl.baseType);
+            stream << to_string(baseTypeDecl->baseType);
         }
+        if ( isPointer )
+            stream << " *";
         for ( auto d : decl.dim ) {
             stream << " " << d;
         }
@@ -112,6 +117,11 @@ namespace yzg
         return (baseType==Type::tVoid) && (dim.size()==0);
     }
     
+    bool TypeDecl::isPointer() const
+    {
+        return (baseType==Type::tPointer) && (dim.size()==0);
+    }
+    
     bool TypeDecl::isSimpleType() const
     {
         if (    baseType==Type::none
@@ -147,6 +157,7 @@ namespace yzg
     int TypeDecl::getBaseSizeOf() const
     {
         switch ( baseType ) {
+            case tPointer:  return sizeof(void *);
             case tString:   return sizeof(char *);
             case tBool:     return sizeof(bool);
             case tInt:      return sizeof(int);
@@ -193,7 +204,6 @@ namespace yzg
     {
         int size = 0;
         for ( const auto & fd : fields ) {
-            
             size += fd.type->getSizeOf();
         }
         return size;
@@ -344,22 +354,89 @@ namespace yzg
     SimNode * ExprR2L::simulate (Context & context) const
     {
         switch ( type->baseType ) {
-            case Type::tInt:    return context.makeNode<SimNode_R2L<int32_t>>(subexpr->simulate(context));
-            case Type::tUInt:   return context.makeNode<SimNode_R2L<uint32_t>>(subexpr->simulate(context));
-            case Type::tBool:   return context.makeNode<SimNode_R2L<bool>>(subexpr->simulate(context));
-            case Type::tString: return context.makeNode<SimNode_R2L<char *>>(subexpr->simulate(context));
-            case Type::tFloat:  return context.makeNode<SimNode_R2L<float>>(subexpr->simulate(context));
-            case Type::tFloat2: return context.makeNode<SimNode_R2L<float2>>(subexpr->simulate(context));
-            case Type::tFloat3: return context.makeNode<SimNode_R2L<float3>>(subexpr->simulate(context));
-            case Type::tFloat4: return context.makeNode<SimNode_R2L<float4>>(subexpr->simulate(context));
-            case Type::tInt2:   return context.makeNode<SimNode_R2L<int2>>(subexpr->simulate(context));
-            case Type::tInt3:   return context.makeNode<SimNode_R2L<int3>>(subexpr->simulate(context));
-            case Type::tInt4:   return context.makeNode<SimNode_R2L<int4>>(subexpr->simulate(context));
-            case Type::tUInt2:  return context.makeNode<SimNode_R2L<uint2>>(subexpr->simulate(context));
-            case Type::tUInt3:  return context.makeNode<SimNode_R2L<uint3>>(subexpr->simulate(context));
-            case Type::tUInt4:  return context.makeNode<SimNode_R2L<uint4>>(subexpr->simulate(context));
-            default:            throw runtime_error("can't dereference type");
+            case Type::tInt:        return context.makeNode<SimNode_R2L<int32_t>>(subexpr->simulate(context));
+            case Type::tUInt:       return context.makeNode<SimNode_R2L<uint32_t>>(subexpr->simulate(context));
+            case Type::tBool:       return context.makeNode<SimNode_R2L<bool>>(subexpr->simulate(context));
+            case Type::tString:     return context.makeNode<SimNode_R2L<char *>>(subexpr->simulate(context));
+            case Type::tPointer:    return context.makeNode<SimNode_R2L<void *>>(subexpr->simulate(context));
+            case Type::tFloat:      return context.makeNode<SimNode_R2L<float>>(subexpr->simulate(context));
+            case Type::tFloat2:     return context.makeNode<SimNode_R2L<float2>>(subexpr->simulate(context));
+            case Type::tFloat3:     return context.makeNode<SimNode_R2L<float3>>(subexpr->simulate(context));
+            case Type::tFloat4:     return context.makeNode<SimNode_R2L<float4>>(subexpr->simulate(context));
+            case Type::tInt2:       return context.makeNode<SimNode_R2L<int2>>(subexpr->simulate(context));
+            case Type::tInt3:       return context.makeNode<SimNode_R2L<int3>>(subexpr->simulate(context));
+            case Type::tInt4:       return context.makeNode<SimNode_R2L<int4>>(subexpr->simulate(context));
+            case Type::tUInt2:      return context.makeNode<SimNode_R2L<uint2>>(subexpr->simulate(context));
+            case Type::tUInt3:      return context.makeNode<SimNode_R2L<uint3>>(subexpr->simulate(context));
+            case Type::tUInt4:      return context.makeNode<SimNode_R2L<uint4>>(subexpr->simulate(context));
+            default:                throw runtime_error("can't dereference type");
         }
+    }
+    
+    // ExprP2R
+    
+    ExpressionPtr ExprP2R::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprP2R>(expr);
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
+    
+    void ExprP2R::log(ostream& stream, int depth) const
+    {
+        stream << "(=> " << *subexpr << ")";
+    }
+    
+    void ExprP2R::inferType(InferTypeContext & context)
+    {
+        subexpr->inferType(context);
+        subexpr = autoDereference(subexpr);
+        if ( !subexpr->type->isPointer() )
+            throw semantic_error("can only dereference pointer", at);
+        type = make_shared<TypeDecl>(*subexpr->type->ptrType);
+        type->rvalue = true;
+    }
+    
+    SimNode * ExprP2R::simulate (Context & context) const
+    {
+        return context.makeNode<SimNode_P2R>(subexpr->simulate(context));
+    }
+    
+    // ExprSizeOf
+    
+    ExpressionPtr ExprSizeOf::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprSizeOf>(expr);
+        if ( subexpr )
+            cexpr->subexpr = subexpr->clone();
+        if ( typeexpr )
+            cexpr->typeexpr = typeexpr;
+        return cexpr;
+    }
+    
+    void ExprSizeOf::log(ostream& stream, int depth) const
+    {
+        stream << "(sizeof ";
+        if ( subexpr )
+            stream << *subexpr;
+        else
+            stream << "(" << *typeexpr << ")";
+        stream << ")";
+    }
+    
+    void ExprSizeOf::inferType(InferTypeContext & context)
+    {
+        if ( subexpr ) {
+            subexpr->inferType(context);
+            typeexpr = make_shared<TypeDecl>(*subexpr->type);
+        }
+        type = make_shared<TypeDecl>(Type::tInt);
+    }
+    
+    SimNode * ExprSizeOf::simulate (Context & context) const
+    {
+        int32_t size = typeexpr->getSizeOf();
+        return context.makeNode<SimNode_ConstValue<int32_t>>(size);
     }
 
     // ExprAt
@@ -520,6 +597,7 @@ namespace yzg
                 variable = arg;
                 argument = true;
                 type = make_shared<TypeDecl>(*arg->type);
+                type->rvalue = arg->type->rvalue;
                 return;
             }
             argumentIndex ++;
@@ -1261,10 +1339,17 @@ namespace yzg
         }
         if ( tdecl->baseType==Type::tNull )
             throw parse_error("can't have null type", decl);
-        if ( decl->list.size()==(3+nFields) && decl->list[1]->isOperator(Operator::binand) ) {
-            tdecl->rvalue = true;
-        } else {
-            for ( int iDim = 1; iDim != decl->list.size() - 1 - nFields; ++iDim ) {
+        int iDim = 1;
+        if ( decl->list.size()==(3+nFields) ) {
+            if ( decl->list[1]->isOperator(Operator::mul) ) {
+                tdecl->ptrType = make_shared<TypeDecl>(*tdecl);
+                tdecl->baseType = Type::tPointer;
+                iDim ++;
+            } else if ( decl->list[1]->isOperator(Operator::binand) )
+                tdecl->rvalue = true;
+        }
+        if ( !tdecl->rvalue ) {
+            for ( ; iDim < decl->list.size() - 1 - nFields; ++iDim ) {
                 uint32_t dim = decl->getUnsigned(iDim);
                 if ( dim == -1U )
                     throw parse_error("expecting dimension", decl);
@@ -1315,7 +1400,7 @@ namespace yzg
                     if ( typeDecl->baseType==Type::tVoid )
                         throw parse_error("structure field can't be void", field);
                     if ( typeDecl->rvalue )
-                        throw parse_error("structure field can't be reference", field);
+                        throw parse_error("structure field can't be rvalue", field);
                     decl->fields.push_back({name, typeDecl, field.get()});
                 }
             }
@@ -1392,6 +1477,11 @@ namespace yzg
                         pR2L->at = decl.get();
                         pR2L->subexpr = parseExpression(decl->list[1], program);
                         return pR2L;
+                    } else if ( head->op==Operator::p2r ) {
+                        auto pP2R = make_shared<ExprP2R>();
+                        pP2R->at = decl.get();
+                        pP2R->subexpr = parseExpression(decl->list[1], program);
+                        return pP2R;
                     } else {
                         if ( !isUnaryOperator(head->op) )
                             throw parse_error("only unary operators can have 1 argument", decl);
@@ -1501,6 +1591,19 @@ namespace yzg
                 }
                 let->subexpr = parseExpression(decl->list.back(), program);
                 return let;
+            } else if ( head->isName("sizeof") ) {
+                auto pSizeOf = make_shared<ExprSizeOf>();
+                pSizeOf->at = decl.get();
+                if ( decl->list.size()==2 ) {
+                    try {
+                        pSizeOf->typeexpr = parseTypeDeclaratoin(decl->list[1], program);
+                    } catch ( const parse_error & ) {
+                        pSizeOf->subexpr = parseExpression(decl->list[1], program);
+                    }
+                } else {
+                    throw parse_error("return has too many operands", decl);
+                }
+                return pSizeOf;
             } else if ( head->isName() ) {
                 // function call
                 auto call = make_shared<ExprCall>();

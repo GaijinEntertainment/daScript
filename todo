@@ -1,10 +1,10 @@
 parser
-    support no initilization in local let, by verifying initialization for basic types?
     support initialization in global let
     support auto in let
     support late binding of default arguments
     support auto in function default arguments
     support auto in function arguments
+    support ` (`debug "hello" "world")
 
 misc
     support 'clone' for variables, redo name lookup upstream during cloning?
@@ -17,7 +17,5 @@ optimization \ ast massage
     flatten conditions
     support break and return to be last statement
 
-interpreter
-    implement sse policy for float2, float3, float4
-    delcare sse builtin operations
+
 

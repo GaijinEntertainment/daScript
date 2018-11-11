@@ -38,6 +38,7 @@
 		0458A5F82193F69900DEB8A0 /* interop.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = interop.h; sourceTree = "<group>"; };
 		0458A5F92194A3F800DEB8A0 /* cast.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = cast.h; sourceTree = "<group>"; };
 		04A1D3382196B07700099208 /* type_string.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = type_string.yzg; sourceTree = "<group>"; };
+		04A1D3392198AC7300099208 /* test_ref.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = test_ref.yzg; sourceTree = "<group>"; };
 		04A56F8921666FEB00DB3482 /* todo */ = {isa = PBXFileReference; lastKnownFileType = text; path = todo; sourceTree = "<group>"; };
 		04A56F8B2173B6E800DB3482 /* profile_array_of_structures.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = profile_array_of_structures.yzg; sourceTree = "<group>"; };
 		04A56F8D2174130400DB3482 /* simulate.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = simulate.cpp; sourceTree = "<group>"; };
@@ -146,6 +147,7 @@
 				0458A5F5218BD9B700DEB8A0 /* profile_array_of_structures_vec.yzg */,
 				0458A5F621910BE300DEB8A0 /* try_catch.yzg */,
 				04A1D3382196B07700099208 /* type_string.yzg */,
+				04A1D3392198AC7300099208 /* test_ref.yzg */,
 			);
 			path = test;
 			sourceTree = "<group>";

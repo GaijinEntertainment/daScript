@@ -23,3 +23,9 @@ $ any $ node $ "after $ is comment"
 (defun madd (int a) (int b ) (int c) (+ (* a b) c))
 
 
+
+(=  (.  (.  t   a)  x)  1)
+(=  (.  (.  t   a)  y)  2)
+(=  (.  (.  t   a)  z)  3)
+(print_bar "t.a" (.t a))
+(debug (. t b))(debug "\n")

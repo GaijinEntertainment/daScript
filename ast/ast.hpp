@@ -43,7 +43,8 @@ namespace yzg
         tFloat3,
         tFloat4,
         tString,
-        tStructure
+        tStructure,
+        tPointer
     };
     
     string to_string ( Type t );
@@ -64,6 +65,9 @@ namespace yzg
     class Program;
     typedef shared_ptr<Program> ProgramPtr;
     
+    class TypeDecl;
+    typedef shared_ptr<TypeDecl> TypeDeclPtr;
+    
     class TypeDecl
     {
     public:
@@ -80,6 +84,7 @@ namespace yzg
         bool isVoid() const;
         bool isRValue() const;
         bool isIndex() const;
+        bool isPointer() const;
         int getSizeOf() const;
         int getBaseSizeOf() const;
         int getStride() const;
@@ -89,14 +94,13 @@ namespace yzg
         vector<uint32_t>    dim;
         bool                rvalue = false;
         Node *              at = nullptr;
+        TypeDeclPtr         ptrType;
     };
-    typedef shared_ptr<TypeDecl> TypeDeclPtr;
     
     template <typename TT>  struct ToBasicType;
     template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
     template <typename QQ> struct ToBasicType<const QQ &> : ToBasicType<QQ> {};
-    template <typename QQ> struct ToBasicType<QQ *> : ToBasicType<QQ> {};
-    template <typename QQ> struct ToBasicType<const QQ *> : ToBasicType<QQ> {};
+    template<> struct ToBasicType<void *>   { enum { type = Type::tPointer }; };
     template<> struct ToBasicType<char *>   { enum { type = Type::tString }; };
     template<> struct ToBasicType<string>   { enum { type = Type::tString }; };
     template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
@@ -194,7 +198,7 @@ namespace yzg
         return cexpr;
     }
     
-    class ExprR2L : public Expression
+    class ExprR2L : public Expression   // rvalue to lvalue
     {
     public:
         virtual void log(ostream& stream, int depth) const override;
@@ -203,6 +207,29 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   subexpr;
+    };
+    
+    class ExprP2R : public Expression   // pointer to rvalue
+    {
+    public:
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr   subexpr;
+    };
+    
+    class ExprSizeOf : public Expression
+    {
+    public:
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr   subexpr;
+        TypeDeclPtr     typeexpr;
     };
     
     class ExprAt : public Expression

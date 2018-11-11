@@ -38,6 +38,7 @@ namespace yzg
         none,
     // 2-char
         r2l,
+        p2r,
         addEqu,
         subEqu,
         divEqu,
