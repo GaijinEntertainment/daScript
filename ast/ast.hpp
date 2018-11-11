@@ -76,13 +76,13 @@ namespace yzg
         TypeDecl(Type tt) : baseType(tt) {}
         friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
         string getMangledName() const;
-        bool isSameType ( const TypeDecl & decl, bool rvalueMatters = true ) const;
+        bool isSameType ( const TypeDecl & decl, bool refMatters = true ) const;
         bool isIteratorType ( const TypeDecl & decl ) const;
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;
         bool isArray() const;
         bool isVoid() const;
-        bool isRValue() const;
+        bool isRef() const;
         bool isIndex() const;
         bool isPointer() const;
         int getSizeOf() const;
@@ -92,7 +92,7 @@ namespace yzg
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
         vector<uint32_t>    dim;
-        bool                rvalue = false;
+        bool                ref = false;
         Node *              at = nullptr;
         TypeDeclPtr         ptrType;
     };
@@ -123,7 +123,7 @@ namespace yzg
         static TypeDeclPtr make(const Program &) {
             auto t = make_shared<TypeDecl>();
             t->baseType = Type(ToBasicType<TT>::type);
-            t->rvalue = is_reference<TT>::value;
+            t->ref = is_reference<TT>::value;
             return t;
         }
     };
@@ -198,7 +198,7 @@ namespace yzg
         return cexpr;
     }
     
-    class ExprR2L : public Expression   // rvalue to lvalue
+    class ExprRef2Value : public Expression   // &value to value
     {
     public:
         virtual void log(ostream& stream, int depth) const override;
@@ -209,7 +209,7 @@ namespace yzg
         ExpressionPtr   subexpr;
     };
     
-    class ExprP2R : public Expression   // pointer to rvalue
+    class ExprPtr2Ref : public Expression   // pointer to &value
     {
     public:
         virtual void log(ostream& stream, int depth) const override;
@@ -290,7 +290,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     public:
         string          name;
-        ExpressionPtr   rvalue;
+        ExpressionPtr   value;
         const Structure::FieldDeclaration * field = nullptr;
     };
     

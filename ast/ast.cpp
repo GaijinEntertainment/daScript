@@ -62,7 +62,7 @@ namespace yzg
         for ( auto d : decl.dim ) {
             stream << " " << d;
         }
-        if ( decl.rvalue )
+        if ( decl.ref )
             stream << " &";
         return stream;
     }
@@ -75,8 +75,8 @@ namespace yzg
         } else {
             ss << g_typeTable.find(baseType);
         }
-        if ( rvalue )
-            ss << "#rvalue";
+        if ( ref )
+            ss << "#ref";
         if ( dim.size() ) {
             for ( auto d : dim ) {
                 ss << "#" << d;
@@ -85,7 +85,7 @@ namespace yzg
         return ss.str();
     }
     
-    bool TypeDecl::isSameType ( const TypeDecl & decl, bool rvalueMatters ) const
+    bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters ) const
     {
         if ( baseType!=decl.baseType )
             return false;
@@ -93,8 +93,8 @@ namespace yzg
             return false;
         if ( dim!=decl.dim )
             return false;
-        if ( rvalueMatters )
-            if ( rvalue!=decl.rvalue )
+        if ( refMatters )
+            if ( ref!=decl.ref )
                 return false;
         return true;
     }
@@ -107,7 +107,7 @@ namespace yzg
             return false;
         if ( decl.dim.size() )
             return false;
-        if ( !decl.isRValue() )
+        if ( !decl.isRef() )
             return false;
         return true;
     }
@@ -144,9 +144,9 @@ namespace yzg
         return dim.size() != 0;
     }
     
-    bool TypeDecl::isRValue() const
+    bool TypeDecl::isRef() const
     {
-        return rvalue || baseType==Type::tStructure || dim.size();
+        return ref || baseType==Type::tStructure || dim.size();
     }
     
     bool TypeDecl::isIndex() const
@@ -302,12 +302,12 @@ namespace yzg
     
     ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr )
     {
-        if ( expr->type->isRValue() ) {
-            auto ar2l = make_shared<ExprR2L>();
+        if ( expr->type->isRef() ) {
+            auto ar2l = make_shared<ExprRef2Value>();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;
             ar2l->type = make_shared<TypeDecl>(*expr->type);
-            ar2l->type->rvalue = false;
+            ar2l->type->ref = false;
             return ar2l;
         } else {
             return expr;
@@ -326,80 +326,80 @@ namespace yzg
         return stream;
     }
     
-    // ExprR2L
+    // ExprRef2Value
     
-    ExpressionPtr ExprR2L::clone( const ExpressionPtr & expr ) const
+    ExpressionPtr ExprRef2Value::clone( const ExpressionPtr & expr ) const
     {
-        auto cexpr = clonePtr<ExprR2L>(expr);
+        auto cexpr = clonePtr<ExprRef2Value>(expr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
     
-    void ExprR2L::log(ostream& stream, int depth) const
+    void ExprRef2Value::log(ostream& stream, int depth) const
     {
         stream << "(-> " << *subexpr << ")";
     }
     
-    void ExprR2L::inferType(InferTypeContext & context)
+    void ExprRef2Value::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
-        if ( !subexpr->type->isRValue() )
-            throw semantic_error("can only dereference rvalue", at);
+        if ( !subexpr->type->isRef() )
+            throw semantic_error("can only dereference ref", at);
         if ( !subexpr->type->isSimpleType() )
             throw semantic_error("can only dereference an simple type", at);
         type = make_shared<TypeDecl>(*subexpr->type);
-        type->rvalue = false;
+        type->ref = false;
     }
     
-    SimNode * ExprR2L::simulate (Context & context) const
+    SimNode * ExprRef2Value::simulate (Context & context) const
     {
         switch ( type->baseType ) {
-            case Type::tInt:        return context.makeNode<SimNode_R2L<int32_t>>(subexpr->simulate(context));
-            case Type::tUInt:       return context.makeNode<SimNode_R2L<uint32_t>>(subexpr->simulate(context));
-            case Type::tBool:       return context.makeNode<SimNode_R2L<bool>>(subexpr->simulate(context));
-            case Type::tString:     return context.makeNode<SimNode_R2L<char *>>(subexpr->simulate(context));
-            case Type::tPointer:    return context.makeNode<SimNode_R2L<void *>>(subexpr->simulate(context));
-            case Type::tFloat:      return context.makeNode<SimNode_R2L<float>>(subexpr->simulate(context));
-            case Type::tFloat2:     return context.makeNode<SimNode_R2L<float2>>(subexpr->simulate(context));
-            case Type::tFloat3:     return context.makeNode<SimNode_R2L<float3>>(subexpr->simulate(context));
-            case Type::tFloat4:     return context.makeNode<SimNode_R2L<float4>>(subexpr->simulate(context));
-            case Type::tInt2:       return context.makeNode<SimNode_R2L<int2>>(subexpr->simulate(context));
-            case Type::tInt3:       return context.makeNode<SimNode_R2L<int3>>(subexpr->simulate(context));
-            case Type::tInt4:       return context.makeNode<SimNode_R2L<int4>>(subexpr->simulate(context));
-            case Type::tUInt2:      return context.makeNode<SimNode_R2L<uint2>>(subexpr->simulate(context));
-            case Type::tUInt3:      return context.makeNode<SimNode_R2L<uint3>>(subexpr->simulate(context));
-            case Type::tUInt4:      return context.makeNode<SimNode_R2L<uint4>>(subexpr->simulate(context));
+            case Type::tInt:        return context.makeNode<SimNode_Ref2Value<int32_t>>(subexpr->simulate(context));
+            case Type::tUInt:       return context.makeNode<SimNode_Ref2Value<uint32_t>>(subexpr->simulate(context));
+            case Type::tBool:       return context.makeNode<SimNode_Ref2Value<bool>>(subexpr->simulate(context));
+            case Type::tString:     return context.makeNode<SimNode_Ref2Value<char *>>(subexpr->simulate(context));
+            case Type::tPointer:    return context.makeNode<SimNode_Ref2Value<void *>>(subexpr->simulate(context));
+            case Type::tFloat:      return context.makeNode<SimNode_Ref2Value<float>>(subexpr->simulate(context));
+            case Type::tFloat2:     return context.makeNode<SimNode_Ref2Value<float2>>(subexpr->simulate(context));
+            case Type::tFloat3:     return context.makeNode<SimNode_Ref2Value<float3>>(subexpr->simulate(context));
+            case Type::tFloat4:     return context.makeNode<SimNode_Ref2Value<float4>>(subexpr->simulate(context));
+            case Type::tInt2:       return context.makeNode<SimNode_Ref2Value<int2>>(subexpr->simulate(context));
+            case Type::tInt3:       return context.makeNode<SimNode_Ref2Value<int3>>(subexpr->simulate(context));
+            case Type::tInt4:       return context.makeNode<SimNode_Ref2Value<int4>>(subexpr->simulate(context));
+            case Type::tUInt2:      return context.makeNode<SimNode_Ref2Value<uint2>>(subexpr->simulate(context));
+            case Type::tUInt3:      return context.makeNode<SimNode_Ref2Value<uint3>>(subexpr->simulate(context));
+            case Type::tUInt4:      return context.makeNode<SimNode_Ref2Value<uint4>>(subexpr->simulate(context));
             default:                throw runtime_error("can't dereference type");
         }
     }
     
-    // ExprP2R
+    // ExprPtr2Ref
     
-    ExpressionPtr ExprP2R::clone( const ExpressionPtr & expr ) const
+    ExpressionPtr ExprPtr2Ref::clone( const ExpressionPtr & expr ) const
     {
-        auto cexpr = clonePtr<ExprP2R>(expr);
+        auto cexpr = clonePtr<ExprPtr2Ref>(expr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
     
-    void ExprP2R::log(ostream& stream, int depth) const
+    void ExprPtr2Ref::log(ostream& stream, int depth) const
     {
         stream << "(=> " << *subexpr << ")";
     }
     
-    void ExprP2R::inferType(InferTypeContext & context)
+    void ExprPtr2Ref::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
         subexpr = autoDereference(subexpr);
         if ( !subexpr->type->isPointer() )
             throw semantic_error("can only dereference pointer", at);
         type = make_shared<TypeDecl>(*subexpr->type->ptrType);
-        type->rvalue = true;
+        type->ref = true;
     }
     
-    SimNode * ExprP2R::simulate (Context & context) const
+    SimNode * ExprPtr2Ref::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_P2R>(subexpr->simulate(context));
+        return context.makeNode<SimNode_Ptr2Ref>(subexpr->simulate(context));
     }
     
     // ExprSizeOf
@@ -457,8 +457,8 @@ namespace yzg
     {
         if ( typeexpr->baseType != Type::tStructure )
             throw semantic_error("can only new structures (for now)", typeexpr->at );
-        if ( typeexpr->rvalue )
-            throw semantic_error("can't new an rvalue", typeexpr->at);
+        if ( typeexpr->ref )
+            throw semantic_error("can't new a ref", typeexpr->at);
         if ( typeexpr->dim.size() )
             throw semantic_error("can only new single object", typeexpr->at );
         type = make_shared<TypeDecl>(Type::tPointer);
@@ -481,8 +481,8 @@ namespace yzg
     void ExprAt::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
-        if ( !subexpr->type->isRValue() )
-            throw semantic_error("can only index rvalue", subexpr->at);
+        if ( !subexpr->type->isRef() )
+            throw semantic_error("can only index ref", subexpr->at);
         if ( !subexpr->type->dim.size() )
             throw semantic_error("can only index arrays", subexpr->at);
         index->inferType(context);
@@ -490,7 +490,7 @@ namespace yzg
         if ( !index->type->isIndex() )
             throw semantic_error("index is int or uint", index->at);
         type = make_shared<TypeDecl>(*subexpr->type);
-        type->rvalue = true;
+        type->ref = true;
         type->dim.pop_back();
     }
     
@@ -559,7 +559,7 @@ namespace yzg
     {
         auto cexpr = clonePtr<ExprField>(expr);
         cexpr->name = name;
-        cexpr->rvalue = rvalue->clone();
+        cexpr->value = value->clone();
         cexpr->field = field;
         return cexpr;
     }
@@ -568,27 +568,27 @@ namespace yzg
     {
         logType(stream);
         stream << "(. ";
-        rvalue->log(stream,depth+1);
+        value->log(stream,depth+1);
         stream << " " << name << ")";
     }
     
     void ExprField::inferType(InferTypeContext & context)
     {
-        rvalue->inferType(context);
-        if ( rvalue->type->baseType!=Type::tStructure )
+        value->inferType(context);
+        if ( value->type->baseType!=Type::tStructure )
             throw semantic_error("expecting structure", at);
-        if ( rvalue->type->isArray() )
+        if ( value->type->isArray() )
             throw semantic_error("can't get field of array", at);
-        field = rvalue->type->structType->findField(name);
+        field = value->type->structType->findField(name);
         if ( !field )
             throw semantic_error("field " + name + " not found", at);
         type = make_shared<TypeDecl>(*field->type);
-        type->rvalue = rvalue->type->isRValue();
+        type->ref = value->type->isRef();
     }
     
     SimNode * ExprField::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Field>(rvalue->simulate(context), field->offset);
+        return context.makeNode<SimNode_Field>(value->simulate(context), field->offset);
     }
     
     // ExprVar
@@ -618,7 +618,7 @@ namespace yzg
                 variable = var;
                 local = true;
                 type = make_shared<TypeDecl>(*var->type);
-                type->rvalue = true;
+                type->ref = true;
                 return;
             }
         }
@@ -629,7 +629,7 @@ namespace yzg
                 variable = arg;
                 argument = true;
                 type = make_shared<TypeDecl>(*arg->type);
-                type->rvalue = arg->type->rvalue;
+                type->ref = arg->type->ref;
                 return;
             }
             argumentIndex ++;
@@ -640,7 +640,7 @@ namespace yzg
             throw semantic_error("can't locate variable " + name, at);
         variable = var;
         type = make_shared<TypeDecl>(*var->type);
-        type->rvalue = true;
+        type->ref = true;
     }
     
     SimNode * ExprVar::simulate (Context & context) const
@@ -697,7 +697,7 @@ namespace yzg
         if ( !func->builtIn )
             throw semantic_error("operator must point to built-in function every time", at);
         type = make_shared<TypeDecl>(*func->result);
-        if ( !func->arguments[0]->type->isRValue() )
+        if ( !func->arguments[0]->type->isRef() )
             subexpr = autoDereference(subexpr);
     }
     
@@ -743,9 +743,9 @@ namespace yzg
         if ( !func->builtIn )
             throw semantic_error("operator must point to built-in function every time", at);
         type = make_shared<TypeDecl>(*func->result);
-        if ( !func->arguments[0]->type->isRValue() )
+        if ( !func->arguments[0]->type->isRef() )
             left = autoDereference(left);
-        if ( !func->arguments[1]->type->isRValue() )
+        if ( !func->arguments[1]->type->isRef() )
             right = autoDereference(right);
     }
     
@@ -797,11 +797,11 @@ namespace yzg
             throw semantic_error("too many matching functions", at);
         func = functions[0];
         type = make_shared<TypeDecl>(*func->result);
-        if ( !func->arguments[0]->type->isRValue() )
+        if ( !func->arguments[0]->type->isRef() )
             subexpr = autoDereference(subexpr);
-        if ( !func->arguments[1]->type->isRValue() )
+        if ( !func->arguments[1]->type->isRef() )
             left = autoDereference(left);
-        if ( !func->arguments[2]->type->isRValue() )
+        if ( !func->arguments[2]->type->isRef() )
             right = autoDereference(right);
     }
     
@@ -844,7 +844,7 @@ namespace yzg
                 throw semantic_error("only void functions can skip return subexpression", at);
         }
         type = make_shared<TypeDecl>();
-        if ( subexpr && !context.func->result->isRValue() )
+        if ( subexpr && !context.func->result->isRef() )
             subexpr = autoDereference(subexpr);
     }
     
@@ -1076,15 +1076,15 @@ namespace yzg
                 auto init = var->init->simulate(context);
                 auto get = context.makeNode<SimNode_GetLocal>(var->stackTop);
                 int size = var->type->getSizeOf();
-                if ( var->init->type->isRValue() ) {
-                    copy = context.makeNode<SimNode_CopyRValue>(get, init, size);
+                if ( var->init->type->isRef() ) {
+                    copy = context.makeNode<SimNode_CopyRefValue>(get, init, size);
                 } else {
                     switch ( var->type->baseType ) {
-                        case Type::tBool:   copy = context.makeNode<SimNode_CopyLValue<bool>>(get, init);       break;
-                        case Type::tInt:    copy = context.makeNode<SimNode_CopyLValue<int32_t>>(get, init);    break;
-                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyLValue<uint32_t>>(get, init);   break;
-                        case Type::tFloat:  copy = context.makeNode<SimNode_CopyLValue<float>>(get, init);      break;
-                        case Type::tString: copy = context.makeNode<SimNode_CopyLValue<char *>>(get, init);     break;
+                        case Type::tBool:   copy = context.makeNode<SimNode_CopyValue<bool>>(get, init);       break;
+                        case Type::tInt:    copy = context.makeNode<SimNode_CopyValue<int32_t>>(get, init);    break;
+                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyValue<uint32_t>>(get, init);   break;
+                        case Type::tFloat:  copy = context.makeNode<SimNode_CopyValue<float>>(get, init);      break;
+                        case Type::tString: copy = context.makeNode<SimNode_CopyValue<char *>>(get, init);     break;
                         default:
                             throw runtime_error("unsupported? can't assign initial value");
                     }
@@ -1153,7 +1153,7 @@ namespace yzg
             arguments.push_back(newArg);
         }
         for ( size_t iA = 0; iA != arguments.size(); ++iA )
-            if ( !func->arguments[iA]->type->isRValue() )
+            if ( !func->arguments[iA]->type->isRef() )
                 arguments[iA] = autoDereference(arguments[iA]);
     }
     
@@ -1286,7 +1286,7 @@ namespace yzg
                 for ( auto ai = 0; ai != types.size(); ++ai ) {
                     auto & argType = pFn->arguments[ai]->type;
                     auto & passType = types[ai];
-                    if ( (argType->isRValue() && !passType->isRValue()) || !argType->isSameType(*passType, false) ) {
+                    if ( (argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false) ) {
                         typesCompatible = false;
                         break;
                     }
@@ -1314,6 +1314,7 @@ namespace yzg
             gvar.name = context.allocateName(pvar->name);
             gvar.size = pvar->type->getSizeOf();
             void * data = context.allocate(gvar.size);
+            memset(data, 0, gvar.size);
             gvar.value = cast<void *>::from(data);
         }
         context.totalVariables = (int) globals.size();
@@ -1378,9 +1379,9 @@ namespace yzg
                 tdecl->baseType = Type::tPointer;
                 iDim ++;
             } else if ( decl->list[1]->isOperator(Operator::binand) )
-                tdecl->rvalue = true;
+                tdecl->ref = true;
         }
-        if ( !tdecl->rvalue ) {
+        if ( !tdecl->ref ) {
             for ( ; iDim < decl->list.size() - 1 - nFields; ++iDim ) {
                 uint32_t dim = decl->getUnsigned(iDim);
                 if ( dim == -1U )
@@ -1431,8 +1432,8 @@ namespace yzg
                     auto typeDecl = parseTypeDeclaratoin(field, program);
                     if ( typeDecl->baseType==Type::tVoid )
                         throw parse_error("structure field can't be void", field);
-                    if ( typeDecl->rvalue )
-                        throw parse_error("structure field can't be rvalue", field);
+                    if ( typeDecl->ref )
+                        throw parse_error("structure field can't be ref", field);
                     decl->fields.push_back({name, typeDecl, field.get()});
                 }
             }
@@ -1505,12 +1506,12 @@ namespace yzg
                     throw parse_error("naked operator", decl);
                 if ( nOp==1 ) {
                     if ( head->op==Operator::r2l ) {
-                        auto pR2L = make_shared<ExprR2L>();
+                        auto pR2L = make_shared<ExprRef2Value>();
                         pR2L->at = decl.get();
                         pR2L->subexpr = parseExpression(decl->list[1], program);
                         return pR2L;
                     } else if ( head->op==Operator::p2r ) {
-                        auto pP2R = make_shared<ExprP2R>();
+                        auto pP2R = make_shared<ExprPtr2Ref>();
                         pP2R->at = decl.get();
                         pP2R->subexpr = parseExpression(decl->list[1], program);
                         return pP2R;
@@ -1536,7 +1537,7 @@ namespace yzg
                             throw parse_error("field needs to be specified as a name", decl);
                         auto pDot = make_shared<ExprField>();
                         pDot->at = decl.get();
-                        pDot->rvalue = parseExpression(decl->list[1], program);
+                        pDot->value = parseExpression(decl->list[1], program);
                         pDot->name = decl->list[2]->text;
                         return pDot;
                     } else {
@@ -1617,7 +1618,7 @@ namespace yzg
                     auto pVar = parseVariable(vdecl, program, false, true);
                     if ( let->find (pVar->name) )
                         throw parse_error("variable already declared", decl);
-                    if ( pVar->type->rvalue )
+                    if ( pVar->type->ref )
                         throw parse_error("local variable can't be reference", decl);
                     let->variables.push_back(pVar);
                 }

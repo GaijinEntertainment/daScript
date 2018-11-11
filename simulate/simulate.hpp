@@ -121,22 +121,22 @@ namespace yzg
     
     // field
     struct SimNode_Field : SimNode {
-        SimNode_Field ( SimNode * rv, uint32_t of ) : rvalue(rv), offset(of) {}
+        SimNode_Field ( SimNode * rv, uint32_t of ) : value(rv), offset(of) {}
         virtual __m128 eval ( Context & context ) override {
-            __m128 rv = rvalue->eval(context);
+            __m128 rv = value->eval(context);
             char * prv = cast<char *>::to(rv);
             if ( !prv )
                 throw runtime_error("dereferencing nil pointer");
             return cast<char *>::from( prv + offset );
         }
-        SimNode *   rvalue;
+        SimNode *   value;
         uint32_t    offset;
     };
     
     // AT (INDEX)
     struct SimNode_At : SimNode {
         virtual __m128 eval ( Context & context ) override {
-            char * pValue = cast<char *>::to(rvalue->eval(context));
+            char * pValue = cast<char *>::to(value->eval(context));
             uint32_t idx = cast<uint32_t>::to(index->eval(context));
             if ( idx >= range )
                 throw runtime_error("index out of range");
@@ -144,8 +144,8 @@ namespace yzg
             
         }
         SimNode_At ( SimNode * rv, SimNode * idx, uint32_t strd, uint32_t rng )
-            : rvalue(rv), index(idx), stride(strd), range(rng) {}
-        SimNode * rvalue, * index;
+            : value(rv), index(idx), stride(strd), range(rng) {}
+        SimNode * value, * index;
         uint32_t  stride, range;
     };
     
@@ -233,10 +233,10 @@ namespace yzg
         int index;
     };
     
-    // R2L
+    // DEREFERENCE
     template <typename TT>
-    struct SimNode_R2L : SimNode {      // rvalue -> lvalue
-        SimNode_R2L ( SimNode * s ) : subexpr(s) {}
+    struct SimNode_Ref2Value : SimNode {      // &value -> value
+        SimNode_Ref2Value ( SimNode * s ) : subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
             TT * pR = cast<TT *>::to(ptr);  // never null
@@ -245,24 +245,9 @@ namespace yzg
         SimNode * subexpr;
     };
     
-    template <>
-    struct SimNode_R2L<void *> : SimNode {      // rvalue -> lvalue
-        using TT = void *;
-        SimNode_R2L ( SimNode * s ) : subexpr(s) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 ptr = subexpr->eval(context);
-            TT * pR = cast<TT *>::to(ptr);
-            // never null, why bother testing?
-            // if ( pR == nullptr )
-            //  throw runtime_error("dereferencing nil pointer");
-            return cast<TT>::from(*pR);
-        }
-        SimNode * subexpr;
-    };
-    
-    // P2R
-    struct SimNode_P2R : SimNode {      // ptr -> rvalue
-        SimNode_P2R ( SimNode * s ) : subexpr(s) {}
+    // POINTER TO REFERENCE (CAST)
+    struct SimNode_Ptr2Ref : SimNode {      // ptr -> &value
+        SimNode_Ptr2Ref ( SimNode * s ) : subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
             void * p = cast<void *>::to(ptr);
@@ -294,9 +279,9 @@ namespace yzg
         __m128 value;
     };
     
-    // COPY R-VALUE
-    struct SimNode_CopyRValue : SimNode {
-        SimNode_CopyRValue(SimNode * ll, SimNode * rr, int sz) : l(ll), r(rr), size(sz) {};
+    // COPY REFERENCE VALUE
+    struct SimNode_CopyRefValue : SimNode {
+        SimNode_CopyRefValue(SimNode * ll, SimNode * rr, int sz) : l(ll), r(rr), size(sz) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
             __m128 rr = r->eval(context);
@@ -309,10 +294,10 @@ namespace yzg
         int size;
     };
     
-    // COPY L-VALUE
+    // COPY VALUE
     template <typename TT>
-    struct SimNode_CopyLValue : SimNode {
-        SimNode_CopyLValue(SimNode * ll, SimNode * rr) : l(ll), r(rr) {};
+    struct SimNode_CopyValue : SimNode {
+        SimNode_CopyValue(SimNode * ll, SimNode * rr) : l(ll), r(rr) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
             __m128 rr = r->eval(context);
