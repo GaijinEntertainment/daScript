@@ -27,16 +27,16 @@ namespace yzg
     
     struct GlobalVariable
     {
-        char *  name;
-        __m128  value;
-        size_t  size;
+        char *      name;
+        __m128      value;
+        uint32_t    size;
     };
     
     struct SimFunction
     {
         char *      name;
         SimNode *   code;
-        size_t      stackSize;
+        uint32_t    stackSize;
     };
     
     struct SimNode
@@ -52,11 +52,12 @@ namespace yzg
         friend class SimNode_GetArgument;
         friend class SimNode_TryCatch;
         friend class SimNode_Call;
+        friend class SimNode_InitLocal;
     public:
         Context();
         ~Context();
         
-        __forceinline void * allocate ( size_t size ) {
+        __forceinline void * allocate ( uint32_t size ) {
             size = (size + 0x0f) & ~0x0f;
             if ( linearAllocator - linearAllocatorBase + size > linearAllocatorSize )
                 throw runtime_error("out of linear allocator space");
@@ -67,7 +68,7 @@ namespace yzg
         
         __forceinline char * allocateName ( const string & name ) {
             auto size = name.length() + 1;
-            char * str = (char *) allocate(size+1);
+            char * str = (char *) allocate(uint32_t(size+1));
             memcpy ( str, name.c_str(), size );
             return str;
         }
@@ -208,11 +209,21 @@ namespace yzg
     
     // LOCAL VARIABLE "GET"
     struct SimNode_GetLocal : SimNode {
-        SimNode_GetLocal(size_t sp) : stackTop(sp) {}
+        SimNode_GetLocal(uint32_t sp) : stackTop(sp) {}
         virtual __m128 eval ( Context & context ) override {
             return cast<char *>::from(context.stackTop + stackTop);
         }
-        size_t stackTop;
+        uint32_t stackTop;
+    };
+    
+    // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
+    struct SimNode_InitLocal : SimNode {
+        SimNode_InitLocal(uint32_t sp, uint32_t sz) : stackTop(sp), size(sz) {}
+        virtual __m128 eval ( Context & context ) override {
+            memset(context.stackTop + stackTop, 0, size);
+            return _mm_setzero_ps();
+        }
+        uint32_t stackTop, size;
     };
     
     // ARGUMENT VARIABLE "GET"
@@ -317,7 +328,7 @@ namespace yzg
             return _mm_setzero_ps();
         }
         SimNode ** list = nullptr;
-        int total = 0;
+        uint32_t total = 0;
     };
     
     // LET

@@ -165,7 +165,7 @@ namespace yzg
         ExpressionPtr   init;
         Node *          at = nullptr;
         int             index = -1;
-        size_t          stackTop = 0;
+        uint32_t        stackTop = 0;
     };
     
     class Expression
@@ -176,7 +176,7 @@ namespace yzg
             ProgramPtr          program;
             FunctionPtr         func;
             vector<VariablePtr> local;
-            size_t              stackTop = 0;
+            uint32_t            stackTop = 0;
         };
     public:
         friend ostream& operator<< (ostream& stream, const Expression & func);
@@ -419,7 +419,6 @@ namespace yzg
     public:
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
-        int                     totalInit = 0;
     };
     
     class ExprCall : public Expression
@@ -496,7 +495,7 @@ namespace yzg
         ExpressionPtr       body;
         bool                builtIn = false;
         int                 index = -1;
-        size_t              totalStackSize = 0;
+        uint32_t            totalStackSize = 0;
     };
     
     class BuiltInFunction : public Function

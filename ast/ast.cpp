@@ -1043,7 +1043,6 @@ namespace yzg
     {
         auto sp = context.stackTop;
         auto sz = context.local.size();
-        totalInit = 0;
         for ( auto & var : variables ) {
             context.local.push_back(var);
             if ( var->init ) {
@@ -1051,7 +1050,6 @@ namespace yzg
                 if ( !var->type->isSameType(*var->init->type,false) )
                     throw semantic_error("variable initialization type mismatch", var->at );
                 var->init = autoDereference(var->init);
-                totalInit ++;
             }
             var->stackTop = context.stackTop;
             context.stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
@@ -1067,15 +1065,15 @@ namespace yzg
     SimNode * ExprLet::simulate (Context & context) const
     {
         auto let = context.makeNode<SimNode_Let>();
-        let->total = totalInit;
+        let->total = (uint32_t) variables.size();
         let->list = (SimNode **) context.allocate(let->total * sizeof(SimNode*));
         int vi = 0;
         for ( auto & var : variables ) {
+            int size = var->type->getSizeOf();
             if ( var->init ) {
                 SimNode * copy = nullptr;
                 auto init = var->init->simulate(context);
                 auto get = context.makeNode<SimNode_GetLocal>(var->stackTop);
-                int size = var->type->getSizeOf();
                 if ( var->init->type->isRef() ) {
                     copy = context.makeNode<SimNode_CopyRefValue>(get, init, size);
                 } else {
@@ -1090,6 +1088,8 @@ namespace yzg
                     }
                 }
                 let->list[vi++] = copy;
+            } else {
+                let->list[vi++] = context.makeNode<SimNode_InitLocal>(var->stackTop, var->type->getSizeOf());
             }
         }
         let->subexpr = subexpr->simulate(context);
@@ -1307,7 +1307,7 @@ namespace yzg
     
     void Program::simulate ( Context & context )
     {
-        context.globalVariables = (GlobalVariable *) context.allocate( globals.size()*sizeof(GlobalVariable) );
+        context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(globals.size()*sizeof(GlobalVariable)) );
         for ( auto & it : globals ) {
             auto pvar = it.second;
             auto & gvar = context.globalVariables[pvar->index];
