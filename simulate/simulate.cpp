@@ -13,13 +13,14 @@ namespace yzg
     Context::Context()
     {
         linearAllocator = linearAllocatorBase = (char *) _mm_malloc(linearAllocatorSize, 16);
-        stackTop = (char *) _mm_malloc(stackSize, 16);
+        stack = (char *) _mm_malloc(stackSize, 16);
+        stackTop = stack + stackSize;
     }
     
     Context::~Context()
     {
         _mm_free(linearAllocatorBase);
-        _mm_free(stackTop);
+        _mm_free(stack);
     }
     
     int Context::findFunction ( const char * name ) const
@@ -40,6 +41,22 @@ namespace yzg
             }
         }
         return -1;
+    }
+    
+    void Context::stackWalk()
+    {
+        char * sp = stackTop;
+        while ( sp>=stackTop && sp <(stack+stackSize) ) {
+            SimNode_Call * call = *(SimNode_Call **) sp;
+            if ( call ) {
+                cout << functions[call->fnIndex].name << "\n";
+                sp += functions[call->fnIndex].stackSize;
+            } else {
+                cout << "external_function_call\n";
+                return;
+            }
+        }
+        cout << "corrupt stack\n";
     }
     
     string unescapeString ( const string & input )

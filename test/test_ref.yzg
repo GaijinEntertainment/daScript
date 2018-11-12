@@ -13,14 +13,24 @@
     (bar *  b)
 )
 
+(defun (void print_xyz)
+        (int x)
+        (int y)
+        (int z)
+        (
+            (debug "x = ")(debug  x)(debug "\n")
+            (debug "y = ")(debug  y)(debug "\n")
+            (debug "z = ")(debug  z)(debug "\n")
+            (stackwalk)
+        )
+)
+
 (defun (void print_bar)
     (string prefix)
     (bar t)
     (
         (debug prefix)(debug "\n")
-        (debug "x = ")(debug  (. t x))(debug "\n")
-        (debug "y = ")(debug  (. t y))(debug "\n")
-        (debug "z = ")(debug  (. t z))(debug "\n")
+        (print_xyz (. t x) (. t y) (. t z))
     )
 )
 

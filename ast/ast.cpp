@@ -1246,6 +1246,7 @@ namespace yzg
             context.program = shared_from_this();
             context.func = fit.second;
             if ( !context.func->builtIn ) {
+                context.func->totalStackSize = context.stackTop = sizeof(SimNode *); // TODO: allocate room for 'result' too
                 context.func->index = totalFunctions ++;
                 for ( auto & arg : context.func->arguments ) {
                     if ( arg->init ) {

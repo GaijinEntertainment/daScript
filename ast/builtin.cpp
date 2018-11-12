@@ -24,6 +24,7 @@ namespace yzg
     {
         addExtern<decltype(builtin_assert),builtin_assert>("assert");
         addExtern<decltype(builtin_assert2),builtin_assert2>("assert");
+        addBuiltIn(make_shared<BuiltInFn<SimNode_StackWalk,void>>("stackwalk", *this));
     }
     
     // basic operations

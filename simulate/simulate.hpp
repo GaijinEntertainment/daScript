@@ -85,17 +85,23 @@ namespace yzg
         
         __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
             linearAllocator = linearAllocatorExecuteBase;
-            return call(fnIndex, args);
+            stackTop = stack + stackSize;
+            return call(fnIndex, args, nullptr);
         }
         
+        void stackWalk();
+        
     protected:
-        __forceinline __m128 call ( int fnIndex, __m128 * args ) {
+        __forceinline __m128 call ( int fnIndex, __m128 * args, SimNode * THAT ) {
             auto & fn = functions[fnIndex];
             // PUSH
             __m128 * pushArg = arguments;
             char * pushStack = stackTop;
             arguments = args;
-            stackTop += fn.stackSize;   // TODO: check for stack overflow
+            stackTop -= fn.stackSize;
+            if ( stack - stackTop > stackSize )
+                throw runtime_error("stack overflow");
+            *(SimNode **)stackTop = THAT;
             // CALL
             __m128 result = fn.code->eval(*this);
             // POP
@@ -111,6 +117,7 @@ namespace yzg
         char * linearAllocatorExecuteBase = nullptr;
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
+        char * stack = nullptr;
         char * stackTop = nullptr;
         int stackSize = 16*1024;
         __m128 * arguments = nullptr;
@@ -159,7 +166,7 @@ namespace yzg
         }
         virtual __m128 eval ( Context & context ) override {
             evalArgs(context);
-            return context.call(fnIndex, argValues);
+            return context.call(fnIndex, argValues, this);
         }
         int fnIndex;
         int nArguments;
@@ -196,13 +203,21 @@ namespace yzg
         }
     };
     
+    // "STACKWALK"
+    struct SimNode_StackWalk : SimNode {
+        virtual __m128 eval ( Context & context ) override {
+            context.stackWalk();
+            return _mm_setzero_ps();
+        }
+    };
+    
     // "DEBUG"
     template <typename TT>
     struct SimNode_Debug : SimNode_Call {
         virtual __m128 eval ( Context & context ) override {
             __m128 res = arguments[0]->eval(context);
             auto value = cast<TT>::to(res);
-            cout << value;
+            cout << value;  // TODO: support custom printers
             return res;
         }
     };

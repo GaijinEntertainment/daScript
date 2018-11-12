@@ -7,18 +7,24 @@ parser
     support ` (`debug "hello" "world")
 
 misc
+    support return
+    basic type - compare pointers if specified, cast unspecified pointers transparently
+    points == null and pointer != null
     support 'clone' for variables, redo name lookup upstream during cloning?
     simplify builtin initialization
     support multi-dimensional array foreach
-
+    support multi-dimensional array new (or regular array new)
     assert2 - need node, so that if ( !a ) b and not a,b, if
     &&, || - need nodes
+    support (unsafe ?)
 
 optimization \ ast massage
     flatten nested blocks
     eliminate dead code (after break and after return)
     flatten conditions
     support break and return to be last statement
+    simplify initialization of local variables
+    propagate local variable initialization on top of the function
 
 
 
