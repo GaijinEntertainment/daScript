@@ -127,12 +127,13 @@ namespace yzg
         char * pA = (char *) pX;
         int stride = getTypeBaseSize(info);
         int count = getDimSize(info);
+        ss << "(";
         for ( int i=0; i!=count; ++i ) {
-            ss << "(";
+            if ( i ) ss << " ";
             debug_value(ss, pA, info, false);
-            ss << ")";
             pA += stride;
         }
+        ss << ")";
     }
     
     void debug_value ( stringstream & ss, void * pX, TypeInfo * info, bool useDim )

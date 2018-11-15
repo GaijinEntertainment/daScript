@@ -34,6 +34,17 @@
     )
 )
 
+(defun (void print_array)
+    (int 4 a)
+    (
+        (debug (@ a 0)) (debug "\n")
+        (debug (@ a 1)) (debug "\n")
+        (debug (@ a 2)) (debug "\n")
+        (debug (@ a 3)) (debug "\n")
+        (stackwalk)
+    )
+)
+
 (defun (void test)
     (
         (let
@@ -60,6 +71,13 @@
                 (=  (.  (=> (.  t   b))  y)  5)
                 (=  (.  (=> (.  t   b))  z)  6)
                 (print_bar "t.b" (=> (.t b)))
+            )
+        )
+        (let
+            (int 4  a)
+            (
+                (=  (@ a 0) 1)  (=  (@ a 1) 2)  (=  (@ a 2) 3)  (=  (@ a 3) 4)
+                (print_array a)
             )
         )
     )
