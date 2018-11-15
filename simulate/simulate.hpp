@@ -91,6 +91,8 @@ namespace yzg
         __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
             linearAllocator = linearAllocatorExecuteBase;
             stackTop = stack + stackSize;
+            evalIndex = fnIndex;
+            evalArgs = args;
             return call(fnIndex, args, nullptr);
         }
         
@@ -128,6 +130,8 @@ namespace yzg
         __m128 * arguments = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
+        int evalIndex = -1;
+        __m128 * evalArgs = nullptr;
     };
     
     // field

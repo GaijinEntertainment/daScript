@@ -45,24 +45,33 @@ namespace yzg
     
     void Context::stackWalk()
     {
+        cout << "\nCALL STACK:\n";
         char * sp = stackTop;
         while ( sp>=stackTop && sp <(stack+stackSize) ) {
             SimNode_Call * call = *(SimNode_Call **) sp;
             if ( call ) {
                 cout << functions[call->fnIndex].name << "\n";
-                sp += functions[call->fnIndex].stackSize;
-            } else {
-                cout << "external_function_call\n";
-                return;
-            }
-            if ( FuncInfo * info = functions[call->fnIndex].debug ) {
-                for ( uint32_t i = 0; i != info->argsSize; ++i ) {
-                    cout << "\t" << info->args[i]->name
+                if ( FuncInfo * info = functions[call->fnIndex].debug ) {
+                    for ( uint32_t i = 0; i != info->argsSize; ++i ) {
+                        cout << "\t" << info->args[i]->name
                         << " : " << debug_type(info->args[i])
                         << " = \t" << debug_value(call->argValues[i], info->args[i]) << "\n";
+                    }
                 }
+                sp += functions[call->fnIndex].stackSize;
+            } else {
+                cout << functions[evalIndex].name << "\n";
+                if ( FuncInfo * info = functions[evalIndex].debug ) {
+                    for ( uint32_t i = 0; i != info->argsSize; ++i ) {
+                        cout << "\t" << info->args[i]->name
+                        << " : " << debug_type(info->args[i])
+                        << " = \t" << debug_value(evalArgs[i], info->args[i]) << "\n";
+                    }
+                }
+                cout << "\n";
+                return;
             }
         }
-        cout << "corrupt stack\n";
+        cout << "!!! corrupt stack !!!\n\n";
     }
 }
