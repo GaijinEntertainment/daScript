@@ -69,8 +69,6 @@ namespace yzg
         }
     }
     
-    int getTypeSize ( TypeInfo * info );
-    
     int getStructSize ( StructInfo * info )
     {
         int size = 0;
@@ -197,6 +195,13 @@ namespace yzg
     {
         stringstream ss;
         debug_value(ss, x, info);
+        return ss.str();
+    }
+    
+    string debug_value ( void * pX, TypeInfo * info )
+    {
+        stringstream ss;
+        debug_value(ss, pX, info);
         return ss.str();
     }
     

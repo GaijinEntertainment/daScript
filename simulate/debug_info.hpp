@@ -74,7 +74,11 @@ namespace yzg
     Type nameToBasicType(const string & name);
     
     int getTypeBaseSize ( Type type );
+    int getTypeBaseSize ( TypeInfo * info );
+    int getDimSize ( TypeInfo * info );
+    int getTypeSize ( TypeInfo * info );
     
+    string debug_value ( void * pX, TypeInfo * info );
     string debug_value ( __m128 value, TypeInfo * info );
     string debug_type ( TypeInfo * info );
 }
