@@ -1208,7 +1208,7 @@ namespace yzg
             context.program = shared_from_this();
             context.func = fit.second;
             if ( !context.func->builtIn ) {
-                context.func->totalStackSize = context.stackTop = sizeof(SimNode *); // TODO: allocate room for 'result' too
+                context.func->totalStackSize = context.stackTop = sizeof(SimNode *) + sizeof(__m128 *); // TODO: allocate room for 'result' too
                 context.func->index = totalFunctions ++;
                 for ( auto & arg : context.func->arguments ) {
                     if ( arg->init ) {
@@ -1271,6 +1271,8 @@ namespace yzg
     FuncInfo * Program::makeFunctionDebugInfo ( Context & context, const Function & fn )
     {
         FuncInfo * fni = context.makeNode<FuncInfo>();
+        fni->name = context.allocateName(fn.name);
+        fni->stackSize = fn.totalStackSize;
         fni->argsSize = (uint32_t) fn.arguments.size();
         fni->args = (VarInfo **) context.allocate(sizeof(VarInfo *) * fni->argsSize);
         for ( uint32_t i=0; i!=fni->argsSize; ++i ) {

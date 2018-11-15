@@ -96,22 +96,32 @@ namespace yzg
             linearAllocator = linearAllocatorExecuteBase;
             stackTop = stack + stackSize;
         }
-    
-        __forceinline __m128 call ( int fnIndex, __m128 * args, SimNode * THAT = nullptr ) {
+        
+        __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
+            // we are abusing the fact that node pointers are aligned
+            SimNode * fakeNode = (SimNode *) ( uint64_t(functions[fnIndex].debug) | 1 );
+            return call(fnIndex, args, fakeNode);
+        }
+
+    protected:
+        
+        __forceinline __m128 * abiArguments() {
+            return *(__m128 **)stackTop;
+        }
+        
+        __forceinline __m128 call ( int fnIndex, __m128 * args, SimNode * THAT ) {
             auto & fn = functions[fnIndex];
             // PUSH
-            __m128 * pushArg = arguments;
             char * pushStack = stackTop;
-            arguments = args;
             stackTop -= fn.stackSize;
             if ( stack - stackTop > stackSize )
                 throw runtime_error("stack overflow");
-            *(SimNode **)stackTop = THAT;
+            *(__m128 **)(stackTop) = args;
+            *(SimNode **)(stackTop + sizeof(__m128 *)) = THAT;
             // CALL
             __m128 result = fn.code->eval(*this);
             // POP
             stackTop = pushStack;
-            arguments = pushArg;
             return result;
         }
         
@@ -125,7 +135,6 @@ namespace yzg
         char * stack = nullptr;
         char * stackTop = nullptr;
         int stackSize = 16*1024;
-        __m128 * arguments = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
         const string * debugInput = nullptr;
@@ -257,7 +266,7 @@ namespace yzg
     struct SimNode_GetArgument : SimNode {
         SimNode_GetArgument ( long at, int i ) : SimNode(at), index(i) {}
         virtual __m128 eval ( Context & context ) override {
-            return context.arguments[index];
+            return context.abiArguments()[index];
         }
         int index;
     };
@@ -404,9 +413,7 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             try {
                 auto sp = context.stackTop;
-                auto ar = context.arguments;
                 try_this->eval(context);
-                context.arguments = ar;
                 context.stackTop = sp;
             } catch ( const runtime_error & err ) {
                 catch_that->eval(context);

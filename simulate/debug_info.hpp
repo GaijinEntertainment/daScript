@@ -66,8 +66,10 @@ namespace yzg
     
     struct FuncInfo
     {
+        char *      name;
         VarInfo **  args;
         uint32_t    argsSize;
+        uint32_t    stackSize;
     };
     
     string to_string ( Type t );

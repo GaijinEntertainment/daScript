@@ -90,7 +90,7 @@ void unit_test ( const string & fn, int numIter = 100 )
         int fnTest = ctx.findFunction("test");
         double simT = profileBlock(numIter, [&](){
             ctx.restart();
-            ctx.call(fnTest, nullptr);
+            ctx.eval(fnTest, nullptr);
         });
         
         cout << fixed;
@@ -131,7 +131,7 @@ void unit_test_array_of_structures ( const string & fn )
         
         Context ctx(&str);
         program->simulate(ctx);
-        ctx.call(ctx.findFunction("init"), nullptr);
+        ctx.eval(ctx.findFunction("init"), nullptr);
         
         // NOTE: this demonstrates particular shader
         Object * objects = cast<Object *>::to ( ctx.getVariable( ctx.findVariable("objects") ) );
@@ -149,7 +149,7 @@ void unit_test_array_of_structures ( const string & fn )
         int fnTest = ctx.findFunction("test");
         double simT = profileBlock(numIter, [&](){
             ctx.restart();
-            ctx.call(fnTest, nullptr);
+            ctx.eval(fnTest, nullptr);
         });
         
         double cT = profileBlock(numIter, [&](){
@@ -159,7 +159,7 @@ void unit_test_array_of_structures ( const string & fn )
         int fniTest = ctx.findFunction("interopTest");
         double intT = profileBlock(numIter, [&](){
             ctx.restart();
-            ctx.call(fniTest, nullptr);
+            ctx.eval(fniTest, nullptr);
         });
 
         int updateFn = ctx.findFunction("update");
@@ -167,20 +167,20 @@ void unit_test_array_of_structures ( const string & fn )
             ctx.restart();
             for ( int oi=0; oi != 10000; ++oi ) {
                 __m128 args[1] = { cast<Object *>::from(objects+oi) };
-                ctx.call(updateFn,  args);
+                ctx.eval(updateFn,  args);
             }
         });
         
         int fnfTest = ctx.findFunction("foreachTest");
         double simFT = profileBlock(numIter, [&](){
             ctx.restart();
-            ctx.call(fnfTest, nullptr);
+            ctx.eval(fnfTest, nullptr);
         });
         
         int fnfiTest = ctx.findFunction("foreachIteropTest");
         double intFT = profileBlock(numIter, [&](){
             ctx.restart();
-            ctx.call(fnfiTest, nullptr);
+            ctx.eval(fnfiTest, nullptr);
         });
         
         // NOTE: this demonstrates result of particular shader

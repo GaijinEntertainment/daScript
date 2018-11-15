@@ -49,28 +49,30 @@ namespace yzg
         cout << "\nCALL STACK:\n";
         char * sp = stackTop;
         while ( sp>=stackTop && sp <(stack+stackSize) ) {
-            SimNode_Call * call = *(SimNode_Call **) sp;
-            if ( call ) {
-                if ( debugInput ) {
-                    int col, row;
-                    positionToRowCol ( *debugInput, call->debug, col, row );
-                    cout << functions[call->fnIndex].name << " at line " << row << "\n";
-                } else {
-                    cout << functions[call->fnIndex].name << "\n";
-                }
-                if ( FuncInfo * info = functions[call->fnIndex].debug ) {
-                    for ( uint32_t i = 0; i != info->argsSize; ++i ) {
-                        cout << "\t" << info->args[i]->name
-                        << " : " << debug_type(info->args[i])
-                        << " = \t" << debug_value(call->argValues[i], info->args[i]) << "\n";
-                    }
-                }
-                sp += functions[call->fnIndex].stackSize;
+            __m128 * args = *(__m128 **)sp;
+            SimNode_Call * call = *(SimNode_Call **)(sp + sizeof(__m128 *));
+            FuncInfo * info;
+            int row = 0, col = 0;
+            if ( (uint64_t(call) & 1) == 0 ) {
+                int fnIndex = call->fnIndex;
+                if ( debugInput )
+                positionToRowCol ( *debugInput, call->debug, col, row );
+                info = functions[fnIndex].debug;
             } else {
-                cout << "external_function_call\n";
-                return;
+                info = (FuncInfo *) ( uint64_t(call) & ~1 );
             }
+            if ( row && col ) {
+                cout << info->name << " at line " << row << "\n";
+            } else {
+                cout << info->name << "\n";
+            }
+            for ( uint32_t i = 0; i != info->argsSize; ++i ) {
+                cout << "\t" << info->args[i]->name
+                << " : " << debug_type(info->args[i])
+                << " = \t" << debug_value(args[i], info->args[i]) << "\n";
+            }
+            sp += info->stackSize;
         }
-        cout << "!!! corrupt stack !!!\n\n";
+        cout << "\n";
     }
 }
