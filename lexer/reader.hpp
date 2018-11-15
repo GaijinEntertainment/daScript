@@ -90,16 +90,16 @@ namespace yzg
             double      dnum;
             Operator    op;
         };
-        string::const_iterator at;
+        long at = 0;
         
-        Node(string::const_iterator & AT) : at(AT), type(NodeType::nil) {}
-        Node(NodeType nt, const string & st, string::const_iterator & AT) : at(AT), type(nt), text(st) {}
-        Node(int32_t val, string::const_iterator & AT) : at(AT), type(NodeType::inumber), inum(val) {}
-        Node(uint32_t val, string::const_iterator & AT) : at(AT), type(NodeType::unumber), unum(val) {}
-        Node(double val, string::const_iterator & AT) : at(AT), type(NodeType::dnumber), dnum(val) {}
-        Node(bool val, string::const_iterator & AT) : at(AT), type(NodeType::boolean), b(val) {}
-        Node(vector<NodePtr> && ll, string::const_iterator & AT) : at(AT), type(NodeType::list), list(move(ll)) {}
-        Node(Operator o, string::const_iterator & AT) : at(AT), type(NodeType::op), op(o) {}
+        Node(long AT) : at(AT), type(NodeType::nil) {}
+        Node(NodeType nt, const string & st, long AT) : at(AT), type(nt), text(st) {}
+        Node(int32_t val, long AT) : at(AT), type(NodeType::inumber), inum(val) {}
+        Node(uint32_t val, long AT) : at(AT), type(NodeType::unumber), unum(val) {}
+        Node(double val, long AT) : at(AT), type(NodeType::dnumber), dnum(val) {}
+        Node(bool val, long AT) : at(AT), type(NodeType::boolean), b(val) {}
+        Node(vector<NodePtr> && ll, long AT) : at(AT), type(NodeType::list), list(move(ll)) {}
+        Node(Operator o, long AT) : at(AT), type(NodeType::op), op(o) {}
         
         bool isList() const { return type==NodeType::list; }
         bool isString() const { return type==NodeType::string; }
@@ -124,13 +124,13 @@ namespace yzg
     class read_error : public runtime_error
     {
     public:
-        read_error ( const string & message, string::const_iterator error_at ) : runtime_error(message), at(error_at) {}
-        string::const_iterator at;
+        read_error ( const string & message, long error_at ) : runtime_error(message), at(error_at) {}
+        long at = 0;
     };
     
     NodePtr read ( const string & st );
     
-    void reportError ( const string & st, const string::const_iterator & at, const string & message );
+    void reportError ( const string & st, long at, const string & message );
 }
 
 #endif /* reader_hpp */

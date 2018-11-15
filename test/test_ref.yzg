@@ -54,7 +54,6 @@
                 (assert (== x 101) "supposed to be 101")
             )
         )
-
         (assert (== (sizeof (bar)) 12) "supposed to be 3*sizeof(int)==12")
         (assert (== (sizeof (foo)) 20) "supposed to be sizeof(bar)+sizeof(bar &)==20")
         (let

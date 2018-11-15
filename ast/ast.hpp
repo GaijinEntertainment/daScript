@@ -162,6 +162,7 @@ namespace yzg
         void logType(ostream& stream) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
         virtual SimNode * simulate (Context & context) const = 0;
+        long At() const { return at ? at->at : 0; }
     public:
         TypeDeclPtr type;
         Node *      at = nullptr;
@@ -337,7 +338,7 @@ namespace yzg
             type = make_shared<TypeDecl>((Type)ToBasicType<TT>::type);
         }
         virtual SimNode * simulate (Context & context) const override {
-            return context.makeNode<SimNode_ConstValue<TT>>(value);
+            return context.makeNode<SimNode_ConstValue<TT>>(At(),value);
         }
         virtual void log(ostream& stream, int depth) const override {
             stream << value;
@@ -379,7 +380,7 @@ namespace yzg
         ExprConstString(const string & str = string()) : ExprConst(unescapeString(str)) {}
         virtual SimNode * simulate (Context & context) const override {
             char * str = context.allocateName(value);
-            return context.makeNode<SimNode_ConstValue<char *>>(str);
+            return context.makeNode<SimNode_ConstValue<char *>>(At(),str);
         }
         virtual void log(ostream& stream, int depth) const override {  stream << "\"" << escapeString(value) << "\""; }   
     };
@@ -463,7 +464,8 @@ namespace yzg
         string getMangledName() const;
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
-        virtual SimNode * makeSimNode ( Context & context ) { return context.makeNode<SimNode_Call>(); }
+        virtual SimNode * makeSimNode ( Context & context ) { return context.makeNode<SimNode_Call>(At()); }
+        long At() const { return at ? at->at : 0; }
     public:
         string              name;
         vector<VariablePtr> arguments;
@@ -472,6 +474,7 @@ namespace yzg
         bool                builtIn = false;
         int                 index = -1;
         uint32_t            totalStackSize = 0;
+        Node *              at = nullptr;
     };
     
     class BuiltInFunction : public Function
@@ -496,7 +499,7 @@ namespace yzg
             }
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
-            return context.makeNode<SimT>();
+            return context.makeNode<SimT>(At());
         }
     };
     
@@ -525,7 +528,7 @@ namespace yzg
             this->result = makeType<Result>(prg);
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
-            return context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>();
+            return context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(At());
         }
     };
     

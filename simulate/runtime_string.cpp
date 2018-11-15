@@ -58,4 +58,23 @@ namespace yzg
         }
         return result;
     }
+    
+    string::const_iterator positionToRowCol ( const string & st, long AT, int & col, int & row )
+    {
+        col = 1;
+        row = 1;
+        auto at = st.begin() + AT;
+        auto text = st.begin();
+        auto it = st.begin();
+        while ( it != at && it != st.end() ) {
+            if ( *it=='\n' ) {
+                text = it + 1;
+                row ++;
+                col = 1;
+            }
+            ++ it;
+            col ++;
+        }
+        return text;
+    }
 }

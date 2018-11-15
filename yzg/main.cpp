@@ -84,12 +84,13 @@ void unit_test ( const string & fn, int numIter = 100 )
         auto program = parse(node, nullptr);
         cout << *program << "\n";
         
-        Context ctx;
+        Context ctx(&str);
         program->simulate(ctx);
         
         int fnTest = ctx.findFunction("test");
         double simT = profileBlock(numIter, [&](){
-            ctx.eval(fnTest, nullptr);
+            ctx.restart();
+            ctx.call(fnTest, nullptr);
         });
         
         cout << fixed;
@@ -98,11 +99,11 @@ void unit_test ( const string & fn, int numIter = 100 )
         
 #if REPORT_ERRORS
     } catch ( const read_error & error ) {
-        reportError ( str, error.at, error.what() );
+        reportError ( str, 0, error.what() );
     } catch ( const parse_error & error ) {
-        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
+        reportError ( str, error.at ? error.at->at : 0, error.what() );
     } catch ( const semantic_error & error ) {
-        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
+        reportError ( str, error.at ? error.at->at : 0, error.what() );
     }
 #endif
 }
@@ -128,9 +129,9 @@ void unit_test_array_of_structures ( const string & fn )
         });
         cout << *program << "\n";
         
-        Context ctx;
+        Context ctx(&str);
         program->simulate(ctx);
-        ctx.eval(ctx.findFunction("init"), nullptr);
+        ctx.call(ctx.findFunction("init"), nullptr);
         
         // NOTE: this demonstrates particular shader
         Object * objects = cast<Object *>::to ( ctx.getVariable( ctx.findVariable("objects") ) );
@@ -147,7 +148,8 @@ void unit_test_array_of_structures ( const string & fn )
         
         int fnTest = ctx.findFunction("test");
         double simT = profileBlock(numIter, [&](){
-            ctx.eval(fnTest, nullptr);
+            ctx.restart();
+            ctx.call(fnTest, nullptr);
         });
         
         double cT = profileBlock(numIter, [&](){
@@ -156,25 +158,29 @@ void unit_test_array_of_structures ( const string & fn )
         
         int fniTest = ctx.findFunction("interopTest");
         double intT = profileBlock(numIter, [&](){
-            ctx.eval(fniTest, nullptr);
+            ctx.restart();
+            ctx.call(fniTest, nullptr);
         });
 
         int updateFn = ctx.findFunction("update");
         double manyT = profileBlock(numIter, [&](){
+            ctx.restart();
             for ( int oi=0; oi != 10000; ++oi ) {
                 __m128 args[1] = { cast<Object *>::from(objects+oi) };
-                ctx.eval(updateFn,  args);
+                ctx.call(updateFn,  args);
             }
         });
         
         int fnfTest = ctx.findFunction("foreachTest");
         double simFT = profileBlock(numIter, [&](){
-            ctx.eval(fnfTest, nullptr);
+            ctx.restart();
+            ctx.call(fnfTest, nullptr);
         });
         
         int fnfiTest = ctx.findFunction("foreachIteropTest");
         double intFT = profileBlock(numIter, [&](){
-            ctx.eval(fnfiTest, nullptr);
+            ctx.restart();
+            ctx.call(fnfiTest, nullptr);
         });
         
         // NOTE: this demonstrates result of particular shader
@@ -201,11 +207,11 @@ void unit_test_array_of_structures ( const string & fn )
         
 #if REPORT_ERRORS
     } catch ( const read_error & error ) {
-        reportError ( str, error.at, error.what() );
+        reportError ( str, 0, error.what() );
     } catch ( const parse_error & error ) {
-        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
+        reportError ( str, error.at ? error.at->at : 0, error.what() );
     } catch ( const semantic_error & error ) {
-        reportError ( str, error.at ? error.at->at : str.begin(), error.what() );
+        reportError ( str, error.at ? error.at->at : 0, error.what() );
     }
 #endif
 }

@@ -10,6 +10,8 @@
 
 #include "enums.h"
 
+#include "runtime_string.hpp"
+
 #include <regex>
 #include <sstream>
 #include <iostream>
@@ -221,7 +223,7 @@ namespace yzg
     static regex REG_boolean       ( "\\b(true|false)\\b", static_regex_init );
     
     //  return -1 if not match
-    stit parseString( stit begin, stit end, char quotes )
+    stit parseString( stit begin, stit stbegin, stit end, char quotes )
     {
         // regex REG_string        ( "\"(([^\"\\\\]|\\\\.)*?)\"", static_regex_init );
         //  1. "
@@ -230,7 +232,7 @@ namespace yzg
         auto pos = begin;
         // 1
         if ( *pos!=quotes )
-            throw read_error("expecting quotes", pos);
+            throw read_error("expecting quotes", pos - stbegin);
         ++ pos;
         // 2
         while ( pos<end )
@@ -238,13 +240,13 @@ namespace yzg
             if ( *pos==quotes )
                 return pos + 1;
             else if ( *pos=='\n' )
-                throw read_error("string constant exceeds line", pos );
+                throw read_error("string constant exceeds line", pos - stbegin);
             else if ( *pos=='\\' )
                 pos += 2;
             else
                 ++ pos;
         }
-        throw read_error("string constant exceeds file", pos);
+        throw read_error("string constant exceeds file", pos - stbegin);
     }
     
     stit skipWhiteSpace ( stit it, stit end )
@@ -253,90 +255,80 @@ namespace yzg
         return it;
     }
     
-    NodePtr readNode ( stit & it, stit end, bool isList );
+    NodePtr readNode ( stit & it, stit begin, stit end, bool isList );
     
-    vector<NodePtr> readNodes ( stit & it, stit end, bool isList )
+    vector<NodePtr> readNodes ( stit & it, stit begin, stit end, bool isList )
     {
         vector<NodePtr> nodes;
-        while ( auto node = readNode(it, end, isList) )
+        while ( auto node = readNode(it, begin, end, isList) )
             nodes.emplace_back(move(node));
         return nodes;
     }
     
-    NodePtr readNode ( stit & it, stit end, bool isList )
+    NodePtr readNode ( stit & it, stit begin, stit end, bool isList )
     {
         smatch what;
         it = skipWhiteSpace(it, end);
         stit at = it;
         if ( it==end ) {
             if ( isList )
-                throw read_error("list exceeds file", it);
+                throw read_error("list exceeds file", it - begin);
             return nullptr;
         } else if ( *it==')' ) {
             if ( !isList )
-                throw read_error("unexpected end of list", it);
+                throw read_error("unexpected end of list", it - begin);
             ++ it;
             return nullptr;
         } else if ( *it=='(' ) {
             ++ it;
-            return make_unique<Node>(readNodes(it, end, true), at);
+            return make_unique<Node>(readNodes(it, begin, end, true), at - begin);
         } else if ( *it=='$' ) {
             ++ it;
-            readNode(it, end, isList);  // skip node, and return next one
-            return readNode(it, end, isList);
+            readNode(it, begin, end, isList);  // skip node, and return next one
+            return readNode(it, begin, end, isList);
         } else if ( *it=='"' || *it=='\'') {
-            it = parseString(it,end,*it);
-            return make_unique<Node>(NodeType::string, string(at+1,it-1), at);
+            it = parseString(it,begin,end,*it);
+            return make_unique<Node>(NodeType::string, string(at+1,it-1), at - begin);
         } else if ( regex_search(it,end,what,REG_boolean,continues) ) {
             it += what.length();
-            return make_unique<Node>(what[1].str()=="true", at);
+            return make_unique<Node>(what[1].str()=="true", at - begin);
         } else if ( regex_search(it,end,what,REG_name,continues) ) {
             it += what.length();
             if ( what[1].str()=="nil" )
-                return make_unique<Node>(at);
+                return make_unique<Node>(at - begin);
             else
-                return make_unique<Node>(NodeType::name, what[1].str(), at);
+                return make_unique<Node>(NodeType::name, what[1].str(), at - begin);
         } else if ( regex_search(it,end,what,REG_hex,continues) ) {
             it += what.length();
-            return make_unique<Node>(uint32_t(stoul(what[1].str(), 0, 16)), at);
+            return make_unique<Node>(uint32_t(stoul(what[1].str(), 0, 16)), at - begin);
         } else if ( regex_search(it,end,what,REG_uint,continues) ) {
             it += what.length();
-            return make_unique<Node>(uint32_t(stoul(what[1].str())), at);
+            return make_unique<Node>(uint32_t(stoul(what[1].str())), at - begin);
         } else if ( regex_search(it,end,what,REG_number_exp,continues) || regex_search(it,end,what,REG_number,continues) ) {
             it += what.length();
             string num = what[1].str();
             auto found = num.find_first_of(".e");
-            return found!=string::npos ? make_unique<Node>(stod(num), at) : make_unique<Node>(int32_t(stol(num)), at);
+            return found!=string::npos ? make_unique<Node>(stod(num), at - begin) : make_unique<Node>(int32_t(stol(num)), at - begin);
         } else {
             auto op = g_opTable2.parse(it, Operator::none);
             if ( op==Operator::none )
                 op = g_opTable1.parse(it, Operator::none);
             if ( op==Operator::none )
-                throw read_error("unexpected character", it);
-            return make_unique<Node>(op, at);
+                throw read_error("unexpected character", it - begin);
+            return make_unique<Node>(op, at - begin);
         }
         return nullptr;
     }
     
-    NodePtr read ( stit it, stit end )
+    NodePtr read ( stit it, stit begin, stit end )
     {
-        return make_unique<Node>(readNodes(it, end, false), it);
+        return make_unique<Node>(readNodes(it, begin, end, false), it - begin);
     }
     
-    void reportError ( const string & st, const string::const_iterator & at, const string & message )
+    void reportError ( const string & st, long AT, const string & message )
     {
-        int col = 1, row = 1;
-        auto text = st.begin();
-        auto it = st.begin();
-        while ( it != at && it != st.end() ) {
-            if ( *it=='\n' ) {
-                text = it + 1;
-                row ++;
-                col = 1;
-            }
-            ++ it;
-            col ++;
-        }
+        int col, row;
+        auto text = positionToRowCol(st, AT, col, row);
         auto endtext = text;
         while ( *endtext!='\n' && endtext!=st.end() )
             ++endtext;
@@ -349,6 +341,6 @@ namespace yzg
     
     NodePtr read ( const string & st )
     {
-        return read(st.begin(), st.end());
+        return read(st.begin(), st.begin(), st.end());
     }
 }

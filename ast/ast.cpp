@@ -317,21 +317,21 @@ namespace yzg
     SimNode * ExprRef2Value::simulate (Context & context) const
     {
         switch ( type->baseType ) {
-            case Type::tInt:        return context.makeNode<SimNode_Ref2Value<int32_t>>(subexpr->simulate(context));
-            case Type::tUInt:       return context.makeNode<SimNode_Ref2Value<uint32_t>>(subexpr->simulate(context));
-            case Type::tBool:       return context.makeNode<SimNode_Ref2Value<bool>>(subexpr->simulate(context));
-            case Type::tString:     return context.makeNode<SimNode_Ref2Value<char *>>(subexpr->simulate(context));
-            case Type::tPointer:    return context.makeNode<SimNode_Ref2Value<void *>>(subexpr->simulate(context));
-            case Type::tFloat:      return context.makeNode<SimNode_Ref2Value<float>>(subexpr->simulate(context));
-            case Type::tFloat2:     return context.makeNode<SimNode_Ref2Value<float2>>(subexpr->simulate(context));
-            case Type::tFloat3:     return context.makeNode<SimNode_Ref2Value<float3>>(subexpr->simulate(context));
-            case Type::tFloat4:     return context.makeNode<SimNode_Ref2Value<float4>>(subexpr->simulate(context));
-            case Type::tInt2:       return context.makeNode<SimNode_Ref2Value<int2>>(subexpr->simulate(context));
-            case Type::tInt3:       return context.makeNode<SimNode_Ref2Value<int3>>(subexpr->simulate(context));
-            case Type::tInt4:       return context.makeNode<SimNode_Ref2Value<int4>>(subexpr->simulate(context));
-            case Type::tUInt2:      return context.makeNode<SimNode_Ref2Value<uint2>>(subexpr->simulate(context));
-            case Type::tUInt3:      return context.makeNode<SimNode_Ref2Value<uint3>>(subexpr->simulate(context));
-            case Type::tUInt4:      return context.makeNode<SimNode_Ref2Value<uint4>>(subexpr->simulate(context));
+            case Type::tInt:        return context.makeNode<SimNode_Ref2Value<int32_t>>(At(),subexpr->simulate(context));
+            case Type::tUInt:       return context.makeNode<SimNode_Ref2Value<uint32_t>>(At(),subexpr->simulate(context));
+            case Type::tBool:       return context.makeNode<SimNode_Ref2Value<bool>>(At(),subexpr->simulate(context));
+            case Type::tString:     return context.makeNode<SimNode_Ref2Value<char *>>(At(),subexpr->simulate(context));
+            case Type::tPointer:    return context.makeNode<SimNode_Ref2Value<void *>>(At(),subexpr->simulate(context));
+            case Type::tFloat:      return context.makeNode<SimNode_Ref2Value<float>>(At(),subexpr->simulate(context));
+            case Type::tFloat2:     return context.makeNode<SimNode_Ref2Value<float2>>(At(),subexpr->simulate(context));
+            case Type::tFloat3:     return context.makeNode<SimNode_Ref2Value<float3>>(At(),subexpr->simulate(context));
+            case Type::tFloat4:     return context.makeNode<SimNode_Ref2Value<float4>>(At(),subexpr->simulate(context));
+            case Type::tInt2:       return context.makeNode<SimNode_Ref2Value<int2>>(At(),subexpr->simulate(context));
+            case Type::tInt3:       return context.makeNode<SimNode_Ref2Value<int3>>(At(),subexpr->simulate(context));
+            case Type::tInt4:       return context.makeNode<SimNode_Ref2Value<int4>>(At(),subexpr->simulate(context));
+            case Type::tUInt2:      return context.makeNode<SimNode_Ref2Value<uint2>>(At(),subexpr->simulate(context));
+            case Type::tUInt3:      return context.makeNode<SimNode_Ref2Value<uint3>>(At(),subexpr->simulate(context));
+            case Type::tUInt4:      return context.makeNode<SimNode_Ref2Value<uint4>>(At(),subexpr->simulate(context));
             default:                throw runtime_error("can't dereference type");
         }
     }
@@ -362,7 +362,7 @@ namespace yzg
     
     SimNode * ExprPtr2Ref::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Ptr2Ref>(subexpr->simulate(context));
+        return context.makeNode<SimNode_Ptr2Ref>(At(),subexpr->simulate(context));
     }
     
     // ExprSizeOf
@@ -399,7 +399,7 @@ namespace yzg
     SimNode * ExprSizeOf::simulate (Context & context) const
     {
         int32_t size = typeexpr->getSizeOf();
-        return context.makeNode<SimNode_ConstValue<int32_t>>(size);
+        return context.makeNode<SimNode_ConstValue<int32_t>>(At(),size);
     }
     
     // ExprNew
@@ -431,7 +431,7 @@ namespace yzg
     SimNode * ExprNew::simulate (Context & context) const
     {
         int32_t bytes = typeexpr->getSizeOf();
-        return context.makeNode<SimNode_New>(bytes);
+        return context.makeNode<SimNode_New>(At(),bytes);
     }
 
     // ExprAt
@@ -471,7 +471,7 @@ namespace yzg
         auto pidx = index->simulate(context);
         uint32_t stride = subexpr->type->getStride();
         uint32_t range = subexpr->type->dim.back();
-        return context.makeNode<SimNode_At>(prv, pidx, stride, range);
+        return context.makeNode<SimNode_At>(At(), prv, pidx, stride, range);
     }
 
     // ExprBlock
@@ -508,7 +508,7 @@ namespace yzg
     
     SimNode * ExprBlock::simulate (Context & context) const
     {
-        auto block = context.makeNode<SimNode_Block>();
+        auto block = context.makeNode<SimNode_Block>(At());
         block->total = int(list.size());
         block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
         for ( int i = 0; i != block->total; ++i )
@@ -551,7 +551,7 @@ namespace yzg
     
     SimNode * ExprField::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Field>(value->simulate(context), field->offset);
+        return context.makeNode<SimNode_Field>(At(), value->simulate(context), field->offset);
     }
     
     // ExprVar
@@ -609,11 +609,11 @@ namespace yzg
     SimNode * ExprVar::simulate (Context & context) const
     {
         if ( local ) {
-            return context.makeNode<SimNode_GetLocal>(variable->stackTop);
+            return context.makeNode<SimNode_GetLocal>(At(), variable->stackTop);
         } else if ( argument) {
-            return context.makeNode<SimNode_GetArgument>(argumentIndex);
+            return context.makeNode<SimNode_GetArgument>(At(), argumentIndex);
         } else {
-            return context.makeNode<SimNode_GetGlobal>(variable->index);
+            return context.makeNode<SimNode_GetGlobal>(At(), variable->index);
         }
     }
 
@@ -855,10 +855,8 @@ namespace yzg
     
     SimNode * ExprIfThenElse::simulate (Context & context) const
     {
-        if ( if_false )
-            return context.makeNode<SimNode_IfThenElse>(cond->simulate(context), if_true->simulate(context), if_false->simulate(context));
-        else
-            return context.makeNode<SimNode_IfThen>(cond->simulate(context), if_true->simulate(context));
+        return context.makeNode<SimNode_IfThenElse>(At(), cond->simulate(context), if_true->simulate(context),
+                                                    if_false ? if_false->simulate(context) : nullptr);
     }
 
     // ExprWhile
@@ -891,7 +889,7 @@ namespace yzg
 
     SimNode * ExprWhile::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_While>(cond->simulate(context),body->simulate(context));
+        return context.makeNode<SimNode_While>(At(), cond->simulate(context),body->simulate(context));
     }
     
     // ExprForeach
@@ -929,7 +927,8 @@ namespace yzg
     
     SimNode * ExprForeach::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Foreach>(head->simulate(context),
+        return context.makeNode<SimNode_Foreach>(At(),
+                                                 head->simulate(context),
                                                  iter->simulate(context),
                                                  body->simulate(context),
                                                  (int) head->type->dim[0],
@@ -964,7 +963,7 @@ namespace yzg
     
     SimNode * ExprTryCatch::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_TryCatch>(try_this->simulate(context),catch_that->simulate(context));
+        return context.makeNode<SimNode_TryCatch>(At(),try_this->simulate(context),catch_that->simulate(context));
     }
     
     // ExprLet
@@ -1027,7 +1026,7 @@ namespace yzg
     
     SimNode * ExprLet::simulate (Context & context) const
     {
-        auto let = context.makeNode<SimNode_Let>();
+        auto let = context.makeNode<SimNode_Let>(At());
         let->total = (uint32_t) variables.size();
         let->list = (SimNode **) context.allocate(let->total * sizeof(SimNode*));
         int vi = 0;
@@ -1036,23 +1035,23 @@ namespace yzg
             if ( var->init ) {
                 SimNode * copy = nullptr;
                 auto init = var->init->simulate(context);
-                auto get = context.makeNode<SimNode_GetLocal>(var->stackTop);
+                auto get = context.makeNode<SimNode_GetLocal>(At(), var->stackTop);
                 if ( var->init->type->isRef() ) {
-                    copy = context.makeNode<SimNode_CopyRefValue>(get, init, size);
+                    copy = context.makeNode<SimNode_CopyRefValue>(At(), get, init, size);
                 } else {
                     switch ( var->type->baseType ) {
-                        case Type::tBool:   copy = context.makeNode<SimNode_CopyValue<bool>>(get, init);       break;
-                        case Type::tInt:    copy = context.makeNode<SimNode_CopyValue<int32_t>>(get, init);    break;
-                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyValue<uint32_t>>(get, init);   break;
-                        case Type::tFloat:  copy = context.makeNode<SimNode_CopyValue<float>>(get, init);      break;
-                        case Type::tString: copy = context.makeNode<SimNode_CopyValue<char *>>(get, init);     break;
+                        case Type::tBool:   copy = context.makeNode<SimNode_CopyValue<bool>>(At(), get, init);       break;
+                        case Type::tInt:    copy = context.makeNode<SimNode_CopyValue<int32_t>>(At(), get, init);    break;
+                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyValue<uint32_t>>(At(), get, init);   break;
+                        case Type::tFloat:  copy = context.makeNode<SimNode_CopyValue<float>>(At(), get, init);      break;
+                        case Type::tString: copy = context.makeNode<SimNode_CopyValue<char *>>(At(), get, init);     break;
                         default:
                             throw runtime_error("unsupported? can't assign initial value");
                     }
                 }
                 let->list[vi++] = copy;
             } else {
-                let->list[vi++] = context.makeNode<SimNode_InitLocal>(var->stackTop, var->type->getSizeOf());
+                let->list[vi++] = context.makeNode<SimNode_InitLocal>(At(), var->stackTop, var->type->getSizeOf());
             }
         }
         let->subexpr = subexpr->simulate(context);
@@ -1361,6 +1360,7 @@ namespace yzg
             gfun.debug = makeFunctionDebugInfo(context, *pfun);
         }
         context.linearAllocatorExecuteBase = context.linearAllocator;
+        context.restart();
         sdebug.clear();
     }
     
@@ -1730,6 +1730,7 @@ namespace yzg
         if ( !decl->isListOfAtLeastSize(3) )
             throw parse_error("function needs name, return type, and body", decl);
         auto func = make_shared<Function>();
+        func->at = decl.get();
         func->name = decl->list[1]->getTailName();
         if ( func->name.empty() )
             throw parse_error("function must have name", decl);

@@ -10,11 +10,12 @@
 
 namespace yzg
 {
-    Context::Context()
+    Context::Context(const string * lines)
     {
         linearAllocator = linearAllocatorBase = (char *) _mm_malloc(linearAllocatorSize, 16);
         stack = (char *) _mm_malloc(stackSize, 16);
         stackTop = stack + stackSize;
+        debugInput = lines;
     }
     
     Context::~Context()
@@ -50,7 +51,13 @@ namespace yzg
         while ( sp>=stackTop && sp <(stack+stackSize) ) {
             SimNode_Call * call = *(SimNode_Call **) sp;
             if ( call ) {
-                cout << functions[call->fnIndex].name << "\n";
+                if ( debugInput ) {
+                    int col, row;
+                    positionToRowCol ( *debugInput, call->debug, col, row );
+                    cout << functions[call->fnIndex].name << " at line " << row << "\n";
+                } else {
+                    cout << functions[call->fnIndex].name << "\n";
+                }
                 if ( FuncInfo * info = functions[call->fnIndex].debug ) {
                     for ( uint32_t i = 0; i != info->argsSize; ++i ) {
                         cout << "\t" << info->args[i]->name
@@ -60,15 +67,7 @@ namespace yzg
                 }
                 sp += functions[call->fnIndex].stackSize;
             } else {
-                cout << functions[evalIndex].name << "\n";
-                if ( FuncInfo * info = functions[evalIndex].debug ) {
-                    for ( uint32_t i = 0; i != info->argsSize; ++i ) {
-                        cout << "\t" << info->args[i]->name
-                        << " : " << debug_type(info->args[i])
-                        << " = \t" << debug_value(evalArgs[i], info->args[i]) << "\n";
-                    }
-                }
-                cout << "\n";
+                cout << "external_function_call\n";
                 return;
             }
         }

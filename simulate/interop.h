@@ -34,6 +34,7 @@ namespace yzg
     template <typename FuncT, FuncT fn, typename RetT>
     struct SimNode_ExtFuncCallImpl : public SimNode_Call
     {
+        SimNode_ExtFuncCallImpl ( long at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
@@ -49,6 +50,7 @@ namespace yzg
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCallImpl<FuncT,fn,void> : public SimNode_Call
     {
+        SimNode_ExtFuncCallImpl ( long at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
@@ -64,6 +66,8 @@ namespace yzg
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCall : public SimNode_ExtFuncCallImpl<FuncT, fn, typename function_traits<FuncT>::return_type>
     {
+        SimNode_ExtFuncCall ( long at )
+            : SimNode_ExtFuncCallImpl<FuncT, fn, typename function_traits<FuncT>::return_type>(at) {}
     };
 }
 
