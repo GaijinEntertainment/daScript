@@ -13,6 +13,9 @@
 #include "vectypes.h"
 #include "cast.h"
 
+#include "runtime_string.hpp"
+#include "debug_info.hpp"
+
 #include <xmmintrin.h>
 #include <vector>
 #include <string>
@@ -30,6 +33,7 @@ namespace yzg
         char *      name;
         __m128      value;
         uint32_t    size;
+        VarInfo *   debug;
     };
     
     struct SimFunction
@@ -37,6 +41,7 @@ namespace yzg
         char *      name;
         SimNode *   code;
         uint32_t    stackSize;
+        FuncInfo *  debug;
     };
     
     struct SimNode
@@ -125,8 +130,6 @@ namespace yzg
         int totalFunctions = 0;
     };
     
-    string unescapeString ( const string & input );
-    
     // field
     struct SimNode_Field : SimNode {
         SimNode_Field ( SimNode * rv, uint32_t of ) : value(rv), offset(of) {}
@@ -213,11 +216,14 @@ namespace yzg
     
     // "DEBUG"
     template <typename TT>
+    __forceinline void debug_out ( TT value ) { cout << value; }
+    __forceinline void debug_out ( uint64_t value ) { cout << hex << "0x" << value << dec; }
+    
+    template <typename TT>
     struct SimNode_Debug : SimNode_Call {
         virtual __m128 eval ( Context & context ) override {
             __m128 res = arguments[0]->eval(context);
-            auto value = cast<TT>::to(res);
-            cout << value;  // TODO: support custom printers
+            debug_out( cast<TT>::to(res) );
             return res;
         }
     };
@@ -584,26 +590,6 @@ namespace yzg
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_div_epu32(cast<TT>::from(*pa), b)); return a;   }
         static __forceinline __m128 SetMul  ( __m128 a, __m128 b )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_epu32(cast<TT>::from(*pa), b)); return a;   }
-    };
-    
-    // todo: expand comparisons
-    struct SimPolicy_String {
-        // bsasic
-        static __forceinline __m128 Set     ( __m128 a, __m128 b )
-            { *cast<char **>::to(a) =  cast<char *>::to(b); return a; }
-        static __forceinline __m128 Equ     ( __m128 a, __m128 b )
-            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))==0); }
-        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b )
-            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))!=0); }
-        static __forceinline __m128 LessEqu ( __m128 a, __m128 b )
-        // ordered
-            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))<=0); }
-        static __forceinline __m128 GtEqu   ( __m128 a, __m128 b )
-            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))>=0); }
-        static __forceinline __m128 Less    ( __m128 a, __m128 b )
-            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))<0); }
-        static __forceinline __m128 Gt      ( __m128 a, __m128 b )
-            { return cast<bool>::from(strcmp(cast<char *>::to(a), cast<char *>::to(b))>0); }
     };
     
     struct SimPolicy_Pointer : SimPolicy_CoreType<void *>

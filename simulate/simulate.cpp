@@ -55,35 +55,14 @@ namespace yzg
                 cout << "external_function_call\n";
                 return;
             }
+            if ( FuncInfo * info = functions[call->fnIndex].debug ) {
+                for ( uint32_t i = 0; i != info->argsSize; ++i ) {
+                    cout << "\t" << info->args[i]->name
+                        << " : " << debug_type(info->args[i])
+                        << " = \t" << debug_value(call->argValues[i], info->args[i]) << "\n";
+                }
+            }
         }
         cout << "corrupt stack\n";
     }
-    
-    string unescapeString ( const string & input )
-    {
-        const char* str = input.c_str();
-        const char* strEnd = str + input.length();
-        string result;
-        for( ; str < strEnd; ++str ) {
-            if ( *str=='\\' ) {
-                ++str;
-                if ( str == strEnd ) throw runtime_error("Invalid escape sequence");
-                switch ( *str ) {
-                    case '"':
-                    case '/':
-                    case '\\':  result += *str;    break;
-                    case 'b':   result += '\b';    break;
-                    case 'f':   result += '\f';    break;
-                    case 'n':   result += '\n';    break;
-                    case 'r':   result += '\r';    break;
-                    case 't':   result += '\t';    break;
-                    case 'u':   throw runtime_error("utf-8 characters not supported yet");
-                    default:    throw runtime_error("Invalid escape character");
-                }
-            } else
-                result += *str;
-        }
-        return result;
-    }
-    
 }

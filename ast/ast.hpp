@@ -14,6 +14,7 @@
 #include "vectypes.h"
 #include "function_traits.h"
 #include "interop.h"
+#include "debug_info.hpp"
 
 #include <memory>
 #include <vector>
@@ -23,32 +24,6 @@
 namespace yzg
 {
     using namespace std;
-    
-    enum Type
-    {
-        none,
-        tNull,
-        tVoid,
-        tBool,
-        tInt,
-        tInt2,
-        tInt3,
-        tInt4,
-        tUInt,
-        tUInt2,
-        tUInt3,
-        tUInt4,
-        tFloat,
-        tFloat2,
-        tFloat3,
-        tFloat4,
-        tString,
-        tStructure,
-        tPointer
-    };
-    
-    string to_string ( Type t );
-    Type nameToBasicType(const string & name);
     
     class Structure;
     typedef shared_ptr<Structure> StructurePtr;
@@ -72,7 +47,8 @@ namespace yzg
     {
     public:
         TypeDecl() = default;
-        TypeDecl(const TypeDecl &) = default;
+        TypeDecl(const TypeDecl & decl);
+        TypeDecl & operator = (const TypeDecl & decl) = delete;
         TypeDecl(Type tt) : baseType(tt) {}
         friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
         string getMangledName() const;
@@ -405,7 +381,7 @@ namespace yzg
             char * str = context.allocateName(value);
             return context.makeNode<SimNode_ConstValue<char *>>(str);
         }
-        virtual void log(ostream& stream, int depth) const override {  stream << "\"" << value << "\""; }   // todo: escape string
+        virtual void log(ostream& stream, int depth) const override {  stream << "\"" << escapeString(value) << "\""; }   
     };
     
     class ExprLet : public Expression
@@ -567,12 +543,14 @@ namespace yzg
         void addBuiltinFunctions();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         void simulate ( Context & context );
-        
         template <typename FuncT, FuncT fn>
-        void addExtern ( const string & name ) {
-            addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, *this));
-        }
-        
+        void addExtern ( const string & name ) { addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, *this)); }
+    protected:
+        void makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type );
+        VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );
+        StructInfo * makeStructureDebugInfo ( Context & context, const Structure & st );
+        FuncInfo * makeFunctionDebugInfo ( Context & context, const Function & fn );
+        map<string,StructInfo *>    sdebug;
     public:
         map<string, StructurePtr>   structures;
         map<string, VariablePtr>    globals;

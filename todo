@@ -8,7 +8,7 @@ parser
 
 misc
     support return
-    basic type - compare pointers if specified, cast unspecified pointers transparently
+    basic type - test pointer casts
     points == null and pointer != null
     support 'clone' for variables, redo name lookup upstream during cloning?
     simplify builtin initialization
@@ -25,6 +25,21 @@ optimization \ ast massage
     support break and return to be last statement
     simplify initialization of local variables
     propagate local variable initialization on top of the function
+
+// recent
+
+iterations took:0.000657
+foreach iterations took:0.000329
+c++ version took:0.000017
+interop version took:0.000498
+foreach interop version took:0.000177
+10000-interop version took:0.000225
+ratio sim / c: 38.588715
+ratio foreach sim / c: 19.299554
+ratio interop / c: 29.260979
+ratio foreach interop / c: 10.379814
+ratio 10000-interop / c: 13.194692
+ratio sim / interop: 1.318777
 
 
 

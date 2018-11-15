@@ -7,7 +7,6 @@
 //
 
 #include "ast.hpp"
-#include "enums.h"
 
 #include <sstream>
 #include <iostream>
@@ -15,36 +14,6 @@
 namespace yzg
 {
     bool g_logTypes = false;
-    
-    Enum<Type> g_typeTable = {
-        {   Type::tVoid,        "void"  },
-        {   Type::tNull,        "null"   },
-        {   Type::tBool,        "bool"  },
-        {   Type::tString,      "string" },
-        {   Type::tPointer,     "pointer" },
-        {   Type::tInt,         "int"   },
-        {   Type::tInt2,        "int2"  },
-        {   Type::tInt3,        "int3"  },
-        {   Type::tInt4,        "int4"  },
-        {   Type::tUInt,        "uint"  },
-        {   Type::tUInt2,       "uint2" },
-        {   Type::tUInt3,       "uint3" },
-        {   Type::tUInt4,       "uint4" },
-        {   Type::tFloat,       "float" },
-        {   Type::tFloat2,      "float2"},
-        {   Type::tFloat3,      "float3"},
-        {   Type::tFloat4,      "float4"}
-    };
-
-    string to_string ( Type t )
-    {
-        return g_typeTable.find(t);
-    }
-    
-    Type nameToBasicType(const string & name)
-    {
-        return g_typeTable.find(name, Type::none);
-    }
     
     // TypeDecl
     
@@ -67,13 +36,23 @@ namespace yzg
         return stream;
     }
     
+    TypeDecl::TypeDecl(const TypeDecl & decl)
+    {
+        baseType = decl.baseType;
+        structType = decl.structType;
+        dim = decl.dim;
+        ref = decl.ref;
+        at = decl.at;
+        ptrType = decl.ptrType ? make_shared<TypeDecl>(*decl.ptrType) : nullptr;
+    }
+    
     string TypeDecl::getMangledName() const
     {
         stringstream ss;
         if ( baseType==Type::tStructure ) {
             ss << structType->name;
         } else {
-            ss << g_typeTable.find(baseType);
+            ss << to_string(baseType);
         }
         if ( ref )
             ss << "#ref";
@@ -91,6 +70,11 @@ namespace yzg
             return false;
         if ( baseType==Type::tStructure && structType!=decl.structType )
             return false;
+        if ( baseType==Type::tPointer ) {
+            if ( ptrType && decl.ptrType && ptrType->isSameType(*decl.ptrType,true) ) {
+                return false;
+            }
+        }
         if ( dim!=decl.dim )
             return false;
         if ( refMatters )
@@ -156,28 +140,7 @@ namespace yzg
     
     int TypeDecl::getBaseSizeOf() const
     {
-        switch ( baseType ) {
-            case tPointer:  return sizeof(void *);
-            case tString:   return sizeof(char *);
-            case tBool:     return sizeof(bool);
-            case tInt:      return sizeof(int);
-            case tInt2:     return sizeof(int) * 2;
-            case tInt3:     return sizeof(int) * 3;
-            case tInt4:     return sizeof(int) * 4;
-            case tUInt:     return sizeof(uint);
-            case tUInt2:    return sizeof(uint) * 2;
-            case tUInt3:    return sizeof(uint) * 3;
-            case tUInt4:    return sizeof(uint) * 4;
-            case tFloat:    return sizeof(float);
-            case tFloat2:   return sizeof(float) * 2;
-            case tFloat3:   return sizeof(float) * 3;
-            case tFloat4:   return sizeof(float) * 4;
-            case tStructure:
-                return structType->getSizeOf();
-            default:
-                throw runtime_error("not implemented");
-                return 0;
-        }
+        return baseType==Type::tStructure ? structType->getSizeOf() : getTypeBaseSize(baseType);
     }
     
     int TypeDecl::getSizeOf() const
@@ -1306,6 +1269,71 @@ namespace yzg
         return result;
     }
     
+    FuncInfo * Program::makeFunctionDebugInfo ( Context & context, const Function & fn )
+    {
+        FuncInfo * fni = context.makeNode<FuncInfo>();
+        fni->argsSize = (uint32_t) fn.arguments.size();
+        fni->args = (VarInfo **) context.allocate(sizeof(VarInfo *) * fni->argsSize);
+        for ( uint32_t i=0; i!=fni->argsSize; ++i ) {
+            fni->args[i] = makeVariableDebugInfo(context, *fn.arguments[i]);
+        }
+        return fni;
+    }
+    
+    StructInfo * Program::makeStructureDebugInfo ( Context & context, const Structure & st )
+    {
+        StructInfo * sti = context.makeNode<StructInfo>();
+        sti->name = context.allocateName(st.name);
+        sti->fieldsSize = (uint32_t) st.fields.size();
+        sti->fields = (VarInfo **) context.allocate( sizeof(VarInfo *) * sti->fieldsSize );
+        for ( uint32_t i=0; i!=sti->fieldsSize; ++i ) {
+            auto & var = st.fields[i];
+            VarInfo * vi = context.makeNode<VarInfo>();
+            makeTypeInfo(vi, context, var.type);
+            vi->name = context.allocateName(var.name);
+            sti->fields[i] = vi;
+        }
+        return sti;
+    }
+    
+    void Program::makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type )
+    {
+        info->type = type->baseType;
+        info->dimSize = (uint32_t) type->dim.size();
+        if ( info->dimSize ) {
+            info->dim = (uint32_t *) context.allocate(sizeof(uint32_t) * info->dimSize );
+            for ( uint32_t i=0; i != info->dimSize; ++i ) {
+                info->dim[i] = type->dim[i];
+            }
+        }
+        if ( type->baseType==Type::tStructure ) {
+            auto st = sdebug.find(type->structType->name);
+            if ( st==sdebug.end() ) {
+                info->structType = makeStructureDebugInfo(context, *type->structType);
+                sdebug[type->structType->name] = info->structType;
+            } else {
+                info->structType = st->second;
+            }
+        } else {
+            info->structType = nullptr;
+        }
+        if ( type->baseType==Type::tPointer && type->ptrType ) {
+            info->ptrType = context.makeNode<TypeInfo>();
+            makeTypeInfo(info->ptrType, context, type->ptrType);
+        } else {
+            info->ptrType = nullptr;
+        }
+        info->ref = type->ref;
+    }
+
+    VarInfo * Program::makeVariableDebugInfo ( Context & context, const Variable & var )
+    {
+        VarInfo * vi = context.makeNode<VarInfo>();
+        makeTypeInfo(vi, context, var.type);
+        vi->name = context.allocateName(var.name);
+        return vi;
+    }
+    
     void Program::simulate ( Context & context )
     {
         context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(globals.size()*sizeof(GlobalVariable)) );
@@ -1314,6 +1342,7 @@ namespace yzg
             auto & gvar = context.globalVariables[pvar->index];
             gvar.name = context.allocateName(pvar->name);
             gvar.size = pvar->type->getSizeOf();
+            gvar.debug = makeVariableDebugInfo(context, *it.second);
             void * data = context.allocate(gvar.size);
             memset(data, 0, gvar.size);
             gvar.value = cast<void *>::from(data);
@@ -1329,8 +1358,10 @@ namespace yzg
             gfun.name = context.allocateName(pfun->name);
             gfun.code = pfun->simulate(context);
             gfun.stackSize = pfun->totalStackSize;
+            gfun.debug = makeFunctionDebugInfo(context, *pfun);
         }
         context.linearAllocatorExecuteBase = context.linearAllocator;
+        sdebug.clear();
     }
     
     TypeDeclPtr Program::makeStructureType ( const string & name ) const

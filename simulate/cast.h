@@ -9,10 +9,16 @@
 #ifndef cast_h
 #define cast_h
 
+#include "platform.h"
+#include "vectypes.h"
+
+#include <string>
 #include <xmmintrin.h>
 
 namespace yzg
 {
+    using namespace std;
+    
     template <typename TT>
     struct cast;
     

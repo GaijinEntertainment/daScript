@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		0458A5F2218BCD4200DEB8A0 /* builtin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0458A5F1218BCD4200DEB8A0 /* builtin.cpp */; };
+		04A1D33D219D03D700099208 /* debug_info.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04A1D33B219D03D700099208 /* debug_info.cpp */; };
+		04A1D340219D065500099208 /* runtime_string.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04A1D33E219D065500099208 /* runtime_string.cpp */; };
 		04A56F8F2174130400DB3482 /* simulate.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04A56F8D2174130400DB3482 /* simulate.cpp */; };
 		04B2409C2133A911007CF8B1 /* ast.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04B2409A2133A911007CF8B1 /* ast.cpp */; };
 		04B2409E2134CA31007CF8B1 /* test_2.yzg in Sources */ = {isa = PBXBuildFile; fileRef = 04B2409D2134CA31007CF8B1 /* test_2.yzg */; };
@@ -39,6 +41,10 @@
 		0458A5F92194A3F800DEB8A0 /* cast.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = cast.h; sourceTree = "<group>"; };
 		04A1D3382196B07700099208 /* type_string.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = type_string.yzg; sourceTree = "<group>"; };
 		04A1D3392198AC7300099208 /* test_ref.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = test_ref.yzg; sourceTree = "<group>"; };
+		04A1D33B219D03D700099208 /* debug_info.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = debug_info.cpp; sourceTree = "<group>"; };
+		04A1D33C219D03D700099208 /* debug_info.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = debug_info.hpp; sourceTree = "<group>"; };
+		04A1D33E219D065500099208 /* runtime_string.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = runtime_string.cpp; sourceTree = "<group>"; };
+		04A1D33F219D065500099208 /* runtime_string.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = runtime_string.hpp; sourceTree = "<group>"; };
 		04A56F8921666FEB00DB3482 /* todo */ = {isa = PBXFileReference; lastKnownFileType = text; path = todo; sourceTree = "<group>"; };
 		04A56F8B2173B6E800DB3482 /* profile_array_of_structures.yzg */ = {isa = PBXFileReference; lastKnownFileType = text; path = profile_array_of_structures.yzg; sourceTree = "<group>"; };
 		04A56F8D2174130400DB3482 /* simulate.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = simulate.cpp; sourceTree = "<group>"; };
@@ -73,6 +79,10 @@
 				04A56F8E2174130400DB3482 /* simulate.hpp */,
 				0458A5F82193F69900DEB8A0 /* interop.h */,
 				0458A5F92194A3F800DEB8A0 /* cast.h */,
+				04A1D33B219D03D700099208 /* debug_info.cpp */,
+				04A1D33C219D03D700099208 /* debug_info.hpp */,
+				04A1D33E219D065500099208 /* runtime_string.cpp */,
+				04A1D33F219D065500099208 /* runtime_string.hpp */,
 			);
 			path = simulate;
 			sourceTree = "<group>";
@@ -209,6 +219,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				04B2409E2134CA31007CF8B1 /* test_2.yzg in Sources */,
+				04A1D33D219D03D700099208 /* debug_info.cpp in Sources */,
+				04A1D340219D065500099208 /* runtime_string.cpp in Sources */,
 				04A56F8F2174130400DB3482 /* simulate.cpp in Sources */,
 				04B2409C2133A911007CF8B1 /* ast.cpp in Sources */,
 				04E5345121326BA5006834F4 /* test_1.yzg in Sources */,
