@@ -7,9 +7,7 @@ parser
     support ` (`debug "hello" "world")
 
 misc
-    support return
     basic type - test pointer casts
-    points == null and pointer != null
     support 'clone' for variables, redo name lookup upstream during cloning?
     simplify builtin initialization
     support multi-dimensional array foreach
@@ -17,6 +15,7 @@ misc
     assert2 - need node, so that if ( !a ) b and not a,b, if
     &&, || - need nodes
     support (unsafe ?)
+    support extern functions stackwalk
 
 optimization \ ast massage
     flatten nested blocks
@@ -28,18 +27,17 @@ optimization \ ast massage
 
 // recent
 
-iterations took:0.000657
-foreach iterations took:0.000329
-c++ version took:0.000017
-interop version took:0.000498
+iterations took:0.000661
+foreach iterations took:0.000347
+c++ version took:0.000019
+interop version took:0.000538
 foreach interop version took:0.000177
-10000-interop version took:0.000225
-ratio sim / c: 38.588715
-ratio foreach sim / c: 19.299554
-ratio interop / c: 29.260979
-ratio foreach interop / c: 10.379814
-ratio 10000-interop / c: 13.194692
-ratio sim / interop: 1.318777
-
+10000-interop version took:0.000271
+ratio sim / c: 34.089840
+ratio foreach sim / c: 17.895093
+ratio interop / c: 27.778472
+ratio foreach interop / c: 9.134733
+ratio 10000-interop / c: 13.966665
+ratio sim / interop: 1.227204
 
 

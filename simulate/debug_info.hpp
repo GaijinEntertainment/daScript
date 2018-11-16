@@ -20,7 +20,6 @@ namespace yzg
     enum Type : uint8_t
     {
         none,
-        tNull,
         tVoid,
         tBool,
         tInt,
@@ -45,7 +44,6 @@ namespace yzg
     struct TypeInfo
     {
         Type            type;
-        TypeInfo *      ptrType;
         StructInfo *    structType;
         uint32_t        dimSize;
         uint32_t *      dim;

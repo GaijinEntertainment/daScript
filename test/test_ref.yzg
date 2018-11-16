@@ -45,6 +45,13 @@
     )
 )
 
+(defun (int add3)
+    (int x)
+    (int y)
+    (int z)
+    (= return (+ (+ x y) z))
+)
+
 (defun (void test)
     (
         (let
@@ -54,6 +61,7 @@
                 (assert (== x 101) "supposed to be 101")
             )
         )
+        (assert (== (add3 1 2 3) 6))
         (assert (== (sizeof (bar)) 12) "supposed to be 3*sizeof(int)==12")
         (assert (== (sizeof (foo)) 20) "supposed to be sizeof(bar)+sizeof(bar &)==20")
         (let

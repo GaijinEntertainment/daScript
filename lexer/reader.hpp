@@ -110,6 +110,7 @@ namespace yzg
         bool isOperator() const { return type==NodeType::op; }
         bool isOperator(Operator opr) const { return type==NodeType::op && op==opr; }
         bool isNumericConstant() const { return type==NodeType::inumber || type==NodeType::unumber || type==NodeType::dnumber; }
+        bool isNil() const { return type==NodeType::nil; }
     
         uint32_t getUnsigned(int n) const;
         string getName(int n) const;

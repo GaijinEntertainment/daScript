@@ -70,7 +70,6 @@ namespace yzg
         vector<uint32_t>    dim;
         bool                ref = false;
         Node *              at = nullptr;
-        TypeDeclPtr         ptrType;
     };
     
     template <typename TT>  struct ToBasicType;
@@ -318,10 +317,7 @@ namespace yzg
     public:
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
-    public:
-        ExpressionPtr   subexpr;
     };
     
     template <typename TT, typename ExprConstExt>
@@ -345,6 +341,15 @@ namespace yzg
         }
     protected:
         TT  value;
+    };
+    
+    class ExprConstPtr : public ExprConst<void *,ExprConstPtr>
+    {
+    public:
+        ExprConstPtr(void * ptr = nullptr) : ExprConst(ptr) {}
+        virtual void log(ostream& stream, int depth) const override {
+            if ( value ) stream << hex << "*0x" << uint64_t(value) << dec; else stream << "nil";
+        }
     };
 
     class ExprConstInt : public ExprConst<int32_t,ExprConstInt>

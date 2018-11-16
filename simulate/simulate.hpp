@@ -60,6 +60,7 @@ namespace yzg
         friend class SimNode_TryCatch;
         friend class SimNode_Call;
         friend class SimNode_InitLocal;
+        friend class SimNode_Return;
     public:
         Context(const string * lines);
         ~Context();
@@ -109,6 +110,10 @@ namespace yzg
             return *(__m128 **)stackTop;
         }
         
+        __forceinline __m128 & abiResult() {
+            return *(__m128 *)(stackTop + sizeof(__m128 *) + sizeof(SimNode *));
+        }
+        
         __forceinline __m128 call ( int fnIndex, __m128 * args, SimNode * THAT ) {
             auto & fn = functions[fnIndex];
             // PUSH
@@ -116,10 +121,12 @@ namespace yzg
             stackTop -= fn.stackSize;
             if ( stack - stackTop > stackSize )
                 throw runtime_error("stack overflow");
-            *(__m128 **)(stackTop) = args;
-            *(SimNode **)(stackTop + sizeof(__m128 *)) = THAT;
+            *(__m128 **)(stackTop) = args;                                                      // args
+            *(SimNode **)(stackTop + sizeof(__m128 *)) = THAT;                                  // debug info
+            *(__m128 *)(stackTop + sizeof(__m128 *) + sizeof(SimNode *)) = _mm_setzero_ps();    // result
             // CALL
-            __m128 result = fn.code->eval(*this);
+            fn.code->eval(*this);
+            __m128 result = abiResult();
             // POP
             stackTop = pushStack;
             return result;
@@ -269,6 +276,14 @@ namespace yzg
             return context.abiArguments()[index];
         }
         int index;
+    };
+    
+    // RETURN VARIABLE GET
+    struct SimNode_Return : SimNode {
+        SimNode_Return ( long at ) : SimNode(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            return cast<__m128 *>::from(&context.abiResult());
+        }
     };
     
     // GLOBAL VARIABLE "GET"

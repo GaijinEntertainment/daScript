@@ -16,7 +16,6 @@ namespace yzg
 {
     Enum<Type> g_typeTable = {
         {   Type::tVoid,        "void"  },
-        {   Type::tNull,        "null"   },
         {   Type::tBool,        "bool"  },
         {   Type::tString,      "string" },
         {   Type::tPointer,     "pointer" },
@@ -142,7 +141,6 @@ namespace yzg
             debug_dim_value(ss, pX, info);
         } else {
             switch ( info->type ) {
-                case Type::tNull:       ss << "null"; break;
                 case Type::tBool:       ss << *((bool *)pX); break;
                 case Type::tString:     ss << "\"" << escapeString(safe_str(pX)) << "\""; break;
                 case Type::tPointer:    ss << "*" << hex << uint64_t(*((uint64_t *)pX)) << dec; break;    // todo: better pointer?
@@ -170,7 +168,6 @@ namespace yzg
             debug_dim_value(ss, cast<void *>::to(x), info);
         } else {
             switch ( info->type ) {
-                case Type::tNull:       ss << "null"; break;
                 case Type::tBool:       ss << cast<bool>::to(x); break;
                 case Type::tString:     ss << "\"" << escapeString(to_rts(x)) << "\""; break;
                 case Type::tPointer:    ss << "*" << hex << uint64_t(cast<void *>::to(x)) << dec; break;    // todo: better pointer?
@@ -209,14 +206,12 @@ namespace yzg
     string debug_type ( TypeInfo * info )
     {
         stringstream stream;
-        bool isPointer = info->type ==Type::tPointer;
-        const TypeInfo * baseTypeDecl = isPointer ? info->ptrType : info;
-        if ( baseTypeDecl->type==Type::tStructure ) {
-            stream << baseTypeDecl->structType->name;
+        if ( info->type==Type::tStructure || info->type==Type::tPointer ) {
+            stream << info->structType->name;
         } else {
-            stream << to_string(baseTypeDecl->type);
+            stream << to_string(info->type);
         }
-        if ( isPointer )
+        if ( info->type ==Type::tPointer )
             stream << " *";
         for ( uint32_t i=0; i!=info->dimSize; ++i ) {
             stream << " " << info->dim[i];

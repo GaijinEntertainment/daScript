@@ -19,14 +19,12 @@ namespace yzg
     
     ostream& operator<< (ostream& stream, const TypeDecl & decl)
     {
-        bool isPointer = decl.baseType==Type::tPointer;
-        const TypeDecl * baseTypeDecl = isPointer ? decl.ptrType.get() : &decl;
-        if ( baseTypeDecl->baseType==Type::tStructure ) {
-            stream << baseTypeDecl->structType->name;
+        if ( decl.baseType==Type::tStructure || decl.baseType==Type::tPointer ) {
+            stream << decl.structType->name;
         } else {
-            stream << to_string(baseTypeDecl->baseType);
+            stream << to_string(decl.baseType);
         }
-        if ( isPointer )
+        if ( decl.baseType==Type::tPointer )
             stream << " *";
         for ( auto d : decl.dim ) {
             stream << " " << d;
@@ -43,7 +41,6 @@ namespace yzg
         dim = decl.dim;
         ref = decl.ref;
         at = decl.at;
-        ptrType = decl.ptrType ? make_shared<TypeDecl>(*decl.ptrType) : nullptr;
     }
     
     string TypeDecl::getMangledName() const
@@ -71,7 +68,7 @@ namespace yzg
         if ( baseType==Type::tStructure && structType!=decl.structType )
             return false;
         if ( baseType==Type::tPointer ) {
-            if ( ptrType && decl.ptrType && ptrType->isSameType(*decl.ptrType,true) ) {
+            if ( structType && decl.structType && structType!=decl.structType ) {
                 return false;
             }
         }
@@ -109,9 +106,9 @@ namespace yzg
     bool TypeDecl::isSimpleType() const
     {
         if (    baseType==Type::none
-            ||  baseType==Type::tNull
             ||  baseType==Type::tVoid
-            ||  baseType==Type::tStructure )
+            ||  baseType==Type::tStructure
+            ||  baseType==Type::tPointer )
             return false;
         if ( dim.size() )
             return false;
@@ -356,7 +353,8 @@ namespace yzg
         subexpr = autoDereference(subexpr);
         if ( !subexpr->type->isPointer() )
             throw semantic_error("can only dereference pointer", at);
-        type = make_shared<TypeDecl>(*subexpr->type->ptrType);
+        type = make_shared<TypeDecl>(*subexpr->type);
+        type->baseType = Type::tStructure;
         type->ref = true;
     }
     
@@ -425,7 +423,7 @@ namespace yzg
         if ( typeexpr->dim.size() )
             throw semantic_error("can only new single object", typeexpr->at );
         type = make_shared<TypeDecl>(Type::tPointer);
-        type->ptrType = typeexpr;
+        type->structType = typeexpr->structType;
     }
     
     SimNode * ExprNew::simulate (Context & context) const
@@ -776,45 +774,22 @@ namespace yzg
     
     // ExprReturn
     
-    ExpressionPtr ExprReturn::clone( const ExpressionPtr & expr ) const
-    {
-        auto cexpr = clonePtr<ExprReturn>(expr);
-        cexpr->subexpr = subexpr->clone();
-        return cexpr;
-    }
-    
     void ExprReturn::log(ostream& stream, int depth) const
     {
-        if ( subexpr ) {
-            stream << "(return\n" << string(depth+1, '\t');
-            subexpr->log(stream, depth+1);
-            stream << ")";
-        } else {
-            stream << "(return)";
-        }
+        stream << "return";
     }
     
     void ExprReturn::inferType(InferTypeContext & context)
     {
-        if ( subexpr ) {
-            subexpr->inferType(context);
-            if ( context.func->result->isVoid() )
-                throw semantic_error("return subexpression of void function must be empty", at);
-            if ( !subexpr->type->isSameType(*context.func->result, false) )
-                throw semantic_error("return subexpression type must match function return type", at);
-        } else {
-            if ( !context.func->result->isVoid() )
-                throw semantic_error("only void functions can skip return subexpression", at);
-        }
-        type = make_shared<TypeDecl>();
-        if ( subexpr && !context.func->result->isRef() )
-            subexpr = autoDereference(subexpr);
+        if ( context.func->result->isVoid() )
+            throw semantic_error("void function has no return", at);
+        type = make_shared<TypeDecl>(*context.func->result);
+        type->ref = true;
     }
     
     SimNode * ExprReturn::simulate (Context & context) const
     {
-        assert(0 && "implement");
-        return nullptr;
+        return context.makeNode<SimNode_Return>(At());
     }
 
     // ExprIfThenElse
@@ -1208,7 +1183,7 @@ namespace yzg
             context.program = shared_from_this();
             context.func = fit.second;
             if ( !context.func->builtIn ) {
-                context.func->totalStackSize = context.stackTop = sizeof(SimNode *) + sizeof(__m128 *); // TODO: allocate room for 'result' too
+                context.func->totalStackSize = context.stackTop = sizeof(SimNode *) + sizeof(__m128 *) + sizeof(__m128);
                 context.func->index = totalFunctions ++;
                 for ( auto & arg : context.func->arguments ) {
                     if ( arg->init ) {
@@ -1307,7 +1282,7 @@ namespace yzg
                 info->dim[i] = type->dim[i];
             }
         }
-        if ( type->baseType==Type::tStructure ) {
+        if ( type->baseType==Type::tStructure || type->baseType==Type::tPointer ) {
             auto st = sdebug.find(type->structType->name);
             if ( st==sdebug.end() ) {
                 info->structType = makeStructureDebugInfo(context, *type->structType);
@@ -1317,12 +1292,6 @@ namespace yzg
             }
         } else {
             info->structType = nullptr;
-        }
-        if ( type->baseType==Type::tPointer && type->ptrType ) {
-            info->ptrType = context.makeNode<TypeInfo>();
-            makeTypeInfo(info->ptrType, context, type->ptrType);
-        } else {
-            info->ptrType = nullptr;
         }
         info->ref = type->ref;
     }
@@ -1404,12 +1373,11 @@ namespace yzg
             tdecl->baseType = Type::tStructure;
             tdecl->structType = it->second.get();
         }
-        if ( tdecl->baseType==Type::tNull )
-            throw parse_error("can't have null type", decl);
         int iDim = 1;
         if ( decl->list.size()==(3+nFields) ) {
             if ( decl->list[1]->isOperator(Operator::mul) ) {
-                tdecl->ptrType = make_shared<TypeDecl>(*tdecl);
+                if ( tdecl->baseType!=Type::tStructure && tdecl->baseType!=Type::tVoid )
+                    throw parse_error("can only be pointer to structure (or void)", decl);
                 tdecl->baseType = Type::tPointer;
                 iDim ++;
             } else if ( decl->list[1]->isOperator(Operator::binand) )
@@ -1630,19 +1598,7 @@ namespace yzg
                 if ( decl->list.size()==4 )
                     pIfThenElse->if_false = parseExpression(decl->list[3], program);
                 return pIfThenElse;
-            } else if ( head->isName("return") ) {
-                auto pRet = make_shared<ExprReturn>();
-                pRet->at = decl.get();
-                auto nArg = decl->list.size() -  1;
-                if ( nArg == 1 ) {
-                    pRet->subexpr = parseExpression(decl->list[1], program);
-                } else if ( nArg == 0 ) {
-                    // nothing to return
-                } else {
-                    throw parse_error("return has too many operands", decl);
-                }
-                return pRet;
-            } else if ( head->isName("let") ) {
+            }  else if ( head->isName("let") ) {
                 if ( !decl->isListOfAtLeastSize(3) )
                     throw parse_error("needs at least one variable declaration and expression", decl);
                 auto let = make_shared<ExprLet>();
@@ -1692,10 +1648,16 @@ namespace yzg
                 throw parse_error("unrecognized expression", decl);
             }
         } else if ( decl->isName() ) {
-            auto pVar = make_shared<ExprVar>();
-            pVar->at = decl.get();
-            pVar->name = decl->text;
-            return pVar;
+            if ( decl->text=="return" ) {
+                auto pReturn = make_shared<ExprReturn>();
+                pReturn->at = decl.get();
+                return pReturn;
+            } else {
+                auto pVar = make_shared<ExprVar>();
+                pVar->at = decl.get();
+                pVar->name = decl->text;
+                return pVar;
+            }
         } else if ( decl->isNumericConstant() ) {
             ExpressionPtr pconst;
             if ( decl->type==NodeType::dnumber ) {
@@ -1713,6 +1675,8 @@ namespace yzg
             return make_shared<ExprConstString>(decl->text);
         } else if ( decl->isBoolean() ) {
             return make_shared<ExprConstBool>(decl->b);
+        } else if ( decl->isNil() ) {
+            return make_shared<ExprConstPtr>(nullptr);
         } else {
             throw parse_error("unrecognized expression", decl);
         }
