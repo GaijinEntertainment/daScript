@@ -154,6 +154,7 @@ namespace yzg
             uint32_t            stackTop = 0;
         };
     public:
+        virtual ~Expression() {}
         friend ostream& operator<< (ostream& stream, const Expression & func);
         virtual void log(ostream& stream, int depth) const = 0;
         virtual void inferType(InferTypeContext & context) = 0;
@@ -465,6 +466,7 @@ namespace yzg
     class Function
     {
     public:
+        virtual ~Function() {}
         friend ostream& operator<< (ostream& stream, const Function & func);
         string getMangledName() const;
         VariablePtr findArgument(const string & name);

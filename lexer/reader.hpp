@@ -79,6 +79,7 @@ namespace yzg
     
     struct Node
     {
+        long at = 0;
         NodeType        type;
         string          text;
         vector<NodePtr> list;
@@ -90,7 +91,6 @@ namespace yzg
             double      dnum;
             Operator    op;
         };
-        long at = 0;
         
         Node(long AT) : at(AT), type(NodeType::nil) {}
         Node(NodeType nt, const string & st, long AT) : at(AT), type(nt), text(st) {}

@@ -25,7 +25,7 @@ namespace yzg
 {
     using namespace std;
     
-    struct Context;
+    class Context;
     struct SimNode;
     
     struct GlobalVariable
@@ -54,13 +54,13 @@ namespace yzg
     class Context
     {
         friend class Program;
-        friend class SimNode_GetGlobal;
-        friend class SimNode_GetLocal;
-        friend class SimNode_GetArgument;
-        friend class SimNode_TryCatch;
-        friend class SimNode_Call;
-        friend class SimNode_InitLocal;
-        friend class SimNode_Return;
+        friend struct SimNode_GetGlobal;
+        friend struct SimNode_GetLocal;
+        friend struct SimNode_GetArgument;
+        friend struct SimNode_TryCatch;
+        friend struct SimNode_Call;
+        friend struct SimNode_InitLocal;
+        friend struct SimNode_Return;
     public:
         Context(const string * lines);
         ~Context();

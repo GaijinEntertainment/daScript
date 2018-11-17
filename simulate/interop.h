@@ -11,6 +11,10 @@
 
 #include "simulate.hpp"
 
+#include <type_traits>
+#include "function_traits.h"
+
+
 namespace yzg
 {
     // convert arguments into a tuple of appropriate types
@@ -18,56 +22,39 @@ namespace yzg
     __forceinline auto cast_args (__m128 * args, index_sequence<I...> ) {
         return make_tuple( cast< typename tuple_element<I, ArgumentsType>::type  >::to ( args[ I ] )... );
     }
-    
     // void static function or lambda
-    template <typename FunctionType, typename TupleType, size_t... I>
-    __forceinline void callStaticVoidFunction(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
-        fn(get<I>(forward<TupleType>(args))...);
-    }
-    
-    // void static function or lambda
-    template <typename FunctionType, typename TupleType, size_t... I>
-    __forceinline auto callStaticFunction(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
-        return fn(get<I>(forward<TupleType>(args))...);
-    }
-    
-    template <typename FuncT, FuncT fn, typename RetT>
-    struct SimNode_ExtFuncCallImpl : public SimNode_Call
-    {
-        SimNode_ExtFuncCallImpl ( long at ) : SimNode_Call(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            using FunctionTrait = function_traits<FuncT>;
-            const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
-            using Indices = make_index_sequence<nargs>;
-            using Arguments = typename FunctionTrait::arguments;
-            using Result  = typename FunctionTrait::result_type;
-            evalArgs(context);
-            auto cpp_args = cast_args<Arguments>(argValues, Indices());
-            return cast<Result>::from ( callStaticFunction(*fn, move(cpp_args), Indices()) );
+    template <typename Result>
+    struct ImplCallStaticFunction {
+        template <typename FunctionType, typename TupleType, size_t... I>
+        static __forceinline __m128 call(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
+            return cast<Result>::from ( fn(get<I>(forward<TupleType>(args))...) );
         }
     };
     
-    template <typename FuncT, FuncT fn>
-    struct SimNode_ExtFuncCallImpl<FuncT,fn,void> : public SimNode_Call
-    {
-        SimNode_ExtFuncCallImpl ( long at ) : SimNode_Call(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            using FunctionTrait = function_traits<FuncT>;
-            const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
-            using Indices = make_index_sequence<nargs>;
-            using Arguments = typename FunctionTrait::arguments;
-            evalArgs(context);
-            auto cpp_args = cast_args<Arguments>(argValues, Indices());
-            callStaticVoidFunction(*fn, move(cpp_args), Indices());
+    template <>
+    struct ImplCallStaticFunction<void> {
+        template <typename FunctionType, typename TupleType, size_t... I>
+        static __forceinline __m128 call(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
+            fn(get<I>(forward<TupleType>(args))...);
             return _mm_setzero_ps();
         }
     };
     
     template <typename FuncT, FuncT fn>
-    struct SimNode_ExtFuncCall : public SimNode_ExtFuncCallImpl<FuncT, fn, typename function_traits<FuncT>::return_type>
+    struct SimNode_ExtFuncCall : SimNode_Call
     {
-        SimNode_ExtFuncCall ( long at )
-            : SimNode_ExtFuncCallImpl<FuncT, fn, typename function_traits<FuncT>::return_type>(at) {}
+        SimNode_ExtFuncCall ( long at ) : SimNode_Call(at) {}
+        
+        virtual __m128 eval ( Context & context ) override {
+            using FunctionTrait = function_traits<FuncT>;
+            using Result = typename FunctionTrait::return_type;
+            const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
+            using Indices = make_index_sequence<nargs>;
+            using Arguments = typename FunctionTrait::arguments;
+            evalArgs(context);
+            auto cpp_args = cast_args<Arguments>(argValues, Indices());
+            return ImplCallStaticFunction<Result>::call(*fn, move(cpp_args), Indices());
+        }
     };
 }
 

@@ -217,10 +217,10 @@ void unit_test_array_of_structures ( const string & fn )
 }
 
 int main(int argc, const char * argv[]) {
-    unit_test_array_of_structures("./test/profile_array_of_structures.yzg");
-    unit_test_array_of_structures("./test/profile_array_of_structures_vec.yzg");
-    unit_test("./test/try_catch.yzg");
-    unit_test("./test/type_string.yzg", 1);
-    unit_test("./test/test_ref.yzg", 1);
+    unit_test_array_of_structures("../../test/profile_array_of_structures.yzg");
+    unit_test_array_of_structures("../../test/profile_array_of_structures_vec.yzg");
+    unit_test("../../test/try_catch.yzg");
+    unit_test("../../test/type_string.yzg", 1);
+    unit_test("../../test/test_ref.yzg", 1);
     return 0;
 }
