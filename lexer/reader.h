@@ -1,17 +1,4 @@
-//
-//  reader.hpp
-//  yzg
-//
-//  Created by Boris Batkin on 8/23/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
-
-#ifndef reader_hpp
-#define reader_hpp
-
-#include <memory>
-#include <vector>
-#include <string>
+#pragma once
 
 namespace yzg
 {
@@ -133,5 +120,3 @@ namespace yzg
     
     void reportError ( const string & st, long at, const string & message );
 }
-
-#endif /* reader_hpp */

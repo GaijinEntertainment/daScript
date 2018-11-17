@@ -1,14 +1,15 @@
-//
-//  platform.h
-//  yzg
-//
-//  Created by Boris Batkin on 11/1/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
+#pragma once
 
-#ifndef platform_h
-#define platform_h
+#include <xmmintrin.h>
+
+#include <map>
+#include <string>
+#include <memory>
+#include <vector>
+#include <sstream>
+#include <fstream>
+#include <iostream>
+#include <type_traits>
+#include <initializer_list>
 
 #define __forceinline inline __attribute__((always_inline))
-
-#endif /* platform_h */

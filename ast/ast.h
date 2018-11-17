@@ -1,25 +1,11 @@
-//
-//  ast.hpp
-//  yzg
-//
-//  Created by Boris Batkin on 8/26/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
+#pragma once
 
-#ifndef ast_hpp
-#define ast_hpp
-
-#include "reader.hpp"
-#include "simulate.hpp"
+#include "reader.h"
+#include "simulate.h"
 #include "vectypes.h"
 #include "function_traits.h"
 #include "interop.h"
-#include "debug_info.hpp"
-
-#include <memory>
-#include <vector>
-#include <map>
-#include <string>
+#include "debug_info.h"
 
 namespace yzg
 {
@@ -586,4 +572,4 @@ namespace yzg
     ProgramPtr parse ( const NodePtr & root, function<void (const ProgramPtr & prg)> && defineContext );
 }
 
-#endif /* ast_hpp */
+

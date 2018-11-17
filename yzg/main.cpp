@@ -1,18 +1,7 @@
-//
-//  main.cpp
-//  yzg
-//
-//  Created by Boris Batkin on 8/23/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
+#include "precomp.h"
 
-#include <iostream>
-#include <fstream>
-
-#include "function_traits.h"
-
-#include "reader.hpp"
-#include "ast.hpp"
+#include "reader.h"
+#include "ast.h"
 #include "interop.h"
 
 using namespace std;

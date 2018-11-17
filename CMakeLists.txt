@@ -7,14 +7,14 @@ SETUP_COMPILER()
 
 SET(AST_SRC
 ast/ast.cpp
-ast/ast.hpp
+ast/ast.h
 ast/builtin.cpp
 )
 SOURCE_GROUP_FILES("ast" AST_SRC)
 
 SET(LEXER_SRC
 lexer/reader.cpp
-lexer/reader.hpp
+lexer/reader.h
 )
 SOURCE_GROUP_FILES("lexer" LEXER_SRC)
 
@@ -23,18 +23,20 @@ misc/enums.h
 misc/function_traits.h
 misc/platform.h
 misc/vectypes.h
+misc/precomp.h
+misc/precomp.cpp
 )
 SOURCE_GROUP_FILES("misc" MISC_SRC)
 
 SET(SIMULATE_SRC
 simulate/cast.h
 simulate/debug_info.cpp
-simulate/debug_info.hpp
+simulate/debug_info.h
 simulate/interop.h
 simulate/runtime_string.cpp
-simulate/runtime_string.hpp
+simulate/runtime_string.h
 simulate/simulate.cpp
-simulate/simulate.hpp
+simulate/simulate.h
 )
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
@@ -58,4 +60,4 @@ include_directories(yzg PUBLIC ast lexer misc simulate test yzg)
 
 add_executable(yzg ${AST_SRC} ${LEXER_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC})
 SETUP_CPP11(yzg)
-
+ADD_PRECOMPILED_HEADER(yzg misc/precomp.h misc/precomp.h)

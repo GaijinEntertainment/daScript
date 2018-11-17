@@ -1,19 +1,7 @@
-//
-//  interop.h
-//  yzg
-//
-//  Created by Boris Batkin on 11/7/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
+#pragma once
 
-#ifndef interop_h
-#define interop_h
-
-#include "simulate.hpp"
-
-#include <type_traits>
+#include "simulate.h"
 #include "function_traits.h"
-
 
 namespace yzg
 {
@@ -58,4 +46,3 @@ namespace yzg
     };
 }
 
-#endif /* interop_h */

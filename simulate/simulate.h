@@ -1,25 +1,10 @@
-//
-//  simulate.hpp
-//  yzg
-//
-//  Created by Boris Batkin on 10/14/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
-
-#ifndef simulate_hpp
-#define simulate_hpp
+#pragma once
 
 #include "platform.h"
 #include "vectypes.h"
 #include "cast.h"
-
-#include "runtime_string.hpp"
-#include "debug_info.hpp"
-
-#include <xmmintrin.h>
-#include <vector>
-#include <string>
-#include <iostream>
+#include "runtime_string.h"
+#include "debug_info.h"
 
 namespace yzg
 {
@@ -683,5 +668,3 @@ namespace yzg
     DEFINE_OP2_POLICY(SetDiv);
     DEFINE_OP2_POLICY(SetMul);
 }
-
-#endif /* simulate_hpp */

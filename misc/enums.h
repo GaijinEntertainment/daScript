@@ -1,17 +1,4 @@
-//
-//  enums.h
-//  yzg
-//
-//  Created by Boris Batkin on 8/27/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
-
-#ifndef enums_h
-#define enums_h
-
-#include <map>
-#include <string>
-#include <initializer_list>
+#pragma once
 
 namespace yzg
 {
@@ -60,5 +47,3 @@ namespace yzg
         map<EE, string>     enum2name;
     };
 }
-
-#endif /* enums_h */

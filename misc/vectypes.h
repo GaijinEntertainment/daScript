@@ -1,15 +1,4 @@
-//
-//  vectypes.h
-//  yzg
-//
-//  Created by Boris Batkin on 11/1/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
-
-#ifndef vectypes_h
-#define vectypes_h
-
-#include <ostream>
+#pragma once
 
 namespace yzg
 {
@@ -58,4 +47,3 @@ namespace yzg
     typedef vec4<uint32_t> uint4;
 }
 
-#endif /* vectypes_h */

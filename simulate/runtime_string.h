@@ -1,18 +1,6 @@
-//
-//  runtime_string.hpp
-//  yzg
-//
-//  Created by Boris Batkin on 11/14/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
-
-#ifndef runtime_string_hpp
-#define runtime_string_hpp
+#pragma once
 
 #include "cast.h"
-
-#include <stdio.h>
-#include <string>
 
 namespace yzg
 {
@@ -52,4 +40,3 @@ namespace yzg
     string::const_iterator positionToRowCol ( const string & st, long AT, int & col, int & row );
 }
 
-#endif /* runtime_string_hpp */

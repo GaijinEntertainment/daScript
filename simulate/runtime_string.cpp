@@ -1,12 +1,6 @@
-//
-//  runtime_string.cpp
-//  yzg
-//
-//  Created by Boris Batkin on 11/14/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
+#include "precomp.h"
 
-#include "runtime_string.hpp"
+#include "runtime_string.h"
 
 namespace yzg
 {

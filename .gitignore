@@ -1,0 +1,7 @@
+cmake_temp/
+
+*.DS_Store
+.DS_Store
+tmtags
+
+

@@ -1,17 +1,4 @@
-//
-//  debug_info.hpp
-//  yzg
-//
-//  Created by Boris Batkin on 11/14/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
-
-#ifndef debug_info_hpp
-#define debug_info_hpp
-
-#include <string>
-#include <sstream>
-#include <xmmintrin.h>
+#pragma once
 
 namespace yzg
 {
@@ -83,4 +70,3 @@ namespace yzg
     string debug_type ( TypeInfo * info );
 }
 
-#endif /* debug_info_hpp */

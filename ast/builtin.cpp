@@ -1,12 +1,6 @@
-//
-//  builtin.cpp
-//  yzg
-//
-//  Created by Boris Batkin on 11/1/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
+#include "precomp.h"
 
-#include "ast.hpp"
+#include "ast.h"
 
 namespace yzg
 {

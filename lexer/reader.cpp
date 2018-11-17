@@ -1,20 +1,12 @@
-//
-//  reader.cpp
-//  yzg
-//
-//  Created by Boris Batkin on 8/23/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
+#include "precomp.h"
 
-#include "reader.hpp"
+#include "reader.h"
 
 #include "enums.h"
-
-#include "runtime_string.hpp"
+#include "runtime_string.h"
 
 #include <regex>
-#include <sstream>
-#include <iostream>
+
 
 namespace yzg
 {

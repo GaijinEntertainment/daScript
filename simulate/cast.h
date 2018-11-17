@@ -1,19 +1,7 @@
-//
-//  cast.h
-//  yzg
-//
-//  Created by Boris Batkin on 11/8/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
-
-#ifndef cast_h
-#define cast_h
+#pragma once
 
 #include "platform.h"
 #include "vectypes.h"
-
-#include <string>
-#include <xmmintrin.h>
 
 namespace yzg
 {
@@ -84,5 +72,3 @@ namespace yzg
     template <> struct cast <uint3>  : cast_iVec<uint3> {};
     template <> struct cast <uint4>  : cast_iVec<uint4> {};
 }
-
-#endif /* cast_h */

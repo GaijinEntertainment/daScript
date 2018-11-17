@@ -1,13 +1,4 @@
-//
-//  function_traits.h
-//  yzg
-//
-//  Created by Boris Batkin on 11/7/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
-
-#ifndef function_traits_h
-#define function_traits_h
+#pragma once
 
 namespace yzg
 {
@@ -54,4 +45,3 @@ namespace yzg
     struct function_traits<F&&> : function_traits<F> {};
 }
 
-#endif /* function_traits_h */

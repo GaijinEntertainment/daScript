@@ -1,16 +1,10 @@
-//
-//  debug_info.cpp
-//  yzg
-//
-//  Created by Boris Batkin on 11/14/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
+#include "precomp.h"
 
-#include "debug_info.hpp"
+#include "debug_info.h"
 
 #include "enums.h"
 #include "cast.h"
-#include "runtime_string.hpp"
+#include "runtime_string.h"
 
 namespace yzg
 {

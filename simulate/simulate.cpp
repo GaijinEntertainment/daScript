@@ -1,12 +1,6 @@
-//
-//  simulate.cpp
-//  yzg
-//
-//  Created by Boris Batkin on 10/14/18.
-//  Copyright © 2018 Boris Batkin. All rights reserved.
-//
+#include "precomp.h"
 
-#include "simulate.hpp"
+#include "simulate.h"
 
 namespace yzg
 {
