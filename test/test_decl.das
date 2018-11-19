@@ -11,3 +11,9 @@ struct HollywoodBall {
     radius:float;
 }
 
+struct HugeCurlyBall
+{
+    position: float3;
+    radius:float;
+}
+

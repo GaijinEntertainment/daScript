@@ -308,21 +308,21 @@ namespace yzg
     SimNode * ExprRef2Value::simulate (Context & context) const
     {
         switch ( type->baseType ) {
-            case Type::tInt:        return context.makeNode<SimNode_Ref2Value<int32_t>>(At(),subexpr->simulate(context));
-            case Type::tUInt:       return context.makeNode<SimNode_Ref2Value<uint32_t>>(At(),subexpr->simulate(context));
-            case Type::tBool:       return context.makeNode<SimNode_Ref2Value<bool>>(At(),subexpr->simulate(context));
-            case Type::tString:     return context.makeNode<SimNode_Ref2Value<char *>>(At(),subexpr->simulate(context));
-            case Type::tPointer:    return context.makeNode<SimNode_Ref2Value<void *>>(At(),subexpr->simulate(context));
-            case Type::tFloat:      return context.makeNode<SimNode_Ref2Value<float>>(At(),subexpr->simulate(context));
-            case Type::tFloat2:     return context.makeNode<SimNode_Ref2Value<float2>>(At(),subexpr->simulate(context));
-            case Type::tFloat3:     return context.makeNode<SimNode_Ref2Value<float3>>(At(),subexpr->simulate(context));
-            case Type::tFloat4:     return context.makeNode<SimNode_Ref2Value<float4>>(At(),subexpr->simulate(context));
-            case Type::tInt2:       return context.makeNode<SimNode_Ref2Value<int2>>(At(),subexpr->simulate(context));
-            case Type::tInt3:       return context.makeNode<SimNode_Ref2Value<int3>>(At(),subexpr->simulate(context));
-            case Type::tInt4:       return context.makeNode<SimNode_Ref2Value<int4>>(At(),subexpr->simulate(context));
-            case Type::tUInt2:      return context.makeNode<SimNode_Ref2Value<uint2>>(At(),subexpr->simulate(context));
-            case Type::tUInt3:      return context.makeNode<SimNode_Ref2Value<uint3>>(At(),subexpr->simulate(context));
-            case Type::tUInt4:      return context.makeNode<SimNode_Ref2Value<uint4>>(At(),subexpr->simulate(context));
+            case Type::tInt:        return context.makeNode<SimNode_Ref2Value<int32_t>>(at,subexpr->simulate(context));
+            case Type::tUInt:       return context.makeNode<SimNode_Ref2Value<uint32_t>>(at,subexpr->simulate(context));
+            case Type::tBool:       return context.makeNode<SimNode_Ref2Value<bool>>(at,subexpr->simulate(context));
+            case Type::tString:     return context.makeNode<SimNode_Ref2Value<char *>>(at,subexpr->simulate(context));
+            case Type::tPointer:    return context.makeNode<SimNode_Ref2Value<void *>>(at,subexpr->simulate(context));
+            case Type::tFloat:      return context.makeNode<SimNode_Ref2Value<float>>(at,subexpr->simulate(context));
+            case Type::tFloat2:     return context.makeNode<SimNode_Ref2Value<float2>>(at,subexpr->simulate(context));
+            case Type::tFloat3:     return context.makeNode<SimNode_Ref2Value<float3>>(at,subexpr->simulate(context));
+            case Type::tFloat4:     return context.makeNode<SimNode_Ref2Value<float4>>(at,subexpr->simulate(context));
+            case Type::tInt2:       return context.makeNode<SimNode_Ref2Value<int2>>(at,subexpr->simulate(context));
+            case Type::tInt3:       return context.makeNode<SimNode_Ref2Value<int3>>(at,subexpr->simulate(context));
+            case Type::tInt4:       return context.makeNode<SimNode_Ref2Value<int4>>(at,subexpr->simulate(context));
+            case Type::tUInt2:      return context.makeNode<SimNode_Ref2Value<uint2>>(at,subexpr->simulate(context));
+            case Type::tUInt3:      return context.makeNode<SimNode_Ref2Value<uint3>>(at,subexpr->simulate(context));
+            case Type::tUInt4:      return context.makeNode<SimNode_Ref2Value<uint4>>(at,subexpr->simulate(context));
             default:                throw runtime_error("can't dereference type");
         }
     }
@@ -354,7 +354,7 @@ namespace yzg
     
     SimNode * ExprPtr2Ref::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Ptr2Ref>(At(),subexpr->simulate(context));
+        return context.makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
     
     // ExprSizeOf
@@ -391,7 +391,7 @@ namespace yzg
     SimNode * ExprSizeOf::simulate (Context & context) const
     {
         int32_t size = typeexpr->getSizeOf();
-        return context.makeNode<SimNode_ConstValue<int32_t>>(At(),size);
+        return context.makeNode<SimNode_ConstValue<int32_t>>(at,size);
     }
     
     // ExprNew
@@ -423,7 +423,7 @@ namespace yzg
     SimNode * ExprNew::simulate (Context & context) const
     {
         int32_t bytes = typeexpr->getSizeOf();
-        return context.makeNode<SimNode_New>(At(),bytes);
+        return context.makeNode<SimNode_New>(at,bytes);
     }
 
     // ExprAt
@@ -463,7 +463,7 @@ namespace yzg
         auto pidx = index->simulate(context);
         uint32_t stride = subexpr->type->getStride();
         uint32_t range = subexpr->type->dim.back();
-        return context.makeNode<SimNode_At>(At(), prv, pidx, stride, range);
+        return context.makeNode<SimNode_At>(at, prv, pidx, stride, range);
     }
 
     // ExprBlock
@@ -500,7 +500,7 @@ namespace yzg
     
     SimNode * ExprBlock::simulate (Context & context) const
     {
-        auto block = context.makeNode<SimNode_Block>(At());
+        auto block = context.makeNode<SimNode_Block>(at);
         block->total = int(list.size());
         block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
         for ( int i = 0; i != block->total; ++i )
@@ -543,7 +543,7 @@ namespace yzg
     
     SimNode * ExprField::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Field>(At(), value->simulate(context), field->offset);
+        return context.makeNode<SimNode_Field>(at, value->simulate(context), field->offset);
     }
     
     // ExprVar
@@ -601,11 +601,11 @@ namespace yzg
     SimNode * ExprVar::simulate (Context & context) const
     {
         if ( local ) {
-            return context.makeNode<SimNode_GetLocal>(At(), variable->stackTop);
+            return context.makeNode<SimNode_GetLocal>(at, variable->stackTop);
         } else if ( argument) {
-            return context.makeNode<SimNode_GetArgument>(At(), argumentIndex);
+            return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
         } else {
-            return context.makeNode<SimNode_GetGlobal>(At(), variable->index);
+            return context.makeNode<SimNode_GetGlobal>(at, variable->index);
         }
     }
 
@@ -783,7 +783,7 @@ namespace yzg
     
     SimNode * ExprReturn::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Return>(At());
+        return context.makeNode<SimNode_Return>(at);
     }
 
     // ExprIfThenElse
@@ -824,7 +824,7 @@ namespace yzg
     
     SimNode * ExprIfThenElse::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_IfThenElse>(At(), cond->simulate(context), if_true->simulate(context),
+        return context.makeNode<SimNode_IfThenElse>(at, cond->simulate(context), if_true->simulate(context),
                                                     if_false ? if_false->simulate(context) : nullptr);
     }
 
@@ -858,7 +858,7 @@ namespace yzg
 
     SimNode * ExprWhile::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_While>(At(), cond->simulate(context),body->simulate(context));
+        return context.makeNode<SimNode_While>(at, cond->simulate(context),body->simulate(context));
     }
     
     // ExprForeach
@@ -896,7 +896,7 @@ namespace yzg
     
     SimNode * ExprForeach::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Foreach>(At(),
+        return context.makeNode<SimNode_Foreach>(at,
                                                  head->simulate(context),
                                                  iter->simulate(context),
                                                  body->simulate(context),
@@ -932,7 +932,7 @@ namespace yzg
     
     SimNode * ExprTryCatch::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_TryCatch>(At(),try_this->simulate(context),catch_that->simulate(context));
+        return context.makeNode<SimNode_TryCatch>(at,try_this->simulate(context),catch_that->simulate(context));
     }
     
     // ExprLet
@@ -995,7 +995,7 @@ namespace yzg
     
     SimNode * ExprLet::simulate (Context & context) const
     {
-        auto let = context.makeNode<SimNode_Let>(At());
+        auto let = context.makeNode<SimNode_Let>(at);
         let->total = (uint32_t) variables.size();
         let->list = (SimNode **) context.allocate(let->total * sizeof(SimNode*));
         int vi = 0;
@@ -1004,23 +1004,23 @@ namespace yzg
             if ( var->init ) {
                 SimNode * copy = nullptr;
                 auto init = var->init->simulate(context);
-                auto get = context.makeNode<SimNode_GetLocal>(At(), var->stackTop);
+                auto get = context.makeNode<SimNode_GetLocal>(at, var->stackTop);
                 if ( var->init->type->isRef() ) {
-                    copy = context.makeNode<SimNode_CopyRefValue>(At(), get, init, size);
+                    copy = context.makeNode<SimNode_CopyRefValue>(at, get, init, size);
                 } else {
                     switch ( var->type->baseType ) {
-                        case Type::tBool:   copy = context.makeNode<SimNode_CopyValue<bool>>(At(), get, init);       break;
-                        case Type::tInt:    copy = context.makeNode<SimNode_CopyValue<int32_t>>(At(), get, init);    break;
-                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyValue<uint32_t>>(At(), get, init);   break;
-                        case Type::tFloat:  copy = context.makeNode<SimNode_CopyValue<float>>(At(), get, init);      break;
-                        case Type::tString: copy = context.makeNode<SimNode_CopyValue<char *>>(At(), get, init);     break;
+                        case Type::tBool:   copy = context.makeNode<SimNode_CopyValue<bool>>(at, get, init);       break;
+                        case Type::tInt:    copy = context.makeNode<SimNode_CopyValue<int32_t>>(at, get, init);    break;
+                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyValue<uint32_t>>(at, get, init);   break;
+                        case Type::tFloat:  copy = context.makeNode<SimNode_CopyValue<float>>(at, get, init);      break;
+                        case Type::tString: copy = context.makeNode<SimNode_CopyValue<char *>>(at, get, init);     break;
                         default:
                             throw runtime_error("unsupported? can't assign initial value");
                     }
                 }
                 let->list[vi++] = copy;
             } else {
-                let->list[vi++] = context.makeNode<SimNode_InitLocal>(At(), var->stackTop, var->type->getSizeOf());
+                let->list[vi++] = context.makeNode<SimNode_InitLocal>(at, var->stackTop, var->type->getSizeOf());
             }
         }
         let->subexpr = subexpr->simulate(context);
@@ -1196,7 +1196,7 @@ namespace yzg
     {
         auto mangledName = func->getMangledName();
         if ( findFunction(mangledName) )
-            throw parse_error("builtin function already defined " + mangledName, nullptr);
+            throw parse_error("builtin function already defined " + mangledName, 0);
         functions[mangledName] = func;
         functionsByName[func->name].push_back(func);
     }
@@ -1355,15 +1355,15 @@ namespace yzg
     {
         // cout << *decl << endl;
         auto tdecl = make_shared<TypeDecl>();
-        tdecl->at = decl.get();
+        tdecl->at = decl->at;
         auto typeName = decl->getName(0);
         if ( typeName.empty() )
-            throw parse_error("expecting basic type", decl);
+            throw parse_error("expecting basic type", decl->at);
         tdecl->baseType = nameToBasicType(typeName);
         if ( tdecl->baseType == Type::none ) {
             auto it = program->structures.find(typeName);
             if ( it == program->structures.end() )
-                throw parse_error("expecting type or structure name", decl);
+                throw parse_error("expecting type or structure name", decl->at);
             tdecl->baseType = Type::tStructure;
             tdecl->structType = it->second.get();
         }
@@ -1371,7 +1371,7 @@ namespace yzg
         if ( decl->list.size()==(3+nFields) ) {
             if ( decl->list[1]->isOperator(Operator::mul) ) {
                 if ( tdecl->baseType!=Type::tStructure && tdecl->baseType!=Type::tVoid )
-                    throw parse_error("can only be pointer to structure (or void)", decl);
+                    throw parse_error("can only be pointer to structure (or void)", decl->at);
                 tdecl->baseType = Type::tPointer;
                 iDim ++;
             } else if ( decl->list[1]->isOperator(Operator::binand) )
@@ -1381,7 +1381,7 @@ namespace yzg
             for ( ; iDim < decl->list.size() - 1 - nFields; ++iDim ) {
                 uint32_t dim = decl->getUnsigned(iDim);
                 if ( dim == -1U )
-                    throw parse_error("expecting dimension", decl);
+                    throw parse_error("expecting dimension", decl->at);
                 tdecl->dim.push_back(dim);
             }
         }
@@ -1404,11 +1404,11 @@ namespace yzg
             if ( expr->getName(0)=="struct"  ) {
                 auto name = expr->getName(1);
                 if ( name.empty() )
-                    throw parse_error("structure must have a name", expr);
+                    throw parse_error("structure must have a name", expr->at);
                 if ( program->structures.find(name) != program->structures.end() )
-                    throw parse_error("structure is already declared", expr);
+                    throw parse_error("structure is already declared", expr->at);
                 auto st = make_shared<Structure>(name);
-                st->at = expr.get();
+                st->at = expr->at;
                 program->structures[name] = st;
             }
         }
@@ -1419,18 +1419,18 @@ namespace yzg
                 for ( int i = 2; i != expr->list.size(); ++i ) {
                     auto & field = expr->list[i];
                     if ( !field->isListOfAtLeastSize(2) )
-                        throw parse_error("structure fields must be lists", field);
+                        throw parse_error("structure fields must be lists", field->at);
                     auto name = field->getTailName();
                     if ( name.empty() )
-                        throw parse_error("structure field must have a name", field);
+                        throw parse_error("structure field must have a name", field->at);
                     if ( decl->findField(name) )
-                        throw parse_error("structure field already declared", field);
+                        throw parse_error("structure field already declared", field->at);
                     auto typeDecl = parseTypeDeclaratoin(field, program);
                     if ( typeDecl->baseType==Type::tVoid )
-                        throw parse_error("structure field can't be void", field);
+                        throw parse_error("structure field can't be void", field->at);
                     if ( typeDecl->ref )
-                        throw parse_error("structure field can't be ref", field);
-                    decl->fields.push_back({name, typeDecl, field.get()});
+                        throw parse_error("structure field can't be ref", field->at);
+                    decl->fields.push_back({name, typeDecl, field->at});
                 }
             }
         }
@@ -1442,15 +1442,15 @@ namespace yzg
         pVar->name = decl->getTailName();
         if ( pVar->name.empty() ) {
             if ( !canHaveInit )
-                throw parse_error("variable can't have initializer", decl);
+                throw parse_error("variable can't have initializer", decl->at);
             pVar->name = decl->getTailName(1);
             if ( pVar->name.empty() )
-                throw parse_error("variable must have a name", decl);
+                throw parse_error("variable must have a name", decl->at);
             pVar->init = parseExpression(decl->list.back(), program);
             pVar->type = parseTypeDeclaratoin(decl, program, 1);
         } else {
             if ( needInit )
-                throw parse_error("variable must be initialized", decl);
+                throw parse_error("variable must be initialized", decl->at);
             pVar->type = parseTypeDeclaratoin(decl, program);
         }
         return pVar;
@@ -1471,7 +1471,7 @@ namespace yzg
                     auto & vdecl = expr->list[iVar];
                     auto pVar = parseVariable(vdecl, program, false, false);    // can global be initialized?
                     if ( program->findVariable(pVar->name) )
-                        throw parse_error("variable already declared", vdecl);
+                        throw parse_error("variable already declared", vdecl->at);
                     program->globals[pVar->name] = pVar;
                 }
             }
@@ -1484,14 +1484,14 @@ namespace yzg
     {
         if ( decl->isList() ) {
             if ( decl->list.size()==0 )
-                throw parse_error("empty list is not a valid expression", decl);
+                throw parse_error("empty list is not a valid expression", decl->at);
             auto & head = decl->list[0];
             if ( head->isList() ) {    // if first element is list, its an expression block
                 auto block = make_shared<ExprBlock>();
-                block->at = decl.get();
+                block->at = decl->at;
                 for ( auto & subExpr : decl->list ) {
                     if ( !subExpr->isList() )
-                        throw parse_error("expression block must contain full expressions", subExpr);
+                        throw parse_error("expression block must contain full expressions", subExpr->at);
                     auto se = parseExpression(subExpr, program);
                     block->list.emplace_back(se);
                 }
@@ -1499,30 +1499,30 @@ namespace yzg
             } else if ( head->isOperator() ) {
                 auto nOp = decl->list.size() - 1;
                 if ( nOp==0 )
-                    throw parse_error("naked operator", decl);
+                    throw parse_error("naked operator", decl->at);
                 if ( nOp==1 ) {
                     if ( head->op==Operator::r2l ) {
                         auto pR2L = make_shared<ExprRef2Value>();
-                        pR2L->at = decl.get();
+                        pR2L->at = decl->at;
                         pR2L->subexpr = parseExpression(decl->list[1], program);
                         return pR2L;
                     } else if ( head->op==Operator::p2r ) {
                         auto pP2R = make_shared<ExprPtr2Ref>();
-                        pP2R->at = decl.get();
+                        pP2R->at = decl->at;
                         pP2R->subexpr = parseExpression(decl->list[1], program);
                         return pP2R;
                     } else {
                         if ( !isUnaryOperator(head->op) )
-                            throw parse_error("only unary operators can have 1 argument", decl);
+                            throw parse_error("only unary operators can have 1 argument", decl->at);
                         auto pOp = make_shared<ExprOp1>();
-                        pOp->at = decl.get();
+                        pOp->at = decl->at;
                         pOp->op = head->op;
                         pOp->subexpr = parseExpression(decl->list[1], program);
                         return pOp;
                     }
                 } else if ( nOp==2 ) {
                     if ( !isBinaryOperator(head->op) )
-                        throw parse_error("only binary operators can have 2 arguments", decl);
+                        throw parse_error("only binary operators can have 2 arguments", decl->at);
                     if ( head->op==Operator::at ) {
                         auto pAt = make_shared<ExprAt>();
                         pAt->subexpr = parseExpression(decl->list[1], program);
@@ -1530,15 +1530,15 @@ namespace yzg
                         return pAt;
                     } else if ( head->op==Operator::dot) {
                         if ( !decl->list[2]->isName() )
-                            throw parse_error("field needs to be specified as a name", decl);
+                            throw parse_error("field needs to be specified as a name", decl->at);
                         auto pDot = make_shared<ExprField>();
-                        pDot->at = decl.get();
+                        pDot->at = decl->at;
                         pDot->value = parseExpression(decl->list[1], program);
                         pDot->name = decl->list[2]->text;
                         return pDot;
                     } else {
                         auto pOp = make_shared<ExprOp2>();
-                        pOp->at = decl.get();
+                        pOp->at = decl->at;
                         pOp->op = head->op;
                         pOp->left = parseExpression(decl->list[1], program);
                         pOp->right = parseExpression(decl->list[2], program);
@@ -1546,47 +1546,47 @@ namespace yzg
                     }
                 } else if ( nOp==3 ) {
                     if ( !isTrinaryOperator(head->op) )
-                        throw parse_error("only trinary operators can have 3 arguments", decl);
+                        throw parse_error("only trinary operators can have 3 arguments", decl->at);
                     auto pOp = make_shared<ExprOp3>();
-                    pOp->at = decl.get();
+                    pOp->at = decl->at;
                     pOp->op = head->op;
                     pOp->subexpr = parseExpression(decl->list[1], program);
                     pOp->left = parseExpression(decl->list[2], program);
                     pOp->right = parseExpression(decl->list[3], program);
                     return pOp;
                 } else {
-                    throw parse_error("operator has too many arguments", decl);
+                    throw parse_error("operator has too many arguments", decl->at);
                 }
             } else if ( head->isName("try") ) {
                 if ( !decl->isListOfAtLeastSize(3) )
-                    throw parse_error("only (try expr catch) is allowed", decl);
+                    throw parse_error("only (try expr catch) is allowed", decl->at);
                 auto pTry = make_shared<ExprTryCatch>();
-                pTry->at = decl.get();
+                pTry->at = decl->at;
                 pTry->try_this = parseExpression(decl->list[1], program);
                 pTry->catch_that = parseExpression(decl->list[2], program);
                 return pTry;
             } else if ( head->isName("while") ) {
                 if ( !decl->isListOfAtLeastSize(3) )
-                    throw parse_error("only (while cond body) is allowed", decl);
+                    throw parse_error("only (while cond body) is allowed", decl->at);
                 auto pWhile = make_shared<ExprWhile>();
-                pWhile->at = decl.get();
+                pWhile->at = decl->at;
                 pWhile->cond = parseExpression(decl->list[1], program);
                 pWhile->body = parseExpression(decl->list[2], program);
                 return pWhile;
             } else if ( head->isName("foreach") ) {
                 if ( !decl->isListOfAtLeastSize(4) )
-                    throw parse_error("only (foreach container iterator body) is allowed", decl);
+                    throw parse_error("only (foreach container iterator body) is allowed", decl->at);
                 auto pForeach = make_shared<ExprForeach>();
-                pForeach->at = decl.get();
+                pForeach->at = decl->at;
                 pForeach->head = parseExpression(decl->list[1], program);
                 pForeach->iter = parseExpression(decl->list[2], program);
                 pForeach->body = parseExpression(decl->list[3], program);
                 return pForeach;
             } else if ( head->isName("if") ) {
                 if ( !decl->isList() && !(decl->list.size()==3 || decl->list.size()==4) )
-                    throw parse_error("only (if cond if_true) or (if cond if_true if_false) are allowed", decl);
+                    throw parse_error("only (if cond if_true) or (if cond if_true if_false) are allowed", decl->at);
                 auto pIfThenElse = make_shared<ExprIfThenElse>();
-                pIfThenElse->at = decl.get();
+                pIfThenElse->at = decl->at;
                 pIfThenElse->cond = parseExpression(decl->list[1], program);
                 pIfThenElse->if_true = parseExpression(decl->list[2], program);
                 if ( decl->list.size()==4 )
@@ -1594,23 +1594,23 @@ namespace yzg
                 return pIfThenElse;
             }  else if ( head->isName("let") ) {
                 if ( !decl->isListOfAtLeastSize(3) )
-                    throw parse_error("needs at least one variable declaration and expression", decl);
+                    throw parse_error("needs at least one variable declaration and expression", decl->at);
                 auto let = make_shared<ExprLet>();
-                let->at = decl.get();
+                let->at = decl->at;
                 for ( int iVar = 1; iVar != decl->list.size()-1; ++iVar ) {
                     auto & vdecl = decl->list[iVar];
                     auto pVar = parseVariable(vdecl, program, false, true);
                     if ( let->find (pVar->name) )
-                        throw parse_error("variable already declared", decl);
+                        throw parse_error("variable already declared", decl->at);
                     if ( pVar->type->ref )
-                        throw parse_error("local variable can't be reference", decl);
+                        throw parse_error("local variable can't be reference", decl->at);
                     let->variables.push_back(pVar);
                 }
                 let->subexpr = parseExpression(decl->list.back(), program);
                 return let;
             } else if ( head->isName("sizeof") ) {
                 auto pSizeOf = make_shared<ExprSizeOf>();
-                pSizeOf->at = decl.get();
+                pSizeOf->at = decl->at;
                 if ( decl->list.size()==2 ) {
                     try {
                         pSizeOf->typeexpr = parseTypeDeclaratoin(decl->list[1], program);
@@ -1618,20 +1618,20 @@ namespace yzg
                         pSizeOf->subexpr = parseExpression(decl->list[1], program);
                     }
                 } else {
-                    throw parse_error("sizeof has too many operands", decl);
+                    throw parse_error("sizeof has too many operands", decl->at);
                 }
                 return pSizeOf;
             } else if ( head->isName("new") ) {
                 auto pNew = make_shared<ExprNew>();
-                pNew->at = decl.get();
+                pNew->at = decl->at;
                 if ( decl->list.size()!=2 )
-                    throw parse_error("new has too many operands", decl);
+                    throw parse_error("new has too many operands", decl->at);
                 pNew->typeexpr = parseTypeDeclaratoin(decl->list[1], program);
                 return pNew;
             } else if ( head->isName() ) {
                 // function call
                 auto call = make_shared<ExprCall>();
-                call->at = decl.get();
+                call->at = decl->at;
                 call->name = head->text;
                 for ( int i = 1; i != decl->list.size(); ++i ) {
                     auto arg = parseExpression(decl->list[i], program);
@@ -1639,16 +1639,16 @@ namespace yzg
                 }
                 return call;
             } else {
-                throw parse_error("unrecognized expression", decl);
+                throw parse_error("unrecognized expression", decl->at);
             }
         } else if ( decl->isName() ) {
             if ( decl->text=="return" ) {
                 auto pReturn = make_shared<ExprReturn>();
-                pReturn->at = decl.get();
+                pReturn->at = decl->at;
                 return pReturn;
             } else {
                 auto pVar = make_shared<ExprVar>();
-                pVar->at = decl.get();
+                pVar->at = decl->at;
                 pVar->name = decl->text;
                 return pVar;
             }
@@ -1661,9 +1661,9 @@ namespace yzg
             } else if ( decl->type==NodeType::unumber ) {
                 pconst = make_shared<ExprConstUInt>(decl->unum);
             } else {
-                throw parse_error("undefined constant type", decl);
+                throw parse_error("undefined constant type", decl->at);
             }
-            pconst->at = decl.get();
+            pconst->at = decl->at;
             return pconst;
         } else if ( decl->isString() ) {
             return make_shared<ExprConstString>(decl->text);
@@ -1672,7 +1672,7 @@ namespace yzg
         } else if ( decl->isNil() ) {
             return make_shared<ExprConstPtr>(nullptr);
         } else {
-            throw parse_error("unrecognized expression", decl);
+            throw parse_error("unrecognized expression", decl->at);
         }
         return nullptr;
     }
@@ -1688,12 +1688,12 @@ namespace yzg
     FunctionPtr parseFunction ( const NodePtr & decl, const ProgramPtr & program )
     {
         if ( !decl->isListOfAtLeastSize(3) )
-            throw parse_error("function needs name, return type, and body", decl);
+            throw parse_error("function needs name, return type, and body", decl->at);
         auto func = make_shared<Function>();
-        func->at = decl.get();
+        func->at = decl->at;
         func->name = decl->list[1]->getTailName();
         if ( func->name.empty() )
-            throw parse_error("function must have name", decl);
+            throw parse_error("function must have name", decl->at);
         func->result = parseTypeDeclaratoin(decl->list[1], program);
         for ( int ai = 2; ai < decl->list.size()-1; ++ai ) {
             int hasDefault = 1;
@@ -1704,10 +1704,10 @@ namespace yzg
                 hasDefault = 0;
                 argp->name = arg->getTailName();
                 if ( argp->name.empty() )
-                    throw parse_error("function argument must have name", arg);
+                    throw parse_error("function argument must have name", arg->at);
             }
             if ( func->findArgument(argp->name) )
-                throw parse_error("function already has argument with this name", arg);
+                throw parse_error("function already has argument with this name", arg->at);
             argp->type = parseTypeDeclaratoin(arg, program, hasDefault);
             if ( hasDefault )
                 argp->init = parseExpression(arg->list.back(), program);
@@ -1724,7 +1724,7 @@ namespace yzg
                 auto func = parseFunction(expr, program);
                 auto mangledName = func->getMangledName();
                 if ( program->findFunction(mangledName) )
-                    throw parse_error("function already defined", expr);
+                    throw parse_error("function already defined", expr->at);
                 program->functions[mangledName] = func;
                 program->functionsByName[func->name].push_back(func);
             }
@@ -1734,7 +1734,7 @@ namespace yzg
     ProgramPtr parse ( const NodePtr & root, function<void (const ProgramPtr & prg)> && defineContext )
     {
         if ( !root->isList() )
-            throw parse_error("expecting a list", root);
+            throw parse_error("expecting a list", root->at);
         auto program = make_shared<Program>();
         parseStructureDeclarations(root, program);
         parseVariableDeclarations(root, program);
