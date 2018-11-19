@@ -1,10 +1,12 @@
 %{
     #include "platform.h"
     #include "ds_parser.hpp"
+
     
-    #include <stack>
-    
-    int yyline;
+    int yyline = 0;
+    int current_line_indent = 0;
+    int indent_level = 0;
+    int tab_size = 4;   // only 2,4 or 8
 %}
 
 %option noyywrap
@@ -13,35 +15,66 @@
 
 /*%option debug*/
 
+%x indent
+%s normal
+
 %%
 
-"struct"                            return _STRUCT;
-"bool"                              return _BOOL;
-"void"                              return _VOID;
-"string"                            return _STRING;
-"int"                               return _INT;
-"int2"                              return _INT2;
-"int3"                              return _INT3;
-"int4"                              return _INT4;
-"uint"                              return _UINT;
-"uint2"                             return _UINT2;
-"uint3"                             return _UINT3;
-"uint4"                             return _UINT4;
-"float"                             return _FLOAT;
-"float2"                            return _FLOAT2;
-"float3"                            return _FLOAT3;
-"float4"                            return _FLOAT4;
-[_[:alpha:]][_[:alnum:]]*           yylval.s = new std::string(yytext);  return NAME;
-[[:digit:]]+                        yylval.i = strtol(yytext, NULL, 10); return INT;
-[-+*/=();,<>{}\[\]!~%&^|\.$@\?:]    return *yytext;
-[ \t\r]                             /* skip white space */
-\n.*                                { yyline ++; yyless(1); }
+<indent>" "      { current_line_indent++; }
+<indent>"\t"     { current_line_indent = (current_line_indent + tab_size) & (tab_size-1);  }
+<indent>"\n"     { current_line_indent = 0; }
+<indent>.        {
+        unput(*yytext);
+        if (current_line_indent > indent_level*tab_size ) {
+            indent_level++;
+            return '{';
+        } else if (current_line_indent < indent_level*tab_size ) {
+            indent_level--;
+            return '}';
+        } else {
+            BEGIN(normal);
+        }
+    }
+<indent><<EOF>> {
+        if ( indent_level ) {
+            indent_level--;
+            unput(' ');
+            return '}';
+        } else {
+            return 0;
+        }
+    }
 
+<normal>"struct"                            return _STRUCT;
+<normal>"bool"                              return _BOOL;
+<normal>"void"                              return _VOID;
+<normal>"string"                            return _STRING;
+<normal>"int"                               return _INT;
+<normal>"int2"                              return _INT2;
+<normal>"int3"                              return _INT3;
+<normal>"int4"                              return _INT4;
+<normal>"uint"                              return _UINT;
+<normal>"uint2"                             return _UINT2;
+<normal>"uint3"                             return _UINT3;
+<normal>"uint4"                             return _UINT4;
+<normal>"float"                             return _FLOAT;
+<normal>"float2"                            return _FLOAT2;
+<normal>"float3"                            return _FLOAT3;
+<normal>"float4"                            return _FLOAT4;
+<normal>[_[:alpha:]][_[:alnum:]]*           yylval.s = new std::string(yytext);  return NAME;
+<normal>[[:digit:]]+                        yylval.i = strtol(yytext, NULL, 10); return INT;
+<normal>[-+*/=();,<>{}\[\]!~%&^|\.$@\?:]    return *yytext;
+<normal>[ \t\r]                             /* skip white space */
+<normal>\n                                  { yyline ++; current_line_indent = 0; BEGIN(indent); }
+<normal><<EOF>>                             { std::cout << "EOF\n"; return 0; }
 %%
 
 void yybegin(const char * str)
 {
+    BEGIN(normal);
     yyline = 0;
+    current_line_indent = 0;
+    indent_level = 0;
     yy_scan_string(str);
 }
 

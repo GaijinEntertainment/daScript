@@ -10,8 +10,6 @@
     void yybegin(const char * str);
 %}
 
-%locations
-
 %union { int i; std::string *s; }
 
 /* keywords */
