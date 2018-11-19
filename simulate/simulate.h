@@ -99,6 +99,7 @@ namespace yzg
         }
         
         __forceinline __m128 call ( int fnIndex, __m128 * args, SimNode * THAT ) {
+            assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
             auto & fn = functions[fnIndex];
             // PUSH
             char * pushStack = stackTop;

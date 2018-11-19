@@ -29,7 +29,7 @@ namespace yzg
     class TypeDecl;
     typedef shared_ptr<TypeDecl> TypeDeclPtr;
     
-    class TypeDecl
+    class TypeDecl : public enable_shared_from_this<TypeDecl>
     {
     public:
         TypeDecl() = default;
@@ -95,7 +95,7 @@ namespace yzg
         return typeFactory<TT>::make(ctx);
     }
     
-    class Structure
+    class Structure : public enable_shared_from_this<Structure>
     {
     public:
         struct FieldDeclaration

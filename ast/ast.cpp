@@ -1747,15 +1747,21 @@ namespace yzg
         return program;
     }
     
+    ProgramPtr g_Program;
+    bool g_CompiledWithErrors = false;
+    
     ProgramPtr parseDaScript ( const char * script )
     {
+        g_CompiledWithErrors = false;
+        g_Program = make_shared<Program>();
         yybegin(script);
-        if ( yyparse() ) {
+        if ( yyparse() || g_CompiledWithErrors ) {
             // throw runtime_error("can't parse");
+            g_Program.reset();
             return nullptr;
         } else {
             // TODO: generate program here
-            return nullptr;
+            return g_Program;
         }
     }
     

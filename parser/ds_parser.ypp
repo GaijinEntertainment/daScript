@@ -1,16 +1,32 @@
-%{
+%code requires {
     #include "platform.h"
-    
     #include "ast.h"
-
-    extern int yyline;
-    void yyerror(const char *s) { std::cout << s << " at line " << yyline << "\n"; }
     
+    using namespace yzg;
+    using namespace std;
+    
+    namespace yzg { extern ProgramPtr g_Program; extern bool g_CompiledWithErrors; }
+    
+    extern Structure * g_Structure;
+}
+
+%{
+    void yyerror (const char *s);
     int yylex();
     void yybegin(const char * str);
 %}
 
-%union { int i; std::string *s; }
+%locations
+
+%union {
+    bool b;
+    int i;
+    string *s;
+    vector<string> *pStructList;
+    Structure *pStruct;
+    TypeDecl *pTypeDecl;
+    Type type;
+}
 
 /* keywords */
 %token  _STRUCT
@@ -24,6 +40,13 @@
 %token<i> INT
 %token<s> NAME
 
+%type <pStruct>     structure_name
+%type <pStructList> variable_name_list
+%type <type>        basic_type_declaration
+%type <pTypeDecl>   type_declaration
+%type <pTypeDecl>   structure_type_declaration
+%type <b>           optional_ptr_declaration
+
 %%
 
 program
@@ -32,7 +55,7 @@ program
     ;
 
 declaration
-    :   structure_declaration   { std::cout << "struct\n"; }
+    :   structure_declaration
     ;
 
 oxford_comma
@@ -40,8 +63,22 @@ oxford_comma
     |   ';'
     ;
 
+structure_name
+    :   NAME[name]  {
+        if ( !g_Program->findStructure(*$name) ) {
+            auto pS = g_Program->structures[*$name] = make_shared<yzg::Structure>(*$name);
+            $$ = g_Structure = pS.get();
+        } else {
+            yyerror ( "structure is alredy defined" );
+            $$ = g_Structure = nullptr;
+        }
+    }
+    ;
+
 structure_declaration
-    : _STRUCT NAME oxford_comma '{' variable_declaration_list '}'
+    : _STRUCT structure_name oxford_comma '{' variable_declaration_list '}' {
+        g_Structure = nullptr;
+    }
     ;
 
 variable_declaration_list
@@ -49,33 +86,90 @@ variable_declaration_list
     |   variable_declaration_list variable_declaration ';'
     ;
 
+variable_name_list
+    :   NAME[name]  {
+        auto pSL = new vector<string>();
+        pSL->push_back(*$name);
+        $$ = pSL;
+    }
+    |   variable_name_list[list] ',' NAME[name] {
+        $list->push_back(*$name);
+        $$ = $list;
+    }
+    ;
+
 variable_declaration
-    :   NAME ':' type_declaration
+    :   variable_name_list[list] ':' type_declaration[typeDecl] {
+        if ( g_Structure ) {
+            if ( $typeDecl->isVoid() ) {
+                yyerror("structure type can't be void");
+            } else if ( $typeDecl->ref ) {
+                yyerror("structure type can't be reference or array of references");
+            } else {
+                for ( const auto & name : *$list ) {
+                    if ( !g_Structure->findField(name) ) {
+                        auto td = make_shared<TypeDecl>(*$typeDecl);
+                        g_Structure->fields.push_back({name, td, 0});   // TODO: support proper location $typeDecl.firstLine...
+                    } else {
+                        yyerror("structure field is already declared");
+                    }
+                }
+            }
+        }
+        delete $list;
+        delete $typeDecl;
+    }
     ;
 
 basic_type_declaration
-    :   _BOOL
-    |   _STRING
-    |   _INT
-    |   _INT2
-    |   _INT3
-    |   _INT4
-    |   _UINT
-    |   _UINT2
-    |   _UINT3
-    |   _UINT4
-    |   _FLOAT
-    |   _FLOAT2
-    |   _FLOAT3
-    |   _FLOAT4
+    :   _BOOL       { $$ = Type::tBool; }
+    |   _STRING     { $$ = Type::tString; }
+    |   _INT        { $$ = Type::tInt; }
+    |   _INT2       { $$ = Type::tInt2; }
+    |   _INT3       { $$ = Type::tInt3; }
+    |   _INT4       { $$ = Type::tInt4; }
+    |   _UINT       { $$ = Type::tUInt; }
+    |   _UINT2      { $$ = Type::tUInt2; }
+    |   _UINT3      { $$ = Type::tUInt3; }
+    |   _UINT4      { $$ = Type::tUInt4; }
+    |   _FLOAT      { $$ = Type::tFloat; }
+    |   _FLOAT2     { $$ = Type::tFloat2; }
+    |   _FLOAT3     { $$ = Type::tFloat3; }
+    |   _FLOAT4     { $$ = Type::tFloat4; }
+    |   _VOID       { $$ = Type::tVoid; }
+    ;
+
+optional_ptr_declaration
+    :           { $$ = false; }
+    |   '*'     { $$ = true; }
+    ;
+
+structure_type_declaration
+    :   NAME[name] optional_ptr_declaration[ptr] {
+        if ( auto pS = g_Program->findStructure(*$name) ) {
+            auto pTD = new TypeDecl($ptr ? Type::tPointer : Type::tStructure);
+            pTD->structType = pS.get();
+            $$ = pTD;
+        } else {
+            yyerror("undefined structure type");
+            $$ = nullptr;
+        }
+    }
     ;
 
 type_declaration
-    :   basic_type_declaration
+    :   basic_type_declaration[basicType]               { $$ = new TypeDecl($basicType); }
+    |   structure_type_declaration[typeDecl]            { $$ = $typeDecl; }
+    |   type_declaration[typeDecl] '[' INT[dimSize] ']' { if ( $typeDecl ) $typeDecl->dim.push_back($dimSize); $$ = $typeDecl; }
+    |   type_declaration[typeDecl] '&'                  { if ( $typeDecl ) $typeDecl->ref = true; $$ = $typeDecl; }
     ;
 
 %%
 
+Structure * g_Structure = nullptr;
 
-
-
+void yyerror(const char *s)
+{
+    cout << s << " at line " << yylloc.first_line << "\n";
+    g_CompiledWithErrors = true;
+}
