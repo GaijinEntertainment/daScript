@@ -570,6 +570,8 @@ namespace yzg
     };
     
     ProgramPtr parse ( const NodePtr & root, function<void (const ProgramPtr & prg)> && defineContext );
+    
+    ProgramPtr parseDaScript ( const char * script );
 }
 
 

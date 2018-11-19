@@ -205,11 +205,53 @@ void unit_test_array_of_structures ( const string & fn )
 #endif
 }
 
+void unit_test_das ( const string & fn, int numIter = 100 )
+{
+    string str;
+#if REPORT_ERRORS
+    try {
+#endif
+        ifstream t(fn);
+        if ( !t.is_open() )
+            throw "can't open";
+        t.seekg(0, ios::end);
+        str.reserve(t.tellg());
+        t.seekg(0, ios::beg);
+        str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
+        if ( auto program = parseDaScript(str.c_str()) ) {
+            cout << *program << "\n";
+            Context ctx(&str);
+            program->simulate(ctx);
+            int fnTest = ctx.findFunction("test");
+            double simT = profileBlock(numIter, [&](){
+                ctx.restart();
+                ctx.eval(fnTest, nullptr);
+            });
+            cout << fixed;
+            cout << fn << " took:" << simT << "\n";
+        }
+        
+        
+#if REPORT_ERRORS
+    } catch ( const read_error & error ) {
+        reportError ( str, 0, error.what() );
+    } catch ( const parse_error & error ) {
+        reportError ( str, error.at ? error.at->at : 0, error.what() );
+    } catch ( const semantic_error & error ) {
+        reportError ( str, error.at ? error.at->at : 0, error.what() );
+    }
+#endif
+}
+
 int main(int argc, const char * argv[]) {
+    /*
     unit_test_array_of_structures("../../test/profile_array_of_structures.yzg");
     unit_test_array_of_structures("../../test/profile_array_of_structures_vec.yzg");
     unit_test("../../test/try_catch.yzg");
     unit_test("../../test/type_string.yzg", 1);
     unit_test("../../test/test_ref.yzg", 1);
+    */
+    
+    unit_test_das("../../test/test_decl.das");
     return 0;
 }

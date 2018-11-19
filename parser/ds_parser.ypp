@@ -1,0 +1,78 @@
+%{
+    #include "platform.h"
+    
+    #include "ast.h"
+
+    extern int yyline;
+    inline void yyerror(const char *s) { std::cout << s << " at line " << yyline << "\n"; }
+    
+    int yylex();
+    void yybegin(const char * str);
+%}
+
+%locations
+
+%union { int i; std::string *s; }
+
+/* keywords */
+%token  _STRUCT
+
+/* basic types */
+%token  _BOOL   _VOID   _STRING
+%token  _INT    _INT2   _INT3   _INT4
+%token  _UINT   _UINT2  _UINT3  _UINT4
+%token  _FLOAT  _FLOAT2 _FLOAT3 _FLOAT4
+
+%token<i> INT
+%token<s> NAME
+
+%%
+
+program
+    :
+    | program   declaration
+    ;
+
+declaration
+    :   structure_declaration   { std::cout << "struct\n"; }
+    ;
+
+structure_declaration
+    : _STRUCT NAME '{' variable_declaration_list '}'
+    ;
+
+variable_declaration_list
+    :
+    |   variable_declaration_list variable_declaration ';'
+    ;
+
+variable_declaration
+    :   NAME ':' type_declaration
+    ;
+
+basic_type_declaration
+    :   _BOOL
+    |   _STRING
+    |   _INT
+    |   _INT2
+    |   _INT3
+    |   _INT4
+    |   _UINT
+    |   _UINT2
+    |   _UINT3
+    |   _UINT4
+    |   _FLOAT
+    |   _FLOAT2
+    |   _FLOAT3
+    |   _FLOAT4
+    ;
+
+type_declaration
+    :   basic_type_declaration
+    ;
+
+%%
+
+
+
+

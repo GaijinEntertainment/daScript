@@ -1,6 +1,5 @@
 #pragma once
 
-#include "platform.h"
 #include "vectypes.h"
 #include "cast.h"
 #include "runtime_string.h"

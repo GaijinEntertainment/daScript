@@ -1,0 +1,47 @@
+%{
+    #include "platform.h"
+    #include "ds_parser.hpp"
+    
+    #include <stack>
+    
+    int yyline;
+%}
+
+%option noyywrap
+%option never-interactive
+%option nounistd
+
+/*%option debug*/
+
+%%
+
+"struct"                            return _STRUCT;
+"bool"                              return _BOOL;
+"void"                              return _VOID;
+"string"                            return _STRING;
+"int"                               return _INT;
+"int2"                              return _INT2;
+"int3"                              return _INT3;
+"int4"                              return _INT4;
+"uint"                              return _UINT;
+"uint2"                             return _UINT2;
+"uint3"                             return _UINT3;
+"uint4"                             return _UINT4;
+"float"                             return _FLOAT;
+"float2"                            return _FLOAT2;
+"float3"                            return _FLOAT3;
+"float4"                            return _FLOAT4;
+[_[:alpha:]][_[:alnum:]]*           yylval.s = new std::string(yytext);  return NAME;
+[[:digit:]]+                        yylval.i = strtol(yytext, NULL, 10); return INT;
+[-+*/=();,<>{}\[\]!~%&^|\.$@\?:]    return *yytext;
+[ \t\r]                             /* skip white space */
+\n.*                                { yyline ++; yyless(1); }
+
+%%
+
+void yybegin(const char * str)
+{
+    yyline = 0;
+    yy_scan_string(str);
+}
+

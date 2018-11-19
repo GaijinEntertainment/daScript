@@ -2,6 +2,9 @@
 
 #include "ast.h"
 
+void yybegin(const char * str);
+int yyparse();
+
 namespace yzg
 {
     bool g_logTypes = false;
@@ -1742,6 +1745,18 @@ namespace yzg
             defineContext(program);
         program->inferTypes();
         return program;
+    }
+    
+    ProgramPtr parseDaScript ( const char * script )
+    {
+        yybegin(script);
+        if ( yyparse() ) {
+            // throw runtime_error("can't parse");
+            return nullptr;
+        } else {
+            // TODO: generate program here
+            return nullptr;
+        }
     }
     
 }
