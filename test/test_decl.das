@@ -5,3 +5,9 @@ struct Ball
 struct BigBall
     position: float3; color: float4
     radius: float
+
+struct HollywoodBall {
+    position: float3;
+    radius:float;
+}
+

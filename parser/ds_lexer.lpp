@@ -10,14 +10,15 @@
     int current_line_indent = 0;
     int indent_level = 0;
     int tab_size = 4;   // only 2,4 or 8
-    int nested = 0;
+    int nested_parentheses = 0;
+    int nested_curly_braces = 0;
 %}
 
 %option noyywrap
 %option never-interactive
 %option nounistd
 
-/*%option debug*/
+/* %option debug */
 
 %x indent
 %s normal
@@ -26,28 +27,37 @@
 
 <indent>" "      { current_line_indent++; }
 <indent>"\t"     { current_line_indent = (current_line_indent + tab_size) & (tab_size-1);  }
-<indent>"\n"     { current_line_indent = 0; }
+<indent>"\n"     { current_line_indent = 0; yyline++; }
 <indent>.        {
-        unput(*yytext);
-        if (current_line_indent > indent_level*tab_size ) {
-            indent_level++;
-            return '{';
-        } else if (current_line_indent < indent_level*tab_size ) {
-            indent_level--;
-            return '}';
-        } else {
-            BEGIN(normal);
-        }
+    unput(*yytext);
+    if (current_line_indent > indent_level*tab_size ) {
+        indent_level++;
+        #ifdef FLEX_DEBUG
+        std::cout << "emit {\n";
+        #endif
+        return '{';
+    } else if (current_line_indent < indent_level*tab_size ) {
+        indent_level--;
+        #ifdef FLEX_DEBUG
+        std::cout << "emit }\n";
+        #endif
+        return '}';
+    } else {
+        BEGIN(normal);
     }
+}
 <indent><<EOF>> {
-        if ( indent_level ) {
-            indent_level--;
-            unput(' ');
-            return '}';
-        } else {
-            return 0;
-        }
+    if ( indent_level ) {
+        indent_level--;
+        unput('\r');
+        #ifdef FLEX_DEBUG
+        std::cout << "emit }\n";
+        #endif
+        return '}';
+    } else {
+        return 0;
     }
+}
 
 <normal>"struct"                            return _STRUCT;
 <normal>"bool"                              return _BOOL;
@@ -67,11 +77,42 @@
 <normal>"float4"                            return _FLOAT4;
 <normal>[_[:alpha:]][_[:alnum:]]*           yylval.s = new std::string(yytext);  return NAME;
 <normal>[[:digit:]]+                        yylval.i = strtol(yytext, NULL, 10); return INT;
-<normal>[(]                                 if ( !nested ) yyerror("mismatching parentheses"); nested --; return ')';
-<normal>[)]                                 nested ++; return '(';
-<normal>[-+*/;,<>{}\[\]!~%&^|\.$@\?:]       return *yytext;
+<normal>[)]                                 {
+    if ( !nested_parentheses )
+        yyerror("mismatching parentheses");
+    nested_parentheses --;
+    return ')';
+}
+<normal>[(]                                 {
+    nested_parentheses ++;
+    return '(';
+}
+<normal>[}]                                 {
+    if ( !nested_curly_braces )
+        yyerror("mismatching curly braces");
+    nested_curly_braces --;
+    return '}';
+}
+<normal>[{]                                 {
+    nested_curly_braces ++;
+    return '{';
+}
+<normal>[-+*/;,<\[\]!~%&^|\.$@\?:]       return *yytext;
 <normal>[ \t\r]                             /* skip white space */
-<normal>\n                                  { yyline ++; current_line_indent = 0; BEGIN(indent); if (!nested) return ';'; }
+<normal>\n                                  {
+    yyline ++;
+    if  ( !nested_parentheses && !nested_curly_braces ) {
+        bool ns = current_line_indent!=0;
+        current_line_indent = 0;
+        BEGIN(indent);
+        #ifdef FLEX_DEBUG
+        std::cout << "emit ;\n";
+        #endif
+        if ( ns )
+            return ';';
+    }
+}
+
 %%
 
 void yybegin(const char * str)
@@ -80,6 +121,8 @@ void yybegin(const char * str)
     yyline = 0;
     current_line_indent = 0;
     indent_level = 0;
+    nested_curly_braces = 0;
+    nested_curly_braces = 0;
     yy_scan_string(str);
 }
 

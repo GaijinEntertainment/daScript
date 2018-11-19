@@ -35,8 +35,13 @@ declaration
     :   structure_declaration   { std::cout << "struct\n"; }
     ;
 
+oxford_comma
+    :
+    |   ';'
+    ;
+
 structure_declaration
-    : _STRUCT NAME ';' '{' variable_declaration_list '}'
+    : _STRUCT NAME oxford_comma '{' variable_declaration_list '}'
     ;
 
 variable_declaration_list
