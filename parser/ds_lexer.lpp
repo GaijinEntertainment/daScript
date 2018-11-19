@@ -1,12 +1,16 @@
 %{
     #include "platform.h"
     #include "ds_parser.hpp"
-
+    
+    #define YY_NO_INPUT
+    
+    void yyerror(const char *s);
     
     int yyline = 0;
     int current_line_indent = 0;
     int indent_level = 0;
     int tab_size = 4;   // only 2,4 or 8
+    int nested = 0;
 %}
 
 %option noyywrap
@@ -63,10 +67,11 @@
 <normal>"float4"                            return _FLOAT4;
 <normal>[_[:alpha:]][_[:alnum:]]*           yylval.s = new std::string(yytext);  return NAME;
 <normal>[[:digit:]]+                        yylval.i = strtol(yytext, NULL, 10); return INT;
-<normal>[-+*/=();,<>{}\[\]!~%&^|\.$@\?:]    return *yytext;
+<normal>[(]                                 if ( !nested ) yyerror("mismatching parentheses"); nested --; return ')';
+<normal>[)]                                 nested ++; return '(';
+<normal>[-+*/;,<>{}\[\]!~%&^|\.$@\?:]       return *yytext;
 <normal>[ \t\r]                             /* skip white space */
-<normal>\n                                  { yyline ++; current_line_indent = 0; BEGIN(indent); }
-<normal><<EOF>>                             { std::cout << "EOF\n"; return 0; }
+<normal>\n                                  { yyline ++; current_line_indent = 0; BEGIN(indent); if (!nested) return ';'; }
 %%
 
 void yybegin(const char * str)

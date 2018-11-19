@@ -4,7 +4,7 @@
     #include "ast.h"
 
     extern int yyline;
-    inline void yyerror(const char *s) { std::cout << s << " at line " << yyline << "\n"; }
+    void yyerror(const char *s) { std::cout << s << " at line " << yyline << "\n"; }
     
     int yylex();
     void yybegin(const char * str);
@@ -36,7 +36,7 @@ declaration
     ;
 
 structure_declaration
-    : _STRUCT NAME '{' variable_declaration_list '}'
+    : _STRUCT NAME ';' '{' variable_declaration_list '}'
     ;
 
 variable_declaration_list
