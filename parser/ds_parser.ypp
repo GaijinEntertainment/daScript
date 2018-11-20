@@ -7,7 +7,18 @@
     
     namespace yzg { extern ProgramPtr g_Program; extern bool g_CompiledWithErrors; }
     
-    extern Structure * g_Structure;
+    struct VariableDeclaration {
+        VariableDeclaration ( vector<string> * n, TypeDecl * t ) : pNameList(n), pTypeDecl(t) {}
+        ~VariableDeclaration () { delete pNameList; delete pTypeDecl; }
+        vector<string>  *pNameList;
+        TypeDecl        *pTypeDecl;
+    };
+    
+    __forceinline void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
+        for ( auto pD : *list )
+            delete pD;
+        delete list;
+    }
 }
 
 %{
@@ -19,17 +30,19 @@
 %locations
 
 %union {
-    bool b;
-    int i;
-    string *s;
-    vector<string> *pStructList;
-    Structure *pStruct;
-    TypeDecl *pTypeDecl;
-    Type type;
+    bool                            b;
+    int                             i;
+    string                          *s;
+    vector<string>                  *pNameList;
+    Structure                       *pStruct;
+    VariableDeclaration             *pVarDecl;
+    vector<VariableDeclaration*>    *pVarDeclList;
+    TypeDecl                        *pTypeDecl;
+    Type                            type;
 }
 
 /* keywords */
-%token  _STRUCT
+%token  _STRUCT _LET    _DEF
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -40,27 +53,88 @@
 %token<i> INT
 %token<s> NAME
 
-%type <pStruct>     structure_name
-%type <pStructList> variable_name_list
-%type <type>        basic_type_declaration
-%type <pTypeDecl>   type_declaration
-%type <pTypeDecl>   structure_type_declaration
-%type <b>           optional_ptr_declaration
+%type <pStruct>         structure_name
+%type <pNameList>       variable_name_list
+%type <type>            basic_type_declaration
+%type <pTypeDecl>       type_declaration
+%type <pTypeDecl>       structure_type_declaration
+%type <b>               optional_ptr_declaration
+%type <pVarDeclList>    variable_declaration_list
+%type <pVarDecl>        variable_declaration
+
 
 %%
 
 program
     :
-    | program   declaration
-    ;
-
-declaration
-    :   structure_declaration
+    | program   structure_declaration
+    | program   global_let
     ;
 
 oxford_comma
     :
     |   ';'
+    ;
+
+function_declaration
+    :   _DEF NAME[name] '(' function_argument_list ')' oxford_comma expression_block
+    ;
+
+function_argument_list
+    :   function_argument
+    |   function_argument ',' function_argument_list
+    ;
+
+function_argument
+    :   variable_name_list ':' type_declaration
+    ;
+
+expression_block
+    : '{' expressions '}'
+    ;
+
+expressions
+    :
+    |   expressions expression ';'
+    ;
+
+expression
+    :   expression_let
+    ;
+
+expression_let
+    :   _LET oxford_comma '{' variable_declaration_list[list] '}' {
+        deleteVariableDeclarationList($list);
+    }
+    ;
+
+variable_declaration_list
+    :                                                                   { $$ = new vector<VariableDeclaration*>(); }
+    |   variable_declaration_list[list] variable_declaration[decl] ';'  { $$ = $list; $list->push_back($decl); }
+    ;
+
+variable_declaration
+    :   variable_name_list[list] ':' type_declaration[typeDecl]         { $$ = new VariableDeclaration($list,$typeDecl); }
+    ;
+
+global_let
+    :   _LET oxford_comma '{' variable_declaration_list[list] '}' {
+        for ( auto pDecl : *$list ) {
+            if ( pDecl->pTypeDecl ) {
+                for ( const auto & name : *pDecl->pNameList ) {
+                    if ( !g_Program->findVariable(name) ) {
+                        VariablePtr pVar = make_shared<Variable>();
+                        pVar->name = name;
+                        pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                        g_Program->globals[name] = pVar;   // TODO: support proper location $typeDecl.firstLine...
+                    } else {
+                        yyerror("global variable is already declared");
+                    }
+                }
+            }
+        }
+        deleteVariableDeclarationList($list);
+    }
     ;
 
 structure_name
@@ -76,14 +150,30 @@ structure_name
     ;
 
 structure_declaration
-    : _STRUCT structure_name oxford_comma '{' variable_declaration_list '}' {
-        g_Structure = nullptr;
+    : _STRUCT NAME[name] oxford_comma '{' variable_declaration_list[list] '}' {
+        if ( !g_Program->findStructure(*$name) ) {
+            auto pStruct = g_Program->structures[*$name] = make_shared<yzg::Structure>(*$name);
+            for ( auto pDecl : *$list ) {
+                if ( pDecl->pTypeDecl->isVoid() ) {
+                    yyerror("structure type can't be void");
+                } else if ( pDecl->pTypeDecl->ref ) {
+                    yyerror("structure type can't be reference or array of references");
+                } else {
+                    for ( const auto & name : *pDecl->pNameList ) {
+                        if ( !pStruct->findField(name) ) {
+                            auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            pStruct->fields.push_back({name, td, 0});   // TODO: support proper location $typeDecl.firstLine...
+                        } else {
+                            yyerror("structure field is already declared");
+                        }
+                    }
+                }
+            }
+        } else {
+            yyerror ( "structure is alredy defined" );
+        }
+        deleteVariableDeclarationList($list);
     }
-    ;
-
-variable_declaration_list
-    :
-    |   variable_declaration_list variable_declaration ';'
     ;
 
 variable_name_list
@@ -95,29 +185,6 @@ variable_name_list
     |   variable_name_list[list] ',' NAME[name] {
         $list->push_back(*$name);
         $$ = $list;
-    }
-    ;
-
-variable_declaration
-    :   variable_name_list[list] ':' type_declaration[typeDecl] {
-        if ( g_Structure ) {
-            if ( $typeDecl->isVoid() ) {
-                yyerror("structure type can't be void");
-            } else if ( $typeDecl->ref ) {
-                yyerror("structure type can't be reference or array of references");
-            } else {
-                for ( const auto & name : *$list ) {
-                    if ( !g_Structure->findField(name) ) {
-                        auto td = make_shared<TypeDecl>(*$typeDecl);
-                        g_Structure->fields.push_back({name, td, 0});   // TODO: support proper location $typeDecl.firstLine...
-                    } else {
-                        yyerror("structure field is already declared");
-                    }
-                }
-            }
-        }
-        delete $list;
-        delete $typeDecl;
     }
     ;
 
@@ -165,8 +232,6 @@ type_declaration
     ;
 
 %%
-
-Structure * g_Structure = nullptr;
 
 void yyerror(const char *s)
 {

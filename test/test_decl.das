@@ -19,3 +19,12 @@ struct HugeCurlyBall
     radius:float;
 }
 
+let
+    a:int
+    b:Ball; c:BigBall*
+
+let { d,e:HugeCurlyBall &; f:int[10]; }
+
+let
+    g:int&[10]
+

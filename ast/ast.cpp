@@ -1761,6 +1761,7 @@ namespace yzg
             return nullptr;
         } else {
             // TODO: generate program here
+            g_Program->inferTypes();
             return g_Program;
         }
     }

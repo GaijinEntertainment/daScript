@@ -223,15 +223,16 @@ void unit_test_das ( const string & fn, int numIter = 100 )
             Context ctx(&str);
             program->simulate(ctx);
             int fnTest = ctx.findFunction("test");
-            double simT = profileBlock(numIter, [&](){
-                ctx.restart();
-                ctx.eval(fnTest, nullptr);
-            });
-            cout << fixed;
-            cout << fn << " took:" << simT << "\n";
+            if ( fnTest != -1 ) {
+                double simT = profileBlock(numIter, [&](){
+                    ctx.restart();
+                    ctx.eval(fnTest, nullptr);
+                });
+                cout << fn << " took:" << fixed << simT << "\n";
+            } else {
+                cout << "function 'test' not found\n";
+            }
         }
-        
-        
 #if REPORT_ERRORS
     } catch ( const read_error & error ) {
         reportError ( str, 0, error.what() );

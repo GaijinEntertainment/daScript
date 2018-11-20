@@ -71,6 +71,8 @@
     }
 }
 
+<normal>"def"                               return _DEF;
+<normal>"let"                               return _LET;
 <normal>"struct"                            return _STRUCT;
 <normal>"bool"                              return _BOOL;
 <normal>"void"                              return _VOID;
@@ -89,23 +91,23 @@
 <normal>"float4"                            return _FLOAT4;
 <normal>[_[:alpha:]][_[:alnum:]]*           yylval.s = new string(yytext);  return NAME;   // TODO: track allocations
 <normal>[[:digit:]]+                        yylval.i = strtol(yytext, NULL, 10); return INT;
-<normal>[)]                                 {
+<normal>\)                                  {
     if ( !nested_parentheses )
         yyerror("mismatching parentheses");
     nested_parentheses --;
     return ')';
 }
-<normal>[(]                                 {
+<normal>\(                                  {
     nested_parentheses ++;
     return '(';
 }
-<normal>[}]                                 {
+<normal>\}                                  {
     if ( !nested_curly_braces )
         yyerror("mismatching curly braces");
     nested_curly_braces --;
     return '}';
 }
-<normal>[{]                                 {
+<normal>\{                                  {
     nested_curly_braces ++;
     return '{';
 }
