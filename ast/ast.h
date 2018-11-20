@@ -1,6 +1,5 @@
 #pragma once
 
-#include "reader.h"
 #include "simulate.h"
 #include "vectypes.h"
 #include "function_traits.h"
@@ -28,6 +27,49 @@ namespace yzg
     
     class TypeDecl;
     typedef shared_ptr<TypeDecl> TypeDeclPtr;
+    
+    enum class Operator
+    {
+        none,
+        // 2-char
+        r2l,
+        p2r,
+        addEqu,
+        subEqu,
+        divEqu,
+        mulEqu,
+        modEqu,
+        andEqu,
+        orEqu,
+        xorEqu,
+        eqEq,
+        lessEqu,
+        greaterEqu,
+        notEqu,
+        binNotEqu,
+        // 1-char
+        at,         // @
+        dot,        // .
+        binand,
+        binor,
+        binxor,
+        add,
+        sub,
+        div,
+        mul,
+        mod,
+        eq,
+        is,         // ?
+        boolNot,    // !
+        binNot,     // ~
+        less,
+        greater
+    };
+    
+    string to_string ( Operator op );
+    bool isUnaryOperator ( Operator op );
+    bool isBinaryOperator ( Operator op );
+    bool isTrinaryOperator ( Operator op );
     
     class TypeDecl : public enable_shared_from_this<TypeDecl>
     {
@@ -591,9 +633,7 @@ namespace yzg
         semantic_error ( const string & message, long error_at ) : runtime_error(message), at(error_at) {}
         long at = 0;
     };
-    
-    ProgramPtr parse ( const NodePtr & root, function<void (const ProgramPtr & prg)> && defineContext );
-    
+     
     ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext );
 }
 

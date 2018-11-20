@@ -71,4 +71,13 @@ namespace yzg
         }
         return text;
     }
+    
+    string to_string_ex ( double dnum )
+    {
+        stringstream ss;
+        ss << dnum;
+        if ( ss.str().find_first_of(".e")==string::npos )
+            ss << ".";
+        return ss.str();
+    }
 }

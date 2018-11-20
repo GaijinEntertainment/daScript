@@ -15,11 +15,8 @@
         Expression      *pInit;
     };
     
-    __forceinline void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
-        for ( auto pD : *list )
-            delete pD;
-        delete list;
-    }
+    ExprCall * parseFunctionArguments ( ExprCall * pCall, Expression * arguments );
+    void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
 }
 
 %{
@@ -248,27 +245,10 @@ expr
     |   expr[subexpr]    '.'     NAME[name]     { $$ = new ExprField(ExpressionPtr($subexpr), *$name); }
     |   expr[left]    ','     expr[right]       { $$ = new ExprSequence(ExpressionPtr($left), ExpressionPtr($right)); }
     |   NAME[name] '(' ')'                      { $$ = new ExprCall(*$name); }
-    |   NAME[name] '(' expr[arguments] ')'      {
-            auto pCall = new ExprCall(*$name);
-            auto arg = $arguments;
-            if ( arg->isSequence() ) {
-                while ( arg->isSequence() ) {
-                    auto pSeq = static_cast<ExprSequence *>(arg);
-                    pCall->arguments.push_back(pSeq->left);
-                    arg = pSeq->right.get();
-                }
-                pCall->arguments.push_back(arg->shared_from_this());
-                delete $arguments;
-            } else {
-                pCall->arguments.push_back(ExpressionPtr(arg));
-            }
-            $$ = pCall;
+    |   NAME[name] '(' expr[arguments] ')'      { $$ = parseFunctionArguments(new ExprCall(*$name),$arguments); }
+    |   basic_type_declaration[type] '(' expr[arguments] ')' {
+            $$ = parseFunctionArguments(new ExprCall(to_string($type)),$arguments);
         }
-    |   basic_type_declaration[type] '(' expr[subexpr] ')' {
-        auto pCast = new ExprCall(to_string($type));
-        pCast->arguments.push_back(ExpressionPtr($subexpr));
-        $$ = pCast;
-    }
     ;
 
 variable_declaration_list
@@ -415,4 +395,29 @@ void yyerror(const char *s)
 {
     cout << s << " at line " << yylloc.first_line << "\n";
     g_CompiledWithErrors = true;
+}
+
+ExprCall * parseFunctionArguments ( ExprCall * pCall, Expression * arguments ) {
+    auto arg = arguments;
+    if ( arg->isSequence() ) {
+        while ( arg->isSequence() ) {
+            auto pSeq = static_cast<ExprSequence *>(arg);
+            assert(!pSeq->right->isSequence());
+            pCall->arguments.push_back(pSeq->right);
+            arg = pSeq->left.get();
+        }
+        pCall->arguments.push_back(arg->shared_from_this());
+        reverse(pCall->arguments.begin(),pCall->arguments.end());
+        delete arguments;
+    } else {
+        pCall->arguments.push_back(ExpressionPtr(arg));
+    }
+    return pCall;
+}
+
+void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list )
+{
+    for ( auto pD : *list )
+        delete pD;
+    delete list;
 }

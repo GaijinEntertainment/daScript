@@ -1,6 +1,7 @@
 #include "precomp.h"
 
 #include "ast.h"
+#include "enums.h"
 
 void yybegin(const char * str);
 int yyparse();
@@ -8,6 +9,76 @@ int yyparse();
 namespace yzg
 {
     bool g_logTypes = false;
+    
+    // operator goo
+    
+    Enum<Operator> g_opTable2 = {
+        {   Operator::r2l,          "->"    },
+        {   Operator::p2r,          "=>"    },
+        {   Operator::addEqu,       "+="    },
+        {   Operator::subEqu,       "-="    },
+        {   Operator::divEqu,       "/="    },
+        {   Operator::mulEqu,       "*="    },
+        {   Operator::modEqu,       "%="    },
+        {   Operator::eqEq,         "=="    },
+        {   Operator::lessEqu,      "<="    },
+        {   Operator::greaterEqu,   ">="    },
+        {   Operator::notEqu,       "!="    },
+        {   Operator::binNotEqu,    "~="    },
+        {   Operator::andEqu,       "&="    },
+        {   Operator::orEqu,        "|="    },
+        {   Operator::xorEqu,       "^="    },
+    };
+    
+    Enum<Operator> g_opTable1 = {
+        {   Operator::at,       "@"    },
+        {   Operator::dot,      "."    },
+        {   Operator::add,      "+"    },
+        {   Operator::sub,      "-"    },
+        {   Operator::div,      "/"    },
+        {   Operator::mul,      "*"    },
+        {   Operator::mod,      "%"    },
+        {   Operator::eq,       "="    },
+        {   Operator::is,       "?"    },
+        {   Operator::boolNot,  "!"    },
+        {   Operator::binNot,   "~"    },
+        {   Operator::less,     "<"    },
+        {   Operator::greater,  ">"    },
+        {   Operator::binand,   "&"    },
+        {   Operator::binor,    "|"    },
+        {   Operator::binxor,   "^"    },
+    };
+    
+    string to_string ( Operator o ) {
+        string t = g_opTable2.find(o);
+        if ( t.empty() )
+            t = g_opTable1.find(o);
+        return t;
+    }
+    
+    bool isUnaryOperator ( Operator op )
+    {
+        return
+            (op==Operator::add)
+        ||  (op==Operator::sub)
+        ||  (op==Operator::boolNot)
+        ||  (op==Operator::binNot)
+        ;
+    }
+    
+    bool isBinaryOperator ( Operator op )
+    {
+        return
+            (op!=Operator::is)
+        &&  (op!=Operator::boolNot)
+        &&  (op!=Operator::binNot)
+        ;
+    }
+    
+    bool isTrinaryOperator ( Operator op )
+    {
+        return (op==Operator::is);
+    }
     
     // TypeDecl
     
@@ -1340,403 +1411,6 @@ namespace yzg
     }
     
     // PARSER
-    
-    // expression parser forward declaration
-    ExpressionPtr parseExpression ( const NodePtr & decl, const ProgramPtr & program );
-    
-    /*
-        (int ...)               // integer
-        (float 2 ...)           // float[2]
-        (blah ..)               // struct blah
-        (uint const 3 4 ...)    // const uint [3][4]
-        (Sphere ...)
-     */
-    TypeDeclPtr parseTypeDeclaratoin ( const NodePtr & decl, const ProgramPtr & program, int nFields = 0 )
-    {
-        // cout << *decl << endl;
-        auto tdecl = make_shared<TypeDecl>();
-        tdecl->at = decl->at;
-        auto typeName = decl->getName(0);
-        if ( typeName.empty() )
-            throw parse_error("expecting basic type", decl->at);
-        tdecl->baseType = nameToBasicType(typeName);
-        if ( tdecl->baseType == Type::none ) {
-            auto it = program->structures.find(typeName);
-            if ( it == program->structures.end() )
-                throw parse_error("expecting type or structure name", decl->at);
-            tdecl->baseType = Type::tStructure;
-            tdecl->structType = it->second.get();
-        }
-        int iDim = 1;
-        if ( decl->list.size()==(3+nFields) ) {
-            if ( decl->list[1]->isOperator(Operator::mul) ) {
-                if ( tdecl->baseType!=Type::tStructure && tdecl->baseType!=Type::tVoid )
-                    throw parse_error("can only be pointer to structure (or void)", decl->at);
-                tdecl->baseType = Type::tPointer;
-                iDim ++;
-            } else if ( decl->list[1]->isOperator(Operator::binand) )
-                tdecl->ref = true;
-        }
-        if ( !tdecl->ref ) {
-            for ( ; iDim < decl->list.size() - 1 - nFields; ++iDim ) {
-                uint32_t dim = decl->getUnsigned(iDim);
-                if ( dim == -1U )
-                    throw parse_error("expecting dimension", decl->at);
-                tdecl->dim.push_back(dim);
-            }
-        }
-        return tdecl;
-    }
-    
-    /*
-     (struct Sphere
-        (float3 xyz)
-        (float radius))
-     
-     (struct Ball
-        (Sphere sph)
-        (float3 color))
-     */
-    void parseStructureDeclarations ( const NodePtr & root, const ProgramPtr & program )
-    {
-        // go through all structure declarations, make placeholders in the program
-        for ( auto & expr : root->list ) {
-            if ( expr->getName(0)=="struct"  ) {
-                auto name = expr->getName(1);
-                if ( name.empty() )
-                    throw parse_error("structure must have a name", expr->at);
-                if ( program->structures.find(name) != program->structures.end() )
-                    throw parse_error("structure is already declared", expr->at);
-                auto st = make_shared<Structure>(name);
-                st->at = expr->at;
-                program->structures[name] = st;
-            }
-        }
-        // go through all structures, parse fields
-        for ( auto & expr : root->list ) {
-            if ( expr->getName(0)=="struct"  ) {
-                StructurePtr decl = program->structures.find(expr->getName(1))->second;
-                for ( int i = 2; i != expr->list.size(); ++i ) {
-                    auto & field = expr->list[i];
-                    if ( !field->isListOfAtLeastSize(2) )
-                        throw parse_error("structure fields must be lists", field->at);
-                    auto name = field->getTailName();
-                    if ( name.empty() )
-                        throw parse_error("structure field must have a name", field->at);
-                    if ( decl->findField(name) )
-                        throw parse_error("structure field already declared", field->at);
-                    auto typeDecl = parseTypeDeclaratoin(field, program);
-                    if ( typeDecl->baseType==Type::tVoid )
-                        throw parse_error("structure field can't be void", field->at);
-                    if ( typeDecl->ref )
-                        throw parse_error("structure field can't be ref", field->at);
-                    decl->fields.push_back({name, typeDecl, field->at});
-                }
-            }
-        }
-    }
-    
-    VariablePtr parseVariable ( const NodePtr & decl, const ProgramPtr & program, bool needInit, bool canHaveInit )
-    {
-        auto pVar = make_shared<Variable>();
-        pVar->name = decl->getTailName();
-        if ( pVar->name.empty() ) {
-            if ( !canHaveInit )
-                throw parse_error("variable can't have initializer", decl->at);
-            pVar->name = decl->getTailName(1);
-            if ( pVar->name.empty() )
-                throw parse_error("variable must have a name", decl->at);
-            pVar->init = parseExpression(decl->list.back(), program);
-            pVar->type = parseTypeDeclaratoin(decl, program, 1);
-        } else {
-            if ( needInit )
-                throw parse_error("variable must be initialized", decl->at);
-            pVar->type = parseTypeDeclaratoin(decl, program);
-        }
-        return pVar;
-    }
-    
-    /*
-     (let
-        (Ball g_variable))
-     
-     (let const
-        (bool ext_constant))
-     */
-    void parseVariableDeclarations ( const NodePtr & root, const ProgramPtr & program )
-    {
-        for ( auto & expr : root->list ) {
-            if ( expr->getName(0)=="let"  ) {
-                for ( int iVar = 1; iVar != expr->list.size(); ++iVar ) {
-                    auto & vdecl = expr->list[iVar];
-                    auto pVar = parseVariable(vdecl, program, false, false);    // can global be initialized?
-                    if ( program->findVariable(pVar->name) )
-                        throw parse_error("variable already declared", vdecl->at);
-                    program->globals[pVar->name] = pVar;
-                }
-            }
-        }
-    }
-    
-    /*
-     */
-    ExpressionPtr parseExpression ( const NodePtr & decl, const ProgramPtr & program )
-    {
-        if ( decl->isList() ) {
-            if ( decl->list.size()==0 )
-                throw parse_error("empty list is not a valid expression", decl->at);
-            auto & head = decl->list[0];
-            if ( head->isList() ) {    // if first element is list, its an expression block
-                auto block = make_shared<ExprBlock>();
-                block->at = decl->at;
-                for ( auto & subExpr : decl->list ) {
-                    if ( !subExpr->isList() )
-                        throw parse_error("expression block must contain full expressions", subExpr->at);
-                    auto se = parseExpression(subExpr, program);
-                    block->list.emplace_back(se);
-                }
-                return block;
-            } else if ( head->isOperator() ) {
-                auto nOp = decl->list.size() - 1;
-                if ( nOp==0 )
-                    throw parse_error("naked operator", decl->at);
-                if ( nOp==1 ) {
-                    if ( head->op==Operator::r2l ) {
-                        auto pR2L = make_shared<ExprRef2Value>();
-                        pR2L->at = decl->at;
-                        pR2L->subexpr = parseExpression(decl->list[1], program);
-                        return pR2L;
-                    } else if ( head->op==Operator::p2r ) {
-                        auto pP2R = make_shared<ExprPtr2Ref>();
-                        pP2R->at = decl->at;
-                        pP2R->subexpr = parseExpression(decl->list[1], program);
-                        return pP2R;
-                    } else {
-                        if ( !isUnaryOperator(head->op) )
-                            throw parse_error("only unary operators can have 1 argument", decl->at);
-                        auto pOp = make_shared<ExprOp1>(head->op,parseExpression(decl->list[1], program));
-                        pOp->at = decl->at;
-                        return pOp;
-                    }
-                } else if ( nOp==2 ) {
-                    if ( !isBinaryOperator(head->op) )
-                        throw parse_error("only binary operators can have 2 arguments", decl->at);
-                    if ( head->op==Operator::at ) {
-                        auto pAt = make_shared<ExprAt>(parseExpression(decl->list[1], program),
-                                                       parseExpression(decl->list[2], program));
-                        return pAt;
-                    } else if ( head->op==Operator::dot) {
-                        if ( !decl->list[2]->isName() )
-                            throw parse_error("field needs to be specified as a name", decl->at);
-                        auto pDot = make_shared<ExprField>(parseExpression(decl->list[1], program), decl->list[2]->text);
-                        pDot->at = decl->at;
-                        return pDot;
-                    } else {
-                        auto pOp = make_shared<ExprOp2>(head->op,
-                                                        parseExpression(decl->list[1], program),
-                                                        parseExpression(decl->list[2], program));
-                        pOp->at = decl->at;
-                        return pOp;
-                    }
-                } else if ( nOp==3 ) {
-                    if ( !isTrinaryOperator(head->op) )
-                        throw parse_error("only trinary operators can have 3 arguments", decl->at);
-                    auto pOp = make_shared<ExprOp3>(head->op,
-                                                    parseExpression(decl->list[1], program),
-                                                    parseExpression(decl->list[2], program),
-                                                    parseExpression(decl->list[3], program));
-                    pOp->at = decl->at;
-                    return pOp;
-                } else {
-                    throw parse_error("operator has too many arguments", decl->at);
-                }
-            } else if ( head->isName("try") ) {
-                if ( !decl->isListOfAtLeastSize(3) )
-                    throw parse_error("only (try expr catch) is allowed", decl->at);
-                auto pTry = make_shared<ExprTryCatch>();
-                pTry->at = decl->at;
-                pTry->try_this = parseExpression(decl->list[1], program);
-                pTry->catch_that = parseExpression(decl->list[2], program);
-                return pTry;
-            } else if ( head->isName("while") ) {
-                if ( !decl->isListOfAtLeastSize(3) )
-                    throw parse_error("only (while cond body) is allowed", decl->at);
-                auto pWhile = make_shared<ExprWhile>();
-                pWhile->at = decl->at;
-                pWhile->cond = parseExpression(decl->list[1], program);
-                pWhile->body = parseExpression(decl->list[2], program);
-                return pWhile;
-            } else if ( head->isName("foreach") ) {
-                if ( !decl->isListOfAtLeastSize(4) )
-                    throw parse_error("only (foreach container iterator body) is allowed", decl->at);
-                auto pForeach = make_shared<ExprForeach>();
-                pForeach->at = decl->at;
-                pForeach->head = parseExpression(decl->list[1], program);
-                pForeach->iter = parseExpression(decl->list[2], program);
-                pForeach->body = parseExpression(decl->list[3], program);
-                return pForeach;
-            } else if ( head->isName("if") ) {
-                if ( !decl->isList() && !(decl->list.size()==3 || decl->list.size()==4) )
-                    throw parse_error("only (if cond if_true) or (if cond if_true if_false) are allowed", decl->at);
-                auto pIfThenElse = make_shared<ExprIfThenElse>();
-                pIfThenElse->at = decl->at;
-                pIfThenElse->cond = parseExpression(decl->list[1], program);
-                pIfThenElse->if_true = parseExpression(decl->list[2], program);
-                if ( decl->list.size()==4 )
-                    pIfThenElse->if_false = parseExpression(decl->list[3], program);
-                return pIfThenElse;
-            }  else if ( head->isName("let") ) {
-                if ( !decl->isListOfAtLeastSize(3) )
-                    throw parse_error("needs at least one variable declaration and expression", decl->at);
-                auto let = make_shared<ExprLet>();
-                let->at = decl->at;
-                for ( int iVar = 1; iVar != decl->list.size()-1; ++iVar ) {
-                    auto & vdecl = decl->list[iVar];
-                    auto pVar = parseVariable(vdecl, program, false, true);
-                    if ( let->find (pVar->name) )
-                        throw parse_error("variable already declared", decl->at);
-                    if ( pVar->type->ref )
-                        throw parse_error("local variable can't be reference", decl->at);
-                    let->variables.push_back(pVar);
-                }
-                let->subexpr = parseExpression(decl->list.back(), program);
-                return let;
-            } else if ( head->isName("sizeof") ) {
-                auto pSizeOf = make_shared<ExprSizeOf>();
-                pSizeOf->at = decl->at;
-                if ( decl->list.size()==2 ) {
-                    try {
-                        pSizeOf->typeexpr = parseTypeDeclaratoin(decl->list[1], program);
-                    } catch ( const parse_error & ) {
-                        pSizeOf->subexpr = parseExpression(decl->list[1], program);
-                    }
-                } else {
-                    throw parse_error("sizeof has too many operands", decl->at);
-                }
-                return pSizeOf;
-            } else if ( head->isName("new") ) {
-                auto pNew = make_shared<ExprNew>();
-                pNew->at = decl->at;
-                if ( decl->list.size()!=2 )
-                    throw parse_error("new has too many operands", decl->at);
-                pNew->typeexpr = parseTypeDeclaratoin(decl->list[1], program);
-                return pNew;
-            } else if ( head->isName() ) {
-                // function call
-                auto call = make_shared<ExprCall>(head->text);
-                call->at = decl->at;
-                for ( int i = 1; i != decl->list.size(); ++i ) {
-                    auto arg = parseExpression(decl->list[i], program);
-                    call->arguments.emplace_back(arg);
-                }
-                return call;
-            } else {
-                throw parse_error("unrecognized expression", decl->at);
-            }
-        } else if ( decl->isName() ) {
-            if ( decl->text=="return" ) {
-                auto pReturn = make_shared<ExprReturn>();
-                pReturn->at = decl->at;
-                return pReturn;
-            } else {
-                auto pVar = make_shared<ExprVar>(decl->text);
-                pVar->at = decl->at;
-                return pVar;
-            }
-        } else if ( decl->isNumericConstant() ) {
-            ExpressionPtr pconst;
-            if ( decl->type==NodeType::dnumber ) {
-                pconst = make_shared<ExprConstFloat>(decl->dnum);
-            } else if ( decl->type==NodeType::inumber ) {
-                pconst = make_shared<ExprConstInt>(decl->inum);
-            } else if ( decl->type==NodeType::unumber ) {
-                pconst = make_shared<ExprConstUInt>(decl->unum);
-            } else {
-                throw parse_error("undefined constant type", decl->at);
-            }
-            pconst->at = decl->at;
-            return pconst;
-        } else if ( decl->isString() ) {
-            return make_shared<ExprConstString>(decl->text);
-        } else if ( decl->isBoolean() ) {
-            return make_shared<ExprConstBool>(decl->b);
-        } else if ( decl->isNil() ) {
-            return make_shared<ExprConstPtr>(nullptr);
-        } else {
-            throw parse_error("unrecognized expression", decl->at);
-        }
-        return nullptr;
-    }
-    
-    /*
-     (defun (int mad)
-        (int a)
-        (int b)
-        (int c)
-        (return
-                (+ (* a b) c))
-     */
-    FunctionPtr parseFunction ( const NodePtr & decl, const ProgramPtr & program )
-    {
-        if ( !decl->isListOfAtLeastSize(3) )
-            throw parse_error("function needs name, return type, and body", decl->at);
-        auto func = make_shared<Function>();
-        func->at = decl->at;
-        func->name = decl->list[1]->getTailName();
-        if ( func->name.empty() )
-            throw parse_error("function must have name", decl->at);
-        func->result = parseTypeDeclaratoin(decl->list[1], program);
-        for ( int ai = 2; ai < decl->list.size()-1; ++ai ) {
-            int hasDefault = 1;
-            auto & arg = decl->list[ai];
-            auto argp = make_shared<Variable>();
-            argp->name = arg->getTailName(1);
-            if ( argp->name.empty() || arg->list.size()==2 ) {
-                hasDefault = 0;
-                argp->name = arg->getTailName();
-                if ( argp->name.empty() )
-                    throw parse_error("function argument must have name", arg->at);
-            }
-            if ( func->findArgument(argp->name) )
-                throw parse_error("function already has argument with this name", arg->at);
-            argp->type = parseTypeDeclaratoin(arg, program, hasDefault);
-            if ( hasDefault )
-                argp->init = parseExpression(arg->list.back(), program);
-            func->arguments.push_back(argp);
-        }
-        func->body = parseExpression(decl->list.back(), program);
-        return func;
-    }
-    
-    void parseFunctionDeclarations ( const NodePtr & root, const ProgramPtr & program )
-    {
-        for ( auto & expr : root->list ) {
-            if ( expr->getName(0)=="defun"  ) {
-                auto func = parseFunction(expr, program);
-                auto mangledName = func->getMangledName();
-                if ( program->findFunction(mangledName) )
-                    throw parse_error("function already defined", expr->at);
-                program->functions[mangledName] = func;
-                program->functionsByName[func->name].push_back(func);
-            }
-        }
-    }
-    
-    ProgramPtr parse ( const NodePtr & root, function<void (const ProgramPtr & prg)> && defineContext )
-    {
-        if ( !root->isList() )
-            throw parse_error("expecting a list", root->at);
-        auto program = make_shared<Program>();
-        parseStructureDeclarations(root, program);
-        parseVariableDeclarations(root, program);
-        parseFunctionDeclarations(root, program);
-        program->addBuiltinOperators();
-        program->addBuiltinFunctions();
-        if ( defineContext )
-            defineContext(program);
-        program->inferTypes();
-        return program;
-    }
     
     ProgramPtr g_Program;
     bool g_CompiledWithErrors = false;
