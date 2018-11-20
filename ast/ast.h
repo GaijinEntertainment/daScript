@@ -97,7 +97,7 @@ namespace yzg
         Structure *         structType = nullptr;
         vector<uint32_t>    dim;
         bool                ref = false;
-        long                at = 0;
+        LineInfo            at;
     };
     
     template <typename TT>  struct ToBasicType;
@@ -144,7 +144,7 @@ namespace yzg
         {
             string      name;
             TypeDeclPtr type;
-            long        at = 0;
+            LineInfo    at;
             int         offset = 0;
         };
     public:
@@ -155,7 +155,7 @@ namespace yzg
     public:
         string                      name;
         vector<FieldDeclaration>    fields;
-        long                        at = 0;
+        LineInfo                    at;
     };
     
     class Variable
@@ -166,7 +166,7 @@ namespace yzg
         string          name;
         TypeDeclPtr     type;
         ExpressionPtr   init;
-        long            at = 0;
+        LineInfo        at;
         int             index = -1;
         uint32_t        stackTop = 0;
     };
@@ -180,8 +180,11 @@ namespace yzg
             FunctionPtr         func;
             vector<VariablePtr> local;
             uint32_t            stackTop = 0;
+            void error ( const string & err, const LineInfo & at );
         };
     public:
+        Expression() = default;
+        Expression(const LineInfo & a) : at(a) {}
         virtual ~Expression() {}
         friend ostream& operator<< (ostream& stream, const Expression & func);
         virtual void log(ostream& stream, int depth) const = 0;
@@ -192,8 +195,8 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const = 0;
         virtual bool isSequence() { return false; }
     public:
+        LineInfo    at;
         TypeDeclPtr type;
-        long        at = 0;
     };
     
     template <typename ExprType, typename SuperType = Expression>
@@ -217,6 +220,8 @@ namespace yzg
     class ExprPtr2Ref : public Expression   // pointer to &value
     {
     public:
+        ExprPtr2Ref () = default;
+        ExprPtr2Ref ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -228,6 +233,8 @@ namespace yzg
     class ExprSizeOf : public Expression
     {
     public:
+        ExprSizeOf () = default;
+        ExprSizeOf ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -277,7 +284,7 @@ namespace yzg
     {
     public:
         ExprVar () = default;
-        ExprVar ( const string & n ) : name(n) {}
+        ExprVar ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -376,6 +383,7 @@ namespace yzg
     {
     public:
         ExprConst(TT val = TT()) : value(val) {}
+        ExprConst(const LineInfo & a, TT val = TT()) : Expression(a), value(val) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
             auto cexpr = clonePtr<ExprConstExt,ExprConst<TT,ExprConstExt>>(expr);
             cexpr->value = value;
@@ -398,6 +406,7 @@ namespace yzg
     {
     public:
         ExprConstPtr(void * ptr = nullptr) : ExprConst(ptr) {}
+        ExprConstPtr(const LineInfo & a, void * ptr = nullptr) : ExprConst(a,ptr) {}
         virtual void log(ostream& stream, int depth) const override {
             if ( value ) stream << hex << "*0x" << uint64_t(value) << dec; else stream << "nil";
         }
@@ -407,12 +416,14 @@ namespace yzg
     {
     public:
         ExprConstInt(int32_t i = 0)  : ExprConst(i) {}
+        ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConst(a, i) {}
     };
     
     class ExprConstUInt : public ExprConst<uint32_t,ExprConstUInt>
     {
     public:
         ExprConstUInt(uint32_t i = 0) : ExprConst(i) {}
+        ExprConstUInt(const LineInfo & a, uint32_t i = 0) : ExprConst(a,i) {}
         virtual void log(ostream& stream, int depth) const override {  stream << "0x" << hex << value << dec; }
     };
     
@@ -420,6 +431,7 @@ namespace yzg
     {
     public:
         ExprConstBool(bool i = false) : ExprConst(i) {}
+        ExprConstBool(const LineInfo & a, bool i = false) : ExprConst(a,i) {}
         virtual void log(ostream& stream, int depth) const override {  stream << (value ? "true" : "false"); }
     };
 
@@ -427,6 +439,7 @@ namespace yzg
     {
     public:
         ExprConstFloat(float i = 0.0f) : ExprConst(i) {}
+        ExprConstFloat(const LineInfo & a, float i = 0.0f) : ExprConst(a,i) {}
         virtual void log(ostream& stream, int depth) const override { stream << to_string_ex(value); }
     };
     
@@ -434,6 +447,7 @@ namespace yzg
     {
     public:
         ExprConstString(const string & str = string()) : ExprConst(unescapeString(str)) {}
+        ExprConstString(const LineInfo & a, const string & str = string()) : ExprConst(a,unescapeString(str)) {}
         virtual SimNode * simulate (Context & context) const override {
             char * str = context.allocateName(value);
             return context.makeNode<SimNode_ConstValue<char *>>(at,str);
@@ -496,6 +510,8 @@ namespace yzg
     class ExprForeach : public Expression
     {
     public:
+        ExprForeach () = default;
+        ExprForeach ( const LineInfo & a ) : Expression(a) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -532,7 +548,7 @@ namespace yzg
         bool                builtIn = false;
         int                 index = -1;
         uint32_t            totalStackSize = 0;
-        long                at = 0;
+        LineInfo            at;
     };
     
     class BuiltInFunction : public Function
@@ -590,6 +606,14 @@ namespace yzg
         }
     };
     
+    struct Error
+    {
+        Error ( const string & w, LineInfo a ) : what(w), at(a) {}
+        __forceinline bool operator < ( const Error & err ) const { return at==err.at ? what < err.what : at<err.at; };
+        string      what;
+        LineInfo    at;
+    };
+    
     class Program : public enable_shared_from_this<Program>
     {
     public:
@@ -606,6 +630,8 @@ namespace yzg
         void simulate ( Context & context );
         template <typename FuncT, FuncT fn>
         void addExtern ( const string & name ) { addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, *this)); }
+        void error ( const string & str, const LineInfo & at );
+        bool failed() const { return failToCompile; }
     protected:
         void makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type );
         VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );
@@ -618,20 +644,8 @@ namespace yzg
         map<string, FunctionPtr>    functions;                  // mangled name 2 function name
         map<string, vector<FunctionPtr>>    functionsByName;    // all functions of the same name
         int                         totalFunctions = 0;
-    };
-
-    class parse_error : public runtime_error
-    {
-    public:
-        parse_error ( const string & message, long error_at ) : runtime_error(message), at(error_at) {}
-        long at = 0;
-    };
-    
-    class semantic_error : public runtime_error
-    {
-    public:
-        semantic_error ( const string & message, long error_at ) : runtime_error(message), at(error_at) {}
-        long at = 0;
+        vector<Error>               errors;
+        bool                        failToCompile = false;
     };
      
     ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext );

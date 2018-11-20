@@ -49,8 +49,10 @@ namespace yzg
             int row = 0, col = 0;
             if ( (uint64_t(call) & 1) == 0 ) {
                 int fnIndex = call->fnIndex;
-                if ( debugInput )
-                positionToRowCol ( *debugInput, call->debug, col, row );
+                if ( debugInput ) {
+                    row = call->debug.line;
+                    col = call->debug.column;
+                }
                 info = functions[fnIndex].debug;
             } else {
                 info = (FuncInfo *) ( uint64_t(call) & ~1 );

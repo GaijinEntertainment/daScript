@@ -8,7 +8,7 @@
     
     #define YY_NO_INPUT
     
-    void yyerror(const char *s);
+    void yyerror(const string & error);
     
     int current_line_indent = 0;
     int indent_level = 0;
@@ -40,7 +40,7 @@
 
 <indent>" "      { current_line_indent++; }
 <indent>"\t"     { current_line_indent = (current_line_indent + tab_size) & (tab_size-1);  }
-<indent>"\n"     { current_line_indent = 0; need_oxford_comma = true; }
+<indent>"\n"     { current_line_indent = 0; need_oxford_comma = true; yycolumn = 1; }
 <indent>.        {
     unput(*yytext);
     if (current_line_indent > indent_level*tab_size ) {
@@ -80,6 +80,9 @@
 <normal>"def"                                           need_oxford_comma = false; return _DEF;
 <normal>"let"                                           need_oxford_comma = false; return _LET;
 <normal>"struct"                                        need_oxford_comma = false; return _STRUCT;
+<normal>"sizeof"                                        return _SIZEOF;
+<normal>"true"                                          return _TRUE;
+<normal>"false"                                         return _FALSE;
 <normal>"bool"                                          return _BOOL;
 <normal>"void"                                          return _VOID;
 <normal>"string"                                        return _STRING;
@@ -95,7 +98,8 @@
 <normal>"float2"                                        return _FLOAT2;
 <normal>"float3"                                        return _FLOAT3;
 <normal>"float4"                                        return _FLOAT4;
-<normal>[_[:alpha:]][_[:alnum:]]*                       yylval.s = new string(yytext);  return NAME;   // TODO: track allocations
+<normal>[_[:alpha:]][_[:alnum:]]*                       yylval.s = new string(yytext);  return NAME;    // TODO: track allocations
+L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yytext+1,yytext+strlen(yytext)-2);  return STRING;  
 <normal>0[xX][0-9a-fA-F]+                               return sscanf(yytext, "%u", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
@@ -124,6 +128,7 @@
     nested_curly_braces ++;
     return '{';
 }
+<normal>"\-\>"                              return ARROW;
 <normal>"\>\>"                              return SHR;
 <normal>"\<\<"                              return SHL;
 <normal>"\+\="                              return ADDEQU;
@@ -146,6 +151,7 @@
 <normal>"\|\|"                              return OROR;
 <normal>[ \t\r]                             /* skip white space */
 <normal>\n                                  {
+    yycolumn = 1;
     if  ( !nested_parentheses && !nested_curly_braces ) {
         bool ns = (current_line_indent!=0) && need_oxford_comma;
         current_line_indent = 0;

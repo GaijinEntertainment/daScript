@@ -5,11 +5,13 @@
     using namespace yzg;
     using namespace std;
     
-    namespace yzg { extern ProgramPtr g_Program; extern bool g_CompiledWithErrors; }
+    namespace yzg { extern ProgramPtr g_Program; }
     
     struct VariableDeclaration {
-        VariableDeclaration ( vector<string> * n, TypeDecl * t, Expression * i ) : pNameList(n), pTypeDecl(t), pInit(i) {}
+        VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
+            : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
         ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
+        LineInfo        at;
         vector<string>  *pNameList;
         TypeDecl        *pTypeDecl;
         Expression      *pInit;
@@ -17,10 +19,12 @@
     
     ExprCall * parseFunctionArguments ( ExprCall * pCall, Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
+    
+    LineInfo tokAt ( const struct YYLTYPE & li );
 }
 
 %{
-    void yyerror (const char *s);
+    void yyerror (const std::string & error);
     int yylex();
     void yybegin(const char * str);
 %}
@@ -49,6 +53,7 @@
 /* keywords */
 %token  _STRUCT _LET    _DEF        _WHILE
 %token  _IF     _ELSE   _FOREACH    _IN
+%token  _TRUE   _FALSE  _SIZEOF
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -61,10 +66,12 @@
 %token  SHLEQU      SHREQU      ANDEQU      OREQU       XOREQU
 %token  SHL         SHR         ADDADD      SUBSUB      LEEQU
 %token  GREQU       EQUEQU      NOTEQU      ANDAND      OROR
+%token  ARROW
 
 %token<i>   INTEGER
 %token<ui>  UNSIGNED_INTEGER
 %token<d>   DOUBLE
+%token<s>   STRING
 %token<s>   NAME
 
 %type <pStruct>         structure_name
@@ -103,7 +110,7 @@
 %left   '-' '+'
 %left   '*' '/' '%'
 %right  UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
-%left   POST_INC POST_DEC '.' '[' ']' '(' ')'
+%left   POST_INC POST_DEC '.' '[' ']' '(' ')' ARROW
 
 %%
 
@@ -115,8 +122,8 @@ program
     ;
 
 expression_foreach_loop
-    :   _FOREACH expr[iter] _IN expr[head] expression_block[block] {
-        auto pForeach = new ExprForeach();
+    :   _FOREACH[loc] expr[iter] _IN expr[head] expression_block[block] {
+        auto pForeach = new ExprForeach(tokAt(@loc));
         pForeach->head = ExpressionPtr($head);
         pForeach->iter = ExpressionPtr($iter);
         pForeach->body = ExpressionPtr($block);
@@ -140,7 +147,7 @@ optional_function_argument_list
 
 optional_function_type
     :                                   { $$ = new TypeDecl(Type::tVoid); }
-    |   ':' type_declaration[typeDecl]  { $$ = $typeDecl; }
+    |   ':' type_declaration[typeDecl]  { $$ = $typeDecl; $$->at = tokAt(@typeDecl); }
     ;
 
 function_declaration
@@ -156,6 +163,7 @@ function_declaration
                         if ( !pFunction->findArgument(name) ) {
                             VariablePtr pVar = make_shared<Variable>();
                             pVar->name = name;
+                            pVar->at = pDecl->at;
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                             pVar->init = ExpressionPtr(pDecl->pInit);
                             pFunction->arguments.push_back(pVar);
@@ -203,6 +211,7 @@ expression_let
                     if ( !pLet->find(name) ) {
                         VariablePtr pVar = make_shared<Variable>();
                         pVar->name = name;
+                        pVar->at = pDecl->at;
                         pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                         pVar->init = ExpressionPtr(pDecl->pInit);
                         pLet->variables.push_back(pVar);
@@ -217,10 +226,13 @@ expression_let
     ;
 
 expr
-    :   NAME[name]                              { $$ = new ExprVar(*$name); }
-    |   INTEGER[const]                          { $$ = new ExprConstInt((int32_t)$const); }
-    |   UNSIGNED_INTEGER[const]                 { $$ = new ExprConstUInt((uint32_t)$const); }
-    |   DOUBLE[const]                           { $$ = new ExprConstFloat((float)$const); }
+    :   NAME[name]                              { $$ = new ExprVar(tokAt(@name),*$name); }
+    |   INTEGER[const]                          { $$ = new ExprConstInt(tokAt(@const),(int32_t)$const); }
+    |   UNSIGNED_INTEGER[const]                 { $$ = new ExprConstUInt(tokAt(@const),(uint32_t)$const); }
+    |   DOUBLE[const]                           { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }
+    |   STRING[const]                           { $$ = new ExprConstString(tokAt(@const),*$const); }
+    |   _TRUE[loc]                              { $$ = new ExprConstBool(tokAt(@loc),true); }
+    |   _FALSE[loc]                             { $$ = new ExprConstBool(tokAt(@loc),false); }
     |   '+' expr[subexpr] %prec  UNARY_PLUS     { $$ = new ExprOp1(Operator::sub, ExpressionPtr($subexpr)); }
     |   '-' expr[subexpr] %prec  UNARY_MINUS    { $$ = new ExprOp1(Operator::add, ExpressionPtr($subexpr)); }
     |   expr[left]    '='     expr[right]       { $$ = new ExprOp2(Operator::eq, ExpressionPtr($left), ExpressionPtr($right)); }
@@ -249,6 +261,12 @@ expr
     |   basic_type_declaration[type] '(' expr[arguments] ')' {
             $$ = parseFunctionArguments(new ExprCall(to_string($type)),$arguments);
         }
+    |   expr[subexpr]   ARROW[loc]              { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   _SIZEOF[loc] '(' expr[subexpr] ')'      { $$ = new ExprSizeOf(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   _SIZEOF[loc] '(' type_declaration[decl] ')' {
+            $$ = new ExprConstInt(tokAt(@loc),$decl->getSizeOf());
+            delete $decl;
+        }
     ;
 
 variable_declaration_list
@@ -268,7 +286,7 @@ optional_initializer
 
 variable_declaration
     :   variable_name_list[list] ':' type_declaration[typeDecl] optional_initializer[init] {
-        $$ = new VariableDeclaration($list,$typeDecl,$init);
+        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
     }
     ;
 
@@ -280,9 +298,10 @@ global_let
                     if ( !g_Program->findVariable(name) ) {
                         VariablePtr pVar = make_shared<Variable>();
                         pVar->name = name;
+                        pVar->at = pDecl->at;
                         pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                         pVar->init = ExpressionPtr(pDecl->pInit);
-                        g_Program->globals[name] = pVar;   // TODO: support proper location $typeDecl.firstLine...
+                        g_Program->globals[name] = pVar;
                     } else {
                         yyerror("global variable is already declared");
                     }
@@ -293,22 +312,11 @@ global_let
     }
     ;
 
-structure_name
-    :   NAME[name]  {
-        if ( !g_Program->findStructure(*$name) ) {
-            auto pS = g_Program->structures[*$name] = make_shared<yzg::Structure>(*$name);
-            $$ = g_Structure = pS.get();
-        } else {
-            yyerror ( "structure is alredy defined" );
-            $$ = g_Structure = nullptr;
-        }
-    }
-    ;
-
 structure_declaration
-    : _STRUCT NAME[name] '{' variable_declaration_list[list] '}' {
+    : _STRUCT[loc] NAME[name] '{' variable_declaration_list[list] '}' {
         if ( !g_Program->findStructure(*$name) ) {
-            auto pStruct = g_Program->structures[*$name] = make_shared<yzg::Structure>(*$name);
+            auto pStruct = g_Program->structures[*$name] = make_shared<Structure>(*$name);
+            pStruct->at = tokAt(@loc);
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl->isVoid() ) {
                     yyerror("structure type can't be void");
@@ -320,7 +328,7 @@ structure_declaration
                     for ( const auto & name : *pDecl->pNameList ) {
                         if ( !pStruct->findField(name) ) {
                             auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                            pStruct->fields.push_back({name, td, 0});   // TODO: support proper location $typeDecl.firstLine...
+                            pStruct->fields.push_back({name, td, pDecl->at});
                         } else {
                             yyerror("structure field is already declared");
                         }
@@ -374,6 +382,7 @@ structure_type_declaration
         if ( auto pS = g_Program->findStructure(*$name) ) {
             auto pTD = new TypeDecl($ptr ? Type::tPointer : Type::tStructure);
             pTD->structType = pS.get();
+            pTD->at = tokAt(@name);
             $$ = pTD;
         } else {
             yyerror("undefined structure type");
@@ -383,7 +392,7 @@ structure_type_declaration
     ;
 
 type_declaration
-    :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); }
+    :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(@basicType); }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' { if ( $typeDecl ) $typeDecl->dim.push_back($dimSize); $$ = $typeDecl; }
     |   type_declaration[typeDecl] '&'                      { if ( $typeDecl ) $typeDecl->ref = true; $$ = $typeDecl; }
@@ -391,10 +400,9 @@ type_declaration
 
 %%
 
-void yyerror(const char *s)
+void yyerror(const string & error)
 {
-    cout << s << " at line " << yylloc.first_line << "\n";
-    g_CompiledWithErrors = true;
+    g_Program->error(error,LineInfo(yylloc.first_column-1,yylloc.first_line-1));
 }
 
 ExprCall * parseFunctionArguments ( ExprCall * pCall, Expression * arguments ) {
@@ -420,4 +428,9 @@ void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list )
     for ( auto pD : *list )
         delete pD;
     delete list;
+}
+
+LineInfo tokAt ( const struct YYLTYPE & li )
+{
+    return LineInfo(li.first_column,li.first_line);
 }

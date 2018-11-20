@@ -28,6 +28,16 @@ namespace yzg
     
     struct StructInfo;
     
+    struct LineInfo
+    {
+        LineInfo() = default;
+        LineInfo(int c, int l) : column(uint32_t(c)), line(uint32_t(l)) {}
+        __forceinline bool operator < ( const LineInfo & info ) const { return (line==info.line) ? column<info.column : line<info.line; }
+        __forceinline bool operator == ( const LineInfo & info ) const { return line==info.line && column==info.column; }
+        __forceinline bool operator != ( const LineInfo & info ) const { return line!=info.line || column!=info.column; }
+        uint32_t    column = 0, line = 0;
+    };
+    
     struct TypeInfo
     {
         Type            type;

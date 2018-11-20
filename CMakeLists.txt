@@ -62,6 +62,7 @@ simulate/simulate.h
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
 SET(TEST_SRC
+test/unit_test.das
 test/profile_array_of_structures.das
 test/profile_array_of_structures_vec.das
 )

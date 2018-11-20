@@ -53,14 +53,13 @@ namespace yzg
         return result;
     }
     
-    string::const_iterator positionToRowCol ( const string & st, long AT, int & col, int & row )
+    string::const_iterator positionToRowCol ( const string & st, int ROW, int COL )
     {
-        col = 1;
-        row = 1;
-        auto at = st.begin() + AT;
+        int col = 1;
+        int row = 1;
         auto text = st.begin();
         auto it = st.begin();
-        while ( it != at && it != st.end() ) {
+        while ( !(ROW==row && COL==col) && it!=st.end() ) {
             if ( *it=='\n' ) {
                 text = it + 1;
                 row ++;
@@ -80,4 +79,22 @@ namespace yzg
             ss << ".";
         return ss.str();
     }
+    
+    void reportError ( const string & st, int row, int col, const string & message )
+    {
+        if ( row && col ) {
+            auto text = positionToRowCol(st, row, col );
+            auto endtext = text;
+            while ( *endtext!='\n' && endtext!=st.end() )
+                ++endtext;
+            cout
+                << "error at line " << row << " column " << col << "\n"
+                << string(text, endtext) << "\n"
+                << string(max(col-2,0), ' ') << "^" << "\n"
+                << message << "\n";
+        } else {
+            cout << "error: " << message << "\n";
+        }
+    }
+
 }

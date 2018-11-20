@@ -30,9 +30,9 @@ namespace yzg
     
     struct SimNode
     {
-        SimNode ( long at ) : debug(at) {}
+        SimNode ( const LineInfo & at ) : debug(at) {}
         virtual __m128 eval ( Context & ) = 0;
-        long debug = 0;
+        LineInfo debug;
     };
     
     class Context
@@ -134,7 +134,7 @@ namespace yzg
     
     // field
     struct SimNode_Field : SimNode {
-        SimNode_Field ( long at, SimNode * rv, uint32_t of ) : SimNode(at), value(rv), offset(of) {}
+        SimNode_Field ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode(at), value(rv), offset(of) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 rv = value->eval(context);
             char * prv = cast<char *>::to(rv);
@@ -156,7 +156,7 @@ namespace yzg
             return cast<char *>::from(pValue + idx*stride);    // TODO: add range check
             
         }
-        SimNode_At ( long at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t rng )
+        SimNode_At ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t rng )
             : SimNode(at), value(rv), index(idx), stride(strd), range(rng) {}
         SimNode * value, * index;
         uint32_t  stride, range;
@@ -164,7 +164,7 @@ namespace yzg
     
     // FUNCTION CALL
     struct SimNode_Call : SimNode {
-        SimNode_Call ( long at ) : SimNode(at) {}
+        SimNode_Call ( const LineInfo & at ) : SimNode(at) {}
         __forceinline void evalArgs ( Context & context ) {
             for ( int i=0; i!=nArguments; ++i ) {
                 argValues[i] = arguments[i]->eval(context);
@@ -183,7 +183,7 @@ namespace yzg
     // CAST
     template <typename CastTo, typename CastFrom>
     struct SimNode_Cast : SimNode_Call {
-        SimNode_Cast ( long at ) : SimNode_Call(at) {}
+        SimNode_Cast ( const LineInfo & at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 res = arguments[0]->eval(context);
             CastTo value = (CastTo) cast<CastFrom>::to(res);
@@ -194,7 +194,7 @@ namespace yzg
     // VECTOR C-TOR
     template <int vecS>
     struct SimNode_VecCtor : SimNode_Call {
-        SimNode_VecCtor ( long at ) : SimNode_Call(at) {}
+        SimNode_VecCtor ( const LineInfo & at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
             evalArgs(context);
             if ( vecS==2 )
@@ -213,7 +213,7 @@ namespace yzg
     
     // "STACKWALK"
     struct SimNode_StackWalk : SimNode {
-        SimNode_StackWalk ( long at ) : SimNode(at) {}
+        SimNode_StackWalk ( const LineInfo & at ) : SimNode(at) {}
         virtual __m128 eval ( Context & context ) override {
             context.stackWalk();
             return _mm_setzero_ps();
@@ -227,7 +227,7 @@ namespace yzg
     
     template <typename TT>
     struct SimNode_Debug : SimNode_Call {
-        SimNode_Debug ( long at ) : SimNode_Call(at) {}
+        SimNode_Debug ( const LineInfo & at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 res = arguments[0]->eval(context);
             debug_out( cast<TT>::to(res) );
@@ -237,7 +237,7 @@ namespace yzg
     
     // LOCAL VARIABLE "GET"
     struct SimNode_GetLocal : SimNode {
-        SimNode_GetLocal(long at, uint32_t sp) : SimNode(at), stackTop(sp) {}
+        SimNode_GetLocal(const LineInfo & at, uint32_t sp) : SimNode(at), stackTop(sp) {}
         virtual __m128 eval ( Context & context ) override {
             return cast<char *>::from(context.stackTop + stackTop);
         }
@@ -246,7 +246,7 @@ namespace yzg
     
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
     struct SimNode_InitLocal : SimNode {
-        SimNode_InitLocal(long at, uint32_t sp, uint32_t sz) : SimNode(at), stackTop(sp), size(sz) {}
+        SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz) : SimNode(at), stackTop(sp), size(sz) {}
         virtual __m128 eval ( Context & context ) override {
             memset(context.stackTop + stackTop, 0, size);
             return _mm_setzero_ps();
@@ -256,7 +256,7 @@ namespace yzg
     
     // ARGUMENT VARIABLE "GET"
     struct SimNode_GetArgument : SimNode {
-        SimNode_GetArgument ( long at, int i ) : SimNode(at), index(i) {}
+        SimNode_GetArgument ( const LineInfo & at, int i ) : SimNode(at), index(i) {}
         virtual __m128 eval ( Context & context ) override {
             return context.abiArguments()[index];
         }
@@ -265,7 +265,7 @@ namespace yzg
     
     // RETURN VARIABLE GET
     struct SimNode_Return : SimNode {
-        SimNode_Return ( long at ) : SimNode(at) {}
+        SimNode_Return ( const LineInfo & at ) : SimNode(at) {}
         virtual __m128 eval ( Context & context ) override {
             return cast<__m128 *>::from(&context.abiResult());
         }
@@ -273,7 +273,7 @@ namespace yzg
     
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode {
-        SimNode_GetGlobal ( long at, int i ) : SimNode(at), index(i) {}
+        SimNode_GetGlobal ( const LineInfo & at, int i ) : SimNode(at), index(i) {}
         virtual __m128 eval ( Context & context ) override {
             return context.globalVariables[index].value;
         }
@@ -283,7 +283,7 @@ namespace yzg
     // DEREFERENCE
     template <typename TT>
     struct SimNode_Ref2Value : SimNode {      // &value -> value
-        SimNode_Ref2Value ( long at, SimNode * s ) : SimNode(at), subexpr(s) {}
+        SimNode_Ref2Value ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
             TT * pR = cast<TT *>::to(ptr);  // never null
@@ -294,7 +294,7 @@ namespace yzg
     
     // POINTER TO REFERENCE (CAST)
     struct SimNode_Ptr2Ref : SimNode {      // ptr -> &value
-        SimNode_Ptr2Ref ( long at, SimNode * s ) : SimNode(at), subexpr(s) {}
+        SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
             void * p = cast<void *>::to(ptr);
@@ -307,7 +307,7 @@ namespace yzg
     
     // NEW
     struct SimNode_New : SimNode {
-        SimNode_New ( long at, int32_t b ) : SimNode(at), bytes(b) {}
+        SimNode_New ( const LineInfo & at, int32_t b ) : SimNode(at), bytes(b) {}
         virtual __m128 eval ( Context & context ) override {
             void * ptr = context.allocate(bytes);
             memset ( ptr, 0, bytes );
@@ -319,7 +319,7 @@ namespace yzg
     // CONST-VALUE
     template <typename TT>
     struct SimNode_ConstValue : SimNode {
-        SimNode_ConstValue(long at, TT c) : SimNode(at), value(cast<TT>::from(c)) {}
+        SimNode_ConstValue(const LineInfo & at, TT c) : SimNode(at), value(cast<TT>::from(c)) {}
         virtual __m128 eval ( Context & context ) override {
             return value;
         }
@@ -328,7 +328,7 @@ namespace yzg
     
     // COPY REFERENCE VALUE
     struct SimNode_CopyRefValue : SimNode {
-        SimNode_CopyRefValue(long at, SimNode * ll, SimNode * rr, int sz)
+        SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, int sz)
             : SimNode(at), l(ll), r(rr), size(sz) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
@@ -345,7 +345,7 @@ namespace yzg
     // COPY VALUE
     template <typename TT>
     struct SimNode_CopyValue : SimNode {
-        SimNode_CopyValue(long at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
+        SimNode_CopyValue(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
             __m128 rr = r->eval(context);
@@ -359,7 +359,7 @@ namespace yzg
     
     // BLOCK
     struct SimNode_Block : SimNode {
-        SimNode_Block ( long at ) : SimNode(at) {}
+        SimNode_Block ( const LineInfo & at ) : SimNode(at) {}
         virtual __m128 eval ( Context & context ) override {
             for ( int i = 0; i != total; ++i )
                 list[i]->eval(context);
@@ -371,7 +371,7 @@ namespace yzg
     
     // LET
     struct SimNode_Let : SimNode_Block {
-        SimNode_Let ( long at ) : SimNode_Block(at) {}
+        SimNode_Let ( const LineInfo & at ) : SimNode_Block(at) {}
         virtual __m128 eval ( Context & context ) override {
             for ( int i = 0; i != total; ++i )
                 list[i]->eval(context);
@@ -382,7 +382,7 @@ namespace yzg
     
     // IF-THEN-ELSE
     struct SimNode_IfThenElse : SimNode {
-        SimNode_IfThenElse ( long at, SimNode * c, SimNode * t, SimNode * f )
+        SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         virtual __m128 eval ( Context & context ) override {
             if ( cast<bool>::to(cond->eval(context)) ) {
@@ -397,7 +397,7 @@ namespace yzg
     
     // WHILE
     struct SimNode_While : SimNode {
-        SimNode_While ( long at, SimNode * c, SimNode * b ) : SimNode(at), cond(c), body(b) {}
+        SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b ) : SimNode(at), cond(c), body(b) {}
         virtual __m128 eval ( Context & context ) override {
             while ( cast<bool>::to(cond->eval(context)) ) {
                 body->eval(context);
@@ -409,7 +409,7 @@ namespace yzg
     
     // TRY-CATCH
     struct SimNode_TryCatch : SimNode {
-        SimNode_TryCatch ( long at, SimNode * t, SimNode * c ) : SimNode(at), try_this(t), catch_that(c) {}
+        SimNode_TryCatch ( const LineInfo & at, SimNode * t, SimNode * c ) : SimNode(at), try_this(t), catch_that(c) {}
         virtual __m128 eval ( Context & context ) override {
             try {
                 auto sp = context.stackTop;
@@ -425,7 +425,7 @@ namespace yzg
     
     // FOREACH
     struct SimNode_Foreach : SimNode {
-        SimNode_Foreach ( long at, SimNode * h, SimNode * i, SimNode * b, int sz, int st )
+        SimNode_Foreach ( const LineInfo & at, SimNode * h, SimNode * i, SimNode * b, int sz, int st )
             : SimNode(at), head(h), iter(i), body(b), size(sz), stride(st) {}
         virtual __m128 eval ( Context & context ) override {
             char * ph = cast<char *>::to(head->eval(context));
@@ -604,14 +604,14 @@ namespace yzg
     // op1 policies
     
     struct SimNode_Op1 : SimNode {
-        SimNode_Op1 ( long at ) : SimNode(at) {}
+        SimNode_Op1 ( const LineInfo & at ) : SimNode(at) {}
         SimNode * x = nullptr;
     };
     
 #define DEFINE_OP1_POLICY(CALL)                                         \
     template <typename SimPolicy>                                       \
     struct Sim_##CALL : SimNode_Op1 {                                   \
-        Sim_##CALL ( long at ) : SimNode_Op1(at) {}                     \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         virtual __m128 eval ( Context & context ) override {            \
             return SimPolicy::CALL ( x->eval(context) );                \
         }                                                               \
@@ -625,7 +625,7 @@ namespace yzg
     // op2 policies
     
     struct SimNode_Op2 : SimNode {
-        SimNode_Op2 ( long at ) : SimNode(at) {}
+        SimNode_Op2 ( const LineInfo & at ) : SimNode(at) {}
         SimNode * l = nullptr;
         SimNode * r = nullptr;
     };
@@ -633,7 +633,7 @@ namespace yzg
 #define DEFINE_OP2_POLICY(CALL)                                             \
     template <typename SimPolicy>                                           \
     struct Sim_##CALL : SimNode_Op2 {                                       \
-        Sim_##CALL ( long at ) : SimNode_Op2(at) {}                         \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}             \
         virtual __m128 eval ( Context & context ) override {                \
             return SimPolicy::CALL ( l->eval(context), r->eval(context) );  \
         }                                                                   \

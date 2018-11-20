@@ -31,7 +31,7 @@ namespace yzg
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCall : SimNode_Call
     {
-        SimNode_ExtFuncCall ( long at ) : SimNode_Call(at) {}
+        SimNode_ExtFuncCall ( const LineInfo & at ) : SimNode_Call(at) {}
         
         virtual __m128 eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;

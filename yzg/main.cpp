@@ -58,17 +58,19 @@ inline double profileBlock ( int numIter, TT && block ) {
 void unit_test ( const string & fn, int numIter = 100 )
 {
     string str;
-#if REPORT_ERRORS
-    try {
-#endif
-        ifstream t(fn);
-        if ( !t.is_open() )
-            throw "can't open";
-        t.seekg(0, ios::end);
-        str.reserve(t.tellg());
-        t.seekg(0, ios::beg);
-        str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-        if ( auto program = parseDaScript(str.c_str(), nullptr) ) {
+    ifstream t(fn);
+    if ( !t.is_open() )
+        throw "can't open";
+    t.seekg(0, ios::end);
+    str.reserve(t.tellg());
+    t.seekg(0, ios::beg);
+    str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
+    if ( auto program = parseDaScript(str.c_str(), nullptr) ) {
+        if ( program->failed() ) {
+            for ( auto & err : program->errors ) {
+                reportError(str, err.at.line, err.at.column, err.what );
+            }
+        } else {
             cout << *program << "\n";
             Context ctx(&str);
             program->simulate(ctx);
@@ -83,40 +85,35 @@ void unit_test ( const string & fn, int numIter = 100 )
                 cout << "function 'test' not found\n";
             }
         }
-#if REPORT_ERRORS
-    } catch ( const parse_error & error ) {
-        cout << error.what() << endl;
-        // reportError ( str, error.at, error.what() );
-    } catch ( const semantic_error & error ) {
-        cout << error.what() << endl;
-        // reportError ( str, error.at, error.what() );
     }
-#endif
 }
 
 void unit_test_array_of_structures ( const string & fn )
 {
     string str;
-#if REPORT_ERRORS
-    try {
-#endif
-        ifstream t(fn);
-        if ( !t.is_open() ) {
-            cout << "can't open\n";
-            return;
+
+    ifstream t(fn);
+    if ( !t.is_open() ) {
+        cout << "can't open\n";
+        return;
+    }
+    t.seekg(0, ios::end);
+    str.reserve(t.tellg());
+    t.seekg(0, ios::beg);
+    str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
+    auto program = parseDaScript(str.c_str(), [&](const ProgramPtr & prog){
+        // this is how we declare external function
+        prog->addExtern<decltype(updateObject),updateObject>("interopUpdate");
+    });
+    if ( !program ) {
+        cout << "can't parse\n";
+        return;
+    }
+    if ( program->failed() ) {
+        for ( auto & err : program->errors ) {
+            reportError(str, err.at.line, err.at.column, err.what );
         }
-        t.seekg(0, ios::end);
-        str.reserve(t.tellg());
-        t.seekg(0, ios::beg);
-        str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-        auto program = parseDaScript(str.c_str(), [&](const ProgramPtr & prog){
-            // this is how we declare external function
-            prog->addExtern<decltype(updateObject),updateObject>("interopUpdate");
-        });
-        if ( !program ) {
-            cout << "can't parse\n";
-            return;
-        }
+    } else {
         cout << *program << "\n";
         
         Context ctx(&str);
@@ -132,7 +129,6 @@ void unit_test_array_of_structures ( const string & fn )
             cout << "object[" << i << "].position = " << var->pos[0] << "," << var->pos[1] << "," << var->pos[2] << "\n";
             cout << "object[" << i << "].velocity = " << var->vel[0] << "," << var->vel[1] << "," << var->vel[2] << "\n";
         }
-        
         
         int numIter = 100;
         
@@ -194,21 +190,15 @@ void unit_test_array_of_structures ( const string & fn )
         cout << "ratio foreach interop / c: " << intFT / cT << "\n";
         cout << "ratio 10000-interop / c: " << manyT / cT << "\n";
         cout << "ratio sim / interop: " << simT / intT << "\n";
-        
-#if REPORT_ERRORS
-    } catch ( const parse_error & error ) {
-        cout << error.what() << endl;
-        // reportError ( str, error.at, error.what() );
-    } catch ( const semantic_error & error ) {
-        cout << error.what() << endl;
-        // reportError ( str, error.at, error.what() );
     }
-#endif
 }
 
 
 int main(int argc, const char * argv[]) {
+    unit_test("../../test/unit_test.das");
+#if 0
     unit_test_array_of_structures("../../test/profile_array_of_structures.das");
     unit_test_array_of_structures("../../test/profile_array_of_structures_vec.das");
+#endif
     return 0;
 }

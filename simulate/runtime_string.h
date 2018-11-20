@@ -37,7 +37,6 @@ namespace yzg
     string unescapeString ( const string & input );
     string escapeString ( const string & input );
     string to_string_ex ( double dnum );
-    
-    string::const_iterator positionToRowCol ( const string & st, long AT, int & col, int & row );
+    void reportError ( const string & st, int row, int col, const string & message );
 }
 

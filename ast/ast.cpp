@@ -13,8 +13,8 @@ namespace yzg
     // operator goo
     
     Enum<Operator> g_opTable2 = {
-        {   Operator::r2l,          "->"    },
-        {   Operator::p2r,          "=>"    },
+        {   Operator::r2l,          "=>"    },
+        {   Operator::p2r,          "->"    },
         {   Operator::addEqu,       "+="    },
         {   Operator::subEqu,       "-="    },
         {   Operator::divEqu,       "/="    },
@@ -316,10 +316,15 @@ namespace yzg
     
     // expression
     
+    void Expression::InferTypeContext::error ( const string & err, const LineInfo & at )
+    {
+        program->error(err,at);
+    }
+    
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const
     {
         if ( !expr )
-            throw semantic_error("unsupported expression", at);
+            throw runtime_error("unsupported expression");
         expr->at = at;
         expr->type = type ? make_shared<TypeDecl>(*type) : nullptr;
         return expr;
@@ -327,7 +332,7 @@ namespace yzg
     
     ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr )
     {
-        if ( expr->type->isRef() ) {
+        if ( expr->type && expr->type->isRef() ) {
             auto ar2l = make_shared<ExprRef2Value>();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;
@@ -368,12 +373,14 @@ namespace yzg
     void ExprRef2Value::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
-        if ( !subexpr->type->isRef() )
-            throw semantic_error("can only dereference ref", at);
-        if ( !subexpr->type->isSimpleType() )
-            throw semantic_error("can only dereference an simple type", at);
-        type = make_shared<TypeDecl>(*subexpr->type);
-        type->ref = false;
+        if ( !subexpr->type->isRef() ) {
+            context.error("can only dereference ref", at);
+        } else if ( !subexpr->type->isSimpleType() ) {
+            context.error("can only dereference an simple type", at);
+        } else {
+            type = make_shared<TypeDecl>(*subexpr->type);
+            type->ref = false;
+        }
     }
     
     SimNode * ExprRef2Value::simulate (Context & context) const
@@ -416,11 +423,13 @@ namespace yzg
     {
         subexpr->inferType(context);
         subexpr = autoDereference(subexpr);
-        if ( !subexpr->type->isPointer() )
-            throw semantic_error("can only dereference pointer", at);
-        type = make_shared<TypeDecl>(*subexpr->type);
-        type->baseType = Type::tStructure;
-        type->ref = true;
+        if ( !subexpr->type->isPointer() ) {
+            context.error("can only dereference pointer", at);
+        } else {
+            type = make_shared<TypeDecl>(*subexpr->type);
+            type->baseType = Type::tStructure;
+            type->ref = true;
+        }
     }
     
     SimNode * ExprPtr2Ref::simulate (Context & context) const
@@ -481,14 +490,16 @@ namespace yzg
     
     void ExprNew::inferType(InferTypeContext & context)
     {
-        if ( typeexpr->baseType != Type::tStructure )
-            throw semantic_error("can only new structures (for now)", typeexpr->at );
-        if ( typeexpr->ref )
-            throw semantic_error("can't new a ref", typeexpr->at);
-        if ( typeexpr->dim.size() )
-            throw semantic_error("can only new single object", typeexpr->at );
-        type = make_shared<TypeDecl>(Type::tPointer);
-        type->structType = typeexpr->structType;
+        if ( typeexpr->baseType != Type::tStructure ) {
+            context.error("can only new structures (for now)", typeexpr->at );
+        } else if ( typeexpr->ref ) {
+            context.error("can't new a ref", typeexpr->at);
+        } else if ( typeexpr->dim.size() ) {
+            context.error("can only new single object", typeexpr->at );
+        } else {
+            type = make_shared<TypeDecl>(Type::tPointer);
+            type->structType = typeexpr->structType;
+        }
     }
     
     SimNode * ExprNew::simulate (Context & context) const
@@ -507,17 +518,21 @@ namespace yzg
     void ExprAt::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
-        if ( !subexpr->type->isRef() )
-            throw semantic_error("can only index ref", subexpr->at);
-        if ( !subexpr->type->dim.size() )
-            throw semantic_error("can only index arrays", subexpr->at);
-        index->inferType(context);
-        index = autoDereference(index);
-        if ( !index->type->isIndex() )
-            throw semantic_error("index is int or uint", index->at);
-        type = make_shared<TypeDecl>(*subexpr->type);
-        type->ref = true;
-        type->dim.pop_back();
+        if ( !subexpr->type->isRef() ) {
+            context.error("can only index ref", subexpr->at);
+        } else if ( !subexpr->type->dim.size() ) {
+            context.error("can only index arrays", subexpr->at);
+        } else {
+            index->inferType(context);
+            index = autoDereference(index);
+            if ( !index->type->isIndex() ) {
+                context.error("index is int or uint", index->at);
+            } else {
+                type = make_shared<TypeDecl>(*subexpr->type);
+                type->ref = true;
+                type->dim.pop_back();
+            }
+        }
     }
     
     ExpressionPtr ExprAt::clone( const ExpressionPtr & expr ) const
@@ -601,15 +616,19 @@ namespace yzg
     void ExprField::inferType(InferTypeContext & context)
     {
         value->inferType(context);
-        if ( value->type->baseType!=Type::tStructure )
-            throw semantic_error("expecting structure", at);
-        if ( value->type->isArray() )
-            throw semantic_error("can't get field of array", at);
-        field = value->type->structType->findField(name);
-        if ( !field )
-            throw semantic_error("field " + name + " not found", at);
-        type = make_shared<TypeDecl>(*field->type);
-        type->ref = value->type->isRef();
+        if ( value->type->baseType!=Type::tStructure ) {
+            context.error("expecting structure", at);
+        } else if ( value->type->isArray() ) {
+            context.error("can't get field of array", at);
+        } else {
+            field = value->type->structType->findField(name);
+            if ( !field ) {
+                context.error("field " + name + " not found", at);
+            } else {
+                type = make_shared<TypeDecl>(*field->type);
+                type->ref = value->type->isRef();
+            }
+        }
     }
     
     SimNode * ExprField::simulate (Context & context) const
@@ -662,11 +681,13 @@ namespace yzg
         }
         // global
         auto var = context.program->findVariable(name);
-        if ( !var )
-            throw semantic_error("can't locate variable " + name, at);
-        variable = var;
-        type = make_shared<TypeDecl>(*var->type);
-        type->ref = true;
+        if ( !var ) {
+            context.error("can't locate variable " + name, at);
+        } else {
+            variable = var;
+            type = make_shared<TypeDecl>(*var->type);
+            type->ref = true;
+        }
     }
     
     SimNode * ExprVar::simulate (Context & context) const
@@ -686,7 +707,7 @@ namespace yzg
     ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const
     {
         if ( !expr )
-            throw semantic_error("can't clone ExprOp", at);
+            throw runtime_error("can't clone ExprOp");
         auto cexpr = static_pointer_cast<ExprOp>(expr);
         cexpr->op = op;
         cexpr->func = func;
@@ -715,16 +736,20 @@ namespace yzg
         subexpr->inferType(context);
         vector<TypeDeclPtr> types = { subexpr->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
-        if ( functions.size()==0 )
-            throw semantic_error("no matching function " + to_string(op) + " " + subexpr->type->getMangledName(), at);
-        if ( functions.size()>1 )
-            throw semantic_error("too many matching functions", at);
+        if ( functions.size()==0 ) {
+            context.error("no matching function " + to_string(op) + " " + subexpr->type->getMangledName(), at);
+        } else if ( functions.size()>1 ) {
+            context.error("too many matching functions", at);
+        } else {
         func = functions[0];
-        if ( !func->builtIn )
-            throw semantic_error("operator must point to built-in function every time", at);
-        type = make_shared<TypeDecl>(*func->result);
-        if ( !func->arguments[0]->type->isRef() )
-            subexpr = autoDereference(subexpr);
+            if ( !func->builtIn ) {
+                context.error("operator must point to built-in function every time", at);
+            } else {
+                type = make_shared<TypeDecl>(*func->result);
+                if ( !func->arguments[0]->type->isRef() )
+                    subexpr = autoDereference(subexpr);
+            }
+        }
     }
     
     SimNode * ExprOp1::simulate (Context & context) const
@@ -760,19 +785,23 @@ namespace yzg
         right->inferType(context);
         vector<TypeDeclPtr> types = { left->type, right->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
-        if ( functions.size()==0 )
-            throw semantic_error("no matching function " + to_string(op)
+        if ( functions.size()==0 ) {
+            context.error("no matching function " + to_string(op)
                 + " " + left->type->getMangledName() + " " + right->type->getMangledName(), at);
-        if ( functions.size()>1 )
-            throw semantic_error("too many matching functions", at);
-        func = functions[0];
-        if ( !func->builtIn )
-            throw semantic_error("operator must point to built-in function every time", at);
-        type = make_shared<TypeDecl>(*func->result);
-        if ( !func->arguments[0]->type->isRef() )
-            left = autoDereference(left);
-        if ( !func->arguments[1]->type->isRef() )
-            right = autoDereference(right);
+        } else if ( functions.size()>1 ) {
+            context.error("too many matching functions", at);
+        } else {
+            func = functions[0];
+            if ( !func->builtIn ) {
+                context.error("operator must point to built-in function every time", at);
+            } else {
+                type = make_shared<TypeDecl>(*func->result);
+                if ( !func->arguments[0]->type->isRef() )
+                    left = autoDereference(left);
+                if ( !func->arguments[1]->type->isRef() )
+                    right = autoDereference(right);
+            }
+        }
     }
     
     SimNode * ExprOp2::simulate (Context & context) const
@@ -809,26 +838,30 @@ namespace yzg
     void ExprOp3::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
-        if ( !subexpr->type->isSimpleType(Type::tBool) )
-            throw semantic_error("cond operator condition must be boolean", at);
-        left->inferType(context);
-        right->inferType(context);
-        vector<TypeDeclPtr> types = { subexpr->type, left->type, right->type };
-        auto functions = context.program->findMatchingFunctions(to_string(op), types);
-        if ( functions.size()==0 )
-            throw semantic_error("no matching function " + to_string(op)
-                + " " + subexpr->type->getMangledName() + " "
-                    + left->type->getMangledName() + " " + right->type->getMangledName(), at);
-        if ( functions.size()>1 )
-            throw semantic_error("too many matching functions", at);
-        func = functions[0];
-        type = make_shared<TypeDecl>(*func->result);
-        if ( !func->arguments[0]->type->isRef() )
-            subexpr = autoDereference(subexpr);
-        if ( !func->arguments[1]->type->isRef() )
-            left = autoDereference(left);
-        if ( !func->arguments[2]->type->isRef() )
-            right = autoDereference(right);
+        if ( !subexpr->type->isSimpleType(Type::tBool) ) {
+            context.error("cond operator condition must be boolean", at);
+        } else {
+            left->inferType(context);
+            right->inferType(context);
+            vector<TypeDeclPtr> types = { subexpr->type, left->type, right->type };
+            auto functions = context.program->findMatchingFunctions(to_string(op), types);
+            if ( functions.size()==0 ) {
+                context.error("no matching function " + to_string(op)
+                    + " " + subexpr->type->getMangledName() + " "
+                        + left->type->getMangledName() + " " + right->type->getMangledName(), at);
+            } else if ( functions.size()>1 ) {
+                context.error("too many matching functions", at);
+            } else {
+                func = functions[0];
+                type = make_shared<TypeDecl>(*func->result);
+                if ( !func->arguments[0]->type->isRef() )
+                    subexpr = autoDereference(subexpr);
+                if ( !func->arguments[1]->type->isRef() )
+                    left = autoDereference(left);
+                if ( !func->arguments[2]->type->isRef() )
+                    right = autoDereference(right);
+            }
+        }
     }
     
     SimNode * ExprOp3::simulate (Context & context) const
@@ -846,10 +879,12 @@ namespace yzg
     
     void ExprReturn::inferType(InferTypeContext & context)
     {
-        if ( context.func->result->isVoid() )
-            throw semantic_error("void function has no return", at);
-        type = make_shared<TypeDecl>(*context.func->result);
-        type->ref = true;
+        if ( context.func->result->isVoid() ) {
+            context.error("void function has no return", at);
+        } else {
+            type = make_shared<TypeDecl>(*context.func->result);
+            type->ref = true;
+        }
     }
     
     SimNode * ExprReturn::simulate (Context & context) const
@@ -885,12 +920,14 @@ namespace yzg
     void ExprIfThenElse::inferType(InferTypeContext & context)
     {
         cond->inferType(context);
-        if ( !cond->type->isSimpleType(Type::tBool) )
-            throw semantic_error("if-then-else condition must be boolean", at);
-        if_true->inferType(context);
-        if ( if_false )
-            if_false->inferType(context);
-        type = make_shared<TypeDecl>();
+        if ( !cond->type->isSimpleType(Type::tBool) ) {
+            context.error("if-then-else condition must be boolean", at);
+        } else {
+            if_true->inferType(context);
+            if ( if_false )
+                if_false->inferType(context);
+            type = make_shared<TypeDecl>();
+        }
     }
     
     SimNode * ExprIfThenElse::simulate (Context & context) const
@@ -912,10 +949,12 @@ namespace yzg
     void ExprWhile::inferType(InferTypeContext & context)
     {
         cond->inferType(context);
-        if ( !cond->type->isSimpleType(Type::tBool) )
-            throw semantic_error("while loop condition must be boolean", at);
-        body->inferType(context);
-        type = make_shared<TypeDecl>();
+        if ( !cond->type->isSimpleType(Type::tBool) ) {
+            context.error("while loop condition must be boolean", at);
+        } else {
+            body->inferType(context);
+            type = make_shared<TypeDecl>();
+        }
     }
     
     void ExprWhile::log(ostream& stream, int depth) const
@@ -947,12 +986,14 @@ namespace yzg
     {
         head->inferType(context);
         iter->inferType(context);
-        if ( head->type->dim.size()!=1 )    // TODO: support multi-array
-            throw semantic_error("can only iterate through a 1-d array", at);
-        if ( !head->type->isIteratorType(*iter->type) )
-            throw semantic_error("iterator type does not match", at);
-        body->inferType(context);
-        type = make_shared<TypeDecl>();
+        if ( head->type->dim.size()!=1 ) {   // TODO: support multi-array
+            context.error("can only iterate through a 1-d array", at);
+        } else if ( !head->type->isIteratorType(*iter->type) ) {
+            context.error("iterator type does not match", at);
+        } else {
+            body->inferType(context);
+            type = make_shared<TypeDecl>();
+        }
     }
     
     void ExprForeach::log(ostream& stream, int depth) const
@@ -1049,9 +1090,11 @@ namespace yzg
             context.local.push_back(var);
             if ( var->init ) {
                 var->init->inferType(context);
-                if ( !var->type->isSameType(*var->init->type,false) )
-                    throw semantic_error("variable initialization type mismatch", var->at );
-                var->init = autoDereference(var->init);
+                if ( !var->type->isSameType(*var->init->type,false) ) {
+                    context.error("variable initialization type mismatch", var->at );
+                } else {
+                    var->init = autoDereference(var->init);
+                }
             }
             var->stackTop = context.stackTop;
             context.stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
@@ -1142,21 +1185,23 @@ namespace yzg
             types.push_back(ar->type);
         }
         auto functions = context.program->findMatchingFunctions(name, types);
-        if ( functions.size()==0 )
-            throw semantic_error("no matching function " + describe(), at);
-        if ( functions.size()>1 )
-            throw semantic_error("too many matching functions " + describe(), at);
-        func = functions[0];
-        type = make_shared<TypeDecl>(*func->result);
-        for ( size_t iT = arguments.size(); iT != func->arguments.size(); ++iT ) {
-            auto newArg = func->arguments[iT]->init->clone();
-            if ( !newArg->type )
-                newArg->inferType(context);
-            arguments.push_back(newArg);
+        if ( functions.size()==0 ) {
+            context.error("no matching function " + describe(), at);
+        } else if ( functions.size()>1 ) {
+            context.error("too many matching functions " + describe(), at);
+        } else {
+            func = functions[0];
+            type = make_shared<TypeDecl>(*func->result);
+            for ( size_t iT = arguments.size(); iT != func->arguments.size(); ++iT ) {
+                auto newArg = func->arguments[iT]->init->clone();
+                if ( !newArg->type )
+                    newArg->inferType(context);
+                arguments.push_back(newArg);
+            }
+            for ( size_t iA = 0; iA != arguments.size(); ++iA )
+                if ( !func->arguments[iA]->type->isRef() )
+                    arguments[iA] = autoDereference(arguments[iA]);
         }
-        for ( size_t iA = 0; iA != arguments.size(); ++iA )
-            if ( !func->arguments[iA]->type->isRef() )
-                arguments[iA] = autoDereference(arguments[iA]);
     }
     
     SimNode * ExprCall::simulate (Context & context) const
@@ -1253,8 +1298,10 @@ namespace yzg
                 for ( auto & arg : context.func->arguments ) {
                     if ( arg->init ) {
                         arg->init->inferType(context);
+                        if ( failed() )
+                            return;
                         if ( !arg->type->isSameType(*arg->init->type, true) ) {
-                            throw semantic_error("function argument default value type mismatch", arg->init->at);
+                            context.error("function argument default value type mismatch", arg->init->at);
                         }
                     }
                 }
@@ -1266,10 +1313,12 @@ namespace yzg
     void Program::addBuiltIn(FunctionPtr && func)
     {
         auto mangledName = func->getMangledName();
-        if ( findFunction(mangledName) )
-            throw parse_error("builtin function already defined " + mangledName, 0);
-        functions[mangledName] = func;
-        functionsByName[func->name].push_back(func);
+        if ( findFunction(mangledName) ) {
+            error("builtin function already defined " + mangledName, LineInfo());
+        } else {
+            functions[mangledName] = func;
+            functionsByName[func->name].push_back(func);
+        }
     }
         
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const
@@ -1289,7 +1338,7 @@ namespace yzg
                 for ( auto ai = 0; ai != types.size(); ++ai ) {
                     auto & argType = pFn->arguments[ai]->type;
                     auto & passType = types[ai];
-                    if ( (argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false) ) {
+                    if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false)) ) {
                         typesCompatible = false;
                         break;
                     }
@@ -1410,27 +1459,33 @@ namespace yzg
         return t;
     }
     
+    void Program::error ( const string & str, const LineInfo & at )
+    {
+        errors.emplace_back(str,at);
+        failToCompile = true;
+    }
+    
     // PARSER
     
     ProgramPtr g_Program;
-    bool g_CompiledWithErrors = false;
     
     ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext )
     {
-        g_CompiledWithErrors = false;
-        g_Program = make_shared<Program>();
+        int err;
+        auto program = g_Program = make_shared<Program>();
         yybegin(script);
-        if ( yyparse() || g_CompiledWithErrors ) {
-            // throw runtime_error("can't parse");
-            g_Program.reset();
-            return nullptr;
+        err = yyparse();        // TODO: add mutex or make thread safe?
+        g_Program = nullptr;
+        if ( err || program->failed() ) {
+            sort(program->errors.begin(),program->errors.end());
+            return program;
         } else {
-            g_Program->addBuiltinOperators();
-            g_Program->addBuiltinFunctions();
+            program->addBuiltinOperators();
+            program->addBuiltinFunctions();
             if ( defineContext )
-                defineContext(g_Program);
-            g_Program->inferTypes();
-            return g_Program;
+                defineContext(program);
+            program->inferTypes();
+            return program;
         }
     }
     
