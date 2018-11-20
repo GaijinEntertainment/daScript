@@ -16,6 +16,7 @@
     int nested_parentheses = 0;
     int nested_curly_braces = 0;
     int yycolumn = 1;
+    bool need_oxford_comma = true;
     
     #define YY_USER_ACTION \
         yylloc.first_line = yylloc.last_line = yylineno; \
@@ -30,7 +31,7 @@
 %option nounistd
 %option yylineno
 
-/* %option debug */
+/*%option debug*/
 
 %x indent
 %s normal
@@ -39,7 +40,7 @@
 
 <indent>" "      { current_line_indent++; }
 <indent>"\t"     { current_line_indent = (current_line_indent + tab_size) & (tab_size-1);  }
-<indent>"\n"     { current_line_indent = 0; }
+<indent>"\n"     { current_line_indent = 0; need_oxford_comma = true; }
 <indent>.        {
     unput(*yytext);
     if (current_line_indent > indent_level*tab_size ) {
@@ -71,9 +72,14 @@
     }
 }
 
-<normal>"def"                               return _DEF;
-<normal>"let"                               return _LET;
-<normal>"struct"                            return _STRUCT;
+<normal>"foreach"                           need_oxford_comma = false; return _FOREACH;
+<normal>"in"                                need_oxford_comma = false; return _IN;
+<normal>"while"                             need_oxford_comma = false; return _WHILE;
+<normal>"if"                                need_oxford_comma = false; return _IF;
+<normal>"else"                              need_oxford_comma = false; return _ELSE;
+<normal>"def"                               need_oxford_comma = false; return _DEF;
+<normal>"let"                               need_oxford_comma = false; return _LET;
+<normal>"struct"                            need_oxford_comma = false; return _STRUCT;
 <normal>"bool"                              return _BOOL;
 <normal>"void"                              return _VOID;
 <normal>"string"                            return _STRING;
@@ -90,7 +96,14 @@
 <normal>"float3"                            return _FLOAT3;
 <normal>"float4"                            return _FLOAT4;
 <normal>[_[:alpha:]][_[:alnum:]]*           yylval.s = new string(yytext);  return NAME;   // TODO: track allocations
-<normal>[[:digit:]]+                        yylval.i = strtol(yytext, NULL, 10); return INT;
+<normal>0[xX][0-9a-fA-F]+                             return sscanf(yytext, "%u", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
+<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?    return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)? return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+(f|F)                                   return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                  return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+(l|L)?                                  return sscanf(yytext, "%i", &yylval.i)!=1 ? LEXER_ERROR : INTEGER;
+<normal>0[xX][0-9a-fA-F]+(u|U)                        return sscanf(yytext, "%u", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
+<normal>[0-9]+(u|U)                                   return sscanf(yytext, "%u", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>\)                                  {
     if ( !nested_parentheses )
         yyerror("mismatching parentheses");
@@ -111,12 +124,32 @@
     nested_curly_braces ++;
     return '{';
 }
-<normal>[-+*/;,<\[\]!~%&^|\.$@\?:]       return *yytext;
+<normal>"\>\>"                              return SHR;
+<normal>"\<\<"                              return SHL;
+<normal>"\+\="                              return ADDEQU;
+<normal>"\-\="                              return SUBEQU;
+<normal>"\/\="                              return DIVEQU;
+<normal>"\*\="                              return MULEQU;
+<normal>"\%\="                              return MODEQU;
+<normal>"\>\>\="                            return SHREQU;
+<normal>"\<\<\="                            return SHLEQU;
+<normal>"\&\="                              return ANDEQU;
+<normal>"\|\="                              return OREQU;
+<normal>"\^\="                              return XOREQU;
+<normal>"\+\+"                              return ADDADD;
+<normal>"\-\-"                              return SUBSUB;
+<normal>"\<\="                              return LEEQU;
+<normal>"\>\="                              return GREQU;
+<normal>"\=\="                              return EQUEQU;
+<normal>"\!\="                              return NOTEQU;
+<normal>"\&\&"                              return ANDAND;
+<normal>"\|\|"                              return OROR;
 <normal>[ \t\r]                             /* skip white space */
 <normal>\n                                  {
     if  ( !nested_parentheses && !nested_curly_braces ) {
-        bool ns = current_line_indent!=0;
+        bool ns = (current_line_indent!=0) && need_oxford_comma;
         current_line_indent = 0;
+        need_oxford_comma = true;
         BEGIN(indent);
         #ifdef FLEX_DEBUG
         cout << "emit ;\n";
@@ -125,17 +158,21 @@
             return ';';
     }
 }
+<normal>.                                   return *yytext;
 
 %%
 
+extern int yydebug;
+
 void yybegin(const char * str)
 {
-    BEGIN(normal);
+    yydebug = 0;
+    need_oxford_comma = true;
     yycolumn = 1;
     current_line_indent = 0;
     indent_level = 0;
     nested_curly_braces = 0;
     nested_curly_braces = 0;
+    BEGIN(normal);
     yy_scan_string(str);
 }
-

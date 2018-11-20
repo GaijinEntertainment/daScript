@@ -8,10 +8,11 @@
     namespace yzg { extern ProgramPtr g_Program; extern bool g_CompiledWithErrors; }
     
     struct VariableDeclaration {
-        VariableDeclaration ( vector<string> * n, TypeDecl * t ) : pNameList(n), pTypeDecl(t) {}
-        ~VariableDeclaration () { delete pNameList; delete pTypeDecl; }
+        VariableDeclaration ( vector<string> * n, TypeDecl * t, Expression * i ) : pNameList(n), pTypeDecl(t), pInit(i) {}
+        ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
         vector<string>  *pNameList;
         TypeDecl        *pTypeDecl;
+        Expression      *pInit;
     };
     
     __forceinline void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
@@ -28,21 +29,29 @@
 %}
 
 %locations
+%verbose
+%debug
 
 %union {
     bool                            b;
     int                             i;
+    uint                            ui;
+    double                          d;
     string                          *s;
     vector<string>                  *pNameList;
     Structure                       *pStruct;
     VariableDeclaration             *pVarDecl;
     vector<VariableDeclaration*>    *pVarDeclList;
     TypeDecl                        *pTypeDecl;
+    Expression                      *pExpression;
     Type                            type;
 }
 
+%token  LEXER_ERROR
+
 /* keywords */
-%token  _STRUCT _LET    _DEF
+%token  _STRUCT _LET    _DEF        _WHILE
+%token  _IF     _ELSE   _FOREACH    _IN
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -50,61 +59,215 @@
 %token  _UINT   _UINT2  _UINT3  _UINT4
 %token  _FLOAT  _FLOAT2 _FLOAT3 _FLOAT4
 
-%token<i> INT
-%token<s> NAME
+/* operators */
+%token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
+%token  SHLEQU      SHREQU      ANDEQU      OREQU       XOREQU
+%token  SHL         SHR         ADDADD      SUBSUB      LEEQU
+%token  GREQU       EQUEQU      NOTEQU      ANDAND      OROR
+
+%token<i>   INTEGER
+%token<ui>  UNSIGNED_INTEGER
+%token<d>   DOUBLE
+%token<s>   NAME
 
 %type <pStruct>         structure_name
 %type <pNameList>       variable_name_list
 %type <type>            basic_type_declaration
 %type <pTypeDecl>       type_declaration
+%type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
 %type <b>               optional_ptr_declaration
 %type <pVarDeclList>    variable_declaration_list
+%type <pVarDeclList>    optional_function_argument_list
+%type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
 
+%type <pExpression>     expr
+%type <pExpression>     expression_let
+%type <pExpression>     expressions
+%type <pExpression>     expression_block
+%type <pExpression>     expression_while_loop
+%type <pExpression>     expression_foreach_loop
+%type <pExpression>     expression_any
+%type <pExpression>     optional_initializer
+
+/* operation precedence*/
+%left   ','
+%right  '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU SHREQU SHLEQU ANDEQU OREQU XOREQU
+%right  '?' ':'
+%left   OROR
+%left   ANDAND
+%left   '|'
+%left   '^'
+%left   '&'
+%left   EQUEQU NOTEQU
+%left   '<' '>' LEEQU GREQU
+%left   SHR SHL
+%left   '-' '+'
+%left   '*' '/' '%'
+%right  UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
+%left   POST_INC POST_DEC '.' '[' ']' '(' ')'
 
 %%
 
 program
     :
-    | program   structure_declaration
-    | program   global_let
+    |   program structure_declaration
+    |   program global_let
+    |   program function_declaration
     ;
 
-oxford_comma
-    :
-    |   ';'
+expression_foreach_loop
+    :   _FOREACH expr[iter] _IN expr[head] expression_block[block] {
+        auto pForeach = new ExprForeach();
+        pForeach->head = ExpressionPtr($head);
+        pForeach->iter = ExpressionPtr($iter);
+        pForeach->body = ExpressionPtr($block);
+        $$ = pForeach;
+    }
+    ;
+
+expression_while_loop
+    :   _WHILE expr[condition] expression_block[block] {
+        auto pWhile = new ExprWhile();
+        pWhile->cond = ExpressionPtr($condition);
+        pWhile->body = ExpressionPtr($block);
+        $$ = pWhile;
+    }
+    ;
+
+optional_function_argument_list
+    :                                           { $$ = nullptr; }
+    |   '(' function_argument_list[list] ')'    { $$ = $list; }
+    ;
+
+optional_function_type
+    :                                   { $$ = new TypeDecl(Type::tVoid); }
+    |   ':' type_declaration[typeDecl]  { $$ = $typeDecl; }
     ;
 
 function_declaration
-    :   _DEF NAME[name] '(' function_argument_list ')' oxford_comma expression_block
-    ;
-
-function_argument_list
-    :   function_argument
-    |   function_argument ',' function_argument_list
-    ;
-
-function_argument
-    :   variable_name_list ':' type_declaration
+    :   _DEF NAME[name] optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
+        auto pFunction = make_shared<Function>();
+        pFunction->name = *$name;
+        pFunction->body = ExpressionPtr($block);
+        pFunction->result = TypeDeclPtr($result);
+        if ( $list ) {
+            for ( auto pDecl : *$list ) {
+                if ( pDecl->pTypeDecl ) {
+                    for ( const auto & name : *pDecl->pNameList ) {
+                        if ( !pFunction->findArgument(name) ) {
+                            VariablePtr pVar = make_shared<Variable>();
+                            pVar->name = name;
+                            pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            pVar->init = ExpressionPtr(pDecl->pInit);
+                            pFunction->arguments.push_back(pVar);
+                        } else {
+                            yyerror("function argument is already declared");
+                        }
+                    }
+                }
+            }
+        }
+        auto mangledName = pFunction->getMangledName();
+        if ( g_Program->findFunction(mangledName) )
+            yyerror("function already defined");
+        g_Program->functions[mangledName] = pFunction;
+        g_Program->functionsByName[pFunction->name].push_back(pFunction);
+    }
     ;
 
 expression_block
-    : '{' expressions '}'
+    :   '{' expressions[block] '}'      { $$ = $block; }
+    ;
+
+expression_any
+    :   expr[subexpr] ';'                { $$ = $subexpr; }
+    |   expression_let[subexpr]          { $$ = $subexpr; }
+    |   expression_while_loop[subexpr]   { $$ = $subexpr; }
+    |   expression_foreach_loop[subexpr] { $$ = $subexpr; }
     ;
 
 expressions
-    :
-    |   expressions expression ';'
-    ;
-
-expression
-    :   expression_let
+    :                                                   { $$ = new ExprBlock(); }
+    |   expressions[block] expression_any[subexpr]      {
+        $$ = $block;
+        static_cast<ExprBlock*>($block)->list.push_back(ExpressionPtr($subexpr));
+    }
     ;
 
 expression_let
-    :   _LET oxford_comma '{' variable_declaration_list[list] '}' {
-        deleteVariableDeclarationList($list);
+    :   _LET '{' variable_declaration_list[list] expression_block[subexpr] '}' {
+        auto pLet = new ExprLet();
+        pLet->subexpr = ExpressionPtr($subexpr);
+        for ( auto pDecl : *$list ) {
+            if ( pDecl->pTypeDecl ) {
+                for ( const auto & name : *pDecl->pNameList ) {
+                    if ( !pLet->find(name) ) {
+                        VariablePtr pVar = make_shared<Variable>();
+                        pVar->name = name;
+                        pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                        pVar->init = ExpressionPtr(pDecl->pInit);
+                        pLet->variables.push_back(pVar);
+                    } else {
+                        yyerror("local variable is already declared");
+                    }
+                }
+            }
+        }
+        $$ = pLet;
+    }
+    ;
+
+expr
+    :   NAME[name]                              { $$ = new ExprVar(*$name); }
+    |   INTEGER[const]                          { $$ = new ExprConstInt((int32_t)$const); }
+    |   UNSIGNED_INTEGER[const]                 { $$ = new ExprConstUInt((uint32_t)$const); }
+    |   DOUBLE[const]                           { $$ = new ExprConstFloat((float)$const); }
+    |   '+' expr[subexpr] %prec  UNARY_PLUS     { $$ = new ExprOp1(Operator::sub, ExpressionPtr($subexpr)); }
+    |   '-' expr[subexpr] %prec  UNARY_MINUS    { $$ = new ExprOp1(Operator::add, ExpressionPtr($subexpr)); }
+    |   expr[left]    '='     expr[right]       { $$ = new ExprOp2(Operator::eq, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    ADDEQU  expr[right]       { $$ = new ExprOp2(Operator::addEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    SUBEQU  expr[right]       { $$ = new ExprOp2(Operator::subEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    MULEQU  expr[right]       { $$ = new ExprOp2(Operator::mulEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    DIVEQU  expr[right]       { $$ = new ExprOp2(Operator::divEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    MODEQU  expr[right]       { $$ = new ExprOp2(Operator::modEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    '+'     expr[right]       { $$ = new ExprOp2(Operator::add, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    '-'     expr[right]       { $$ = new ExprOp2(Operator::sub, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    '*'     expr[right]       { $$ = new ExprOp2(Operator::mul, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    '/'     expr[right]       { $$ = new ExprOp2(Operator::div, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    '%'     expr[right]       { $$ = new ExprOp2(Operator::mod, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    '<'     expr[right]       { $$ = new ExprOp2(Operator::less, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    '>'     expr[right]       { $$ = new ExprOp2(Operator::greater, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    EQUEQU  expr[right]       { $$ = new ExprOp2(Operator::eqEq, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    NOTEQU  expr[right]       { $$ = new ExprOp2(Operator::notEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    LEEQU   expr[right]       { $$ = new ExprOp2(Operator::lessEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left]    GREQU   expr[right]       { $$ = new ExprOp2(Operator::greaterEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   '(' expr[subexpr] ')'                   { $$ = $subexpr; }
+    |   expr[subexpr]    '[' expr[index] ']'    { $$ = new ExprAt(ExpressionPtr($subexpr), ExpressionPtr($index)); }
+    |   expr[subexpr]    '.'     NAME[name]     { $$ = new ExprField(ExpressionPtr($subexpr), *$name); }
+    |   expr[left]    ','     expr[right]       { $$ = new ExprSequence(ExpressionPtr($left), ExpressionPtr($right)); }
+    |   NAME[name] '(' ')'                      { $$ = new ExprCall(*$name); }
+    |   NAME[name] '(' expr[arguments] ')'      {
+            auto pCall = new ExprCall(*$name);
+            auto arg = $arguments;
+            if ( arg->isSequence() ) {
+                while ( arg->isSequence() ) {
+                    auto pSeq = static_cast<ExprSequence *>(arg);
+                    pCall->arguments.push_back(pSeq->left);
+                    arg = pSeq->right.get();
+                }
+                pCall->arguments.push_back(arg->shared_from_this());
+                delete $arguments;
+            } else {
+                pCall->arguments.push_back(ExpressionPtr(arg));
+            }
+            $$ = pCall;
+        }
+    |   basic_type_declaration[type] '(' expr[subexpr] ')' {
+        auto pCast = new ExprCall(to_string($type));
+        pCast->arguments.push_back(ExpressionPtr($subexpr));
+        $$ = pCast;
     }
     ;
 
@@ -113,12 +276,24 @@ variable_declaration_list
     |   variable_declaration_list[list] variable_declaration[decl] ';'  { $$ = $list; $list->push_back($decl); }
     ;
 
+function_argument_list
+    :   variable_declaration[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
+    |   function_argument_list[list] ';' variable_declaration[decl]     { $$ = $list; $list->push_back($decl); }
+    ;
+
+optional_initializer
+    :                       { $$ = nullptr; }
+    |  '=' expr[subexpr]    { $$ = $subexpr; }
+    ;
+
 variable_declaration
-    :   variable_name_list[list] ':' type_declaration[typeDecl]         { $$ = new VariableDeclaration($list,$typeDecl); }
+    :   variable_name_list[list] ':' type_declaration[typeDecl] optional_initializer[init] {
+        $$ = new VariableDeclaration($list,$typeDecl,$init);
+    }
     ;
 
 global_let
-    :   _LET oxford_comma '{' variable_declaration_list[list] '}' {
+    :   _LET '{' variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {
@@ -126,6 +301,7 @@ global_let
                         VariablePtr pVar = make_shared<Variable>();
                         pVar->name = name;
                         pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                        pVar->init = ExpressionPtr(pDecl->pInit);
                         g_Program->globals[name] = pVar;   // TODO: support proper location $typeDecl.firstLine...
                     } else {
                         yyerror("global variable is already declared");
@@ -150,7 +326,7 @@ structure_name
     ;
 
 structure_declaration
-    : _STRUCT NAME[name] oxford_comma '{' variable_declaration_list[list] '}' {
+    : _STRUCT NAME[name] '{' variable_declaration_list[list] '}' {
         if ( !g_Program->findStructure(*$name) ) {
             auto pStruct = g_Program->structures[*$name] = make_shared<yzg::Structure>(*$name);
             for ( auto pDecl : *$list ) {
@@ -158,6 +334,8 @@ structure_declaration
                     yyerror("structure type can't be void");
                 } else if ( pDecl->pTypeDecl->ref ) {
                     yyerror("structure type can't be reference or array of references");
+                } else if ( pDecl->pInit ) {
+                    yyerror("structure field can't have initialization");
                 } else {
                     for ( const auto & name : *pDecl->pNameList ) {
                         if ( !pStruct->findField(name) ) {
@@ -225,10 +403,10 @@ structure_type_declaration
     ;
 
 type_declaration
-    :   basic_type_declaration[basicType]               { $$ = new TypeDecl($basicType); }
-    |   structure_type_declaration[typeDecl]            { $$ = $typeDecl; }
-    |   type_declaration[typeDecl] '[' INT[dimSize] ']' { if ( $typeDecl ) $typeDecl->dim.push_back($dimSize); $$ = $typeDecl; }
-    |   type_declaration[typeDecl] '&'                  { if ( $typeDecl ) $typeDecl->ref = true; $$ = $typeDecl; }
+    :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); }
+    |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
+    |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' { if ( $typeDecl ) $typeDecl->dim.push_back($dimSize); $$ = $typeDecl; }
+    |   type_declaration[typeDecl] '&'                      { if ( $typeDecl ) $typeDecl->ref = true; $$ = $typeDecl; }
     ;
 
 %%

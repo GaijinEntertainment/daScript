@@ -30,6 +30,7 @@ namespace yzg
         subEqu,
         divEqu,
         mulEqu,
+        modEqu,
         andEqu,
         orEqu,
         xorEqu,
@@ -48,6 +49,7 @@ namespace yzg
         sub,
         div,
         mul,
+        mod,
         eq,
         is,         // ?
         boolNot,    // !

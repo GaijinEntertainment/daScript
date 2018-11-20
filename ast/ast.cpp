@@ -1514,45 +1514,38 @@ namespace yzg
                     } else {
                         if ( !isUnaryOperator(head->op) )
                             throw parse_error("only unary operators can have 1 argument", decl->at);
-                        auto pOp = make_shared<ExprOp1>();
+                        auto pOp = make_shared<ExprOp1>(head->op,parseExpression(decl->list[1], program));
                         pOp->at = decl->at;
-                        pOp->op = head->op;
-                        pOp->subexpr = parseExpression(decl->list[1], program);
                         return pOp;
                     }
                 } else if ( nOp==2 ) {
                     if ( !isBinaryOperator(head->op) )
                         throw parse_error("only binary operators can have 2 arguments", decl->at);
                     if ( head->op==Operator::at ) {
-                        auto pAt = make_shared<ExprAt>();
-                        pAt->subexpr = parseExpression(decl->list[1], program);
-                        pAt->index = parseExpression(decl->list[2], program);
+                        auto pAt = make_shared<ExprAt>(parseExpression(decl->list[1], program),
+                                                       parseExpression(decl->list[2], program));
                         return pAt;
                     } else if ( head->op==Operator::dot) {
                         if ( !decl->list[2]->isName() )
                             throw parse_error("field needs to be specified as a name", decl->at);
-                        auto pDot = make_shared<ExprField>();
+                        auto pDot = make_shared<ExprField>(parseExpression(decl->list[1], program), decl->list[2]->text);
                         pDot->at = decl->at;
-                        pDot->value = parseExpression(decl->list[1], program);
-                        pDot->name = decl->list[2]->text;
                         return pDot;
                     } else {
-                        auto pOp = make_shared<ExprOp2>();
+                        auto pOp = make_shared<ExprOp2>(head->op,
+                                                        parseExpression(decl->list[1], program),
+                                                        parseExpression(decl->list[2], program));
                         pOp->at = decl->at;
-                        pOp->op = head->op;
-                        pOp->left = parseExpression(decl->list[1], program);
-                        pOp->right = parseExpression(decl->list[2], program);
                         return pOp;
                     }
                 } else if ( nOp==3 ) {
                     if ( !isTrinaryOperator(head->op) )
                         throw parse_error("only trinary operators can have 3 arguments", decl->at);
-                    auto pOp = make_shared<ExprOp3>();
+                    auto pOp = make_shared<ExprOp3>(head->op,
+                                                    parseExpression(decl->list[1], program),
+                                                    parseExpression(decl->list[2], program),
+                                                    parseExpression(decl->list[3], program));
                     pOp->at = decl->at;
-                    pOp->op = head->op;
-                    pOp->subexpr = parseExpression(decl->list[1], program);
-                    pOp->left = parseExpression(decl->list[2], program);
-                    pOp->right = parseExpression(decl->list[3], program);
                     return pOp;
                 } else {
                     throw parse_error("operator has too many arguments", decl->at);
@@ -1630,9 +1623,8 @@ namespace yzg
                 return pNew;
             } else if ( head->isName() ) {
                 // function call
-                auto call = make_shared<ExprCall>();
+                auto call = make_shared<ExprCall>(head->text);
                 call->at = decl->at;
-                call->name = head->text;
                 for ( int i = 1; i != decl->list.size(); ++i ) {
                     auto arg = parseExpression(decl->list[i], program);
                     call->arguments.emplace_back(arg);
@@ -1647,9 +1639,8 @@ namespace yzg
                 pReturn->at = decl->at;
                 return pReturn;
             } else {
-                auto pVar = make_shared<ExprVar>();
+                auto pVar = make_shared<ExprVar>(decl->text);
                 pVar->at = decl->at;
-                pVar->name = decl->text;
                 return pVar;
             }
         } else if ( decl->isNumericConstant() ) {
@@ -1750,7 +1741,7 @@ namespace yzg
     ProgramPtr g_Program;
     bool g_CompiledWithErrors = false;
     
-    ProgramPtr parseDaScript ( const char * script )
+    ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext )
     {
         g_CompiledWithErrors = false;
         g_Program = make_shared<Program>();
@@ -1760,7 +1751,10 @@ namespace yzg
             g_Program.reset();
             return nullptr;
         } else {
-            // TODO: generate program here
+            g_Program->addBuiltinOperators();
+            g_Program->addBuiltinFunctions();
+            if ( defineContext )
+                defineContext(g_Program);
             g_Program->inferTypes();
             return g_Program;
         }

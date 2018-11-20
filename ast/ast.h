@@ -129,7 +129,7 @@ namespace yzg
         uint32_t        stackTop = 0;
     };
     
-    class Expression
+    class Expression : public enable_shared_from_this<Expression>
     {
     public:
         struct InferTypeContext
@@ -148,6 +148,7 @@ namespace yzg
         void logType(ostream& stream) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
         virtual SimNode * simulate (Context & context) const = 0;
+        virtual bool isSequence() { return false; }
     public:
         TypeDeclPtr type;
         long        at = 0;
@@ -208,6 +209,8 @@ namespace yzg
     class ExprAt : public Expression
     {
     public:
+        ExprAt() = default;
+        ExprAt ( ExpressionPtr s, ExpressionPtr i ) : subexpr(s), index(i) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -231,6 +234,8 @@ namespace yzg
     class ExprVar : public Expression
     {
     public:
+        ExprVar () = default;
+        ExprVar ( const string & n ) : name(n) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -246,19 +251,23 @@ namespace yzg
     class ExprField : public Expression
     {
     public:
+        ExprField () = default;
+        ExprField ( ExpressionPtr val, const string & n ) : value(val), name(n) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     public:
-        string          name;
         ExpressionPtr   value;
+        string          name;
         const Structure::FieldDeclaration * field = nullptr;
     };
     
     class ExprOp : public Expression
     {
     public:
+        ExprOp () = default;
+        ExprOp ( Operator o ) : op(o) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         Operator        op;
@@ -268,6 +277,8 @@ namespace yzg
     class ExprOp1 : public ExprOp   // unary    !subexpr
     {
     public:
+        ExprOp1 () = default;
+        ExprOp1 ( Operator o, ExpressionPtr s ) : ExprOp(o), subexpr(s) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -279,6 +290,8 @@ namespace yzg
     class ExprOp2 : public ExprOp   // binary   left < right
     {
     public:
+        ExprOp2 () = default;
+        ExprOp2 ( Operator o, ExpressionPtr l, ExpressionPtr r ) : ExprOp(o), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -287,9 +300,19 @@ namespace yzg
         ExpressionPtr   left, right;
     };
     
+    // this only exists during parsing, and can't be
+    class ExprSequence : public ExprOp2
+    {
+    public:
+        ExprSequence ( ExpressionPtr l, ExpressionPtr r ) : ExprOp2(Operator::none, l, r) {}
+        virtual bool isSequence() override { return true; }
+    };
+    
     class ExprOp3 : public ExprOp   // trinary  subexpr ? left : right
     {
     public:
+        ExprOp3 () = default;
+        ExprOp3 ( Operator o, ExpressionPtr s, ExpressionPtr l, ExpressionPtr r ) : ExprOp(o), subexpr(s), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -392,6 +415,8 @@ namespace yzg
     class ExprCall : public Expression
     {
     public:
+        ExprCall () = default;
+        ExprCall ( const string & n ) : name(n) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -569,7 +594,7 @@ namespace yzg
     
     ProgramPtr parse ( const NodePtr & root, function<void (const ProgramPtr & prg)> && defineContext );
     
-    ProgramPtr parseDaScript ( const char * script );
+    ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext );
 }
 
 
