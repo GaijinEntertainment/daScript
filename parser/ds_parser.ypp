@@ -194,7 +194,7 @@ expressions
     ;
 
 expression_let
-    :   _LET '{' variable_declaration_list[list] expression_block[subexpr] '}' {
+    :   _LET '{' variable_declaration_list[list] '}' _IN expression_block[subexpr] {
         auto pLet = new ExprLet();
         pLet->subexpr = ExpressionPtr($subexpr);
         for ( auto pDecl : *$list ) {

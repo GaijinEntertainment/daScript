@@ -6,7 +6,7 @@
 using namespace std;
 using namespace yzg;
 
-#define REPORT_ERRORS 0
+#define REPORT_ERRORS 1
 
 #pragma pack(1)
 struct Object
@@ -101,8 +101,10 @@ void unit_test_array_of_structures ( const string & fn )
     try {
 #endif
         ifstream t(fn);
-        if ( !t.is_open() )
-            throw "can't open";
+        if ( !t.is_open() ) {
+            cout << "can't open\n";
+            return;
+        }
         t.seekg(0, ios::end);
         str.reserve(t.tellg());
         t.seekg(0, ios::beg);
@@ -111,6 +113,10 @@ void unit_test_array_of_structures ( const string & fn )
             // this is how we declare external function
             prog->addExtern<decltype(updateObject),updateObject>("interopUpdate");
         });
+        if ( !program ) {
+            cout << "can't parse\n";
+            return;
+        }
         cout << *program << "\n";
         
         Context ctx(&str);

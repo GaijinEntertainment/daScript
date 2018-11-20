@@ -13,43 +13,49 @@ def update(a:Object)
 def test
     let
         index:int = 0
-            while index < 10000
-                update(objects[index])
-                index += 1
+    in
+        while index < 10000
+            update(objects[index])
+            index += 1
 
 def foreachTest
     let
         obj:Object
-            foreach obj in objects
-                update(obj)
+    in
+        foreach obj in objects
+            update(obj)
 
 def foreachIteropTest
     let
         obj:Object
-            foreach obj in objects
-                interopUpdate(obj)
+    in
+        foreach obj in objects
+            interopUpdate(obj)
 
 def interopTest
     let
         index:int = 0
-            while index < 10000
-                interopUpdate(objects[index])
-                index += 1
+    in
+        while index < 10000
+            interopUpdate(objects[index])
+            index += 1
 
 def initObj(index:int;a:Object)
     let
         oi:float=float(index)
         ii:float=oi*2.0
-            a.position[0]=oi+0.1
-            a.position[1]=oi+0.2
-            a.position[2]=oi+0.3
-            a.velocity[0]=ii+1.0
-            a.velocity[1]=ii+2.0
-            a.velocity[2]=ii+3.0
+    in
+        a.position[0]=oi+0.1
+        a.position[1]=oi+0.2
+        a.position[2]=oi+0.3
+        a.velocity[0]=ii+1.0
+        a.velocity[1]=ii+2.0
+        a.velocity[2]=ii+3.0
 
 def init
     let
         index:int = 0
-            while index < 10000
-                initObj(index,objects[index])
-                index += 1
+    in
+        while index < 10000
+            initObj(index,objects[index])
+            index += 1
