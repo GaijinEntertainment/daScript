@@ -49,9 +49,25 @@ def test_new
 //            verify_default_ball(qb)
 //            verify_default_ball(qc)
 
+def test_array
+    let
+        arr:int[10]
+        idx:int = 0
+        val:int = 13
+    in
+        while idx!=10
+            arr[idx] = idx
+            idx += 1
+        idx = 0
+        foreach val in arr
+            assert(arr[idx]==val,"we just set it that way")
+            idx += 1
+
 // this is where unit tests are
 def test
     assert(true,"this should pass")
     test_sizeof()
     test_new()
+    test_array()
+
 

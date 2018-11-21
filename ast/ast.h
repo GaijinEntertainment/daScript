@@ -261,7 +261,7 @@ namespace yzg
     {
     public:
         ExprAt() = default;
-        ExprAt ( ExpressionPtr s, ExpressionPtr i ) : subexpr(s), index(i) {}
+        ExprAt ( const LineInfo & a, ExpressionPtr s, ExpressionPtr i ) : Expression(a), subexpr(s), index(i) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;

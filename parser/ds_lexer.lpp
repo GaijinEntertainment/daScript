@@ -101,7 +101,7 @@
 <normal>"float3"                                        return _FLOAT3;
 <normal>"float4"                                        return _FLOAT4;
 <normal>[_[:alpha:]][_[:alnum:]]*                       yylval.s = new string(yytext);  return NAME;    // TODO: track allocations
-L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yytext+1,yytext+strlen(yytext)-2);  return STRING;  
+L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yytext+1,yytext+strlen(yytext)-1);  return STRING;  
 <normal>0[xX][0-9a-fA-F]+                               return sscanf(yytext, "%u", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;

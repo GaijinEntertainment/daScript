@@ -1020,6 +1020,7 @@ namespace yzg
                                                  iter->simulate(context),
                                                  body->simulate(context),
                                                  (int) head->type->dim[0],
+                                                 iter->type->getSizeOf(),
                                                  iter->type->getSizeOf());
     }
     

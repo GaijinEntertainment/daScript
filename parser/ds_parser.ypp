@@ -171,7 +171,7 @@ function_declaration
                             pVar->init = ExpressionPtr(pDecl->pInit);
                             pFunction->arguments.push_back(pVar);
                         } else {
-                            yyerror("function argument is already declared");
+                            yyerror("function argument is already declared " + name);
                         }
                     }
                 }
@@ -179,7 +179,7 @@ function_declaration
         }
         auto mangledName = pFunction->getMangledName();
         if ( g_Program->findFunction(mangledName) )
-            yyerror("function already defined");
+            yyerror("function already defined " + mangledName);
         g_Program->functions[mangledName] = pFunction;
         g_Program->functionsByName[pFunction->name].push_back(pFunction);
     }
@@ -229,7 +229,7 @@ expression_let
                         pVar->init = ExpressionPtr(pDecl->pInit);
                         pLet->variables.push_back(pVar);
                     } else {
-                        yyerror("local variable is already declared");
+                        yyerror("local variable is already declared " + name);
                     }
                 }
             }
@@ -242,7 +242,7 @@ expr_sizeof
     :   _SIZEOF[loc] '(' expr[subexpr] ')'          { $$ = new ExprSizeOf(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   _SIZEOF[loc] '(' _TYPE type_declaration[decl] ')' {
         if ( $decl->ref )
-            yyerror("sizing reference is prohibited");
+            yyerror("sizeof(type " + $decl->getMangledName() + "), sizing reference is prohibited");
         $$ = new ExprConstInt(tokAt(@loc),$decl->getSizeOf());
         delete $decl;
     }
@@ -276,7 +276,7 @@ expr
     |   expr[left]    LEEQU   expr[right]       { $$ = new ExprOp2(Operator::lessEqu, ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left]    GREQU   expr[right]       { $$ = new ExprOp2(Operator::greaterEqu, ExpressionPtr($left), ExpressionPtr($right)); }
     |   '(' expr[subexpr] ')'                   { $$ = $subexpr; }
-    |   expr[subexpr]    '[' expr[index] ']'    { $$ = new ExprAt(ExpressionPtr($subexpr), ExpressionPtr($index)); }
+    |   expr[subexpr]    '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr]    '.'     NAME[name]     { $$ = new ExprField(ExpressionPtr($subexpr), *$name); }
     |   expr[left]    ','     expr[right]       { $$ = new ExprSequence(ExpressionPtr($left), ExpressionPtr($right)); }
     |   NAME[name] '(' ')'                      { $$ = new ExprCall(*$name); }
@@ -323,7 +323,7 @@ global_let
                         pVar->init = ExpressionPtr(pDecl->pInit);
                         g_Program->globals[name] = pVar;
                     } else {
-                        yyerror("global variable is already declared");
+                        yyerror("global variable is already declared " + name);
                     }
                 }
             }
@@ -350,13 +350,13 @@ structure_declaration
                             auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                             pStruct->fields.push_back({name, td, pDecl->at});
                         } else {
-                            yyerror("structure field is already declared");
+                            yyerror("structure field is already declared " + name);
                         }
                     }
                 }
             }
         } else {
-            yyerror ( "structure is alredy defined" );
+            yyerror ( "structure is alredy defined " + *$name );
         }
         deleteVariableDeclarationList($list);
     }

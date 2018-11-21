@@ -425,20 +425,20 @@ namespace yzg
     
     // FOREACH
     struct SimNode_Foreach : SimNode {
-        SimNode_Foreach ( const LineInfo & at, SimNode * h, SimNode * i, SimNode * b, int sz, int st )
-            : SimNode(at), head(h), iter(i), body(b), size(sz), stride(st) {}
+        SimNode_Foreach ( const LineInfo & at, SimNode * h, SimNode * i, SimNode * b, int sz, int st, int ts )
+            : SimNode(at), head(h), iter(i), body(b), size(sz), stride(st), typeSize(ts) {}
         virtual __m128 eval ( Context & context ) override {
             char * ph = cast<char *>::to(head->eval(context));
-            __m128 * pi = cast<__m128 *>::to(iter->eval(context));
+            char * pi = cast<char *>::to(iter->eval(context));
             for ( int i=0; i!=size; ++i ) {
-                *pi = cast<char *>::from(ph);
+                memcpy(pi,ph,typeSize);
                 body->eval(context);
                 ph += stride;
             }
             return _mm_setzero_ps();
         }
         SimNode * head, * iter, * body;
-        int size, stride;
+        int size, stride, typeSize;
     };
     
     // POLICY BASED OPERATIONS
