@@ -31,7 +31,7 @@
 %option nounistd
 %option yylineno
 
-/*%option debug*/
+/* %option debug */
 
 %x indent
 %s normal
@@ -54,6 +54,7 @@
         #ifdef FLEX_DEBUG
         cout << "emit }\n";
         #endif
+        yycolumn--;
         return '}';
     } else {
         BEGIN(normal);

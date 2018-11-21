@@ -96,6 +96,7 @@ namespace yzg
         int getSizeOf() const;
         int getBaseSizeOf() const;
         int getStride() const;
+        string describe() const { stringstream ss; ss << *this; return ss.str(); }
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -322,7 +323,7 @@ namespace yzg
     {
     public:
         ExprOp () = default;
-        ExprOp ( Operator o ) : op(o) {}
+        ExprOp ( const LineInfo & a, Operator o ) : Expression(a), op(o) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         Operator        op;
@@ -333,7 +334,7 @@ namespace yzg
     {
     public:
         ExprOp1 () = default;
-        ExprOp1 ( Operator o, ExpressionPtr s ) : ExprOp(o), subexpr(s) {}
+        ExprOp1 ( const LineInfo & a, Operator o, ExpressionPtr s ) : ExprOp(a,o), subexpr(s) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -346,7 +347,7 @@ namespace yzg
     {
     public:
         ExprOp2 () = default;
-        ExprOp2 ( Operator o, ExpressionPtr l, ExpressionPtr r ) : ExprOp(o), left(l), right(r) {}
+        ExprOp2 ( const LineInfo & a, Operator o, ExpressionPtr l, ExpressionPtr r ) : ExprOp(a,o), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -359,7 +360,7 @@ namespace yzg
     class ExprSequence : public ExprOp2
     {
     public:
-        ExprSequence ( ExpressionPtr l, ExpressionPtr r ) : ExprOp2(Operator::none, l, r) {}
+        ExprSequence ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {}
         virtual bool isSequence() override { return true; }
     };
     
@@ -367,7 +368,8 @@ namespace yzg
     {
     public:
         ExprOp3 () = default;
-        ExprOp3 ( Operator o, ExpressionPtr s, ExpressionPtr l, ExpressionPtr r ) : ExprOp(o), subexpr(s), left(l), right(r) {}
+        ExprOp3 ( const LineInfo & a, Operator o, ExpressionPtr s, ExpressionPtr l, ExpressionPtr r )
+            : ExprOp(a,o), subexpr(s), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -478,7 +480,7 @@ namespace yzg
     {
     public:
         ExprCall () = default;
-        ExprCall ( const string & n ) : name(n) {}
+        ExprCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;

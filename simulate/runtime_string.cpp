@@ -53,22 +53,24 @@ namespace yzg
         return result;
     }
     
-    string::const_iterator positionToRowCol ( const string & st, int ROW, int COL )
+    string getFewLines ( const string & st, int ROW, int COL )
     {
-        int col = 1;
-        int row = 1;
-        auto text = st.begin();
+        stringstream text;
+        int col=1, row=1;
         auto it = st.begin();
-        while ( !(ROW==row && COL==col) && it!=st.end() ) {
+        for ( ; ROW>=row && it!=st.end(); ++it, ++col ) {
+            if ( row==ROW-1 || row==ROW )
+                text << *it;
             if ( *it=='\n' ) {
-                text = it + 1;
                 row ++;
                 col = 1;
             }
-            ++ it;
-            col ++;
         }
-        return text;
+        text << string(max(COL-2,0), ' ') << "^" << "\n";
+        while ( *it!='\n' && it!=st.end() ) {
+            text << *it; ++it;
+        }
+        return text.str();
     }
     
     string to_string_ex ( double dnum )
@@ -83,14 +85,10 @@ namespace yzg
     void reportError ( const string & st, int row, int col, const string & message )
     {
         if ( row && col ) {
-            auto text = positionToRowCol(st, row, col );
-            auto endtext = text;
-            while ( *endtext!='\n' && endtext!=st.end() )
-                ++endtext;
+            auto text = getFewLines(st, row, col );
             cout
                 << "error at line " << row << " column " << col << "\n"
-                << string(text, endtext) << "\n"
-                << string(max(col-2,0), ' ') << "^" << "\n"
+                << text << "\n"
                 << message << "\n";
         } else {
             cout << "error: " << message << "\n";

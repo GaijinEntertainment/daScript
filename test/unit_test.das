@@ -56,12 +56,10 @@ def test_array
         val:int
     in
         while idx!=10
-            arr[idx] = idx
-            idx ++
+            arr[idx++] = idx
         idx = 0
         foreach val in arr
-            assert(arr[idx]==val,"we just set it that way")
-            idx ++
+            assert(arr[idx++]==val,"we just set it that way")
 
 def test_prefix_postfix
     let
@@ -74,6 +72,8 @@ def test_prefix_postfix
         assert(a==3,"3==3")
         ++b=a
         assert(b==3,"3==3")
+        a = ++b+b++
+        assert(a==8,"8==8")
 
 // this is where unit tests are
 def test

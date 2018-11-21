@@ -756,7 +756,7 @@ namespace yzg
         vector<TypeDeclPtr> types = { subexpr->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 ) {
-            context.error("no matching function " + to_string(op) + " " + subexpr->type->getMangledName(), at);
+            context.error("no matching function " + to_string(op) + " (" + subexpr->type->describe() + ")", at);
         } else if ( functions.size()>1 ) {
             context.error("too many matching functions", at);
         } else {
@@ -806,7 +806,7 @@ namespace yzg
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 ) {
             context.error("no matching function " + to_string(op)
-                + " " + left->type->getMangledName() + " " + right->type->getMangledName(), at);
+                + " (" + left->type->describe() + ", " + right->type->describe() + ")", at);
         } else if ( functions.size()>1 ) {
             context.error("too many matching functions", at);
         } else {
@@ -866,8 +866,8 @@ namespace yzg
             auto functions = context.program->findMatchingFunctions(to_string(op), types);
             if ( functions.size()==0 ) {
                 context.error("no matching function " + to_string(op)
-                    + " " + subexpr->type->getMangledName() + " "
-                        + left->type->getMangledName() + " " + right->type->getMangledName(), at);
+                    + " (" + subexpr->type->describe() + ", "
+                        + left->type->describe() + ", " + right->type->describe() + ")", at);
             } else if ( functions.size()>1 ) {
                 context.error("too many matching functions", at);
             } else {
@@ -1005,6 +1005,7 @@ namespace yzg
     {
         head->inferType(context);
         iter->inferType(context);
+        if ( !head->type || !iter->type ) return;
         if ( head->type->dim.size()!=1 ) {   // TODO: support multi-array
             context.error("can only iterate through a 1-d array", at);
         } else if ( !head->type->isIteratorType(*iter->type) ) {
@@ -1180,7 +1181,10 @@ namespace yzg
         stringstream stream;
         stream << "(" << name;
         for ( auto & arg : arguments ) {
-            stream << " " << *arg->type;
+            if ( arg->type )
+                stream << " " << *arg->type;
+            else
+                stream << " ???";
         }
         stream << ")";
         return stream.str();
