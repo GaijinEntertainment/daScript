@@ -38,9 +38,9 @@
 
 %%
 
-<indent>" "      { current_line_indent++; }
-<indent>"\t"     { current_line_indent = (current_line_indent + tab_size) & (tab_size-1);  }
-<indent>"\n"     { current_line_indent = 0; need_oxford_comma = true; yycolumn = 1; }
+<indent>" "             { current_line_indent++; }
+<indent>"\t"            { current_line_indent = (current_line_indent + tab_size) & (tab_size-1);  }
+<indent>(\/\/.*)*\n     { current_line_indent = 0; need_oxford_comma = true; yycolumn = 1; }
 <indent>.        {
     unput(*yytext);
     if (current_line_indent > indent_level*tab_size ) {
@@ -150,7 +150,7 @@ L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yy
 <normal>"\&\&"                              return ANDAND;
 <normal>"\|\|"                              return OROR;
 <normal>[ \t\r]                             /* skip white space */
-<normal>\n                                  {
+<normal>(\/\/.*)*\n                        {
     yycolumn = 1;
     if  ( !nested_parentheses && !nested_curly_braces ) {
         bool ns = (current_line_indent!=0) && need_oxford_comma;
