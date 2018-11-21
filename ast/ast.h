@@ -339,7 +339,7 @@ namespace yzg
     {
     public:
         ExprField () = default;
-        ExprField ( ExpressionPtr val, const string & n ) : value(val), name(n) {}
+        ExprField ( const LineInfo & a, ExpressionPtr val, const string & n ) : Expression(a), value(val), name(n) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -447,7 +447,7 @@ namespace yzg
         ExprConstPtr(void * ptr = nullptr) : ExprConst(ptr) {}
         ExprConstPtr(const LineInfo & a, void * ptr = nullptr) : ExprConst(a,ptr) {}
         virtual void log(ostream& stream, int depth) const override {
-            if ( value ) stream << hex << "*0x" << uint64_t(value) << dec; else stream << "nil";
+            if ( value ) stream << hex << "*0x" << intptr_t(value) << dec; else stream << "nil";
         }
     };
 

@@ -151,18 +151,21 @@ namespace yzg
     };
     
     // field
-    struct SimNode_Field : SimNode {
-        SimNode_Field ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode(at), value(rv), offset(of) {}
+    template <bool checkForNull>
+    struct SimNode_FieldDeref : SimNode {
+        SimNode_FieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode(at), value(rv), offset(of) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 rv = value->eval(context);
             char * prv = cast<char *>::to(rv);
-            if ( !prv )
+            if ( checkForNull && !prv )
                 throw runtime_error("dereferencing nil pointer");
             return cast<char *>::from( prv + offset );
         }
         SimNode *   value;
         uint32_t    offset;
     };
+    typedef SimNode_FieldDeref<false> SimNode_Field;
+    typedef SimNode_FieldDeref<true> SimNode_PtrField;
     
     // AT (INDEX)
     struct SimNode_At : SimNode {
@@ -245,7 +248,7 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             __m128 res = subexpr->eval(context);
             if ( message ) cout << message << " ";
-            cout << debug_type(typeInfo) << " = " << debug_value(res, typeInfo) << "\n";
+            cout << debug_type(typeInfo) << " = " << debug_value(res, typeInfo) << " at " << debug.describe() << "\n";
             return res;
         }
         SimNode *       subexpr;

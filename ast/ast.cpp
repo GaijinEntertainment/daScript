@@ -471,7 +471,7 @@ namespace yzg
     void ExprAssert::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
-        if ( !subexpr->type ) return;
+        subexpr = autoDereference(subexpr);
         if ( !subexpr->type->isSimpleType(Type::tBool) )
             context.error("assert condition must be boolean", at);
         type = make_shared<TypeDecl>(Type::tVoid);
@@ -505,7 +505,6 @@ namespace yzg
     {
         thisProgram = context.program.get();
         subexpr->inferType(context);
-        if ( !subexpr->type ) return;
         type = make_shared<TypeDecl>(*subexpr->type);
     }
     
@@ -705,8 +704,10 @@ namespace yzg
     {
         value->inferType(context);
         if ( !value->type ) return;
-        if ( value->type->baseType!=Type::tStructure ) {
-            context.error("expecting structure", at);
+        if ( value->type->baseType==Type::tPointer )
+            value = autoDereference(value);
+        if ( value->type->baseType!=Type::tStructure && value->type->baseType!=Type::tPointer ) {
+            context.error("expecting structure or pointer", at);
         } else if ( value->type->isArray() ) {
             context.error("can't get field of array", at);
         } else {
@@ -715,14 +716,17 @@ namespace yzg
                 context.error("field " + name + " not found", at);
             } else {
                 type = make_shared<TypeDecl>(*field->type);
-                type->ref = value->type->isRef();
+                type->ref = true;
             }
         }
     }
     
     SimNode * ExprField::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Field>(at, value->simulate(context), field->offset);
+        if ( value->type->baseType==Type::tStructure )
+            return context.makeNode<SimNode_Field>(at,value->simulate(context),field->offset);
+        else
+            return context.makeNode<SimNode_PtrField>(at,value->simulate(context),field->offset);
     }
     
     // ExprVar

@@ -30,6 +30,7 @@ def test_sizeof
     assert(sizeof(type Ball)==16,"ball is float3+float")
 
 def verify_default_ball(b:Ball)
+    debug(b,"verifying ball")
     assert(b.position==float3(1.0,2.0,3.0),"default ball position is 1,2,3")
     assert(b.radius==5.0,"default ball radius is 5")
 
@@ -37,8 +38,9 @@ def test_new
     let
         b:Ball* = new Ball
     in
-        b->.position = float3(1.0,2.0,3.0)
-        b->.radius = 5.0
+        debug(b,"before")
+        b.position = float3(1.0,2.0,3.0)
+        b.radius = 5.0
         verify_default_ball(debug(b,"ball is")->)
 // TODO: support assigning of the structures and default values for the structures
 //        let
@@ -75,6 +77,21 @@ def test_prefix_postfix
         a = ++b+b++
         assert(a==8,"8==8")
 
+def stack_depth_3(a:int;b:float)
+    assert(debug(a,"a")==2)
+    assert(1.0==debug(b,"b"))
+    stackwalk()
+
+def stack_depth_2(b:float&;a:int&;c:string)
+    stack_depth_3(debug(a,"a&"),debug(b,"b&"))
+
+def test_stackwalk
+    let
+        a:float=1.0
+        b:int=2
+    in
+        stack_depth_2(debug(a,"a"),debug(b,"b"),"and string")
+
 // this is where unit tests are
 def test
     assert(true,"this should pass")
@@ -82,6 +99,7 @@ def test
     test_new()
     test_prefix_postfix()
     test_array()
+    test_stackwalk()
 
 
 

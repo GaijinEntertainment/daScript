@@ -288,7 +288,7 @@ expr
     |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(@loc),Operator::postDec, ExpressionPtr($subexpr)); }
     |   '(' expr[subexpr] ')'                { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
-    |   expr[subexpr] '.' NAME[name]        { $$ = new ExprField(ExpressionPtr($subexpr), *$name); }
+    |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); }
     |   expr[left] ',' expr[right]          { $$ = new ExprSequence(tokAt(@left),ExpressionPtr($left),ExpressionPtr($right)); }
     |   NAME[name] '(' ')'                  { $$ = new ExprCall(tokAt(@name),*$name); }
     |   NAME[name] '(' expr[arguments] ')'  { $$ = parseFunctionArguments(new ExprCall(tokAt(@name),*$name),$arguments); }
