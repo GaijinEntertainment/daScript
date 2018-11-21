@@ -59,7 +59,7 @@ namespace yzg
         int col=1, row=1;
         auto it = st.begin();
         for ( ; ROW>=row && it!=st.end(); ++it, ++col ) {
-            if ( row==ROW-1 || row==ROW )
+            if ( row==ROW /* || row==ROW-1 */ )
                 text << *it;
             if ( *it=='\n' ) {
                 row ++;
@@ -67,9 +67,8 @@ namespace yzg
             }
         }
         text << string(max(COL-2,0), ' ') << "^" << "\n";
-        while ( *it!='\n' && it!=st.end() ) {
-            text << *it; ++it;
-        }
+//        while ( *it!='\n' && it!=st.end() )
+//            text << *it++;
         return text.str();
     }
     
@@ -86,12 +85,9 @@ namespace yzg
     {
         if ( row && col ) {
             auto text = getFewLines(st, row, col );
-            cout
-                << "error at line " << row << " column " << col << "\n"
-                << text << "\n"
-                << message << "\n";
+            cout << "error at line " << row << " column " << col << "\n" << text << message << "\n";
         } else {
-            cout << "error: " << message << "\n";
+            cout << "error, " << message << "\n";
         }
     }
 

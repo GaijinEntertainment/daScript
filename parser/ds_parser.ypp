@@ -426,7 +426,7 @@ type_declaration
 
 void yyerror(const string & error)
 {
-    g_Program->error(error,LineInfo(yylloc.first_column-1,yylloc.first_line-1));
+    g_Program->error(error,LineInfo(yylloc.first_column,yylloc.first_line));
 }
 
 ExprCall * parseFunctionArguments ( ExprCall * pCall, Expression * arguments ) {
