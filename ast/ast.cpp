@@ -388,7 +388,7 @@ namespace yzg
         if ( !subexpr->type->isRef() ) {
             context.error("can only dereference ref", at);
         } else if ( !subexpr->type->isSimpleType() ) {
-            context.error("can only dereference an simple type", at);
+            context.error("can only dereference a simple type", at);
         } else {
             type = make_shared<TypeDecl>(*subexpr->type);
             type->ref = false;
@@ -471,6 +471,7 @@ namespace yzg
     void ExprAssert::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
+        if ( !subexpr->type ) return;
         subexpr = autoDereference(subexpr);
         if ( !subexpr->type->isSimpleType(Type::tBool) )
             context.error("assert condition must be boolean", at);
@@ -876,6 +877,8 @@ namespace yzg
     {
         left->inferType(context);
         right->inferType(context);
+        if ( !left->type ) return;
+        if ( !right->type ) return;
         vector<TypeDeclPtr> types = { left->type, right->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 ) {
@@ -1187,6 +1190,8 @@ namespace yzg
                 var->init->inferType(context);
                 if ( !var->type->isSameType(*var->init->type,false) ) {
                     context.error("variable initialization type mismatch", var->at );
+                } else if ( var->type->baseType==Type::tStructure ) {
+                    context.error("can't initialize structures", var->at );
                 } else {
                     var->init = autoDereference(var->init);
                 }

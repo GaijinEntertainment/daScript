@@ -24,7 +24,10 @@
 }
 
 %{
+    #include "debug_info.h"
+    
     void yyerror (const std::string & error);
+    void yyerror (const std::string & error, const yzg::LineInfo & at);
     int yylex();
     void yybegin(const char * str);
 %}
@@ -55,6 +58,7 @@
 %token  _IF     _ELSE   _FOREACH    _IN
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _ASSERT _DEBUG      _BREAKPOINT
+%token  _RETURN
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -155,11 +159,19 @@ optional_function_type
     ;
 
 function_declaration
-    :   _DEF NAME[name] optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
+    :   _DEF[loc] NAME[name] optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         auto pFunction = make_shared<Function>();
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
+        if ( pFunction->result->ref )
+            yyerror("function " + *$name + " can't return reference",tokAt(@loc));
+        else if ( pFunction->result->dim.size() )
+            yyerror("function " + *$name + " can't return array",tokAt(@loc));
+        else if ( pFunction->result->baseType==Type::tPointer )
+            yyerror("function " + *$name + " can't return pointer",tokAt(@loc));
+        else if (pFunction->result->baseType==Type::tStructure )
+            yyerror("function " + *$name + " can't return structure",tokAt(@loc));
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -172,7 +184,7 @@ function_declaration
                             pVar->init = ExpressionPtr(pDecl->pInit);
                             pFunction->arguments.push_back(pVar);
                         } else {
-                            yyerror("function argument is already declared " + name);
+                            yyerror("function argument is already declared " + name,pDecl->at);
                         }
                     }
                 }
@@ -180,7 +192,7 @@ function_declaration
         }
         auto mangledName = pFunction->getMangledName();
         if ( g_Program->findFunction(mangledName) )
-            yyerror("function already defined " + mangledName);
+            yyerror("function already defined " + mangledName,tokAt(@loc));
         g_Program->functions[mangledName] = pFunction;
         g_Program->functionsByName[pFunction->name].push_back(pFunction);
     }
@@ -211,7 +223,7 @@ expr_new
             auto pTypeDecl = make_shared<TypeDecl>(Type::tStructure);
             pTypeDecl->structType = g_Program->findStructure(*$structName).get();
             if ( !pTypeDecl->structType )
-                yyerror ( "structure type not found " + *$structName );
+                yyerror("structure type not found "+*$structName,tokAt(@loc));
             $$ = new ExprNew(tokAt(@loc),pTypeDecl);
     }
     ;
@@ -236,7 +248,7 @@ expression_let
                         pVar->init = ExpressionPtr(pDecl->pInit);
                         pLet->variables.push_back(pVar);
                     } else {
-                        yyerror("local variable is already declared " + name);
+                        yyerror("local variable is already declared " + name,tokAt(@list));
                     }
                 }
             }
@@ -249,7 +261,7 @@ expr_sizeof
     :   _SIZEOF[loc] '(' expr[subexpr] ')'          { $$ = new ExprSizeOf(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   _SIZEOF[loc] '(' _TYPE type_declaration[decl] ')' {
         if ( $decl->ref )
-            yyerror("sizeof(type " + $decl->getMangledName() + "), sizing reference is prohibited");
+            yyerror("sizeof(type " + $decl->getMangledName() + "), sizing reference is prohibited",tokAt(@loc));
         $$ = new ExprConstInt(tokAt(@loc),$decl->getSizeOf());
         delete $decl;
     }
@@ -300,6 +312,7 @@ expr
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   _DEBUG[loc] '(' expr[subexpr] ')'                       { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   _DEBUG[loc] '(' expr[subexpr] ',' STRING[message] ')'   { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr),*$message); }
+    |   _RETURN[loc]                            { $$ = new ExprReturn(tokAt(@loc)); }
     ;
 
 variable_declaration_list
@@ -336,7 +349,7 @@ global_let
                         pVar->init = ExpressionPtr(pDecl->pInit);
                         g_Program->globals[name] = pVar;
                     } else {
-                        yyerror("global variable is already declared " + name);
+                        yyerror("global variable is already declared " + name,pDecl->at);
                     }
                 }
             }
@@ -352,24 +365,24 @@ structure_declaration
             pStruct->at = tokAt(@loc);
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl->isVoid() ) {
-                    yyerror("structure type can't be void");
+                    yyerror("structure type can't be void",tokAt(@loc));
                 } else if ( pDecl->pTypeDecl->ref ) {
-                    yyerror("structure type can't be reference or array of references");
+                    yyerror("structure type can't be reference or array of references",tokAt(@loc));
                 } else if ( pDecl->pInit ) {
-                    yyerror("structure field can't have initialization");
+                    yyerror("structure field can't have initialization",tokAt(@loc));
                 } else {
                     for ( const auto & name : *pDecl->pNameList ) {
                         if ( !pStruct->findField(name) ) {
                             auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                             pStruct->fields.push_back({name, td, pDecl->at});
                         } else {
-                            yyerror("structure field is already declared " + name);
+                            yyerror("structure field is already declared "+name,pDecl->at);
                         }
                     }
                 }
             }
         } else {
-            yyerror ( "structure is alredy defined " + *$name );
+            yyerror("structure is alredy defined "+*$name,tokAt(@loc));
         }
         deleteVariableDeclarationList($list);
     }
@@ -418,7 +431,7 @@ structure_type_declaration
             pTD->at = tokAt(@name);
             $$ = pTD;
         } else {
-            yyerror("undefined structure type");
+            yyerror("undefined structure type",tokAt(@name));
             $$ = nullptr;
         }
     }
@@ -432,6 +445,11 @@ type_declaration
     ;
 
 %%
+
+void yyerror(const string & error, const LineInfo & at)
+{
+    g_Program->error(error,at);
+}
 
 void yyerror(const string & error)
 {

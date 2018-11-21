@@ -29,10 +29,30 @@ def test_sizeof
     assert(sizeof(type Ball*)==8,"ball pointer is 8 bytes")
     assert(sizeof(type Ball)==16,"ball is float3+float")
 
+def inc(a:int&)
+    a ++
+
+def madd(a,b,c:int):int
+    return = a*b+c
+
+def test_return
+    let
+        a:int=2
+        b:int=3
+        c:int=3
+    in
+        inc(c)
+        assert(madd(2,3,4)==10,"2*3+4==10")
+
 def verify_default_ball(b:Ball)
     debug(b,"verifying ball")
     assert(b.position==float3(1.0,2.0,3.0),"default ball position is 1,2,3")
     assert(b.radius==5.0,"default ball radius is 5")
+
+def copy_ball(a,b:Ball)
+    // todo: implement copy of the object
+    a.position = b.position
+    a.radius = b.radius
 
 def test_new
     let
@@ -42,14 +62,14 @@ def test_new
         b.position = float3(1.0,2.0,3.0)
         b.radius = 5.0
         verify_default_ball(debug(b,"ball is")->)
-// TODO: support assigning of the structures and default values for the structures
-//        let
-//            qb:Ball
-//            qc:Ball = b->
-//        in
-//            qb = b->
-//            verify_default_ball(qb)
-//            verify_default_ball(qc)
+        let
+            qb:Ball
+            qc:Ball* = b
+        in
+            debug(qc,"qc")
+            copy_ball(qb,qc->)
+            verify_default_ball(qb)
+            verify_default_ball(qc->)
 
 def test_array
     let
@@ -96,6 +116,7 @@ def test_stackwalk
 def test
     assert(true,"this should pass")
     test_sizeof()
+    test_return()
     test_new()
     test_prefix_postfix()
     test_array()

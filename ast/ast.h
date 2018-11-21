@@ -412,6 +412,8 @@ namespace yzg
     class ExprReturn : public Expression
     {
     public:
+        ExprReturn() = default;
+        ExprReturn ( const LineInfo & a ) : Expression(a) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
