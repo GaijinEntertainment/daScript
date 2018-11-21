@@ -28,6 +28,10 @@ namespace yzg
         {   Operator::andEqu,       "&="    },
         {   Operator::orEqu,        "|="    },
         {   Operator::xorEqu,       "^="    },
+        {   Operator::inc,          "++"    },
+        {   Operator::dec,          "--"    },
+        {   Operator::postInc,      "+++"    },
+        {   Operator::postDec,      "---"    },
     };
     
     Enum<Operator> g_opTable1 = {
@@ -63,6 +67,10 @@ namespace yzg
         ||  (op==Operator::sub)
         ||  (op==Operator::boolNot)
         ||  (op==Operator::binNot)
+        ||  (op==Operator::inc)
+        ||  (op==Operator::dec)
+        ||  (op==Operator::postInc)
+        ||  (op==Operator::postDec)
         ;
     }
     
@@ -72,6 +80,10 @@ namespace yzg
             (op!=Operator::is)
         &&  (op!=Operator::boolNot)
         &&  (op!=Operator::binNot)
+        &&  (op==Operator::inc)
+        &&  (op==Operator::dec)
+        &&  (op==Operator::postInc)
+        &&  (op==Operator::postDec)
         ;
     }
     

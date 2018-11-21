@@ -275,6 +275,10 @@ expr
     |   expr[left]    NOTEQU  expr[right]       { $$ = new ExprOp2(Operator::notEqu, ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left]    LEEQU   expr[right]       { $$ = new ExprOp2(Operator::lessEqu, ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left]    GREQU   expr[right]       { $$ = new ExprOp2(Operator::greaterEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   ADDADD expr[subexpr] %prec PRE_INC      { $$ = new ExprOp1(Operator::inc, ExpressionPtr($subexpr)); }
+    |   SUBSUB expr[subexpr] %prec PRE_DEC      { $$ = new ExprOp1(Operator::dec, ExpressionPtr($subexpr)); }
+    |   expr[subexpr] ADDADD %prec POST_INC     { $$ = new ExprOp1(Operator::postInc, ExpressionPtr($subexpr)); }
+    |   expr[subexpr] SUBSUB %prec POST_DEC     { $$ = new ExprOp1(Operator::postDec, ExpressionPtr($subexpr)); }
     |   '(' expr[subexpr] ')'                   { $$ = $subexpr; }
     |   expr[subexpr]    '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr]    '.'     NAME[name]     { $$ = new ExprField(ExpressionPtr($subexpr), *$name); }

@@ -60,6 +60,17 @@ namespace yzg
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetDiv<SimPolicy_TT>,     TT&,  TT&, TT>  >("/=",     prg) );
     }
     
+    // inc-dec
+    template <typename TT, typename SimPolicy_TT>
+    void addBuiltInIncDec(Program & prg)
+    {
+        //                                    policy                        ret   arg1 arg2    name
+        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Inc<SimPolicy_TT>,        TT&,  TT&>      >("++",     prg) );
+        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Dec<SimPolicy_TT>,        TT&,  TT&>      >("--",     prg) );
+        prg.addBuiltIn( make_shared<BuiltInFn<Sim_IncPost<SimPolicy_TT>,    TT,   TT&>      >("+++",    prg) );
+        prg.addBuiltIn( make_shared<BuiltInFn<Sim_DecPost<SimPolicy_TT>,    TT,   TT&>      >("---",    prg) );
+    }
+    
     // built-in numeric types
     template <typename TT, typename SimPolicy_TT>
     void addBuiltInBit(Program & prg)
@@ -101,6 +112,7 @@ namespace yzg
         // int32
         addBuiltInBasic<int32_t, SimPolicy_Int>(*this);
         addBuiltInNumeric<int32_t, SimPolicy_Int>(*this);
+        addBuiltInIncDec<int32_t, SimPolicy_Int>(*this);
         addBuiltInOrdered<int32_t, SimPolicy_Int>(*this);
         addBuiltInBit<int32_t, SimPolicy_Int>(*this);
         addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<int32_t,float>,int32_t,float>>("int",*this) );
@@ -108,6 +120,7 @@ namespace yzg
         // uint32
         addBuiltInBasic<uint32_t, SimPolicy_UInt>(*this);
         addBuiltInNumeric<uint32_t, SimPolicy_UInt>(*this);
+        addBuiltInIncDec<uint32_t, SimPolicy_UInt>(*this);
         addBuiltInOrdered<uint32_t, SimPolicy_UInt>(*this);
         addBuiltInBit<uint32_t, SimPolicy_UInt>(*this);
         addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,float>,uint32_t,float>>("uint",*this) );
@@ -115,6 +128,7 @@ namespace yzg
         // float
         addBuiltInBasic<float, SimPolicy_Float>(*this);
         addBuiltInNumeric<float, SimPolicy_Float>(*this);
+        addBuiltInIncDec<float, SimPolicy_Float>(*this);
         addBuiltInOrdered<float, SimPolicy_Float>(*this);
         addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,int32_t>,float,int32_t>>("float",*this) );
         addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,uint32_t>,float,uint32_t>>("float",*this) );

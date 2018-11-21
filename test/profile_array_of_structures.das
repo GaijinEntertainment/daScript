@@ -15,8 +15,7 @@ def test
         index:int = 0
     in
         while index < 10000
-            update(objects[index])
-            index += 1
+            update(objects[index++])
 
 def foreachTest
     let
@@ -37,8 +36,7 @@ def interopTest
         index:int = 0
     in
         while index < 10000
-            interopUpdate(objects[index])
-            index += 1
+            interopUpdate(objects[index++])
 
 def initObj(index:int;a:Object)
     let
@@ -57,5 +55,4 @@ def init
         index:int = 0
     in
         while index < 10000
-            initObj(index,objects[index])
-            index += 1
+            initObj(index,objects[index++])

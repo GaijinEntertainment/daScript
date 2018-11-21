@@ -53,21 +53,35 @@ def test_array
     let
         arr:int[10]
         idx:int = 0
-        val:int = 13
+        val:int
     in
         while idx!=10
             arr[idx] = idx
-            idx += 1
+            idx ++
         idx = 0
         foreach val in arr
             assert(arr[idx]==val,"we just set it that way")
-            idx += 1
+            idx ++
+
+def test_prefix_postfix
+    let
+        a:int = 1
+        b:int = 2
+    in
+        assert(++a==b,"++1==2")
+        assert(a==2,"2==2")
+        assert(a++==2,"2++==2")
+        assert(a==3,"3==3")
+        ++b=a
+        assert(b==3,"3==3")
 
 // this is where unit tests are
 def test
     assert(true,"this should pass")
     test_sizeof()
     test_new()
+    test_prefix_postfix()
     test_array()
+
 
 

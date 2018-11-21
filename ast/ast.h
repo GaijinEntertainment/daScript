@@ -47,6 +47,10 @@ namespace yzg
         greaterEqu,
         notEqu,
         binNotEqu,
+        inc,
+        dec,
+        postInc,
+        postDec,
         // 1-char
         at,         // @
         dot,        // .

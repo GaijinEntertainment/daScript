@@ -457,6 +457,10 @@ namespace yzg
         // numeric
         static __forceinline __m128 Unp ( __m128 x ) { return x; }
         static __forceinline __m128 Unm ( __m128 x ) { return cast<TT>::from( -cast<TT>::to(x)); }
+        static __forceinline __m128 Inc ( __m128 x ) { (*cast<TT*>::to(x))++; return x; }
+        static __forceinline __m128 Dec ( __m128 x ) { (*cast<TT*>::to(x))--; return x; }
+        static __forceinline __m128 IncPost ( __m128 x ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X++); }
+        static __forceinline __m128 DecPost ( __m128 x ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X--); }
         static __forceinline __m128 Add ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)+cast<TT>::to(b)); }
         static __forceinline __m128 Sub ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)-cast<TT>::to(b)); }
         static __forceinline __m128 Div ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)/cast<TT>::to(b)); }
@@ -619,6 +623,10 @@ namespace yzg
     
     DEFINE_OP1_POLICY(Unp);
     DEFINE_OP1_POLICY(Unm);
+    DEFINE_OP1_POLICY(Inc);
+    DEFINE_OP1_POLICY(Dec);
+    DEFINE_OP1_POLICY(IncPost);
+    DEFINE_OP1_POLICY(DecPost);
     DEFINE_OP1_POLICY(BoolNot);
     DEFINE_OP1_POLICY(BinNot);
     
