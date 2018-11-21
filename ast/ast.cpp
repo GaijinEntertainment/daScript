@@ -586,12 +586,17 @@ namespace yzg
     
     SimNode * ExprBlock::simulate (Context & context) const
     {
-        auto block = context.makeNode<SimNode_Block>(at);
-        block->total = int(list.size());
-        block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
-        for ( int i = 0; i != block->total; ++i )
-            block->list[i] = list[i]->simulate(context);
-        return block;
+        // TODO: what if list size is 0?
+        if ( list.size()!=1 ) {
+            auto block = context.makeNode<SimNode_Block>(at);
+            block->total = int(list.size());
+            block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
+            for ( int i = 0; i != block->total; ++i )
+                block->list[i] = list[i]->simulate(context);
+            return block;
+        } else {
+            return list[0]->simulate(context);
+        }
     }
     
     // ExprField
