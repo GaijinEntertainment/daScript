@@ -247,6 +247,8 @@ namespace yzg
     class ExprNew : public Expression
     {
     public:
+        ExprNew() = default;
+        ExprNew ( const LineInfo & a, TypeDeclPtr t ) : Expression(a), typeexpr(t) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;

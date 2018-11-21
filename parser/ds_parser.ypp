@@ -53,7 +53,8 @@
 /* keywords */
 %token  _STRUCT _LET    _DEF        _WHILE
 %token  _IF     _ELSE   _FOREACH    _IN
-%token  _TRUE   _FALSE  _SIZEOF
+%token  _TRUE   _FALSE  _SIZEOF     _NEW
+%token  _TYPE
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -92,6 +93,8 @@
 %type <pExpression>     expression_block
 %type <pExpression>     expression_while_loop
 %type <pExpression>     expression_foreach_loop
+%type <pExpression>     expr_new
+%type <pExpression>     expr_sizeof
 %type <pExpression>     expression_any
 %type <pExpression>     optional_initializer
 
@@ -187,10 +190,10 @@ expression_block
     ;
 
 expression_any
-    :   expr[subexpr] ';'                { $$ = $subexpr; }
-    |   expression_let[subexpr]          { $$ = $subexpr; }
-    |   expression_while_loop[subexpr]   { $$ = $subexpr; }
-    |   expression_foreach_loop[subexpr] { $$ = $subexpr; }
+    :   expr[subexpr] ';'                   { $$ = $subexpr; }
+    |   expression_let[subexpr]             { $$ = $subexpr; }
+    |   expression_while_loop[subexpr]      { $$ = $subexpr; }
+    |   expression_foreach_loop[subexpr]    { $$ = $subexpr; }
     ;
 
 expressions
@@ -198,6 +201,16 @@ expressions
     |   expressions[block] expression_any[subexpr]      {
         $$ = $block;
         static_cast<ExprBlock*>($block)->list.push_back(ExpressionPtr($subexpr));
+    }
+    ;
+
+expr_new
+    :   _NEW[loc] NAME[structName]   {
+            auto pTypeDecl = make_shared<TypeDecl>(Type::tStructure);
+            pTypeDecl->structType = g_Program->findStructure(*$structName).get();
+            if ( !pTypeDecl->structType )
+                yyerror ( "structure type not found " + *$structName );
+            $$ = new ExprNew(tokAt(@loc),pTypeDecl);
     }
     ;
 
@@ -222,6 +235,16 @@ expression_let
             }
         }
         $$ = pLet;
+    }
+    ;
+
+expr_sizeof
+    :   _SIZEOF[loc] '(' expr[subexpr] ')'          { $$ = new ExprSizeOf(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   _SIZEOF[loc] '(' _TYPE type_declaration[decl] ')' {
+        if ( $decl->ref )
+            yyerror("sizing reference is prohibited");
+        $$ = new ExprConstInt(tokAt(@loc),$decl->getSizeOf());
+        delete $decl;
     }
     ;
 
@@ -262,11 +285,8 @@ expr
             $$ = parseFunctionArguments(new ExprCall(to_string($type)),$arguments);
         }
     |   expr[subexpr]   ARROW[loc]              { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
-    |   _SIZEOF[loc] '(' expr[subexpr] ')'      { $$ = new ExprSizeOf(tokAt(@loc),ExpressionPtr($subexpr)); }
-    |   _SIZEOF[loc] '(' type_declaration[decl] ')' {
-            $$ = new ExprConstInt(tokAt(@loc),$decl->getSizeOf());
-            delete $decl;
-        }
+    |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
+    |   expr_new[subexpr]                       { $$ = $subexpr; }
     ;
 
 variable_declaration_list

@@ -4,7 +4,7 @@ parser
     support late binding of default arguments
     support auto in function default arguments
     support auto in function arguments
-    support ` (`debug "hello" "world")
+	support assigning of the structures and default values for the structures
 
 misc
     basic type - test pointer casts

@@ -463,7 +463,8 @@ namespace yzg
     {
         if ( subexpr ) {
             subexpr->inferType(context);
-            typeexpr = make_shared<TypeDecl>(*subexpr->type);
+            if ( subexpr->type )
+                typeexpr = make_shared<TypeDecl>(*subexpr->type);
         }
         type = make_shared<TypeDecl>(Type::tInt);
     }
@@ -621,6 +622,7 @@ namespace yzg
     void ExprField::inferType(InferTypeContext & context)
     {
         value->inferType(context);
+        if ( !value->type ) return;
         if ( value->type->baseType!=Type::tStructure ) {
             context.error("expecting structure", at);
         } else if ( value->type->isArray() ) {
@@ -1128,11 +1130,12 @@ namespace yzg
                     copy = context.makeNode<SimNode_CopyRefValue>(at, get, init, size);
                 } else {
                     switch ( var->type->baseType ) {
-                        case Type::tBool:   copy = context.makeNode<SimNode_CopyValue<bool>>(at, get, init);       break;
-                        case Type::tInt:    copy = context.makeNode<SimNode_CopyValue<int32_t>>(at, get, init);    break;
-                        case Type::tUInt:   copy = context.makeNode<SimNode_CopyValue<uint32_t>>(at, get, init);   break;
-                        case Type::tFloat:  copy = context.makeNode<SimNode_CopyValue<float>>(at, get, init);      break;
-                        case Type::tString: copy = context.makeNode<SimNode_CopyValue<char *>>(at, get, init);     break;
+                        case Type::tBool:       copy = context.makeNode<SimNode_CopyValue<bool>>(at, get, init);       break;
+                        case Type::tInt:        copy = context.makeNode<SimNode_CopyValue<int32_t>>(at, get, init);    break;
+                        case Type::tUInt:       copy = context.makeNode<SimNode_CopyValue<uint32_t>>(at, get, init);   break;
+                        case Type::tFloat:      copy = context.makeNode<SimNode_CopyValue<float>>(at, get, init);      break;
+                        case Type::tString:     copy = context.makeNode<SimNode_CopyValue<char *>>(at, get, init);     break;
+                        case Type::tPointer:    copy = context.makeNode<SimNode_CopyValue<void *>>(at, get, init);     break;
                         default:
                             throw runtime_error("unsupported? can't assign initial value");
                     }

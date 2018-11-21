@@ -80,6 +80,8 @@
 <normal>"def"                                           need_oxford_comma = false; return _DEF;
 <normal>"let"                                           need_oxford_comma = false; return _LET;
 <normal>"struct"                                        need_oxford_comma = false; return _STRUCT;
+<normal>"type"                                          return _TYPE;
+<normal>"new"                                           return _NEW;
 <normal>"sizeof"                                        return _SIZEOF;
 <normal>"true"                                          return _TRUE;
 <normal>"false"                                         return _FALSE;

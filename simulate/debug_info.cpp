@@ -40,9 +40,9 @@ namespace yzg
     int getTypeBaseSize ( Type type )
     {
         switch ( type ) {
-            case tPointer:      return sizeof(void *);
+            case tPointer:      return sizeof(void *);          static_assert(sizeof(void *)==8, "64-bit");
             case tString:       return sizeof(char *);
-            case tBool:         return sizeof(bool);
+            case tBool:         return sizeof(bool);            static_assert(sizeof(bool)==1,"4 byte bool");
             case tInt:          return sizeof(int);
             case tInt2:         return sizeof(int) * 2;
             case tInt3:         return sizeof(int) * 3;
