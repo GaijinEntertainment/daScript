@@ -59,6 +59,8 @@ namespace yzg
         }
         
         __forceinline char * allocateName ( const string & name ) {
+            if ( name.empty() )
+                return nullptr;
             auto size = name.length() + 1;
             char * str = (char *) allocate(uint32_t(size+1));
             memcpy ( str, name.c_str(), size );
@@ -130,6 +132,22 @@ namespace yzg
         int totalVariables = 0;
         int totalFunctions = 0;
         const string * debugInput = nullptr;
+    };
+    
+    struct SimNode_Assert : SimNode {
+        SimNode_Assert ( const LineInfo & at, SimNode * s, const char * m ) : SimNode(at), subexpr(s), message(m) {}
+        virtual __m128 eval ( Context & context ) override {
+            if ( !cast<bool>::to(subexpr->eval(context)) ) {
+                if ( message ) {
+                    throw runtime_error("assert failed at " + debug.describe() + ", " + message);
+                } else {
+                    throw runtime_error("assert failed at " + debug.describe());
+                }
+            }
+            return _mm_setzero_ps();
+        }
+        SimNode *       subexpr;
+        const char *    message;
     };
     
     // field
@@ -221,18 +239,18 @@ namespace yzg
     };
     
     // "DEBUG"
-    template <typename TT>
-    __forceinline void debug_out ( TT value ) { cout << value; }
-    __forceinline void debug_out ( uint64_t value ) { cout << hex << "0x" << value << dec; }
-    
-    template <typename TT>
-    struct SimNode_Debug : SimNode_Call {
-        SimNode_Debug ( const LineInfo & at ) : SimNode_Call(at) {}
+    struct SimNode_Debug : SimNode {
+        SimNode_Debug ( const LineInfo & at, SimNode * s, TypeInfo * ti, char * msg )
+            : SimNode(at), subexpr(s), typeInfo(ti), message(msg) {}
         virtual __m128 eval ( Context & context ) override {
-            __m128 res = arguments[0]->eval(context);
-            debug_out( cast<TT>::to(res) );
+            __m128 res = subexpr->eval(context);
+            if ( message ) cout << message << " ";
+            cout << debug_type(typeInfo) << " = " << debug_value(res, typeInfo) << "\n";
             return res;
         }
+        SimNode *       subexpr;
+        TypeInfo *      typeInfo;
+        const char *    message;
     };
     
     // LOCAL VARIABLE "GET"

@@ -54,7 +54,7 @@
 %token  _STRUCT _LET    _DEF        _WHILE
 %token  _IF     _ELSE   _FOREACH    _IN
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
-%token  _TYPE
+%token  _TYPE   _ASSERT _DEBUG      _BREAKPOINT
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -93,6 +93,7 @@
 %type <pExpression>     expression_block
 %type <pExpression>     expression_while_loop
 %type <pExpression>     expression_foreach_loop
+%type <pExpression>     expression_assert
 %type <pExpression>     expr_new
 %type <pExpression>     expr_sizeof
 %type <pExpression>     expression_any
@@ -194,6 +195,7 @@ expression_any
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_foreach_loop[subexpr]    { $$ = $subexpr; }
+    |   expression_assert[subexpr]          { $$ = $subexpr; }
     ;
 
 expressions
@@ -212,6 +214,11 @@ expr_new
                 yyerror ( "structure type not found " + *$structName );
             $$ = new ExprNew(tokAt(@loc),pTypeDecl);
     }
+    ;
+
+expression_assert
+    :   _ASSERT[loc] '(' expr[subexpr] ')' ';'                      { $$ = new ExprAssert(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   _ASSERT[loc] '(' expr[subexpr] ',' STRING[message] ')' ';'  { $$ = new ExprAssert(tokAt(@loc),ExpressionPtr($subexpr),*$message); }
     ;
 
 expression_let
@@ -291,6 +298,8 @@ expr
     |   expr[subexpr]   ARROW[loc]              { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
+    |   _DEBUG[loc] '(' expr[subexpr] ')'                       { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   _DEBUG[loc] '(' expr[subexpr] ',' STRING[message] ')'   { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr),*$message); }
     ;
 
 variable_declaration_list

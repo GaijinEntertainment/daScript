@@ -35,6 +35,7 @@ namespace yzg
         __forceinline bool operator < ( const LineInfo & info ) const { return (line==info.line) ? column<info.column : line<info.line; }
         __forceinline bool operator == ( const LineInfo & info ) const { return line==info.line && column==info.column; }
         __forceinline bool operator != ( const LineInfo & info ) const { return line!=info.line || column!=info.column; }
+        string describe() const;
         uint32_t    column = 0, line = 0;
     };
     

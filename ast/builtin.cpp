@@ -4,20 +4,8 @@
 
 namespace yzg
 {
-    void builtin_assert ( bool expr ) {
-        if ( !expr )
-            throw runtime_error("assert failed");
-    }
-    
-    void builtin_assert2 ( bool expr, string comment ) {
-        if ( !expr )
-            throw runtime_error("assert failed: " + comment);
-    }
-
     void Program::addBuiltinFunctions()
     {
-        addExtern<decltype(builtin_assert),builtin_assert>("assert");
-        addExtern<decltype(builtin_assert2),builtin_assert2>("assert");
         addBuiltIn(make_shared<BuiltInFn<SimNode_StackWalk,void>>("stackwalk", *this));
     }
     
@@ -26,7 +14,6 @@ namespace yzg
     void addBuiltInBasic(Program & prg)
     {
         //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<SimNode_Debug<TT>,            TT,   TT>       >("debug",  prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_Set<SimPolicy_TT>,        TT&,  TT&, TT>  >("=",      prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_Equ<SimPolicy_TT>,        bool, TT,  TT>  >("==",     prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_NotEqu<SimPolicy_TT>,     bool, TT,  TT>  >("!=",     prg) );

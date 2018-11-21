@@ -39,7 +39,7 @@ def test_new
     in
         b->.position = float3(1.0,2.0,3.0)
         b->.radius = 5.0
-        verify_default_ball(b->)
+        verify_default_ball(debug(b,"ball is")->)
 // TODO: support assigning of the structures and default values for the structures
 //        let
 //            qb:Ball

@@ -262,6 +262,37 @@ namespace yzg
         TypeDeclPtr     typeexpr;
     };
     
+    class ExprAssert : public Expression
+    {
+    public:
+        ExprAssert () = default;
+        ExprAssert ( const LineInfo & a, ExpressionPtr s, const string & msg = string() )
+            : Expression(a), subexpr(s), message(msg) {}
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr   subexpr;
+        string          message;
+    };
+    
+    class ExprDebug : public Expression
+    {
+    public:
+        ExprDebug () = default;
+        ExprDebug ( const LineInfo & a, ExpressionPtr s, const string & msg = string() )
+            : Expression(a), subexpr(s), message(msg) {}
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr   subexpr;
+        string          message;
+        Program *       thisProgram = nullptr;
+    };
+    
     class ExprAt : public Expression
     {
     public:
@@ -640,8 +671,9 @@ namespace yzg
         void addExtern ( const string & name ) { addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, *this)); }
         void error ( const string & str, const LineInfo & at );
         bool failed() const { return failToCompile; }
-    protected:
+    public:
         void makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type );
+    protected:
         VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );
         StructInfo * makeStructureDebugInfo ( Context & context, const Structure & st );
         FuncInfo * makeFunctionDebugInfo ( Context & context, const Function & fn );

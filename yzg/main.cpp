@@ -55,7 +55,7 @@ inline double profileBlock ( int numIter, TT && block ) {
     return minT * s_timebase_info.numer / (1000000000.0 * s_timebase_info.denom);
 }
 
-void unit_test ( const string & fn, int numIter = 100 )
+void unit_test ( const string & fn, int numIter = 1 )
 {
     string str;
     ifstream t(fn);

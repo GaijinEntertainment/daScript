@@ -137,7 +137,6 @@ namespace yzg
             switch ( info->type ) {
                 case Type::tBool:       ss << *((bool *)pX); break;
                 case Type::tString:     ss << "\"" << escapeString(safe_str(pX)) << "\""; break;
-                case Type::tPointer:    ss << "*" << hex << uint64_t(*((uint64_t *)pX)) << dec; break;    // todo: better pointer?
                 case Type::tInt:        ss << *((int32_t *)pX); break;
                 case Type::tInt2:       ss << *((int2 *)pX); break;
                 case Type::tInt3:       ss << *((int3 *)pX); break;
@@ -150,6 +149,7 @@ namespace yzg
                 case Type::tFloat2:     ss << *((float2 *)pX); break;
                 case Type::tFloat3:     ss << *((float3 *)pX); break;
                 case Type::tFloat4:     ss << *((float4 *)pX);; break;
+                case Type::tPointer:    ss << "*" << hex << uint64_t(*((uint64_t *)pX)) << dec << " ";
                 case Type::tStructure:  debug_structure(ss, (char *)pX, info->structType); break;
                 default:                throw runtime_error("unsupported print type");
             }
@@ -164,7 +164,6 @@ namespace yzg
             switch ( info->type ) {
                 case Type::tBool:       ss << cast<bool>::to(x); break;
                 case Type::tString:     ss << "\"" << escapeString(to_rts(x)) << "\""; break;
-                case Type::tPointer:    ss << "*" << hex << uint64_t(cast<void *>::to(x)) << dec; break;    // todo: better pointer?
                 case Type::tInt:        ss << cast<int32_t>::to(x); break;
                 case Type::tInt2:       ss << cast<int2>::to(x); break;
                 case Type::tInt3:       ss << cast<int3>::to(x); break;
@@ -177,7 +176,8 @@ namespace yzg
                 case Type::tFloat2:     ss << cast<float2>::to(x); break;
                 case Type::tFloat3:     ss << cast<float3>::to(x); break;
                 case Type::tFloat4:     ss << cast<float4>::to(x); break;
-                case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType); break;
+                case Type::tPointer:    ss << "*" << hex << uint64_t(cast<void *>::to(x)) << dec << " ";
+                case Type::tStructure:  debug_structure(ss, *cast<char **>::to(x), info->structType); break;
                 default:                throw runtime_error("unsupported print type");
             }
         }
@@ -213,5 +213,11 @@ namespace yzg
         if ( info->ref )
             stream << " &";
         return stream.str();
+    }
+    
+    string LineInfo::describe() const {
+        stringstream ss;
+        ss << "line " << line << " column " << column;
+        return ss.str();
     }
 }

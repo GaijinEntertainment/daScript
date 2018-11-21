@@ -448,6 +448,76 @@ namespace yzg
     {
         return context.makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
+
+    // ExprAssert
+    
+    ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprAssert>(expr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->message = message;
+        return cexpr;
+    }
+    
+    void ExprAssert::log(ostream& stream, int depth) const
+    {
+        stream << "(assert ";
+        stream << *subexpr;
+        if ( !message.empty() )
+            stream << " \"" << message << "\"";
+        stream << ")";
+    }
+    
+    void ExprAssert::inferType(InferTypeContext & context)
+    {
+        subexpr->inferType(context);
+        if ( !subexpr->type ) return;
+        if ( !subexpr->type->isSimpleType(Type::tBool) )
+            context.error("assert condition must be boolean", at);
+        type = make_shared<TypeDecl>(Type::tVoid);
+    }
+    
+    SimNode * ExprAssert::simulate (Context & context) const
+    {
+        return context.makeNode<SimNode_Assert>(at,subexpr->simulate(context),context.allocateName(message));
+    }
+    
+    // ExprDebug
+    
+    ExpressionPtr ExprDebug::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprDebug>(expr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->message = message;
+        return cexpr;
+    }
+    
+    void ExprDebug::log(ostream& stream, int depth) const
+    {
+        stream << "(debug ";
+        stream << *subexpr;
+        if ( !message.empty() )
+            stream << " \"" << message << "\"";
+        stream << ")";
+    }
+    
+    void ExprDebug::inferType(InferTypeContext & context)
+    {
+        thisProgram = context.program.get();
+        subexpr->inferType(context);
+        if ( !subexpr->type ) return;
+        type = make_shared<TypeDecl>(*subexpr->type);
+    }
+    
+    SimNode * ExprDebug::simulate (Context & context) const
+    {
+        TypeInfo * pTypeInfo = context.makeNode<TypeInfo>();
+        thisProgram->makeTypeInfo(pTypeInfo, context, subexpr->type);
+        return context.makeNode<SimNode_Debug>(at,
+                                               subexpr->simulate(context),
+                                               pTypeInfo,
+                                               context.allocateName(message));
+    }
     
     // ExprSizeOf
     
