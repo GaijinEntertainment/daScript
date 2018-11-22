@@ -30,8 +30,8 @@ namespace yzg
         {   Operator::xorEqu,       "^="    },
         {   Operator::inc,          "++"    },
         {   Operator::dec,          "--"    },
-        {   Operator::postInc,      "+++"    },
-        {   Operator::postDec,      "---"    },
+        {   Operator::postInc,      "+++"   },
+        {   Operator::postDec,      "---"   },
     };
     
     Enum<Operator> g_opTable1 = {

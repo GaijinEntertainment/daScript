@@ -70,8 +70,7 @@
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
 %token  SHLEQU      SHREQU      ANDEQU      OREQU       XOREQU
 %token  SHL         SHR         ADDADD      SUBSUB      LEEQU
-%token  GREQU       EQUEQU      NOTEQU      ANDAND      OROR
-%token  ARROW
+%token  GREQU       EQUEQU      NOTEQU      ARROW
 
 %token<i>   INTEGER
 %token<ui>  UNSIGNED_INTEGER
@@ -108,8 +107,6 @@
 %left   ','
 %right  '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU SHREQU SHLEQU ANDEQU OREQU XOREQU
 %right  '?' ':'
-%left   OROR
-%left   ANDAND
 %left   '|'
 %left   '^'
 %left   '&'
@@ -299,6 +296,9 @@ expr
     |   expr[left] NOTEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::notEqu, ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] LEEQU[loc]  expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::lessEqu, ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] GREQU[loc]  expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::greaterEqu, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '&'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),Operator::binand, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '|'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),Operator::binor, ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '^'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),Operator::binxor, ExpressionPtr($left), ExpressionPtr($right)); }
     |   ADDADD[loc] expr[subexpr] %prec PRE_INC  { $$ = new ExprOp1(tokAt(@loc),Operator::inc, ExpressionPtr($subexpr)); }
     |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokAt(@loc),Operator::dec, ExpressionPtr($subexpr)); }
     |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokAt(@loc),Operator::postInc, ExpressionPtr($subexpr)); }

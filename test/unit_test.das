@@ -132,6 +132,27 @@ def test_stackwalk
     in
         stack_depth_2(debug(a,"a"),debug(b,"b"),"and string")
 
+def inc_true(x:int &):bool
+    x ++
+    return = true
+
+def inc_false(x:int &):bool
+    x ++
+    return = false
+
+def test_and_or
+    let
+        x:int=1
+    in
+        assert((inc_false(x) & inc_true(x))==false, "false & true = false")
+        assert(x==2,"right did not happen")
+        assert((inc_true(x) & inc_false(x))==false, "true & false = false")
+        assert(x==4,"both happen")
+        assert((inc_false(x) | inc_true(x))==true, "false | true = true")
+        assert(x==6,"both happen")
+        assert((inc_true(x) | inc_false(x))==true, "true | false = true")
+        assert(x==7,"right did not happen")
+
 // this is where unit tests are
 def test
     assert(true,"this should pass")
@@ -140,6 +161,7 @@ def test
     test_new()
     test_prefix_postfix()
     test_array()
+    test_and_or()
     test_stackwalk()
 
 

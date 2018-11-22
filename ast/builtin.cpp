@@ -78,8 +78,8 @@ namespace yzg
     {
         //                                    policy                        ret   arg1 arg2    name
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolNot<SimPolicy_Bool>,  TT,   TT>       >("!",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolAnd<SimPolicy_Bool>,  TT,   TT,  TT>  >("&",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolOr<SimPolicy_Bool>,   TT,   TT,  TT>  >("|",      prg) );
+        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolAnd,                  TT,   TT,  TT>  >("&",      prg) );
+        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolOr,                   TT,   TT,  TT>  >("|",      prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolXor<SimPolicy_Bool>,  TT,   TT,  TT>  >("^",      prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBoolAnd<SimPolicy_Bool>,TT&, TT&, TT>  >("&=",     prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBoolOr<SimPolicy_Bool>, TT&, TT&, TT>  >("|=",     prg) );

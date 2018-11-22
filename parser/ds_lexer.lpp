@@ -155,8 +155,6 @@ L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yy
 <normal>"\>\="                              return GREQU;
 <normal>"\=\="                              return EQUEQU;
 <normal>"\!\="                              return NOTEQU;
-<normal>"\&\&"                              return ANDAND;
-<normal>"\|\|"                              return OROR;
 <normal>[ \t\r]                             /* skip white space */
 <normal>(\/\/.*)*\n                        {
     yycolumn = 1;

@@ -698,8 +698,6 @@ namespace yzg
     DEFINE_OP2_POLICY(Sub);
     DEFINE_OP2_POLICY(Div);
     DEFINE_OP2_POLICY(Mul);
-    DEFINE_OP2_POLICY(BoolAnd);
-    DEFINE_OP2_POLICY(BoolOr);
     DEFINE_OP2_POLICY(BoolXor);
     DEFINE_OP2_POLICY(BinAnd);
     DEFINE_OP2_POLICY(BinOr);
@@ -715,4 +713,25 @@ namespace yzg
     DEFINE_OP2_POLICY(SetSub);
     DEFINE_OP2_POLICY(SetDiv);
     DEFINE_OP2_POLICY(SetMul);
+    
+    struct Sim_BoolAnd : SimNode_Op2 {
+        Sim_BoolAnd ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            if ( !cast<bool>::to(l->eval(context)) )    // if not left, then false
+                return cast<bool>::from(false);
+            else
+                return r->eval(context);                // if left, then right
+        }
+    };
+    
+    struct Sim_BoolOr : SimNode_Op2 {
+        Sim_BoolOr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            if ( cast<bool>::to(l->eval(context)) )     // if left, then true
+                return cast<bool>::from(true);
+            else
+                return r->eval(context);                // if not left, then right
+        }
+    };
+
 }

@@ -12,10 +12,10 @@ misc
     simplify builtin initialization
     support multi-dimensional array foreach
     support multi-dimensional array new (or regular array new)
-    assert2 - need node, so that if ( !a ) b and not a,b, if
-    &&, || - need nodes
+	support <- aka copy object
     support (unsafe ?)
     support extern functions stackwalk
+	simplified exception handling
 
 optimization \ ast massage
     flatten nested blocks
