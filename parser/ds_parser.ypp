@@ -58,7 +58,7 @@
 %token  _IF     _ELSE   _FOREACH    _IN
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _ASSERT _DEBUG      _BREAKPOINT
-%token  _RETURN
+%token  _RETURN _NULL
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -168,8 +168,6 @@ function_declaration
             yyerror("function " + *$name + " can't return reference",tokAt(@loc));
         else if ( pFunction->result->dim.size() )
             yyerror("function " + *$name + " can't return array",tokAt(@loc));
-        else if ( pFunction->result->baseType==Type::tPointer )
-            yyerror("function " + *$name + " can't return pointer",tokAt(@loc));
         else if (pFunction->result->baseType==Type::tStructure )
             yyerror("function " + *$name + " can't return structure",tokAt(@loc));
         if ( $list ) {
@@ -268,7 +266,8 @@ expr_sizeof
     ;
 
 expr
-    :   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); }
+    :   _NULL[loc]                            { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
+    |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); }
     |   INTEGER[const]                        { $$ = new ExprConstInt(tokAt(@const),(int32_t)$const); }
     |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(@const),(uint32_t)$const); }
     |   DOUBLE[const]                         { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }

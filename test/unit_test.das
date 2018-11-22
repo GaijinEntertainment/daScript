@@ -54,6 +54,12 @@ def copy_ball(a,b:Ball)
     a.position = b.position
     a.radius = b.radius
 
+def test_ref_ptr(a:Ball*&;b:Ball*)
+    a = b
+
+def test_ret_ptr(a:Ball*):Ball*
+    return = a
+
 def test_new
     let
         b:Ball* = new Ball
@@ -65,11 +71,20 @@ def test_new
         let
             qb:Ball
             qc:Ball* = b
+            qd:Ball* = new Ball
         in
             debug(qc,"qc")
             copy_ball(qb,qc->)
             verify_default_ball(qb)
             verify_default_ball(qc->)
+            qc = null
+            assert(qc==null,"null")
+            assert(qd!=null,"not null")
+            test_ref_ptr(qc,qd)
+            assert(qc==qd,"now same pointer")
+            qd = test_ret_ptr(null)
+            assert(qd==null,"null")
+            assert(qd!=qc,"now one is null")
 
 def test_array
     let
