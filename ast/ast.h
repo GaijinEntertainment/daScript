@@ -524,6 +524,7 @@ namespace yzg
         string                  name;
         vector<ExpressionPtr>   arguments;
         FunctionPtr             func;
+        uint32_t                stackTop = 0;
     };
     
     class ExprIfThenElse : public Expression

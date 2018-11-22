@@ -1282,6 +1282,9 @@ namespace yzg
     
     void ExprCall::inferType(InferTypeContext & context)
     {
+        stackTop = context.stackTop;
+        context.stackTop = (stackTop + arguments.size()*sizeof(__m128));
+        context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
         vector<TypeDeclPtr> types;
         types.reserve(arguments.size());
         for ( auto & ar : arguments ) {
@@ -1306,6 +1309,7 @@ namespace yzg
                 if ( !func->arguments[iA]->type->isRef() )
                     arguments[iA] = autoDereference(arguments[iA]);
         }
+        context.stackTop = stackTop;
     }
     
     SimNode * ExprCall::simulate (Context & context) const
@@ -1316,14 +1320,14 @@ namespace yzg
         if ( int nArg = (int) arguments.size() ) {
             pCall->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
             pCall->nArguments = nArg;
-            pCall->argValues = (__m128 *) context.allocate(nArg * sizeof(__m128));
+            pCall->stackTop = stackTop;
             for ( int a=0; a!=nArg; ++a ) {
                 pCall->arguments[a] = arguments[a]->simulate(context);
             }
         } else {
             pCall->arguments = nullptr;
             pCall->nArguments = 0;
-            pCall->argValues = nullptr;
+            pCall->stackTop = 0;
         }
         return pCall;
     }

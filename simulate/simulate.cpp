@@ -44,8 +44,8 @@ namespace yzg
         char * sp = stackTop;
         while ( sp>=stackTop && sp <(stack+stackSize) ) {
             Prologue * pp = (Prologue *) sp;
-            if ( pp->row && pp->col ) {
-                cout << pp->info->name << " at line " << pp->row << "\n";
+            if ( pp->line ) {
+                cout << pp->info->name << " at line " << pp->line << "\n";
             } else {
                 cout << pp->info->name << "\n";
             }

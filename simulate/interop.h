@@ -40,7 +40,7 @@ namespace yzg
             using Indices = make_index_sequence<nargs>;
             using Arguments = typename FunctionTrait::arguments;
             evalArgs(context);
-            auto cpp_args = cast_args<Arguments>(argValues, Indices());
+            auto cpp_args = cast_args<Arguments>(abiArgValues(context), Indices());
             return ImplCallStaticFunction<Result>::call(*fn, move(cpp_args), Indices());
         }
     };

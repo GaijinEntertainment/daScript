@@ -37,11 +37,10 @@ namespace yzg
     
     struct Prologue
     {
+        __m128      result;
         __m128 *    arguments;
         FuncInfo *  info;
-        __m128      result;
-        int32_t     row;
-        int32_t     col;
+        int32_t     line;
     };
     
     class Context
@@ -94,20 +93,20 @@ namespace yzg
         }
         
         __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
-            return call(fnIndex, args, 0, 0);
+            return call(fnIndex, args, 0);
         }
 
     protected:
         
         __forceinline __m128 * abiArguments() {
-            return *(__m128 **)stackTop;
+            return ((Prologue *)stackTop)->arguments;
         }
         
         __forceinline __m128 & abiResult() {
-            return *(__m128 *)(stackTop + sizeof(__m128 *) + sizeof(FuncInfo *));
+            return ((Prologue *)stackTop)->result;
         }
         
-        __forceinline __m128 call ( int fnIndex, __m128 * args, int row, int column ) {
+        __forceinline __m128 call ( int fnIndex, __m128 * args, int line ) {
             assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
             auto & fn = functions[fnIndex];
             // PUSH
@@ -116,11 +115,10 @@ namespace yzg
             if ( stack - stackTop > stackSize )
                 throw runtime_error("stack overflow");
             Prologue * pp = (Prologue *) stackTop;
+            pp->result =        _mm_setzero_ps();
             pp->arguments =     args;
             pp->info =          fn.debug;
-            pp->result =        _mm_setzero_ps();
-            pp->row =           row;
-            pp->col =           column;
+            pp->line =          line;
             // CALL
             fn.code->eval(*this);
             __m128 result = abiResult();
@@ -196,19 +194,22 @@ namespace yzg
     // FUNCTION CALL
     struct SimNode_Call : SimNode {
         SimNode_Call ( const LineInfo & at ) : SimNode(at) {}
+        __forceinline __m128 * abiArgValues ( Context & context ) const { return (__m128 *)(context.stackTop+stackTop); }
         __forceinline void evalArgs ( Context & context ) {
+            __m128 * argValues = abiArgValues(context);
             for ( int i=0; i!=nArguments; ++i ) {
                 argValues[i] = arguments[i]->eval(context);
             }
         }
         virtual __m128 eval ( Context & context ) override {
+            __m128 * argValues = abiArgValues(context);
             evalArgs(context);
-            return context.call(fnIndex, argValues, debug.line, debug.column);
+            return context.call(fnIndex, argValues, debug.line);
         }
-        int fnIndex;
-        int nArguments;
         SimNode ** arguments;
-        __m128 * argValues;
+        int32_t  fnIndex;
+        int32_t  nArguments;
+        uint32_t stackTop;
     };
     
     // CAST
@@ -227,6 +228,7 @@ namespace yzg
     struct SimNode_VecCtor : SimNode_Call {
         SimNode_VecCtor ( const LineInfo & at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
+            __m128 * argValues = abiArgValues(context);
             evalArgs(context);
             if ( vecS==2 )
                 return _mm_setr_ps(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
@@ -287,11 +289,11 @@ namespace yzg
     
     // ARGUMENT VARIABLE "GET"
     struct SimNode_GetArgument : SimNode {
-        SimNode_GetArgument ( const LineInfo & at, int i ) : SimNode(at), index(i) {}
+        SimNode_GetArgument ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
         virtual __m128 eval ( Context & context ) override {
             return context.abiArguments()[index];
         }
-        int index;
+        int32_t index;
     };
     
     // RETURN VARIABLE GET
@@ -304,11 +306,11 @@ namespace yzg
     
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode {
-        SimNode_GetGlobal ( const LineInfo & at, int i ) : SimNode(at), index(i) {}
+        SimNode_GetGlobal ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
         virtual __m128 eval ( Context & context ) override {
             return context.globalVariables[index].value;
         }
-        int index;
+        int32_t index;
     };
     
     // DEREFERENCE
@@ -359,7 +361,7 @@ namespace yzg
     
     // COPY REFERENCE VALUE
     struct SimNode_CopyRefValue : SimNode {
-        SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, int sz)
+        SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, int32_t sz)
             : SimNode(at), l(ll), r(rr), size(sz) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
@@ -370,7 +372,7 @@ namespace yzg
             return ll;
         }
         SimNode * l, * r;
-        int size;
+        int32_t size;
     };
     
     // COPY VALUE
