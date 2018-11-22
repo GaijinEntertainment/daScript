@@ -831,7 +831,7 @@ namespace yzg
         vector<TypeDeclPtr> types = { subexpr->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 ) {
-            context.error("no matching function " + to_string(op) + " (" + subexpr->type->describe() + ")", at);
+            context.error("no matching function '" + to_string(op) + "' with argument (" + subexpr->type->describe() + ")", at);
         } else if ( functions.size()>1 ) {
             context.error("too many matching functions", at);
         } else {
@@ -882,8 +882,8 @@ namespace yzg
         vector<TypeDeclPtr> types = { left->type, right->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 ) {
-            context.error("no matching function " + to_string(op)
-                + " (" + left->type->describe() + ", " + right->type->describe() + ")", at);
+            context.error("no matching function '" + to_string(op)
+                + "' with arguments (" + left->type->describe() + ", " + right->type->describe() + ")", at);
         } else if ( functions.size()>1 ) {
             context.error("too many matching functions", at);
         } else {
@@ -942,8 +942,8 @@ namespace yzg
             vector<TypeDeclPtr> types = { subexpr->type, left->type, right->type };
             auto functions = context.program->findMatchingFunctions(to_string(op), types);
             if ( functions.size()==0 ) {
-                context.error("no matching function " + to_string(op)
-                    + " (" + subexpr->type->describe() + ", "
+                context.error("no matching function '" + to_string(op)
+                    + "' with arguments (" + subexpr->type->describe() + ", "
                         + left->type->describe() + ", " + right->type->describe() + ")", at);
             } else if ( functions.size()>1 ) {
                 context.error("too many matching functions", at);
