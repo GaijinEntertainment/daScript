@@ -27,17 +27,34 @@ optimization \ ast massage
 
 // recent
 
-iterations took:0.000547
+STACKWALK
+
+iterations took:0.000544
 foreach iterations took:0.000298
 c++ version took:0.000019
-interop version took:0.000398
-foreach interop version took:0.000141
-10000-interop version took:0.000247
-ratio sim / c: 28.080452
-ratio foreach sim / c: 15.315284
-ratio interop / c: 20.443822
-ratio foreach interop / c: 7.245158
-ratio 10000-interop / c: 12.691446
-ratio sim / interop: 1.373542
+interop version took:0.000429
+foreach interop version took:0.000160
+10000-interop version took:0.000241
+ratio sim / c: 28.413156
+ratio foreach sim / c: 15.568833
+ratio interop / c: 22.392065
+ratio foreach interop / c: 8.374941
+ratio 10000-interop / c: 12.563352
+ratio sim / interop: 1.268894
+
+NO STACKWALK
+
+iterations took:0.000544
+foreach iterations took:0.000296
+c++ version took:0.000019
+interop version took:0.000393			vs 0.000429
+foreach interop version took:0.000145	vs 0.000160
+10000-interop version took:0.000243
+ratio sim / c: 29.220096
+ratio foreach sim / c: 15.886350
+ratio interop / c: 21.105317
+ratio foreach interop / c: 7.802161
+ratio 10000-interop / c: 13.040912
+ratio sim / interop: 1.384490
 
 

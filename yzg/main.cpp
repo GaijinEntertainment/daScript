@@ -30,6 +30,15 @@ __attribute__((noinline)) void updateTest ( Object * objects )
     }
 }
 
+Context * g_Context = nullptr;
+void stack_depth_4(const char * str)
+{
+    int fnIndex = g_Context->findFunction("stack_depth_5");
+    const char * message = "from c++";
+    __m128 args[1] = { cast<char *>::from((char *)message) };
+    g_Context->eval(fnIndex, args);
+}
+
 // this is how we declare type
 template <>
 struct typeFactory<Object *> {
@@ -65,7 +74,9 @@ void unit_test ( const string & fn, int numIter = 1 )
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), nullptr) ) {
+    if ( auto program = parseDaScript(str.c_str(), [](const ProgramPtr & prog){
+        addExtern<decltype(stack_depth_4),stack_depth_4>(*prog,"stack_depth_4");
+    }) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
                 reportError(str, err.at.line, err.at.column, err.what );
@@ -73,6 +84,7 @@ void unit_test ( const string & fn, int numIter = 1 )
         } else {
             cout << *program << "\n";
             Context ctx(&str);
+            g_Context = &ctx;
             program->simulate(ctx);
             int fnTest = ctx.findFunction("test");
             if ( fnTest != -1 ) {
@@ -103,7 +115,7 @@ void unit_test_array_of_structures ( const string & fn )
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
     auto program = parseDaScript(str.c_str(), [&](const ProgramPtr & prog){
         // this is how we declare external function
-        prog->addExtern<decltype(updateObject),updateObject>("interopUpdate");
+        addExtern<decltype(updateObject),updateObject>(*prog,"interopUpdate");
     });
     if ( !program ) {
         cout << "can't parse\n";

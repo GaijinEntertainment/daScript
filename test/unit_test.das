@@ -113,10 +113,14 @@ def test_prefix_postfix
         a = ++b+b++
         assert(a==8,"8==8")
 
+def stack_depth_5(a:string)
+    assert(a=="from c++")
+    stackwalk()
+
 def stack_depth_3(a:int;b:float)
     assert(debug(a,"a")==2)
     assert(1.0==debug(b,"b"))
-    stackwalk()
+    stack_depth_4("to c++")
 
 def stack_depth_2(b:float&;a:int&;c:string)
     stack_depth_3(debug(a,"a&"),debug(b,"b&"))

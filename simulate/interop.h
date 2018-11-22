@@ -32,7 +32,6 @@ namespace yzg
     struct SimNode_ExtFuncCall : SimNode_Call
     {
         SimNode_ExtFuncCall ( const LineInfo & at ) : SimNode_Call(at) {}
-        
         virtual __m128 eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;
             using Result = typename FunctionTrait::return_type;
@@ -40,9 +39,30 @@ namespace yzg
             using Indices = make_index_sequence<nargs>;
             using Arguments = typename FunctionTrait::arguments;
             evalArgs(context);
-            auto cpp_args = cast_args<Arguments>(abiArgValues(context), Indices());
-            return ImplCallStaticFunction<Result>::call(*fn, move(cpp_args), Indices());
+            __m128 * args = abiArgValues(context);
+            auto cpp_args = cast_args<Arguments>(args, Indices());
+        #if ENABLE_STACK_WALK
+            // PUSH
+            char * pushStack = context.stackTop;
+            context.stackTop -= sizeof(Prologue);
+            if ( context.stack - context.stackTop > context.stackSize )
+                throw runtime_error("stack overflow");
+            // fill prologue
+            Prologue * pp = (Prologue *) context.stackTop;
+            pp->result =        _mm_setzero_ps();
+            pp->arguments =     args;
+            pp->info =          info;
+            pp->line =          debug.line;
+        #endif
+            // calc
+            auto res = ImplCallStaticFunction<Result>::call(*fn, move(cpp_args), Indices());
+            // POP
+        #if ENABLE_STACK_WALK
+            context.stackTop = pushStack;
+        #endif
+            return res;
         }
+        FuncInfo * info = nullptr;
     };
 }
 

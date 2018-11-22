@@ -7,6 +7,8 @@
 
 namespace yzg
 {
+    #define ENABLE_STACK_WALK   1
+    
     using namespace std;
     
     class Context;
@@ -42,6 +44,7 @@ namespace yzg
         FuncInfo *  info;
         int32_t     line;
     };
+    static_assert((sizeof(Prologue) & 0xf)==0, "it has to be 16 byte aligned");
     
     class Context
     {
@@ -114,11 +117,14 @@ namespace yzg
             stackTop -= fn.stackSize;
             if ( stack - stackTop > stackSize )
                 throw runtime_error("stack overflow");
+            // fill prologue
             Prologue * pp = (Prologue *) stackTop;
             pp->result =        _mm_setzero_ps();
             pp->arguments =     args;
+        #if ENABLE_STACK_WALK
             pp->info =          fn.debug;
             pp->line =          line;
+        #endif
             // CALL
             fn.code->eval(*this);
             __m128 result = abiResult();
@@ -134,12 +140,13 @@ namespace yzg
         char * linearAllocatorExecuteBase = nullptr;
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
-        char * stack = nullptr;
-        char * stackTop = nullptr;
-        int stackSize = 16*1024;
         int totalVariables = 0;
         int totalFunctions = 0;
         const string * debugInput = nullptr;
+    public:
+        char * stackTop = nullptr;
+        char * stack = nullptr;
+        int stackSize = 16*1024;
     };
     
     struct SimNode_Assert : SimNode {

@@ -110,6 +110,7 @@ namespace yzg
     template <typename QQ> struct ToBasicType<const QQ &> : ToBasicType<QQ> {};
     template<> struct ToBasicType<void *>   { enum { type = Type::tPointer }; };
     template<> struct ToBasicType<char *>   { enum { type = Type::tString }; };
+    template<> struct ToBasicType<const char *> { enum { type = Type::tString }; };
     template<> struct ToBasicType<string>   { enum { type = Type::tString }; };
     template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
     template<> struct ToBasicType<int32_t>  { enum { type = Type::tInt }; };
@@ -619,35 +620,6 @@ namespace yzg
         }
     };
     
-    template  <typename FuncT, FuncT fn>
-    class ExternalFn : public BuiltInFunction
-    {
-        template <typename ArgumentsType, size_t... I>
-        __forceinline vector<TypeDeclPtr> makeArgs ( const Program & prg, index_sequence<I...> ) {
-            return { makeType< typename tuple_element<I, ArgumentsType>::type>(prg)... };
-        }
-    public:
-        ExternalFn(const string & name, const Program & prg) : BuiltInFunction(name)
-        {
-            using FunctionTrait = function_traits<FuncT>;
-            const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
-            using Indices = make_index_sequence<nargs>;
-            using Arguments = typename FunctionTrait::arguments;
-            using Result  = typename FunctionTrait::return_type;
-            auto args = makeArgs<Arguments>(prg, Indices());
-            for ( int argi=0; argi!=nargs; ++argi ) {
-                auto arg = make_shared<Variable>();
-                arg->name = "arg" + std::to_string(argi);
-                arg->type = args[argi];
-                this->arguments.push_back(arg);
-            }
-            this->result = makeType<Result>(prg);
-        }
-        virtual SimNode * makeSimNode ( Context & context ) override {
-            return context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(at);
-        }
-    };
-    
     struct Error
     {
         Error ( const string & w, LineInfo a ) : what(w), at(a) {}
@@ -670,16 +642,14 @@ namespace yzg
         void addBuiltinFunctions();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         void simulate ( Context & context );
-        template <typename FuncT, FuncT fn>
-        void addExtern ( const string & name ) { addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, *this)); }
         void error ( const string & str, const LineInfo & at );
         bool failed() const { return failToCompile; }
     public:
         void makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type );
-    protected:
         VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );
         StructInfo * makeStructureDebugInfo ( Context & context, const Structure & st );
         FuncInfo * makeFunctionDebugInfo ( Context & context, const Function & fn );
+    public:
         map<string,StructInfo *>    sdebug;
     public:
         map<string, StructurePtr>   structures;
@@ -690,6 +660,44 @@ namespace yzg
         vector<Error>               errors;
         bool                        failToCompile = false;
     };
+    
+    template  <typename FuncT, FuncT fn>
+    class ExternalFn : public BuiltInFunction
+    {
+        template <typename ArgumentsType, size_t... I>
+        __forceinline vector<TypeDeclPtr> makeArgs ( const Program & prg, index_sequence<I...> ) {
+            return { makeType< typename tuple_element<I, ArgumentsType>::type>(prg)... };
+        }
+    public:
+        ExternalFn(const string & name, Program & prg) : BuiltInFunction(name)
+        {
+            thisProgram = &prg;
+            using FunctionTrait = function_traits<FuncT>;
+            const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
+            using Indices = make_index_sequence<nargs>;
+            using Arguments = typename FunctionTrait::arguments;
+            using Result  = typename FunctionTrait::return_type;
+            auto args = makeArgs<Arguments>(prg, Indices());
+            for ( int argi=0; argi!=nargs; ++argi ) {
+                auto arg = make_shared<Variable>();
+                arg->name = "arg" + std::to_string(argi);
+                arg->type = args[argi];
+                this->arguments.push_back(arg);
+            }
+            this->result = makeType<Result>(prg);
+            this->totalStackSize = sizeof(Prologue);
+        }
+        virtual SimNode * makeSimNode ( Context & context ) override {
+            auto pCall = context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(at);
+            pCall->info = thisProgram->makeFunctionDebugInfo(context, *this);
+            return pCall;
+        }
+    protected:
+        Program *       thisProgram = nullptr;
+    };
+    
+    template <typename FuncT, FuncT fn>
+    void addExtern ( Program & prog, const string & name ) { prog.addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, prog)); }
      
     ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext );
 }

@@ -40,6 +40,7 @@ namespace yzg
     
     void Context::stackWalk()
     {
+    #if ENABLE_STACK_WALK
         cout << "\nCALL STACK:\n";
         char * sp = stackTop;
         while ( sp>=stackTop && sp <(stack+stackSize) ) {
@@ -57,5 +58,8 @@ namespace yzg
             sp += pp->info->stackSize;
         }
         cout << "\n";
+    #else
+        cout << "\nCALL STACK TRACKING DISABLED:\n\n";
+    #endif
     }
 }
