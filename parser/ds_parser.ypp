@@ -92,6 +92,7 @@
 %type <pVarDecl>        variable_declaration
 
 %type <pExpression>     expr
+%type <pExpression>     expr_list
 %type <pExpression>     expression_let
 %type <pExpression>     expressions
 %type <pExpression>     expression_block
@@ -265,6 +266,11 @@ expr_sizeof
     }
     ;
 
+expr_list
+    :   expr[subexpr]                       { $$ = $subexpr; }
+    |   expr_list[left] ',' expr[right]     { $$ = new ExprSequence(tokAt(@left),ExpressionPtr($left),ExpressionPtr($right)); }
+    ;
+
 expr
     :   _NULL[loc]                            { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
     |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); }
@@ -297,13 +303,12 @@ expr
     |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokAt(@loc),Operator::dec, ExpressionPtr($subexpr)); }
     |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokAt(@loc),Operator::postInc, ExpressionPtr($subexpr)); }
     |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(@loc),Operator::postDec, ExpressionPtr($subexpr)); }
-    |   '(' expr[subexpr] ')'                { $$ = $subexpr; }
+    |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); }
-    |   expr[left] ',' expr[right]          { $$ = new ExprSequence(tokAt(@left),ExpressionPtr($left),ExpressionPtr($right)); }
-    |   NAME[name] '(' ')'                  { $$ = new ExprCall(tokAt(@name),*$name); }
-    |   NAME[name] '(' expr[arguments] ')'  { $$ = parseFunctionArguments(new ExprCall(tokAt(@name),*$name),$arguments); }
-    |   basic_type_declaration[type] '(' expr[arguments] ')' {
+    |   NAME[name] '(' ')'                       { $$ = new ExprCall(tokAt(@name),*$name); }
+    |   NAME[name] '(' expr_list[arguments] ')'  { $$ = parseFunctionArguments(new ExprCall(tokAt(@name),*$name),$arguments); }
+    |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
             $$ = parseFunctionArguments(new ExprCall(tokAt(@type),to_string($type)),$arguments);
         }
     |   expr[subexpr]   ARROW[loc]              { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
