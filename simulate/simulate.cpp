@@ -43,31 +43,18 @@ namespace yzg
         cout << "\nCALL STACK:\n";
         char * sp = stackTop;
         while ( sp>=stackTop && sp <(stack+stackSize) ) {
-            __m128 * args = *(__m128 **)sp;
-            SimNode_Call * call = *(SimNode_Call **)(sp + sizeof(__m128 *));
-            FuncInfo * info;
-            int row = 0, col = 0;
-            if ( (uint64_t(call) & 1) == 0 ) {
-                int fnIndex = call->fnIndex;
-                if ( debugInput ) {
-                    row = call->debug.line;
-                    col = call->debug.column;
-                }
-                info = functions[fnIndex].debug;
+            Prologue * pp = (Prologue *) sp;
+            if ( pp->row && pp->col ) {
+                cout << pp->info->name << " at line " << pp->row << "\n";
             } else {
-                info = (FuncInfo *) ( uint64_t(call) & ~1 );
+                cout << pp->info->name << "\n";
             }
-            if ( row && col ) {
-                cout << info->name << " at line " << row << "\n";
-            } else {
-                cout << info->name << "\n";
+            for ( uint32_t i = 0; i != pp->info->argsSize; ++i ) {
+                cout << "\t" << pp->info->args[i]->name
+                << " : " << debug_type(pp->info->args[i])
+                << " = \t" << debug_value(pp->arguments[i], pp->info->args[i]) << "\n";
             }
-            for ( uint32_t i = 0; i != info->argsSize; ++i ) {
-                cout << "\t" << info->args[i]->name
-                << " : " << debug_type(info->args[i])
-                << " = \t" << debug_value(args[i], info->args[i]) << "\n";
-            }
-            sp += info->stackSize;
+            sp += pp->info->stackSize;
         }
         cout << "\n";
     }

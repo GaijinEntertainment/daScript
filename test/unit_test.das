@@ -56,6 +56,7 @@ def copy_ball(a,b:Ball)
 
 def test_ref_ptr(a:Ball*&;b:Ball*)
     a = b
+    assert(a==b,"now same pointer")
 
 def test_ret_ptr(a:Ball*):Ball*
     return = a

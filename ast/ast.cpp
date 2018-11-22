@@ -1311,6 +1311,7 @@ namespace yzg
     SimNode * ExprCall::simulate (Context & context) const
     {
         SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
+        pCall->debug = at;
         pCall->fnIndex = func->index;
         if ( int nArg = (int) arguments.size() ) {
             pCall->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
@@ -1397,7 +1398,7 @@ namespace yzg
             context.program = shared_from_this();
             context.func = fit.second;
             if ( !context.func->builtIn ) {
-                context.func->totalStackSize = context.stackTop = sizeof(SimNode *) + sizeof(__m128 *) + sizeof(__m128);
+                context.func->totalStackSize = context.stackTop = sizeof(Prologue);
                 context.func->index = totalFunctions ++;
                 for ( auto & arg : context.func->arguments ) {
                     if ( arg->init ) {

@@ -35,6 +35,15 @@ namespace yzg
         LineInfo debug;
     };
     
+    struct Prologue
+    {
+        __m128 *    arguments;
+        FuncInfo *  info;
+        __m128      result;
+        int32_t     row;
+        int32_t     col;
+    };
+    
     class Context
     {
         friend class Program;
@@ -85,9 +94,7 @@ namespace yzg
         }
         
         __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
-            // we are abusing the fact that node pointers are aligned
-            SimNode * fakeNode = (SimNode *) ( uint64_t(functions[fnIndex].debug) | 1 );
-            return call(fnIndex, args, fakeNode);
+            return call(fnIndex, args, 0, 0);
         }
 
     protected:
@@ -97,10 +104,10 @@ namespace yzg
         }
         
         __forceinline __m128 & abiResult() {
-            return *(__m128 *)(stackTop + sizeof(__m128 *) + sizeof(SimNode *));
+            return *(__m128 *)(stackTop + sizeof(__m128 *) + sizeof(FuncInfo *));
         }
         
-        __forceinline __m128 call ( int fnIndex, __m128 * args, SimNode * THAT ) {
+        __forceinline __m128 call ( int fnIndex, __m128 * args, int row, int column ) {
             assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
             auto & fn = functions[fnIndex];
             // PUSH
@@ -108,9 +115,12 @@ namespace yzg
             stackTop -= fn.stackSize;
             if ( stack - stackTop > stackSize )
                 throw runtime_error("stack overflow");
-            *(__m128 **)(stackTop) = args;                                                      // args
-            *(SimNode **)(stackTop + sizeof(__m128 *)) = THAT;                                  // debug info
-            *(__m128 *)(stackTop + sizeof(__m128 *) + sizeof(SimNode *)) = _mm_setzero_ps();    // result
+            Prologue * pp = (Prologue *) stackTop;
+            pp->arguments =     args;
+            pp->info =          fn.debug;
+            pp->result =        _mm_setzero_ps();
+            pp->row =           row;
+            pp->col =           column;
             // CALL
             fn.code->eval(*this);
             __m128 result = abiResult();
@@ -193,7 +203,7 @@ namespace yzg
         }
         virtual __m128 eval ( Context & context ) override {
             evalArgs(context);
-            return context.call(fnIndex, argValues, this);
+            return context.call(fnIndex, argValues, debug.line, debug.column);
         }
         int fnIndex;
         int nArguments;
