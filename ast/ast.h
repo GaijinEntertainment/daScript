@@ -205,11 +205,9 @@ namespace yzg
         TypeDeclPtr type;
     };
     
-    template <typename ExprType, typename SuperType = Expression>
+    template <typename ExprType>
     __forceinline shared_ptr<ExprType> clonePtr ( const ExpressionPtr & expr ) {
-        auto cexpr =  expr ? static_pointer_cast<ExprType>(expr) : make_shared<ExprType>();
-        (*cexpr).SuperType::clone(cexpr);
-        return cexpr;
+        return expr ? static_pointer_cast<ExprType>(expr) : make_shared<ExprType>();
     }
     
     class ExprRef2Value : public Expression   // &value to value
@@ -427,7 +425,8 @@ namespace yzg
         ExprConst(TT val = TT()) : value(val) {}
         ExprConst(const LineInfo & a, TT val = TT()) : Expression(a), value(val) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
-            auto cexpr = clonePtr<ExprConstExt,ExprConst<TT,ExprConstExt>>(expr);
+            auto cexpr = clonePtr<ExprConstExt>(expr);
+            Expression::clone(cexpr);
             cexpr->value = value;
             return cexpr;
         }
@@ -505,6 +504,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        static SimNode * simulateInit(Context & context, const VariablePtr & var, bool local);
     public:
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;

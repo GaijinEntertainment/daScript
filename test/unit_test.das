@@ -110,9 +110,10 @@ def test_array
 def test_prefix_postfix
     print("test prefix postfix:\n")
     let
-        a:int = 1
-        b:int = 2
+        a,b:int = 1
     in
+        assert(a==1 & b==1)
+        b = 2
         assert(++a==b,"++1==2")
         assert(a==2,"2==2")
         assert(a++==2,"2++==2")
@@ -198,10 +199,24 @@ def test_if_then_else
         assert(x==5)
     print("ok\n")
 
+let
+    global_x:int=1
+
+def test_globals
+    print("test globals:\n")
+    debug(global_x)
+    assert(global_x==1,"global variable init")
+    let
+        y:int=global_x=5
+    in
+        assert(global_x==5 & y==5)
+    print("ok\n")
+
 // this is where unit tests are
 def test
     print("unit tests started\n")
     assert(true,"this should pass")
+    test_globals()
     test_sizeof()
     test_return()
     test_new()

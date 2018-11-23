@@ -34,7 +34,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                 ctx.restart();
                 ctx.eval(fnTest, nullptr);
             } else {
-                cout << "function 'test' not found\n";
+                cout << "function '"  << mainFnName << " ' not found\n";
             }
         }
     }

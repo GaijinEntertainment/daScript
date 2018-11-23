@@ -1,10 +1,10 @@
 parser
-    support initialization in global let
+    support array initialization and object initializatoin (c-tors?)
     support auto in let
     support late binding of default arguments
     support auto in function default arguments
     support auto in function arguments
-	support assigning of the structures and default values for the structures
+	support assigning of the structures
 
 misc
     basic type - test pointer casts
@@ -14,7 +14,6 @@ misc
     support multi-dimensional array new (or regular array new)
 	support <- aka copy object
     support (unsafe ?)
-    support extern functions stackwalk
 	simplified exception handling
 
 optimization \ ast massage

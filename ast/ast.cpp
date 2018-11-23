@@ -377,6 +377,7 @@ namespace yzg
     ExpressionPtr ExprRef2Value::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprRef2Value>(expr);
+        Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
@@ -429,6 +430,7 @@ namespace yzg
     ExpressionPtr ExprPtr2Ref::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprPtr2Ref>(expr);
+        Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
@@ -461,6 +463,7 @@ namespace yzg
     ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprAssert>(expr);
+        Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         cexpr->message = message;
         return cexpr;
@@ -495,6 +498,7 @@ namespace yzg
     ExpressionPtr ExprDebug::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprDebug>(expr);
+        Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         cexpr->message = message;
         return cexpr;
@@ -531,6 +535,7 @@ namespace yzg
     ExpressionPtr ExprSizeOf::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprSizeOf>(expr);
+        Expression::clone(cexpr);
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
         if ( typeexpr )
@@ -569,6 +574,7 @@ namespace yzg
     ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprNew>(expr);
+        Expression::clone(cexpr);
         cexpr->typeexpr = typeexpr;
         return cexpr;
     }
@@ -628,6 +634,7 @@ namespace yzg
     ExpressionPtr ExprAt::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprAt>(expr);
+        Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         cexpr->index = index->clone();
         return cexpr;
@@ -647,6 +654,7 @@ namespace yzg
     ExpressionPtr ExprBlock::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprBlock>(expr);
+        Expression::clone(cexpr);
         for ( auto & subexpr : list ) {
             cexpr->list.push_back(subexpr->clone());
         }
@@ -694,6 +702,7 @@ namespace yzg
     ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprField>(expr);
+        Expression::clone(cexpr);
         cexpr->name = name;
         cexpr->value = value->clone();
         cexpr->field = field;
@@ -742,6 +751,7 @@ namespace yzg
     ExpressionPtr ExprVar::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprVar>(expr);
+        Expression::clone(cexpr);
         cexpr->name = name;
         cexpr->variable = variable; // todo: lookup again?
         cexpr->local = local;
@@ -821,7 +831,8 @@ namespace yzg
     
     ExpressionPtr ExprOp1::clone( const ExpressionPtr & expr ) const
     {
-        auto cexpr = clonePtr<ExprOp1,ExprOp>(expr);
+        auto cexpr = clonePtr<ExprOp1>(expr);
+        ExprOp::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
@@ -866,7 +877,8 @@ namespace yzg
     
     ExpressionPtr ExprOp2::clone( const ExpressionPtr & expr ) const
     {
-        auto cexpr = clonePtr<ExprOp2,ExprOp>(expr);
+        auto cexpr = clonePtr<ExprOp2>(expr);
+        ExprOp::clone(cexpr);
         cexpr->left = left->clone();
         cexpr->right = right->clone();
         return cexpr;
@@ -921,7 +933,8 @@ namespace yzg
     
     ExpressionPtr ExprOp3::clone( const ExpressionPtr & expr ) const
     {
-        auto cexpr = clonePtr<ExprOp3,ExprOp>(expr);
+        auto cexpr = clonePtr<ExprOp3>(expr);
+        ExprOp::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         cexpr->left = left->clone();
         cexpr->right = right->clone();
@@ -1002,6 +1015,7 @@ namespace yzg
     ExpressionPtr ExprIfThenElse::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprIfThenElse>(expr);
+        Expression::clone(cexpr);
         cexpr->cond = cond->clone();
         cexpr->if_true = if_true->clone();
         if ( if_false )
@@ -1047,6 +1061,7 @@ namespace yzg
     ExpressionPtr ExprWhile::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprWhile>(expr);
+        Expression::clone(cexpr);
         cexpr->cond = cond->clone();
         cexpr->body = body->clone();
         return cexpr;
@@ -1082,6 +1097,7 @@ namespace yzg
     ExpressionPtr ExprForeach::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprForeach>(expr);
+        Expression::clone(cexpr);
         cexpr->head = head->clone();
         cexpr->iter = iter->clone();
         cexpr->body = body->clone();
@@ -1129,6 +1145,7 @@ namespace yzg
     ExpressionPtr ExprTryCatch::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprTryCatch>(expr);
+        Expression::clone(cexpr);
         cexpr->try_this = try_this->clone();
         cexpr->catch_that = catch_that->clone();
         return cexpr;
@@ -1160,6 +1177,7 @@ namespace yzg
     ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprLet>(expr);
+        Expression::clone(cexpr);
         for ( auto & var : variables )
             cexpr->variables.push_back(var);    // TODO: clone variable???
         cexpr->subexpr = subexpr->clone();
@@ -1195,6 +1213,8 @@ namespace yzg
         auto sp = context.stackTop;
         auto sz = context.local.size();
         for ( auto & var : variables ) {
+            if ( var->type->ref )
+                context.error("local variable can't be reference", var->at);
             context.local.push_back(var);
             if ( var->init ) {
                 var->init->inferType(context);
@@ -1216,6 +1236,28 @@ namespace yzg
         type = make_shared<TypeDecl>();
     }
     
+    SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local)
+    {
+        SimNode * copy = nullptr;
+        SimNode * init = var->init->simulate(context);
+        SimNode * get;
+        if ( local )
+            get = context.makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
+        else
+            get = context.makeNode<SimNode_GetGlobal>(var->init->at, var->index);
+        switch ( var->type->baseType ) {
+            case Type::tBool:       copy = context.makeNode<SimNode_CopyValue<bool>>(var->init->at, get, init);       break;
+            case Type::tInt:        copy = context.makeNode<SimNode_CopyValue<int32_t>>(var->init->at, get, init);    break;
+            case Type::tUInt:       copy = context.makeNode<SimNode_CopyValue<uint32_t>>(var->init->at, get, init);   break;
+            case Type::tFloat:      copy = context.makeNode<SimNode_CopyValue<float>>(var->init->at, get, init);      break;
+            case Type::tString:     copy = context.makeNode<SimNode_CopyValue<char *>>(var->init->at, get, init);     break;
+            case Type::tPointer:    copy = context.makeNode<SimNode_CopyValue<void *>>(var->init->at, get, init);     break;
+            default: {
+                assert(0 && "unsupported? can't assign initial value");
+            }
+        }
+        return copy;
+    }
     
     SimNode * ExprLet::simulate (Context & context) const
     {
@@ -1224,27 +1266,8 @@ namespace yzg
         let->list = (SimNode **) context.allocate(let->total * sizeof(SimNode*));
         int vi = 0;
         for ( auto & var : variables ) {
-            int size = var->type->getSizeOf();
             if ( var->init ) {
-                SimNode * copy = nullptr;
-                auto init = var->init->simulate(context);
-                auto get = context.makeNode<SimNode_GetLocal>(at, var->stackTop);
-                if ( var->init->type->isRef() ) {
-                    copy = context.makeNode<SimNode_CopyRefValue>(at, get, init, size);
-                } else {
-                    switch ( var->type->baseType ) {
-                        case Type::tBool:       copy = context.makeNode<SimNode_CopyValue<bool>>(at, get, init);       break;
-                        case Type::tInt:        copy = context.makeNode<SimNode_CopyValue<int32_t>>(at, get, init);    break;
-                        case Type::tUInt:       copy = context.makeNode<SimNode_CopyValue<uint32_t>>(at, get, init);   break;
-                        case Type::tFloat:      copy = context.makeNode<SimNode_CopyValue<float>>(at, get, init);      break;
-                        case Type::tString:     copy = context.makeNode<SimNode_CopyValue<char *>>(at, get, init);     break;
-                        case Type::tPointer:    copy = context.makeNode<SimNode_CopyValue<void *>>(at, get, init);     break;
-                        default: {
-                            assert(0 && "unsupported? can't assign initial value");
-                        }
-                    }
-                }
-                let->list[vi++] = copy;
+                let->list[vi++] = simulateInit(context, var, true);
             } else {
                 let->list[vi++] = context.makeNode<SimNode_InitLocal>(at, var->stackTop, var->type->getSizeOf());
             }
@@ -1258,6 +1281,7 @@ namespace yzg
     ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprCall>(expr);
+        Expression::clone(cexpr);
         cexpr->name = name;
         for ( auto & arg : arguments ) {
             cexpr->arguments.push_back(arg->clone());
@@ -1541,6 +1565,7 @@ namespace yzg
     void Program::simulate ( Context & context )
     {
         context.thisProgram = this;
+        vector<SimNode *> globalInit;
         context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(globals.size()*sizeof(GlobalVariable)) );
         for ( auto & it : globals ) {
             auto pvar = it.second;
@@ -1551,6 +1576,8 @@ namespace yzg
             void * data = context.allocate(gvar.size);
             memset(data, 0, gvar.size);
             gvar.value = cast<void *>::from(data);
+            if ( pvar->init )
+                globalInit.push_back(ExprLet::simulateInit(context, pvar, false));
         }
         context.totalVariables = (int) globals.size();
         context.functions = (SimFunction *) context.allocate( totalFunctions*sizeof(SimFunction) );
@@ -1565,10 +1592,24 @@ namespace yzg
             gfun.stackSize = pfun->totalStackSize;
             gfun.debug = makeFunctionDebugInfo(context, *pfun);
         }
-        context.linearAllocatorExecuteBase = context.linearAllocator;
-        context.restart();
+        if ( globalInit.size() ) {
+            if ( globalInit.size()>1 ) {
+                auto block = context.makeNode<SimNode_Block>(LineInfo());
+                block->total = int(globalInit.size());
+                block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
+                for ( int i = 0; i != block->total; ++i )
+                    block->list[i] = globalInit[i];
+                context.globalInitializtion = block;
+            } else {
+                context.globalInitializtion = globalInit[0];
+            }
+        }
         sdebug.clear();
         context.thisProgram = nullptr;
+        context.linearAllocatorExecuteBase = context.linearAllocator;
+        context.restart();
+        context.runInitScript();
+        context.restart();
     }
     
     TypeDeclPtr Program::makeStructureType ( const string & name ) const
@@ -1585,6 +1626,7 @@ namespace yzg
     
     void Program::error ( const string & str, const LineInfo & at )
     {
+        cout << "ERROR: " << str << ", at " << at.describe() << "\n";
         errors.emplace_back(str,at);
         failToCompile = true;
     }

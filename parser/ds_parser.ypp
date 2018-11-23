@@ -258,7 +258,8 @@ expression_let
                         pVar->name = name;
                         pVar->at = pDecl->at;
                         pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        pVar->init = ExpressionPtr(pDecl->pInit);   // TODO: clone
+                        if ( pDecl->pInit )
+                            pVar->init = pDecl->pInit->clone();
                         pLet->variables.push_back(pVar);
                     } else {
                         yyerror("local variable is already declared " + name,tokAt(@list));
@@ -266,6 +267,7 @@ expression_let
                 }
             }
         }
+        deleteVariableDeclarationList($list);
         $$ = pLet;
     }
     ;
@@ -367,7 +369,8 @@ global_let
                         pVar->name = name;
                         pVar->at = pDecl->at;
                         pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        pVar->init = ExpressionPtr(pDecl->pInit);
+                        if ( pDecl->pInit )
+                            pVar->init = pDecl->pInit->clone();
                         g_Program->globals[name] = pVar;
                     } else {
                         yyerror("global variable is already declared " + name,pDecl->at);

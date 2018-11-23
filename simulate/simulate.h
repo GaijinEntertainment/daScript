@@ -91,10 +91,14 @@ namespace yzg
         
         void stackWalk();
     
-
-        __forceinline void restart() {
+        __forceinline void restart( ) {
             linearAllocator = linearAllocatorExecuteBase;
             stackTop = stack + stackSize;
+        }
+        
+        __forceinline void runInitScript (  ) {
+            if ( globalInitializtion )
+                globalInitializtion->eval(*this);
         }
         
         __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
@@ -153,6 +157,7 @@ namespace yzg
         char * linearAllocatorBase = nullptr;
         char * linearAllocatorExecuteBase = nullptr;
         GlobalVariable * globalVariables = nullptr;
+        SimNode * globalInitializtion = nullptr;
         SimFunction * functions = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
@@ -363,22 +368,6 @@ namespace yzg
             return value;
         }
         __m128 value;
-    };
-    
-    // COPY REFERENCE VALUE
-    struct SimNode_CopyRefValue : SimNode {
-        SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, int32_t sz)
-            : SimNode(at), l(ll), r(rr), size(sz) {};
-        virtual __m128 eval ( Context & context ) override {
-            __m128 ll = l->eval(context);
-            __m128 rr = r->eval(context);
-            auto pl = cast<void *>::to(ll);
-            auto pr = cast<void *>::to(rr);
-            memcpy ( pl, pr, size );
-            return ll;
-        }
-        SimNode * l, * r;
-        int32_t size;
     };
     
     // COPY VALUE
