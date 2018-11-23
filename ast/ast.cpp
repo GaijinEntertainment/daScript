@@ -1016,6 +1016,7 @@ namespace yzg
     void ExprIfThenElse::inferType(InferTypeContext & context)
     {
         cond->inferType(context);
+        if ( !cond->type ) return;
         if ( !cond->type->isSimpleType(Type::tBool) ) {
             context.error("if-then-else condition must be boolean", at);
         } else {

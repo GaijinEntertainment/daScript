@@ -531,6 +531,9 @@ namespace yzg
     class ExprIfThenElse : public Expression
     {
     public:
+        ExprIfThenElse () = default;
+        ExprIfThenElse ( const LineInfo & a, ExpressionPtr c, ExpressionPtr ift, ExpressionPtr iff )
+            : Expression(a), cond(c), if_true(ift), if_false(iff) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;

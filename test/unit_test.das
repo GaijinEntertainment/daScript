@@ -153,6 +153,33 @@ def test_and_or
         assert((inc_true(x) | inc_false(x))==true, "true | false = true")
         assert(x==7,"right did not happen")
 
+def test_if_then_else
+    let
+        x:int=1
+    in
+        if x==1
+            x=2
+        assert(x==2)
+        if x==2
+            x=3
+        else
+            x=0
+        assert(x==3)
+        if x==2
+            x=0
+        elif x==3
+            x=4
+        else
+            x=0
+        assert(x==4)
+        if (x=4)==4
+            x=5
+        elif x==5       // this elif won't happen
+            x=0
+        else
+            x=0
+        assert(x==5)
+
 // this is where unit tests are
 def test
     assert(true,"this should pass")
@@ -162,6 +189,7 @@ def test
     test_prefix_postfix()
     test_array()
     test_and_or()
+    test_if_then_else()
     test_stackwalk()
 
 
