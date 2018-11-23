@@ -61,6 +61,28 @@ simulate/simulate.h
 )
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
+include_directories(libDaScript PUBLIC ast misc simulate)
+ADD_LIBRARY(libDaScript ${AST_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
+SETUP_CPP11(libDaScript)
+ADD_PRECOMPILED_HEADER(libDaScript misc/precomp.h misc/precomp.h)
+
+add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
+add_dependencies(libDaScript daScriptGenDir)
+
+# Stand alone command line compiler
+
+SET(DASCRIPT_MAIN_SRC
+daScript/main.cpp
+)
+
+include_directories(daScript PUBLIC ast lexer misc simulate test)
+add_executable(daScript ${DASCRIPT_MAIN_SRC} )
+TARGET_LINK_LIBRARIES(daScript libDaScript)
+ADD_DEPENDENCIES(daScript libDaScript)
+SETUP_CPP11(daScript)
+
+# Test
+
 SET(TEST_SRC
 test/unit_test.das
 test/profile_array_of_structures.das
@@ -68,15 +90,14 @@ test/profile_array_of_structures_vec.das
 )
 SOURCE_GROUP_FILES("test" TEST_SRC)
 
-SET(MAIN_SRC
-yzg/main.cpp
+SET(TEST_MAIN_SRC
+test/main.cpp
 )
 
-include_directories(yzg PUBLIC ast lexer misc simulate test yzg)
+include_directories(daScriptTest PUBLIC ast lexer misc simulate test)
+add_executable(daScriptTest ${TEST_SRC} ${TEST_MAIN_SRC} )
+TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
+ADD_DEPENDENCIES(daScriptTest libDaScript)
+SETUP_CPP11(daScriptTest)
 
-add_executable(yzg ${AST_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
-SETUP_CPP11(yzg)
-ADD_PRECOMPILED_HEADER(yzg misc/precomp.h misc/precomp.h)
 
-add_custom_target(yzgGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
-add_dependencies(yzg yzgGenDir)
