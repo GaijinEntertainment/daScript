@@ -176,6 +176,8 @@ def test_if_then_else
             x=5
         elif x==5       // this elif won't happen
             x=0
+        elif x==4       // this elif won't happen either
+            x =0
         else
             x=0
         assert(x==5)
