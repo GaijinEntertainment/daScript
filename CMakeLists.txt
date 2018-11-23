@@ -84,6 +84,7 @@ SETUP_CPP11(daScript)
 # Test
 
 SET(TEST_SRC
+test/hello_world.das
 test/unit_test.das
 test/profile_array_of_structures.das
 test/profile_array_of_structures_vec.das

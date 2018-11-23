@@ -23,7 +23,8 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                 reportError(str, err.at.line, err.at.column, err.what );
             }
         } else {
-            cout << *program << "\n";
+            if ( outputProgramCode )
+                cout << *program << "\n";
             Context ctx(&str);
             program->simulate(ctx);
             int fnTest = ctx.findFunction(mainFnName.c_str());

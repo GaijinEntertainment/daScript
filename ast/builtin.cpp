@@ -4,8 +4,14 @@
 
 namespace yzg
 {
+    void builtin_print ( const char * message )
+    {
+        if ( message ) cout << message;
+    }
+    
     void Program::addBuiltinFunctions()
     {
+        addExtern<decltype(builtin_print),builtin_print>(*this,"print");
         addBuiltIn(make_shared<BuiltInFn<SimNode_StackWalk,void>>("stackwalk", *this));
     }
     
