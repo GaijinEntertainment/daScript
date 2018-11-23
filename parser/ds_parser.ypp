@@ -70,7 +70,7 @@
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
 %token  SHLEQU      SHREQU      ANDEQU      OREQU       XOREQU
 %token  SHL         SHR         ADDADD      SUBSUB      LEEQU
-%token  GREQU       EQUEQU      NOTEQU      ARROW
+%token  GREQU       EQUEQU      NOTEQU      RARROW      LARROW
 
 %token<i>   INTEGER
 %token<ui>  UNSIGNED_INTEGER
@@ -107,7 +107,7 @@
 
 /* operation precedence*/
 %left   ','
-%right  '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU SHREQU SHLEQU ANDEQU OREQU XOREQU
+%right  '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU SHREQU SHLEQU ANDEQU OREQU XOREQU LARROW
 %right  '?' ':'
 %left   '|'
 %left   '^'
@@ -118,7 +118,7 @@
 %left   '-' '+'
 %left   '*' '/' '%'
 %right  UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
-%left   POST_INC POST_DEC '.' '[' ']' '(' ')' ARROW
+%left   POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW
 
 %%
 
@@ -298,6 +298,7 @@ expr
     |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }
     |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),Operator::sub,ExpressionPtr($subexpr)); }
     |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),Operator::add,ExpressionPtr($subexpr)); }
+    |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '='[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::eq,ExpressionPtr($left),ExpressionPtr($right)); }
     |   expr[left] ADDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::addEqu, ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] SUBEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::subEqu, ExpressionPtr($left), ExpressionPtr($right)); }
@@ -330,7 +331,7 @@ expr
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
             $$ = parseFunctionArguments(new ExprCall(tokAt(@type),to_string($type)),$arguments);
         }
-    |   expr[subexpr]   ARROW[loc]              { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   expr[subexpr] RARROW[loc]               { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   _DEBUG[loc] '(' expr[subexpr] ')'                       { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr)); }

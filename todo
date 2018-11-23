@@ -8,11 +8,9 @@ parser
 
 misc
     basic type - test pointer casts
-    support 'clone' for variables, redo name lookup upstream during cloning?
     simplify builtin initialization
     support multi-dimensional array foreach
     support multi-dimensional array new (or regular array new)
-	support <- aka copy object
     support (unsafe ?)
 	simplified exception handling
 
@@ -26,34 +24,17 @@ optimization \ ast massage
 
 // recent
 
-STACKWALK
-
-iterations took:0.000544
-foreach iterations took:0.000298
-c++ version took:0.000019
-interop version took:0.000429
-foreach interop version took:0.000160
-10000-interop version took:0.000241
-ratio sim / c: 28.413156
-ratio foreach sim / c: 15.568833
-ratio interop / c: 22.392065
-ratio foreach interop / c: 8.374941
-ratio 10000-interop / c: 12.563352
-ratio sim / interop: 1.268894
-
-NO STACKWALK
-
-iterations took:0.000544
-foreach iterations took:0.000296
-c++ version took:0.000019
-interop version took:0.000393			vs 0.000429
-foreach interop version took:0.000145	vs 0.000160
-10000-interop version took:0.000243
-ratio sim / c: 29.220096
-ratio foreach sim / c: 15.886350
-ratio interop / c: 21.105317
-ratio foreach interop / c: 7.802161
-ratio 10000-interop / c: 13.040912
-ratio sim / interop: 1.384490
+iterations took:0.000526
+foreach iterations took:0.000301
+c++ version took:0.000017
+interop version took:0.000380
+foreach interop version took:0.000145
+10000-interop version took:0.000215
+ratio sim / c: 30.503889
+ratio foreach sim / c: 17.468833
+ratio interop / c: 22.052467
+ratio foreach interop / c: 8.413639
+ratio 10000-interop / c: 12.464887
+ratio sim / interop: 1.383242
 
 

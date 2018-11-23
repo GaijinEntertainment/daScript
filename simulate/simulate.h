@@ -385,6 +385,22 @@ namespace yzg
         SimNode * l, * r;
     };
     
+    // COPY REFERENCE VALUE
+    struct SimNode_CopyRefValue : SimNode {
+        SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, int32_t sz)
+        : SimNode(at), l(ll), r(rr), size(sz) {};
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ll = l->eval(context);
+            __m128 rr = r->eval(context);
+            auto pl = cast<void *>::to(ll);
+            auto pr = cast<void *>::to(rr);
+            memcpy ( pl, pr, size );
+            return ll;
+        }
+        SimNode * l, * r;
+        int32_t size;
+    };
+    
     // BLOCK
     struct SimNode_Block : SimNode {
         SimNode_Block ( const LineInfo & at ) : SimNode(at) {}

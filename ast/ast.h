@@ -168,6 +168,7 @@ namespace yzg
     {
     public:
         friend ostream& operator<< (ostream& stream, const Variable & var);
+        VariablePtr clone() const;
     public:
         string          name;
         TypeDeclPtr     type;
@@ -384,6 +385,18 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     public:
         ExpressionPtr   left, right;
+    };
+    
+    // this copies one object to the other
+    class ExprCopy : public ExprOp2
+    {
+    public:
+        ExprCopy () = default;
+        ExprCopy ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {};
+        virtual void inferType(InferTypeContext & context) override;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
     };
     
     // this only exists during parsing, and can't be

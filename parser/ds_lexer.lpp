@@ -136,7 +136,8 @@ L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yy
     nested_curly_braces ++;
     return '{';
 }
-<normal>"\-\>"                              return ARROW;
+<normal>"\-\>"                              return RARROW;
+<normal>"\<\-"                              return LARROW;
 <normal>"\>\>"                              return SHR;
 <normal>"\<\<"                              return SHL;
 <normal>"\+\="                              return ADDEQU;

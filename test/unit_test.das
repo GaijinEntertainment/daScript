@@ -53,11 +53,6 @@ def verify_default_ball(b:Ball)
     assert(b.position==float3(1.0,2.0,3.0),"default ball position is 1,2,3")
     assert(b.radius==5.0,"default ball radius is 5")
 
-def copy_ball(a,b:Ball)
-    // todo: implement copy of the object
-    a.position = b.position
-    a.radius = b.radius
-
 def test_ref_ptr(a:Ball*&;b:Ball*)
     a = b
     assert(a==b,"now same pointer")
@@ -80,7 +75,7 @@ def test_new
             qd:Ball* = new Ball
         in
             debug(qc,"qc")
-            copy_ball(qb,qc->)
+            qb <- qc->
             verify_default_ball(qb)
             verify_default_ball(qc->)
             qc = null
@@ -212,6 +207,26 @@ def test_globals
         assert(global_x==5 & y==5)
     print("ok\n")
 
+def test_copy
+    print("test copy:\n")
+    let
+        a,aCopy:int[10]
+        b,bCopy:Ball
+        idx:int
+    in
+        idx = 0
+        while idx!=10
+            a[idx++] = idx
+        aCopy <- a
+        idx = 0
+        while idx!=10
+            assert(aCopy[idx++]!=idx)
+        b.position = float3(1.0,2.0,3.0)
+        b.radius = 5.0
+        bCopy <- b
+        verify_default_ball(b)
+    print("ok")
+
 // this is where unit tests are
 def test
     print("unit tests started\n")
@@ -224,6 +239,7 @@ def test
     test_array()
     test_and_or()
     test_if_then_else()
+    test_copy()
     test_stackwalk()
     print("unit tests finished\n")
 

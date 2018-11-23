@@ -274,6 +274,18 @@ namespace yzg
         return stream;
     }
     
+    VariablePtr Variable::clone() const
+    {
+        auto pVar = make_shared<Variable>();
+        pVar->name = name;
+        pVar->type = make_shared<TypeDecl>(*type);
+        if ( init )
+            pVar->init = init->clone();
+        pVar->at = at;
+        return pVar;
+    }
+
+    
     // function
     
     ostream& operator<< (ostream& stream, const Function & func)
@@ -988,6 +1000,48 @@ namespace yzg
         return nullptr;
     }
     
+    // ExprCopy
+    
+    
+    void ExprCopy::log(ostream& stream, int depth) const
+    {
+        logType(stream);
+        stream << "(<- ";
+        left->log(stream, depth);
+        stream << " ";
+        right->log(stream, depth);
+        stream << ")";
+    }
+    
+    void ExprCopy::inferType(InferTypeContext & context)
+    {
+        left->inferType(context);
+        right->inferType(context);
+        if ( !left->type ) return;
+        if ( !right->type ) return;
+        if ( !left->type->isSameType(*right->type,true) ) {
+            context.error("can only copy same type", at);
+        } else if ( !left->type->isRef() ) {
+            context.error("can only copy to reference", at);
+        }
+        type = make_shared<TypeDecl>(*left->type);  // we return left
+    }
+    
+    ExpressionPtr ExprCopy::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprCopy>(expr);
+        ExprOp2::clone(cexpr);
+        return cexpr;
+    }
+    
+    SimNode * ExprCopy::simulate (Context & context) const
+    {
+        return context.makeNode<SimNode_CopyRefValue>(at,
+                                                      left->simulate(context),
+                                                      right->simulate(context),
+                                                      left->type->getSizeOf());
+    }
+    
     // ExprReturn
     
     void ExprReturn::log(ostream& stream, int depth) const
@@ -1179,7 +1233,7 @@ namespace yzg
         auto cexpr = clonePtr<ExprLet>(expr);
         Expression::clone(cexpr);
         for ( auto & var : variables )
-            cexpr->variables.push_back(var);    // TODO: clone variable???
+            cexpr->variables.push_back(var->clone());
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
