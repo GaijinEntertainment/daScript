@@ -56,6 +56,7 @@ namespace yzg
         friend struct SimNode_Call;
         friend struct SimNode_InitLocal;
         friend struct SimNode_Return;
+        friend struct SimNode_Assert;
     public:
         Context(const string * lines);
         ~Context();
@@ -63,7 +64,7 @@ namespace yzg
         __forceinline void * allocate ( uint32_t size ) {
             size = (size + 0x0f) & ~0x0f;
             if ( linearAllocator - linearAllocatorBase + size > linearAllocatorSize )
-                throw runtime_error("out of linear allocator space");
+                throw_error("out of linear allocator space");
             void * result = linearAllocator;
             linearAllocator += size;
             return result;
@@ -89,6 +90,7 @@ namespace yzg
         int findVariable ( const char * name ) const;
         
         void stackWalk();
+    
 
         __forceinline void restart() {
             linearAllocator = linearAllocatorExecuteBase;
@@ -98,6 +100,18 @@ namespace yzg
         __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
             return call(fnIndex, args, 0);
         }
+        
+        // throw
+        void throw_error ( const char * message );
+        
+        // output to stdout or equivalent
+        virtual void to_out ( const char * message );
+        
+        // output to stderr or equivalent
+        virtual void to_err ( const char * message );
+        
+        // what to do in case of breakpoint
+        virtual void breakPoint(int column, int line) const;
 
     protected:
         
@@ -116,7 +130,7 @@ namespace yzg
             char * pushStack = stackTop;
             stackTop -= fn.stackSize;
             if ( stack - stackTop > stackSize )
-                throw runtime_error("stack overflow");
+                throw_error("stack overflow");
             // fill prologue
             Prologue * pp = (Prologue *) stackTop;
             pp->result =        _mm_setzero_ps();
@@ -143,6 +157,7 @@ namespace yzg
         int totalVariables = 0;
         int totalFunctions = 0;
         const string * debugInput = nullptr;
+        class Program * thisProgram = nullptr;
     public:
         char * stackTop = nullptr;
         char * stack = nullptr;
@@ -151,16 +166,7 @@ namespace yzg
     
     struct SimNode_Assert : SimNode {
         SimNode_Assert ( const LineInfo & at, SimNode * s, const char * m ) : SimNode(at), subexpr(s), message(m) {}
-        virtual __m128 eval ( Context & context ) override {
-            if ( !cast<bool>::to(subexpr->eval(context)) ) {
-                if ( message ) {
-                    throw runtime_error("assert failed at " + debug.describe() + ", " + message);
-                } else {
-                    throw runtime_error("assert failed at " + debug.describe());
-                }
-            }
-            return _mm_setzero_ps();
-        }
+        virtual __m128 eval ( Context & context ) override;
         SimNode *       subexpr;
         const char *    message;
     };
@@ -173,7 +179,7 @@ namespace yzg
             __m128 rv = value->eval(context);
             char * prv = cast<char *>::to(rv);
             if ( checkForNull && !prv )
-                throw runtime_error("dereferencing nil pointer");
+                context.throw_error("dereferencing nil pointer");
             return cast<char *>::from( prv + offset );
         }
         SimNode *   value;
@@ -188,7 +194,7 @@ namespace yzg
             char * pValue = cast<char *>::to(value->eval(context));
             uint32_t idx = cast<uint32_t>::to(index->eval(context));
             if ( idx >= range )
-                throw runtime_error("index out of range");
+                context.throw_error("index out of range");
             return cast<char *>::from(pValue + idx*stride);    // TODO: add range check
             
         }
@@ -251,23 +257,16 @@ namespace yzg
         }
     };
     
-    // "STACKWALK"
-    struct SimNode_StackWalk : SimNode {
-        SimNode_StackWalk ( const LineInfo & at ) : SimNode(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            context.stackWalk();
-            return _mm_setzero_ps();
-        }
-    };
-    
     // "DEBUG"
     struct SimNode_Debug : SimNode {
         SimNode_Debug ( const LineInfo & at, SimNode * s, TypeInfo * ti, char * msg )
             : SimNode(at), subexpr(s), typeInfo(ti), message(msg) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 res = subexpr->eval(context);
-            if ( message ) cout << message << " ";
-            cout << debug_type(typeInfo) << " = " << debug_value(res, typeInfo) << " at " << debug.describe() << "\n";
+            stringstream ssw;
+            if ( message ) ssw << message << " ";
+            ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo) << " at " << debug.describe() << "\n";
+            context.to_out(ssw.str().c_str());
             return res;
         }
         SimNode *       subexpr;
@@ -339,7 +338,7 @@ namespace yzg
             __m128 ptr = subexpr->eval(context);
             void * p = cast<void *>::to(ptr);
             if ( p == nullptr )
-                throw runtime_error("dereferencing nil pointer");
+                context.throw_error("dereferencing nil pointer");
             return ptr;
         }
         SimNode * subexpr;

@@ -86,7 +86,6 @@
 <normal>"return"                                        return _RETURN;
 <normal>"assert"                                        return _ASSERT;
 <normal>"debug"                                         return _DEBUG;
-<normal>"breakpoint"                                    return _BREAKPOINT;
 <normal>"type"                                          return _TYPE;
 <normal>"new"                                           return _NEW;
 <normal>"sizeof"                                        return _SIZEOF;

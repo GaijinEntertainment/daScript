@@ -3,6 +3,7 @@ struct Ball
     radius:float
 
 def test_sizeof
+    print("test sizeof:\n")
     // verifying if sizeof accepts expression, not just type
     let
         a:int
@@ -28,6 +29,7 @@ def test_sizeof
     // verifying structure sizes
     assert(sizeof(type Ball*)==8,"ball pointer is 8 bytes")
     assert(sizeof(type Ball)==16,"ball is float3+float")
+    print("ok\n")
 
 def inc(a:int&)
     a ++
@@ -36,6 +38,7 @@ def madd(a,b,c:int):int
     return = a*b+c
 
 def test_return
+    print("test return:\n")
     let
         a:int=2
         b:int=3
@@ -43,6 +46,7 @@ def test_return
     in
         inc(c)
         assert(madd(2,3,4)==10,"2*3+4==10")
+    print("ok\n")
 
 def verify_default_ball(b:Ball)
     debug(b,"verifying ball")
@@ -62,6 +66,7 @@ def test_ret_ptr(a:Ball*):Ball*
     return = a
 
 def test_new
+    print("test new:\n")
     let
         b:Ball* = new Ball
     in
@@ -86,8 +91,10 @@ def test_new
             qd = test_ret_ptr(null)
             assert(qd==null,"null")
             assert(qd!=qc,"now one is null")
+    print("ok\n")
 
 def test_array
+    print("test array:\n")
     let
         arr:int[10]
         idx:int = 0
@@ -98,8 +105,10 @@ def test_array
         idx = 0
         foreach val in arr
             assert(arr[idx++]==val,"we just set it that way")
+    print("ok\n")
 
 def test_prefix_postfix
+    print("test prefix postfix:\n")
     let
         a:int = 1
         b:int = 2
@@ -112,6 +121,7 @@ def test_prefix_postfix
         assert(b==3,"3==3")
         a = ++b+b++
         assert(a==8,"8==8")
+    print("ok\n")
 
 def stack_depth_5(a:string)
     assert(a=="from c++")
@@ -126,11 +136,13 @@ def stack_depth_2(b:float&;a:int&;c:string)
     stack_depth_3(debug(a,"a&"),debug(b,"b&"))
 
 def test_stackwalk
+    print("test stackwalk:\n")
     let
         a:float=1.0
         b:int=2
     in
         stack_depth_2(debug(a,"a"),debug(b,"b"),"and string")
+    print("ok\n")
 
 def inc_true(x:int &):bool
     x ++
@@ -141,6 +153,7 @@ def inc_false(x:int &):bool
     return = false
 
 def test_and_or
+    print("test and or:\n")
     let
         x:int=1
     in
@@ -152,8 +165,10 @@ def test_and_or
         assert(x==6,"both happen")
         assert((inc_true(x) | inc_false(x))==true, "true | false = true")
         assert(x==7,"right did not happen")
+    print("ok\n")
 
 def test_if_then_else
+    print("test if-then-else:\n")
     let
         x:int=1
     in
@@ -181,9 +196,11 @@ def test_if_then_else
         else
             x=0
         assert(x==5)
+    print("ok\n")
 
 // this is where unit tests are
 def test
+    print("unit tests started\n")
     assert(true,"this should pass")
     test_sizeof()
     test_return()
@@ -193,6 +210,7 @@ def test
     test_and_or()
     test_if_then_else()
     test_stackwalk()
+    print("unit tests finished\n")
 
 
 

@@ -11,8 +11,10 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
 {
     string str;
     ifstream t(fn);
-    if ( !t.is_open() )
-        throw "can't open";
+    if ( !t.is_open() ) {
+        cout << "can't open " << endl;
+        return;
+    }
     t.seekg(0, ios::end);
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
@@ -20,7 +22,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     if ( auto program = parseDaScript(str.c_str(), nullptr) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
-                reportError(str, err.at.line, err.at.column, err.what );
+                cout << reportError(&str, err.at.line, err.at.column, err.what );
             }
         } else {
             if ( outputProgramCode )

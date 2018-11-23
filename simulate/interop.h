@@ -46,7 +46,7 @@ namespace yzg
             char * pushStack = context.stackTop;
             context.stackTop -= sizeof(Prologue);
             if ( context.stack - context.stackTop > context.stackSize )
-                throw runtime_error("stack overflow");
+                context.throw_error("stack overflow");
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
             pp->result =        _mm_setzero_ps();

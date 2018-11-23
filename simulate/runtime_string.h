@@ -37,6 +37,6 @@ namespace yzg
     string unescapeString ( const string & input );
     string escapeString ( const string & input );
     string to_string_ex ( double dnum );
-    void reportError ( const string & st, int row, int col, const string & message );
+    string reportError ( const string * st, int row, int col, const string & message );
 }
 

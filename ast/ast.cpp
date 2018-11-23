@@ -313,8 +313,10 @@ namespace yzg
     
     SimNode * Function::simulate (Context & context) const
     {
-        if ( builtIn )
-            throw runtime_error("can only simulate non built-in function");
+        if ( builtIn ) {
+            assert(0 && "can only simulate non built-in function");
+            return nullptr;
+        }
         return body->simulate(context);
     }
     
@@ -335,8 +337,10 @@ namespace yzg
     
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const
     {
-        if ( !expr )
-            throw runtime_error("unsupported expression");
+        if ( !expr ) {
+            assert(0 && "unsupported expression");
+            return nullptr;
+        }
         expr->at = at;
         expr->type = type ? make_shared<TypeDecl>(*type) : nullptr;
         return expr;
@@ -413,7 +417,10 @@ namespace yzg
             case Type::tUInt2:      return context.makeNode<SimNode_Ref2Value<uint2>>(at,subexpr->simulate(context));
             case Type::tUInt3:      return context.makeNode<SimNode_Ref2Value<uint3>>(at,subexpr->simulate(context));
             case Type::tUInt4:      return context.makeNode<SimNode_Ref2Value<uint4>>(at,subexpr->simulate(context));
-            default:                throw runtime_error("can't dereference type");
+            default:                {
+                assert(0 && "can't dereference type");
+                return nullptr;
+            }
         }
     }
     
@@ -800,8 +807,10 @@ namespace yzg
     
     ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const
     {
-        if ( !expr )
-            throw runtime_error("can't clone ExprOp");
+        if ( !expr ) {
+            assert(0 && "can't clone ExprOp");
+            return nullptr;
+        }
         auto cexpr = static_pointer_cast<ExprOp>(expr);
         cexpr->op = op;
         cexpr->func = func;
@@ -1230,8 +1239,9 @@ namespace yzg
                         case Type::tFloat:      copy = context.makeNode<SimNode_CopyValue<float>>(at, get, init);      break;
                         case Type::tString:     copy = context.makeNode<SimNode_CopyValue<char *>>(at, get, init);     break;
                         case Type::tPointer:    copy = context.makeNode<SimNode_CopyValue<void *>>(at, get, init);     break;
-                        default:
-                            throw runtime_error("unsupported? can't assign initial value");
+                        default: {
+                            assert(0 && "unsupported? can't assign initial value");
+                        }
                     }
                 }
                 let->list[vi++] = copy;
@@ -1530,6 +1540,7 @@ namespace yzg
     
     void Program::simulate ( Context & context )
     {
+        context.thisProgram = this;
         context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(globals.size()*sizeof(GlobalVariable)) );
         for ( auto & it : globals ) {
             auto pvar = it.second;
@@ -1557,6 +1568,7 @@ namespace yzg
         context.linearAllocatorExecuteBase = context.linearAllocator;
         context.restart();
         sdebug.clear();
+        context.thisProgram = nullptr;
     }
     
     TypeDeclPtr Program::makeStructureType ( const string & name ) const
@@ -1564,8 +1576,10 @@ namespace yzg
         auto t = make_shared<TypeDecl>();
         t->baseType = Type::tStructure;
         t->structType = findStructure(name).get();
-        if ( !t->structType )
-            throw runtime_error("can't make structure type " + name);
+        if ( !t->structType ) {
+            assert(0 && "can't make structure type");
+            return nullptr;
+        }
         return t;
     }
     

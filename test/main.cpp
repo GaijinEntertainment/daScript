@@ -79,7 +79,7 @@ void unit_test ( const string & fn, int numIter = 1 )
     }) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
-                reportError(str, err.at.line, err.at.column, err.what );
+                cout << reportError(&str, err.at.line, err.at.column, err.what );
             }
         } else {
             cout << *program << "\n";
@@ -123,7 +123,7 @@ void unit_test_array_of_structures ( const string & fn )
     }
     if ( program->failed() ) {
         for ( auto & err : program->errors ) {
-            reportError(str, err.at.line, err.at.column, err.what );
+            cout << reportError(&str, err.at.line, err.at.column, err.what );
         }
     } else {
         cout << *program << "\n";

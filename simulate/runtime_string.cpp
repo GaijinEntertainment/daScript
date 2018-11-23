@@ -14,7 +14,7 @@ namespace yzg
         for( ; str < strEnd; ++str ) {
             if ( *str=='\\' ) {
                 ++str;
-                if ( str == strEnd ) throw runtime_error("Invalid escape sequence");
+                if ( str == strEnd ) return result; // invalid escape sequence
                 switch ( *str ) {
                     case '"':
                     case '/':
@@ -24,8 +24,8 @@ namespace yzg
                     case 'n':   result += '\n';    break;
                     case 'r':   result += '\r';    break;
                     case 't':   result += '\t';    break;
-                    case 'u':   throw runtime_error("utf-8 characters not supported yet");
-                    default:    throw runtime_error("Invalid escape character");
+                    case 'u':   assert(0 && "utf-8 characters not supported yet"); break;
+                    default:    break;  // invalid escape character
                 }
             } else
                 result += *str;
@@ -81,14 +81,16 @@ namespace yzg
         return ss.str();
     }
     
-    void reportError ( const string & st, int row, int col, const string & message )
+    string reportError ( const string * st, int row, int col, const string & message )
     {
+        stringstream ssw;
         if ( row && col ) {
-            auto text = getFewLines(st, row, col );
-            cout << "error at line " << row << " column " << col << "\n" << text << message << "\n";
+            auto text = st ? getFewLines(*st, row, col ) : "";
+            ssw << "error at line " << row << " column " << col << "\n" << text << message << "\n";
         } else {
-            cout << "error, " << message << "\n";
+            ssw << "error, " << message << "\n";
         }
+        return ssw.str();
     }
 
 }

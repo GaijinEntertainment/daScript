@@ -4,15 +4,39 @@
 
 namespace yzg
 {
-    void builtin_print ( const char * message )
-    {
-        if ( message ) cout << message;
-    }
+    // "PRINT"
+    struct SimNode_Print : SimNode_Call {
+        SimNode_Print ( const LineInfo & at ) : SimNode_Call(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            evalArgs(context);
+            context.to_out(to_rts(abiArgValues(context)[0]));
+            return _mm_setzero_ps();
+        }
+    };
     
+    // "BREAKPOINT"
+    struct SimNode_BreakPoint : SimNode {
+        SimNode_BreakPoint ( const LineInfo & at ) : SimNode(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            context.breakPoint(debug.column, debug.line);
+            return _mm_setzero_ps();
+        }
+    };
+    
+    // "STACKWALK"
+    struct SimNode_StackWalk : SimNode {
+        SimNode_StackWalk ( const LineInfo & at ) : SimNode(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            context.stackWalk();
+            return _mm_setzero_ps();
+        }
+    };
+
     void Program::addBuiltinFunctions()
     {
-        addExtern<decltype(builtin_print),builtin_print>(*this,"print");
+        addBuiltIn(make_shared<BuiltInFn<SimNode_Print,void,char *>>("print", *this));
         addBuiltIn(make_shared<BuiltInFn<SimNode_StackWalk,void>>("stackwalk", *this));
+        addBuiltIn(make_shared<BuiltInFn<SimNode_BreakPoint,void>>("breakpoint", *this));
     }
     
     // basic operations

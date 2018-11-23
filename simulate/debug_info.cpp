@@ -57,7 +57,7 @@ namespace yzg
             case tFloat4:       return sizeof(float) * 4;
             case tStructure:    return 0;
             default:
-                throw runtime_error("not implemented");
+                assert(0 && "not implemented");
                 return 0;
         }
     }
@@ -155,7 +155,7 @@ namespace yzg
                 case Type::tFloat4:     ss << *((float4 *)pX);; break;
                 case Type::tPointer:    ss << "*" << hex << intptr_t(pX) << dec << " ";
                 case Type::tStructure:  debug_structure(ss, *(char **)pX, info->structType); break;
-                default:                throw runtime_error("unsupported print type");
+                default:                assert(0 && "unsupported print type"); break;
             }
         }
     }
@@ -186,7 +186,7 @@ namespace yzg
                 case Type::tFloat4:     ss << cast<float4>::to(x); break;
                 case Type::tPointer:    ss << "*" << hex << intptr_t(cast<void *>::to(x)) << dec << " ";
                 case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType); break;
-                default:                throw runtime_error("unsupported print type");
+                default:                assert(0 && "unsupported print type"); break;
             }
         }
     }
