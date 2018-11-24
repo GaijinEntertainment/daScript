@@ -218,9 +218,11 @@ def test_copy
         while idx!=10
             a[idx++] = idx
         aCopy <- a
+        debug(a,"a=")
+        debug(aCopy,"aCopy=")
         idx = 0
         while idx!=10
-            assert(aCopy[idx++]!=idx)
+            assert(aCopy[idx++]==idx)
         b.position = float3(1.0,2.0,3.0)
         b.radius = 5.0
         bCopy <- b
