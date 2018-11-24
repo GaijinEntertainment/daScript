@@ -1,4 +1,6 @@
 parser
+	support external global variables (as opposet to regular global variables)
+	support external structures (no fields, just sizes)
     support array initialization and object initializatoin (c-tors?)
     support auto in let
     support late binding of default arguments
@@ -6,7 +8,6 @@ parser
     support auto in function arguments
 
 misc
-    basic type - test pointer casts
     simplify builtin initialization
     support multi-dimensional array foreach
     support multi-dimensional array new (or regular array new)
