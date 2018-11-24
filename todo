@@ -4,7 +4,6 @@ parser
     support late binding of default arguments
     support auto in function default arguments
     support auto in function arguments
-	support assigning of the structures
 
 misc
     basic type - test pointer casts
@@ -12,7 +11,6 @@ misc
     support multi-dimensional array foreach
     support multi-dimensional array new (or regular array new)
     support (unsafe ?)
-	simplified exception handling
 
 optimization \ ast massage
     flatten nested blocks

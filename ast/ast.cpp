@@ -1194,38 +1194,6 @@ namespace yzg
                                                  iter->type->getSizeOf());
     }
     
-    // ExprTryCatch
-    
-    ExpressionPtr ExprTryCatch::clone( const ExpressionPtr & expr ) const
-    {
-        auto cexpr = clonePtr<ExprTryCatch>(expr);
-        Expression::clone(cexpr);
-        cexpr->try_this = try_this->clone();
-        cexpr->catch_that = catch_that->clone();
-        return cexpr;
-    }
-    
-    void ExprTryCatch::inferType(InferTypeContext & context)
-    {
-        try_this->inferType(context);
-        catch_that->inferType(context);
-        type = make_shared<TypeDecl>();
-    }
-    
-    void ExprTryCatch::log(ostream& stream, int depth) const
-    {
-        stream << "(try\n"<< string(depth+1,'\t');
-        try_this->log(stream, depth+1);
-        stream << "\n" << string(depth+2,'\t');
-        catch_that->log(stream, depth+2);
-        stream << ")";
-    }
-    
-    SimNode * ExprTryCatch::simulate (Context & context) const
-    {
-        return context.makeNode<SimNode_TryCatch>(at,try_this->simulate(context),catch_that->simulate(context));
-    }
-    
     // ExprLet
     
     ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const
@@ -1619,7 +1587,6 @@ namespace yzg
     void Program::simulate ( Context & context )
     {
         context.thisProgram = this;
-        vector<SimNode *> globalInit;
         context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(globals.size()*sizeof(GlobalVariable)) );
         for ( auto & it : globals ) {
             auto pvar = it.second;
@@ -1627,11 +1594,8 @@ namespace yzg
             gvar.name = context.allocateName(pvar->name);
             gvar.size = pvar->type->getSizeOf();
             gvar.debug = makeVariableDebugInfo(context, *it.second);
-            void * data = context.allocate(gvar.size);
-            memset(data, 0, gvar.size);
-            gvar.value = cast<void *>::from(data);
-            if ( pvar->init )
-                globalInit.push_back(ExprLet::simulateInit(context, pvar, false));
+            gvar.value = cast<void *>::from(context.allocate(gvar.size));
+            gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
         }
         context.totalVariables = (int) globals.size();
         context.functions = (SimFunction *) context.allocate( totalFunctions*sizeof(SimFunction) );
@@ -1645,18 +1609,6 @@ namespace yzg
             gfun.code = pfun->simulate(context);
             gfun.stackSize = pfun->totalStackSize;
             gfun.debug = makeFunctionDebugInfo(context, *pfun);
-        }
-        if ( globalInit.size() ) {
-            if ( globalInit.size()>1 ) {
-                auto block = context.makeNode<SimNode_Block>(LineInfo());
-                block->total = int(globalInit.size());
-                block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
-                for ( int i = 0; i != block->total; ++i )
-                    block->list[i] = globalInit[i];
-                context.globalInitializtion = block;
-            } else {
-                context.globalInitializtion = globalInit[0];
-            }
         }
         sdebug.clear();
         context.thisProgram = nullptr;

@@ -20,6 +20,7 @@ namespace yzg
         __m128      value;
         uint32_t    size;
         VarInfo *   debug;
+        SimNode *   init;
     };
     
     struct SimFunction
@@ -86,36 +87,24 @@ namespace yzg
         
         __forceinline __m128 getVariable ( int index ) const { return globalVariables[index].value; }
         
-        int findFunction ( const char * name ) const;
-        int findVariable ( const char * name ) const;
-        
-        void stackWalk();
-    
         __forceinline void restart( ) {
             linearAllocator = linearAllocatorExecuteBase;
             stackTop = stack + stackSize;
-        }
-        
-        __forceinline void runInitScript (  ) {
-            if ( globalInitializtion )
-                globalInitializtion->eval(*this);
         }
         
         __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
             return call(fnIndex, args, 0);
         }
         
-        // throw
-        void throw_error ( const char * message );
+        int findFunction ( const char * name ) const;
+        int findVariable ( const char * name ) const;
+        void stackWalk();
+        void runInitScript ( void );
         
-        // output to stdout or equivalent
-        virtual void to_out ( const char * message );
-        
-        // output to stderr or equivalent
-        virtual void to_err ( const char * message );
-        
-        // what to do in case of breakpoint
-        virtual void breakPoint(int column, int line) const;
+        virtual void throw_error ( const char * message );      // throw
+        virtual void to_out ( const char * message );           // output to stdout or equivalent
+        virtual void to_err ( const char * message );           // output to stderr or equivalent
+        virtual void breakPoint(int column, int line) const;    // what to do in case of breakpoint
 
     protected:
         
@@ -157,7 +146,6 @@ namespace yzg
         char * linearAllocatorBase = nullptr;
         char * linearAllocatorExecuteBase = nullptr;
         GlobalVariable * globalVariables = nullptr;
-        SimNode * globalInitializtion = nullptr;
         SimFunction * functions = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
@@ -450,23 +438,7 @@ namespace yzg
         }
         SimNode * cond, * body;
     };
-    
-    // TRY-CATCH
-    struct SimNode_TryCatch : SimNode {
-        SimNode_TryCatch ( const LineInfo & at, SimNode * t, SimNode * c ) : SimNode(at), try_this(t), catch_that(c) {}
-        virtual __m128 eval ( Context & context ) override {
-            try {
-                auto sp = context.stackTop;
-                try_this->eval(context);
-                context.stackTop = sp;
-            } catch ( const runtime_error & err ) {
-                catch_that->eval(context);
-            }
-            return _mm_setzero_ps();
-        }
-        SimNode * try_this, * catch_that;
-    };
-    
+
     // FOREACH
     struct SimNode_Foreach : SimNode {
         SimNode_Foreach ( const LineInfo & at, SimNode * h, SimNode * i, SimNode * b, int sz, int st, int ts )

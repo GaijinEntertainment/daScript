@@ -38,6 +38,18 @@ namespace yzg
         _mm_free(stack);
     }
     
+    void Context::runInitScript ( void )
+    {
+        for ( int i=0; i!=totalVariables; ++i ) {
+            auto & pv = globalVariables[i];
+            if ( pv.init ) {
+                pv.init->eval(*this);
+            } else {
+                memset ( cast<void *>::to(pv.value), 0, pv.size );
+            }
+        }
+    }
+    
     int Context::findFunction ( const char * name ) const
     {
         for ( int fni = 0; fni != totalFunctions; ++fni ) {

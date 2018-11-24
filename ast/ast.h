@@ -579,17 +579,6 @@ namespace yzg
         ExpressionPtr   head, iter, body;
     };
     
-    class ExprTryCatch : public Expression
-    {
-    public:
-        virtual void log(ostream& stream, int depth) const override;
-        virtual void inferType(InferTypeContext & context) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-    public:
-        ExpressionPtr   try_this, catch_that;
-    };
-    
     class Function
     {
     public:
