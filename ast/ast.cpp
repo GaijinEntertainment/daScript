@@ -97,7 +97,11 @@ namespace yzg
     ostream& operator<< (ostream& stream, const TypeDecl & decl)
     {
         if ( decl.baseType==Type::tStructure || decl.baseType==Type::tPointer ) {
-            stream << decl.structType->name;
+            if ( decl.structType ) {
+                stream << decl.structType->name;
+            } else {
+                stream << "unspecified";
+            }
         } else {
             stream << to_string(decl.baseType);
         }
@@ -912,6 +916,9 @@ namespace yzg
         right->inferType(context);
         if ( !left->type ) return;
         if ( !right->type ) return;
+        if ( left->type->isPointer() && right->type->isPointer() )
+            if ( !left->type->isSameType(*right->type,false) )
+                context.error("operations on incompatible pointers are prohibited", at);
         vector<TypeDeclPtr> types = { left->type, right->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 ) {
@@ -1632,7 +1639,7 @@ namespace yzg
     
     void Program::error ( const string & str, const LineInfo & at )
     {
-        cout << "ERROR: " << str << ", at " << at.describe() << "\n";
+        // cout << "ERROR: " << str << ", at " << at.describe() << "\n";
         errors.emplace_back(str,at);
         failToCompile = true;
     }
