@@ -55,11 +55,11 @@
 
 /* keywords */
 %token  _STRUCT _LET    _DEF        _WHILE
-%token  _IF     _ELSE   _FOREACH    _IN
+%token  _IF     _ELSE   _FOREACH    _CATCH
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _ASSERT _DEBUG      _ELIF
 %token  _RETURN _NULL   _BREAK      _TRY
-%token  _CATCH
+%token  _IN
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -86,6 +86,7 @@
 %type <pTypeDecl>       structure_type_declaration
 %type <b>               optional_ptr_declaration
 %type <pVarDeclList>    variable_declaration_list
+%type <pVarDeclList>    struct_variable_declaration_list
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
@@ -269,7 +270,7 @@ expression_try_catch
     ;
 
 expression_let
-    :   _LET '{' variable_declaration_list[list] '}' _IN expression_block[subexpr] {
+    :   _LET '(' variable_declaration_list[list] ')' expression_block[subexpr] {
         auto pLet = new ExprLet();
         pLet->subexpr = ExpressionPtr($subexpr);
         for ( auto pDecl : *$list ) {
@@ -360,9 +361,14 @@ expr
     |   _DEBUG[loc] '(' expr[subexpr] ',' STRING[message] ')'   { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr),*$message); }
     ;
 
+struct_variable_declaration_list
+    :                                                                            { $$ = new vector<VariableDeclaration*>(); }
+    |   struct_variable_declaration_list[list] variable_declaration[decl] ';'    { $$ = $list; $list->push_back($decl); }
+    ;
+
 variable_declaration_list
-    :                                                                   { $$ = new vector<VariableDeclaration*>(); }
-    |   variable_declaration_list[list] variable_declaration[decl] ';'  { $$ = $list; $list->push_back($decl); }
+    :   variable_declaration[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
+    |   variable_declaration_list[list] ';' variable_declaration[decl]  { $$ = $list; $list->push_back($decl); }
     ;
 
 function_argument_list
@@ -382,7 +388,7 @@ variable_declaration
     ;
 
 global_let
-    :   _LET '{' variable_declaration_list[list] '}' {
+    :   _LET '{' struct_variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {
@@ -405,7 +411,7 @@ global_let
     ;
 
 structure_declaration
-    : _STRUCT[loc] NAME[name] '{' variable_declaration_list[list] '}' {
+    : _STRUCT[loc] NAME[name] '{' struct_variable_declaration_list[list] '}' {
         if ( !g_Program->findStructure(*$name) ) {
             auto pStruct = g_Program->structures[*$name] = make_shared<Structure>(*$name);
             pStruct->at = tokAt(@loc);

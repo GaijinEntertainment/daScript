@@ -1,8 +1,5 @@
 def test
-    let
-        i,fail:int = 0
-        arr:int[1000]
-    in
+    let ( i,fail:int = 0; arr:int[1000] )
         while i < 2000
             try
                 arr[i] = i

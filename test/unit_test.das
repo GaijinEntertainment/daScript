@@ -5,9 +5,7 @@ struct Ball
 def test_sizeof
     print("test sizeof:\n")
     // verifying if sizeof accepts expression, not just type
-    let
-        a:int
-    in
+    let ( a:int )
         assert(sizeof(a)==4,"integer size must be 4, sizeof understands expressions and types")
     // verifying basic type sizes
     assert(sizeof(type bool)==1,"bool size must be 1")
@@ -50,11 +48,7 @@ def same_value(i:int&):int
 
 def test_return
     print("test return:\n")
-    let
-        a:int=2
-        b:int=3
-        c:int=3
-    in
+    let ( a:int=2; b:int=3; c:int=3 )
         inc(c)
         assert(madd(2,3,4)==10,"2*3+4==10")
         inc_inc(c)
@@ -75,18 +69,12 @@ def test_ret_ptr(a:Ball*):Ball*
 
 def test_new
     print("test new:\n")
-    let
-        b:Ball* = new Ball
-    in
+    let ( b:Ball* = new Ball )
         debug(b,"before")
         b.position = float3(1.0,2.0,3.0)
         b.radius = 5.0
         verify_default_ball(debug(b,"ball is")->)
-        let
-            qb:Ball
-            qc:Ball* = b
-            qd:Ball* = new Ball
-        in
+        let ( qb:Ball; qc:Ball* = b; qd:Ball* = new Ball )
             debug(qc,"qc")
             qb <- qc->
             verify_default_ball(qb)
@@ -103,11 +91,7 @@ def test_new
 
 def test_array
     print("test array:\n")
-    let
-        arr:int[10]
-        idx:int = 0
-        val:int
-    in
+    let ( arr:int[10]; idx:int = 0; val:int )
         while idx!=10
             arr[idx++] = idx
         idx = 0
@@ -117,9 +101,7 @@ def test_array
 
 def test_prefix_postfix
     print("test prefix postfix:\n")
-    let
-        a,b:int = 1
-    in
+    let ( a,b:int = 1 )
         assert(a==1 & b==1)
         b = 2
         assert(++a==b,"++1==2")
@@ -146,10 +128,7 @@ def stack_depth_2(b:float&;a:int&;c:string)
 
 def test_stackwalk
     print("test stackwalk:\n")
-    let
-        a:float=1.0
-        b:int=2
-    in
+    let ( a:float=1.0; b:int=2 )
         stack_depth_2(debug(a,"a"),debug(b,"b"),"and string")
     print("ok\n")
 
@@ -163,9 +142,7 @@ def inc_false(x:int &):bool
 
 def test_and_or
     print("test and or:\n")
-    let
-        x:int=1
-    in
+    let ( x:int=1 )
         assert((inc_false(x) & inc_true(x))==false, "false & true = false")
         assert(x==2,"right did not happen")
         assert((inc_true(x) & inc_false(x))==false, "true & false = false")
@@ -178,9 +155,7 @@ def test_and_or
 
 def test_if_then_else
     print("test if-then-else:\n")
-    let
-        x:int=1
-    in
+    let ( x:int=1 )
         if x==1
             x=2
         assert(x==2)
@@ -214,19 +189,13 @@ def test_globals
     print("test globals:\n")
     debug(global_x)
     assert(global_x==1,"global variable init")
-    let
-        y:int=global_x=5
-    in
+    let ( y:int=global_x=5 )
         assert(global_x==5 & y==5)
     print("ok\n")
 
 def test_copy
     print("test copy:\n")
-    let
-        a,aCopy:int[10]
-        b,bCopy:Ball
-        idx:int
-    in
+    let ( a,aCopy:int[10]; b,bCopy:Ball; idx:int )
         idx = 0
         while idx!=10
             a[idx++] = idx
@@ -244,9 +213,7 @@ def test_copy
 
 def test_break
     print("test break:\n")
-    let
-        i,j,k:int=0
-    in
+    let ( i,j,k:int=0 )
         while i < 20
             i ++
             if i == 10
@@ -269,12 +236,7 @@ def test_break
 
 def test_string
     print("test string:\n")
-    let
-        a:string="foo"
-        b:string="bar"
-        c:string=a+b
-        d:string
-    in
+    let ( a:string="foo"; b:string="bar"; c:string=a+b; d:string )
         assert(c=="foobar")
         d = a + b
         assert(d=="foobar")
