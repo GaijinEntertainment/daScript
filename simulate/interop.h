@@ -67,5 +67,41 @@ namespace yzg
         }
         FuncInfo * info = nullptr;
     };
+    
+    typedef __m128 ( InteropFunction ) ( Context & context, SimNode_Call * node, __m128 * args );
+    
+    template <InteropFunction fn>
+    struct SimNode_InteropFuncCall : SimNode_Call
+    {
+        SimNode_InteropFuncCall ( const LineInfo & at ) : SimNode_Call(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            evalArgs(context);
+            YZG_EXCEPTION_POINT;
+            __m128 * args = abiArgValues(context);
+#if YZG_ENABLE_STACK_WALK
+            // PUSH
+            if ( context.stack - ( context.stackTop - sizeof(Prologue) ) > context.stackSize ) {
+                context.throw_error("stack overflow");
+                return _mm_setzero_ps();
+            }
+            char * pushStack = context.stackTop;
+            context.stackTop -= sizeof(Prologue);
+            // fill prologue
+            Prologue * pp = (Prologue *) context.stackTop;
+            pp->result =        _mm_setzero_ps();
+            pp->arguments =     args;
+            pp->info =          info;
+            pp->line =          debug.line;
+#endif
+            // calc
+            auto res = fn(context,this,args);
+            // POP
+#if YZG_ENABLE_STACK_WALK
+            context.stackTop = pushStack;
+#endif
+            return res;
+        }
+        FuncInfo * info = nullptr;
+    };
 }
 

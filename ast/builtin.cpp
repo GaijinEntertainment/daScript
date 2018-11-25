@@ -4,50 +4,32 @@
 
 namespace yzg
 {
-    // "PRINT"
-    struct SimNode_Print : SimNode_Call {
-        SimNode_Print ( const LineInfo & at ) : SimNode_Call(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            evalArgs(context);
-            YZG_EXCEPTION_POINT;
-            context.to_out(to_rts(abiArgValues(context)[0]));
-            return _mm_setzero_ps();
-        }
-    };
+    __m128 builtin_print ( Context & context, SimNode_Call *, __m128 * args ) {
+        context.to_out(to_rts(args[0]));
+        return _mm_setzero_ps();
+    }
     
-    // "BREAKPOINT"
-    struct SimNode_BreakPoint : SimNode {
-        SimNode_BreakPoint ( const LineInfo & at ) : SimNode(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            context.breakPoint(debug.column, debug.line);
-            return _mm_setzero_ps();
-        }
-    };
+    __m128 builtin_breakpoint ( Context & context, SimNode_Call * call, __m128 * ) {
+        context.breakPoint(call->debug.column, call->debug.line);
+        return _mm_setzero_ps();
+    }
     
-    // "STACKWALK"
-    struct SimNode_StackWalk : SimNode {
-        SimNode_StackWalk ( const LineInfo & at ) : SimNode(at) {}
-        virtual __m128 eval ( Context & context ) override {
+    __m128 builtin_stackwalk ( Context & context, SimNode_Call *, __m128 * ) {
             context.stackWalk();
-            return _mm_setzero_ps();
-        }
-    };
+        return _mm_setzero_ps();
+    }
     
-    // "TERMINATE"
-    struct SimNode_Terminate : SimNode {
-        SimNode_Terminate ( const LineInfo & at ) : SimNode(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            context.stopFlags |= EvalFlags::stopForTerminate;
-            return _mm_setzero_ps();
-        }
-    };
+    __m128 builtin_terminate ( Context & context, SimNode_Call *, __m128 * ) {
+        context.stopFlags |= EvalFlags::stopForTerminate;
+        return _mm_setzero_ps();
+    }
 
     void Program::addBuiltinFunctions()
     {
-        addBuiltIn(make_shared<BuiltInFn<SimNode_Print,void,char *>>("print", *this));
-        addBuiltIn(make_shared<BuiltInFn<SimNode_StackWalk,void>>("stackwalk", *this));
-        addBuiltIn(make_shared<BuiltInFn<SimNode_BreakPoint,void>>("breakpoint", *this));
-        addBuiltIn(make_shared<BuiltInFn<SimNode_Terminate,void>>("terminate", *this));
+        addInterop<builtin_print,void,char *>   (*this, "print");
+        addInterop<builtin_terminate,void>      (*this, "terminate");
+        addInterop<builtin_breakpoint,void>     (*this, "breakpoint");
+        addInterop<builtin_stackwalk,void>      (*this, "stackwalk");
     }
     
     // basic operations

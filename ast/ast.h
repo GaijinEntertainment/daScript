@@ -722,8 +722,38 @@ namespace yzg
         }
     };
     
+    template  <InteropFunction func, typename RetT, typename ...Args>
+    class InteropFn : public BuiltInFunction
+    {
+    public:
+        InteropFn(const string & name, Program & prg) : BuiltInFunction(name)
+        {
+            vector<TypeDeclPtr> args = { makeType<Args>(prg)... };
+            for ( int argi=0; argi!=args.size(); ++argi ) {
+                auto arg = make_shared<Variable>();
+                arg->name = "arg" + std::to_string(argi);
+                arg->type = args[argi];
+                this->arguments.push_back(arg);
+            }
+            this->result = makeType<RetT>(prg);
+            this->totalStackSize = sizeof(Prologue);
+        }
+        virtual SimNode * makeSimNode ( Context & context ) override {
+            auto pCall = context.makeNode<SimNode_InteropFuncCall<func>>(at);
+            pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
+            return pCall;
+        }
+    };
+    
     template <typename FuncT, FuncT fn>
-    void addExtern ( Program & prog, const string & name ) { prog.addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, prog)); }
+    __forceinline void addExtern ( Program & prog, const string & name ) {
+        prog.addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, prog));
+    }
+    
+    template <InteropFunction func, typename RetT, typename ...Args>
+    __forceinline void addInterop ( Program & prog, const string & name ) {
+        prog.addBuiltIn(make_shared<InteropFn<func,RetT,Args...>>(name,prog));
+    }
      
     ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext );
 }

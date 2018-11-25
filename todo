@@ -8,6 +8,7 @@ parser
     support auto in function arguments
 
 misc
+	support variadic functions (with type info)
     simplify builtin initialization
     support multi-dimensional array foreach
     support multi-dimensional array new (or regular array new)
@@ -19,6 +20,11 @@ optimization \ ast massage
     flatten conditions
     simplify initialization of local variables
     propagate local variable initialization on top of the function
+	
+tests
+	does not compile - for every error. add huge error enumeration. add 'expect' keyword
+	every type with evey operator
+	every concept
 
 // EXCEPTIONS DISABLED (TRY-CATCH implemented via C++ try\catch)
 1000/2000 exception loop ../../test/profile_try_catch.das took:0.001628	 
