@@ -17,7 +17,6 @@ optimization \ ast massage
     flatten nested blocks
     eliminate dead code (after break and after return)
     flatten conditions
-    support break and return to be last statement
     simplify initialization of local variables
     propagate local variable initialization on top of the function
 
@@ -38,19 +37,19 @@ ratio sim / interop: 1.381603
 
 // EXCEPTIONS ENABLED (TRY-CATCH implemented via stopFlags)
 1000/2000 exception loop ../../test/profile_try_catch.das took:0.000122
-iterations took:0.000567
-foreach iterations took:0.000314
-c++ version took:0.000017
-interop version took:0.000401
-foreach interop version took:0.000148
-10000-interop version took:0.000231
+iterations took:0.000567					3% slower
+foreach iterations took:0.000314			2% slower
+c++ version took:0.000017			
+interop version took:0.000401				1% slower
+foreach interop version took:0.000148		2% slower
+10000-interop version took:0.000231			11% faster!!!
 ratio sim / c: 34.221055
 ratio foreach sim / c: 18.989974
 ratio interop / c: 24.204747
 ratio foreach interop / c: 8.945944
 ratio 10000-interop / c: 13.923356
 ratio sim / interop: 1.413816
-Program ended with exit code: 0
+
 
 
 
