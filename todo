@@ -21,19 +21,36 @@ optimization \ ast massage
     simplify initialization of local variables
     propagate local variable initialization on top of the function
 
-// recent
-
-iterations took:0.000526
-foreach iterations took:0.000301
-c++ version took:0.000017
-interop version took:0.000380
+// EXCEPTIONS DISABLED (TRY-CATCH implemented via C++ try\catch)
+1000/2000 exception loop ../../test/profile_try_catch.das took:0.001628	 
+iterations took:0.000551
+foreach iterations took:0.000304
+c++ version took:0.000019
+interop version took:0.000399
 foreach interop version took:0.000145
-10000-interop version took:0.000215
-ratio sim / c: 30.503889
-ratio foreach sim / c: 17.468833
-ratio interop / c: 22.052467
-ratio foreach interop / c: 8.413639
-ratio 10000-interop / c: 12.464887
-ratio sim / interop: 1.383242
+10000-interop version took:0.000258
+ratio sim / c: 28.977349
+ratio foreach sim / c: 15.956590
+ratio interop / c: 20.973723
+ratio foreach interop / c: 7.619823
+ratio 10000-interop / c: 13.553185
+ratio sim / interop: 1.381603
+
+// EXCEPTIONS ENABLED (TRY-CATCH implemented via stopFlags)
+1000/2000 exception loop ../../test/profile_try_catch.das took:0.000122
+iterations took:0.000567
+foreach iterations took:0.000314
+c++ version took:0.000017
+interop version took:0.000401
+foreach interop version took:0.000148
+10000-interop version took:0.000231
+ratio sim / c: 34.221055
+ratio foreach sim / c: 18.989974
+ratio interop / c: 24.204747
+ratio foreach interop / c: 8.945944
+ratio 10000-interop / c: 13.923356
+ratio sim / interop: 1.413816
+Program ended with exit code: 0
+
 
 

@@ -346,18 +346,6 @@ namespace yzg
         int32_t index;
     };
     
-    // RETURN VARIABLE GET
-    struct SimNode_Return : SimNode {
-        SimNode_Return ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
-        virtual __m128 eval ( Context & context ) override {
-            if ( subexpr )
-                context.abiResult() = subexpr->eval(context);
-            context.stopFlags |= EvalFlags::stopForReturn;
-            return _mm_setzero_ps();
-        }
-        SimNode * subexpr;
-    };
-    
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode {
         SimNode_GetGlobal ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
@@ -365,6 +353,41 @@ namespace yzg
             return context.globalVariables[index].value;
         }
         int32_t index;
+    };
+    
+    // TRY-CATCH
+    struct SimNode_TryCatch : SimNode {
+        SimNode_TryCatch ( const LineInfo & at, SimNode * t, SimNode * c ) : SimNode(at), try_block(t), catch_block(c) {}
+        virtual __m128 eval ( Context & context ) override {
+            #if YZG_ENABLE_EXCEPTIONS
+                try_block->eval(context);
+                if ( context.stopFlags & EvalFlags::stopForThrow ) {
+                    context.stopFlags &= ~EvalFlags::stopForThrow;
+                    catch_block->eval(context);
+                }
+            #else
+                try {
+                    try_block->eval(context);
+                } catch ( const runtime_error & ) {
+                    context.stopFlags &= ~EvalFlags::stopForThrow;
+                    catch_block->eval(context);
+                }
+            #endif
+            return _mm_setzero_ps();
+        }
+        SimNode * try_block, * catch_block;
+    };
+    
+    // RETURN
+    struct SimNode_Return : SimNode {
+        SimNode_Return ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
+        virtual __m128 eval ( Context & context ) override {
+            if ( subexpr )
+            context.abiResult() = subexpr->eval(context);
+            context.stopFlags |= EvalFlags::stopForReturn;
+            return _mm_setzero_ps();
+        }
+        SimNode * subexpr;
     };
     
     // BREAK

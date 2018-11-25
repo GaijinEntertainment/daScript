@@ -79,7 +79,6 @@
 %token<s>   STRING
 %token<s>   NAME
 
-%type <pStruct>         structure_name
 %type <pNameList>       variable_name_list
 %type <type>            basic_type_declaration
 %type <pTypeDecl>       type_declaration
@@ -103,6 +102,7 @@
 %type <pExpression>     expression_return
 %type <pExpression>     expression_else
 %type <pExpression>     expression_if_then_else
+%type <pExpression>     expression_try_catch
 %type <pExpression>     expr_new
 %type <pExpression>     expr_sizeof
 %type <pExpression>     expression_any
@@ -227,6 +227,7 @@ expression_any
     |   expression_break[subexpr]           { $$ = $subexpr; }
     |   expression_return[subexpr]          { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
+    |   expression_try_catch[subexpr]       { $$ = $subexpr; }
     ;
 
 expressions
@@ -259,6 +260,12 @@ expression_return
 expression_assert
     :   _ASSERT[loc] '(' expr[subexpr] ')' ';'                      { $$ = new ExprAssert(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   _ASSERT[loc] '(' expr[subexpr] ',' STRING[message] ')' ';'  { $$ = new ExprAssert(tokAt(@loc),ExpressionPtr($subexpr),*$message); }
+    ;
+
+expression_try_catch
+    :   _TRY[loc] expression_block[tryBlock] _CATCH expression_block[catchBlock] {
+        $$ = new ExprTryCatch(tokAt(@loc),ExpressionPtr($tryBlock),ExpressionPtr($catchBlock));
+    }
     ;
 
 expression_let

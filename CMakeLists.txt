@@ -88,6 +88,7 @@ test/hello_world.das
 test/unit_test.das
 test/profile_array_of_structures.das
 test/profile_array_of_structures_vec.das
+test/profile_try_catch.das
 )
 SOURCE_GROUP_FILES("test" TEST_SRC)
 

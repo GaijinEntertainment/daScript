@@ -211,6 +211,7 @@ int main(int argc, const char * argv[]) {
 #if 0
     unit_test_array_of_structures("../../test/profile_array_of_structures.das");
     unit_test_array_of_structures("../../test/profile_array_of_structures_vec.das");
+    unit_test("../../test/profile_try_catch.das", 100);
 #endif
     return 0;
 }

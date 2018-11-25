@@ -421,6 +421,18 @@ namespace yzg
         ExpressionPtr   subexpr, left, right;
     };
     
+    class ExprTryCatch : public Expression
+    {
+    public:
+        ExprTryCatch() = default;
+        ExprTryCatch ( const LineInfo & a, ExpressionPtr t, ExpressionPtr c ) : Expression(a), try_block(t), catch_block(c) {}
+        virtual void inferType(InferTypeContext & context) override;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr try_block, catch_block;
+    };
+    
     class ExprReturn : public Expression
     {
     public:

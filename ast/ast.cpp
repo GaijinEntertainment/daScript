@@ -1050,6 +1050,32 @@ namespace yzg
                                                       left->type->getSizeOf());
     }
     
+    // ExprTryCatch
+    
+    void ExprTryCatch::log(ostream& stream, int depth) const
+    {
+        stream << "(try\n";
+        stream << string(depth+2,'\t');
+        try_block->log(stream, depth+1);
+        stream << "\n" << string(depth+2,'\t');
+        catch_block->log(stream, depth+1);
+        stream << ")";
+    }
+    
+    void ExprTryCatch::inferType(InferTypeContext & context)
+    {
+        try_block->inferType(context);
+        catch_block->inferType(context);
+        type = make_shared<TypeDecl>();
+    }
+    
+    SimNode * ExprTryCatch::simulate (Context & context) const
+    {
+        return context.makeNode<SimNode_TryCatch>(at,
+                                                  try_block->simulate(context),
+                                                  catch_block->simulate(context));
+    }
+    
     // ExprReturn
     
     void ExprReturn::log(ostream& stream, int depth) const
