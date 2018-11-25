@@ -34,8 +34,19 @@ def test_sizeof
 def inc(a:int&)
     a ++
 
+def inc_inc(a:int&)
+    a ++
+    return
+    a++
+    assert(false,"should never get here")
+
 def madd(a,b,c:int):int
-    return = a*b+c
+    return a*b+c
+
+def same_value(i:int&):int
+    return i
+    ++i
+    assert(false,"should never get here")
 
 def test_return
     print("test return:\n")
@@ -46,6 +57,8 @@ def test_return
     in
         inc(c)
         assert(madd(2,3,4)==10,"2*3+4==10")
+        inc_inc(c)
+        assert(c==5)
     print("ok\n")
 
 def verify_default_ball(b:Ball)
@@ -58,7 +71,7 @@ def test_ref_ptr(a:Ball*&;b:Ball*)
     assert(a==b,"now same pointer")
 
 def test_ret_ptr(a:Ball*):Ball*
-    return = a
+    return a
 
 def test_new
     print("test new:\n")
@@ -142,11 +155,11 @@ def test_stackwalk
 
 def inc_true(x:int &):bool
     x ++
-    return = true
+    return true
 
 def inc_false(x:int &):bool
     x ++
-    return = false
+    return false
 
 def test_and_or
     print("test and or:\n")

@@ -425,10 +425,12 @@ namespace yzg
     {
     public:
         ExprReturn() = default;
-        ExprReturn ( const LineInfo & a ) : Expression(a) {}
+        ExprReturn ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr subexpr;
     };
     
     class ExprBreak : public Expression

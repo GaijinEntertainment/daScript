@@ -100,6 +100,7 @@
 %type <pExpression>     expression_foreach_loop
 %type <pExpression>     expression_assert
 %type <pExpression>     expression_break
+%type <pExpression>     expression_return
 %type <pExpression>     expression_else
 %type <pExpression>     expression_if_then_else
 %type <pExpression>     expr_new
@@ -224,6 +225,7 @@ expression_any
     |   expression_foreach_loop[subexpr]    { $$ = $subexpr; }
     |   expression_assert[subexpr]          { $$ = $subexpr; }
     |   expression_break[subexpr]           { $$ = $subexpr; }
+    |   expression_return[subexpr]          { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     ;
 
@@ -246,7 +248,12 @@ expr_new
     ;
 
 expression_break
-    :   _BREAK[loc]   { $$ = new ExprBreak(tokAt(@loc)); }
+    :   _BREAK[loc] ';'  { $$ = new ExprBreak(tokAt(@loc)); }
+    ;
+
+expression_return
+    :   _RETURN[loc] ';'                { $$ = new ExprReturn(tokAt(@loc),nullptr); }
+    |   _RETURN[loc] expr[subexpr] ';'  { $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr)); }
     ;
 
 expression_assert
@@ -344,7 +351,6 @@ expr
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   _DEBUG[loc] '(' expr[subexpr] ')'                       { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   _DEBUG[loc] '(' expr[subexpr] ',' STRING[message] ')'   { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr),*$message); }
-    |   _RETURN[loc]                            { $$ = new ExprReturn(tokAt(@loc)); }
     ;
 
 variable_declaration_list

@@ -1054,22 +1054,42 @@ namespace yzg
     
     void ExprReturn::log(ostream& stream, int depth) const
     {
-        stream << "return";
+        if ( subexpr ) {
+            stream << "(return ";
+            subexpr->log(stream, depth);
+            stream << ")";
+        } else {
+            stream << "return";
+        }
     }
     
     void ExprReturn::inferType(InferTypeContext & context)
     {
+        if ( subexpr ) {
+            subexpr->inferType(context);
+            if ( !subexpr->type ) return;
+            subexpr = autoDereference(subexpr);
+        }
         if ( context.func->result->isVoid() ) {
-            context.error("void function has no return", at);
+            if ( subexpr ) {
+                context.error("void function has no return", at);
+            }
         } else {
-            type = make_shared<TypeDecl>(*context.func->result);
-            type->ref = true;
+            if ( !subexpr ) {
+                context.error("must return value", at);
+            } else {
+                if ( !context.func->result->isSameType(*subexpr->type) ) {
+                    context.error("incompatible return type", at);
+                }
+                type = make_shared<TypeDecl>(*context.func->result);
+                type->ref = true;
+            }
         }
     }
     
     SimNode * ExprReturn::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Return>(at);
+        return context.makeNode<SimNode_Return>(at, subexpr ? subexpr->simulate(context) : nullptr);
     }
     
     // ExprBreak

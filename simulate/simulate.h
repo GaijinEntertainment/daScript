@@ -167,6 +167,7 @@ namespace yzg
             // CALL
             fn.code->eval(*this);
             __m128 result = abiResult();
+            stopFlags &= ~EvalFlags::stopForReturn;
             // POP
             stackTop = pushStack;
             return result;
@@ -347,10 +348,14 @@ namespace yzg
     
     // RETURN VARIABLE GET
     struct SimNode_Return : SimNode {
-        SimNode_Return ( const LineInfo & at ) : SimNode(at) {}
+        SimNode_Return ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
-            return cast<__m128 *>::from(&context.abiResult());
+            if ( subexpr )
+                context.abiResult() = subexpr->eval(context);
+            context.stopFlags |= EvalFlags::stopForReturn;
+            return _mm_setzero_ps();
         }
+        SimNode * subexpr;
     };
     
     // GLOBAL VARIABLE "GET"
