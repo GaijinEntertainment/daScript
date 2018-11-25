@@ -267,6 +267,21 @@ def test_break
         assert(i==6 & j==7 & k==21)
     print("ok\n")
 
+def test_string
+    print("test string:\n")
+    let
+        a:string="foo"
+        b:string="bar"
+        c:string=a+b
+        d:string
+    in
+        assert(c=="foobar")
+        d = a + b
+        assert(d=="foobar")
+        b += a
+        assert(b=="barfoo")
+    print("ok\n")
+
 // this is where unit tests are
 def test
     print("unit tests started\n")
@@ -282,6 +297,7 @@ def test
     test_copy()
     test_stackwalk()
     test_break()
+    test_string()
     print("unit tests finished\n")
 
 

@@ -557,60 +557,60 @@ namespace yzg
     template <typename TT>
     struct SimPolicy_CoreType
     {
-        static __forceinline __m128 Set     ( __m128 a, __m128 b ) { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
-        static __forceinline __m128 Equ     ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)==cast<TT>::to(b));  }
-        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)!=cast<TT>::to(b));  }
+        static __forceinline __m128 Set     ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
+        static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)==cast<TT>::to(b));  }
+        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)!=cast<TT>::to(b));  }
     };
     
     template <typename TT>
     struct SimPolicy_Type : SimPolicy_CoreType<TT>
     {
         // numeric
-        static __forceinline __m128 Unp ( __m128 x ) { return x; }
-        static __forceinline __m128 Unm ( __m128 x ) { return cast<TT>::from( -cast<TT>::to(x)); }
-        static __forceinline __m128 Inc ( __m128 x ) { (*cast<TT*>::to(x))++; return x; }
-        static __forceinline __m128 Dec ( __m128 x ) { (*cast<TT*>::to(x))--; return x; }
-        static __forceinline __m128 IncPost ( __m128 x ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X++); }
-        static __forceinline __m128 DecPost ( __m128 x ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X--); }
-        static __forceinline __m128 Add ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)+cast<TT>::to(b)); }
-        static __forceinline __m128 Sub ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)-cast<TT>::to(b)); }
-        static __forceinline __m128 Div ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)/cast<TT>::to(b)); }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a)*cast<TT>::to(b)); }
-        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) += cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetSub  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) -= cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) *= cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) /= cast<TT>::to(b); return a; }
+        static __forceinline __m128 Unp ( __m128 x, Context & ) { return x; }
+        static __forceinline __m128 Unm ( __m128 x, Context & ) { return cast<TT>::from( -cast<TT>::to(x)); }
+        static __forceinline __m128 Inc ( __m128 x, Context & ) { (*cast<TT*>::to(x))++; return x; }
+        static __forceinline __m128 Dec ( __m128 x, Context & ) { (*cast<TT*>::to(x))--; return x; }
+        static __forceinline __m128 IncPost ( __m128 x, Context & ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X++); }
+        static __forceinline __m128 DecPost ( __m128 x, Context & ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X--); }
+        static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)+cast<TT>::to(b)); }
+        static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)-cast<TT>::to(b)); }
+        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)/cast<TT>::to(b)); }
+        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)*cast<TT>::to(b)); }
+        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) += cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetSub  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) -= cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) *= cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) /= cast<TT>::to(b); return a; }
         // ordered
-        static __forceinline __m128 LessEqu ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)<=cast<TT>::to(b));  }
-        static __forceinline __m128 GtEqu   ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)>=cast<TT>::to(b));  }
-        static __forceinline __m128 Less    ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)<cast<TT>::to(b));  }
-        static __forceinline __m128 Gt      ( __m128 a, __m128 b ) { return cast<bool>::from(cast<TT>::to(a)>cast<TT>::to(b));  }
+        static __forceinline __m128 LessEqu ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)<=cast<TT>::to(b));  }
+        static __forceinline __m128 GtEqu   ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)>=cast<TT>::to(b));  }
+        static __forceinline __m128 Less    ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)<cast<TT>::to(b));  }
+        static __forceinline __m128 Gt      ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)>cast<TT>::to(b));  }
     };
     
     struct SimPolicy_Bool : SimPolicy_CoreType<bool>
     {
-        static __forceinline __m128 BoolNot ( __m128 x ) { return cast<bool>::from( !cast<bool>::to(x)); }
-        static __forceinline __m128 BoolAnd ( __m128 a, __m128 b ) { return cast<bool>::from(cast<bool>::to(a) && cast<bool>::to(b)); }
-        static __forceinline __m128 BoolOr  ( __m128 a, __m128 b ) { return cast<bool>::from(cast<bool>::to(a) || cast<bool>::to(b)); }
-        static __forceinline __m128 BoolXor ( __m128 a, __m128 b ) { return cast<bool>::from(cast<bool>::to(a) != cast<bool>::to(b)); }
-        static __forceinline __m128 SetBoolAnd  ( __m128 a, __m128 b )
+        static __forceinline __m128 BoolNot ( __m128 x, Context & ) { return cast<bool>::from( !cast<bool>::to(x)); }
+        static __forceinline __m128 BoolAnd ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) && cast<bool>::to(b)); }
+        static __forceinline __m128 BoolOr  ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) || cast<bool>::to(b)); }
+        static __forceinline __m128 BoolXor ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) != cast<bool>::to(b)); }
+        static __forceinline __m128 SetBoolAnd  ( __m128 a, __m128 b, Context & )
             { auto pa = cast<bool *>::to(a); *pa = *pa && cast<bool>::to(b); return a; }
-        static __forceinline __m128 SetBoolOr   ( __m128 a, __m128 b )
+        static __forceinline __m128 SetBoolOr   ( __m128 a, __m128 b, Context & )
             { auto pa = cast<bool *>::to(a); *pa = *pa || cast<bool>::to(b); return a; }
-        static __forceinline __m128 SetBoolXor  ( __m128 a, __m128 b )
+        static __forceinline __m128 SetBoolXor  ( __m128 a, __m128 b, Context & )
             { auto pa = cast<bool *>::to(a); *pa = *pa != cast<bool>::to(b); return a; }
     };
     
     template <typename TT>
     struct SimPolicy_Bin : SimPolicy_Type<TT>
     {
-        static __forceinline __m128 BinNot ( __m128 x ) { return cast<TT>::from( ~cast<TT>::to(x)); }
-        static __forceinline __m128 BinAnd ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a) & cast<TT>::to(b)); }
-        static __forceinline __m128 BinOr  ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a) | cast<TT>::to(b)); }
-        static __forceinline __m128 BinXor ( __m128 a, __m128 b ) { return cast<TT>::from(cast<TT>::to(a) ^ cast<TT>::to(b)); }
-        static __forceinline __m128 SetBinAnd ( __m128 a, __m128 b ) { *cast<TT *>::to(a) &= cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetBinOr  ( __m128 a, __m128 b ) { *cast<TT *>::to(a) |= cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetBinXor ( __m128 a, __m128 b ) { *cast<TT *>::to(a) ^= cast<TT>::to(b); return a; }
+        static __forceinline __m128 BinNot ( __m128 x, Context & ) { return cast<TT>::from( ~cast<TT>::to(x)); }
+        static __forceinline __m128 BinAnd ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) & cast<TT>::to(b)); }
+        static __forceinline __m128 BinOr  ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) | cast<TT>::to(b)); }
+        static __forceinline __m128 BinXor ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) ^ cast<TT>::to(b)); }
+        static __forceinline __m128 SetBinAnd ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) &= cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetBinOr  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) |= cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetBinXor ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) ^= cast<TT>::to(b); return a; }
     };
     
     struct SimPolicy_Int : SimPolicy_Bin<int32_t>
@@ -623,36 +623,36 @@ namespace yzg
     
     struct SimPolicy_Float : SimPolicy_Type<float>
     {
-        static __forceinline __m128 Add ( __m128 a, __m128 b ) { return _mm_add_ss(a,b); }
-        static __forceinline __m128 Sub ( __m128 a, __m128 b ) { return _mm_sub_ss(a,b); }
-        static __forceinline __m128 Div ( __m128 a, __m128 b ) { return _mm_div_ss(a,b); }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return _mm_mul_ss(a,b); }
+        static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return _mm_add_ss(a,b); }
+        static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return _mm_sub_ss(a,b); }
+        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return _mm_div_ss(a,b); }
+        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return _mm_mul_ss(a,b); }
     };
     
     template <typename TT, int mask>
     struct SimPolicy_Vec
     {
         // basic
-        static __forceinline __m128 Set     ( __m128 a, __m128 b )
+        static __forceinline __m128 Set     ( __m128 a, __m128 b, Context & )
             { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
-        static __forceinline __m128 Equ     ( __m128 a, __m128 b )
+        static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & )
             { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)==mask ); }
-        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b )
+        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b, Context & )
             { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)!=mask ); }
         // numeric
-        static __forceinline __m128 Unp ( __m128 x ) { return x; }
-        static __forceinline __m128 Unm ( __m128 x ) { return _mm_sub_ps(_mm_setzero_ps(), x); }    // todo: optimize?
-        static __forceinline __m128 Add ( __m128 a, __m128 b ) { return _mm_add_ps(a,b); }
-        static __forceinline __m128 Sub ( __m128 a, __m128 b ) { return _mm_sub_ps(a,b); }
-        static __forceinline __m128 Div ( __m128 a, __m128 b ) { return _mm_div_ps(a,b); }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return _mm_mul_ps(a,b); }
-        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b )
+        static __forceinline __m128 Unp ( __m128 x, Context & ) { return x; }
+        static __forceinline __m128 Unm ( __m128 x, Context & ) { return _mm_sub_ps(_mm_setzero_ps(), x); }    // todo: optimize?
+        static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return _mm_add_ps(a,b); }
+        static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return _mm_sub_ps(a,b); }
+        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return _mm_div_ps(a,b); }
+        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return _mm_mul_ps(a,b); }
+        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_add_ps(cast<TT>::from(*pa), b)); return a;   }
-        static __forceinline __m128 SetSub  ( __m128 a, __m128 b )
+        static __forceinline __m128 SetSub  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_sub_ps(cast<TT>::from(*pa), b)); return a;   }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b )
+        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_div_ps(cast<TT>::from(*pa), b)); return a;   }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b )
+        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_ps(cast<TT>::from(*pa), b)); return a;   }
     };
     
@@ -671,26 +671,26 @@ namespace yzg
             return C;
         }
         // basic
-        static __forceinline __m128 Set     ( __m128 a, __m128 b )
+        static __forceinline __m128 Set     ( __m128 a, __m128 b, Context & )
             { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
-        static __forceinline __m128 Equ     ( __m128 a, __m128 b )
+        static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & )
             { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_epi32(a,b)) & mask)==mask ); }            // todo: verify
-        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b )
+        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b, Context & )
             { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_epi32(a,b)) & mask)!=mask ); }            // todo: verify
         // numeric
-        static __forceinline __m128 Unp ( __m128 x ) { return x; }
-        static __forceinline __m128 Unm ( __m128 x ) { return _mm_sub_epi32(_mm_setzero_si128(), x); }      // todo: optimize?
-        static __forceinline __m128 Add ( __m128 a, __m128 b ) { return _mm_add_epi32(a,b); }
-        static __forceinline __m128 Sub ( __m128 a, __m128 b ) { return _mm_sub_epi32(a,b); }
-        static __forceinline __m128 Div ( __m128 a, __m128 b ) { return _mm_div_epi32(a,b); }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return _mm_mul_epi32(a,b); }
-        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b )
+        static __forceinline __m128 Unp ( __m128 x, Context & ) { return x; }
+        static __forceinline __m128 Unm ( __m128 x, Context & ) { return _mm_sub_epi32(_mm_setzero_si128(), x); }      // todo: optimize?
+        static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return _mm_add_epi32(a,b); }
+        static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return _mm_sub_epi32(a,b); }
+        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return _mm_div_epi32(a,b); }
+        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return _mm_mul_epi32(a,b); }
+        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_add_epi32(cast<TT>::from(*pa), b)); return a;   }
-        static __forceinline __m128 SetSub  ( __m128 a, __m128 b )
+        static __forceinline __m128 SetSub  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_sub_epi32(cast<TT>::from(*pa), b)); return a;   }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b )
+        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_div_epi32(cast<TT>::from(*pa), b)); return a;   }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b )
+        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_epi32(cast<TT>::from(*pa), b)); return a;   }
     };
     
@@ -704,11 +704,11 @@ namespace yzg
             return c;
         }
         // swappmin some numeric operations
-        static __forceinline __m128 Div ( __m128 a, __m128 b ) { return _mm_div_epu32(a,b); }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b ) { return _mm_mul_epu32(a,b); }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b )
+        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return _mm_div_epu32(a,b); }
+        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return _mm_mul_epu32(a,b); }
+        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_div_epu32(cast<TT>::from(*pa), b)); return a;   }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b )
+        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_epu32(cast<TT>::from(*pa), b)); return a;   }
     };
     
@@ -728,7 +728,7 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {            \
             __m128 val = x->eval(context);                              \
             YZG_EXCEPTION_POINT;                                        \
-            return SimPolicy::CALL(val);                                \
+            return SimPolicy::CALL(val,context);                        \
         }                                                               \
     };
     
@@ -758,7 +758,7 @@ namespace yzg
             YZG_EXCEPTION_POINT;                                            \
             __m128 rv = r->eval(context);                                   \
             YZG_EXCEPTION_POINT;                                            \
-            return SimPolicy::CALL ( lv, rv );                              \
+            return SimPolicy::CALL ( lv, rv, context );                     \
         }                                                                   \
     };
     
@@ -792,7 +792,7 @@ namespace yzg
     struct Sim_BoolAnd : SimNode_Op2 {
         Sim_BoolAnd ( const LineInfo & at ) : SimNode_Op2(at) {}
         virtual __m128 eval ( Context & context ) override {
-            if ( !cast<bool>::to(l->eval(context)) ) {    // if not left, then false
+            if ( !cast<bool>::to(l->eval(context)) ) {  // if not left, then false
                 return cast<bool>::from(false);
             } else {
                 YZG_EXCEPTION_POINT; 

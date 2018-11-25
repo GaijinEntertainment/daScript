@@ -53,18 +53,26 @@ namespace yzg
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_Less<SimPolicy_TT>,       bool, TT,  TT>  >("<",      prg) );
     }
     
+    // concatination types
+    template <typename TT, typename SimPolicy_TT>
+    void addBuiltInConcat(Program & prg)
+    {
+        //                                    policy                        ret   arg1 arg2    name
+        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Add<SimPolicy_TT>,        TT,   TT,  TT>  >("+",      prg) );
+        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetAdd<SimPolicy_TT>,     TT&,  TT&, TT>  >("+=",     prg) );
+    }
+    
     // numeric types
     template <typename TT, typename SimPolicy_TT>
     void addBuiltInNumeric(Program & prg)
     {
+        addBuiltInConcat<TT,SimPolicy_TT>(prg);
         //                                    policy                        ret   arg1 arg2    name
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_Unp<SimPolicy_TT>,        TT,   TT>       >("+",      prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_Unm<SimPolicy_TT>,        TT,   TT>       >("-",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Add<SimPolicy_TT>,        TT,   TT,  TT>  >("+",      prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_Sub<SimPolicy_TT>,        TT,   TT,  TT>  >("-",      prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_Mul<SimPolicy_TT>,        TT,   TT,  TT>  >("*",      prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_Div<SimPolicy_TT>,        TT,   TT,  TT>  >("/",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetAdd<SimPolicy_TT>,     TT&,  TT&, TT>  >("+=",     prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     TT&,  TT&, TT>  >("-=",     prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetMul<SimPolicy_TT>,     TT&,  TT&, TT>  >("*=",     prg) );
         prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetDiv<SimPolicy_TT>,     TT&,  TT&, TT>  >("/=",     prg) );
@@ -116,6 +124,7 @@ namespace yzg
         // string
         addBuiltInBasic<char *,SimPolicy_String>(*this);
         addBuiltInOrdered<char *, SimPolicy_String>(*this);
+        addBuiltInConcat<char *, SimPolicy_String>(*this);
         // boolean
         addBuiltInBasic<bool, SimPolicy_Bool>(*this);
         addBuiltInBoolean<bool, SimPolicy_Bool>(*this);

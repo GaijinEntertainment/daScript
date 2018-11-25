@@ -1,9 +1,35 @@
 #include "precomp.h"
 
 #include "runtime_string.h"
+#include "simulate.h"
 
 namespace yzg
 {
+    // string operations
+    
+    __m128 SimPolicy_String::Add ( __m128 a, __m128 b, Context & context )
+    {
+        const char *  sA = to_rts(a); auto la = strlen(sA);
+        const char *  sB = to_rts(b); auto lb = strlen(sB);
+        char * sAB = (char * ) context.allocate(la + lb + 1);
+        memcpy ( sAB, sA, la );
+        memcpy ( sAB+la, sB, lb+1 );
+        return from_rts(sAB);
+    }
+  
+    __m128 SimPolicy_String::SetAdd ( __m128 a, __m128 b, Context & context )
+    {
+        char ** pA = cast<char **>::to(a);
+        const char *  sA = *pA ? *pA : rts_null; auto la = strlen(sA);
+        const char *  sB = to_rts(b); auto lb = strlen(sB);
+        *pA = (char * ) context.allocate(la + lb + 1);
+        memcpy ( *pA , sA, la );
+        memcpy ( *pA +la, sB, lb+1 );
+        return a;
+    }
+    
+    // helper functions
+    
     const char * rts_null = "";
     
     string unescapeString ( const string & input )
