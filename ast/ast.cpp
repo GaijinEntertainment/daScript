@@ -1126,6 +1126,8 @@ namespace yzg
     
     void ExprBreak::inferType(InferTypeContext & context)
     {
+        if ( !context.loop.size() )
+            context.error("break without loop", at);
         type = make_shared<TypeDecl>();
     }
     
@@ -1194,10 +1196,13 @@ namespace yzg
     void ExprWhile::inferType(InferTypeContext & context)
     {
         cond->inferType(context);
+        if ( !cond->type ) return;
         if ( !cond->type->isSimpleType(Type::tBool) ) {
             context.error("while loop condition must be boolean", at);
         } else {
+            context.loop.push_back(shared_from_this());
             body->inferType(context);
+            context.loop.pop_back();
             type = make_shared<TypeDecl>();
         }
     }
@@ -1238,7 +1243,9 @@ namespace yzg
         } else if ( !head->type->isIteratorType(*iter->type) ) {
             context.error("iterator type does not match", at);
         } else {
+            context.loop.push_back(shared_from_this());
             body->inferType(context);
+            context.loop.pop_back();
             type = make_shared<TypeDecl>();
         }
     }

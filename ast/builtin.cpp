@@ -9,6 +9,7 @@ namespace yzg
         SimNode_Print ( const LineInfo & at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
             evalArgs(context);
+            YZG_EXCEPTION_POINT;
             context.to_out(to_rts(abiArgValues(context)[0]));
             return _mm_setzero_ps();
         }
@@ -31,12 +32,22 @@ namespace yzg
             return _mm_setzero_ps();
         }
     };
+    
+    // "TERMINATE"
+    struct SimNode_Terminate : SimNode {
+        SimNode_Terminate ( const LineInfo & at ) : SimNode(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            context.stopFlags |= EvalFlags::stopForTerminate;
+            return _mm_setzero_ps();
+        }
+    };
 
     void Program::addBuiltinFunctions()
     {
         addBuiltIn(make_shared<BuiltInFn<SimNode_Print,void,char *>>("print", *this));
         addBuiltIn(make_shared<BuiltInFn<SimNode_StackWalk,void>>("stackwalk", *this));
         addBuiltIn(make_shared<BuiltInFn<SimNode_BreakPoint,void>>("breakpoint", *this));
+        addBuiltIn(make_shared<BuiltInFn<SimNode_Terminate,void>>("terminate", *this));
     }
     
     // basic operations

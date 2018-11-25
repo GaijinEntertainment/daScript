@@ -183,10 +183,11 @@ namespace yzg
     public:
         struct InferTypeContext
         {
-            ProgramPtr          program;
-            FunctionPtr         func;
-            vector<VariablePtr> local;
-            uint32_t            stackTop = 0;
+            ProgramPtr              program;
+            FunctionPtr             func;
+            vector<VariablePtr>     local;
+            vector<ExpressionPtr>   loop;
+            uint32_t                stackTop = 0;
             void error ( const string & err, const LineInfo & at );
         };
     public:

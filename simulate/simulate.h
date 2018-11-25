@@ -158,7 +158,7 @@ namespace yzg
             // CALL
             fn.code->eval(*this);
             __m128 result = abiResult();
-            stopFlags &= ~EvalFlags::stopForReturn;
+            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
             // POP
             stackTop = pushStack;
             return result;
@@ -353,14 +353,14 @@ namespace yzg
             #if YZG_ENABLE_EXCEPTIONS
                 try_block->eval(context);
                 if ( context.stopFlags & EvalFlags::stopForThrow ) {
-                    context.stopFlags &= ~EvalFlags::stopForThrow;
+                    context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
                     catch_block->eval(context);
                 }
             #else
                 try {
                     try_block->eval(context);
                 } catch ( const runtime_error & ) {
-                    context.stopFlags &= ~EvalFlags::stopForThrow;
+                    context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
                     catch_block->eval(context);
                 }
             #endif
@@ -374,7 +374,7 @@ namespace yzg
         SimNode_Return ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             if ( subexpr )
-            context.abiResult() = subexpr->eval(context);
+                context.abiResult() = subexpr->eval(context);
             context.stopFlags |= EvalFlags::stopForReturn;
             return _mm_setzero_ps();
         }
