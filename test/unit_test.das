@@ -229,6 +229,31 @@ def test_copy
         verify_default_ball(b)
     print("ok")
 
+def test_break
+    print("test break:\n")
+    let
+        i,j,k:int=0
+    in
+        while i < 20
+            i ++
+            if i == 10
+                break
+            j++
+        assert(j==9)
+        i = 0
+        while i < 10
+            i ++
+            j = 0
+            while j < 10
+                j ++
+                if j > i
+                    break
+                k++
+            if k>=20
+                break
+        assert(i==6 & j==7 & k==21)
+    print("ok")
+
 // this is where unit tests are
 def test
     print("unit tests started\n")
@@ -243,6 +268,7 @@ def test
     test_if_then_else()
     test_copy()
     test_stackwalk()
+    test_break()
     print("unit tests finished\n")
 
 

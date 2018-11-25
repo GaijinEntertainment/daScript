@@ -533,6 +533,7 @@ namespace yzg
     {
         thisProgram = context.program.get();
         subexpr->inferType(context);
+        if ( !subexpr->type ) return;
         type = make_shared<TypeDecl>(*subexpr->type);
     }
     
@@ -1069,6 +1070,23 @@ namespace yzg
     SimNode * ExprReturn::simulate (Context & context) const
     {
         return context.makeNode<SimNode_Return>(at);
+    }
+    
+    // ExprBreak
+    
+    void ExprBreak::log(ostream& stream, int depth) const
+    {
+        stream << "break";
+    }
+    
+    void ExprBreak::inferType(InferTypeContext & context)
+    {
+        type = make_shared<TypeDecl>();
+    }
+    
+    SimNode * ExprBreak::simulate (Context & context) const
+    {
+        return context.makeNode<SimNode_Break>(at);
     }
 
     // ExprIfThenElse

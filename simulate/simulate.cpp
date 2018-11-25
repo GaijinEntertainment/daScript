@@ -12,6 +12,7 @@ namespace yzg
     __m128 SimNode_Assert::eval ( Context & context )
     {
         if ( !cast<bool>::to(subexpr->eval(context)) ) {
+            YZG_EXCEPTION_POINT;
             string error_message = "assert failed";
             if ( message )
                 error_message = error_message + ", " + message;
@@ -40,7 +41,7 @@ namespace yzg
     
     void Context::runInitScript ( void )
     {
-        for ( int i=0; i!=totalVariables; ++i ) {
+        for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
             auto & pv = globalVariables[i];
             if ( pv.init ) {
                 pv.init->eval(*this);
@@ -73,7 +74,7 @@ namespace yzg
     void Context::stackWalk()
     {
         stringstream ssw;
-    #if ENABLE_STACK_WALK
+    #if YZG_ENABLE_STACK_WALK
         ssw << "\nCALL STACK:\n";
         char * sp = stackTop;
         while ( sp>=stackTop && sp <(stack+stackSize) ) {
@@ -100,11 +101,6 @@ namespace yzg
     void Context::breakPoint(int column, int line) const
     {
         raise(SIGTRAP);
-    }
-    
-    void Context::throw_error ( const char * message )
-    {
-        throw runtime_error(message);
     }
     
     void Context::to_out ( const char * message )

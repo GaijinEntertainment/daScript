@@ -7,7 +7,13 @@
 
 namespace yzg
 {
-    #define ENABLE_STACK_WALK   1
+    #ifndef YZG_ENABLE_STACK_WALK
+    #define YZG_ENABLE_STACK_WALK   1
+    #endif
+    
+    #ifndef YZG_ENABLE_EXCEPTIONS
+    #define YZG_ENABLE_EXCEPTIONS   1
+    #endif
     
     using namespace std;
     
@@ -47,6 +53,14 @@ namespace yzg
     };
     static_assert((sizeof(Prologue) & 0xf)==0, "it has to be 16 byte aligned");
     
+    enum EvalFlags : uint32_t
+    {
+        stopForBreak        = 1 << 0
+    ,   stopForReturn       = 1 << 1
+    ,   stopForThrow        = 1 << 2
+    ,   stopForTerminate    = 1 << 3
+    };
+    
     class Context
     {
         friend class Program;
@@ -64,8 +78,10 @@ namespace yzg
         
         __forceinline void * allocate ( uint32_t size ) {
             size = (size + 0x0f) & ~0x0f;
-            if ( linearAllocator - linearAllocatorBase + size > linearAllocatorSize )
+            if ( linearAllocator - linearAllocatorBase + size > linearAllocatorSize ) {
                 throw_error("out of linear allocator space");
+                return nullptr;
+            }
             void * result = linearAllocator;
             linearAllocator += size;
             return result;
@@ -75,9 +91,12 @@ namespace yzg
             if ( name.empty() )
                 return nullptr;
             auto size = name.length() + 1;
-            char * str = (char *) allocate(uint32_t(size+1));
-            memcpy ( str, name.c_str(), size );
-            return str;
+            if ( char * str = (char *) allocate(uint32_t(size+1)) ) {
+                memcpy ( str, name.c_str(), size );
+                return str;
+            } else {
+                return nullptr;
+            }
         }
         
         template<typename TT, typename... Params>
@@ -85,15 +104,27 @@ namespace yzg
             return new (allocate(sizeof(TT))) TT(args...);
         }
         
-        __forceinline __m128 getVariable ( int index ) const { return globalVariables[index].value; }
+        __forceinline __m128 getVariable ( int index ) const {
+            assert(index>=0 && index<totalVariables && "variable index out of range");
+            return globalVariables[index].value;
+        }
         
         __forceinline void restart( ) {
             linearAllocator = linearAllocatorExecuteBase;
             stackTop = stack + stackSize;
+            stopFlags = 0;
         }
         
         __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
             return call(fnIndex, args, 0);
+        }
+        
+        __forceinline void throw_error ( const char * message ) {
+            exception = message;
+            stopFlags |= EvalFlags::stopForThrow;
+            #if !YZG_ENABLE_EXCEPTIONS
+                throw runtime_error(message ? message : "");
+            #endif
         }
         
         int findFunction ( const char * name ) const;
@@ -101,7 +132,6 @@ namespace yzg
         void stackWalk();
         void runInitScript ( void );
         
-        virtual void throw_error ( const char * message );      // throw
         virtual void to_out ( const char * message );           // output to stdout or equivalent
         virtual void to_err ( const char * message );           // output to stderr or equivalent
         virtual void breakPoint(int column, int line) const;    // what to do in case of breakpoint
@@ -120,15 +150,17 @@ namespace yzg
             assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
             auto & fn = functions[fnIndex];
             // PUSH
+            if ( stack - ( stackTop - fn.stackSize ) > stackSize ) {
+                throw_error("stack overflow");
+                return _mm_setzero_ps();
+            }
             char * pushStack = stackTop;
             stackTop -= fn.stackSize;
-            if ( stack - stackTop > stackSize )
-                throw_error("stack overflow");
             // fill prologue
             Prologue * pp = (Prologue *) stackTop;
             pp->result =        _mm_setzero_ps();
             pp->arguments =     args;
-        #if ENABLE_STACK_WALK
+        #if YZG_ENABLE_STACK_WALK
             pp->info =          fn.debug;
             pp->line =          line;
         #endif
@@ -151,11 +183,20 @@ namespace yzg
         int totalFunctions = 0;
         const string * debugInput = nullptr;
         class Program * thisProgram = nullptr;
+        const char * exception = nullptr;
     public:
         char * stackTop = nullptr;
         char * stack = nullptr;
         int stackSize = 16*1024;
+        uint32_t stopFlags = 0;
     };
+    
+#if YZG_ENABLE_EXCEPTIONS
+    #define YZG_EXCEPTION_POINT \
+        { if ( context.stopFlags ) return _mm_setzero_ps(); }
+#else
+     #define YZG_EXCEPTION_POINT
+#endif
     
     struct SimNode_Assert : SimNode {
         SimNode_Assert ( const LineInfo & at, SimNode * s, const char * m ) : SimNode(at), subexpr(s), message(m) {}
@@ -170,10 +211,14 @@ namespace yzg
         SimNode_FieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode(at), value(rv), offset(of) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 rv = value->eval(context);
+            YZG_EXCEPTION_POINT;
             char * prv = cast<char *>::to(rv);
-            if ( checkForNull && !prv )
+            if ( checkForNull && !prv ) {
                 context.throw_error("dereferencing nil pointer");
-            return cast<char *>::from( prv + offset );
+                return _mm_setzero_ps();
+            } else {
+                return cast<char *>::from( prv + offset );
+            }
         }
         SimNode *   value;
         uint32_t    offset;
@@ -183,16 +228,19 @@ namespace yzg
     
     // AT (INDEX)
     struct SimNode_At : SimNode {
-        virtual __m128 eval ( Context & context ) override {
-            char * pValue = cast<char *>::to(value->eval(context));
-            uint32_t idx = cast<uint32_t>::to(index->eval(context));
-            if ( idx >= range )
-                context.throw_error("index out of range");
-            return cast<char *>::from(pValue + idx*stride);    // TODO: add range check
-            
-        }
         SimNode_At ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t rng )
             : SimNode(at), value(rv), index(idx), stride(strd), range(rng) {}
+        virtual __m128 eval ( Context & context ) override {
+            char * pValue = cast<char *>::to(value->eval(context));
+            YZG_EXCEPTION_POINT;
+            uint32_t idx = cast<uint32_t>::to(index->eval(context));
+            if ( idx >= range ) {
+                context.throw_error("index out of range");
+                return _mm_setzero_ps();
+            } else {
+                return cast<char *>::from(pValue + idx*stride);
+            }
+        }
         SimNode * value, * index;
         uint32_t  stride, range;
     };
@@ -203,13 +251,14 @@ namespace yzg
         __forceinline __m128 * abiArgValues ( Context & context ) const { return (__m128 *)(context.stackTop+stackTop); }
         __forceinline void evalArgs ( Context & context ) {
             __m128 * argValues = abiArgValues(context);
-            for ( int i=0; i!=nArguments; ++i ) {
+            for ( int i=0; i!=nArguments && !context.stopFlags; ++i ) {
                 argValues[i] = arguments[i]->eval(context);
             }
         }
         virtual __m128 eval ( Context & context ) override {
             __m128 * argValues = abiArgValues(context);
             evalArgs(context);
+            YZG_EXCEPTION_POINT;
             return context.call(fnIndex, argValues, debug.line);
         }
         SimNode ** arguments;
@@ -256,6 +305,7 @@ namespace yzg
             : SimNode(at), subexpr(s), typeInfo(ti), message(msg) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 res = subexpr->eval(context);
+            YZG_EXCEPTION_POINT;
             stringstream ssw;
             if ( message ) ssw << message << " ";
             ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo) << " at " << debug.describe() << "\n";
@@ -312,6 +362,15 @@ namespace yzg
         int32_t index;
     };
     
+    // BREAK
+    struct SimNode_Break : SimNode {
+        SimNode_Break ( const LineInfo & at ) : SimNode(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            context.stopFlags |= EvalFlags::stopForBreak;
+            return _mm_setzero_ps();
+        }
+    };
+    
     // DEREFERENCE
     template <typename TT>
     struct SimNode_Ref2Value : SimNode {      // &value -> value
@@ -330,8 +389,10 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
             void * p = cast<void *>::to(ptr);
-            if ( p == nullptr )
+            if ( p == nullptr ) {
                 context.throw_error("dereferencing nil pointer");
+                return _mm_setzero_ps();
+            }
             return ptr;
         }
         SimNode * subexpr;
@@ -341,9 +402,13 @@ namespace yzg
     struct SimNode_New : SimNode {
         SimNode_New ( const LineInfo & at, int32_t b ) : SimNode(at), bytes(b) {}
         virtual __m128 eval ( Context & context ) override {
-            void * ptr = context.allocate(bytes);
-            memset ( ptr, 0, bytes );
-            return cast<void *>::from(ptr);
+            if ( void * ptr = context.allocate(bytes) ) {
+                memset ( ptr, 0, bytes );
+                return cast<void *>::from(ptr);
+            } else {
+                context.throw_error("out of memory");
+                return _mm_setzero_ps();
+            }
         }
         int32_t     bytes;
     };
@@ -364,7 +429,9 @@ namespace yzg
         SimNode_CopyValue(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
+            YZG_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
+            YZG_EXCEPTION_POINT;
             TT * pl = cast<TT *>::to(ll);
             TT * pr = (TT *) &rr;
             *pl = *pr;
@@ -379,7 +446,9 @@ namespace yzg
         : SimNode(at), l(ll), r(rr), size(sz) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
+            YZG_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
+            YZG_EXCEPTION_POINT;
             auto pl = cast<void *>::to(ll);
             auto pr = cast<void *>::to(rr);
             memcpy ( pl, pr, size );
@@ -393,7 +462,7 @@ namespace yzg
     struct SimNode_Block : SimNode {
         SimNode_Block ( const LineInfo & at ) : SimNode(at) {}
         virtual __m128 eval ( Context & context ) override {
-            for ( int i = 0; i != total; ++i )
+            for ( int i = 0; i!=total && !context.stopFlags; ++i )
                 list[i]->eval(context);
             return _mm_setzero_ps();
         }
@@ -405,8 +474,9 @@ namespace yzg
     struct SimNode_Let : SimNode_Block {
         SimNode_Let ( const LineInfo & at ) : SimNode_Block(at) {}
         virtual __m128 eval ( Context & context ) override {
-            for ( int i = 0; i != total; ++i )
+            for ( int i = 0; i!=total && !context.stopFlags; ++i )
                 list[i]->eval(context);
+            if ( context.stopFlags ) return _mm_setzero_ps();
             return subexpr->eval(context);
         }
         SimNode * subexpr = nullptr;
@@ -417,7 +487,9 @@ namespace yzg
         SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         virtual __m128 eval ( Context & context ) override {
-            if ( cast<bool>::to(cond->eval(context)) ) {
+            bool cmp = cast<bool>::to(cond->eval(context));
+            YZG_EXCEPTION_POINT;
+            if ( cmp ) {
                 if_true->eval(context);
             } else if ( if_false ){
                 if_false->eval(context);
@@ -431,9 +503,10 @@ namespace yzg
     struct SimNode_While : SimNode {
         SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b ) : SimNode(at), cond(c), body(b) {}
         virtual __m128 eval ( Context & context ) override {
-            while ( cast<bool>::to(cond->eval(context)) ) {
+            while ( cast<bool>::to(cond->eval(context)) && !context.stopFlags ) {
                 body->eval(context);
             }
+            context.stopFlags &= ~EvalFlags::stopForBreak;
             return _mm_setzero_ps();
         }
         SimNode * cond, * body;
@@ -445,12 +518,15 @@ namespace yzg
             : SimNode(at), head(h), iter(i), body(b), size(sz), stride(st), typeSize(ts) {}
         virtual __m128 eval ( Context & context ) override {
             char * ph = cast<char *>::to(head->eval(context));
+            YZG_EXCEPTION_POINT;
             char * pi = cast<char *>::to(iter->eval(context));
-            for ( int i=0; i!=size; ++i ) {
+            YZG_EXCEPTION_POINT;
+            for ( int i=0; i!=size && !context.stopFlags; ++i ) {
                 memcpy(pi,ph,typeSize);
                 body->eval(context);
                 ph += stride;
             }
+            context.stopFlags &= ~EvalFlags::stopForBreak;
             return _mm_setzero_ps();
         }
         SimNode * head, * iter, * body;
@@ -617,9 +693,7 @@ namespace yzg
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_mul_epu32(cast<TT>::from(*pa), b)); return a;   }
     };
     
-    struct SimPolicy_Pointer : SimPolicy_CoreType<void *>
-    {        
-    };
+    struct SimPolicy_Pointer : SimPolicy_CoreType<void *> {};
 
     // op1 policies
     
@@ -633,7 +707,9 @@ namespace yzg
     struct Sim_##CALL : SimNode_Op1 {                                   \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         virtual __m128 eval ( Context & context ) override {            \
-            return SimPolicy::CALL ( x->eval(context) );                \
+            __m128 val = x->eval(context);                              \
+            YZG_EXCEPTION_POINT;                                        \
+            return SimPolicy::CALL(val);                                \
         }                                                               \
     };
     
@@ -659,7 +735,11 @@ namespace yzg
     struct Sim_##CALL : SimNode_Op2 {                                       \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}             \
         virtual __m128 eval ( Context & context ) override {                \
-            return SimPolicy::CALL ( l->eval(context), r->eval(context) );  \
+            __m128 lv = l->eval(context);                                   \
+            YZG_EXCEPTION_POINT;                                            \
+            __m128 rv = r->eval(context);                                   \
+            YZG_EXCEPTION_POINT;                                            \
+            return SimPolicy::CALL ( lv, rv );                              \
         }                                                                   \
     };
     
@@ -693,20 +773,24 @@ namespace yzg
     struct Sim_BoolAnd : SimNode_Op2 {
         Sim_BoolAnd ( const LineInfo & at ) : SimNode_Op2(at) {}
         virtual __m128 eval ( Context & context ) override {
-            if ( !cast<bool>::to(l->eval(context)) )    // if not left, then false
+            if ( !cast<bool>::to(l->eval(context)) ) {    // if not left, then false
                 return cast<bool>::from(false);
-            else
+            } else {
+                YZG_EXCEPTION_POINT; 
                 return r->eval(context);                // if left, then right
+            }
         }
     };
     
     struct Sim_BoolOr : SimNode_Op2 {
         Sim_BoolOr ( const LineInfo & at ) : SimNode_Op2(at) {}
         virtual __m128 eval ( Context & context ) override {
-            if ( cast<bool>::to(l->eval(context)) )     // if left, then true
+            if ( cast<bool>::to(l->eval(context)) ) {   // if left, then true
                 return cast<bool>::from(true);
-            else
+            } else {
+                YZG_EXCEPTION_POINT;
                 return r->eval(context);                // if not left, then right
+            }
         }
     };
 

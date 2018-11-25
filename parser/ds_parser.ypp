@@ -58,7 +58,8 @@
 %token  _IF     _ELSE   _FOREACH    _IN
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _ASSERT _DEBUG      _ELIF
-%token  _RETURN _NULL
+%token  _RETURN _NULL   _BREAK      _TRY
+%token  _CATCH
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -98,12 +99,14 @@
 %type <pExpression>     expression_while_loop
 %type <pExpression>     expression_foreach_loop
 %type <pExpression>     expression_assert
+%type <pExpression>     expression_break
+%type <pExpression>     expression_else
+%type <pExpression>     expression_if_then_else
 %type <pExpression>     expr_new
 %type <pExpression>     expr_sizeof
 %type <pExpression>     expression_any
 %type <pExpression>     optional_initializer
-%type <pExpression>     expression_else
-%type <pExpression>     expressoin_if_then_else
+
 
 /* operation precedence*/
 %left   ','
@@ -137,7 +140,7 @@ expression_else
     }
     ;
 
-expressoin_if_then_else
+expression_if_then_else
     :   _IF[loc] expr[cond] expression_block[block] expression_else[then] {
         $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),ExpressionPtr($block),ExpressionPtr($then));
     }
@@ -220,7 +223,8 @@ expression_any
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_foreach_loop[subexpr]    { $$ = $subexpr; }
     |   expression_assert[subexpr]          { $$ = $subexpr; }
-    |   expressoin_if_then_else[subexpr]    { $$ = $subexpr; }
+    |   expression_break[subexpr]           { $$ = $subexpr; }
+    |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     ;
 
 expressions
@@ -239,6 +243,10 @@ expr_new
                 yyerror("structure type not found "+*$structName,tokAt(@loc));
             $$ = new ExprNew(tokAt(@loc),pTypeDecl);
     }
+    ;
+
+expression_break
+    :   _BREAK[loc]   { $$ = new ExprBreak(tokAt(@loc)); }
     ;
 
 expression_assert

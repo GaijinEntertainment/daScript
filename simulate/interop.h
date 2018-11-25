@@ -39,14 +39,17 @@ namespace yzg
             using Indices = make_index_sequence<nargs>;
             using Arguments = typename FunctionTrait::arguments;
             evalArgs(context);
+            YZG_EXCEPTION_POINT;
             __m128 * args = abiArgValues(context);
             auto cpp_args = cast_args<Arguments>(args, Indices());
-        #if ENABLE_STACK_WALK
+        #if YZG_ENABLE_STACK_WALK
             // PUSH
+            if ( context.stack - ( context.stackTop - sizeof(Prologue) ) > context.stackSize ) {
+                context.throw_error("stack overflow");
+                return _mm_setzero_ps();
+            }
             char * pushStack = context.stackTop;
             context.stackTop -= sizeof(Prologue);
-            if ( context.stack - context.stackTop > context.stackSize )
-                context.throw_error("stack overflow");
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
             pp->result =        _mm_setzero_ps();
@@ -57,7 +60,7 @@ namespace yzg
             // calc
             auto res = ImplCallStaticFunction<Result>::call(*fn, move(cpp_args), Indices());
             // POP
-        #if ENABLE_STACK_WALK
+        #if YZG_ENABLE_STACK_WALK
             context.stackTop = pushStack;
         #endif
             return res;

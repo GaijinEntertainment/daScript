@@ -82,6 +82,9 @@
 <normal>"def"                                           need_oxford_comma = false; return _DEF;
 <normal>"let"                                           need_oxford_comma = false; return _LET;
 <normal>"struct"                                        need_oxford_comma = false; return _STRUCT;
+<normal>"break"                                         need_oxford_comma = false; return _BREAK;
+<normal>"try"                                           need_oxford_comma = false; return _TRY;
+<normal>"catch"                                         need_oxford_comma = false; return _CATCH;
 <normal>"null"                                          return _NULL;
 <normal>"return"                                        return _RETURN;
 <normal>"assert"                                        return _ASSERT;

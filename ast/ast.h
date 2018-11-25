@@ -431,6 +431,16 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
+    class ExprBreak : public Expression
+    {
+    public:
+        ExprBreak() = default;
+        ExprBreak ( const LineInfo & a ) : Expression(a) {}
+        virtual void inferType(InferTypeContext & context) override;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+    
     template <typename TT, typename ExprConstExt>
     class ExprConst : public Expression
     {
