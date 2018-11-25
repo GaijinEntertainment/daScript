@@ -531,7 +531,6 @@ namespace yzg
     
     void ExprDebug::inferType(InferTypeContext & context)
     {
-        thisProgram = context.program.get();
         subexpr->inferType(context);
         if ( !subexpr->type ) return;
         type = make_shared<TypeDecl>(*subexpr->type);
@@ -540,7 +539,7 @@ namespace yzg
     SimNode * ExprDebug::simulate (Context & context) const
     {
         TypeInfo * pTypeInfo = context.makeNode<TypeInfo>();
-        thisProgram->makeTypeInfo(pTypeInfo, context, subexpr->type);
+        context.thisProgram->makeTypeInfo(pTypeInfo, context, subexpr->type);
         return context.makeNode<SimNode_Debug>(at,
                                                subexpr->simulate(context),
                                                pTypeInfo,

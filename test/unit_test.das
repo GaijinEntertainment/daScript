@@ -265,7 +265,7 @@ def test_break
             if k>=20
                 break
         assert(i==6 & j==7 & k==21)
-    print("ok")
+    print("ok\n")
 
 // this is where unit tests are
 def test

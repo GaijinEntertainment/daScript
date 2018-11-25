@@ -63,15 +63,8 @@ namespace yzg
     
     class Context
     {
-        friend class Program;
         friend struct SimNode_GetGlobal;
-        friend struct SimNode_GetLocal;
-        friend struct SimNode_GetArgument;
-        friend struct SimNode_TryCatch;
-        friend struct SimNode_Call;
-        friend struct SimNode_InitLocal;
-        friend struct SimNode_Return;
-        friend struct SimNode_Assert;
+        friend class Program;
     public:
         Context(const string * lines);
         ~Context();
@@ -135,8 +128,6 @@ namespace yzg
         virtual void to_out ( const char * message );           // output to stdout or equivalent
         virtual void to_err ( const char * message );           // output to stderr or equivalent
         virtual void breakPoint(int column, int line) const;    // what to do in case of breakpoint
-
-    protected:
         
         __forceinline __m128 * abiArguments() {
             return ((Prologue *)stackTop)->arguments;
@@ -182,10 +173,10 @@ namespace yzg
         SimFunction * functions = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
-        const string * debugInput = nullptr;
-        class Program * thisProgram = nullptr;
         const char * exception = nullptr;
     public:
+        const string * debugInput = nullptr;
+        class Program * thisProgram = nullptr;
         char * stackTop = nullptr;
         char * stack = nullptr;
         int stackSize = 16*1024;

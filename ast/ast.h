@@ -290,7 +290,6 @@ namespace yzg
     public:
         ExpressionPtr   subexpr;
         string          message;
-        Program *       thisProgram = nullptr;
     };
     
     class ExprAt : public Expression
@@ -700,7 +699,6 @@ namespace yzg
     public:
         ExternalFn(const string & name, Program & prg) : BuiltInFunction(name)
         {
-            thisProgram = &prg;
             using FunctionTrait = function_traits<FuncT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
             using Indices = make_index_sequence<nargs>;
@@ -718,11 +716,9 @@ namespace yzg
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
             auto pCall = context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(at);
-            pCall->info = thisProgram->makeFunctionDebugInfo(context, *this);
+            pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
             return pCall;
         }
-    protected:
-        Program *       thisProgram = nullptr;
     };
     
     template <typename FuncT, FuncT fn>
