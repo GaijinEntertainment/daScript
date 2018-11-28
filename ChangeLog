@@ -6,6 +6,7 @@ NOTE: uriparser is looking for help with a few things:
 
   * Fixed: Compilation with MinGW
       Thanks to Sandro Mani for the patch!
+  * Fixed: Drop use of asprintf from the test suite for MinGW (GitHub #40)
   * Soname: TODO
 
 2018-10-27 -- 0.9.0
