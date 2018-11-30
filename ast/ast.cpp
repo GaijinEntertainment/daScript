@@ -1470,44 +1470,34 @@ namespace yzg
     
     StructurePtr Program::findStructure ( const string & name ) const
     {
-        auto it = structures.find(name);
-        if ( it != structures.end() )
-            return it->second;
-        return nullptr;
+        return library.findStructure(name);
     }
     
     VariablePtr Program::findVariable ( const string & name ) const
     {
-        auto it = globals.find(name);
-        if ( it != globals.end() )
-            return it->second;
-        return nullptr;
+        return library.findVariable(name);
     }
     
     FunctionPtr Program::findFunction ( const string & mangledName ) const
     {
-        auto it = functions.find(mangledName);
-        if ( it != functions.end() )
-            return it->second;
-        return nullptr;
+        return library.findFunction(mangledName);
     }
     
     ostream& operator<< (ostream& stream, const Program & program)
     {
-        for ( const auto & st : program.structures ) {
+        for ( const auto & st : program.thisModule->structures ) {
             stream << *st.second << "\n";
         }
-        if ( program.globals.size() ) {
+        if ( program.thisModule->globals.size() ) {
             stream << "(let\n";
-            for ( auto & pv : program.globals ) {
+            for ( auto & pv : program.thisModule->globals ) {
                 stream << "\t(" <<  *pv.second << ")\n";
             }
             stream << ")\n\n";
         }
-        for ( const auto & st : program.functions ) {
-            if ( !st.second->builtIn ) {
+        for ( const auto & st : program.thisModule->functions ) {
+            if ( !st.second->builtIn )
                 stream << *st.second << "\n";
-            }
         }
         return stream;
     }
@@ -1515,7 +1505,7 @@ namespace yzg
     void Program::inferTypes()
     {
         // structure declarations (precompute offsets of fields)
-        for ( auto & ist : structures ) {
+        for ( auto & ist : thisModule->structures ) {
             auto & st = ist.second;
             int offset = 0;
             for ( auto & fi : st->fields ) {
@@ -1525,13 +1515,13 @@ namespace yzg
         }
         // global variables
         int gvi = 0;
-        for ( auto & it : globals ) {
+        for ( auto & it : thisModule->globals ) {
             auto pvar = it.second;
             pvar->index = gvi ++;
         }
         // functions
         totalFunctions = 0;
-        for ( auto & fit : functions ) {
+        for ( auto & fit : thisModule->functions ) {
             Expression::InferTypeContext context;
             context.program = shared_from_this();
             context.func = fit.second;
@@ -1552,17 +1542,6 @@ namespace yzg
             }
         }
     }
-    
-    void Program::addBuiltIn(FunctionPtr && func)
-    {
-        auto mangledName = func->getMangledName();
-        if ( findFunction(mangledName) ) {
-            error("builtin function already defined " + mangledName, LineInfo());
-        } else {
-            functions[mangledName] = func;
-            functionsByName[func->name].push_back(func);
-        }
-    }
         
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const
     {
@@ -1571,32 +1550,35 @@ namespace yzg
             arguments by name?
          */
         vector<FunctionPtr> result;
-        auto itFnList = functionsByName.find(name);
-        if ( itFnList == functionsByName.end() )
-            return result;
-        auto & goodFunctions = itFnList->second;
-        for ( auto & pFn : goodFunctions ) {
-            if ( pFn->arguments.size() >= types.size() ) {
-                bool typesCompatible = true;
-                for ( auto ai = 0; ai != types.size(); ++ai ) {
-                    auto & argType = pFn->arguments[ai]->type;
-                    auto & passType = types[ai];
-                    if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false)) ) {
-                        typesCompatible = false;
-                        break;
+        library.foreach([&](const ModulePtr & mod) -> bool {
+            auto itFnList = mod->functionsByName.find(name);
+            if ( itFnList != mod->functionsByName.end() ) {
+                auto & goodFunctions = itFnList->second;
+                for ( auto & pFn : goodFunctions ) {
+                    if ( pFn->arguments.size() >= types.size() ) {
+                        bool typesCompatible = true;
+                        for ( auto ai = 0; ai != types.size(); ++ai ) {
+                            auto & argType = pFn->arguments[ai]->type;
+                            auto & passType = types[ai];
+                            if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false)) ) {
+                                typesCompatible = false;
+                                break;
+                            }
+                        }
+                        bool tailCompatible = true;
+                        for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
+                            if ( !pFn->arguments[ti]->init ) {
+                                tailCompatible = false;
+                            }
+                        }
+                        if ( typesCompatible && tailCompatible ) {
+                            result.push_back(pFn);
+                        }
                     }
-                }
-                bool tailCompatible = true;
-                for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
-                    if ( !pFn->arguments[ti]->init ) {
-                        tailCompatible = false;
-                    }
-                }
-                if ( typesCompatible && tailCompatible ) {
-                    result.push_back(pFn);
                 }
             }
-        }
+            return true;
+        });
         return result;
     }
     
@@ -1664,8 +1646,8 @@ namespace yzg
     void Program::simulate ( Context & context )
     {
         context.thisProgram = this;
-        context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(globals.size()*sizeof(GlobalVariable)) );
-        for ( auto & it : globals ) {
+        context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(thisModule->globals.size()*sizeof(GlobalVariable)) );
+        for ( auto & it : thisModule->globals ) {
             auto pvar = it.second;
             auto & gvar = context.globalVariables[pvar->index];
             gvar.name = context.allocateName(pvar->name);
@@ -1674,10 +1656,10 @@ namespace yzg
             gvar.value = cast<void *>::from(context.allocate(gvar.size));
             gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
         }
-        context.totalVariables = (int) globals.size();
+        context.totalVariables = (int) thisModule->globals.size();
         context.functions = (SimFunction *) context.allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
-        for ( auto & it : functions ) {
+        for ( auto & it : thisModule->functions ) {
             auto pfun = it.second;
             if ( pfun->index==-1 )
                 continue;
@@ -1695,7 +1677,124 @@ namespace yzg
         context.restart();
     }
     
-    TypeDeclPtr Program::makeStructureType ( const string & name ) const
+    void Program::error ( const string & str, const LineInfo & at )
+    {
+        // cout << "ERROR: " << str << ", at " << at.describe() << "\n";
+        errors.emplace_back(str,at);
+        failToCompile = true;
+    }
+    
+    void Program::addModule ( const ModulePtr & pm )
+    {
+        library.addModule(pm);
+    }
+    
+    bool Program::addVariable ( const VariablePtr & var )
+    {
+        return thisModule->addVariable(var);
+    }
+    
+    bool Program::addStructure ( const StructurePtr & st )
+    {
+        return thisModule->addStructure(st);
+    }
+    
+    bool Program::addFunction ( const FunctionPtr & fn )
+    {
+        return thisModule->addFunction(fn);
+    }
+
+    ModulePtr Program::builtInModule;
+    
+    Program::Program()
+    {
+        thisModule = make_shared<Module>();
+        if ( !builtInModule ) builtInModule = make_shared<Module_BuiltIn>();
+        library.addModule(builtInModule);
+        library.addModule(thisModule);
+    }
+    
+    // MODULE
+    
+    bool Module::addVariable ( const VariablePtr & var )
+    {
+        return globals.insert(make_pair(var->name, var)).second;
+    }
+    
+    bool Module::addStructure ( const StructurePtr & st )
+    {
+        return structures.insert(make_pair(st->name, st)).second;
+    }
+    
+    bool Module::addFunction ( const FunctionPtr & fn )
+    {
+        auto mangledName = fn->getMangledName();
+        if ( functions.insert(make_pair(mangledName, fn)).second ) {
+            functionsByName[fn->name].push_back(fn);
+            return true;
+        } else {
+            return false;
+        }
+    }
+    
+    VariablePtr Module::findVariable ( const string & name ) const
+    {
+        auto it = globals.find(name);
+        return it != globals.end() ? it->second : VariablePtr();
+    }
+    
+    FunctionPtr Module::findFunction ( const string & mangledName ) const
+    {
+        auto it = functions.find(mangledName);
+        return it != functions.end() ? it->second : FunctionPtr();
+    }
+    
+    StructurePtr Module::findStructure ( const string & name ) const
+    {
+        auto it = structures.find(name);
+        return it != structures.end() ? it->second : StructurePtr();
+    }
+
+    // MODULE LIBRARY
+    
+    void ModuleLibrary::foreach ( function<bool (const ModulePtr & module)> && func ) const
+    {
+        for ( auto & pm : modules ) {
+            if ( !func(pm) ) break;
+        }
+    }
+    
+    VariablePtr ModuleLibrary::findVariable ( const string & name ) const
+    {
+        VariablePtr ptr;
+        foreach([&](const ModulePtr & pm) -> bool {
+            ptr = pm->findVariable(name);
+            return !ptr;
+        });
+        return ptr;
+    }
+    
+    FunctionPtr ModuleLibrary::findFunction ( const string & mangledName ) const
+    {
+        FunctionPtr ptr;
+        foreach([&](const ModulePtr & pm) -> bool {
+            ptr = pm->findFunction(mangledName);
+            return !ptr;
+        });
+        return ptr;
+    }
+    
+    StructurePtr ModuleLibrary::findStructure ( const string & name ) const
+    {
+        StructurePtr ptr;
+        foreach([&](const ModulePtr & pm) -> bool {
+            ptr = pm->findStructure(name);
+            return !ptr;
+        });
+        return ptr;
+    }
+    
+    TypeDeclPtr ModuleLibrary::makeStructureType ( const string & name ) const
     {
         auto t = make_shared<TypeDecl>();
         t->baseType = Type::tStructure;
@@ -1706,14 +1805,6 @@ namespace yzg
         }
         return t;
     }
-    
-    void Program::error ( const string & str, const LineInfo & at )
-    {
-        // cout << "ERROR: " << str << ", at " << at.describe() << "\n";
-        errors.emplace_back(str,at);
-        failToCompile = true;
-    }
-
     
     // PARSER
     
@@ -1730,8 +1821,6 @@ namespace yzg
             sort(program->errors.begin(),program->errors.end());
             return program;
         } else {
-            program->addBuiltinOperators();
-            program->addBuiltinFunctions();
             if ( defineContext )
                 defineContext(program);
             program->inferTypes();

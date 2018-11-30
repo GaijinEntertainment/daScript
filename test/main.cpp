@@ -42,8 +42,8 @@ void stack_depth_4(const char * str)
 // this is how we declare type
 template <>
 struct typeFactory<Object *> {
-    static TypeDeclPtr make(const Program & prg) {
-        return prg.makeStructureType("Object");
+    static TypeDeclPtr make(const ModuleLibrary & library ) {
+        return library.makeStructureType("Object");
     }
 };
 
@@ -75,7 +75,7 @@ void unit_test ( const string & fn, int numIter = 1 )
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
     if ( auto program = parseDaScript(str.c_str(), [](const ProgramPtr & prog){
-        addExtern<decltype(stack_depth_4),stack_depth_4>(*prog,"stack_depth_4");
+        addExtern<decltype(stack_depth_4),stack_depth_4>(*prog->thisModule,prog->library,"stack_depth_4");
     }) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
@@ -114,8 +114,7 @@ void unit_test_array_of_structures ( const string & fn )
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
     auto program = parseDaScript(str.c_str(), [&](const ProgramPtr & prog){
-        // this is how we declare external function
-        addExtern<decltype(updateObject),updateObject>(*prog,"interopUpdate");
+        addExtern<decltype(updateObject),updateObject>(*prog->thisModule,prog->library,"interopUpdate");
     });
     if ( !program ) {
         cout << "can't parse\n";

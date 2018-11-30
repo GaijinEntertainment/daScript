@@ -207,11 +207,8 @@ function_declaration
                 }
             }
         }
-        auto mangledName = pFunction->getMangledName();
-        if ( g_Program->findFunction(mangledName) )
-            yyerror("function already defined " + mangledName,tokAt(@loc));
-        g_Program->functions[mangledName] = pFunction;
-        g_Program->functionsByName[pFunction->name].push_back(pFunction);
+        if ( !g_Program->addFunction(pFunction) )
+            yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc));
     }
     ;
 
@@ -392,17 +389,14 @@ global_let
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {
-                    if ( !g_Program->findVariable(name) ) {
-                        VariablePtr pVar = make_shared<Variable>();
-                        pVar->name = name;
-                        pVar->at = pDecl->at;
-                        pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        if ( pDecl->pInit )
-                            pVar->init = pDecl->pInit->clone();
-                        g_Program->globals[name] = pVar;
-                    } else {
+                    VariablePtr pVar = make_shared<Variable>();
+                    pVar->name = name;
+                    pVar->at = pDecl->at;
+                    pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                    if ( pDecl->pInit )
+                        pVar->init = pDecl->pInit->clone();
+                    if ( !g_Program->addVariable(pVar) )
                         yyerror("global variable is already declared " + name,pDecl->at);
-                    }
                 }
             }
         }
@@ -412,30 +406,28 @@ global_let
 
 structure_declaration
     : _STRUCT[loc] NAME[name] '{' struct_variable_declaration_list[list] '}' {
-        if ( !g_Program->findStructure(*$name) ) {
-            auto pStruct = g_Program->structures[*$name] = make_shared<Structure>(*$name);
-            pStruct->at = tokAt(@loc);
-            for ( auto pDecl : *$list ) {
-                if ( pDecl->pTypeDecl->isVoid() ) {
-                    yyerror("structure type can't be void",tokAt(@loc));
-                } else if ( pDecl->pTypeDecl->ref ) {
-                    yyerror("structure type can't be reference or array of references",tokAt(@loc));
-                } else if ( pDecl->pInit ) {
-                    yyerror("structure field can't have initialization",tokAt(@loc));
-                } else {
-                    for ( const auto & name : *pDecl->pNameList ) {
-                        if ( !pStruct->findField(name) ) {
-                            auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                            pStruct->fields.push_back({name, td, pDecl->at});
-                        } else {
-                            yyerror("structure field is already declared "+name,pDecl->at);
-                        }
+        auto pStruct = make_shared<Structure>(*$name);
+        pStruct->at = tokAt(@loc);
+        for ( auto pDecl : *$list ) {
+            if ( pDecl->pTypeDecl->isVoid() ) {
+                yyerror("structure type can't be void",tokAt(@loc));
+            } else if ( pDecl->pTypeDecl->ref ) {
+                yyerror("structure type can't be reference or array of references",tokAt(@loc));
+            } else if ( pDecl->pInit ) {
+                yyerror("structure field can't have initialization",tokAt(@loc));
+            } else {
+                for ( const auto & name : *pDecl->pNameList ) {
+                    if ( !pStruct->findField(name) ) {
+                        auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                        pStruct->fields.push_back({name, td, pDecl->at});
+                    } else {
+                        yyerror("structure field is already declared "+name,pDecl->at);
                     }
                 }
             }
-        } else {
-            yyerror("structure is alredy defined "+*$name,tokAt(@loc));
         }
+        if ( !g_Program->addStructure(pStruct) )
+            yyerror("structure is alredy defined "+*$name,tokAt(@loc));
         deleteVariableDeclarationList($list);
     }
     ;

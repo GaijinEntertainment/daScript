@@ -23,170 +23,170 @@ namespace yzg
         context.stopFlags |= EvalFlags::stopForTerminate;
         return _mm_setzero_ps();
     }
-
-    void Program::addBuiltinFunctions()
-    {
-        addInterop<builtin_print,void,char *>   (*this, "print");
-        addInterop<builtin_terminate,void>      (*this, "terminate");
-        addInterop<builtin_breakpoint,void>     (*this, "breakpoint");
-        addInterop<builtin_stackwalk,void>      (*this, "stackwalk");
-    }
     
     // basic operations
     template <typename TT, typename SimPolicy_TT>
-    void addBuiltInBasic(Program & prg)
+    void addFunctionBasic(Module & mod, const ModuleLibrary & lib)
     {
         //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Set<SimPolicy_TT>,        TT&,  TT&, TT>  >("=",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Equ<SimPolicy_TT>,        bool, TT,  TT>  >("==",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_NotEqu<SimPolicy_TT>,     bool, TT,  TT>  >("!=",     prg) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Set<SimPolicy_TT>,        TT&,  TT&, TT>  >("=",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Equ<SimPolicy_TT>,        bool, TT,  TT>  >("==",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_NotEqu<SimPolicy_TT>,     bool, TT,  TT>  >("!=",     lib) );
     }
     
     // ordered types
     template <typename TT, typename SimPolicy_TT>
-    void addBuiltInOrdered(Program & prg)
+    void addFunctionOrdered(Module & mod, const ModuleLibrary & lib)
     {
         //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_GtEqu<SimPolicy_TT>,      bool, TT,  TT>  >(">=",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_LessEqu<SimPolicy_TT>,    bool, TT,  TT>  >("<=",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Gt<SimPolicy_TT>,         bool, TT,  TT>  >(">",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Less<SimPolicy_TT>,       bool, TT,  TT>  >("<",      prg) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_GtEqu<SimPolicy_TT>,      bool, TT,  TT>  >(">=",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_LessEqu<SimPolicy_TT>,    bool, TT,  TT>  >("<=",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Gt<SimPolicy_TT>,         bool, TT,  TT>  >(">",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Less<SimPolicy_TT>,       bool, TT,  TT>  >("<",      lib) );
     }
     
     // concatination types
     template <typename TT, typename SimPolicy_TT>
-    void addBuiltInConcat(Program & prg)
+    void addFunctionConcat(Module & mod, const ModuleLibrary & lib)
     {
         //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Add<SimPolicy_TT>,        TT,   TT,  TT>  >("+",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetAdd<SimPolicy_TT>,     TT&,  TT&, TT>  >("+=",     prg) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Add<SimPolicy_TT>,        TT,   TT,  TT>  >("+",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetAdd<SimPolicy_TT>,     TT&,  TT&, TT>  >("+=",     lib) );
     }
     
     // numeric types
     template <typename TT, typename SimPolicy_TT>
-    void addBuiltInNumeric(Program & prg)
+    void addFunctionNumeric(Module & mod, const ModuleLibrary & lib)
     {
-        addBuiltInConcat<TT,SimPolicy_TT>(prg);
+        addFunctionConcat<TT,SimPolicy_TT>(mod,lib);
         //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Unp<SimPolicy_TT>,        TT,   TT>       >("+",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Unm<SimPolicy_TT>,        TT,   TT>       >("-",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Sub<SimPolicy_TT>,        TT,   TT,  TT>  >("-",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Mul<SimPolicy_TT>,        TT,   TT,  TT>  >("*",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Div<SimPolicy_TT>,        TT,   TT,  TT>  >("/",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     TT&,  TT&, TT>  >("-=",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetMul<SimPolicy_TT>,     TT&,  TT&, TT>  >("*=",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetDiv<SimPolicy_TT>,     TT&,  TT&, TT>  >("/=",     prg) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Unp<SimPolicy_TT>,        TT,   TT>       >("+",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Unm<SimPolicy_TT>,        TT,   TT>       >("-",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Sub<SimPolicy_TT>,        TT,   TT,  TT>  >("-",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Mul<SimPolicy_TT>,        TT,   TT,  TT>  >("*",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Div<SimPolicy_TT>,        TT,   TT,  TT>  >("/",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     TT&,  TT&, TT>  >("-=",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetMul<SimPolicy_TT>,     TT&,  TT&, TT>  >("*=",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetDiv<SimPolicy_TT>,     TT&,  TT&, TT>  >("/=",     lib) );
     }
     
     // inc-dec
     template <typename TT, typename SimPolicy_TT>
-    void addBuiltInIncDec(Program & prg)
+    void addFunctionIncDec(Module & mod, const ModuleLibrary & lib)
     {
         //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Inc<SimPolicy_TT>,        TT&,  TT&>      >("++",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_Dec<SimPolicy_TT>,        TT&,  TT&>      >("--",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_IncPost<SimPolicy_TT>,    TT,   TT&>      >("+++",    prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_DecPost<SimPolicy_TT>,    TT,   TT&>      >("---",    prg) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Inc<SimPolicy_TT>,        TT&,  TT&>      >("++",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Dec<SimPolicy_TT>,        TT&,  TT&>      >("--",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_IncPost<SimPolicy_TT>,    TT,   TT&>      >("+++",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_DecPost<SimPolicy_TT>,    TT,   TT&>      >("---",    lib) );
     }
     
     // built-in numeric types
     template <typename TT, typename SimPolicy_TT>
-    void addBuiltInBit(Program & prg)
+    void addFunctionBit(Module & mod, const ModuleLibrary & lib)
     {
         //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BinNot<SimPolicy_TT>,     TT,   TT>       >("~",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BinAnd<SimPolicy_TT>,     TT,   TT,  TT>  >("&",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BinOr<SimPolicy_TT>,      TT,   TT,  TT>  >("|",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BinXor<SimPolicy_TT>,     TT,   TT,  TT>  >("^",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBinAnd<SimPolicy_TT>,  TT&,  TT,  TT&> >("&=",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBinOr<SimPolicy_TT>,   TT&,  TT,  TT&> >("|=",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBinXor<SimPolicy_TT>,  TT&,  TT,  TT&> >("^=",     prg) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinNot<SimPolicy_TT>,     TT,   TT>       >("~",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinAnd<SimPolicy_TT>,     TT,   TT,  TT>  >("&",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinOr<SimPolicy_TT>,      TT,   TT,  TT>  >("|",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinXor<SimPolicy_TT>,     TT,   TT,  TT>  >("^",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinAnd<SimPolicy_TT>,  TT&,  TT,  TT&> >("&=",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinOr<SimPolicy_TT>,   TT&,  TT,  TT&> >("|=",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinXor<SimPolicy_TT>,  TT&,  TT,  TT&> >("^=",     lib) );
     }
     
     // built-in boolean types
     template <typename TT, typename SimPolicy_TT>
-    void addBuiltInBoolean(Program & prg)
+    void addFunctionBoolean(Module & mod, const ModuleLibrary & lib)
     {
         //                                    policy                        ret   arg1 arg2    name
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolNot<SimPolicy_Bool>,  TT,   TT>       >("!",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolAnd,                  TT,   TT,  TT>  >("&",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolOr,                   TT,   TT,  TT>  >("|",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_BoolXor<SimPolicy_Bool>,  TT,   TT,  TT>  >("^",      prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBoolAnd<SimPolicy_Bool>,TT&, TT&, TT>  >("&=",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBoolOr<SimPolicy_Bool>, TT&, TT&, TT>  >("|=",     prg) );
-        prg.addBuiltIn( make_shared<BuiltInFn<Sim_SetBoolXor<SimPolicy_Bool>,TT&, TT&, TT>  >("^=",     prg) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BoolNot<SimPolicy_Bool>,  TT,   TT>       >("!",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BoolAnd,                  TT,   TT,  TT>  >("&",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BoolOr,                   TT,   TT,  TT>  >("|",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BoolXor<SimPolicy_Bool>,  TT,   TT,  TT>  >("^",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolAnd<SimPolicy_Bool>,TT&, TT&, TT>  >("&=",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolOr<SimPolicy_Bool>, TT&, TT&, TT>  >("|=",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolXor<SimPolicy_Bool>,TT&, TT&, TT>  >("^=",     lib) );
     }
     
-    void Program::addBuiltinOperators()
+    Module_BuiltIn::Module_BuiltIn()
     {
+        ModuleLibrary lib;
+        
         // pointer
-        addBuiltInBasic<void *,SimPolicy_Pointer>(*this);
+        addFunctionBasic<void *,SimPolicy_Pointer>(*this,lib);
         // string
-        addBuiltInBasic<char *,SimPolicy_String>(*this);
-        addBuiltInOrdered<char *, SimPolicy_String>(*this);
-        addBuiltInConcat<char *, SimPolicy_String>(*this);
+        addFunctionBasic<char *,SimPolicy_String>(*this,lib);
+        addFunctionOrdered<char *, SimPolicy_String>(*this,lib);
+        addFunctionConcat<char *, SimPolicy_String>(*this,lib);
         // boolean
-        addBuiltInBasic<bool, SimPolicy_Bool>(*this);
-        addBuiltInBoolean<bool, SimPolicy_Bool>(*this);
+        addFunctionBasic<bool, SimPolicy_Bool>(*this,lib);
+        addFunctionBoolean<bool, SimPolicy_Bool>(*this,lib);
         // int32
-        addBuiltInBasic<int32_t, SimPolicy_Int>(*this);
-        addBuiltInNumeric<int32_t, SimPolicy_Int>(*this);
-        addBuiltInIncDec<int32_t, SimPolicy_Int>(*this);
-        addBuiltInOrdered<int32_t, SimPolicy_Int>(*this);
-        addBuiltInBit<int32_t, SimPolicy_Int>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<int32_t,float>,int32_t,float>>("int",*this) );
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<int32_t,uint32_t>,int32_t,uint32_t>>("int",*this) );
+        addFunctionBasic<int32_t, SimPolicy_Int>(*this,lib);
+        addFunctionNumeric<int32_t, SimPolicy_Int>(*this,lib);
+        addFunctionIncDec<int32_t, SimPolicy_Int>(*this,lib);
+        addFunctionOrdered<int32_t, SimPolicy_Int>(*this,lib);
+        addFunctionBit<int32_t, SimPolicy_Int>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<int32_t,float>,int32_t,float>>("int",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<int32_t,uint32_t>,int32_t,uint32_t>>("int",lib) );
         // uint32
-        addBuiltInBasic<uint32_t, SimPolicy_UInt>(*this);
-        addBuiltInNumeric<uint32_t, SimPolicy_UInt>(*this);
-        addBuiltInIncDec<uint32_t, SimPolicy_UInt>(*this);
-        addBuiltInOrdered<uint32_t, SimPolicy_UInt>(*this);
-        addBuiltInBit<uint32_t, SimPolicy_UInt>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,float>,uint32_t,float>>("uint",*this) );
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,int32_t>,uint32_t,int32_t>>("uint",*this) );
+        addFunctionBasic<uint32_t, SimPolicy_UInt>(*this,lib);
+        addFunctionNumeric<uint32_t, SimPolicy_UInt>(*this,lib);
+        addFunctionIncDec<uint32_t, SimPolicy_UInt>(*this,lib);
+        addFunctionOrdered<uint32_t, SimPolicy_UInt>(*this,lib);
+        addFunctionBit<uint32_t, SimPolicy_UInt>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,float>,uint32_t,float>>("uint",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,int32_t>,uint32_t,int32_t>>("uint",lib) );
         // float
-        addBuiltInBasic<float, SimPolicy_Float>(*this);
-        addBuiltInNumeric<float, SimPolicy_Float>(*this);
-        addBuiltInIncDec<float, SimPolicy_Float>(*this);
-        addBuiltInOrdered<float, SimPolicy_Float>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,int32_t>,float,int32_t>>("float",*this) );
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_Cast<float,uint32_t>,float,uint32_t>>("float",*this) );
+        addFunctionBasic<float, SimPolicy_Float>(*this,lib);
+        addFunctionNumeric<float, SimPolicy_Float>(*this,lib);
+        addFunctionIncDec<float, SimPolicy_Float>(*this,lib);
+        addFunctionOrdered<float, SimPolicy_Float>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<float,int32_t>,float,int32_t>>("float",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<float,uint32_t>,float,uint32_t>>("float",lib) );
         // float2
-        addBuiltInBasic<float2, SimPolicy_Vec<float2,3>>(*this);
-        addBuiltInNumeric<float2, SimPolicy_Vec<float2,3>>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<2>,float2,float,float>>("float2",*this) );
+        addFunctionBasic<float2, SimPolicy_Vec<float2,3>>(*this,lib);
+        addFunctionNumeric<float2, SimPolicy_Vec<float2,3>>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<2>,float2,float,float>>("float2",lib) );
         // float3
-        addBuiltInBasic<float3, SimPolicy_Vec<float3,7>>(*this);
-        addBuiltInNumeric<float3, SimPolicy_Vec<float3,7>>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<3>,float3,float,float,float>>("float3",*this) );
+        addFunctionBasic<float3, SimPolicy_Vec<float3,7>>(*this,lib);
+        addFunctionNumeric<float3, SimPolicy_Vec<float3,7>>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<3>,float3,float,float,float>>("float3",lib) );
         // float4
-        addBuiltInBasic<float4, SimPolicy_Vec<float4,3>>(*this);
-        addBuiltInNumeric<float4, SimPolicy_Vec<float4,3>>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<4>,float4,float,float,float,float>>("float4",*this) );
+        addFunctionBasic<float4, SimPolicy_Vec<float4,3>>(*this,lib);
+        addFunctionNumeric<float4, SimPolicy_Vec<float4,3>>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<4>,float4,float,float,float,float>>("float4",lib) );
         // int2
-        addBuiltInBasic<int2, SimPolicy_iVec<int2,3>>(*this);
-        addBuiltInNumeric<int2, SimPolicy_iVec<int2,3>>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<2>,int2,int32_t,int32_t>>("int2",*this) );
+        addFunctionBasic<int2, SimPolicy_iVec<int2,3>>(*this,lib);
+        addFunctionNumeric<int2, SimPolicy_iVec<int2,3>>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<2>,int2,int32_t,int32_t>>("int2",lib) );
         // int3
-        addBuiltInBasic<int3, SimPolicy_iVec<int3,7>>(*this);
-        addBuiltInNumeric<int3, SimPolicy_iVec<int3,7>>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<3>,int3,int32_t,int32_t,int32_t>>("int3",*this) );
+        addFunctionBasic<int3, SimPolicy_iVec<int3,7>>(*this,lib);
+        addFunctionNumeric<int3, SimPolicy_iVec<int3,7>>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<3>,int3,int32_t,int32_t,int32_t>>("int3",lib) );
         // int4
-        addBuiltInBasic<int4, SimPolicy_iVec<int4,3>>(*this);
-        addBuiltInNumeric<int4, SimPolicy_iVec<int4,3>>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<4>,int4,int32_t,int32_t,int32_t,int32_t>>("int4",*this) );
+        addFunctionBasic<int4, SimPolicy_iVec<int4,3>>(*this,lib);
+        addFunctionNumeric<int4, SimPolicy_iVec<int4,3>>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<4>,int4,int32_t,int32_t,int32_t,int32_t>>("int4",lib) );
         // uint2
-        addBuiltInBasic<uint2, SimPolicy_uVec<uint2,3>>(*this);
-        addBuiltInNumeric<uint2, SimPolicy_uVec<uint2,3>>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<2>,uint2,uint32_t,uint32_t>>("uint2",*this) );
+        addFunctionBasic<uint2, SimPolicy_uVec<uint2,3>>(*this,lib);
+        addFunctionNumeric<uint2, SimPolicy_uVec<uint2,3>>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<2>,uint2,uint32_t,uint32_t>>("uint2",lib) );
         // uint3
-        addBuiltInBasic<uint3, SimPolicy_uVec<uint3,7>>(*this);
-        addBuiltInNumeric<uint3, SimPolicy_uVec<uint3,7>>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<3>,uint3,uint32_t,uint32_t,uint32_t>>("uint3",*this) );
+        addFunctionBasic<uint3, SimPolicy_uVec<uint3,7>>(*this,lib);
+        addFunctionNumeric<uint3, SimPolicy_uVec<uint3,7>>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<3>,uint3,uint32_t,uint32_t,uint32_t>>("uint3",lib) );
         // uint4
-        addBuiltInBasic<uint4, SimPolicy_uVec<uint4,3>>(*this);
-        addBuiltInNumeric<uint4, SimPolicy_uVec<uint4,3>>(*this);
-        addBuiltIn ( make_shared<BuiltInFn<SimNode_VecCtor<4>,uint4,uint32_t,uint32_t,uint32_t,uint32_t>>("uint4",*this) );
+        addFunctionBasic<uint4, SimPolicy_uVec<uint4,3>>(*this,lib);
+        addFunctionNumeric<uint4, SimPolicy_uVec<uint4,3>>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<4>,uint4,uint32_t,uint32_t,uint32_t,uint32_t>>("uint4",lib) );
+        
+        // functions
+        addInterop<builtin_print,void,char *>   (*this, lib, "print");
+        addInterop<builtin_terminate,void>      (*this, lib, "terminate");
+        addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint");
+        addInterop<builtin_stackwalk,void>      (*this, lib, "stackwalk");
     }
 
 }

@@ -28,6 +28,11 @@ namespace yzg
     class TypeDecl;
     typedef shared_ptr<TypeDecl> TypeDeclPtr;
     
+    class Module;
+    typedef shared_ptr<Module> ModulePtr;
+    
+    class ModuleLibrary;
+    
     enum class Operator
     {
         none,
@@ -129,7 +134,7 @@ namespace yzg
 
     template <typename TT>
     struct typeFactory {
-        static TypeDeclPtr make(const Program &) {
+        static TypeDeclPtr make(const ModuleLibrary &) {
             auto t = make_shared<TypeDecl>();
             t->baseType = Type(ToBasicType<TT>::type);
             t->ref = is_reference<TT>::value;
@@ -138,7 +143,7 @@ namespace yzg
     };
     
     template <typename TT>
-    __forceinline TypeDeclPtr makeType(const Program & ctx)
+    __forceinline TypeDeclPtr makeType(const ModuleLibrary & ctx)
     {
         return typeFactory<TT>::make(ctx);
     }
@@ -633,10 +638,10 @@ namespace yzg
     class BuiltInFn : public BuiltInFunction
     {
     public:
-        BuiltInFn(const string & fn, const Program & prg) : BuiltInFunction(fn)
+        BuiltInFn(const string & fn, const ModuleLibrary & lib) : BuiltInFunction(fn)
         {
-            this->result = makeType<RetT>(prg);
-            vector<TypeDeclPtr> args = { makeType<Args>(prg)... };
+            this->result = makeType<RetT>(lib);
+            vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
             for ( int argi=0; argi != args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
                 arg->name = "arg" + std::to_string(argi);
@@ -657,18 +662,54 @@ namespace yzg
         LineInfo    at;
     };
     
-    class Program : public enable_shared_from_this<Program>
+    class Module : public enable_shared_from_this<Module>
     {
     public:
-        friend ostream& operator<< (ostream& stream, const Program & program);
+        bool addVariable ( const VariablePtr & var );
+        bool addStructure ( const StructurePtr & st );
+        bool addFunction ( const FunctionPtr & fn );
+        VariablePtr findVariable ( const string & name ) const;
+        FunctionPtr findFunction ( const string & mangledName ) const;
+        StructurePtr findStructure ( const string & name ) const;
+    public:
+        map<string, StructurePtr>           structures;
+        map<string, VariablePtr>            globals;
+        map<string, FunctionPtr>            functions;                  // mangled name 2 function name
+        map<string, vector<FunctionPtr>>    functionsByName;    // all functions of the same name
+    };
+    
+    class Module_BuiltIn : public Module
+    {
+    public:
+        Module_BuiltIn();
+    };
+    
+    class ModuleLibrary
+    {
+    public:
+        void addModule ( const ModulePtr & module ) { modules.push_back(module); }
+        void foreach ( function<bool (const ModulePtr & module)> && func ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
-        void addBuiltIn(FunctionPtr && fn);
+    protected:
+        vector<ModulePtr>   modules;
+    };
+    
+    class Program : public enable_shared_from_this<Program>
+    {
+    public:
+        Program();
+        friend ostream& operator<< (ostream& stream, const Program & program);
+        VariablePtr findVariable ( const string & name ) const;
+        FunctionPtr findFunction ( const string & mangledName ) const;
+        StructurePtr findStructure ( const string & name ) const;
+        bool addVariable ( const VariablePtr & var );
+        bool addStructure ( const StructurePtr & st );
+        bool addFunction ( const FunctionPtr & fn );
+        void addModule ( const ModulePtr & pm );
         void inferTypes();
-        void addBuiltinOperators();
-        void addBuiltinFunctions();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         void simulate ( Context & context );
         void error ( const string & str, const LineInfo & at );
@@ -681,10 +722,9 @@ namespace yzg
     public:
         map<string,StructInfo *>    sdebug;
     public:
-        map<string, StructurePtr>   structures;
-        map<string, VariablePtr>    globals;
-        map<string, FunctionPtr>    functions;                  // mangled name 2 function name
-        map<string, vector<FunctionPtr>>    functionsByName;    // all functions of the same name
+        static ModulePtr            builtInModule;
+        ModulePtr                   thisModule;
+        ModuleLibrary               library;
         int                         totalFunctions = 0;
         vector<Error>               errors;
         bool                        failToCompile = false;
@@ -694,25 +734,25 @@ namespace yzg
     class ExternalFn : public BuiltInFunction
     {
         template <typename ArgumentsType, size_t... I>
-        __forceinline vector<TypeDeclPtr> makeArgs ( const Program & prg, index_sequence<I...> ) {
-            return { makeType< typename tuple_element<I, ArgumentsType>::type>(prg)... };
+        __forceinline vector<TypeDeclPtr> makeArgs ( const ModuleLibrary & lib, index_sequence<I...> ) {
+            return { makeType< typename tuple_element<I, ArgumentsType>::type>(lib)... };
         }
     public:
-        ExternalFn(const string & name, Program & prg) : BuiltInFunction(name)
+        ExternalFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name)
         {
             using FunctionTrait = function_traits<FuncT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
             using Indices = make_index_sequence<nargs>;
             using Arguments = typename FunctionTrait::arguments;
             using Result  = typename FunctionTrait::return_type;
-            auto args = makeArgs<Arguments>(prg, Indices());
+            auto args = makeArgs<Arguments>(lib, Indices());
             for ( int argi=0; argi!=nargs; ++argi ) {
                 auto arg = make_shared<Variable>();
                 arg->name = "arg" + std::to_string(argi);
                 arg->type = args[argi];
                 this->arguments.push_back(arg);
             }
-            this->result = makeType<Result>(prg);
+            this->result = makeType<Result>(lib);
             this->totalStackSize = sizeof(Prologue);
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
@@ -726,16 +766,16 @@ namespace yzg
     class InteropFn : public BuiltInFunction
     {
     public:
-        InteropFn(const string & name, Program & prg) : BuiltInFunction(name)
+        InteropFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name)
         {
-            vector<TypeDeclPtr> args = { makeType<Args>(prg)... };
+            vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
             for ( int argi=0; argi!=args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
                 arg->name = "arg" + std::to_string(argi);
                 arg->type = args[argi];
                 this->arguments.push_back(arg);
             }
-            this->result = makeType<RetT>(prg);
+            this->result = makeType<RetT>(lib);
             this->totalStackSize = sizeof(Prologue);
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
@@ -746,13 +786,13 @@ namespace yzg
     };
     
     template <typename FuncT, FuncT fn>
-    __forceinline void addExtern ( Program & prog, const string & name ) {
-        prog.addBuiltIn(make_shared<ExternalFn<FuncT,fn>>(name, prog));
+    __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name ) {
+        mod.addFunction(make_shared<ExternalFn<FuncT,fn>>(name,lib));
     }
     
     template <InteropFunction func, typename RetT, typename ...Args>
-    __forceinline void addInterop ( Program & prog, const string & name ) {
-        prog.addBuiltIn(make_shared<InteropFn<func,RetT,Args...>>(name,prog));
+    __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name ) {
+        mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib));
     }
      
     ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext );
