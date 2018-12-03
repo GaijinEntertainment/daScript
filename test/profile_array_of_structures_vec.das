@@ -5,6 +5,9 @@ struct Object
 let
     objects:Object[10000]
 
+def ks_update(pos:float3 &;vel:float3)
+    pos += vel
+
 def update(a:Object)
     a.position+=a.velocity
 

@@ -11,16 +11,16 @@ using namespace yzg;
 #pragma pack(1)
 struct Object
 {
-    float   pos[3];
-    float   vel[3];
+    float3   pos;
+    float3   vel;
 };
 #pragma pack()
 
 __attribute__((noinline)) void updateObject ( Object * obj )
 {
-    obj->pos[0] += obj->vel[0];
-    obj->pos[1] += obj->vel[1];
-    obj->pos[2] += obj->vel[2];
+    obj->pos.x += obj->vel.x;
+    obj->pos.y += obj->vel.y;
+    obj->pos.z += obj->vel.z;
 }
 
 __attribute__((noinline)) void updateTest ( Object * objects )
@@ -137,8 +137,8 @@ void unit_test_array_of_structures ( const string & fn )
         cout << "before:\n";
         for ( int i=0; i!=5; ++i ) {
             Object * var = objects + i;
-            cout << "object[" << i << "].position = " << var->pos[0] << "," << var->pos[1] << "," << var->pos[2] << "\n";
-            cout << "object[" << i << "].velocity = " << var->vel[0] << "," << var->vel[1] << "," << var->vel[2] << "\n";
+            cout << "object[" << i << "].position = " << var->pos.x << "," << var->pos.y << "," << var->pos.z << "\n";
+            cout << "object[" << i << "].velocity = " << var->vel.x << "," << var->vel.y << "," << var->vel.z << "\n";
         }
         
         int numIter = 100;
@@ -168,6 +168,15 @@ void unit_test_array_of_structures ( const string & fn )
             }
         });
         
+        int ksUpdateFn = ctx.findFunction("ks_update");
+        double manyKsT = profileBlock(numIter, [&](){
+            ctx.restart();
+            for ( int oi=0; oi != 10000; ++oi ) {
+                __m128 args[2] = { cast<float3 *>::from(&objects[oi].pos), cast<float3>::from(objects[oi].vel) };
+                ctx.eval(ksUpdateFn,  args);
+            }
+        });
+        
         int fnfTest = ctx.findFunction("foreachTest");
         double simFT = profileBlock(numIter, [&](){
             ctx.restart();
@@ -184,8 +193,8 @@ void unit_test_array_of_structures ( const string & fn )
         cout << "after:\n";
         for ( int i=0; i!=5; ++i ) {
             Object * var = objects + i;
-            cout << "object[" << i << "].position = " << var->pos[0] << "," << var->pos[1] << "," << var->pos[2] << "\n";
-            cout << "object[" << i << "].velocity = " << var->vel[0] << "," << var->vel[1] << "," << var->vel[2] << "\n";
+            cout << "object[" << i << "].position = " << var->pos.x << "," << var->pos.y << "," << var->pos.z << "\n";
+            cout << "object[" << i << "].velocity = " << var->vel.x << "," << var->vel.y << "," << var->vel.z << "\n";
         }
         
         cout << fixed;
@@ -195,11 +204,13 @@ void unit_test_array_of_structures ( const string & fn )
         cout << "interop version took:" << intT << "\n";
         cout << "foreach interop version took:" << intFT << "\n";
         cout << "10000-interop version took:" << manyT << "\n";
+        cout << "10000-interop ks version took:" << manyKsT << "\n";
         cout << "ratio sim / c: " << simT / cT << "\n";
         cout << "ratio foreach sim / c: " << simFT / cT << "\n";
         cout << "ratio interop / c: " << intT / cT << "\n";
         cout << "ratio foreach interop / c: " << intFT / cT << "\n";
         cout << "ratio 10000-interop / c: " << manyT / cT << "\n";
+        cout << "ratio 10000-interop ks / c: " << manyKsT / cT << "\n";
         cout << "ratio sim / interop: " << simT / intT << "\n";
     }
 }

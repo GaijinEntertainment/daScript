@@ -10,6 +10,9 @@ def update(a:Object)
     a.position[1]+=a.velocity[1]
     a.position[2]+=a.velocity[2]
 
+def ks_update(pos:float3 &;vel:float3)
+    pos += vel
+
 def test
     let ( index:int = 0 )
         while index < 10000
