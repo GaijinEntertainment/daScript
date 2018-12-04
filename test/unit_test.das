@@ -273,8 +273,8 @@ def test_dynamic_array
         assert(capacity(arr)==33,"did not grow smaller")
         assert(length(arr)==4,"resized properly")
         debug(arr, "array 1 is")
-        arr2 <- arr // todo: make this work properly
-        debug(arr2, "array 2 is")
+        // arr2 <- arr // todo: make this work properly
+        // debug(arr2, "array 2 is")
         let ( index:int = 0 )
             while index < 4
                 debug(arr[index++]++)

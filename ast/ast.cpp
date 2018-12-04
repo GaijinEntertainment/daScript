@@ -186,6 +186,12 @@ namespace yzg
         return true;
     }
     
+    
+    bool TypeDecl::isGoodArrayType() const
+    {
+        return baseType==Type::tArray && dim.size()==0 && firstType;
+    }
+    
     bool TypeDecl::isIteratorType ( const TypeDecl & decl ) const
     {
         if ( baseType!=decl.baseType )
@@ -564,7 +570,7 @@ namespace yzg
         auto arrayType = arguments[0]->type;
         auto valueType = arguments[1]->type;
         if ( !arrayType || !valueType ) return;
-        if ( !arrayType->isSimpleType(Type::tArray) || !arrayType->firstType ) {
+        if ( !arrayType->isGoodArrayType() ) {
             context.error("push first argument must be fully qualified array", at);
             return;
         }
@@ -700,7 +706,7 @@ namespace yzg
             context.error("index is int or uint", index->at);
             return;
         }
-        if ( subexpr->type->isSimpleType(Type::tArray) && subexpr->type->dim.size()==0 ) {
+        if ( subexpr->type->isGoodArrayType() ) {
             type = make_shared<TypeDecl>(*subexpr->type->firstType);
             type->ref = true;
         } else if ( !subexpr->type->isRef() ) {
@@ -727,7 +733,7 @@ namespace yzg
     {
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
-        if ( subexpr->type->isSimpleType(Type::tArray) && subexpr->type->dim.size()==0 ) {
+        if ( subexpr->type->isGoodArrayType() ) {
             return context.makeNode<SimNode_ArrayAt>(at, prv, pidx, subexpr->type->firstType->getSizeOf());
         } else {
             uint32_t stride = subexpr->type->getStride();
@@ -1102,6 +1108,9 @@ namespace yzg
         } else if ( !left->type->isRef() ) {
             context.error("can only copy to reference", at);
         }
+        if ( left->type->isGoodArrayType() ) {
+            context.error("can't copy arrays yet", at);
+        }
         type = make_shared<TypeDecl>(*left->type);  // we return left
     }
     
@@ -1114,6 +1123,7 @@ namespace yzg
     
     SimNode * ExprCopy::simulate (Context & context) const
     {
+        // TODO: support array copying properly
         return context.makeNode<SimNode_CopyRefValue>(at,
                                                       left->simulate(context),
                                                       right->simulate(context),

@@ -95,6 +95,7 @@ namespace yzg
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;
         bool isArray() const;
+        bool isGoodArrayType() const;
         bool isVoid() const;
         bool isRef() const;
         bool isIndex() const;
