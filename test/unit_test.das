@@ -275,6 +275,10 @@ def test_dynamic_array
         debug(arr, "array 1 is")
         arr2 <- arr // todo: make this work properly
         debug(arr2, "array 2 is")
+        let ( index:int = 0 )
+            while index < 4
+                debug(arr[index++]++)
+        debug(arr)
     print("ok\n")
 
 // this is where unit tests are

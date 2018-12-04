@@ -693,20 +693,24 @@ namespace yzg
     void ExprAt::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
-        if ( !subexpr->type->isRef() ) {
+        if ( !subexpr->type ) return;
+        index->inferType(context);
+        index = autoDereference(index);
+        if ( !index->type->isIndex() ) {
+            context.error("index is int or uint", index->at);
+            return;
+        }
+        if ( subexpr->type->isSimpleType(Type::tArray) && subexpr->type->dim.size()==0 ) {
+            type = make_shared<TypeDecl>(*subexpr->type->firstType);
+            type->ref = true;
+        } else if ( !subexpr->type->isRef() ) {
             context.error("can only index ref", subexpr->at);
         } else if ( !subexpr->type->dim.size() ) {
             context.error("can only index arrays", subexpr->at);
         } else {
-            index->inferType(context);
-            index = autoDereference(index);
-            if ( !index->type->isIndex() ) {
-                context.error("index is int or uint", index->at);
-            } else {
-                type = make_shared<TypeDecl>(*subexpr->type);
-                type->ref = true;
-                type->dim.pop_back();
-            }
+            type = make_shared<TypeDecl>(*subexpr->type);
+            type->ref = true;
+            type->dim.pop_back();
         }
     }
     
@@ -723,9 +727,13 @@ namespace yzg
     {
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
-        uint32_t stride = subexpr->type->getStride();
-        uint32_t range = subexpr->type->dim.back();
-        return context.makeNode<SimNode_At>(at, prv, pidx, stride, range);
+        if ( subexpr->type->isSimpleType(Type::tArray) && subexpr->type->dim.size()==0 ) {
+            return context.makeNode<SimNode_ArrayAt>(at, prv, pidx, subexpr->type->firstType->getSizeOf());
+        } else {
+            uint32_t stride = subexpr->type->getStride();
+            uint32_t range = subexpr->type->dim.back();
+            return context.makeNode<SimNode_At>(at, prv, pidx, stride, range);
+        }
     }
 
     // ExprBlock

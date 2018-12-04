@@ -19,6 +19,26 @@ namespace yzg
         uint32_t size;
     };
     
+    // AT (INDEX)
+    struct SimNode_ArrayAt : SimNode_Array {
+        SimNode_ArrayAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t sz )
+            : SimNode_Array(at,sz), value(rv), index(idx) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ll = value->eval(context);
+            YZG_EXCEPTION_POINT;
+            uint32_t idx = cast<uint32_t>::to(index->eval(context));
+            YZG_EXCEPTION_POINT;
+            Array * pA = cast_array(ll, size);
+            if ( idx >= pA->size ) {
+                context.throw_error("index out of range");
+                return _mm_setzero_ps();
+            } else {
+                return cast<char *>::from(pA->data + idx*pA->fieldSize);
+            }
+        }
+        SimNode * value, * index;
+    };
+    
     // RESIZE
     struct SimNode_ArrayResize : SimNode_Array {
         SimNode_ArrayResize(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,sz), l(ll), r(rr) {};

@@ -91,6 +91,8 @@ void unit_test ( const string & fn, int numIter = 1 )
                 double simT = profileBlock(numIter, [&](){
                     ctx.restart();
                     ctx.eval(fnTest, nullptr);
+                    if ( auto ex = ctx.getException() )
+                        cout << "exception: " << ex << "\n";
                 });
                 cout << fn << " took:" << fixed << simT << "\n";
             } else {

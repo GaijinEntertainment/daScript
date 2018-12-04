@@ -184,6 +184,10 @@ namespace yzg
             return result;
         }
         
+        __forceinline const char * getException() const {
+            return stopFlags & EvalFlags::stopForThrow ? exception : nullptr;
+        }
+        
     protected:
         int linearAllocatorSize = 1*1024*1024;
         char * linearAllocator = nullptr;
@@ -246,6 +250,7 @@ namespace yzg
             char * pValue = cast<char *>::to(value->eval(context));
             YZG_EXCEPTION_POINT;
             uint32_t idx = cast<uint32_t>::to(index->eval(context));
+            YZG_EXCEPTION_POINT;
             if ( idx >= range ) {
                 context.throw_error("index out of range");
                 return _mm_setzero_ps();
