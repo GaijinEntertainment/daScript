@@ -155,7 +155,7 @@ namespace yzg
             debug_dim_value(ss, pX, info);
         } else if ( info->type==Type::tArray ) {
             auto arr = (Array *) pX;
-            debug_array_value(ss, arr->data, arr->fieldSize, arr->size, info->firstType);
+            debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType);
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << *((bool *)pX); break;

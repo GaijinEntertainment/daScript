@@ -5,19 +5,26 @@
 
 namespace yzg
 {
-    __forceinline Array * cast_array ( __m128 arr, uint32_t fieldSize ) {
-        Array * pA = cast<Array *>::to(arr);
-        assert ( pA->fieldSize==0 || pA->fieldSize==fieldSize );
-        pA->fieldSize = fieldSize;
-        return pA;
+    __forceinline void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride ) {
+        if ( arr.capacity >= newCapacity ) return;
+        arr.data = (char *) context.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
+        arr.capacity = newCapacity;
     }
     
-    void array_reserve ( Context & context, Array & arr, uint32_t newCapacity );
-    void array_resize ( Context & context, Array & arr, uint32_t newSize );
+    __forceinline void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero ) {
+        if ( newSize > arr.capacity ) {
+            uint32_t newCapacity = 1 << (32 - __builtin_clz (newSize - 1));
+            newCapacity = max(newCapacity, 16u);
+            array_reserve(context, arr, newCapacity, stride);
+        }
+        if ( zero && newSize>arr.size )
+            memset ( arr.data + arr.size*stride, 0, (newSize-arr.size)*stride );
+        arr.size = newSize;
+    }
     
     struct SimNode_Array : SimNode {
-        SimNode_Array(const LineInfo & at, uint32_t s) : SimNode(at), size(s) {}
-        uint32_t size;
+        SimNode_Array(const LineInfo & at, uint32_t s) : SimNode(at), stride(s) {}
+        uint32_t stride;
     };
     
     // AT (INDEX)
@@ -34,7 +41,7 @@ namespace yzg
                 context.throw_error("index out of range");
                 return _mm_setzero_ps();
             } else {
-                return cast<char *>::from(pA->data + idx*pA->fieldSize);
+                return cast<char *>::from(pA->data + idx*stride);
             }
         }
         SimNode * value, * index;
@@ -48,9 +55,9 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
             YZG_EXCEPTION_POINT;
-            Array * pA = cast_array(ll, size);
+            Array * pA = cast<Array *>::to(ll);
             uint32_t newSize = cast<uint32_t>::to(rr);
-            array_resize(context, *pA, newSize);
+            array_resize(context, *pA, newSize, stride, true);
             return _mm_setzero_ps();
         }
         SimNode * l, * r;
@@ -64,9 +71,9 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
             YZG_EXCEPTION_POINT;
-            Array * pA = cast_array(ll, size);
+            Array * pA = cast<Array *>::to(ll);
             uint32_t newSize = cast<uint32_t>::to(rr);
-            array_reserve(context, *pA, newSize);
+            array_reserve(context, *pA, newSize, stride);
             return _mm_setzero_ps();
         }
         SimNode * l, * r;
@@ -81,10 +88,10 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
             YZG_EXCEPTION_POINT;
-            auto * pA = cast_array(ll, sizeof(TT));
+            auto * pA = cast<Array *>::to(ll);
             uint32_t index = pA->size;
-            array_resize(context, *pA, index + 1);
-            TT * pl = (TT *) ( pA->data + index*pA->fieldSize );
+            array_resize(context, *pA, index + 1, stride, false);
+            TT * pl = (TT *) ( pA->data + index*stride );
             TT * pr = (TT *) &rr;
             *pl = *pr;
             return _mm_setzero_ps();
@@ -100,12 +107,12 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
             YZG_EXCEPTION_POINT;
-            Array * pA = cast_array(ll, size);
+            Array * pA = cast<Array *>::to(ll);
             uint32_t index = pA->size;
-            array_resize(context, *pA, index + 1);
-            void * pl = pA->data + index*pA->fieldSize;
+            array_resize(context, *pA, index + 1, stride, false);
+            void * pl = pA->data + index*stride;
             auto pr = cast<void *>::to(rr);
-            memcpy ( pl, pr, size );
+            memcpy ( pl, pr, stride );
             return _mm_setzero_ps();
         }
         SimNode * l, * r;

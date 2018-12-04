@@ -282,6 +282,7 @@ def test_dynamic_array
         resize(arr,3)
         debug(arr)
         resize(arr,4)
+        assert(arr[3]==0,"new element after resize is 0")
         debug(arr)
     print("ok\n")
 

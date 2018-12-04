@@ -7,6 +7,5 @@ namespace yzg
         char *      data;
         uint32_t    size;
         uint32_t    capacity;
-        uint32_t    fieldSize;
     };
 }
