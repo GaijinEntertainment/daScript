@@ -209,7 +209,8 @@ namespace yzg
         void logType(ostream& stream) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
         virtual SimNode * simulate (Context & context) const = 0;
-        virtual bool isSequence() { return false; }
+        virtual bool isSequence() const { return false; }
+        virtual bool isStringConstant() const { return false; }
     public:
         LineInfo    at;
         TypeDeclPtr type;
@@ -244,20 +245,6 @@ namespace yzg
         ExpressionPtr   subexpr;
     };
     
-    class ExprSizeOf : public Expression
-    {
-    public:
-        ExprSizeOf () = default;
-        ExprSizeOf ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
-        virtual void log(ostream& stream, int depth) const override;
-        virtual void inferType(InferTypeContext & context) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-    public:
-        ExpressionPtr   subexpr;
-        TypeDeclPtr     typeexpr;
-    };
-    
     class ExprNew : public Expression
     {
     public:
@@ -269,36 +256,6 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     public:
         TypeDeclPtr     typeexpr;
-    };
-    
-    class ExprAssert : public Expression
-    {
-    public:
-        ExprAssert () = default;
-        ExprAssert ( const LineInfo & a, ExpressionPtr s, const string & msg = string() )
-            : Expression(a), subexpr(s), message(msg) {}
-        virtual void log(ostream& stream, int depth) const override;
-        virtual void inferType(InferTypeContext & context) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-    public:
-        ExpressionPtr   subexpr;
-        string          message;
-    };
-    
-    class ExprDebug : public Expression
-    {
-    public:
-        ExprDebug () = default;
-        ExprDebug ( const LineInfo & a, ExpressionPtr s, const string & msg = string() )
-            : Expression(a), subexpr(s), message(msg) {}
-        virtual void log(ostream& stream, int depth) const override;
-        virtual void inferType(InferTypeContext & context) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-    public:
-        ExpressionPtr   subexpr;
-        string          message;
     };
     
     class ExprAt : public Expression
@@ -412,7 +369,7 @@ namespace yzg
     {
     public:
         ExprSequence ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {}
-        virtual bool isSequence() override { return true; }
+        virtual bool isSequence() const override { return true; }
     };
     
     class ExprOp3 : public ExprOp   // trinary  subexpr ? left : right
@@ -484,6 +441,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override {
             stream << value;
         }
+        TT getValue() const { return value; }
     protected:
         TT  value;
     };
@@ -538,7 +496,8 @@ namespace yzg
             char * str = context.allocateName(value);
             return context.makeNode<SimNode_ConstValue<char *>>(at,str);
         }
-        virtual void log(ostream& stream, int depth) const override {  stream << "\"" << escapeString(value) << "\""; }   
+        virtual void log(ostream& stream, int depth) const override {  stream << "\"" << escapeString(value) << "\""; }
+        virtual bool isStringConstant() const override { return true; }
     };
     
     class ExprLet : public Expression
@@ -555,20 +514,71 @@ namespace yzg
         ExpressionPtr           subexpr;
     };
     
-    class ExprCall : public Expression
+    class ExprLooksLikeCall : public Expression
     {
     public:
-        ExprCall () = default;
-        ExprCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
+        ExprLooksLikeCall () = default;
+        ExprLooksLikeCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
+        void autoDereference();
     protected:
         string describe() const;
     public:
         string                  name;
         vector<ExpressionPtr>   arguments;
+    };
+    typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
+    
+    class ExprAssert : public ExprLooksLikeCall
+    {
+    public:
+        ExprAssert () = default;
+        ExprAssert ( const LineInfo & a ) : ExprLooksLikeCall(a,"assert") {}
+        virtual void inferType(InferTypeContext & context) override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+    
+    class ExprDebug : public Expression
+    {
+    public:
+        ExprDebug () = default;
+        ExprDebug ( const LineInfo & a, ExpressionPtr s, const string & msg = string() )
+        : Expression(a), subexpr(s), message(msg) {}
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr   subexpr;
+        string          message;
+    };
+    
+    class ExprSizeOf : public Expression
+    {
+    public:
+        ExprSizeOf () = default;
+        ExprSizeOf ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr   subexpr;
+        TypeDeclPtr     typeexpr;
+    };
+
+    
+    class ExprCall : public ExprLooksLikeCall
+    {
+    public:
+        ExprCall () = default;
+        ExprCall ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) {}
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
         FunctionPtr             func;
         uint32_t                stackTop = 0;
     };
@@ -683,8 +693,16 @@ namespace yzg
     
     class Module_BuiltIn : public Module
     {
+        friend class Program;
     public:
         Module_BuiltIn();
+    protected:
+        template <typename TT>
+        __forceinline void addCall ( const string & name ) {
+            callThis[name] = [](const LineInfo & at) { return new TT(at); };
+        }
+    protected:
+        map<string,ExprCallFactory> callThis;
     };
     
     class ModuleLibrary
@@ -717,6 +735,7 @@ namespace yzg
         void simulate ( Context & context );
         void error ( const string & str, const LineInfo & at );
         bool failed() const { return failToCompile; }
+        ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
     public:
         void makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type );
         VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );

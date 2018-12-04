@@ -187,6 +187,9 @@ namespace yzg
         addInterop<builtin_terminate,void>      (*this, lib, "terminate");
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint");
         addInterop<builtin_stackwalk,void>      (*this, lib, "stackwalk");
+        
+        // function-like expresions
+        addCall<ExprAssert>("assert");
     }
 
 }

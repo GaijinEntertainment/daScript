@@ -17,7 +17,7 @@
         Expression      *pInit;
     };
     
-    ExprCall * parseFunctionArguments ( ExprCall * pCall, Expression * arguments );
+    ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     
     LineInfo tokAt ( const struct YYLTYPE & li );
@@ -57,9 +57,9 @@
 %token  _STRUCT _LET    _DEF        _WHILE
 %token  _IF     _ELSE   _FOREACH    _CATCH
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
-%token  _TYPE   _ASSERT _DEBUG      _ELIF
+%token  _TYPE   _DEBUG  _ELIF       _ARRAY
 %token  _RETURN _NULL   _BREAK      _TRY
-%token  _IN     _ARRAY
+%token  _IN
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -98,7 +98,6 @@
 %type <pExpression>     expression_block
 %type <pExpression>     expression_while_loop
 %type <pExpression>     expression_foreach_loop
-%type <pExpression>     expression_assert
 %type <pExpression>     expression_break
 %type <pExpression>     expression_return
 %type <pExpression>     expression_else
@@ -220,7 +219,6 @@ expression_any
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_foreach_loop[subexpr]    { $$ = $subexpr; }
-    |   expression_assert[subexpr]          { $$ = $subexpr; }
     |   expression_break[subexpr]           { $$ = $subexpr; }
     |   expression_return[subexpr]          { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
@@ -252,11 +250,6 @@ expression_break
 expression_return
     :   _RETURN[loc] ';'                { $$ = new ExprReturn(tokAt(@loc),nullptr); }
     |   _RETURN[loc] expr[subexpr] ';'  { $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr)); }
-    ;
-
-expression_assert
-    :   _ASSERT[loc] '(' expr[subexpr] ')' ';'                      { $$ = new ExprAssert(tokAt(@loc),ExpressionPtr($subexpr)); }
-    |   _ASSERT[loc] '(' expr[subexpr] ',' STRING[message] ')' ';'  { $$ = new ExprAssert(tokAt(@loc),ExpressionPtr($subexpr),*$message); }
     ;
 
 expression_try_catch
@@ -345,10 +338,10 @@ expr
     |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); }
-    |   NAME[name] '(' ')'                       { $$ = new ExprCall(tokAt(@name),*$name); }
-    |   NAME[name] '(' expr_list[arguments] ')'  { $$ = parseFunctionArguments(new ExprCall(tokAt(@name),*$name),$arguments); }
+    |   NAME[name] '(' ')'                       { $$ = g_Program->makeCall(tokAt(@name),*$name); }
+    |   NAME[name] '(' expr_list[arguments] ')'  { $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@name),*$name),$arguments); }
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
-            $$ = parseFunctionArguments(new ExprCall(tokAt(@type),to_string($type)),$arguments);
+            $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),to_string($type)),$arguments);
         }
     |   expr[subexpr] RARROW[loc]               { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
@@ -505,7 +498,7 @@ void yyerror(const string & error)
     g_Program->error(error,LineInfo(yylloc.first_column,yylloc.first_line));
 }
 
-ExprCall * parseFunctionArguments ( ExprCall * pCall, Expression * arguments ) {
+ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments ) {
     auto arg = arguments;
     if ( arg->isSequence() ) {
         while ( arg->isSequence() ) {

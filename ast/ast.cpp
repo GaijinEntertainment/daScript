@@ -499,37 +499,28 @@ namespace yzg
 
     // ExprAssert
     
-    ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const
-    {
-        auto cexpr = clonePtr<ExprAssert>(expr);
-        Expression::clone(cexpr);
-        cexpr->subexpr = subexpr->clone();
-        cexpr->message = message;
-        return cexpr;
-    }
-    
-    void ExprAssert::log(ostream& stream, int depth) const
-    {
-        stream << "(assert ";
-        stream << *subexpr;
-        if ( !message.empty() )
-            stream << " \"" << message << "\"";
-        stream << ")";
-    }
     
     void ExprAssert::inferType(InferTypeContext & context)
     {
-        subexpr->inferType(context);
-        if ( !subexpr->type ) return;
-        subexpr = autoDereference(subexpr);
-        if ( !subexpr->type->isSimpleType(Type::tBool) )
+        if ( arguments.size()<1 || arguments.size()>2 ) {
+            context.error("assert(expr) or assert(expr,string)", at);
+        }
+        ExprLooksLikeCall::inferType(context);
+        autoDereference();
+        if ( !arguments[0]->type ) return;
+        if ( !arguments[0]->type->isSimpleType(Type::tBool) )
             context.error("assert condition must be boolean", at);
+        if ( arguments.size()==2 && !arguments[1]->isStringConstant() )
+            context.error("assert comment must be string constant", at);
         type = make_shared<TypeDecl>(Type::tVoid);
     }
     
     SimNode * ExprAssert::simulate (Context & context) const
     {
-        return context.makeNode<SimNode_Assert>(at,subexpr->simulate(context),context.allocateName(message));
+        string message;
+        if ( arguments.size()==2 && arguments[1]->isStringConstant() )
+            message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
+        return context.makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.allocateName(message));
     }
     
     // ExprDebug
@@ -1400,7 +1391,7 @@ namespace yzg
     
     // ExprCall
     
-    ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const
+    ExpressionPtr ExprLooksLikeCall::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprCall>(expr);
         Expression::clone(cexpr);
@@ -1408,11 +1399,10 @@ namespace yzg
         for ( auto & arg : arguments ) {
             cexpr->arguments.push_back(arg->clone());
         }
-        cexpr->func = func;
         return cexpr;
     }
     
-    string ExprCall::describe() const
+    string ExprLooksLikeCall::describe() const
     {
         stringstream stream;
         stream << "(" << name;
@@ -1426,7 +1416,7 @@ namespace yzg
         return stream.str();
     }
     
-    void ExprCall::log(ostream& stream, int depth) const
+    void ExprLooksLikeCall::log(ostream& stream, int depth) const
     {
         logType(stream);
         stream << "(" << name;
@@ -1437,15 +1427,38 @@ namespace yzg
         stream << ")";
     }
     
+    void ExprLooksLikeCall::inferType(InferTypeContext & context)
+    {
+        for ( auto & ar : arguments ) {
+            ar->inferType(context);
+        }
+    }
+    
+    void ExprLooksLikeCall::autoDereference()
+    {
+        for ( size_t iA = 0; iA != arguments.size(); ++iA )
+            arguments[iA] = Expression::autoDereference(arguments[iA]);
+    }
+    
+    // ExprCall
+    
+    ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprCall>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        cexpr->func = func;
+        return cexpr;
+    }
+    
     void ExprCall::inferType(InferTypeContext & context)
     {
+        ExprLooksLikeCall::inferType(context);
         stackTop = context.stackTop;
         context.stackTop = (stackTop + arguments.size()*sizeof(__m128));
         context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
         vector<TypeDeclPtr> types;
         types.reserve(arguments.size());
         for ( auto & ar : arguments ) {
-            ar->inferType(context);
             types.push_back(ar->type);
         }
         auto functions = context.program->findMatchingFunctions(name, types);
@@ -1464,7 +1477,7 @@ namespace yzg
             }
             for ( size_t iA = 0; iA != arguments.size(); ++iA )
                 if ( !func->arguments[iA]->type->isRef() )
-                    arguments[iA] = autoDereference(arguments[iA]);
+                    arguments[iA] = Expression::autoDereference(arguments[iA]);
         }
         context.stackTop = stackTop;
     }
@@ -1735,6 +1748,17 @@ namespace yzg
         if ( !builtInModule ) builtInModule = make_shared<Module_BuiltIn>();
         library.addModule(builtInModule);
         library.addModule(thisModule);
+    }
+    
+    ExprLooksLikeCall * Program::makeCall ( const LineInfo & at, const string & name )
+    {
+        auto builtIn = static_pointer_cast<Module_BuiltIn>(builtInModule);
+        auto it = builtIn->callThis.find(name);
+        if ( it != builtIn->callThis.end() ) {
+            return (it->second)(at);
+        } else {
+            return new ExprCall(at,name);
+        }
     }
     
     // MODULE
