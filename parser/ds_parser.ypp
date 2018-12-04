@@ -186,6 +186,8 @@ function_declaration
             yyerror("function " + *$name + " can't return array",tokAt(@loc));
         else if (pFunction->result->baseType==Type::tStructure )
             yyerror("function " + *$name + " can't return structure",tokAt(@loc));
+        else if ( pFunction->result->baseType==Type::tArray )
+            yyerror("function " + *$name + " can't return array",tokAt(@loc));
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -402,6 +404,10 @@ structure_declaration
                 yyerror("structure type can't be void",tokAt(@loc));
             } else if ( pDecl->pTypeDecl->ref ) {
                 yyerror("structure type can't be reference or array of references",tokAt(@loc));
+            } else if ( pDecl->pTypeDecl->isSimpleType(Type::tArray) ) {
+                yyerror("structure type can't be an array",tokAt(@loc));
+            } else if ( pDecl->pTypeDecl->isSimpleType(Type::tTable) ) {
+                yyerror("structure type can't be a table",tokAt(@loc));
             } else if ( pDecl->pInit ) {
                 yyerror("structure field can't have initialization",tokAt(@loc));
             } else {
@@ -475,7 +481,7 @@ type_declaration
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' { if ( $typeDecl ) $typeDecl->dim.push_back($dimSize); $$ = $typeDecl; }
     |   type_declaration[typeDecl] '&'                      { if ( $typeDecl ) $typeDecl->ref = true; $$ = $typeDecl; }
-    |   _ARRAY[loc] type_declaration[typeDecl]              {
+    |   _ARRAY[loc] '<' type_declaration[typeDecl] '>'      {
         if ( $typeDecl->ref ) yyerror ( "can't have reference in the Array" );
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);

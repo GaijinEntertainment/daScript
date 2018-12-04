@@ -48,12 +48,6 @@ namespace yzg
         static __forceinline __m128 from ( float x )            { return _mm_set_ss(x); }
     };
     
-    template <>
-    struct cast <Array> {
-        static __forceinline Array to ( __m128 x )              { return *((Array *)&x); }
-        static __forceinline __m128 from ( const Array & x )    { return x._stub; }
-    };
-    
     template <typename TT>
     struct cast_fVec {
         static __forceinline TT to ( __m128 x )                 { return *((TT *)&x); }

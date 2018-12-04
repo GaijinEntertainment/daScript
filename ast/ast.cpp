@@ -233,7 +233,7 @@ namespace yzg
     
     bool TypeDecl::isRef() const
     {
-        return ref || baseType==Type::tStructure || dim.size();
+        return ref || baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || dim.size();
     }
     
     bool TypeDecl::isIndex() const
@@ -555,7 +555,6 @@ namespace yzg
     
     // ExprArrayPush
     
-    
     void ExprArrayPush::inferType(InferTypeContext & context)
     {
         if ( arguments.size()!=2 ) {
@@ -565,7 +564,7 @@ namespace yzg
         auto arrayType = arguments[0]->type;
         auto valueType = arguments[1]->type;
         if ( !arrayType || !valueType ) return;
-        if ( !arrayType->isSimpleType(Type::tArray) || !arrayType->firstType || !arrayType->ref ) {
+        if ( !arrayType->isSimpleType(Type::tArray) || !arrayType->firstType ) {
             context.error("push first argument must be fully qualified array", at);
             return;
         }

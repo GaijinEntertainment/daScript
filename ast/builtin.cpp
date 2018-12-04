@@ -1,9 +1,12 @@
 #include "precomp.h"
 
 #include "ast.h"
+#include "runtime_array.h"
 
 namespace yzg
 {
+    // core functions
+    
     __m128 builtin_print ( Context & context, SimNode_Call *, __m128 * args ) {
         context.to_out(to_rts(args[0]));
         return _mm_setzero_ps();
@@ -22,6 +25,16 @@ namespace yzg
     __m128 builtin_terminate ( Context & context, SimNode_Call *, __m128 * ) {
         context.stopFlags |= EvalFlags::stopForTerminate;
         return _mm_setzero_ps();
+    }
+    
+    // array functions
+    
+    int builtin_array_size ( Array * arr ) {
+        return arr->size;
+    }
+    
+    int builtin_array_capacity ( Array * arr ) {
+        return arr->capacity;
     }
     
     // basic operations
@@ -188,10 +201,17 @@ namespace yzg
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint");
         addInterop<builtin_stackwalk,void>      (*this, lib, "stackwalk");
         
+        // array functions
+        addExtern<decltype(builtin_array_size), builtin_array_size>(*this, lib, "length");
+        addExtern<decltype(builtin_array_capacity), builtin_array_capacity>(*this, lib, "capacity");
+        
         // function-like expresions
         addCall<ExprAssert>     ("assert");
         addCall<ExprDebug>      ("debug");
+        
         addCall<ExprArrayPush>  ("push");
+        addCall<ExprArrayResizeOrReserve<SimNode_ArrayResize>>  ("resize");
+        addCall<ExprArrayResizeOrReserve<SimNode_ArrayReserve>> ("reserve");
     }
 
 }

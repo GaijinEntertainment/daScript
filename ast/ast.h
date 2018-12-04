@@ -134,6 +134,7 @@ namespace yzg
     template<> struct ToBasicType<uint2>   { enum { type = Type::tUInt2 }; };
     template<> struct ToBasicType<uint3>   { enum { type = Type::tUInt3 }; };
     template<> struct ToBasicType<uint4>   { enum { type = Type::tUInt4 }; };
+    template<> struct ToBasicType<Array *> { enum { type = Type::tArray }; };
 
     template <typename TT>
     struct typeFactory {
@@ -535,7 +536,7 @@ namespace yzg
     {
     public:
         ExprAssert () = default;
-        ExprAssert ( const LineInfo & a ) : ExprLooksLikeCall(a,"assert") {}
+        ExprAssert ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a,name) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
@@ -544,7 +545,7 @@ namespace yzg
     {
     public:
         ExprDebug () = default;
-        ExprDebug ( const LineInfo & a ) : ExprLooksLikeCall(a, "debug") {}
+        ExprDebug ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
@@ -553,10 +554,46 @@ namespace yzg
     {
     public:
         ExprArrayPush() = default;
-        ExprArrayPush ( const LineInfo & a ) : ExprLooksLikeCall(a, "push") {}
+        ExprArrayPush ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
+    
+    template <typename SimNodeT>
+    class ExprArrayResizeOrReserve : public ExprLooksLikeCall
+    {
+    public:
+        ExprArrayResizeOrReserve() = default;
+        ExprArrayResizeOrReserve ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        
+        void inferType(InferTypeContext & context)
+        {
+            if ( arguments.size()!=2 ) {
+                context.error("expecting (array,size)", at);
+            }
+            ExprLooksLikeCall::inferType(context);
+            auto arrayType = arguments[0]->type;
+            auto valueType = arguments[1]->type;
+            if ( !arrayType || !valueType ) return;
+            if ( !arrayType->isSimpleType(Type::tArray) || !arrayType->firstType ) {
+                context.error("first argument must be fully qualified array", at);
+                return;
+            }
+            if ( !valueType->isIndex() )
+                context.error("size must be int or uint", at);
+            arguments[1] = Expression::autoDereference(arguments[1]);
+            type = make_shared<TypeDecl>(Type::tVoid);
+        }
+        
+        SimNode * simulate (Context & context) const
+        {
+            auto arr = arguments[0]->simulate(context);
+            auto newSize = arguments[1]->simulate(context);
+            auto size = arguments[0]->type->firstType->getSizeOf();
+            return context.makeNode<SimNodeT>(at,arr,newSize,size);
+        }
+    };
+
     
     class ExprSizeOf : public Expression
     {
@@ -700,8 +737,8 @@ namespace yzg
         Module_BuiltIn();
     protected:
         template <typename TT>
-        __forceinline void addCall ( const string & name ) {
-            callThis[name] = [](const LineInfo & at) { return new TT(at); };
+        __forceinline void addCall ( const string & fnName ) {
+            callThis[fnName] = [fnName](const LineInfo & at) { return new TT(at, fnName); };
         }
     protected:
         map<string,ExprCallFactory> callThis;

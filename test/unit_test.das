@@ -244,13 +244,37 @@ def test_string
         assert(b=="barfoo")
     print("ok\n")
 
+def pass_array ( arr:array<int> )
+    push(arr,4)
+
 def test_dynamic_array
     print("test array:\n")
-    let ( arr:array int )
+    let ( arr:array<int>; arr2:array<int> )
+        assert(length(arr)==0,"array starts at 0 length")
         push(arr,1)
         push(arr,2)
         push(arr,3)
+        assert(length(arr)==3,"array length is 3")
+        assert(capacity(arr)==16,"its 2x, but no less than 16")
         debug(arr)
+        pass_array(arr)
+        assert(length(arr)==4,"array length is 4")
+        debug(arr)
+        resize(arr,6)
+        assert(length(arr)==6,"array length is now 6")
+        debug(arr)
+        resize(arr,17)
+        debug(arr)
+        assert(capacity(arr)==32,"now bigger")
+        reserve(arr,33)
+        debug(arr)
+        assert(capacity(arr)==33,"now even bigger")
+        resize(arr,4)
+        assert(capacity(arr)==33,"did not grow smaller")
+        assert(length(arr)==4,"resized properly")
+        debug(arr, "array 1 is")
+        arr2 <- arr // todo: make this work properly
+        debug(arr2, "array 2 is")
     print("ok\n")
 
 // this is where unit tests are

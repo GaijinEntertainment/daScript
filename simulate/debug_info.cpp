@@ -188,8 +188,8 @@ namespace yzg
         } else if ( info->dimSize ) {
             debug_dim_value(ss, cast<void *>::to(x), info);
         } else if ( info->type==Type::tArray ) {
-            auto arr = cast<Array>::to(x);
-            debug_array_value(ss, arr.data, arr.fieldSize, arr.size, info->firstType);
+            auto arr = cast<Array *>::to(x);
+            debug_array_value(ss, arr->data, arr->fieldSize, arr->size, info->firstType);
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << cast<bool>::to(x); break;
