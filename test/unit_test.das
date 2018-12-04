@@ -291,6 +291,11 @@ def test_dynamic_array
         debug(arr)
         push(arr,7,2)
         debug(arr)
+        erase(arr,2)
+        debug(arr)
+        erase(arr,0)
+        erase(arr,3)
+        debug(arr)
     print("ok\n")
 
 // this is where unit tests are

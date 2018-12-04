@@ -210,8 +210,9 @@ namespace yzg
         addCall<ExprDebug>      ("debug");
         
         addCall<ExprArrayPush>  ("push");
-        addCall<ExprArrayResizeOrReserve<SimNode_ArrayResize>>  ("resize");
-        addCall<ExprArrayResizeOrReserve<SimNode_ArrayReserve>> ("reserve");
+        addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayResize>>  ("resize");
+        addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayReserve>> ("reserve");
+        addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayErase>>   ("erase");
     }
 
 }

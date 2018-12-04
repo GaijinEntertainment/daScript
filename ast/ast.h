@@ -561,16 +561,16 @@ namespace yzg
     };
     
     template <typename SimNodeT>
-    class ExprArrayResizeOrReserve : public ExprLooksLikeCall
+    class ExprArrayCallWithSizeOrIndex : public ExprLooksLikeCall
     {
     public:
-        ExprArrayResizeOrReserve() = default;
-        ExprArrayResizeOrReserve ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        ExprArrayCallWithSizeOrIndex() = default;
+        ExprArrayCallWithSizeOrIndex ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
         
         void inferType(InferTypeContext & context)
         {
             if ( arguments.size()!=2 ) {
-                context.error("expecting (array,size)", at);
+                context.error("expecting array and size or index", at);
             }
             ExprLooksLikeCall::inferType(context);
             auto arrayType = arguments[0]->type;

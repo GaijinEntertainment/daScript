@@ -47,9 +47,35 @@ namespace yzg
         SimNode * value, * index;
     };
     
+    // ERASE
+    // [1,2,3,4,5]
+    // erase(2)
+    //  move(i,i+1,oldSize-i-1)
+    struct SimNode_ArrayErase : SimNode_Array {
+        SimNode_ArrayErase(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
+            : SimNode_Array(at,sz), l(ll), r(rr) {};
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ll = l->eval(context);
+            YZG_EXCEPTION_POINT;
+            __m128 rr = r->eval(context);
+            YZG_EXCEPTION_POINT;
+            Array * pA = cast<Array *>::to(ll);
+            uint32_t idx = cast<uint32_t>::to(rr);
+            if ( idx >= pA->size ) {
+                context.throw_error("erase index out of range");
+                return _mm_setzero_ps();
+            }
+            memmove ( pA->data+idx*stride, pA->data+(idx+1)*stride, (pA->size-idx-1)*stride );
+            array_resize(context, *pA, pA->size-1, stride, false);
+            return _mm_setzero_ps();
+        }
+        SimNode * l, * r;
+    };
+    
     // RESIZE
     struct SimNode_ArrayResize : SimNode_Array {
-        SimNode_ArrayResize(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,sz), l(ll), r(rr) {};
+        SimNode_ArrayResize(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
+            : SimNode_Array(at,sz), l(ll), r(rr) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
             YZG_EXCEPTION_POINT;
@@ -65,7 +91,8 @@ namespace yzg
     
     // RESERVE
     struct SimNode_ArrayReserve : SimNode_Array {
-        SimNode_ArrayReserve(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,sz), l(ll), r(rr) {};
+        SimNode_ArrayReserve(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
+            : SimNode_Array(at,sz), l(ll), r(rr) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
             YZG_EXCEPTION_POINT;
