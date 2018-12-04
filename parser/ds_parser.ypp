@@ -57,9 +57,8 @@
 %token  _STRUCT _LET    _DEF        _WHILE
 %token  _IF     _ELSE   _FOREACH    _CATCH
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
-%token  _TYPE   _DEBUG  _ELIF       _ARRAY
+%token  _TYPE   _IN     _ELIF       _ARRAY
 %token  _RETURN _NULL   _BREAK      _TRY
-%token  _IN
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -346,8 +345,6 @@ expr
     |   expr[subexpr] RARROW[loc]               { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
-    |   _DEBUG[loc] '(' expr[subexpr] ')'                       { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr)); }
-    |   _DEBUG[loc] '(' expr[subexpr] ',' STRING[message] ')'   { $$ = new ExprDebug(tokAt(@loc),ExpressionPtr($subexpr),*$message); }
     ;
 
 struct_variable_declaration_list

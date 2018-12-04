@@ -483,6 +483,7 @@ namespace yzg
     {
         subexpr->inferType(context);
         subexpr = autoDereference(subexpr);
+        if ( !subexpr->type ) return;
         if ( !subexpr->type->isPointer() ) {
             context.error("can only dereference pointer", at);
         } else {
@@ -525,37 +526,27 @@ namespace yzg
     
     // ExprDebug
     
-    ExpressionPtr ExprDebug::clone( const ExpressionPtr & expr ) const
-    {
-        auto cexpr = clonePtr<ExprDebug>(expr);
-        Expression::clone(cexpr);
-        cexpr->subexpr = subexpr->clone();
-        cexpr->message = message;
-        return cexpr;
-    }
-    
-    void ExprDebug::log(ostream& stream, int depth) const
-    {
-        stream << "(debug ";
-        stream << *subexpr;
-        if ( !message.empty() )
-            stream << " \"" << message << "\"";
-        stream << ")";
-    }
-    
     void ExprDebug::inferType(InferTypeContext & context)
     {
-        subexpr->inferType(context);
-        if ( !subexpr->type ) return;
-        type = make_shared<TypeDecl>(*subexpr->type);
+        if ( arguments.size()<1 || arguments.size()>2 ) {
+            context.error("debug(expr) or debug(expr,string)", at);
+        }
+        ExprLooksLikeCall::inferType(context);
+        if ( !arguments[0]->type ) return;
+        if ( arguments.size()==2 && !arguments[1]->isStringConstant() )
+            context.error("debug comment must be string constant", at);
+        type = make_shared<TypeDecl>(*arguments[0]->type);
     }
     
     SimNode * ExprDebug::simulate (Context & context) const
     {
         TypeInfo * pTypeInfo = context.makeNode<TypeInfo>();
-        context.thisProgram->makeTypeInfo(pTypeInfo, context, subexpr->type);
+        context.thisProgram->makeTypeInfo(pTypeInfo, context, arguments[0]->type);
+        string message;
+        if ( arguments.size()==2 && arguments[1]->isStringConstant() )
+            message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
         return context.makeNode<SimNode_Debug>(at,
-                                               subexpr->simulate(context),
+                                               arguments[0]->simulate(context),
                                                pTypeInfo,
                                                context.allocateName(message));
     }

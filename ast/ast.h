@@ -540,19 +540,13 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    class ExprDebug : public Expression
+    class ExprDebug : public ExprLooksLikeCall
     {
     public:
         ExprDebug () = default;
-        ExprDebug ( const LineInfo & a, ExpressionPtr s, const string & msg = string() )
-        : Expression(a), subexpr(s), message(msg) {}
-        virtual void log(ostream& stream, int depth) const override;
+        ExprDebug ( const LineInfo & a ) : ExprLooksLikeCall(a, "debug") {}
         virtual void inferType(InferTypeContext & context) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
-    public:
-        ExpressionPtr   subexpr;
-        string          message;
     };
     
     class ExprSizeOf : public Expression

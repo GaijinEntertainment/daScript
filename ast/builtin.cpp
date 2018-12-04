@@ -189,7 +189,8 @@ namespace yzg
         addInterop<builtin_stackwalk,void>      (*this, lib, "stackwalk");
         
         // function-like expresions
-        addCall<ExprAssert>("assert");
+        addCall<ExprAssert> ("assert");
+        addCall<ExprDebug>  ("debug");
     }
 
 }
