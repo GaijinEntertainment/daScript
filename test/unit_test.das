@@ -249,10 +249,10 @@ def pass_array ( arr:array<int> )
 
 def test_dynamic_array
     print("test array:\n")
-    let ( arr:array<int>; arr2:array<int> )
+    let ( arr:array<int>; arr2:array<int>; val2:int=2 )
         assert(length(arr)==0,"array starts at 0 length")
         push(arr,1)
-        push(arr,2)
+        push(arr,val2)
         push(arr,3)
         assert(length(arr)==3,"array length is 3")
         assert(capacity(arr)==16,"its 2x, but no less than 16")
