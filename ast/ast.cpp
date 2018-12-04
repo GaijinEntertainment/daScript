@@ -96,6 +96,13 @@ namespace yzg
     
     ostream& operator<< (ostream& stream, const TypeDecl & decl)
     {
+        if ( decl.baseType==Type::tArray ) {
+            if ( decl.firstType ) {
+                stream << "array (" << *decl.firstType << ")";
+            } else {
+                stream << "array";
+            }
+        }
         if ( decl.baseType==Type::tStructure || decl.baseType==Type::tPointer ) {
             if ( decl.structType ) {
                 stream << decl.structType->name;
@@ -122,12 +129,23 @@ namespace yzg
         dim = decl.dim;
         ref = decl.ref;
         at = decl.at;
+        if ( decl.firstType )
+            firstType = make_shared<TypeDecl>(*decl.firstType);
+        if ( decl.secondType )
+            secondType = make_shared<TypeDecl>(*decl.secondType);
     }
     
     string TypeDecl::getMangledName() const
     {
         stringstream ss;
-        if ( baseType==Type::tStructure ) {
+        if ( baseType==Type::tArray ) {
+            ss << "#array";
+            if ( firstType ) {
+                ss << "#" << firstType->getMangledName();
+            }
+        } else if ( baseType==Type::tPointer ) {
+            ss << structType << "#ptr";
+        } else if ( baseType==Type::tStructure ) {
             ss << structType->name;
         } else {
             ss << to_string(baseType);
@@ -150,6 +168,11 @@ namespace yzg
             return false;
         if ( baseType==Type::tPointer ) {
             if ( structType && decl.structType && structType!=decl.structType ) {
+                return false;
+            }
+        }
+        if ( baseType==Type::tArray ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
         }

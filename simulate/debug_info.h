@@ -23,7 +23,9 @@ namespace yzg
         tFloat4,
         tString,
         tStructure,
-        tPointer
+        tPointer,
+        tArray,
+        tTable
     };
     
     struct StructInfo;
@@ -43,6 +45,8 @@ namespace yzg
     {
         Type            type;
         StructInfo *    structType;
+        TypeInfo *      firstType;      // map  from, or array
+        TypeInfo *      secondType;     // map  to
         uint32_t        dimSize;
         uint32_t *      dim;
         bool            ref;

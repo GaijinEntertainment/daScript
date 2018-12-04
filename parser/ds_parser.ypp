@@ -59,7 +59,7 @@
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _ASSERT _DEBUG      _ELIF
 %token  _RETURN _NULL   _BREAK      _TRY
-%token  _IN
+%token  _IN     _ARRAY
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -108,7 +108,6 @@
 %type <pExpression>     expr_sizeof
 %type <pExpression>     expression_any
 %type <pExpression>     optional_initializer
-
 
 /* operation precedence*/
 %left   ','
@@ -486,6 +485,12 @@ type_declaration
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' { if ( $typeDecl ) $typeDecl->dim.push_back($dimSize); $$ = $typeDecl; }
     |   type_declaration[typeDecl] '&'                      { if ( $typeDecl ) $typeDecl->ref = true; $$ = $typeDecl; }
+    |   _ARRAY[loc] type_declaration[typeDecl]              {
+        if ( $typeDecl->ref ) yyerror ( "can't have reference in the Array" );
+        $$ = new TypeDecl(Type::tArray);
+        $$->at = tokAt(@loc);
+        $$->firstType = TypeDeclPtr($typeDecl);
+    }
     ;
 
 %%

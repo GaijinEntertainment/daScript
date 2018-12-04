@@ -44,6 +44,7 @@ misc/enums.h
 misc/function_traits.h
 misc/platform.h
 misc/vectypes.h
+misc/arraytype.h
 misc/precomp.h
 misc/precomp.cpp
 )

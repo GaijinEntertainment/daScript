@@ -2,6 +2,7 @@
 
 #include "simulate.h"
 #include "vectypes.h"
+#include "arraytype.h"
 #include "function_traits.h"
 #include "interop.h"
 #include "debug_info.h"
@@ -105,6 +106,8 @@ namespace yzg
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
+        TypeDeclPtr         firstType;      // map.first or array
+        TypeDeclPtr         secondType;     // map.second
         vector<uint32_t>    dim;
         bool                ref = false;
         LineInfo            at;

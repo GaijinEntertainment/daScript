@@ -5,6 +5,7 @@
 #include "enums.h"
 #include "cast.h"
 #include "runtime_string.h"
+#include "arraytype.h"
 
 namespace yzg
 {
@@ -13,6 +14,8 @@ namespace yzg
         {   Type::tBool,        "bool"  },
         {   Type::tString,      "string" },
         {   Type::tPointer,     "pointer" },
+        {   Type::tArray,       "array" },
+        {   Type::tTable,       "table" },
         {   Type::tInt,         "int"   },
         {   Type::tInt2,        "int2"  },
         {   Type::tInt3,        "int3"  },
@@ -55,6 +58,7 @@ namespace yzg
             case tFloat2:       return sizeof(float) * 2;
             case tFloat3:       return sizeof(float) * 3;
             case tFloat4:       return sizeof(float) * 4;
+            case tArray:        return sizeof(Array);
             case tStructure:    return 0;
             default:
                 assert(0 && "not implemented");
