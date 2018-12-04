@@ -3,6 +3,8 @@
 #include "ast.h"
 #include "enums.h"
 
+#include "runtime_array.h"
+
 void yybegin(const char * str);
 int yyparse();
 
@@ -549,6 +551,63 @@ namespace yzg
                                                arguments[0]->simulate(context),
                                                pTypeInfo,
                                                context.allocateName(message));
+    }
+    
+    // ExprArrayPush
+    
+    
+    void ExprArrayPush::inferType(InferTypeContext & context)
+    {
+        if ( arguments.size()!=2 ) {
+            context.error("push(array,value)", at);
+        }
+        ExprLooksLikeCall::inferType(context);
+        auto arrayType = arguments[0]->type;
+        auto valueType = arguments[1]->type;
+        if ( !arrayType || !valueType ) return;
+        if ( !arrayType->isSimpleType(Type::tArray) || !arrayType->firstType || !arrayType->ref ) {
+            context.error("push first argument must be fully qualified array", at);
+            return;
+        }
+        if ( !arrayType->firstType->isSameType(*valueType,false) )
+            context.error("can't push value of different type", at);
+        arguments[1] = Expression::autoDereference(arguments[1]);   // TODO: verify if we need to dereference
+        type = make_shared<TypeDecl>(Type::tVoid);
+    }
+    
+    SimNode * ExprArrayPush::simulate (Context & context) const
+    {
+        auto arr = arguments[0]->simulate(context);
+        auto val = arguments[1]->simulate(context);
+        
+        // TODO: verify if its indeed a copy
+        
+        switch ( arguments[1]->type->baseType ) {
+            case Type::tBool:       return context.makeNode<SimNode_ArrayPushValue<bool>>     (at, arr, val); break;
+            case Type::tInt:        return context.makeNode<SimNode_ArrayPushValue<int32_t>>  (at, arr, val); break;
+            case Type::tInt2:       return context.makeNode<SimNode_ArrayPushValue<int2>>     (at, arr, val); break;
+            case Type::tInt3:       return context.makeNode<SimNode_ArrayPushValue<int3>>     (at, arr, val); break;
+            case Type::tInt4:       return context.makeNode<SimNode_ArrayPushValue<int4>>     (at, arr, val); break;
+            case Type::tUInt:       return context.makeNode<SimNode_ArrayPushValue<uint32_t>> (at, arr, val); break;
+            case Type::tUInt2:      return context.makeNode<SimNode_ArrayPushValue<uint2>>    (at, arr, val); break;
+            case Type::tUInt3:      return context.makeNode<SimNode_ArrayPushValue<uint3>>    (at, arr, val); break;
+            case Type::tUInt4:      return context.makeNode<SimNode_ArrayPushValue<uint4>>    (at, arr, val); break;
+            case Type::tFloat:      return context.makeNode<SimNode_ArrayPushValue<float>>    (at, arr, val); break;
+            case Type::tFloat2:     return context.makeNode<SimNode_ArrayPushValue<float2>>   (at, arr, val); break;
+            case Type::tFloat3:     return context.makeNode<SimNode_ArrayPushValue<float3>>   (at, arr, val); break;
+            case Type::tFloat4:     return context.makeNode<SimNode_ArrayPushValue<float4>>   (at, arr, val); break;
+            case Type::tString:     return context.makeNode<SimNode_ArrayPushValue<char *>>   (at, arr, val); break;
+            case Type::tPointer:    return context.makeNode<SimNode_ArrayPushValue<void *>>   (at, arr, val); break;
+            case Type::tArray:      return context.makeNode<SimNode_ArrayPushValue<Array>>    (at, arr, val); break;
+                // unimplemented
+            case Type::tTable:
+                // fail cases
+            case Type::none:
+            case Type::tVoid:
+            case Type::tStructure:
+                assert(0 && "unsupported? can't assign initial value");
+                return nullptr;
+        }
     }
     
     // ExprSizeOf
@@ -1352,13 +1411,27 @@ namespace yzg
         switch ( var->type->baseType ) {
             case Type::tBool:       copy = context.makeNode<SimNode_CopyValue<bool>>(var->init->at, get, init);       break;
             case Type::tInt:        copy = context.makeNode<SimNode_CopyValue<int32_t>>(var->init->at, get, init);    break;
+            case Type::tInt2:       copy = context.makeNode<SimNode_CopyValue<int2>>(var->init->at, get, init);    break;
+            case Type::tInt3:       copy = context.makeNode<SimNode_CopyValue<int3>>(var->init->at, get, init);    break;
+            case Type::tInt4:       copy = context.makeNode<SimNode_CopyValue<int4>>(var->init->at, get, init);    break;
             case Type::tUInt:       copy = context.makeNode<SimNode_CopyValue<uint32_t>>(var->init->at, get, init);   break;
+            case Type::tUInt2:      copy = context.makeNode<SimNode_CopyValue<uint2>>(var->init->at, get, init);   break;
+            case Type::tUInt3:      copy = context.makeNode<SimNode_CopyValue<uint3>>(var->init->at, get, init);   break;
+            case Type::tUInt4:      copy = context.makeNode<SimNode_CopyValue<uint4>>(var->init->at, get, init);   break;
             case Type::tFloat:      copy = context.makeNode<SimNode_CopyValue<float>>(var->init->at, get, init);      break;
+            case Type::tFloat2:     copy = context.makeNode<SimNode_CopyValue<float2>>(var->init->at, get, init);      break;
+            case Type::tFloat3:     copy = context.makeNode<SimNode_CopyValue<float3>>(var->init->at, get, init);      break;
+            case Type::tFloat4:     copy = context.makeNode<SimNode_CopyValue<float4>>(var->init->at, get, init);      break;
             case Type::tString:     copy = context.makeNode<SimNode_CopyValue<char *>>(var->init->at, get, init);     break;
             case Type::tPointer:    copy = context.makeNode<SimNode_CopyValue<void *>>(var->init->at, get, init);     break;
-            default: {
-                assert(0 && "unsupported? can't assign initial value");
-            }
+            case Type::tArray:      copy = context.makeNode<SimNode_CopyValue<Array>>(var->init->at, get, init);     break;
+            // unimplemented
+            case Type::tTable:
+            // fail cases
+            case Type::none:
+            case Type::tVoid:
+            case Type::tStructure:
+                                    assert(0 && "unsupported? can't assign initial value");
         }
         return copy;
     }
@@ -1660,6 +1733,18 @@ namespace yzg
             info->structType = nullptr;
         }
         info->ref = type->ref;
+        if ( type->firstType ) {
+            info->firstType = context.makeNode<TypeInfo>();
+            makeTypeInfo(info->firstType, context, type->firstType);
+        } else {
+            info->firstType = nullptr;
+        }
+        if ( type->secondType ) {
+            info->secondType = context.makeNode<TypeInfo>();
+            makeTypeInfo(info->secondType , context, type->secondType);
+        } else {
+            info->secondType = nullptr;
+        }
     }
 
     VarInfo * Program::makeVariableDebugInfo ( Context & context, const Variable & var )

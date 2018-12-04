@@ -57,6 +57,8 @@ simulate/debug_info.h
 simulate/interop.h
 simulate/runtime_string.cpp
 simulate/runtime_string.h
+simulate/runtime_array.cpp
+simulate/runtime_array.h
 simulate/simulate.cpp
 simulate/simulate.h
 )

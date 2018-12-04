@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vectypes.h"
+#include "arraytype.h"
 
 namespace yzg
 {
@@ -45,6 +46,12 @@ namespace yzg
     struct cast <float> {
         static __forceinline float to ( __m128 x )              { return *((float *)&x); }
         static __forceinline __m128 from ( float x )            { return _mm_set_ss(x); }
+    };
+    
+    template <>
+    struct cast <Array> {
+        static __forceinline Array to ( __m128 x )              { return *((Array *)&x); }
+        static __forceinline __m128 from ( const Array & x )    { return x._stub; }
     };
     
     template <typename TT>

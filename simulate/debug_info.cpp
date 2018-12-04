@@ -133,6 +133,18 @@ namespace yzg
         ss << ")";
     }
     
+    void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info )
+    {
+        char * pA = (char *) pX;
+        ss << "([size=" << count << "] ";
+        for ( int i=0; i!=count; ++i ) {
+            if ( i ) ss << " ";
+            debug_value(ss, pA, info, false);
+            pA += stride;
+        }
+        ss << ")";
+    }
+    
     void debug_value ( stringstream & ss, void * pX, TypeInfo * info, bool useDim )
     {
         if ( info->ref ) {
@@ -141,6 +153,9 @@ namespace yzg
             debug_value(ss, *(void **)pX, &ti);
         } else if ( info->dimSize && useDim ) {
             debug_dim_value(ss, pX, info);
+        } else if ( info->type==Type::tArray ) {
+            auto arr = (Array *) pX;
+            debug_array_value(ss, arr->data, arr->fieldSize, arr->size, info->firstType);
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << *((bool *)pX); break;
@@ -172,6 +187,9 @@ namespace yzg
             debug_value(ss, cast<void *>::to(x), &ti);
         } else if ( info->dimSize ) {
             debug_dim_value(ss, cast<void *>::to(x), info);
+        } else if ( info->type==Type::tArray ) {
+            auto arr = cast<Array>::to(x);
+            debug_array_value(ss, arr.data, arr.fieldSize, arr.size, info->firstType);
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << cast<bool>::to(x); break;

@@ -244,6 +244,15 @@ def test_string
         assert(b=="barfoo")
     print("ok\n")
 
+def test_dynamic_array
+    print("test array:\n")
+    let ( arr:array int )
+        push(arr,1)
+        push(arr,2)
+        push(arr,3)
+        debug(arr)
+    print("ok\n")
+
 // this is where unit tests are
 def test
     print("unit tests started\n")
@@ -260,6 +269,7 @@ def test
     test_stackwalk()
     test_break()
     test_string()
+    test_dynamic_array()
     print("unit tests finished\n")
 
 

@@ -69,6 +69,26 @@ namespace yzg
         Context(const string * lines);
         ~Context();
         
+        __forceinline void * reallocate ( void * oldData, uint32_t oldSize, uint32_t size )
+        {
+            if ( size <= oldSize ) return oldData;
+            size = (size + 0x0f) & ~0x0f;
+            oldSize = (oldSize + 0x0f) & ~0x0f;
+            if ( oldData && (oldData == linearAllocator - oldSize) ) {
+                uint32_t extra = size - oldSize;
+                if ( linearAllocator - linearAllocatorBase + extra > linearAllocatorSize ) {
+                    throw_error("out of linear allocator space");
+                    return nullptr;
+                }
+                linearAllocator += extra;
+                return oldData;
+            } else {
+                void * data = allocate(size);
+                memcpy ( data, oldData, oldSize );
+                return data;
+            }
+        }
+        
         __forceinline void * allocate ( uint32_t size ) {
             size = (size + 0x0f) & ~0x0f;
             if ( linearAllocator - linearAllocatorBase + size > linearAllocatorSize ) {
@@ -461,7 +481,7 @@ namespace yzg
     
     // COPY REFERENCE VALUE
     struct SimNode_CopyRefValue : SimNode {
-        SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, int32_t sz)
+        SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
         : SimNode(at), l(ll), r(rr), size(sz) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
@@ -474,7 +494,7 @@ namespace yzg
             return ll;
         }
         SimNode * l, * r;
-        int32_t size;
+        uint32_t size;
     };
     
     // BLOCK

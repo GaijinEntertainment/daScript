@@ -549,6 +549,15 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
+    class ExprArrayPush : public ExprLooksLikeCall
+    {
+    public:
+        ExprArrayPush() = default;
+        ExprArrayPush ( const LineInfo & a ) : ExprLooksLikeCall(a, "push") {}
+        virtual void inferType(InferTypeContext & context) override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+    
     class ExprSizeOf : public Expression
     {
     public:
@@ -563,7 +572,6 @@ namespace yzg
         TypeDeclPtr     typeexpr;
     };
 
-    
     class ExprCall : public ExprLooksLikeCall
     {
     public:
