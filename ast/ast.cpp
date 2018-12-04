@@ -734,7 +734,8 @@ namespace yzg
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
         if ( subexpr->type->isGoodArrayType() ) {
-            return context.makeNode<SimNode_ArrayAt>(at, prv, pidx, subexpr->type->firstType->getSizeOf());
+            uint32_t stride =subexpr->type->firstType->getSizeOf();
+            return context.makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
         } else {
             uint32_t stride = subexpr->type->getStride();
             uint32_t range = subexpr->type->dim.back();

@@ -136,7 +136,7 @@ namespace yzg
     void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info )
     {
         char * pA = (char *) pX;
-        ss << "([size=" << count << "] ";
+        ss << "([size=" << count << ",stride=" << stride << "] ";
         for ( int i=0; i!=count; ++i ) {
             if ( i ) ss << " ";
             debug_value(ss, pA, info, false);
@@ -187,9 +187,6 @@ namespace yzg
             debug_value(ss, cast<void *>::to(x), &ti);
         } else if ( info->dimSize ) {
             debug_dim_value(ss, cast<void *>::to(x), info);
-        } else if ( info->type==Type::tArray ) {
-            auto arr = cast<Array *>::to(x);
-            debug_array_value(ss, arr->data, arr->fieldSize, arr->size, info->firstType);
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << cast<bool>::to(x); break;

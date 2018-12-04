@@ -7,7 +7,8 @@ namespace yzg
 {
     __forceinline Array * cast_array ( __m128 arr, uint32_t fieldSize ) {
         Array * pA = cast<Array *>::to(arr);
-        if ( !pA->fieldSize ) pA->fieldSize = fieldSize;
+        assert ( pA->fieldSize==0 || pA->fieldSize==fieldSize );
+        pA->fieldSize = fieldSize;
         return pA;
     }
     
@@ -28,7 +29,7 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             uint32_t idx = cast<uint32_t>::to(index->eval(context));
             YZG_EXCEPTION_POINT;
-            Array * pA = cast_array(ll, size);
+            Array * pA = cast<Array *>::to(ll);
             if ( idx >= pA->size ) {
                 context.throw_error("index out of range");
                 return _mm_setzero_ps();

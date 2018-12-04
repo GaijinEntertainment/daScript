@@ -279,6 +279,10 @@ def test_dynamic_array
             while index < 4
                 debug(arr[index++]++)
         debug(arr)
+        resize(arr,3)
+        debug(arr)
+        resize(arr,4)
+        debug(arr)
     print("ok\n")
 
 // this is where unit tests are

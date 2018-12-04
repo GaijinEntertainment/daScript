@@ -18,6 +18,8 @@ namespace yzg
             newCapacity = max(newCapacity, 16u);
             array_reserve(context, arr, newCapacity);
         }
+        if ( newSize > arr.size )
+            memset ( arr.data + arr.size*arr.fieldSize, 0, (newSize-arr.size)*arr.fieldSize );
         arr.size = newSize;
     }
 }
