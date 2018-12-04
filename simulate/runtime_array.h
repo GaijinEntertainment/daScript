@@ -79,42 +79,70 @@ namespace yzg
         SimNode * l, * r;
     };
     
+    // [1,2,i,4,5]
+    // insert(2)
+    //  move ( data + 3, data + 2, old_length - 2 );
+    
     // PUSH VALUE
     template <typename TT>
     struct SimNode_ArrayPushValue : SimNode_Array {
-        SimNode_ArrayPushValue(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode_Array(at, sizeof(TT)), l(ll), r(rr) {};
+        SimNode_ArrayPushValue(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii)
+            : SimNode_Array(at, sizeof(TT)), array(ll), value(rr), index(ii) {};
         virtual __m128 eval ( Context & context ) override {
-            __m128 ll = l->eval(context);
+            __m128 arr = array->eval(context);
             YZG_EXCEPTION_POINT;
-            __m128 rr = r->eval(context);
+            __m128 val = value->eval(context);
             YZG_EXCEPTION_POINT;
-            auto * pA = cast<Array *>::to(ll);
-            uint32_t index = pA->size;
-            array_resize(context, *pA, index + 1, stride, false);
-            TT * pl = (TT *) ( pA->data + index*stride );
-            TT * pr = (TT *) &rr;
+            auto * pA = cast<Array *>::to(arr);
+            uint32_t idx = pA->size;
+            array_resize(context, *pA, idx + 1, stride, false);
+            if ( index ) {
+                __m128 ati = index->eval(context);
+                YZG_EXCEPTION_POINT;
+                uint32_t i = cast<uint32_t>::to(ati);
+                if ( i >= pA->size ) {
+                    context.throw_error("insert index out of range");
+                    return _mm_setzero_ps();
+                }
+                memmove ( pA->data+(i+1)*stride, pA->data+i*stride, (idx-i)*stride );
+                idx = i;
+            }
+            TT * pl = (TT *) ( pA->data + idx*stride );
+            TT * pr = (TT *) &val;
             *pl = *pr;
             return _mm_setzero_ps();
         }
-        SimNode * l, * r;
+        SimNode * array, *value, *index;
     };
     
     // PUSH REFERENCE VALUE
     struct SimNode_ArrayPushRefValue : SimNode_Array {
-        SimNode_ArrayPushRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,sz), l(ll), r(rr) {};
+        SimNode_ArrayPushRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii, uint32_t sz)
+            : SimNode_Array(at, sz), array(ll), value(rr), index(ii) {};
         virtual __m128 eval ( Context & context ) override {
-            __m128 ll = l->eval(context);
+            __m128 arr = array->eval(context);
             YZG_EXCEPTION_POINT;
-            __m128 rr = r->eval(context);
+            __m128 val = value->eval(context);
             YZG_EXCEPTION_POINT;
-            Array * pA = cast<Array *>::to(ll);
-            uint32_t index = pA->size;
-            array_resize(context, *pA, index + 1, stride, false);
-            void * pl = pA->data + index*stride;
-            auto pr = cast<void *>::to(rr);
+            Array * pA = cast<Array *>::to(arr);
+            uint32_t idx = pA->size;
+            array_resize(context, *pA, idx + 1, stride, false);
+            if ( index ) {
+                __m128 ati = index->eval(context);
+                YZG_EXCEPTION_POINT;
+                uint32_t i = cast<uint32_t>::to(ati);
+                if ( i >= pA->size ) {
+                    context.throw_error("insert index out of range");
+                    return _mm_setzero_ps();
+                }
+                memmove ( pA->data+(i+1)*stride, pA->data+i*stride, (idx-i)*stride );
+                idx = i;
+            }
+            void * pl = pA->data + idx*stride;
+            auto pr = cast<void *>::to(val);
             memcpy ( pl, pr, stride );
             return _mm_setzero_ps();
         }
-        SimNode * l, * r;
+        SimNode * array, *value, *index;
     };
 }

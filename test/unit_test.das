@@ -284,6 +284,13 @@ def test_dynamic_array
         resize(arr,4)
         assert(arr[3]==0,"new element after resize is 0")
         debug(arr)
+        push(arr,1,0)
+        debug(arr)
+        resize(arr,4)
+        push(arr,5,4)
+        debug(arr)
+        push(arr,7,2)
+        debug(arr)
     print("ok\n")
 
 // this is where unit tests are

@@ -563,8 +563,9 @@ namespace yzg
     
     void ExprArrayPush::inferType(InferTypeContext & context)
     {
-        if ( arguments.size()!=2 ) {
-            context.error("push(array,value)", at);
+        if ( arguments.size()!=2 && arguments.size()!=3 ) {
+            context.error("push(array,value) or push(array,value,at)", at);
+            return;
         }
         ExprLooksLikeCall::inferType(context);
         auto arrayType = arguments[0]->type;
@@ -576,6 +577,8 @@ namespace yzg
         }
         if ( !arrayType->firstType->isSameType(*valueType,false) )
             context.error("can't push value of different type", at);
+        if ( arguments.size()==3 && !arguments[2]->type->isIndex() )
+            context.error("push at must be an index", at);
         type = make_shared<TypeDecl>(Type::tVoid);
     }
     
@@ -583,26 +586,27 @@ namespace yzg
     {
         auto arr = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
+        auto idx = arguments.size()==3 ? arguments[2]->simulate(context) : nullptr;
         if ( arguments[1]->type->isRef() ) {
-            return context.makeNode<SimNode_ArrayPushRefValue>(at, arr, val, arguments[0]->type->firstType->getSizeOf());
+            return context.makeNode<SimNode_ArrayPushRefValue>(at, arr, val, idx, arguments[0]->type->firstType->getSizeOf());
         } else {
             switch ( arguments[1]->type->baseType ) {
-                case Type::tBool:       return context.makeNode<SimNode_ArrayPushValue<bool>>     (at, arr, val); break;
-                case Type::tInt:        return context.makeNode<SimNode_ArrayPushValue<int32_t>>  (at, arr, val); break;
-                case Type::tInt2:       return context.makeNode<SimNode_ArrayPushValue<int2>>     (at, arr, val); break;
-                case Type::tInt3:       return context.makeNode<SimNode_ArrayPushValue<int3>>     (at, arr, val); break;
-                case Type::tInt4:       return context.makeNode<SimNode_ArrayPushValue<int4>>     (at, arr, val); break;
-                case Type::tUInt:       return context.makeNode<SimNode_ArrayPushValue<uint32_t>> (at, arr, val); break;
-                case Type::tUInt2:      return context.makeNode<SimNode_ArrayPushValue<uint2>>    (at, arr, val); break;
-                case Type::tUInt3:      return context.makeNode<SimNode_ArrayPushValue<uint3>>    (at, arr, val); break;
-                case Type::tUInt4:      return context.makeNode<SimNode_ArrayPushValue<uint4>>    (at, arr, val); break;
-                case Type::tFloat:      return context.makeNode<SimNode_ArrayPushValue<float>>    (at, arr, val); break;
-                case Type::tFloat2:     return context.makeNode<SimNode_ArrayPushValue<float2>>   (at, arr, val); break;
-                case Type::tFloat3:     return context.makeNode<SimNode_ArrayPushValue<float3>>   (at, arr, val); break;
-                case Type::tFloat4:     return context.makeNode<SimNode_ArrayPushValue<float4>>   (at, arr, val); break;
-                case Type::tString:     return context.makeNode<SimNode_ArrayPushValue<char *>>   (at, arr, val); break;
-                case Type::tPointer:    return context.makeNode<SimNode_ArrayPushValue<void *>>   (at, arr, val); break;
-                case Type::tArray:      return context.makeNode<SimNode_ArrayPushValue<Array>>    (at, arr, val); break;
+                case Type::tBool:       return context.makeNode<SimNode_ArrayPushValue<bool>>     (at, arr, val, idx); break;
+                case Type::tInt:        return context.makeNode<SimNode_ArrayPushValue<int32_t>>  (at, arr, val, idx); break;
+                case Type::tInt2:       return context.makeNode<SimNode_ArrayPushValue<int2>>     (at, arr, val, idx); break;
+                case Type::tInt3:       return context.makeNode<SimNode_ArrayPushValue<int3>>     (at, arr, val, idx); break;
+                case Type::tInt4:       return context.makeNode<SimNode_ArrayPushValue<int4>>     (at, arr, val, idx); break;
+                case Type::tUInt:       return context.makeNode<SimNode_ArrayPushValue<uint32_t>> (at, arr, val, idx); break;
+                case Type::tUInt2:      return context.makeNode<SimNode_ArrayPushValue<uint2>>    (at, arr, val, idx); break;
+                case Type::tUInt3:      return context.makeNode<SimNode_ArrayPushValue<uint3>>    (at, arr, val, idx); break;
+                case Type::tUInt4:      return context.makeNode<SimNode_ArrayPushValue<uint4>>    (at, arr, val, idx); break;
+                case Type::tFloat:      return context.makeNode<SimNode_ArrayPushValue<float>>    (at, arr, val, idx); break;
+                case Type::tFloat2:     return context.makeNode<SimNode_ArrayPushValue<float2>>   (at, arr, val, idx); break;
+                case Type::tFloat3:     return context.makeNode<SimNode_ArrayPushValue<float3>>   (at, arr, val, idx); break;
+                case Type::tFloat4:     return context.makeNode<SimNode_ArrayPushValue<float4>>   (at, arr, val, idx); break;
+                case Type::tString:     return context.makeNode<SimNode_ArrayPushValue<char *>>   (at, arr, val, idx); break;
+                case Type::tPointer:    return context.makeNode<SimNode_ArrayPushValue<void *>>   (at, arr, val, idx); break;
+                case Type::tArray:      return context.makeNode<SimNode_ArrayPushValue<Array>>    (at, arr, val, idx); break;
                     // unimplemented
                 case Type::tTable:
                     // fail cases
