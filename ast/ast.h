@@ -533,6 +533,10 @@ namespace yzg
         vector<ExpressionPtr>   sources;
         ExpressionPtr           subexpr;
         ExpressionPtr           filter;
+    protected:
+        uint32_t                fixedSize = 0;
+        bool                    dynamicArrays = false;
+        bool                    fixedArrays = false;
     };
     
     class ExprLooksLikeCall : public Expression

@@ -319,6 +319,29 @@ def test_for
         assert(i==5)
     print("ok\n")
 
+def test_for_array
+    print("test for array:\n")
+    let(a,b:array<int>;i:int=0)
+        resize(a,10)
+        resize(b,10)
+        for l,r in a,b
+            l = i
+            r = i*2-5
+            i++
+        debug(a,"a=")
+        debug(b,"b=")
+        i = 0
+        for l,r in a,b
+            assert(l==i)
+            assert(r==i*2-5)
+            i++
+        i = 0
+        for l,r in a,b where l>r
+            assert(l>r)
+            i++
+        assert(i==5)
+    print("ok\n")
+
 // this is where unit tests are
 def test
     print("unit tests started\n")
@@ -337,6 +360,7 @@ def test
     test_string()
     test_dynamic_array()
     test_for()
+    test_for_array()
     print("unit tests finished\n")
 
 

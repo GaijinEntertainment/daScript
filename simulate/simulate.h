@@ -15,6 +15,8 @@ namespace yzg
     #define YZG_ENABLE_EXCEPTIONS   1
     #endif
     
+    #define MAX_FOR_ITERATORS   4
+    
     using namespace std;
     
     class Context;
@@ -565,18 +567,52 @@ namespace yzg
         SimNode * cond, * body;
     };
 
-    // REPEAT
-    struct SimNode_Repeat : SimNode {
-        SimNode_Repeat ( const LineInfo & at ) : SimNode(at) {}
+    // FOR BASE
+    struct SimNode_ForBase : SimNode {
+        SimNode_ForBase ( const LineInfo & at ) : SimNode(at) {}
+        SimNode *   sources [MAX_FOR_ITERATORS];
+        uint32_t    strides [MAX_FOR_ITERATORS];
+        uint32_t    stackTop[MAX_FOR_ITERATORS];
         SimNode *   body;
         SimNode *   filter;
         uint32_t    size;
     };
+
+    template <int total>
+    struct SimNode_ForGoodArray : public SimNode_ForBase {
+        SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            Array * pha[total];
+            char * ph[total];
+            for ( int t=0; t!=total; ++t ) {
+                pha[t] = cast<Array *>::to(sources[t]->eval(context));
+                ph[t]  = pha[t]->data;
+                YZG_EXCEPTION_POINT;
+            }
+            char ** pi[total];
+            for ( int t=0; t!=total; ++t ) {
+                pi[t] = (char **)(context.stackTop + stackTop[t]);
+            }
+            for ( int i=0; !context.stopFlags; ++i ) {
+                for ( int t=0; t!=total; ++t ){
+                    if ( i > pha[t]->size ) goto loopOver;
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                if ( !filter || cast<bool>::to(filter->eval(context)) )
+                    if ( !context.stopFlags )
+                        body->eval(context);
+            }
+        loopOver:
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return _mm_setzero_ps();
+        }
+    };
     
     // FOR
     template <int total>
-    struct SimNode_For : SimNode_Repeat {
-        SimNode_For ( const LineInfo & at ) : SimNode_Repeat(at) {}
+    struct SimNode_ForFixedArray : SimNode_ForBase {
+        SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
         virtual __m128 eval ( Context & context ) override {
             char * ph[total];
             for ( int t=0; t!=total; ++t ) {
@@ -593,15 +629,12 @@ namespace yzg
                     ph[t] += strides[t];
                 }
                 if ( !filter || cast<bool>::to(filter->eval(context)) )
-                    body->eval(context);
+                    if ( !context.stopFlags )
+                        body->eval(context);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return _mm_setzero_ps();
         }
-        SimNode *   sources[total];
-        uint32_t    strides[total];
-        uint32_t    typeSize[total];
-        uint32_t    stackTop[total];
     };
     
     // FOREACH
