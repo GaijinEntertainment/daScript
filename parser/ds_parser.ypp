@@ -18,6 +18,7 @@
     };
     
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
+    vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     
     LineInfo tokAt ( const struct YYLTYPE & li );
@@ -59,6 +60,7 @@
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _IN     _ELIF       _ARRAY
 %token  _RETURN _NULL   _BREAK      _TRY
+%token  _FOR    _WHERE
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -97,6 +99,7 @@
 %type <pExpression>     expression_block
 %type <pExpression>     expression_while_loop
 %type <pExpression>     expression_foreach_loop
+%type <pExpression>     expression_for_loop
 %type <pExpression>     expression_break
 %type <pExpression>     expression_return
 %type <pExpression>     expression_else
@@ -142,6 +145,26 @@ expression_else
 expression_if_then_else
     :   _IF[loc] expr[cond] expression_block[block] expression_else[then] {
         $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),ExpressionPtr($block),ExpressionPtr($then));
+    }
+    ;
+
+expression_for_loop
+    :   _FOR[loc] variable_name_list[iters] _IN expr_list[srcs] expression_block[block] {
+        auto pFor = new ExprFor(tokAt(@loc));
+        pFor->iterators = *$iters;
+        delete $iters;
+        pFor->sources = sequenceToList($srcs);
+        pFor->subexpr = ExpressionPtr($block);
+        $$ = pFor;
+    }
+    |   _FOR[loc] variable_name_list[iters] _IN expr_list[srcs] _WHERE expr[filter] expression_block[block] {
+        auto pFor = new ExprFor(tokAt(@loc));
+        pFor->iterators = *$iters;
+        delete $iters;
+        pFor->sources = sequenceToList($srcs);
+        pFor->subexpr = ExpressionPtr($block);
+        pFor->filter = ExpressionPtr($filter);
+        $$ = pFor;
     }
     ;
 
@@ -220,6 +243,7 @@ expression_any
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_foreach_loop[subexpr]    { $$ = $subexpr; }
+    |   expression_for_loop[subexpr]        { $$ = $subexpr; }
     |   expression_break[subexpr]           { $$ = $subexpr; }
     |   expression_return[subexpr]          { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
@@ -501,21 +525,28 @@ void yyerror(const string & error)
     g_Program->error(error,LineInfo(yylloc.first_column,yylloc.first_line));
 }
 
-ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments ) {
+vector<ExpressionPtr> sequenceToList ( Expression * arguments )
+{
+    vector<ExpressionPtr> argList;
     auto arg = arguments;
     if ( arg->isSequence() ) {
         while ( arg->isSequence() ) {
             auto pSeq = static_cast<ExprSequence *>(arg);
             assert(!pSeq->right->isSequence());
-            pCall->arguments.push_back(pSeq->right);
+            argList.push_back(pSeq->right);
             arg = pSeq->left.get();
         }
-        pCall->arguments.push_back(arg->shared_from_this());
-        reverse(pCall->arguments.begin(),pCall->arguments.end());
+        argList.push_back(arg->shared_from_this());
+        reverse(argList.begin(),argList.end());
         delete arguments;
     } else {
-        pCall->arguments.push_back(ExpressionPtr(arg));
+        argList.push_back(ExpressionPtr(arg));
     }
+    return argList;
+}
+
+ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments ) {
+    pCall->arguments = sequenceToList(arguments);
     return pCall;
 }
 

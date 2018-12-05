@@ -26,20 +26,20 @@ tests
 	every type with evey operator
 	every concept
 
-iterations took:0.000540
-foreach iterations took:0.000315
-c++ version took:0.000019
-interop version took:0.000399
+iterations took:0.000594
+foreach iterations took:0.000314
+for iterations took:0.000261
+c++ version took:0.000018
+interop version took:0.000410
 foreach interop version took:0.000148
-10000-interop version took:0.000222
-ratio sim / c: 28.389012
-ratio foreach sim / c: 16.541430
-ratio interop / c: 20.986593
-ratio foreach interop / c: 7.790326
-ratio 10000-interop / c: 11.696740
-ratio sim / interop: 1.352721
-../../test/profile_try_catch.das took:0.000116
-
-
+10000-interop version took:0.000230
+10000-interop ks version took:0.000107
+ratio sim / c: 33.815146
+ratio foreach sim / c: 17.889338
+ratio interop / c: 23.355371
+ratio foreach interop / c: 8.435082
+ratio 10000-interop / c: 13.097747
+ratio 10000-interop ks / c: 6.111345
+ratio sim / interop: 1.447853
 
 

@@ -23,6 +23,10 @@ def foreachTest
         foreach obj in objects
             update(obj)
 
+def forTest
+    for obj in objects
+        update(obj)
+
 def foreachIteropTest
     let ( obj:Object )
         foreach obj in objects

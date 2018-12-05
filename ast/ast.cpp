@@ -902,7 +902,11 @@ namespace yzg
     SimNode * ExprVar::simulate (Context & context) const
     {
         if ( local ) {
-            return context.makeNode<SimNode_GetLocal>(at, variable->stackTop);
+            if ( variable->type->ref ) {
+                return context.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
+            } else {
+                return context.makeNode<SimNode_GetLocal>(at, variable->stackTop);
+            }
         } else if ( argument) {
             return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
         } else {
@@ -1355,6 +1359,159 @@ namespace yzg
                                                  (int) head->type->dim[0],
                                                  iter->type->getSizeOf(),
                                                  iter->type->getSizeOf());
+    }
+    
+    // ExprFor
+
+    ExpressionPtr ExprFor::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprFor>(expr);
+        Expression::clone(cexpr);
+        cexpr->iterators = iterators;
+        for ( auto & src : sources )
+            cexpr->sources.push_back(src->clone());
+        for ( auto & var : iteratorVariables )
+            cexpr->iteratorVariables.push_back(var->clone());
+        cexpr->subexpr = subexpr->clone();
+        if ( filter )
+            cexpr->filter = filter->clone();
+        return cexpr;
+    }
+    
+    Variable * ExprFor::findIterator(const string & name) const
+    {
+        for ( auto & v : iteratorVariables ) {
+            if ( v->name==name ) {
+                return v.get();
+            }
+        }
+        return nullptr;
+    }
+    
+    void ExprFor::log(ostream& stream, int depth) const
+    {
+        stream << "(for (";
+        for ( int i=0; i!=iterators.size(); ++i ) {
+            if ( i ) stream << " ";
+            stream << iterators[i];
+        }
+        stream << ")\n";
+        for ( auto & src : sources ) {
+            stream << string(depth+2, '\t') << "(";
+            src->log(stream, depth+2);
+            stream << ")\n";
+        }
+        if ( filter ) {
+            stream << string(depth+2, '\t') << "(";
+            filter->log(stream, depth+2);
+            stream << ")\n";
+        }
+        stream << string(depth+2, '\t');
+        subexpr->log(stream, depth+2);
+        stream << ")";
+    }
+    
+    void ExprFor::inferType(InferTypeContext & context)
+    {
+        if ( !iterators.size() ) {
+            context.error("for needs at least one iterator", at);
+            return;
+        } else if ( iterators.size() != sources.size() ) {
+            context.error("for needs as many iterators as there are sources", at);
+            return;
+        } else if ( sources.size()>3 ) {
+            context.error("too many sources for now", at);
+            return;
+        }
+        auto sp = context.stackTop;
+        auto sz = context.local.size();
+        for ( auto & src : sources )
+            src->inferType(context);
+        // TODO: determine iteration size correctly
+        //          support multiple iterations
+        int size = sources[0]->type->dim[0];
+        for ( auto & src : sources ) {
+            if ( src->type->dim[0] != size ) {
+                context.error("iteration size has to match", at);
+            }
+        }
+        int idx = 0;
+        for ( auto & src : sources ) {
+            if ( !src->type ) return;
+            auto pVar = make_shared<Variable>();
+            pVar->name = iterators[idx];
+            pVar->at = at;
+            if ( src->type->dim.size() ) {
+                pVar->type = make_shared<TypeDecl>(*src->type);
+                pVar->type->ref = true;
+                pVar->type->dim.pop_back();
+            } else if ( src->type->isGoodArrayType() ) {
+                pVar->type = make_shared<TypeDecl>(*src->type->firstType);
+                pVar->type->ref = true;
+            } else {
+                context.error("unsupported iteration type for " + pVar->name, at);
+                return;
+            }
+            context.local.push_back(pVar);
+            pVar->stackTop = context.stackTop;
+            context.stackTop += (pVar->type->getSizeOf() + 0xf) & ~0xf;
+            iteratorVariables.push_back(pVar);
+            ++ idx;
+        }
+        if ( filter )
+            filter->inferType(context);
+        subexpr->inferType(context);
+        context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
+        context.stackTop = sp;
+        context.local.resize(sz);
+        type = make_shared<TypeDecl>();
+    }
+
+    SimNode * ExprFor::simulate (Context & context) const
+    {
+        int total = sources.size();
+        SimNode_Repeat * result;
+        SimNode **  nsources;
+        uint32_t*   nstrides;
+        uint32_t*   ntypesiz;
+        uint32_t*   nstacktp;
+        if ( sources.size()==1 ) {
+            auto node = context.makeNode<SimNode_For<1>>(at);
+            nsources = node->sources;
+            nstrides = node->strides;
+            ntypesiz = node->typeSize;
+            nstacktp = node->stackTop;
+            result = node;
+        } else if ( sources.size()==2 ) {
+            auto node = context.makeNode<SimNode_For<2>>(at);
+            nsources = node->sources;
+            nstrides = node->strides;
+            ntypesiz = node->typeSize;
+            nstacktp = node->stackTop;
+            result = node;
+        } else if ( sources.size()==3 ) {
+            auto node = context.makeNode<SimNode_For<3>>(at);
+            nsources = node->sources;
+            nstrides = node->strides;
+            ntypesiz = node->typeSize;
+            nstacktp = node->stackTop;
+            result = node;
+        } else {
+            assert(0 && "implement");
+            return nullptr;
+        }
+        for ( int t=0; t!=total; ++t ) {
+            nsources[t] = sources[t]->simulate(context);
+            nstrides[t] = sources[t]->type->getStride();
+            ntypesiz[t] = iteratorVariables[t]->type->getSizeOf();
+            nstacktp[t] = iteratorVariables[t]->stackTop;
+        }
+        // TODO: determine iteration size correctly
+        //          support multiple iterations
+        result->size = sources[0]->type->dim[0];
+        result->body = subexpr->simulate(context);
+        result->filter = filter ? filter->simulate(context) : nullptr;
+        return result;
     }
     
     // ExprLet

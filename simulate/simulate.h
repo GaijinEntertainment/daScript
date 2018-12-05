@@ -343,6 +343,15 @@ namespace yzg
         uint32_t stackTop;
     };
     
+    // WHEN LOCAL VARIABLE STORES REFERENCE
+    struct SimNode_GetLocalRef : SimNode {
+        SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode(at), stackTop(sp) {}
+        virtual __m128 eval ( Context & context ) override {
+            return *(__m128 *)(context.stackTop + stackTop);
+        }
+        uint32_t stackTop;
+    };
+    
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
     struct SimNode_InitLocal : SimNode {
         SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz) : SimNode(at), stackTop(sp), size(sz) {}
@@ -556,6 +565,45 @@ namespace yzg
         SimNode * cond, * body;
     };
 
+    // REPEAT
+    struct SimNode_Repeat : SimNode {
+        SimNode_Repeat ( const LineInfo & at ) : SimNode(at) {}
+        SimNode *   body;
+        SimNode *   filter;
+        uint32_t    size;
+    };
+    
+    // FOR
+    template <int total>
+    struct SimNode_For : SimNode_Repeat {
+        SimNode_For ( const LineInfo & at ) : SimNode_Repeat(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            char * ph[total];
+            for ( int t=0; t!=total; ++t ) {
+                ph[t] = cast<char *>::to(sources[t]->eval(context));
+                YZG_EXCEPTION_POINT;
+            }
+            char ** pi[total];
+            for ( int t=0; t!=total; ++t ) {
+                pi[t] = (char **)(context.stackTop + stackTop[t]);
+            }
+            for ( int i=0; i!=size && !context.stopFlags; ++i ) {
+                for ( int t=0; t!=total; ++t ){
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                if ( !filter || cast<bool>::to(filter->eval(context)) )
+                    body->eval(context);
+            }
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return _mm_setzero_ps();
+        }
+        SimNode *   sources[total];
+        uint32_t    strides[total];
+        uint32_t    typeSize[total];
+        uint32_t    stackTop[total];
+    };
+    
     // FOREACH
     struct SimNode_Foreach : SimNode {
         SimNode_Foreach ( const LineInfo & at, SimNode * h, SimNode * i, SimNode * b, int sz, int st, int ts )

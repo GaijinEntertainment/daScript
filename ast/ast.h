@@ -516,6 +516,25 @@ namespace yzg
         ExpressionPtr           subexpr;
     };
     
+    // for a,b in foo,bar where a>b ...
+    class ExprFor : public Expression
+    {
+    public:
+        ExprFor () = default;
+        ExprFor ( const LineInfo & a ) : Expression(a) {}
+        Variable * findIterator ( const string & name ) const;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        vector<string>          iterators;
+        vector<VariablePtr>     iteratorVariables;
+        vector<ExpressionPtr>   sources;
+        ExpressionPtr           subexpr;
+        ExpressionPtr           filter;
+    };
+    
     class ExprLooksLikeCall : public Expression
     {
     public:

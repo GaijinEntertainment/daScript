@@ -73,6 +73,7 @@
     }
 }
 
+<normal>"for"                                           need_oxford_comma = false; return _FOR;
 <normal>"foreach"                                       need_oxford_comma = false; return _FOREACH;
 <normal>"while"                                         need_oxford_comma = false; return _WHILE;
 <normal>"if"                                            need_oxford_comma = false; return _IF;
@@ -85,6 +86,7 @@
 <normal>"catch"                                         need_oxford_comma = false; return _CATCH;
 <normal>"array"                                         return _ARRAY;
 <normal>"in"                                            return _IN;
+<normal>"where"                                         return _WHERE;
 <normal>"null"                                          return _NULL;
 <normal>"return"                                        return _RETURN;
 <normal>"break"                                         return _BREAK;

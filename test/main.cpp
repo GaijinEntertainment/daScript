@@ -185,6 +185,12 @@ void unit_test_array_of_structures ( const string & fn )
             ctx.eval(fnfTest, nullptr);
         });
         
+        int fnffTest = ctx.findFunction("forTest");
+        double simFTF = profileBlock(numIter, [&](){
+            ctx.restart();
+            ctx.eval(fnffTest, nullptr);
+        });
+        
         int fnfiTest = ctx.findFunction("foreachIteropTest");
         double intFT = profileBlock(numIter, [&](){
             ctx.restart();
@@ -202,6 +208,7 @@ void unit_test_array_of_structures ( const string & fn )
         cout << fixed;
         cout << "iterations took:" << simT << "\n";
         cout << "foreach iterations took:" << simFT << "\n";
+        cout << "for iterations took:" << simFTF << "\n";
         cout << "c++ version took:" << cT << "\n";
         cout << "interop version took:" << intT << "\n";
         cout << "foreach interop version took:" << intFT << "\n";
@@ -225,5 +232,6 @@ int main(int argc, const char * argv[]) {
     unit_test_array_of_structures("../../test/profile_array_of_structures_vec.das");
     unit_test("../../test/profile_try_catch.das", 100);
 #endif
+    // unit_test_array_of_structures("../../test/profile_array_of_structures_vec.das");
     return 0;
 }
