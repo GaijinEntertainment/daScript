@@ -198,6 +198,8 @@ function_declaration
             yyerror("function " + *$name + " can't return array",tokAt(@loc));
         else if (pFunction->result->baseType==Type::tStructure )
             yyerror("function " + *$name + " can't return structure",tokAt(@loc));
+        else if ( pFunction->result->baseType==Type::tArray )
+            yyerror("function " + *$name + " can't return array",tokAt(@loc));
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -207,11 +209,7 @@ function_declaration
                             pVar->name = name;
                             pVar->at = pDecl->at;
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                            if ( pVar->type->needsBoxing() ) {
-                                if ( pVar->type->ref )
-                                    yyerror("can't pass boxed type by reference",pVar->at);
-                                pVar->type->ref = true; // now, we force it. this way we prevent passing move type by value
-                            } else if ( pVar->type->ref && pVar->type->isRefType() ) {
+                            if ( pVar->type->ref && pVar->type->isRefType() ) {
                                 yyerror("can't pass boxed type by reference",pVar->at);
                             }
                             pVar->init = ExpressionPtr(pDecl->pInit);

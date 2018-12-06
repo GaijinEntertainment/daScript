@@ -429,22 +429,6 @@ namespace yzg
         }
     };
     
-    // BOX IT
-    template <typename TT>
-    struct SimNode_Value2Ref : SimNode {      // value -> &value
-        SimNode_Value2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 ptr = subexpr->eval(context);
-            YZG_EXCEPTION_POINT;
-            // TODO: we should probably put this on the stack at some point
-            TT * box = (TT *) context.allocate(sizeof(TT));
-            YZG_EXCEPTION_POINT;
-            *box = cast<TT>::to(ptr);
-            return cast<TT*>::from(box);
-        }
-        SimNode * subexpr;
-    };
-    
     // DEREFERENCE
     template <typename TT>
     struct SimNode_Ref2Value : SimNode {      // &value -> value

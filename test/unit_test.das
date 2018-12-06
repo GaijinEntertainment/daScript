@@ -320,36 +320,28 @@ def test_for
         assert(i==5)
     print("ok\n")
 
-def make_test_array(extra:int=0):array<int>
-    let (a:array<int>; i:int=0)
+def make_test_array(a:array<int>;extra:int=0)
+    let (i:int=0)
         resize(a,10)
         for x in a
             x = i++ + extra
-        return a
 
-def verify_test_array(a:array<int>;extra:int=0):array<int>
+def verify_test_array(a:array<int>;extra:int=0)
     assert(length(a)==10)
     let(i:int=0)
         for x in a
             assert(x==(extra+i++))
-    return a
 
 def test_for_array
     print("test for array:\n")
-    debug(length(make_test_array()),"its length")
-    verify_test_array(make_test_array())
     let(a:array<int>)
-        a <- make_test_array()
+        make_test_array(a)
         debug(a)
         verify_test_array(a)
-        verify_test_array(verify_test_array(a))
         let(b:array<int> = a)
             assert(length(a)==0)
             verify_test_array(b)
-            a <- verify_test_array(b)
-        verify_test_array(a)
-    let(a:array<int> = make_test_array() )
-        debug(a)
+            a <- b
         verify_test_array(a)
     let(a,b:array<int>;i:int=0)
         resize(a,10)
@@ -373,7 +365,7 @@ def test_for_array
         assert(i==5)
     let(a:array<int>[10]; i:int=0)
         for b in a
-            b <- make_test_array(i++)
+            make_test_array(b,i++)
         i = 0
         for b in a
             verify_test_array(b,i++)
