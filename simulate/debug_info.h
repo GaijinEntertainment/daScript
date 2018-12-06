@@ -9,6 +9,8 @@ namespace yzg
         none,
         tVoid,
         tBool,
+        tInt64,
+        tUInt64,
         tInt,
         tInt2,
         tInt3,

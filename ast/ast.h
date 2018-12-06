@@ -118,26 +118,28 @@ namespace yzg
     template <typename TT>  struct ToBasicType;
     template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
     template <typename QQ> struct ToBasicType<const QQ &> : ToBasicType<QQ> {};
-    template<> struct ToBasicType<void *>   { enum { type = Type::tPointer }; };
-    template<> struct ToBasicType<char *>   { enum { type = Type::tString }; };
+    template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
+    template<> struct ToBasicType<char *>       { enum { type = Type::tString }; };
     template<> struct ToBasicType<const char *> { enum { type = Type::tString }; };
-    template<> struct ToBasicType<string>   { enum { type = Type::tString }; };
-    template<> struct ToBasicType<bool>     { enum { type = Type::tBool }; };
-    template<> struct ToBasicType<int32_t>  { enum { type = Type::tInt }; };
-    template<> struct ToBasicType<uint32_t> { enum { type = Type::tUInt }; };
-    template<> struct ToBasicType<float>    { enum { type = Type::tFloat }; };
-    template<> struct ToBasicType<void>     { enum { type = Type::tVoid }; };
-    template<> struct ToBasicType<float2>   { enum { type = Type::tFloat2 }; };
-    template<> struct ToBasicType<float3>   { enum { type = Type::tFloat3 }; };
-    template<> struct ToBasicType<float4>   { enum { type = Type::tFloat4 }; };
-    template<> struct ToBasicType<int2>    { enum { type = Type::tInt2 }; };
-    template<> struct ToBasicType<int3>    { enum { type = Type::tInt3 }; };
-    template<> struct ToBasicType<int4>    { enum { type = Type::tInt4 }; };
-    template<> struct ToBasicType<uint2>   { enum { type = Type::tUInt2 }; };
-    template<> struct ToBasicType<uint3>   { enum { type = Type::tUInt3 }; };
-    template<> struct ToBasicType<uint4>   { enum { type = Type::tUInt4 }; };
-    template<> struct ToBasicType<Array>   { enum { type = Type::tArray }; };
-    template<> struct ToBasicType<Array *> { enum { type = Type::tArray }; };
+    template<> struct ToBasicType<string>       { enum { type = Type::tString }; };
+    template<> struct ToBasicType<bool>         { enum { type = Type::tBool }; };
+    template<> struct ToBasicType<int64_t>      { enum { type = Type::tBool }; };
+    template<> struct ToBasicType<uint64_t>     { enum { type = Type::tBool }; };
+    template<> struct ToBasicType<int32_t>      { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<uint32_t>     { enum { type = Type::tUInt }; };
+    template<> struct ToBasicType<float>        { enum { type = Type::tFloat }; };
+    template<> struct ToBasicType<void>         { enum { type = Type::tVoid }; };
+    template<> struct ToBasicType<float2>       { enum { type = Type::tFloat2 }; };
+    template<> struct ToBasicType<float3>       { enum { type = Type::tFloat3 }; };
+    template<> struct ToBasicType<float4>       { enum { type = Type::tFloat4 }; };
+    template<> struct ToBasicType<int2>         { enum { type = Type::tInt2 }; };
+    template<> struct ToBasicType<int3>         { enum { type = Type::tInt3 }; };
+    template<> struct ToBasicType<int4>         { enum { type = Type::tInt4 }; };
+    template<> struct ToBasicType<uint2>        { enum { type = Type::tUInt2 }; };
+    template<> struct ToBasicType<uint3>        { enum { type = Type::tUInt3 }; };
+    template<> struct ToBasicType<uint4>        { enum { type = Type::tUInt4 }; };
+    template<> struct ToBasicType<Array>        { enum { type = Type::tArray }; };
+    template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
 
     template <typename TT>
     struct typeFactory {

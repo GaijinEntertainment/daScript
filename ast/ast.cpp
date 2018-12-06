@@ -478,6 +478,8 @@ namespace yzg
             case Type::tInt:        return context.makeNode<SimNode_Ref2Value<int32_t>>(at,subexpr->simulate(context));
             case Type::tUInt:       return context.makeNode<SimNode_Ref2Value<uint32_t>>(at,subexpr->simulate(context));
             case Type::tBool:       return context.makeNode<SimNode_Ref2Value<bool>>(at,subexpr->simulate(context));
+            case Type::tInt64:      return context.makeNode<SimNode_Ref2Value<int64_t>>(at,subexpr->simulate(context));
+            case Type::tUInt64:     return context.makeNode<SimNode_Ref2Value<uint64_t>>(at,subexpr->simulate(context));
             case Type::tString:     return context.makeNode<SimNode_Ref2Value<char *>>(at,subexpr->simulate(context));
             case Type::tPointer:    return context.makeNode<SimNode_Ref2Value<void *>>(at,subexpr->simulate(context));
             case Type::tFloat:      return context.makeNode<SimNode_Ref2Value<float>>(at,subexpr->simulate(context));
@@ -637,6 +639,8 @@ namespace yzg
         } else {
             switch ( arguments[1]->type->baseType ) {
                 case Type::tBool:       return context.makeNode<SimNode_ArrayPushValue<bool>>     (at, arr, val, idx); break;
+                case Type::tInt64:      return context.makeNode<SimNode_ArrayPushValue<int64_t>>  (at, arr, val, idx); break;
+                case Type::tUInt64:     return context.makeNode<SimNode_ArrayPushValue<uint64_t>> (at, arr, val, idx); break;
                 case Type::tInt:        return context.makeNode<SimNode_ArrayPushValue<int32_t>>  (at, arr, val, idx); break;
                 case Type::tInt2:       return context.makeNode<SimNode_ArrayPushValue<int2>>     (at, arr, val, idx); break;
                 case Type::tInt3:       return context.makeNode<SimNode_ArrayPushValue<int3>>     (at, arr, val, idx); break;
@@ -1148,6 +1152,8 @@ namespace yzg
         }
         switch ( rightType.baseType ) {
             case Type::tBool:       return context.makeNode<SimNode_CopyValue<bool>>    (at, left, right);
+            case Type::tInt64:      return context.makeNode<SimNode_CopyValue<int64_t>> (at, left, right);
+            case Type::tUInt64:     return context.makeNode<SimNode_CopyValue<uint64_t>>(at, left, right);
             case Type::tInt:        return context.makeNode<SimNode_CopyValue<int32_t>> (at, left, right);
             case Type::tInt2:       return context.makeNode<SimNode_CopyValue<int2>>    (at, left, right);
             case Type::tInt3:       return context.makeNode<SimNode_CopyValue<int3>>    (at, left, right);

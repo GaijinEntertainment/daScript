@@ -12,6 +12,8 @@ namespace yzg
     Enum<Type> g_typeTable = {
         {   Type::tVoid,        "void"  },
         {   Type::tBool,        "bool"  },
+        {   Type::tInt64,       "int64"  },
+        {   Type::tUInt64,      "uint64"  },
         {   Type::tString,      "string" },
         {   Type::tPointer,     "pointer" },
         {   Type::tArray,       "array" },
@@ -46,6 +48,8 @@ namespace yzg
             case tPointer:      return sizeof(void *);          static_assert(sizeof(void *)==8, "64-bit");
             case tString:       return sizeof(char *);
             case tBool:         return sizeof(bool);            static_assert(sizeof(bool)==1,"4 byte bool");
+            case tInt64:        return sizeof(int64_t);
+            case tUInt64:       return sizeof(uint64_t);
             case tInt:          return sizeof(int);
             case tInt2:         return sizeof(int) * 2;
             case tInt3:         return sizeof(int) * 3;
@@ -159,6 +163,8 @@ namespace yzg
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << *((bool *)pX); break;
+                case Type::tInt64:      ss << *((int64_t *)pX); break;
+                case Type::tUInt64:     ss << *((uint64_t *)pX); break;
                 case Type::tString:     ss << "\"" << escapeString(safe_str(pX)) << "\""; break;
                 case Type::tInt:        ss << *((int32_t *)pX); break;
                 case Type::tInt2:       ss << *((int2 *)pX); break;
@@ -188,11 +194,13 @@ namespace yzg
         } else if ( info->dimSize ) {
             debug_dim_value(ss, cast<void *>::to(x), info);
         } else if ( info->type==Type::tArray ) {
-            auto arr = (Array *) &x;
+            auto arr = cast<Array *>::to(x);
             debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType);
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << cast<bool>::to(x); break;
+                case Type::tInt64:      ss << cast<int64_t>::to(x); break;
+                case Type::tUInt64:     ss << cast<uint64_t>::to(x); break;
                 case Type::tString:     ss << "\"" << escapeString(to_rts(x)) << "\""; break;
                 case Type::tInt:        ss << cast<int32_t>::to(x); break;
                 case Type::tInt2:       ss << cast<int2>::to(x); break;

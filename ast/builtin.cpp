@@ -150,6 +150,22 @@ namespace yzg
         addFunctionBit<uint32_t, SimPolicy_UInt>(*this,lib);
         addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,float>,uint32_t,float>>("uint",lib) );
         addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,int32_t>,uint32_t,int32_t>>("uint",lib) );
+        // int64
+        addFunctionBasic<int64_t, SimPolicy_Int64>(*this,lib);
+        addFunctionNumeric<int64_t, SimPolicy_Int64>(*this,lib);
+        addFunctionIncDec<int64_t, SimPolicy_Int64>(*this,lib);
+        addFunctionOrdered<int64_t, SimPolicy_Int64>(*this,lib);
+        addFunctionBit<int64_t, SimPolicy_Int>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<int64_t,float>,int64_t,float>>("int64",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<int64_t,uint64_t>,int64_t,uint64_t>>("int64",lib) );
+        // uint64
+        addFunctionBasic<uint64_t, SimPolicy_UInt64>(*this,lib);
+        addFunctionNumeric<uint64_t, SimPolicy_UInt64>(*this,lib);
+        addFunctionIncDec<uint64_t, SimPolicy_UInt64>(*this,lib);
+        addFunctionOrdered<uint64_t, SimPolicy_UInt64>(*this,lib);
+        addFunctionBit<uint64_t, SimPolicy_UInt64>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint64_t,float>,uint64_t,float>>("uint64",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint64_t,int64_t>,uint64_t,int64_t>>("uint64",lib) );
         // float
         addFunctionBasic<float, SimPolicy_Float>(*this,lib);
         addFunctionNumeric<float, SimPolicy_Float>(*this,lib);
