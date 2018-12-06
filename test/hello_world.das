@@ -10,5 +10,5 @@ def it(a:array<int>):array<int>
 def test
     let(a:array<int>)
         debug(a)
-        it(it(a))
+        it(it(it(a)))
 

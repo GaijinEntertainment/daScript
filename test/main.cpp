@@ -203,8 +203,8 @@ void unit_test_array_of_structures ( const string & fn )
 
 
 int main(int argc, const char * argv[]) {
-//    unit_test("../../test/hello_world.das");
-    unit_test("../../test/unit_test.das");
+    unit_test("../../test/hello_world.das");
+//    unit_test("../../test/unit_test.das");
 #if 0
     unit_test_array_of_structures("../../test/profile_array_of_structures_vec.das");
     unit_test("../../test/profile_try_catch.das", 100);

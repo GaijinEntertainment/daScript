@@ -435,11 +435,12 @@ namespace yzg
         SimNode_Value2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
-            box = cast<TT>::to(ptr);
-            return cast<TT*>::from(&box);
+            // TODO: we should probably put this on the stack at some point
+            TT * box = (TT *) context.allocate(sizeof(TT));
+            *box = cast<TT>::to(ptr);
+            return cast<TT*>::from(box);
         }
         SimNode * subexpr;
-        TT        box;
     };
     
     // DEREFERENCE
