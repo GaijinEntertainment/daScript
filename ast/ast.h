@@ -671,19 +671,6 @@ namespace yzg
         ExpressionPtr   cond, body;
     };
     
-    class ExprForeach : public Expression
-    {
-    public:
-        ExprForeach () = default;
-        ExprForeach ( const LineInfo & a ) : Expression(a) {}
-        virtual void log(ostream& stream, int depth) const override;
-        virtual void inferType(InferTypeContext & context) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-    public:
-        ExpressionPtr   head, iter, body;
-    };
-    
     class Function
     {
     public:

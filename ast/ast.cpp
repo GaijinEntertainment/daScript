@@ -1311,56 +1311,6 @@ namespace yzg
         return context.makeNode<SimNode_While>(at, cond->simulate(context),body->simulate(context));
     }
     
-    // ExprForeach
-    
-    ExpressionPtr ExprForeach::clone( const ExpressionPtr & expr ) const
-    {
-        auto cexpr = clonePtr<ExprForeach>(expr);
-        Expression::clone(cexpr);
-        cexpr->head = head->clone();
-        cexpr->iter = iter->clone();
-        cexpr->body = body->clone();
-        return cexpr;
-    }
-    
-    void ExprForeach::inferType(InferTypeContext & context)
-    {
-        head->inferType(context);
-        iter->inferType(context);
-        if ( !head->type || !iter->type ) return;
-        if ( head->type->dim.size()!=1 ) {   // TODO: support multi-array
-            context.error("can only iterate through a 1-d array", at);
-        } else if ( !head->type->isIteratorType(*iter->type) ) {
-            context.error("iterator type does not match", at);
-        } else {
-            context.loop.push_back(shared_from_this());
-            body->inferType(context);
-            context.loop.pop_back();
-            type = make_shared<TypeDecl>();
-        }
-    }
-    
-    void ExprForeach::log(ostream& stream, int depth) const
-    {
-        stream << "(foreach\n"<< string(depth+1,'\t');
-        head->log(stream, depth+1);
-        stream << " " << *iter;
-        stream << "\n" << string(depth+2,'\t');
-        body->log(stream, depth+2);
-        stream << ")";
-    }
-    
-    SimNode * ExprForeach::simulate (Context & context) const
-    {
-        return context.makeNode<SimNode_Foreach>(at,
-                                                 head->simulate(context),
-                                                 iter->simulate(context),
-                                                 body->simulate(context),
-                                                 (int) head->type->dim[0],
-                                                 iter->type->getSizeOf(),
-                                                 iter->type->getSizeOf());
-    }
-    
     // ExprFor
 
     ExpressionPtr ExprFor::clone( const ExpressionPtr & expr ) const

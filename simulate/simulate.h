@@ -717,27 +717,6 @@ namespace yzg
         }
     };
     
-    // FOREACH
-    struct SimNode_Foreach : SimNode {
-        SimNode_Foreach ( const LineInfo & at, SimNode * h, SimNode * i, SimNode * b, int sz, int st, int ts )
-            : SimNode(at), head(h), iter(i), body(b), size(sz), stride(st), typeSize(ts) {}
-        virtual __m128 eval ( Context & context ) override {
-            char * ph = cast<char *>::to(head->eval(context));
-            YZG_EXCEPTION_POINT;
-            char * pi = cast<char *>::to(iter->eval(context));
-            YZG_EXCEPTION_POINT;
-            for ( int i=0; i!=size && !context.stopFlags; ++i ) {
-                memcpy(pi,ph,typeSize);
-                body->eval(context);
-                ph += stride;
-            }
-            context.stopFlags &= ~EvalFlags::stopForBreak;
-            return _mm_setzero_ps();
-        }
-        SimNode * head, * iter, * body;
-        int size, stride, typeSize;
-    };
-    
     // POLICY BASED OPERATIONS
     
     template <typename TT>
