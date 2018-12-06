@@ -5,13 +5,35 @@
 
 namespace yzg
 {
+    __forceinline void array_lock ( Context & context, Array & arr ) {
+        arr.lock ++;
+        if ( arr.lock==0 ) {
+            context.throw_error("array lock overflow");
+        }
+    }
+    
+    __forceinline void array_unlock ( Context & context, Array & arr ) {
+        if ( arr.lock==0 ) {
+            context.throw_error("array lock underflow");
+        }
+        arr.lock --;
+    }
+    
     __forceinline void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride ) {
+        if ( arr.lock ) {
+            context.throw_error("changing capacity of a locked array");
+            return;
+        }
         if ( arr.capacity >= newCapacity ) return;
         arr.data = (char *) context.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
         arr.capacity = newCapacity;
     }
     
     __forceinline void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero ) {
+        if ( arr.lock ) {
+            context.throw_error("resizing locked array");
+            return;
+        }
         if ( newSize > arr.capacity ) {
             uint32_t newCapacity = 1 << (32 - __builtin_clz (newSize - 1));
             newCapacity = max(newCapacity, 16u);
@@ -123,6 +145,7 @@ namespace yzg
             auto * pA = cast<Array *>::to(arr);
             uint32_t idx = pA->size;
             array_resize(context, *pA, idx + 1, stride, false);
+            YZG_EXCEPTION_POINT;
             if ( index ) {
                 __m128 ati = index->eval(context);
                 YZG_EXCEPTION_POINT;
@@ -154,6 +177,7 @@ namespace yzg
             Array * pA = cast<Array *>::to(arr);
             uint32_t idx = pA->size;
             array_resize(context, *pA, idx + 1, stride, false);
+            YZG_EXCEPTION_POINT;
             if ( index ) {
                 __m128 ati = index->eval(context);
                 YZG_EXCEPTION_POINT;

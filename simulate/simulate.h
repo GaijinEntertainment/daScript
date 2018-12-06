@@ -212,8 +212,11 @@ namespace yzg
 #if YZG_ENABLE_EXCEPTIONS
     #define YZG_EXCEPTION_POINT \
         { if ( context.stopFlags ) return _mm_setzero_ps(); }
+    #define YZG_ITERATOR_EXCEPTION_POINT \
+        { if ( context.stopFlags ) return nullptr; }
 #else
-     #define YZG_EXCEPTION_POINT
+    #define YZG_EXCEPTION_POINT
+    #define YZG_ITERATOR_EXCEPTION_POINT
 #endif
     
     struct SimNode_Assert : SimNode {
@@ -586,8 +589,10 @@ namespace yzg
             char * ph[total];
             for ( int t=0; t!=total; ++t ) {
                 pha[t] = cast<Array *>::to(sources[t]->eval(context));
-                ph[t]  = pha[t]->data;
                 YZG_EXCEPTION_POINT;
+                array_lock(context, *pha[t]);
+                YZG_EXCEPTION_POINT;
+                ph[t]  = pha[t]->data;
             }
             char ** pi[total];
             for ( int t=0; t!=total; ++t ) {
@@ -604,6 +609,10 @@ namespace yzg
                         body->eval(context);
             }
         loopOver:
+            for ( int t=0; t!=total; ++t ) {
+                array_unlock(context, *pha[t]);
+                YZG_EXCEPTION_POINT;
+            }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return _mm_setzero_ps();
         }
@@ -635,6 +644,57 @@ namespace yzg
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return _mm_setzero_ps();
         }
+    };
+    
+    // iterator
+    
+    struct Iterator {
+        virtual void * first ( Context & context ) = 0;
+        virtual void * next  ( Context & context ) = 0;
+    };
+    
+    struct FixedArrayIterator : Iterator {
+        virtual void * first ( Context & context ) override {
+            __m128 ll = source->eval(context);
+            YZG_ITERATOR_EXCEPTION_POINT;
+            data = cast<char *>::to(ll);
+            dataEnd = data + size * stride;
+            return data;
+        }
+        virtual void * next  ( Context & context ) override {
+            if ( data>=dataEnd ) return nullptr;
+            data += stride;
+            return data;
+        }
+        SimNode *   source;
+        char *      data;
+        char *      dataEnd;
+        uint32_t    size;
+        uint32_t    stride;
+    };
+    
+    struct GoodArrayIterator : Iterator {
+        virtual void * first ( Context & context ) override {
+            __m128 ll = source->eval(context);
+            YZG_ITERATOR_EXCEPTION_POINT;
+            auto pA = cast<Array *>::to(ll);
+            size = pA->size;
+            data = pA->data;
+            dataEnd = data + size * stride;
+            return data;
+        }
+        virtual void * next  ( Context & context ) override {
+            if ( data>=dataEnd ) {
+                return nullptr;
+            }
+            data += stride;
+            return data;
+        }
+        SimNode *   source;
+        char *      data;
+        char *      dataEnd;
+        uint32_t    size;
+        uint32_t    stride;
     };
     
     // FOREACH
