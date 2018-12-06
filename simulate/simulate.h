@@ -435,8 +435,10 @@ namespace yzg
         SimNode_Value2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
+            YZG_EXCEPTION_POINT;
             // TODO: we should probably put this on the stack at some point
             TT * box = (TT *) context.allocate(sizeof(TT));
+            YZG_EXCEPTION_POINT;
             *box = cast<TT>::to(ptr);
             return cast<TT*>::from(box);
         }
@@ -449,6 +451,7 @@ namespace yzg
         SimNode_Ref2Value ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
+            YZG_EXCEPTION_POINT;
             TT * pR = cast<TT *>::to(ptr);  // never null
             return cast<TT>::from(*pR);
         }
@@ -460,6 +463,7 @@ namespace yzg
         SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 ptr = subexpr->eval(context);
+            YZG_EXCEPTION_POINT;
             void * p = cast<void *>::to(ptr);
             if ( p == nullptr ) {
                 context.throw_error("dereferencing nil pointer");
