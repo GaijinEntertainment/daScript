@@ -320,19 +320,18 @@ def test_for
         assert(i==5)
     print("ok\n")
 
-def make_test_array:array<int>
+def make_test_array(extra:int=0):array<int>
     let (a:array<int>; i:int=0)
         resize(a,10)
         for x in a
-            x = i++
-        debug(a,"make_test_array returns")
+            x = i++ + extra
         return a
 
-def verify_test_array(a:array<int>):array<int>
+def verify_test_array(a:array<int>;extra:int=0):array<int>
     assert(length(a)==10)
     let(i:int=0)
         for x in a
-            assert(x==i++)
+            assert(x==(extra+i++))
     return a
 
 def test_for_array
@@ -347,6 +346,8 @@ def test_for_array
         let(b:array<int> = a)
             assert(length(a)==0)
             verify_test_array(b)
+            a <- verify_test_array(b)
+        verify_test_array(a)
     let(a:array<int> = make_test_array() )
         debug(a)
         verify_test_array(a)
@@ -370,6 +371,12 @@ def test_for_array
             assert(l>r)
             i++
         assert(i==5)
+    let(a:array<int>[10]; i:int=0)
+        for b in a
+            b <- make_test_array(i++)
+        i = 0
+        for b in a
+            verify_test_array(b,i++)
     print("ok\n")
 
 def test_for_hybrid
