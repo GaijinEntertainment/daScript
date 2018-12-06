@@ -4,6 +4,7 @@
 #include "enums.h"
 
 #include "runtime_array.h"
+#include "hash.h"
 
 void yybegin(const char * str);
 int yyparse();
@@ -474,29 +475,7 @@ namespace yzg
     
     SimNode * ExprRef2Value::simulate (Context & context) const
     {
-        switch ( type->baseType ) {
-            case Type::tInt:        return context.makeNode<SimNode_Ref2Value<int32_t>>(at,subexpr->simulate(context));
-            case Type::tUInt:       return context.makeNode<SimNode_Ref2Value<uint32_t>>(at,subexpr->simulate(context));
-            case Type::tBool:       return context.makeNode<SimNode_Ref2Value<bool>>(at,subexpr->simulate(context));
-            case Type::tInt64:      return context.makeNode<SimNode_Ref2Value<int64_t>>(at,subexpr->simulate(context));
-            case Type::tUInt64:     return context.makeNode<SimNode_Ref2Value<uint64_t>>(at,subexpr->simulate(context));
-            case Type::tString:     return context.makeNode<SimNode_Ref2Value<char *>>(at,subexpr->simulate(context));
-            case Type::tPointer:    return context.makeNode<SimNode_Ref2Value<void *>>(at,subexpr->simulate(context));
-            case Type::tFloat:      return context.makeNode<SimNode_Ref2Value<float>>(at,subexpr->simulate(context));
-            case Type::tFloat2:     return context.makeNode<SimNode_Ref2Value<float2>>(at,subexpr->simulate(context));
-            case Type::tFloat3:     return context.makeNode<SimNode_Ref2Value<float3>>(at,subexpr->simulate(context));
-            case Type::tFloat4:     return context.makeNode<SimNode_Ref2Value<float4>>(at,subexpr->simulate(context));
-            case Type::tInt2:       return context.makeNode<SimNode_Ref2Value<int2>>(at,subexpr->simulate(context));
-            case Type::tInt3:       return context.makeNode<SimNode_Ref2Value<int3>>(at,subexpr->simulate(context));
-            case Type::tInt4:       return context.makeNode<SimNode_Ref2Value<int4>>(at,subexpr->simulate(context));
-            case Type::tUInt2:      return context.makeNode<SimNode_Ref2Value<uint2>>(at,subexpr->simulate(context));
-            case Type::tUInt3:      return context.makeNode<SimNode_Ref2Value<uint3>>(at,subexpr->simulate(context));
-            case Type::tUInt4:      return context.makeNode<SimNode_Ref2Value<uint4>>(at,subexpr->simulate(context));
-            default:                {
-                assert(0 && "can't dereference type");
-                return nullptr;
-            }
-        }
+        return context.makeValueNode<SimNode_Ref2Value>(type->baseType, at, subexpr->simulate(context));
     }
     
     // ExprPtr2Ref
@@ -598,6 +577,40 @@ namespace yzg
                                                pTypeInfo,
                                                context.allocateName(message));
     }
+
+    // ExprHash
+    
+    ExpressionPtr ExprHash::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprHash>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+    
+    void ExprHash::inferType(InferTypeContext & context)
+    {
+        if ( arguments.size()!=1 ) {
+            context.error("hash(expr)", at);
+        }
+        ExprLooksLikeCall::inferType(context);
+        if ( !arguments[0]->type ) return;
+        type = make_shared<TypeDecl>(Type::tUInt64);
+    }
+    
+    SimNode * ExprHash::simulate (Context & context) const
+    {
+        auto val = arguments[0]->simulate(context);
+        if ( !arguments[0]->type->isRef() ) {
+            return context.makeValueNode<SimNode_HashOfValue>(arguments[0]->type->baseType, at, val);
+        } else if ( arguments[0]->type->canCopy() ) {
+            return context.makeNode<SimNode_HashOfRef>(at, val, arguments[0]->type->getSizeOf());
+        } else {
+            auto typeInfo = context.makeNode<TypeInfo>();
+            context.thisProgram->makeTypeInfo(typeInfo, context, arguments[0]->type);
+            return context.makeNode<SimNode_HashOfMixedType>(at, val, typeInfo);
+        }
+    }
+
     
     // ExprArrayPush
     
@@ -637,34 +650,7 @@ namespace yzg
         if ( arguments[1]->type->isRef() ) {
             return context.makeNode<SimNode_ArrayPushRefValue>(at, arr, val, idx, arguments[0]->type->firstType->getSizeOf());
         } else {
-            switch ( arguments[1]->type->baseType ) {
-                case Type::tBool:       return context.makeNode<SimNode_ArrayPushValue<bool>>     (at, arr, val, idx); break;
-                case Type::tInt64:      return context.makeNode<SimNode_ArrayPushValue<int64_t>>  (at, arr, val, idx); break;
-                case Type::tUInt64:     return context.makeNode<SimNode_ArrayPushValue<uint64_t>> (at, arr, val, idx); break;
-                case Type::tInt:        return context.makeNode<SimNode_ArrayPushValue<int32_t>>  (at, arr, val, idx); break;
-                case Type::tInt2:       return context.makeNode<SimNode_ArrayPushValue<int2>>     (at, arr, val, idx); break;
-                case Type::tInt3:       return context.makeNode<SimNode_ArrayPushValue<int3>>     (at, arr, val, idx); break;
-                case Type::tInt4:       return context.makeNode<SimNode_ArrayPushValue<int4>>     (at, arr, val, idx); break;
-                case Type::tUInt:       return context.makeNode<SimNode_ArrayPushValue<uint32_t>> (at, arr, val, idx); break;
-                case Type::tUInt2:      return context.makeNode<SimNode_ArrayPushValue<uint2>>    (at, arr, val, idx); break;
-                case Type::tUInt3:      return context.makeNode<SimNode_ArrayPushValue<uint3>>    (at, arr, val, idx); break;
-                case Type::tUInt4:      return context.makeNode<SimNode_ArrayPushValue<uint4>>    (at, arr, val, idx); break;
-                case Type::tFloat:      return context.makeNode<SimNode_ArrayPushValue<float>>    (at, arr, val, idx); break;
-                case Type::tFloat2:     return context.makeNode<SimNode_ArrayPushValue<float2>>   (at, arr, val, idx); break;
-                case Type::tFloat3:     return context.makeNode<SimNode_ArrayPushValue<float3>>   (at, arr, val, idx); break;
-                case Type::tFloat4:     return context.makeNode<SimNode_ArrayPushValue<float4>>   (at, arr, val, idx); break;
-                case Type::tString:     return context.makeNode<SimNode_ArrayPushValue<char *>>   (at, arr, val, idx); break;
-                case Type::tPointer:    return context.makeNode<SimNode_ArrayPushValue<void *>>   (at, arr, val, idx); break;
-                case Type::tArray:      return context.makeNode<SimNode_ArrayPushValue<Array>>    (at, arr, val, idx); break;
-                    // unimplemented
-                case Type::tTable:
-                    // fail cases
-                case Type::none:
-                case Type::tVoid:
-                case Type::tStructure:
-                    assert(0 && "unsupported? can't assign initial value");
-                    return nullptr;
-            }
+            return context.makeValueNode<SimNode_ArrayPushValue>(arguments[1]->type->baseType, at, arr, val, idx);
         }
     }
     
@@ -1149,34 +1135,9 @@ namespace yzg
         assert ( rightType.canCopy() && "should check above" );
         if ( rightType.isRef() ) {
             return context.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+        } else {
+            return context.makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
-        switch ( rightType.baseType ) {
-            case Type::tBool:       return context.makeNode<SimNode_CopyValue<bool>>    (at, left, right);
-            case Type::tInt64:      return context.makeNode<SimNode_CopyValue<int64_t>> (at, left, right);
-            case Type::tUInt64:     return context.makeNode<SimNode_CopyValue<uint64_t>>(at, left, right);
-            case Type::tInt:        return context.makeNode<SimNode_CopyValue<int32_t>> (at, left, right);
-            case Type::tInt2:       return context.makeNode<SimNode_CopyValue<int2>>    (at, left, right);
-            case Type::tInt3:       return context.makeNode<SimNode_CopyValue<int3>>    (at, left, right);
-            case Type::tInt4:       return context.makeNode<SimNode_CopyValue<int4>>    (at, left, right);
-            case Type::tUInt:       return context.makeNode<SimNode_CopyValue<uint32_t>>(at, left, right);
-            case Type::tUInt2:      return context.makeNode<SimNode_CopyValue<uint2>>   (at, left, right);
-            case Type::tUInt3:      return context.makeNode<SimNode_CopyValue<uint3>>   (at, left, right);
-            case Type::tUInt4:      return context.makeNode<SimNode_CopyValue<uint4>>   (at, left, right);
-            case Type::tFloat:      return context.makeNode<SimNode_CopyValue<float>>   (at, left, right);
-            case Type::tFloat2:     return context.makeNode<SimNode_CopyValue<float2>>  (at, left, right);
-            case Type::tFloat3:     return context.makeNode<SimNode_CopyValue<float3>>  (at, left, right);
-            case Type::tFloat4:     return context.makeNode<SimNode_CopyValue<float4>>  (at, left, right);
-            case Type::tString:     return context.makeNode<SimNode_CopyValue<char *>>  (at, left, right);
-            case Type::tPointer:    return context.makeNode<SimNode_CopyValue<void *>>  (at, left, right);
-            case Type::tArray:
-            case Type::tTable:
-                assert(0 && "not copyable");
-            case Type::none:
-            case Type::tVoid:
-            case Type::tStructure:
-                assert(0 && "unsupported? can't assign initial value");
-        }
-        return nullptr;
     }
     
     SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right )
@@ -1594,14 +1555,8 @@ namespace yzg
     {
         int total = sources.size();
         if ( dynamicArrays && fixedArrays ) {
-            SimNode_ForWithIteratorBase * result;
-            switch ( sources.size() ) {
-                case 1: result = context.makeNode<SimNode_ForWithIterator<1>>(at); break;
-                case 2: result = context.makeNode<SimNode_ForWithIterator<2>>(at); break;
-                case 3: result = context.makeNode<SimNode_ForWithIterator<3>>(at); break;
-                case 4: result = context.makeNode<SimNode_ForWithIterator<4>>(at); break;
-                default:    assert(0 && "we should not even be here"); return nullptr;
-            }
+            SimNode_ForWithIteratorBase * result = (SimNode_ForWithIteratorBase *)
+                context.makeNodeUnroll<SimNode_ForWithIterator>(total, at);
             for ( int t=0; t!=total; ++t ) {
                 if ( sources[t]->type->isGoodArrayType() ) {
                     auto iter = context.makeNode<GoodArrayIterator>();
@@ -1626,21 +1581,9 @@ namespace yzg
         } else {
             SimNode_ForBase * result;
             if ( dynamicArrays ) {
-                switch ( sources.size() ) {
-                    case 1: result = context.makeNode<SimNode_ForGoodArray<1>>(at); break;
-                    case 2: result = context.makeNode<SimNode_ForGoodArray<2>>(at); break;
-                    case 3: result = context.makeNode<SimNode_ForGoodArray<3>>(at); break;
-                    case 4: result = context.makeNode<SimNode_ForGoodArray<4>>(at); break;
-                    default:    assert(0 && "we should not even be here"); return nullptr;
-                }
+                result = (SimNode_ForBase *) context.makeNodeUnroll<SimNode_ForGoodArray>(total, at);
             } else if ( fixedArrays ) {
-                switch ( sources.size() ) {
-                    case 1: result = context.makeNode<SimNode_ForFixedArray<1>>(at); break;
-                    case 2: result = context.makeNode<SimNode_ForFixedArray<2>>(at); break;
-                    case 3: result = context.makeNode<SimNode_ForFixedArray<3>>(at); break;
-                    case 4: result = context.makeNode<SimNode_ForFixedArray<4>>(at); break;
-                    default:    assert(0 && "we should not even be here"); return nullptr;
-                }
+                result = (SimNode_ForBase *) context.makeNodeUnroll<SimNode_ForFixedArray>(total, at);
             } else {
                 assert(0 && "we should not be here yet");
                 return nullptr;

@@ -52,7 +52,8 @@ SOURCE_GROUP_FILES("misc" MISC_SRC)
 
 SET(SIMULATE_SRC
 simulate/cast.h
-sumulate/hash.h
+simulate/hash.h
+simulate/hash.cpp
 simulate/debug_info.cpp
 simulate/debug_info.h
 simulate/interop.h

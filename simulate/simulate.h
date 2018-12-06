@@ -15,7 +15,7 @@ namespace yzg
     #define YZG_ENABLE_EXCEPTIONS   1
     #endif
     
-    #define MAX_FOR_ITERATORS   4
+    #define MAX_FOR_ITERATORS   16
     
     using namespace std;
     
@@ -117,6 +117,57 @@ namespace yzg
         template<typename TT, typename... Params>
         __forceinline TT * makeNode(Params... args) {
             return new (allocate(sizeof(TT))) TT(args...);
+        }
+        
+        template < template <typename TT> class NodeType, typename... Params>
+        __forceinline SimNode * makeValueNode(Type baseType, Params... args) {
+            switch ( baseType ) {
+                case Type::tBool:       return makeNode<NodeType<bool>>     (args...);
+                case Type::tInt64:      return makeNode<NodeType<int64_t>>  (args...);
+                case Type::tUInt64:     return makeNode<NodeType<uint64_t>> (args...);
+                case Type::tInt:        return makeNode<NodeType<int32_t>>  (args...);
+                case Type::tInt2:       return makeNode<NodeType<int2>>     (args...);
+                case Type::tInt3:       return makeNode<NodeType<int3>>     (args...);
+                case Type::tInt4:       return makeNode<NodeType<int4>>     (args...);
+                case Type::tUInt:       return makeNode<NodeType<uint32_t>> (args...);
+                case Type::tUInt2:      return makeNode<NodeType<uint2>>    (args...);
+                case Type::tUInt3:      return makeNode<NodeType<uint3>>    (args...);
+                case Type::tUInt4:      return makeNode<NodeType<uint4>>    (args...);
+                case Type::tFloat:      return makeNode<NodeType<float>>    (args...);
+                case Type::tFloat2:     return makeNode<NodeType<float2>>   (args...);
+                case Type::tFloat3:     return makeNode<NodeType<float3>>   (args...);
+                case Type::tFloat4:     return makeNode<NodeType<float4>>   (args...);
+                case Type::tString:     return makeNode<NodeType<char *>>   (args...);
+                case Type::tPointer:    return makeNode<NodeType<void *>>   (args...);
+                default:
+                    assert(0 && "we should not even be here");
+                    return nullptr;
+            }
+        }
+        
+        template < template <int TT> class NodeType, typename... Params>
+        __forceinline SimNode * makeNodeUnroll ( int count, Params... args ) {
+            switch ( count ) {
+                case  1: return makeNode<NodeType< 1>>(args...);
+                case  2: return makeNode<NodeType< 2>>(args...);
+                case  3: return makeNode<NodeType< 3>>(args...);
+                case  4: return makeNode<NodeType< 4>>(args...);
+                case  5: return makeNode<NodeType< 5>>(args...);
+                case  6: return makeNode<NodeType< 6>>(args...);
+                case  7: return makeNode<NodeType< 7>>(args...);
+                case  8: return makeNode<NodeType< 8>>(args...);
+                case  9: return makeNode<NodeType< 9>>(args...);
+                case 10: return makeNode<NodeType<10>>(args...);
+                case 11: return makeNode<NodeType<11>>(args...);
+                case 12: return makeNode<NodeType<12>>(args...);
+                case 13: return makeNode<NodeType<13>>(args...);
+                case 14: return makeNode<NodeType<14>>(args...);
+                case 15: return makeNode<NodeType<15>>(args...);
+                case 16: return makeNode<NodeType<16>>(args...);
+                default:
+                    assert(0 && "we should not even be here");
+                    return nullptr;
+            }
         }
         
         __forceinline __m128 getVariable ( int index ) const {

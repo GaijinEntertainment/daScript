@@ -100,11 +100,6 @@ namespace yzg
         return getDimSize(info) * getTypeBaseSize(info);
     }
     
-    const char * safe_str ( void * pX ) {
-        const char * s = *((char **)pX);
-        return s ? s : rts_null;
-    }
-    
     void debug_structure ( stringstream & ss, char * ps, StructInfo * info );
     void debug_value ( stringstream & ss, void * pX, TypeInfo * info, bool useDim = true );
     

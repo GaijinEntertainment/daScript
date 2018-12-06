@@ -8,6 +8,11 @@ namespace yzg
     
     class Context;
     
+    __forceinline const char * safe_str ( void * pX ) {
+        const char * s = *((char **)pX);
+        return s ? s : rts_null;
+    }
+    
     __forceinline const char * to_rts ( __m128 a ) {
         const char * s = cast<const char *>::to(a);
         return s ? s : rts_null;

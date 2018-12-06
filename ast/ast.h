@@ -598,6 +598,16 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
+    class ExprHash : public ExprLooksLikeCall
+    {
+    public:
+        ExprHash () = default;
+        ExprHash ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+    
     class ExprArrayPush : public ExprLooksLikeCall
     {
     public:
