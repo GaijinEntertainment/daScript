@@ -105,6 +105,7 @@ namespace yzg
         int getStride() const;
         string describe() const { stringstream ss; ss << *this; return ss.str(); }
         bool canCopy() const;
+        bool needsBoxing() const;
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -212,7 +213,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) = 0;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
         void logType(ostream& stream) const;
-        static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
+        static ExpressionPtr autoDereference ( const ExpressionPtr & expr, bool boxIt = true );
         virtual SimNode * simulate (Context & context) const = 0;
         virtual bool isSequence() const { return false; }
         virtual bool isStringConstant() const { return false; }
@@ -227,6 +228,18 @@ namespace yzg
     }
     
     class ExprRef2Value : public Expression   // &value to value
+    {
+    public:
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    public:
+        ExpressionPtr   subexpr;
+    };
+    
+    // this is very limited, and designed to box temp array<> and table<>
+    class ExprValue2Ref : public Expression   // value to &value
     {
     public:
         virtual void log(ostream& stream, int depth) const override;

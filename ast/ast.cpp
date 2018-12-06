@@ -145,6 +145,11 @@ namespace yzg
         return true;
     }
     
+    bool TypeDecl::needsBoxing() const
+    {
+        return !dim.size() && ((baseType==Type::tArray));
+    }
+    
     string TypeDecl::getMangledName() const
     {
         stringstream ss;
@@ -415,8 +420,20 @@ namespace yzg
         return expr;
     }
     
-    ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr )
+    ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr, bool boxIt )
     {
+        if ( boxIt && expr->type && expr->type->needsBoxing() ) {
+            if ( !expr->type->ref ) {
+                auto box = make_shared<ExprValue2Ref>();
+                box->subexpr = expr;
+                box->at = expr->at;
+                box->type = make_shared<TypeDecl>(*expr->type);
+                box->type->ref = true;
+                return box;
+            } else {
+                return expr;
+            }
+        }
         if ( expr->type && expr->type->isRef() ) {
             auto ar2l = make_shared<ExprRef2Value>();
             ar2l->subexpr = expr;
@@ -459,6 +476,7 @@ namespace yzg
     void ExprRef2Value::inferType(InferTypeContext & context)
     {
         subexpr->inferType(context);
+        if ( !subexpr->type ) return;
         if ( !subexpr->type->isRef() ) {
             context.error("can only dereference ref", at);
         } else if ( !subexpr->type->isSimpleType() ) {
@@ -496,6 +514,49 @@ namespace yzg
             }
         }
     }
+    
+    // ExprValue2Ref
+    
+    ExpressionPtr ExprValue2Ref::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprValue2Ref>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
+    
+    void ExprValue2Ref::log(ostream& stream, int depth) const
+    {
+        stream << "(box-it " << *subexpr << ")";
+    }
+    
+    void ExprValue2Ref::inferType(InferTypeContext & context)
+    {
+        subexpr->inferType(context);
+        if ( !subexpr->type ) return;
+        if ( subexpr->type->isRefType() ) {
+            context.error("can only box unboxed ref", at);
+        } else if ( !subexpr->type->ref ) {
+            context.error("can only box temporary unboxed type", at);
+        } if ( subexpr->type->canCopy() ) {
+            context.error("can't only box non-copyable type", at);
+        } else {
+            type = make_shared<TypeDecl>(*subexpr->type);
+            type->ref = true;
+        }
+    }
+    
+    SimNode * ExprValue2Ref::simulate (Context & context) const
+    {
+        switch ( type->baseType ) {
+            case Type::tArray:      return context.makeNode<SimNode_Value2Ref<Array>>(at,subexpr->simulate(context));
+            default:                {
+                assert(0 && "can't box type");
+                return nullptr;
+            }
+        }
+    }
+
     
     // ExprPtr2Ref
     
@@ -1334,7 +1395,7 @@ namespace yzg
         if ( subexpr ) {
             subexpr->inferType(context);
             if ( !subexpr->type ) return;
-            subexpr = autoDereference(subexpr);
+            subexpr = autoDereference(subexpr, false);
         }
         if ( context.func->result->isVoid() ) {
             if ( subexpr ) {
@@ -1839,7 +1900,7 @@ namespace yzg
                 arguments.push_back(newArg);
             }
             for ( size_t iA = 0; iA != arguments.size(); ++iA )
-                if ( !func->arguments[iA]->type->isRef() )
+                if ( !func->arguments[iA]->type->isRef() || func->arguments[iA]->type->needsBoxing() )
                     arguments[iA] = Expression::autoDereference(arguments[iA]);
         }
         context.stackTop = stackTop;
@@ -1969,11 +2030,14 @@ namespace yzg
                                 typesCompatible = false;
                                 break;
                             }
-                            // also check for passing nonCopyable types by value
+                            // if we disable automatic boxing, we need to enable this
+                            // this checks for passing nonCopyable types by value
+                            /*
                             if ( !passType->canCopy() && !passType->ref ) {
                                 typesCompatible = false;
                                 break;
                             }
+                            */
                         }
                         bool tailCompatible = true;
                         for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {

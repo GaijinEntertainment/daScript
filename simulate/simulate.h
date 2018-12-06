@@ -429,6 +429,19 @@ namespace yzg
         }
     };
     
+    // BOX IT
+    template <typename TT>
+    struct SimNode_Value2Ref : SimNode {      // value -> &value
+        SimNode_Value2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ptr = subexpr->eval(context);
+            box = cast<TT>::to(ptr);
+            return cast<TT*>::from(&box);
+        }
+        SimNode * subexpr;
+        TT        box;
+    };
+    
     // DEREFERENCE
     template <typename TT>
     struct SimNode_Ref2Value : SimNode {      // &value -> value

@@ -336,13 +336,13 @@ def verify_test_array(a:array<int>;extra:int=0):array<int>
 
 def test_for_array
     print("test for array:\n")
-    // debug(length(make_test_array()),"its length") // this won't compile
-    // verify_test_array(make_test_array()) // this won't compile either
+    debug(length(make_test_array()),"its length")
+    verify_test_array(make_test_array())
     let(a:array<int>)
         a <- make_test_array()
         debug(a)
         verify_test_array(a)
-        // verify_test_array(verify_test_array(a)) // this won't compile
+        verify_test_array(verify_test_array(a))
         let(b:array<int> = a)
             assert(length(a)==0)
             verify_test_array(b)

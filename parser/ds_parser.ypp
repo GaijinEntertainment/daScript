@@ -207,7 +207,7 @@ function_declaration
                             pVar->name = name;
                             pVar->at = pDecl->at;
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                            if ( !pVar->type->canCopy() && pVar->type->dim.size()==0 ) {
+                            if ( pVar->type->needsBoxing() ) {
                                 if ( pVar->type->ref )
                                     yyerror("can't pass boxed type by reference",pVar->at);
                                 pVar->type->ref = true; // now, we force it. this way we prevent passing move type by value
