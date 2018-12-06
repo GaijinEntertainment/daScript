@@ -342,6 +342,28 @@ def test_for_array
         assert(i==5)
     print("ok\n")
 
+def test_for_hybrid
+    print("test for hybrid:\n")
+    let(a:array<int>;b:int[10];i:int=0)
+        resize(a,4)
+        for l,r in a,b
+            l = i
+            r = i*2-5
+            i++
+        debug(a,"a=")
+        debug(b,"b=")
+        i = 0
+        for l,r in a,b
+            assert(l==i)
+            assert(r==i*2-5)
+            i++
+        i = 0
+        for l,r in a,b where l>r
+            assert(l>r)
+            i++
+        assert(i==3)
+    print("ok\n")
+
 // this is where unit tests are
 def test
     print("unit tests started\n")
@@ -361,6 +383,7 @@ def test
     test_dynamic_array()
     test_for()
     test_for_array()
+    test_for_hybrid()
     print("unit tests finished\n")
 
 

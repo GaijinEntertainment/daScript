@@ -196,4 +196,30 @@ namespace yzg
         }
         SimNode * array, *value, *index;
     };
+    
+    struct GoodArrayIterator : Iterator {
+        virtual void * first ( Context & context ) override {
+            __m128 ll = source->eval(context);
+            YZG_ITERATOR_EXCEPTION_POINT;
+            pArray = cast<Array *>::to(ll);
+            array_lock(context, *pArray);
+            YZG_ITERATOR_EXCEPTION_POINT;
+            data = pArray->data;
+            dataEnd = data + pArray->size * stride;
+            return data;
+        }
+        virtual void * next  ( Context & context ) override {
+            data += stride;
+            if ( data>=dataEnd ) return nullptr;
+            return data;
+        }
+        virtual void close ( Context & context ) override {
+            array_unlock(context, *pArray);
+        }
+        SimNode *   source;
+        uint32_t    stride;
+        Array *     pArray;
+        char *      data;
+        char *      dataEnd;
+    };
 }

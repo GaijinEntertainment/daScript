@@ -1479,44 +1479,72 @@ namespace yzg
     SimNode * ExprFor::simulate (Context & context) const
     {
         int total = sources.size();
-        SimNode_ForBase * result;
         if ( dynamicArrays && fixedArrays ) {
-            // TODO: implement hybrid loop
-            assert(0 && "not implmeneted yet");
-            return nullptr;
-        } else if ( dynamicArrays ) {
+            SimNode_ForWithIteratorBase * result;
             switch ( sources.size() ) {
-                case 1: result = context.makeNode<SimNode_ForGoodArray<1>>(at); break;
-                case 2: result = context.makeNode<SimNode_ForGoodArray<2>>(at); break;
-                case 3: result = context.makeNode<SimNode_ForGoodArray<3>>(at); break;
-                case 4: result = context.makeNode<SimNode_ForGoodArray<4>>(at); break;
+                case 1: result = context.makeNode<SimNode_ForWithIterator<1>>(at); break;
+                case 2: result = context.makeNode<SimNode_ForWithIterator<2>>(at); break;
+                case 3: result = context.makeNode<SimNode_ForWithIterator<3>>(at); break;
+                case 4: result = context.makeNode<SimNode_ForWithIterator<4>>(at); break;
                 default:    assert(0 && "we should not even be here"); return nullptr;
             }
-        } else if ( fixedArrays ) {
-            switch ( sources.size() ) {
-                case 1: result = context.makeNode<SimNode_ForFixedArray<1>>(at); break;
-                case 2: result = context.makeNode<SimNode_ForFixedArray<2>>(at); break;
-                case 3: result = context.makeNode<SimNode_ForFixedArray<3>>(at); break;
-                case 4: result = context.makeNode<SimNode_ForFixedArray<4>>(at); break;
-                default:    assert(0 && "we should not even be here"); return nullptr;
+            for ( int t=0; t!=total; ++t ) {
+                if ( sources[t]->type->isGoodArrayType() ) {
+                    auto iter = context.makeNode<GoodArrayIterator>();
+                    iter->source = sources[t]->simulate(context);
+                    iter->stride = sources[t]->type->firstType->getStride();
+                    result->sources[t] = iter;
+                } else if ( sources[t]->type->dim.size() ) {
+                    auto iter = context.makeNode<FixedArrayIterator>();
+                    iter->source = sources[t]->simulate(context);
+                    iter->stride = sources[t]->type->getStride();
+                    iter->size = sources[t]->type->dim.back();
+                    result->sources[t] = iter;
+                } else {
+                    assert(0 && "we should not be here yet");
+                    return nullptr;
+                }
+                result->stackTop[t] = iteratorVariables[t]->stackTop;
             }
+            result->body = subexpr->simulate(context);
+            result->filter = filter ? filter->simulate(context) : nullptr;
+            return result;
         } else {
-            assert(0 && "we should not be here yet");
-            return nullptr;
-        }
-        for ( int t=0; t!=total; ++t ) {
-            result->sources[t] = sources[t]->simulate(context);
-            if ( sources[t]->type->isGoodArrayType() ) {
-                result->strides[t] = sources[t]->type->firstType->getStride();
+            SimNode_ForBase * result;
+            if ( dynamicArrays ) {
+                switch ( sources.size() ) {
+                    case 1: result = context.makeNode<SimNode_ForGoodArray<1>>(at); break;
+                    case 2: result = context.makeNode<SimNode_ForGoodArray<2>>(at); break;
+                    case 3: result = context.makeNode<SimNode_ForGoodArray<3>>(at); break;
+                    case 4: result = context.makeNode<SimNode_ForGoodArray<4>>(at); break;
+                    default:    assert(0 && "we should not even be here"); return nullptr;
+                }
+            } else if ( fixedArrays ) {
+                switch ( sources.size() ) {
+                    case 1: result = context.makeNode<SimNode_ForFixedArray<1>>(at); break;
+                    case 2: result = context.makeNode<SimNode_ForFixedArray<2>>(at); break;
+                    case 3: result = context.makeNode<SimNode_ForFixedArray<3>>(at); break;
+                    case 4: result = context.makeNode<SimNode_ForFixedArray<4>>(at); break;
+                    default:    assert(0 && "we should not even be here"); return nullptr;
+                }
             } else {
-                result->strides[t] = sources[t]->type->getStride();
+                assert(0 && "we should not be here yet");
+                return nullptr;
             }
-            result->stackTop[t] = iteratorVariables[t]->stackTop;
+            for ( int t=0; t!=total; ++t ) {
+                result->sources[t] = sources[t]->simulate(context);
+                if ( sources[t]->type->isGoodArrayType() ) {
+                    result->strides[t] = sources[t]->type->firstType->getStride();
+                } else {
+                    result->strides[t] = sources[t]->type->getStride();
+                }
+                result->stackTop[t] = iteratorVariables[t]->stackTop;
+            }
+            result->size = fixedSize;
+            result->body = subexpr->simulate(context);
+            result->filter = filter ? filter->simulate(context) : nullptr;
+            return result;
         }
-        result->size = fixedSize;
-        result->body = subexpr->simulate(context);
-        result->filter = filter ? filter->simulate(context) : nullptr;
-        return result;
     }
     
     // ExprLet

@@ -569,7 +569,7 @@ namespace yzg
         }
         SimNode * cond, * body;
     };
-
+    
     // FOR BASE
     struct SimNode_ForBase : SimNode {
         SimNode_ForBase ( const LineInfo & at ) : SimNode(at) {}
@@ -651,6 +651,7 @@ namespace yzg
     struct Iterator {
         virtual void * first ( Context & context ) = 0;
         virtual void * next  ( Context & context ) = 0;
+        virtual void close ( Context & context ) = 0;
     };
     
     struct FixedArrayIterator : Iterator {
@@ -666,6 +667,8 @@ namespace yzg
             data += stride;
             return data;
         }
+        virtual void close ( Context & context ) override {
+        }
         SimNode *   source;
         char *      data;
         char *      dataEnd;
@@ -673,28 +676,45 @@ namespace yzg
         uint32_t    stride;
     };
     
-    struct GoodArrayIterator : Iterator {
-        virtual void * first ( Context & context ) override {
-            __m128 ll = source->eval(context);
-            YZG_ITERATOR_EXCEPTION_POINT;
-            auto pA = cast<Array *>::to(ll);
-            size = pA->size;
-            data = pA->data;
-            dataEnd = data + size * stride;
-            return data;
-        }
-        virtual void * next  ( Context & context ) override {
-            if ( data>=dataEnd ) {
-                return nullptr;
+    struct SimNode_ForWithIteratorBase : SimNode {
+        SimNode_ForWithIteratorBase ( const LineInfo & at ) : SimNode(at) {}
+        Iterator *  sources[MAX_FOR_ITERATORS];
+        SimNode *   body;
+        SimNode *   filter;
+        uint32_t    stackTop[MAX_FOR_ITERATORS];
+    };
+    
+    template <int total>
+    struct SimNode_ForWithIterator : SimNode_ForWithIteratorBase {
+        SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            char * ph[total];
+            for ( int t=0; t!=total; ++t ) {
+                ph[t] = (char *) sources[t]->first(context);
+                YZG_EXCEPTION_POINT;
             }
-            data += stride;
-            return data;
+            char ** pi[total];
+            for ( int t=0; t!=total; ++t ) {
+                pi[t] = (char **)(context.stackTop + stackTop[t]);
+            }
+            for ( int i=0; !context.stopFlags; ++i ) {
+                for ( int t=0; t!=total; ++t ){
+                    *pi[t] = ph[t];
+                    ph[t] = (char *) sources[t]->next(context);
+                    YZG_EXCEPTION_POINT;
+                    if ( !ph[t] ) goto loopend;
+                }
+                if ( !filter || cast<bool>::to(filter->eval(context)) )
+                    if ( !context.stopFlags )
+                        body->eval(context);
+            }
+        loopend:
+            for ( int t=0; t!=total; ++t ) {
+                sources[t]->close(context);
+            }
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return _mm_setzero_ps();
         }
-        SimNode *   source;
-        char *      data;
-        char *      dataEnd;
-        uint32_t    size;
-        uint32_t    stride;
     };
     
     // FOREACH
