@@ -179,24 +179,6 @@ void unit_test_array_of_structures ( const string & fn )
             }
         });
         
-        int fnfTest = ctx.findFunction("foreachTest");
-        double simFT = profileBlock(numIter, [&](){
-            ctx.restart();
-            ctx.eval(fnfTest, nullptr);
-        });
-        
-        int fnffTest = ctx.findFunction("forTest");
-        double simFTF = profileBlock(numIter, [&](){
-            ctx.restart();
-            ctx.eval(fnffTest, nullptr);
-        });
-        
-        int fnfiTest = ctx.findFunction("foreachIteropTest");
-        double intFT = profileBlock(numIter, [&](){
-            ctx.restart();
-            ctx.eval(fnfiTest, nullptr);
-        });
-        
         // NOTE: this demonstrates result of particular shader
         cout << "after:\n";
         for ( int i=0; i!=5; ++i ) {
@@ -207,17 +189,12 @@ void unit_test_array_of_structures ( const string & fn )
         
         cout << fixed;
         cout << "iterations took:" << simT << "\n";
-        cout << "foreach iterations took:" << simFT << "\n";
-        cout << "for iterations took:" << simFTF << "\n";
         cout << "c++ version took:" << cT << "\n";
         cout << "interop version took:" << intT << "\n";
-        cout << "foreach interop version took:" << intFT << "\n";
         cout << "10000-interop version took:" << manyT << "\n";
         cout << "10000-interop ks version took:" << manyKsT << "\n";
         cout << "ratio sim / c: " << simT / cT << "\n";
-        cout << "ratio foreach sim / c: " << simFT / cT << "\n";
         cout << "ratio interop / c: " << intT / cT << "\n";
-        cout << "ratio foreach interop / c: " << intFT / cT << "\n";
         cout << "ratio 10000-interop / c: " << manyT / cT << "\n";
         cout << "ratio 10000-interop ks / c: " << manyKsT / cT << "\n";
         cout << "ratio sim / interop: " << simT / intT << "\n";
@@ -228,10 +205,8 @@ void unit_test_array_of_structures ( const string & fn )
 int main(int argc, const char * argv[]) {
     unit_test("../../test/unit_test.das");
 #if 0
-    unit_test_array_of_structures("../../test/profile_array_of_structures.das");
     unit_test_array_of_structures("../../test/profile_array_of_structures_vec.das");
     unit_test("../../test/profile_try_catch.das", 100);
 #endif
-    // unit_test_array_of_structures("../../test/profile_array_of_structures_vec.das");
     return 0;
 }

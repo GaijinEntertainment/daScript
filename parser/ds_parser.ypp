@@ -56,11 +56,11 @@
 
 /* keywords */
 %token  _STRUCT _LET    _DEF        _WHILE
-%token  _IF     _ELSE   _FOREACH    _CATCH
+%token  _IF     _ELSE   _FOR        _CATCH
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _IN     _ELIF       _ARRAY
 %token  _RETURN _NULL   _BREAK      _TRY
-%token  _FOR    _WHERE
+%token  _WHERE
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -98,7 +98,6 @@
 %type <pExpression>     expressions
 %type <pExpression>     expression_block
 %type <pExpression>     expression_while_loop
-%type <pExpression>     expression_foreach_loop
 %type <pExpression>     expression_for_loop
 %type <pExpression>     expression_break
 %type <pExpression>     expression_return
@@ -168,16 +167,6 @@ expression_for_loop
     }
     ;
 
-expression_foreach_loop
-    :   _FOREACH[loc] expr[iter] _IN expr[head] expression_block[block] {
-        auto pForeach = new ExprForeach(tokAt(@loc));
-        pForeach->head = ExpressionPtr($head);
-        pForeach->iter = ExpressionPtr($iter);
-        pForeach->body = ExpressionPtr($block);
-        $$ = pForeach;
-    }
-    ;
-
 expression_while_loop
     :   _WHILE expr[condition] expression_block[block] {
         auto pWhile = new ExprWhile();
@@ -242,7 +231,6 @@ expression_any
     :   expr[subexpr] ';'                   { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
-    |   expression_foreach_loop[subexpr]    { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
     |   expression_break[subexpr]           { $$ = $subexpr; }
     |   expression_return[subexpr]          { $$ = $subexpr; }

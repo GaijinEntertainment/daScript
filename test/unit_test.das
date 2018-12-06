@@ -91,11 +91,11 @@ def test_new
 
 def test_array
     print("test array:\n")
-    let ( arr:int[10]; idx:int = 0; val:int )
+    let ( arr:int[10]; idx:int = 0 )
         while idx!=10
             arr[idx++] = idx
         idx = 0
-        foreach val in arr
+        for val in arr
             assert(arr[idx++]==val,"we just set it that way")
     print("ok\n")
 

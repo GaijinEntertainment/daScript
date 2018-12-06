@@ -1,45 +1,11 @@
-parser
-	support external global variables (as opposet to regular global variables)
-	support external structures (no fields, just sizes)
-    support array initialization and object initializatoin (c-tors?)
-    support auto in let
-    support late binding of default arguments
-    support auto in function default arguments
-    support auto in function arguments
-
-misc
-	support variadic functions (with type info)
-    simplify builtin initialization
-    support multi-dimensional array foreach
-    support multi-dimensional array new (or regular array new)
-    support (unsafe ?)
-
-optimization \ ast massage
-    flatten nested blocks
-    eliminate dead code (after break and after return)
-    flatten conditions
-    simplify initialization of local variables
-    propagate local variable initialization on top of the function
-	
-tests
-	does not compile - for every error. add huge error enumeration. add 'expect' keyword
-	every type with evey operator
-	every concept
-
-iterations took:0.000594
-foreach iterations took:0.000314
-for iterations took:0.000261
-c++ version took:0.000018
-interop version took:0.000410
-foreach interop version took:0.000148
-10000-interop version took:0.000230
-10000-interop ks version took:0.000107
-ratio sim / c: 33.815146
-ratio foreach sim / c: 17.889338
-ratio interop / c: 23.355371
-ratio foreach interop / c: 8.435082
-ratio 10000-interop / c: 13.097747
-ratio 10000-interop ks / c: 6.111345
-ratio sim / interop: 1.447853
-
+iterations took:0.000283
+c++ version took:0.000017
+interop version took:0.000106
+10000-interop version took:0.000229
+10000-interop ks version took:0.000108
+ratio sim / c: 16.535267
+ratio interop / c: 6.206632
+ratio 10000-interop / c: 13.411452
+ratio 10000-interop ks / c: 6.301965
+ratio sim / interop: 2.664129
 
