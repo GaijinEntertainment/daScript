@@ -490,7 +490,6 @@ namespace yzg
             case Type::tUInt2:      return context.makeNode<SimNode_Ref2Value<uint2>>(at,subexpr->simulate(context));
             case Type::tUInt3:      return context.makeNode<SimNode_Ref2Value<uint3>>(at,subexpr->simulate(context));
             case Type::tUInt4:      return context.makeNode<SimNode_Ref2Value<uint4>>(at,subexpr->simulate(context));
-            case Type::tArray:      return context.makeNode<SimNode_Ref2Value<Array>>(at,subexpr->simulate(context));
             default:                {
                 assert(0 && "can't dereference type");
                 return nullptr;
