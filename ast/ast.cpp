@@ -44,7 +44,6 @@ namespace yzg
         {   Operator::div,      "/"    },
         {   Operator::mul,      "*"    },
         {   Operator::mod,      "%"    },
-        {   Operator::eq,       "="    },
         {   Operator::is,       "?"    },
         {   Operator::boolNot,  "!"    },
         {   Operator::binNot,   "~"    },
@@ -135,6 +134,15 @@ namespace yzg
             firstType = make_shared<TypeDecl>(*decl.firstType);
         if ( decl.secondType )
             secondType = make_shared<TypeDecl>(*decl.secondType);
+    }
+    
+    bool TypeDecl::canCopy() const
+    {
+        if ( baseType==Type::tArray )
+            return false;
+        if ( baseType==Type::tStructure && structType )
+            return structType->canCopy();
+        return true;
     }
     
     string TypeDecl::getMangledName() const
@@ -242,6 +250,11 @@ namespace yzg
         return ref || baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || dim.size();
     }
     
+    bool TypeDecl::isRefType() const
+    {
+        return baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || dim.size();
+    }
+    
     bool TypeDecl::isIndex() const
     {
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
@@ -271,6 +284,15 @@ namespace yzg
     }
     
     // structure
+    
+    bool Structure::canCopy() const
+    {
+        for ( const auto & fd : fields ) {
+            if ( !fd.type->canCopy() )
+                return false;
+        }
+        return true;
+    }
     
     int Structure::getSizeOf() const
     {
@@ -441,6 +463,8 @@ namespace yzg
             context.error("can only dereference ref", at);
         } else if ( !subexpr->type->isSimpleType() ) {
             context.error("can only dereference a simple type", at);
+        } if ( !subexpr->type->canCopy() ) {
+            context.error("can't dereference non-copyable type", at);
         } else {
             type = make_shared<TypeDecl>(*subexpr->type);
             type->ref = false;
@@ -465,6 +489,7 @@ namespace yzg
             case Type::tUInt2:      return context.makeNode<SimNode_Ref2Value<uint2>>(at,subexpr->simulate(context));
             case Type::tUInt3:      return context.makeNode<SimNode_Ref2Value<uint3>>(at,subexpr->simulate(context));
             case Type::tUInt4:      return context.makeNode<SimNode_Ref2Value<uint4>>(at,subexpr->simulate(context));
+            case Type::tArray:      return context.makeNode<SimNode_Ref2Value<Array>>(at,subexpr->simulate(context));
             default:                {
                 assert(0 && "can't dereference type");
                 return nullptr;
@@ -508,6 +533,12 @@ namespace yzg
 
     // ExprAssert
     
+    ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprAssert>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
     
     void ExprAssert::inferType(InferTypeContext & context)
     {
@@ -533,6 +564,13 @@ namespace yzg
     }
     
     // ExprDebug
+    
+    ExpressionPtr ExprDebug::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprDebug>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
     
     void ExprDebug::inferType(InferTypeContext & context)
     {
@@ -560,6 +598,13 @@ namespace yzg
     }
     
     // ExprArrayPush
+    
+    ExpressionPtr ExprArrayPush::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprArrayPush>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
     
     void ExprArrayPush::inferType(InferTypeContext & context)
     {
@@ -1093,13 +1138,105 @@ namespace yzg
         return nullptr;
     }
     
-    // ExprCopy
+    // common for move and copy
     
+    SimNode * makeCopy(const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right )
+    {
+        assert ( rightType.canCopy() && "should check above" );
+        if ( rightType.isRef() ) {
+            return context.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+        }
+        switch ( rightType.baseType ) {
+            case Type::tBool:       return context.makeNode<SimNode_CopyValue<bool>>    (at, left, right);
+            case Type::tInt:        return context.makeNode<SimNode_CopyValue<int32_t>> (at, left, right);
+            case Type::tInt2:       return context.makeNode<SimNode_CopyValue<int2>>    (at, left, right);
+            case Type::tInt3:       return context.makeNode<SimNode_CopyValue<int3>>    (at, left, right);
+            case Type::tInt4:       return context.makeNode<SimNode_CopyValue<int4>>    (at, left, right);
+            case Type::tUInt:       return context.makeNode<SimNode_CopyValue<uint32_t>>(at, left, right);
+            case Type::tUInt2:      return context.makeNode<SimNode_CopyValue<uint2>>   (at, left, right);
+            case Type::tUInt3:      return context.makeNode<SimNode_CopyValue<uint3>>   (at, left, right);
+            case Type::tUInt4:      return context.makeNode<SimNode_CopyValue<uint4>>   (at, left, right);
+            case Type::tFloat:      return context.makeNode<SimNode_CopyValue<float>>   (at, left, right);
+            case Type::tFloat2:     return context.makeNode<SimNode_CopyValue<float2>>  (at, left, right);
+            case Type::tFloat3:     return context.makeNode<SimNode_CopyValue<float3>>  (at, left, right);
+            case Type::tFloat4:     return context.makeNode<SimNode_CopyValue<float4>>  (at, left, right);
+            case Type::tString:     return context.makeNode<SimNode_CopyValue<char *>>  (at, left, right);
+            case Type::tPointer:    return context.makeNode<SimNode_CopyValue<void *>>  (at, left, right);
+            case Type::tArray:
+            case Type::tTable:
+                assert(0 && "not copyable");
+            case Type::none:
+            case Type::tVoid:
+            case Type::tStructure:
+                assert(0 && "unsupported? can't assign initial value");
+        }
+        return nullptr;
+    }
+    
+    SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right )
+    {
+        assert ( !rightType.canCopy() && "should check above" );
+        if ( rightType.ref ) {
+            return context.makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
+        } else if ( rightType.isGoodArrayType() ) {
+            return context.makeNode<SimNode_CopyValue<Array>>(at, left, right);
+        } else {
+            assert(0 && "we should not be here");
+            return nullptr;
+        }
+    }
+    
+    // ExprMove
+    
+    void ExprMove::log(ostream& stream, int depth) const
+    {
+        logType(stream);
+        stream << "(<- ";
+        left->log(stream, depth);
+        stream << " ";
+        right->log(stream, depth);
+        stream << ")";
+    }
+    
+    void ExprMove::inferType(InferTypeContext & context)
+    {
+        left->inferType(context);
+        right->inferType(context);
+        if ( !left->type ) return;
+        if ( !right->type ) return;
+        if ( !left->type->isSameType(*right->type,false) ) {
+            context.error("can only move same type", at);
+        } else if ( !left->type->isRef() ) {
+            context.error("can only move to reference", at);
+        }
+        if ( left->type->canCopy() ) {
+            context.error("this type can be copied, use copy instead of move", at);
+        }
+        type = make_shared<TypeDecl>(*left->type);  // we return left
+    }
+    
+    ExpressionPtr ExprMove::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprCopy>(expr);
+        ExprOp2::clone(cexpr);
+        return cexpr;
+    }
+    
+    SimNode * ExprMove::simulate (Context & context) const
+    {
+        return makeMove(at,
+                        context,
+                        *right->type,
+                        left->simulate(context),
+                        right->simulate(context));
+    }
+    
+    // ExprCopy
     
     void ExprCopy::log(ostream& stream, int depth) const
     {
         logType(stream);
-        stream << "(<- ";
+        stream << "(= ";
         left->log(stream, depth);
         stream << " ";
         right->log(stream, depth);
@@ -1112,13 +1249,13 @@ namespace yzg
         right->inferType(context);
         if ( !left->type ) return;
         if ( !right->type ) return;
-        if ( !left->type->isSameType(*right->type,true) ) {
+        if ( !left->type->isSameType(*right->type,false) ) {
             context.error("can only copy same type", at);
         } else if ( !left->type->isRef() ) {
             context.error("can only copy to reference", at);
         }
-        if ( left->type->isGoodArrayType() ) {
-            context.error("can't copy arrays yet", at);
+        if ( !left->type->canCopy() ) {
+            context.error("this type can't be copied", at);
         }
         type = make_shared<TypeDecl>(*left->type);  // we return left
     }
@@ -1132,11 +1269,7 @@ namespace yzg
     
     SimNode * ExprCopy::simulate (Context & context) const
     {
-        // TODO: support array copying properly
-        return context.makeNode<SimNode_CopyRefValue>(at,
-                                                      left->simulate(context),
-                                                      right->simulate(context),
-                                                      left->type->getSizeOf());
+        return makeCopy(at, context, *right->type, left->simulate(context), right->simulate(context));
     }
     
     // ExprTryCatch
@@ -1165,7 +1298,25 @@ namespace yzg
                                                   catch_block->simulate(context));
     }
     
+    ExpressionPtr ExprTryCatch::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprTryCatch>(expr);
+        Expression::clone(cexpr);
+        cexpr->try_block = try_block->clone();
+        cexpr->catch_block = catch_block->clone();
+        return cexpr;
+    }
+    
     // ExprReturn
+    
+    ExpressionPtr ExprReturn::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprReturn>(expr);
+        Expression::clone(cexpr);
+        if ( subexpr )
+            cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
     
     void ExprReturn::log(ostream& stream, int depth) const
     {
@@ -1208,6 +1359,13 @@ namespace yzg
     }
     
     // ExprBreak
+    
+    ExpressionPtr ExprBreak::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprBreak>(expr);
+        Expression::clone(cexpr);
+        return cexpr;
+    }
     
     void ExprBreak::log(ostream& stream, int depth) const
     {
@@ -1543,13 +1701,15 @@ namespace yzg
             context.local.push_back(var);
             if ( var->init ) {
                 var->init->inferType(context);
+                if ( !var->init->type ) {
+                    var->init->inferType(context);
+                    return;
+                }
                 if ( !var->type->isSameType(*var->init->type,false) ) {
                     context.error("variable initialization type mismatch", var->at );
                 } else if ( var->type->baseType==Type::tStructure ) {
                     context.error("can't initialize structures", var->at );
-                } else {
-                    var->init = autoDereference(var->init);
-                }
+                } 
             }
             var->stackTop = context.stackTop;
             context.stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
@@ -1563,39 +1723,16 @@ namespace yzg
     
     SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local)
     {
-        SimNode * copy = nullptr;
         SimNode * init = var->init->simulate(context);
         SimNode * get;
         if ( local )
             get = context.makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
         else
             get = context.makeNode<SimNode_GetGlobal>(var->init->at, var->index);
-        switch ( var->type->baseType ) {
-            case Type::tBool:       copy = context.makeNode<SimNode_CopyValue<bool>>(var->init->at, get, init);       break;
-            case Type::tInt:        copy = context.makeNode<SimNode_CopyValue<int32_t>>(var->init->at, get, init);    break;
-            case Type::tInt2:       copy = context.makeNode<SimNode_CopyValue<int2>>(var->init->at, get, init);    break;
-            case Type::tInt3:       copy = context.makeNode<SimNode_CopyValue<int3>>(var->init->at, get, init);    break;
-            case Type::tInt4:       copy = context.makeNode<SimNode_CopyValue<int4>>(var->init->at, get, init);    break;
-            case Type::tUInt:       copy = context.makeNode<SimNode_CopyValue<uint32_t>>(var->init->at, get, init);   break;
-            case Type::tUInt2:      copy = context.makeNode<SimNode_CopyValue<uint2>>(var->init->at, get, init);   break;
-            case Type::tUInt3:      copy = context.makeNode<SimNode_CopyValue<uint3>>(var->init->at, get, init);   break;
-            case Type::tUInt4:      copy = context.makeNode<SimNode_CopyValue<uint4>>(var->init->at, get, init);   break;
-            case Type::tFloat:      copy = context.makeNode<SimNode_CopyValue<float>>(var->init->at, get, init);      break;
-            case Type::tFloat2:     copy = context.makeNode<SimNode_CopyValue<float2>>(var->init->at, get, init);      break;
-            case Type::tFloat3:     copy = context.makeNode<SimNode_CopyValue<float3>>(var->init->at, get, init);      break;
-            case Type::tFloat4:     copy = context.makeNode<SimNode_CopyValue<float4>>(var->init->at, get, init);      break;
-            case Type::tString:     copy = context.makeNode<SimNode_CopyValue<char *>>(var->init->at, get, init);     break;
-            case Type::tPointer:    copy = context.makeNode<SimNode_CopyValue<void *>>(var->init->at, get, init);     break;
-            case Type::tArray:      copy = context.makeNode<SimNode_CopyValue<Array>>(var->init->at, get, init);     break;
-            // unimplemented
-            case Type::tTable:
-            // fail cases
-            case Type::none:
-            case Type::tVoid:
-            case Type::tStructure:
-                                    assert(0 && "unsupported? can't assign initial value");
-        }
-        return copy;
+        if ( var->type->canCopy() )
+            return makeCopy(var->init->at, context, *var->init->type, get, init);
+        else
+            return makeMove(var->init->at, context, *var->init->type, get, init);
     }
     
     SimNode * ExprLet::simulate (Context & context) const
@@ -1619,7 +1756,7 @@ namespace yzg
     
     ExpressionPtr ExprLooksLikeCall::clone( const ExpressionPtr & expr ) const
     {
-        auto cexpr = clonePtr<ExprCall>(expr);
+        auto cexpr = clonePtr<ExprLooksLikeCall>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
         for ( auto & arg : arguments ) {
@@ -1780,6 +1917,12 @@ namespace yzg
         for ( auto & it : thisModule->globals ) {
             auto pvar = it.second;
             pvar->index = gvi ++;
+            if ( pvar->init ) {
+                Expression::InferTypeContext context;
+                pvar->init->inferType(context);
+                if ( failed() )
+                    return;
+            }
         }
         // functions
         totalFunctions = 0;
@@ -1823,6 +1966,11 @@ namespace yzg
                             auto & argType = pFn->arguments[ai]->type;
                             auto & passType = types[ai];
                             if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false)) ) {
+                                typesCompatible = false;
+                                break;
+                            }
+                            // also check for passing nonCopyable types by value
+                            if ( !passType->canCopy() && !passType->ref ) {
                                 typesCompatible = false;
                                 break;
                             }

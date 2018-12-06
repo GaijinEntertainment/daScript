@@ -68,7 +68,6 @@ namespace yzg
         div,
         mul,
         mod,
-        eq,
         is,         // ?
         boolNot,    // !
         binNot,     // ~
@@ -98,12 +97,14 @@ namespace yzg
         bool isGoodArrayType() const;
         bool isVoid() const;
         bool isRef() const;
+        bool isRefType() const;
         bool isIndex() const;
         bool isPointer() const;
         int getSizeOf() const;
         int getBaseSizeOf() const;
         int getStride() const;
         string describe() const { stringstream ss; ss << *this; return ss.str(); }
+        bool canCopy() const;
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -129,12 +130,13 @@ namespace yzg
     template<> struct ToBasicType<float2>   { enum { type = Type::tFloat2 }; };
     template<> struct ToBasicType<float3>   { enum { type = Type::tFloat3 }; };
     template<> struct ToBasicType<float4>   { enum { type = Type::tFloat4 }; };
-    template<> struct ToBasicType<int2>   { enum { type = Type::tInt2 }; };
-    template<> struct ToBasicType<int3>   { enum { type = Type::tInt3 }; };
-    template<> struct ToBasicType<int4>   { enum { type = Type::tInt4 }; };
+    template<> struct ToBasicType<int2>    { enum { type = Type::tInt2 }; };
+    template<> struct ToBasicType<int3>    { enum { type = Type::tInt3 }; };
+    template<> struct ToBasicType<int4>    { enum { type = Type::tInt4 }; };
     template<> struct ToBasicType<uint2>   { enum { type = Type::tUInt2 }; };
     template<> struct ToBasicType<uint3>   { enum { type = Type::tUInt3 }; };
     template<> struct ToBasicType<uint4>   { enum { type = Type::tUInt4 }; };
+    template<> struct ToBasicType<Array>   { enum { type = Type::tArray }; };
     template<> struct ToBasicType<Array *> { enum { type = Type::tArray }; };
 
     template <typename TT>
@@ -168,6 +170,7 @@ namespace yzg
         const FieldDeclaration * findField ( const string & name ) const;
         friend ostream& operator<< (ostream& stream, const Structure & structure);
         int getSizeOf() const;
+        bool canCopy() const;
     public:
         string                      name;
         vector<FieldDeclaration>    fields;
@@ -366,7 +369,20 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
+    // this moves one object to the other
+    class ExprMove : public ExprOp2
+    {
+    public:
+        ExprMove () = default;
+        ExprMove ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {};
+        virtual void inferType(InferTypeContext & context) override;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+    
     // this only exists during parsing, and can't be
+    // and this is why it does not have CLONE
     class ExprSequence : public ExprOp2
     {
     public:
@@ -396,6 +412,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         ExpressionPtr try_block, catch_block;
     };
@@ -408,6 +425,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     public:
         ExpressionPtr subexpr;
     };
@@ -420,6 +438,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
     };
     
     template <typename TT, typename ExprConstExt>
@@ -548,6 +567,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         void autoDereference();
+        virtual SimNode * simulate (Context & context) const override { return nullptr; }
     protected:
         string describe() const;
     public:
@@ -561,6 +581,7 @@ namespace yzg
     public:
         ExprAssert () = default;
         ExprAssert ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a,name) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
@@ -570,6 +591,7 @@ namespace yzg
     public:
         ExprDebug () = default;
         ExprDebug ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
@@ -579,6 +601,7 @@ namespace yzg
     public:
         ExprArrayPush() = default;
         ExprArrayPush ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
@@ -589,8 +612,11 @@ namespace yzg
     public:
         ExprArrayCallWithSizeOrIndex() = default;
         ExprArrayCallWithSizeOrIndex ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
-        
-        void inferType(InferTypeContext & context)
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
+            auto cexpr = clonePtr<ExprArrayCallWithSizeOrIndex<SimNodeT>>(expr);
+            return cexpr;
+        }
+        virtual void inferType(InferTypeContext & context) override
         {
             if ( arguments.size()!=2 ) {
                 context.error("expecting array and size or index", at);
@@ -608,8 +634,7 @@ namespace yzg
             arguments[1] = Expression::autoDereference(arguments[1]);
             type = make_shared<TypeDecl>(Type::tVoid);
         }
-        
-        SimNode * simulate (Context & context) const
+        virtual SimNode * simulate (Context & context) const override
         {
             auto arr = arguments[0]->simulate(context);
             auto newSize = arguments[1]->simulate(context);
@@ -637,7 +662,7 @@ namespace yzg
     {
     public:
         ExprCall () = default;
-        ExprCall ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) {}
+        ExprCall ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) { }
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;

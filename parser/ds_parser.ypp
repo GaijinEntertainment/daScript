@@ -198,8 +198,6 @@ function_declaration
             yyerror("function " + *$name + " can't return array",tokAt(@loc));
         else if (pFunction->result->baseType==Type::tStructure )
             yyerror("function " + *$name + " can't return structure",tokAt(@loc));
-        else if ( pFunction->result->baseType==Type::tArray )
-            yyerror("function " + *$name + " can't return array",tokAt(@loc));
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -209,6 +207,13 @@ function_declaration
                             pVar->name = name;
                             pVar->at = pDecl->at;
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            if ( !pVar->type->canCopy() && pVar->type->dim.size()==0 ) {
+                                if ( pVar->type->ref )
+                                    yyerror("can't pass boxed type by reference",pVar->at);
+                                pVar->type->ref = true; // now, we force it. this way we prevent passing move type by value
+                            } else if ( pVar->type->ref && pVar->type->isRefType() ) {
+                                yyerror("can't pass boxed type by reference",pVar->at);
+                            }
                             pVar->init = ExpressionPtr(pDecl->pInit);
                             pFunction->arguments.push_back(pVar);
                         } else {
@@ -323,8 +328,8 @@ expr
     |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }
     |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),Operator::sub,ExpressionPtr($subexpr)); }
     |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),Operator::add,ExpressionPtr($subexpr)); }
-    |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '='[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::eq,ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '='[loc]    expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
     |   expr[left] ADDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::addEqu, ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] SUBEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::subEqu, ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] MULEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::mulEqu, ExpressionPtr($left), ExpressionPtr($right)); }

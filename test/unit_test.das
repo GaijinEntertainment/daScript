@@ -76,7 +76,7 @@ def test_new
         verify_default_ball(debug(b,"ball is")->)
         let ( qb:Ball; qc:Ball* = b; qd:Ball* = new Ball )
             debug(qc,"qc")
-            qb <- qc->
+            qb = qc->
             verify_default_ball(qb)
             verify_default_ball(qc->)
             qc = null
@@ -199,7 +199,7 @@ def test_copy
         idx = 0
         while idx!=10
             a[idx++] = idx
-        aCopy <- a
+        aCopy = a
         debug(a,"a=")
         debug(aCopy,"aCopy=")
         idx = 0
@@ -207,7 +207,7 @@ def test_copy
             assert(aCopy[idx++]==idx)
         b.position = float3(1.0,2.0,3.0)
         b.radius = 5.0
-        bCopy <- b
+        bCopy = b
         verify_default_ball(b)
     print("ok")
 
@@ -272,12 +272,13 @@ def test_dynamic_array
         resize(arr,4)
         assert(capacity(arr)==33,"did not grow smaller")
         assert(length(arr)==4,"resized properly")
-        debug(arr, "array 1 is")
-        // arr2 <- arr // todo: make this work properly
-        // debug(arr2, "array 2 is")
+        arr2 <- arr
+        assert(length(arr)==0)
+        assert(length(arr2)==4)
         let ( index:int = 0 )
             while index < 4
-                debug(arr[index++]++)
+                debug(arr2[index++]++)
+        arr <- arr2
         debug(arr)
         resize(arr,3)
         debug(arr)
@@ -319,8 +320,36 @@ def test_for
         assert(i==5)
     print("ok\n")
 
+def make_test_array:array<int>
+    let (a:array<int>; i:int=0)
+        resize(a,10)
+        for x in a
+            x = i++
+        debug(a,"make_test_array returns")
+        return a
+
+def verify_test_array(a:array<int>):array<int>
+    assert(length(a)==10)
+    let(i:int=0)
+        for x in a
+            assert(x==i++)
+    return a
+
 def test_for_array
     print("test for array:\n")
+    // debug(length(make_test_array()),"its length") // this won't compile
+    // verify_test_array(make_test_array()) // this won't compile either
+    let(a:array<int>)
+        a <- make_test_array()
+        debug(a)
+        verify_test_array(a)
+        // verify_test_array(verify_test_array(a)) // this won't compile
+        let(b:array<int> = a)
+            assert(length(a)==0)
+            verify_test_array(b)
+    let(a:array<int> = make_test_array() )
+        debug(a)
+        verify_test_array(a)
     let(a,b:array<int>;i:int=0)
         resize(a,10)
         resize(b,10)
@@ -328,6 +357,7 @@ def test_for_array
             l = i
             r = i*2-5
             i++
+        verify_test_array(a)
         debug(a,"a=")
         debug(b,"b=")
         i = 0

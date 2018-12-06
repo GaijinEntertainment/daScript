@@ -25,6 +25,12 @@ namespace yzg
     template<> struct cast <const string &> : cast<string> {};
     
     template <>
+    struct cast <Array> {
+        static __forceinline Array to ( __m128 x )               { Array a; a.stub = x; return a; }
+        static __forceinline __m128 from ( Array x )             { return x.stub; }
+    };
+    
+    template <>
     struct cast <bool> {
         static __forceinline bool to ( __m128 x )               { return *((int *)&x) != 0; }
         static __forceinline __m128 from ( bool x )             { return _mm_set1_epi32(x); }

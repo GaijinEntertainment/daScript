@@ -42,7 +42,6 @@ namespace yzg
     void addFunctionBasic(Module & mod, const ModuleLibrary & lib)
     {
         //                                    policy                        ret   arg1 arg2    name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Set<SimPolicy_TT>,        TT&,  TT&, TT>  >("=",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Equ<SimPolicy_TT>,        bool, TT,  TT>  >("==",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_NotEqu<SimPolicy_TT>,     bool, TT,  TT>  >("!=",     lib) );
     }

@@ -19,8 +19,6 @@ namespace yzg
     
     struct SimPolicy_String {
         // basic
-        static __forceinline __m128 Set     ( __m128 a, __m128 b, Context & )
-            { *cast<char **>::to(a) =  cast<char *>::to(b); return a; }
         static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & )
             { return cast<bool>::from(strcmp(to_rts(a), to_rts(b))==0); }
         static __forceinline __m128 NotEqu  ( __m128 a, __m128 b, Context & )

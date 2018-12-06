@@ -501,7 +501,7 @@ namespace yzg
     // COPY REFERENCE VALUE
     struct SimNode_CopyRefValue : SimNode {
         SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
-        : SimNode(at), l(ll), r(rr), size(sz) {};
+            : SimNode(at), l(ll), r(rr), size(sz) {};
         virtual __m128 eval ( Context & context ) override {
             __m128 ll = l->eval(context);
             YZG_EXCEPTION_POINT;
@@ -510,6 +510,25 @@ namespace yzg
             auto pl = cast<void *>::to(ll);
             auto pr = cast<void *>::to(rr);
             memcpy ( pl, pr, size );
+            return ll;
+        }
+        SimNode * l, * r;
+        uint32_t size;
+    };
+    
+    // MOVE REFERENCE VALUE
+    struct SimNode_MoveRefValue : SimNode {
+        SimNode_MoveRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
+            : SimNode(at), l(ll), r(rr), size(sz) {};
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ll = l->eval(context);
+            YZG_EXCEPTION_POINT;
+            __m128 rr = r->eval(context);
+            YZG_EXCEPTION_POINT;
+            auto pl = cast<void *>::to(ll);
+            auto pr = cast<void *>::to(rr);
+            memcpy ( pl, pr, size );
+            memset ( pr, 0, size );
             return ll;
         }
         SimNode * l, * r;
@@ -722,7 +741,6 @@ namespace yzg
     template <typename TT>
     struct SimPolicy_CoreType
     {
-        static __forceinline __m128 Set     ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
         static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)==cast<TT>::to(b));  }
         static __forceinline __m128 NotEqu  ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)!=cast<TT>::to(b));  }
     };
@@ -798,8 +816,6 @@ namespace yzg
     struct SimPolicy_Vec
     {
         // basic
-        static __forceinline __m128 Set     ( __m128 a, __m128 b, Context & )
-            { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
         static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & )
             { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)==mask ); }
         static __forceinline __m128 NotEqu  ( __m128 a, __m128 b, Context & )
@@ -836,8 +852,6 @@ namespace yzg
             return C;
         }
         // basic
-        static __forceinline __m128 Set     ( __m128 a, __m128 b, Context & )
-            { *cast<TT *>::to(a) =  cast<TT>::to(b); return a; }
         static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & )
             { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_epi32(a,b)) & mask)==mask ); }            // todo: verify
         static __forceinline __m128 NotEqu  ( __m128 a, __m128 b, Context & )
