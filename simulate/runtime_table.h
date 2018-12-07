@@ -25,6 +25,10 @@ namespace yzg
             swap_ranges(a, a + valueTypeSize, (char *) b);
         }
         
+        __forceinline void copy_value ( Table & tab, size_t index, Table & ftab, size_t findex ) {
+            memcpy ( tab.data + index*valueTypeSize, ftab.data + findex*valueTypeSize, valueTypeSize );
+        }
+        
         __forceinline void copy_value ( Table & tab, size_t index, void * b ) {
             memcpy ( tab.data + index*valueTypeSize, b, valueTypeSize );
         }
@@ -34,16 +38,14 @@ namespace yzg
             return hash % (tab.capacity - tab.maxLookups - 1);
         }
         
-        __forceinline void computeMaxLookups(Table & tab) {
-            uint32_t desired = 32 - __builtin_clz (tab.capacity-1);
-            tab.maxLookups = std::max(minLookups, desired);
+        __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
+            uint32_t desired = 32 - __builtin_clz(capacity-1);
+            return std::max(minLookups, desired);
         }
         
         pair<size_t,bool> find ( const Table & tab, const KeyType & key ) const {
-            if ( tab.capacity==0 ) {
-                return { 0, false };
-            }
-            size_t index = indexForHash ( tab, hash_function(key) );
+            if ( tab.capacity==0 ) { return { 0, false }; }
+            size_t index = indexForHash(tab, hash_function(key));
             const KeyType * keys = (const KeyType *)(tab.keys);
             for ( int8_t dist = 0; tab.distance[index] >= dist; ++dist, ++index ) {
                 if ( keys[index] == key ) {
@@ -62,27 +64,24 @@ namespace yzg
             newTab.size = 0;
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
-            computeMaxLookups(newTab);
-            memset ( newTab.distance, -1, newCapacity * sizeof(uint8_t) );
+            newTab.maxLookups = computeMaxLookups(newCapacity);
+            memset(newTab.distance, -1, newCapacity * sizeof(uint8_t));
             if ( tab.size ) {
                 KeyType * keys = (KeyType *)(tab.keys);
                 for ( uint32_t index=0; index != tab.capacity; ++ index ) {
                     if ( tab.distance[index] >=0 ) {
                         auto at = insert(newTab, keys[index], tab.data + index*valueTypeSize);
                         assert(at.second && "expected for it to be inserted fine");
-                        memcpy ( newTab.data + at.first*valueTypeSize, tab.data + index*valueTypeSize, valueTypeSize );
+                        copy_value(newTab, at.first, tab, index);
                     }
                 }
             }
             swap(newTab, tab);
         }
         
-        // this moves on insert
-        pair<size_t,bool> insert ( Table & tab, const KeyType & key, void * value )
-        {
-            if ( tab.capacity==0 ) {
-                grow(tab);
-            }
+        // this moves on insert. be warned!!!
+        pair<size_t,bool> insert ( Table & tab, const KeyType & key, void * value ) {
+            if ( tab.capacity==0 ) {  grow(tab); }
             auto hash = hash_function(key);
             size_t index = indexForHash(tab, hash );
             KeyType * keys = (KeyType *)(tab.keys);
@@ -92,7 +91,6 @@ namespace yzg
                     return { index, false };
                 }
             }
-            // insert_new
             return insert_new(tab, dist, index, key, value);
         }
         
@@ -107,7 +105,6 @@ namespace yzg
         }
         
     protected:
-        
         pair<size_t,bool> insert_new ( Table & tab, int8_t dist, size_t index, const KeyType & key, void * value ) {
             KeyType * keys = (KeyType *)(tab.keys);
             if ( tab.capacity==0 || dist==tab.maxLookups || (tab.size+1)>(tab.capacity/2) ) {
@@ -117,7 +114,7 @@ namespace yzg
                 tab.size ++;
                 tab.distance[index] = dist;
                 keys[index] = key;
-                copy_value ( tab, index, value );
+                copy_value(tab, index, value);
                 return { index, true };
             }
             KeyType insertKey = key;
@@ -129,7 +126,7 @@ namespace yzg
                     tab.size ++;
                     tab.distance[index] = dist;
                     keys[index] = insertKey;
-                    copy_value ( tab, index, value );
+                    copy_value(tab, index, value);
                     return { index, true };
                 } else if ( tab.distance[index]<dist ) {
                     swap(dist, tab.distance[index]);
@@ -153,10 +150,10 @@ namespace yzg
             tab.distance[current] = -1;
             tab.size --;
             KeyType * keys = (KeyType *)(tab.keys);
-            for ( size_t next = current + 1; tab.distance[next]>0 ; ++ current, ++next ) {
+            for ( size_t next = current + 1; tab.distance[next]>0 ; ++current, ++next ) {
                 tab.distance[current] = tab.distance[next] - 1;
                 keys[current] = keys[next];
-                memcpy ( tab.data + current*valueTypeSize, tab.data + next*valueTypeSize, valueTypeSize );
+                copy_value(tab, current, tab, next);
                 tab.distance[next] = -1;
             }
         }
