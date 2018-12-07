@@ -3,8 +3,6 @@
 #include "simulate.h"
 #include "runtime_string.h"
 
-#include <signal.h>
-
 namespace yzg
 {
     // Debug

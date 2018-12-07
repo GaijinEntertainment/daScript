@@ -1,6 +1,7 @@
 #pragma once
 
 #include <xmmintrin.h>
+#include <signal.h>
 
 #include <map>
 #include <string>

@@ -61,6 +61,8 @@ simulate/runtime_string.cpp
 simulate/runtime_string.h
 simulate/runtime_array.cpp
 simulate/runtime_array.h
+simulate/runtime_table.cpp
+simulate/runtime_table.h
 simulate/simulate.cpp
 simulate/simulate.h
 )
