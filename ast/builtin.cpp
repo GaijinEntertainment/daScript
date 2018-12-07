@@ -223,11 +223,13 @@ namespace yzg
         // function-like expresions
         addCall<ExprAssert>     ("assert");
         addCall<ExprDebug>      ("debug");
+        addCall<ExprHash>       ("hash");
         
         addCall<ExprArrayPush>  ("push");
         addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayResize>>  ("resize");
         addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayReserve>> ("reserve");
         addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayErase>>   ("erase");
+
     }
 
 }

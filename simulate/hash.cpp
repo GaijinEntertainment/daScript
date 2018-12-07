@@ -11,37 +11,49 @@ namespace yzg
     
     uint64_t hash_value ( void * pX, TypeInfo * info, bool useDim = true );
     
-    uint64_t hash_structure ( char * ps, StructInfo * info ) {
-        uint64_t hash = 0;
-        char * pf = ps;
-        for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
-            VarInfo * vi = info->fields[i];
-            hash = _rotl(hash,2) ^ hash_value(pf, vi);
-            pf += getTypeSize(vi);
+    uint64_t hash_structure ( char * ps, StructInfo * info, int size, bool isPod ) {
+        if ( isPod ) {
+            return hash_function(ps, size);
+        } else {
+            uint64_t hash = 0;
+            char * pf = ps;
+            for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
+                VarInfo * vi = info->fields[i];
+                hash = _rotl(hash,2) ^ hash_value(pf, vi);
+                pf += getTypeSize(vi);
+            }
+            return hash;
         }
-        return hash;
     }
     
     uint64_t hash_dim_value ( void * pX, TypeInfo * info ) {
-        uint64_t hash = 0;
         char * pA = (char *) pX;
         int stride = getTypeBaseSize(info);
         int count = getDimSize(info);
-        for ( int i=0; i!=count; ++i ) {
-            hash = _rotl(hash,2) ^ hash_value(pA, info, false);
-            pA += stride;
+        if ( info->isPod ) {
+            return hash_function(pA, stride*count);
+        } else {
+            uint64_t hash = 0;
+            for ( int i=0; i!=count; ++i ) {
+                hash = _rotl(hash,2) ^ hash_value(pA, info, false);
+                pA += stride;
+            }
+            return hash;
         }
-        return hash;
     }
     
     uint64_t hash_array_value ( void * pX, int stride, int count, TypeInfo * info ) {
-        uint64_t hash = 0;
-        char * pA = (char *) pX;
-        for ( int i=0; i!=count; ++i ) {
-            hash = _rotl(hash,2) ^ hash_value(pA, info, false);
-            pA += stride;
+        if ( info->isPod ) {
+            return hash_function(pX, stride * count);
+        } else {
+            uint64_t hash = 0;
+            char * pA = (char *) pX;
+            for ( int i=0; i!=count; ++i ) {
+                hash = _rotl(hash,2) ^ hash_value(pA, info, false);
+                pA += stride;
+            }
+            return hash;
         }
-        return hash;
     }
     
     uint64_t hash_value ( void * pX, TypeInfo * info, bool useDim ) {
@@ -73,7 +85,7 @@ namespace yzg
                 case Type::tFloat3:     return hash_function(*((float3 *)pX));
                 case Type::tFloat4:     return hash_function(*((float4 *)pX));
                 case Type::tPointer:    return hash_function(intptr_t(pX));
-                case Type::tStructure:  return hash_structure(*(char **)pX, info->structType);
+                case Type::tStructure:  return hash_structure(*(char **)pX, info->structType, getTypeSize(info), info->isPod);
                 default:                assert(0 && "unsupported print type"); return 0;
             }
         }

@@ -146,6 +146,15 @@ namespace yzg
         return true;
     }
     
+    bool TypeDecl::isPod() const
+    {
+        if ( baseType==Type::tArray || baseType==Type::tString )
+            return false;
+        if ( baseType==Type::tStructure && structType )
+            return structType->isPod();
+        return true;
+    }
+    
     string TypeDecl::getMangledName() const
     {
         stringstream ss;
@@ -290,6 +299,15 @@ namespace yzg
     {
         for ( const auto & fd : fields ) {
             if ( !fd.type->canCopy() )
+                return false;
+        }
+        return true;
+    }
+    
+    bool Structure::isPod() const
+    {
+        for ( const auto & fd : fields ) {
+            if ( !fd.type->isPod() )
                 return false;
         }
         return true;
@@ -602,7 +620,7 @@ namespace yzg
         auto val = arguments[0]->simulate(context);
         if ( !arguments[0]->type->isRef() ) {
             return context.makeValueNode<SimNode_HashOfValue>(arguments[0]->type->baseType, at, val);
-        } else if ( arguments[0]->type->canCopy() ) {
+        } else if ( arguments[0]->type->isPod() ) {
             return context.makeNode<SimNode_HashOfRef>(at, val, arguments[0]->type->getSizeOf());
         } else {
             auto typeInfo = context.makeNode<TypeInfo>();
@@ -1995,6 +2013,10 @@ namespace yzg
             info->structType = nullptr;
         }
         info->ref = type->ref;
+        if ( type->isRefType() )
+            info->ref = false;
+        info->canCopy = type->canCopy();
+        info->isPod = type->isPod();
         if ( type->firstType ) {
             info->firstType = context.makeNode<TypeInfo>();
             makeTypeInfo(info->firstType, context, type->firstType);

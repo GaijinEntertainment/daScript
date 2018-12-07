@@ -159,7 +159,7 @@ namespace yzg
             switch ( info->type ) {
                 case Type::tBool:       ss << *((bool *)pX); break;
                 case Type::tInt64:      ss << *((int64_t *)pX); break;
-                case Type::tUInt64:     ss << *((uint64_t *)pX); break;
+                case Type::tUInt64:     ss << "0x" << hex << *((uint64_t *)pX) << dec; break;
                 case Type::tString:     ss << "\"" << escapeString(safe_str(pX)) << "\""; break;
                 case Type::tInt:        ss << *((int32_t *)pX); break;
                 case Type::tInt2:       ss << *((int2 *)pX); break;
@@ -195,7 +195,7 @@ namespace yzg
             switch ( info->type ) {
                 case Type::tBool:       ss << cast<bool>::to(x); break;
                 case Type::tInt64:      ss << cast<int64_t>::to(x); break;
-                case Type::tUInt64:     ss << cast<uint64_t>::to(x); break;
+                case Type::tUInt64:     ss << "0x" << hex << cast<uint64_t>::to(x) << dec; break;
                 case Type::tString:     ss << "\"" << escapeString(to_rts(x)) << "\""; break;
                 case Type::tInt:        ss << cast<int32_t>::to(x); break;
                 case Type::tInt2:       ss << cast<int2>::to(x); break;

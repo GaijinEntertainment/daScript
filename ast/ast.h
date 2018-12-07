@@ -105,6 +105,7 @@ namespace yzg
         int getStride() const;
         string describe() const { stringstream ss; ss << *this; return ss.str(); }
         bool canCopy() const;
+        bool isPod() const;
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -123,8 +124,8 @@ namespace yzg
     template<> struct ToBasicType<const char *> { enum { type = Type::tString }; };
     template<> struct ToBasicType<string>       { enum { type = Type::tString }; };
     template<> struct ToBasicType<bool>         { enum { type = Type::tBool }; };
-    template<> struct ToBasicType<int64_t>      { enum { type = Type::tBool }; };
-    template<> struct ToBasicType<uint64_t>     { enum { type = Type::tBool }; };
+    template<> struct ToBasicType<int64_t>      { enum { type = Type::tInt64 }; };
+    template<> struct ToBasicType<uint64_t>     { enum { type = Type::tUInt64 }; };
     template<> struct ToBasicType<int32_t>      { enum { type = Type::tInt }; };
     template<> struct ToBasicType<uint32_t>     { enum { type = Type::tUInt }; };
     template<> struct ToBasicType<float>        { enum { type = Type::tFloat }; };
@@ -173,6 +174,7 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const Structure & structure);
         int getSizeOf() const;
         bool canCopy() const;
+        bool isPod() const;
     public:
         string                      name;
         vector<FieldDeclaration>    fields;

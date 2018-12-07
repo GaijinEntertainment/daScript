@@ -672,7 +672,7 @@ namespace yzg
             }
             for ( int i=0; !context.stopFlags; ++i ) {
                 for ( int t=0; t!=total; ++t ){
-                    if ( i > pha[t]->size ) goto loopOver;
+                    if ( i >= pha[t]->size ) goto loopOver;
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }

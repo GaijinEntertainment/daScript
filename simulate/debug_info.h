@@ -52,6 +52,8 @@ namespace yzg
         uint32_t        dimSize;
         uint32_t *      dim;
         bool            ref;
+        bool            canCopy;
+        bool            isPod;
     };
     
     struct VarInfo : TypeInfo

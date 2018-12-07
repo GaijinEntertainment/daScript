@@ -393,6 +393,34 @@ def test_for_hybrid
         assert(i==3)
     print("ok\n")
 
+struct HashObj
+    a,b:int
+
+def test_hash
+    print("test for hash:\n")
+    assert(hash(0)==hash(0.0))
+    let (a:int[10];b:array<int>;c:array<int[10]>;i:int)
+        resize(b,10)
+        i = 0
+        for x in a
+            x = i++
+        i = 0
+        for x in b
+            x = i++
+        assert(hash(a)==hash(b))
+        resize(c,1)
+        i = 0
+        for x in c[0]
+            x = i++
+        assert(hash(a)==hash(c))
+    let(ab:int[2];c:HashObj)
+        ab[0] = 1
+        ab[1] = 2
+        c.a = 1
+        c.b = 2
+        assert(hash(ab)==hash(c))
+    print("ok\n")
+
 // this is where unit tests are
 def test
     print("unit tests started\n")
@@ -413,6 +441,7 @@ def test
     test_for()
     test_for_array()
     test_for_hybrid()
+    test_hash()
     print("unit tests finished\n")
 
 
