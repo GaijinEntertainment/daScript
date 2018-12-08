@@ -10,6 +10,10 @@ NOTE: uriparser is looking for help with a few things:
       mitigated if passed parameter <afterLast> points to readable memory
       containing a '\0' byte.
       Thanks to Joergen Ibsen for the report!
+  * Fixed: When parsing a malformed URI with an IPvFuture address
+      (e.g. "http://[vA.123456" missing "]"), errorPos would point to the first
+      character after "v" than the actual position of the error (here: the end
+      of the string)
   * Fixed: uriToStringCharsRequired* reported 1 more byte than actually needed
       for IPv4 address URIs (GitHub #41); Thanks to @gyh007 for the patch!
   * Fixed: Compilation with MinGW

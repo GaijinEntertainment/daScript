@@ -2065,6 +2065,16 @@ TEST(UriSuite, TestRangeComparisonRemoveBaseUriIssue19) {
 								"http://example2/x/y/z");
 }
 
+TEST(ErrorPosSuite, TestErrorPosIPvFuture) {
+	UriUriA uri;
+	const char * errorPos;
+
+	const char * const uriText = "http://[vA.123456";  // missing "]"
+	EXPECT_EQ(uriParseSingleUriA(&uri, uriText, &errorPos),
+				URI_ERROR_SYNTAX);
+	EXPECT_EQ(errorPos, uriText + strlen(uriText));
+}
+
 TEST(UriParseSingleSuite, Success) {
 	UriUriA uri;
 

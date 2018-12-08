@@ -544,9 +544,12 @@ static URI_INLINE const URI_CHAR * URI_FUNC(ParseIpLit2)(
 			if (afterIpFuture == NULL) {
 				return NULL;
 			}
-			if ((afterIpFuture >= afterLast)
-					|| (*afterIpFuture != _UT(']'))) {
-				URI_FUNC(StopSyntax)(state, first, memory);
+			if (afterIpFuture >= afterLast) {
+				URI_FUNC(StopSyntax)(state, afterLast, memory);
+				return NULL;
+			}
+			if (*afterIpFuture != _UT(']')) {
+				URI_FUNC(StopSyntax)(state, afterIpFuture, memory);
 				return NULL;
 			}
 			return afterIpFuture + 1;
