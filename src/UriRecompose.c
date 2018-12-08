@@ -246,7 +246,7 @@ static URI_INLINE int URI_FUNC(ToStringEngine)(URI_CHAR * dest,
 									}
 								}
 							} else {
-								(*charsRequired) += charsToWrite + 1;
+								(*charsRequired) += charsToWrite + ((i == 3) ? 0 : 1);
 							}
 						}
 					} else if (uri->hostData.ip6 != NULL) {

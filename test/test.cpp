@@ -1214,6 +1214,8 @@ namespace {
 			return false;
 		}
 
+		EXPECT_EQ(charsRequired, wcslen(text));
+
 		// Minimum
 		wchar_t * buffer = new wchar_t[charsRequired + 1];
 		if (uriToStringW(buffer, &uri, charsRequired + 1, NULL) != 0) {
@@ -1236,15 +1238,24 @@ namespace {
 }  // namespace
 
 TEST(UriSuite, TestToStringCharsRequired) {
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com:80/"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://user:pass@www.example.com/"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/index.html"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/#def"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc#def"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"/test"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"test"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://12.1.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://123.1.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.12.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.123.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.12.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.123.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.1.12/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.1.123/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com:80/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://user:pass@www.example.com/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/index.html"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/#def"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc#def"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"/test"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"test"));
 }
 
 namespace {
