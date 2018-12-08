@@ -1214,6 +1214,8 @@ namespace {
 			return false;
 		}
 
+		EXPECT_EQ(charsRequired, wcslen(text));
+
 		// Minimum
 		wchar_t * buffer = new wchar_t[charsRequired + 1];
 		if (uriToStringW(buffer, &uri, charsRequired + 1, NULL) != 0) {
