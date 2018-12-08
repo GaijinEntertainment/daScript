@@ -1238,15 +1238,15 @@ namespace {
 }  // namespace
 
 TEST(UriSuite, TestToStringCharsRequired) {
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com:80/"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://user:pass@www.example.com/"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/index.html"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/#def"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc#def"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"/test"));
-		ASSERT_TRUE(testToStringCharsRequiredHelper(L"test"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com:80/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://user:pass@www.example.com/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/index.html"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/#def"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/?abc#def"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"/test"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"test"));
 }
 
 namespace {
