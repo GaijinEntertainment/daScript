@@ -504,6 +504,7 @@ type_declaration
     }
     |   _TABLE[loc] '<' type_declaration[keyTypeDecl] ',' type_declaration[valueTypeDecl] '>' {
         if ( $keyTypeDecl->ref || $valueTypeDecl->ref ) yyerror( "can't have reference in the Table" );
+        if ( !$keyTypeDecl->isWorkhorseType() ) yyerror( "key has to be basic type" );
         $$ = new TypeDecl(Type::tTable);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($keyTypeDecl);

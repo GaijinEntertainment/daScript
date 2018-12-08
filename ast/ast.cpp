@@ -4,6 +4,7 @@
 #include "enums.h"
 
 #include "runtime_array.h"
+#include "runtime_table.h"
 #include "hash.h"
 
 void yybegin(const char * str);
@@ -269,6 +270,34 @@ namespace yzg
         if ( dim.size() )
             return false;
         return true;
+    }
+    
+    bool TypeDecl::isWorkhorseType() const
+    {
+        if ( dim.size() )
+            return false;
+        switch ( baseType ) {
+            case Type::tBool:
+            case Type::tInt64:
+            case Type::tUInt64:
+            case Type::tInt:
+            case Type::tInt2:
+            case Type::tInt3:
+            case Type::tInt4:
+            case Type::tUInt:
+            case Type::tUInt2:
+            case Type::tUInt3:
+            case Type::tUInt4:
+            case Type::tFloat:
+            case Type::tFloat2:
+            case Type::tFloat3:
+            case Type::tFloat4:
+            case Type::tString:
+            case Type::tPointer:
+                return true;
+            default:
+                return false;
+        }
     }
     
     bool TypeDecl::isSimpleType(Type typ) const
@@ -698,6 +727,52 @@ namespace yzg
         }
     }
     
+    // ExprErase
+    
+    ExpressionPtr ExprErase::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprErase>(expr);
+        return cexpr;
+    }
+    
+    void ExprErase::inferType(InferTypeContext & context)
+    {
+        if ( arguments.size()!=2 ) {
+            context.error("erase(table,key) or erase(array,index)", at);
+        }
+        ExprLooksLikeCall::inferType(context);
+        arguments[1] = Expression::autoDereference(arguments[1]);
+        auto containerType = arguments[0]->type;
+        auto valueType = arguments[1]->type;
+        if ( !containerType || !valueType ) return;
+        if ( containerType->isGoodArrayType() ) {
+            if ( !valueType->isIndex() )
+                context.error("size must be int or uint", at);
+        } else if ( containerType->isGoodTableType() ) {
+            if ( !containerType->firstType->isSameType(*valueType,false) )
+                context.error("key must be of the same type as table<key,...>", at);
+        } else {
+            context.error("first argument must be fully qualified array or table", at);
+        }
+        type = make_shared<TypeDecl>(Type::tVoid);
+    }
+    
+    SimNode * ExprErase::simulate (Context & context) const
+    {
+        auto cont = arguments[0]->simulate(context);
+        auto val = arguments[1]->simulate(context);
+        if ( arguments[0]->type->isGoodArrayType() ) {
+            auto size = arguments[0]->type->firstType->getSizeOf();
+            return context.makeNode<SimNode_ArrayErase>(at,cont,val,size);
+        } else if ( arguments[0]->type->isGoodTableType() ) {
+            uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
+            return context.makeValueNode<SimNode_TableErase>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
+        } else {
+            assert(0 && "we should not even be here");
+            return nullptr;
+        }
+    }
+    
     // ExprSizeOf
     
     ExpressionPtr ExprSizeOf::clone( const ExpressionPtr & expr ) const
@@ -784,22 +859,32 @@ namespace yzg
         subexpr->inferType(context);
         if ( !subexpr->type ) return;
         index->inferType(context);
+        if ( !index->type ) return;
         index = autoDereference(index);
-        if ( !index->type->isIndex() ) {
-            context.error("index is int or uint", index->at);
-            return;
-        }
-        if ( subexpr->type->isGoodArrayType() ) {
-            type = make_shared<TypeDecl>(*subexpr->type->firstType);
+        if ( subexpr->type->isGoodTableType() ) {
+            if ( !subexpr->type->firstType->isSameType(*index->type) ) {
+                context.error("table index type mismatch", index->at);
+                return;
+            }
+            type = make_shared<TypeDecl>(*subexpr->type->secondType);
             type->ref = true;
-        } else if ( !subexpr->type->isRef() ) {
-            context.error("can only index ref", subexpr->at);
-        } else if ( !subexpr->type->dim.size() ) {
-            context.error("can only index arrays", subexpr->at);
         } else {
-            type = make_shared<TypeDecl>(*subexpr->type);
-            type->ref = true;
-            type->dim.pop_back();
+            if ( !index->type->isIndex() ) {
+                context.error("index is int or uint", index->at);
+                return;
+            }
+            if ( subexpr->type->isGoodArrayType() ) {
+                type = make_shared<TypeDecl>(*subexpr->type->firstType);
+                type->ref = true;
+            } else if ( !subexpr->type->isRef() ) {
+                context.error("can only index ref", subexpr->at);
+            } else if ( !subexpr->type->dim.size() ) {
+                context.error("can only index arrays", subexpr->at);
+            } else {
+                type = make_shared<TypeDecl>(*subexpr->type);
+                type->ref = true;
+                type->dim.pop_back();
+            }
         }
     }
     
@@ -816,8 +901,11 @@ namespace yzg
     {
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
-        if ( subexpr->type->isGoodArrayType() ) {
-            uint32_t stride =subexpr->type->firstType->getSizeOf();
+        if ( subexpr->type->isGoodTableType() ) {
+            uint32_t valueTypeSize = subexpr->type->secondType->getSizeOf();
+            return context.makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize);
+        } else if ( subexpr->type->isGoodArrayType() ) {
+            uint32_t stride = subexpr->type->firstType->getSizeOf();
             return context.makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
         } else {
             uint32_t stride = subexpr->type->getStride();

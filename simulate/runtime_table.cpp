@@ -7,8 +7,7 @@ namespace yzg
     template <typename KeyType, typename ValueType>
     void Insert ( Table & tab, RobinHoodHash<KeyType> & rhh, const KeyType & key, const ValueType & value ) {
         ValueType sv = value;
-        auto at = rhh.insert(tab, key, (void *)&sv);
-        assert(at.second==true && "we can insert");
+        rhh.insert(tab, key, (void *)&sv);
     }
     
     template <typename KeyType, typename ValueType>
@@ -26,7 +25,7 @@ namespace yzg
         Context ctx(nullptr);
         Table tab;
         memset ( &tab, 0, sizeof(Table) );
-        RobinHoodHash<const char *> rhh(&ctx, sizeof(int));
+        RobinHoodHash<char *> rhh(&ctx, sizeof(int));
         
         constexpr int total = 10000;
         
@@ -35,25 +34,30 @@ namespace yzg
             stringstream ss;
             ss << i;
             keys[i] = ss.str();
-            Insert<const char *,int>(tab, rhh, keys[i].c_str(), i);
+            Insert<char *,int>(tab, rhh, (char *) keys[i].c_str(), i);
         }
         assert(tab.size==total);
         
         for ( int i=0; i!=total; ++i ) {
-            auto it = Find<const char *,int>(tab, rhh, keys[i].c_str() );
+            Insert<char *,int>(tab, rhh, (char *) keys[i].c_str(), i);
+        }
+        assert(tab.size==total);
+        
+        for ( int i=0; i!=total; ++i ) {
+            auto it = Find<char *,int>(tab, rhh, (char *) keys[i].c_str() );
             assert(it.second);
             assert(it.first == i);
         }
         
         int del = 0;
         for ( int i=0; i<total; i+= 7 ) {
-            rhh.erase(tab, keys[i].c_str());
+            rhh.erase(tab, (char *) keys[i].c_str());
             del ++;
         }
         assert(tab.size==total-del);
         
         for ( int i=0; i<total; ++i ) {
-            auto it = Find<const char *,int>(tab, rhh, keys[i].c_str() );
+            auto it = Find<char *,int>(tab, rhh, (char *) keys[i].c_str() );
             if ( i%7 == 0 ) {
                 assert(!it.second);
             } else {
@@ -63,11 +67,11 @@ namespace yzg
         }
         
         for ( int i=0; i<total; i+=7 ) {
-            Insert<const char *,int>(tab, rhh, keys[i].c_str(), i);
+            Insert<char *,int>(tab, rhh, (char *) keys[i].c_str(), i);
         }
         
         for ( int i=0; i!=total; ++i ) {
-            auto it = Find<const char *,int>(tab, rhh, keys[i].c_str() );
+            auto it = Find<char *,int>(tab, rhh, (char *) keys[i].c_str() );
             assert(it.second);
             assert(it.first == i);
         }

@@ -38,6 +38,14 @@ namespace yzg
         return arr->capacity;
     }
     
+    int builtin_table_size ( Table * arr ) {
+        return arr->size;
+    }
+    
+    int builtin_table_capacity ( Table * arr ) {
+        return arr->capacity;
+    }
+    
     // basic operations
     template <typename TT, typename SimPolicy_TT>
     void addFunctionBasic(Module & mod, const ModuleLibrary & lib)
@@ -132,6 +140,7 @@ namespace yzg
         addFunctionBasic<char *,SimPolicy_String>(*this,lib);
         addFunctionOrdered<char *, SimPolicy_String>(*this,lib);
         addFunctionConcat<char *, SimPolicy_String>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,char *,int32_t>>("string",lib) );
         // boolean
         addFunctionBasic<bool, SimPolicy_Bool>(*this,lib);
         addFunctionBoolean<bool, SimPolicy_Bool>(*this,lib);
@@ -217,19 +226,28 @@ namespace yzg
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint");
         addInterop<builtin_stackwalk,void>      (*this, lib, "stackwalk");
         
-        // array functions
-        addExtern<decltype(builtin_array_size), builtin_array_size>(*this, lib, "length");
-        addExtern<decltype(builtin_array_capacity), builtin_array_capacity>(*this, lib, "capacity");
+
         
         // function-like expresions
         addCall<ExprAssert>     ("assert");
         addCall<ExprDebug>      ("debug");
         addCall<ExprHash>       ("hash");
         
+        // table functions
+        addExtern<decltype(builtin_table_size), builtin_table_size>(*this, lib, "length");
+        addExtern<decltype(builtin_table_capacity), builtin_table_capacity>(*this, lib, "capacity");
+        
+        // array functions
+        addExtern<decltype(builtin_array_size), builtin_array_size>(*this, lib, "length");
+        addExtern<decltype(builtin_array_capacity), builtin_array_capacity>(*this, lib, "capacity");
+        
+        // shared expressions
+        addCall<ExprErase>("erase");
+        
+        // array expresisons
         addCall<ExprArrayPush>  ("push");
         addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayResize>>  ("resize");
         addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayReserve>> ("reserve");
-        addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayErase>>   ("erase");
 
     }
 

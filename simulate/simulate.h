@@ -242,7 +242,7 @@ namespace yzg
         }
         
     protected:
-        int linearAllocatorSize = 1*1024*1024;
+        int linearAllocatorSize = 4*1024*1024;
         char * linearAllocator = nullptr;
         char * linearAllocatorBase = nullptr;
         char * linearAllocatorExecuteBase = nullptr;
@@ -348,6 +348,18 @@ namespace yzg
             __m128 res = arguments[0]->eval(context);
             CastTo value = (CastTo) cast<CastFrom>::to(res);
             return cast<CastTo>::from(value);
+        }
+    };
+    
+    // LEXICAL CAST
+    template <typename CastFrom>
+    struct SimNode_LexicalCast : SimNode_Call {
+        SimNode_LexicalCast ( const LineInfo & at ) : SimNode_Call(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 res = arguments[0]->eval(context);
+            auto str = std::to_string ( cast<CastFrom>::to(res) );
+            auto cpy = context.allocateName(str);
+            return cast<char *>::from(cpy);
         }
     };
     

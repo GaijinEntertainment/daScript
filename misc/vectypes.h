@@ -8,9 +8,12 @@ namespace yzg
     struct vec2
     {
         TT   x, y;
-        inline friend ostream& operator<< (ostream& stream, const vec2<TT> & vec) {
+        __forceinline friend ostream& operator<< (ostream& stream, const vec2<TT> & vec) {
             stream << vec.x << "," << vec.y;
             return stream;
+        }
+        __forceinline bool operator == ( const vec2<TT> & vec ) const {
+            return x==vec.x && y==vec.y;
         }
     };
     
@@ -18,9 +21,12 @@ namespace yzg
     struct vec3
     {
         TT   x, y, z;
-        inline friend ostream& operator<< (ostream& stream, const vec3<TT> & vec) {
+        __forceinline friend ostream& operator<< (ostream& stream, const vec3<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z;
             return stream;
+        }
+        __forceinline bool operator == ( const vec3<TT> & vec ) const {
+            return x==vec.x && y==vec.y && z==vec.z;
         }
     };
     
@@ -28,9 +34,12 @@ namespace yzg
     struct vec4
     {
         TT  x, y, z, w;
-        inline friend ostream& operator<< (ostream& stream, const vec4<TT> & vec) {
+        __forceinline friend ostream& operator<< (ostream& stream, const vec4<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z << "," << vec.w;
             return stream;
+        }
+        __forceinline bool operator == ( const vec4<TT> & vec ) const {
+            return x==vec.x && y==vec.y && z==vec.z && w==vec.w;
         }
     };
     

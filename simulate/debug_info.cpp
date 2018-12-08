@@ -63,6 +63,7 @@ namespace yzg
             case tFloat3:       return sizeof(float) * 3;
             case tFloat4:       return sizeof(float) * 4;
             case tArray:        return sizeof(Array);
+            case tTable:        return sizeof(Table);
             case tStructure:    return 0;
             default:
                 assert(0 && "not implemented");
@@ -180,6 +181,25 @@ namespace yzg
         }
     }
     
+    void debug_table_value (  stringstream & ss, Table & tab, TypeInfo * info )
+    {
+        ss << "([" << tab.size << " of " << tab.capacity << "] ";
+        bool first = true;
+        int keySize = getTypeSize(info->firstType);
+        int valueSize = getTypeSize(info->secondType);
+        for ( int i=0; i!=tab.capacity; ++i ) {
+            if ( tab.distance[i]>=0 ) {
+                if ( !first ) ss << " "; first = false;
+                ss << "("; // ss << "(@ " << i << " ";
+                debug_value ( ss, tab.keys + i*keySize, info->firstType, true );
+                ss << " -> ";
+                debug_value ( ss, tab.data + i*valueSize, info->secondType, true );
+                ss << ")";
+            }
+        }
+        ss << ")";
+    }
+    
     void debug_value ( stringstream & ss, __m128 x, TypeInfo * info )
     {
         if ( info->ref ) {
@@ -191,6 +211,9 @@ namespace yzg
         } else if ( info->type==Type::tArray ) {
             auto arr = cast<Array *>::to(x);
             debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType);
+        } else if ( info->type==Type::tTable ) {
+            auto tab = cast<Table *>::to(x);
+            debug_table_value(ss, *tab, info);
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << cast<bool>::to(x); break;

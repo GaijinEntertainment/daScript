@@ -107,6 +107,7 @@ namespace yzg
         string describe() const { stringstream ss; ss << *this; return ss.str(); }
         bool canCopy() const;
         bool isPod() const;
+        bool isWorkhorseType() const; // we can return this, or pass this, 
     public:
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
@@ -657,7 +658,16 @@ namespace yzg
             return context.makeNode<SimNodeT>(at,arr,newSize,size);
         }
     };
-
+    
+    class ExprErase : public ExprLooksLikeCall
+    {
+    public:
+        ExprErase() = default;
+        ExprErase ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, "erase") {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
     
     class ExprSizeOf : public Expression
     {

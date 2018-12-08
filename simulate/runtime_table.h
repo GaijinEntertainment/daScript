@@ -6,6 +6,28 @@
 
 namespace yzg
 {
+    // TODO:
+    //  -   return correct insert index of original value? is this at all possible?
+    
+    extern const char * rts_null;
+    
+    template <typename KeyType>
+    struct KeyCompare {
+        __forceinline bool operator () ( const KeyType & a, const KeyType & b ) {
+            return a == b;
+        }
+    };
+    
+    template <>
+    struct KeyCompare <char *> {
+        __forceinline bool operator () ( const char * a, const char * b ) {
+            const char * A = a ? a : rts_null;
+            const char * B = b ? b : rts_null;
+            return strcmp(A,B)==0;
+        }
+    };
+    
+    
     template <typename KeyType>
     class RobinHoodHash
     {
@@ -48,7 +70,7 @@ namespace yzg
             size_t index = indexForHash(tab, hash_function(key));
             const KeyType * keys = (const KeyType *)(tab.keys);
             for ( int8_t dist = 0; tab.distance[index] >= dist; ++dist, ++index ) {
-                if ( keys[index] == key ) {
+                if ( KeyCompare<KeyType>()(keys[index],key) ) {
                     return { index, true };
                 }
             }
@@ -58,13 +80,15 @@ namespace yzg
         void grow ( Table & tab ) {
             uint32_t newCapacity = max(minCapacity, tab.capacity*2);
             Table newTab;
-            newTab.data = (char *) context->allocate(newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint8_t)));
+            uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint8_t));
+            newTab.data = (char *) context->allocate(memSize);
             newTab.keys = newTab.data + newCapacity * valueTypeSize;
             newTab.distance = (int8_t *)( newTab.data + newCapacity * (valueTypeSize + sizeof(KeyType)) );
             newTab.size = 0;
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
             newTab.maxLookups = computeMaxLookups(newCapacity);
+            memset(newTab.data, 0, newCapacity*valueTypeSize);
             memset(newTab.distance, -1, newCapacity * sizeof(uint8_t));
             if ( tab.size ) {
                 KeyType * keys = (KeyType *)(tab.keys);
@@ -80,6 +104,7 @@ namespace yzg
         }
         
         // this moves on insert. be warned!!!
+        // returns where it think it inserted, also if it inserted or not
         pair<size_t,bool> insert ( Table & tab, const KeyType & key, void * value ) {
             if ( tab.capacity==0 ) {  grow(tab); }
             auto hash = hash_function(key);
@@ -87,10 +112,27 @@ namespace yzg
             KeyType * keys = (KeyType *)(tab.keys);
             int8_t dist = 0;
             for ( ; tab.distance[index] >= dist; index++, dist++ ) {
-                if ( keys[index] == key ) {
+                if ( KeyCompare<KeyType>()(keys[index],key) ) {
                     return { index, false };
                 }
             }
+            return insert_new(tab, dist, index, key, value);
+        }
+        
+        // returns where it think it inserted, also if it inserted or not
+        pair<size_t,bool> reserve ( Table & tab, const KeyType & key ) {
+            if ( tab.capacity==0 ) {  grow(tab); }
+            auto hash = hash_function(key);
+            size_t index = indexForHash(tab, hash );
+            KeyType * keys = (KeyType *)(tab.keys);
+            int8_t dist = 0;
+            for ( ; tab.distance[index] >= dist; index++, dist++ ) {
+                if ( KeyCompare<KeyType>()(keys[index],key) ) {
+                    return { index, false };
+                }
+            }
+            char value[valueTypeSize];
+            memset(value, 0, valueTypeSize);
             return insert_new(tab, dist, index, key, value);
         }
         
@@ -157,5 +199,52 @@ namespace yzg
                 tab.distance[next] = -1;
             }
         }
+    };
+    
+    struct SimNode_Table : SimNode {
+        SimNode_Table(const LineInfo & at, uint32_t vts) : SimNode(at), valueTypeSize(vts) {}
+        uint32_t valueTypeSize;
+    };
+    
+    template <typename KeyType>
+    struct SimNode_TableIndex : SimNode_Table {
+        SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
+            : SimNode_Table(at,vts), tabExpr(t), keyExpr(k) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 xtab = tabExpr->eval(context);
+            YZG_EXCEPTION_POINT;
+            __m128 xkey = keyExpr->eval(context);
+            YZG_EXCEPTION_POINT;
+            Table * tab = cast<Table *>::to(xtab);
+            KeyType key = cast<KeyType>::to(xkey);
+            auto at = RobinHoodHash<KeyType>(&context,valueTypeSize).reserve(*tab, key);
+            if ( at.second ) {
+                KeyType * keys = (KeyType *)(tab->keys);
+                if ( !KeyCompare<KeyType>()(key,keys[at.first]) )
+                    at = RobinHoodHash<KeyType>(&context,valueTypeSize).find(*tab, key);
+            }
+            return cast<void *>::from(tab->data + at.first * valueTypeSize);
+
+        }
+        SimNode * tabExpr;
+        SimNode * keyExpr;
+    };
+    
+    template <typename KeyType>
+    struct SimNode_TableErase : SimNode_Table {
+        SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
+            : SimNode_Table(at,vts), tabExpr(t), keyExpr(k) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 xtab = tabExpr->eval(context);
+            YZG_EXCEPTION_POINT;
+            __m128 xkey = keyExpr->eval(context);
+            YZG_EXCEPTION_POINT;
+            Table * tab = cast<Table *>::to(xtab);
+            KeyType key = cast<KeyType>::to(xkey);
+            RobinHoodHash<KeyType>(&context,valueTypeSize).erase(*tab, key);
+            return _mm_setzero_ps();
+        }
+        SimNode * tabExpr;
+        SimNode * keyExpr;
     };
 }
