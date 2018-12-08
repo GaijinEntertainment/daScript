@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "runtime_array.h"
+#include "runtime_table.h"
 
 namespace yzg
 {

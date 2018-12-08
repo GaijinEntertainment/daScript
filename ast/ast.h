@@ -95,6 +95,7 @@ namespace yzg
         bool isSimpleType ( Type typ ) const;
         bool isArray() const;
         bool isGoodArrayType() const;
+        bool isGoodTableType() const;
         bool isVoid() const;
         bool isRef() const;
         bool isRefType() const;
@@ -139,8 +140,8 @@ namespace yzg
     template<> struct ToBasicType<uint2>        { enum { type = Type::tUInt2 }; };
     template<> struct ToBasicType<uint3>        { enum { type = Type::tUInt3 }; };
     template<> struct ToBasicType<uint4>        { enum { type = Type::tUInt4 }; };
-    template<> struct ToBasicType<Array>        { enum { type = Type::tArray }; };
     template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
+    template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
 
     template <typename TT>
     struct typeFactory {

@@ -104,8 +104,13 @@ namespace yzg
             } else {
                 stream << "array";
             }
-        }
-        if ( decl.baseType==Type::tStructure || decl.baseType==Type::tPointer ) {
+        } else if ( decl.baseType==Type::tTable ) {
+            if ( decl.firstType && decl.secondType ) {
+                stream << "table (" << *decl.firstType << "," << *decl.secondType << ")";
+            } else {
+                stream << "table";
+            }
+        } else if ( decl.baseType==Type::tStructure || decl.baseType==Type::tPointer ) {
             if ( decl.structType ) {
                 stream << decl.structType->name;
             } else {
@@ -139,7 +144,7 @@ namespace yzg
     
     bool TypeDecl::canCopy() const
     {
-        if ( baseType==Type::tArray )
+        if ( baseType==Type::tArray || baseType==Type::tTable )
             return false;
         if ( baseType==Type::tStructure && structType )
             return structType->canCopy();
@@ -148,7 +153,7 @@ namespace yzg
     
     bool TypeDecl::isPod() const
     {
-        if ( baseType==Type::tArray || baseType==Type::tString )
+        if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString )
             return false;
         if ( baseType==Type::tStructure && structType )
             return structType->isPod();
@@ -162,6 +167,14 @@ namespace yzg
             ss << "#array";
             if ( firstType ) {
                 ss << "#" << firstType->getMangledName();
+            }
+        } else if ( baseType==Type::tTable ) {
+            ss << "#table";
+            if ( firstType ) {
+                ss << "#" << firstType->getMangledName();
+            }
+            if ( secondType ) {
+                ss << "#" << secondType->getMangledName();
             }
         } else if ( baseType==Type::tPointer ) {
             ss << structType << "#ptr";
@@ -196,6 +209,14 @@ namespace yzg
                 return false;
             }
         }
+        if ( baseType==Type::tTable ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
+                return false;
+            }
+            if ( secondType && decl.secondType && !firstType->isSameType(*decl.secondType) ) {
+                return false;
+            }
+        }
         if ( dim!=decl.dim )
             return false;
         if ( refMatters )
@@ -208,6 +229,11 @@ namespace yzg
     bool TypeDecl::isGoodArrayType() const
     {
         return baseType==Type::tArray && dim.size()==0 && firstType;
+    }
+    
+    bool TypeDecl::isGoodTableType() const
+    {
+        return baseType==Type::tTable && dim.size()==0 && firstType && secondType;
     }
     
     bool TypeDecl::isIteratorType ( const TypeDecl & decl ) const

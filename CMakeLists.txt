@@ -90,22 +90,36 @@ SETUP_CPP11(daScript)
 
 # Test
 
-SET(TEST_SRC
-test/hello_world.das
-test/unit_test.das
-test/profile_array_of_structures_vec.das
-test/profile_try_catch.das
+file(GLOB UNIT_TEST_SRC
+"test/unit_tests/*.das"
 )
-SOURCE_GROUP_FILES("test" TEST_SRC)
+SOURCE_GROUP_FILES("test/unit test" UNIT_TEST_SRC)
 
 SET(TEST_MAIN_SRC
 test/main.cpp
 )
 
 include_directories(daScriptTest PUBLIC ast lexer misc simulate test)
-add_executable(daScriptTest ${TEST_SRC} ${TEST_MAIN_SRC} )
+add_executable(daScriptTest ${UNIT_TEST_SRC} ${TEST_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)
 
+# Profile
+
+SET(PROFILE_SRC
+profile/profile_array_of_structures_vec.das
+profile/profile_try_catch.das
+)
+SOURCE_GROUP_FILES("profile" PROFILE_SRC)
+
+SET(PROFILE_MAIN_SRC
+profile/main.cpp
+)
+
+include_directories(daScriptProfile PUBLIC ast lexer misc simulate test)
+add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} )
+TARGET_LINK_LIBRARIES(daScriptProfile libDaScript)
+ADD_DEPENDENCIES(daScriptProfile libDaScript)
+SETUP_CPP11(daScriptProfile)
 

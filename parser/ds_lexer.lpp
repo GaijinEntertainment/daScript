@@ -83,6 +83,7 @@
 <normal>"struct"                                        need_oxford_comma = false; return _STRUCT;
 <normal>"try"                                           need_oxford_comma = false; return _TRY;
 <normal>"catch"                                         need_oxford_comma = false; return _CATCH;
+<normal>"table"                                         return _TABLE;
 <normal>"array"                                         return _ARRAY;
 <normal>"in"                                            return _IN;
 <normal>"where"                                         return _WHERE;

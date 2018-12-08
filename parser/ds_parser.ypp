@@ -60,7 +60,7 @@
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _IN     _ELIF       _ARRAY
 %token  _RETURN _NULL   _BREAK      _TRY
-%token  _WHERE
+%token  _WHERE  _TABLE
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -501,6 +501,13 @@ type_declaration
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($typeDecl);
+    }
+    |   _TABLE[loc] '<' type_declaration[keyTypeDecl] ',' type_declaration[valueTypeDecl] '>' {
+        if ( $keyTypeDecl->ref || $valueTypeDecl->ref ) yyerror( "can't have reference in the Table" );
+        $$ = new TypeDecl(Type::tTable);
+        $$->at = tokAt(@loc);
+        $$->firstType = TypeDeclPtr($keyTypeDecl);
+        $$->secondType = TypeDeclPtr($valueTypeDecl);
     }
     ;
 
