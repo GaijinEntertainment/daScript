@@ -1238,6 +1238,15 @@ namespace {
 }  // namespace
 
 TEST(UriSuite, TestToStringCharsRequired) {
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://12.1.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://123.1.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.12.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.123.1.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.12.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.123.1/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.1.12/"));
+		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://1.1.1.123/"));
 		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com/"));
 		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://www.example.com:80/"));
 		EXPECT_TRUE(testToStringCharsRequiredHelper(L"http://user:pass@www.example.com/"));
