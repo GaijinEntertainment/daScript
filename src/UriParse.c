@@ -692,6 +692,11 @@ static const URI_CHAR * URI_FUNC(ParseIPv6address2)(
 					return NULL;
 				}
 				first++;
+
+				if (first >= afterLast) {
+					URI_FUNC(StopSyntax)(state, first, memory);
+					return NULL;
+				}
 			}
 		} else {
 			/* Eat while no dot in sight */
