@@ -264,7 +264,7 @@ namespace yzg
     #define YZG_EXCEPTION_POINT \
         { if ( context.stopFlags ) return _mm_setzero_ps(); }
     #define YZG_ITERATOR_EXCEPTION_POINT \
-        { if ( context.stopFlags ) return nullptr; }
+    { if ( context.stopFlags ) return false; }
 #else
     #define YZG_EXCEPTION_POINT
     #define YZG_ITERATOR_EXCEPTION_POINT
@@ -732,30 +732,43 @@ namespace yzg
     
     // iterator
     
+    struct IteratorContext {
+        __m128 value;
+        union {
+            __m128 tail;
+            struct {
+                char *  array_end;
+                Array * array;
+            };
+            struct {
+                char *  fixed_array_end;
+            };
+        };
+    };
+    
     struct Iterator {
-        virtual void * first ( Context & context ) = 0;
-        virtual void * next  ( Context & context ) = 0;
-        virtual void close ( Context & context ) = 0;
+        virtual bool first ( Context & context, IteratorContext & itc ) = 0;
+        virtual bool next  ( Context & context, IteratorContext & itc ) = 0;
+        virtual void close ( Context & context, IteratorContext & itc ) = 0;    // can't throw
     };
     
     struct FixedArrayIterator : Iterator {
-        virtual void * first ( Context & context ) override {
+        virtual bool first ( Context & context, IteratorContext & itc ) override {
             __m128 ll = source->eval(context);
             YZG_ITERATOR_EXCEPTION_POINT;
-            data = cast<char *>::to(ll);
-            dataEnd = data + size * stride;
-            return data;
+            char * data = cast<char *>::to(ll);
+            itc.value = cast<char *>::from(data);
+            itc.fixed_array_end = data + size*stride;
+            return size != 0;
         }
-        virtual void * next  ( Context & context ) override {
-            if ( data>=dataEnd ) return nullptr;
-            data += stride;
-            return data;
+        virtual bool next  ( Context & context, IteratorContext & itc ) override {
+            char * data = cast<char *>::to(itc.value) + stride;
+            itc.value = cast<char *>::from(data);
+            return data != itc.fixed_array_end;
         }
-        virtual void close ( Context & context ) override {
+        virtual void close ( Context & context, IteratorContext & itc ) override {
         }
         SimNode *   source;
-        char *      data;
-        char *      dataEnd;
         uint32_t    size;
         uint32_t    stride;
     };
@@ -772,29 +785,35 @@ namespace yzg
     struct SimNode_ForWithIterator : SimNode_ForWithIteratorBase {
         SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
         virtual __m128 eval ( Context & context ) override {
-            char * ph[total];
+            __m128 * pi[total];
             for ( int t=0; t!=total; ++t ) {
-                ph[t] = (char *) sources[t]->first(context);
-                YZG_EXCEPTION_POINT;
+                pi[t] = (__m128 *)(context.stackTop + stackTop[t]);
             }
-            char ** pi[total];
+            IteratorContext ph[total];
+            bool needLoop = true;
             for ( int t=0; t!=total; ++t ) {
-                pi[t] = (char **)(context.stackTop + stackTop[t]);
+                needLoop = sources[t]->first(context, ph[t]) && needLoop;
+                if ( context.stopFlags ) goto loopend;
             }
+            if ( !needLoop ) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
                 for ( int t=0; t!=total; ++t ){
-                    *pi[t] = ph[t];
-                    ph[t] = (char *) sources[t]->next(context);
-                    YZG_EXCEPTION_POINT;
-                    if ( !ph[t] ) goto loopend;
+                    *pi[t] = ph[t].value;
                 }
-                if ( !filter || cast<bool>::to(filter->eval(context)) )
-                    if ( !context.stopFlags )
+                if ( !filter || cast<bool>::to(filter->eval(context)) ) {
+                    if ( !context.stopFlags ) {
                         body->eval(context);
+                        YZG_EXCEPTION_POINT;
+                    }
+                }
+                for ( int t=0; t!=total; ++t ){
+                    if ( !sources[t]->next(context, ph[t]) ) goto loopend;
+                    if ( context.stopFlags ) goto loopend;
+                }
             }
         loopend:
             for ( int t=0; t!=total; ++t ) {
-                sources[t]->close(context);
+                sources[t]->close(context, ph[t]);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return _mm_setzero_ps();
