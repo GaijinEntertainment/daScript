@@ -185,6 +185,7 @@ void yybegin(const char * str)
 {
     yydebug = 0;
     need_oxford_comma = true;
+    yylineno = 1;
     yycolumn = 1;
     current_line_indent = 0;
     indent_level = 0;

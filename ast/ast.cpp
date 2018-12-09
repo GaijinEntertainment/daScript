@@ -111,17 +111,21 @@ namespace yzg
             } else {
                 stream << "table";
             }
-        } else if ( decl.baseType==Type::tStructure || decl.baseType==Type::tPointer ) {
+        } else if ( decl.baseType==Type::tStructure ) {
             if ( decl.structType ) {
                 stream << decl.structType->name;
             } else {
                 stream << "unspecified";
             }
+        } else if ( decl.baseType==Type::tPointer ) {
+            if ( decl.firstType ) {
+                stream << *decl.firstType << " *";
+            } else {
+                stream << "void *";
+            }
         } else {
             stream << to_string(decl.baseType);
         }
-        if ( decl.baseType==Type::tPointer )
-            stream << " *";
         for ( auto d : decl.dim ) {
             stream << " " << d;
         }
@@ -178,7 +182,10 @@ namespace yzg
                 ss << "#" << secondType->getMangledName();
             }
         } else if ( baseType==Type::tPointer ) {
-            ss << structType << "#ptr";
+            ss << "#ptr";
+            if ( firstType ) {
+                ss << "#" << firstType->getMangledName();
+            }
         } else if ( baseType==Type::tStructure ) {
             ss << structType->name;
         } else {
@@ -201,7 +208,7 @@ namespace yzg
         if ( baseType==Type::tStructure && structType!=decl.structType )
             return false;
         if ( baseType==Type::tPointer ) {
-            if ( structType && decl.structType && structType!=decl.structType ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
         }
@@ -573,9 +580,10 @@ namespace yzg
         if ( !subexpr->type ) return;
         if ( !subexpr->type->isPointer() ) {
             context.error("can only dereference pointer", at);
+        } if ( !subexpr->type->firstType ) {
+            context.error("can only dereference pointer to something", at);
         } else {
-            type = make_shared<TypeDecl>(*subexpr->type);
-            type->baseType = Type::tStructure;
+            type = make_shared<TypeDecl>(*subexpr->type->firstType);
             type->ref = true;
         }
     }
@@ -837,7 +845,7 @@ namespace yzg
             context.error("can only new single object", typeexpr->at );
         } else {
             type = make_shared<TypeDecl>(Type::tPointer);
-            type->structType = typeexpr->structType;
+            type->firstType = make_shared<TypeDecl>(*typeexpr);
         }
     }
     
@@ -986,20 +994,25 @@ namespace yzg
     {
         value->inferType(context);
         if ( !value->type ) return;
-        if ( value->type->baseType==Type::tPointer )
+        auto valT = value->type;
+        if ( valT->baseType==Type::tPointer )
             value = autoDereference(value);
-        if ( value->type->baseType!=Type::tStructure && value->type->baseType!=Type::tPointer ) {
-            context.error("expecting structure or pointer", at);
-        } else if ( value->type->isArray() ) {
+        if ( valT->isArray() ) {
             context.error("can't get field of array", at);
-        } else {
-            field = value->type->structType->findField(name);
-            if ( !field ) {
-                context.error("field " + name + " not found", at);
-            } else {
-                type = make_shared<TypeDecl>(*field->type);
-                type->ref = true;
+            return;
+        }
+        if ( valT->baseType==Type::tStructure ) {
+            field = valT->structType->findField(name);
+        } else if ( valT->baseType==Type::tPointer ) {
+            if ( valT->firstType->baseType==Type::tStructure ) {
+                field = valT->firstType->structType->findField(name);
             }
+        }
+        if ( !field ) {
+            context.error("field " + name + " not found, expecting a structure or a pointer to a structure", at);
+        } else {
+            type = make_shared<TypeDecl>(*field->type);
+            type->ref = true;
         }
     }
     
@@ -2115,7 +2128,7 @@ namespace yzg
                 info->dim[i] = type->dim[i];
             }
         }
-        if ( type->baseType==Type::tStructure || type->baseType==Type::tPointer ) {
+        if ( type->baseType==Type::tStructure  ) {
             auto st = sdebug.find(type->structType->name);
             if ( st==sdebug.end() ) {
                 info->structType = makeStructureDebugInfo(context, *type->structType);
@@ -2123,8 +2136,6 @@ namespace yzg
             } else {
                 info->structType = st->second;
             }
-        } else {
-            info->structType = nullptr;
         }
         info->ref = type->ref;
         if ( type->isRefType() )

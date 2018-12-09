@@ -9,7 +9,7 @@ namespace yzg
         return (value<<shift) | (value>>(64-shift));
     }
     
-    uint64_t hash_value ( void * pX, TypeInfo * info, bool useDim = true );
+    uint64_t hash_value ( void * pX, TypeInfo * info );
     
     uint64_t hash_structure ( char * ps, StructInfo * info, int size, bool isPod ) {
         if ( isPod ) {
@@ -26,22 +26,6 @@ namespace yzg
         }
     }
     
-    uint64_t hash_dim_value ( void * pX, TypeInfo * info ) {
-        char * pA = (char *) pX;
-        int stride = getTypeBaseSize(info);
-        int count = getDimSize(info);
-        if ( info->isPod ) {
-            return hash_function(pA, stride*count);
-        } else {
-            uint64_t hash = 0;
-            for ( int i=0; i!=count; ++i ) {
-                hash = _rotl(hash,2) ^ hash_value(pA, info, false);
-                pA += stride;
-            }
-            return hash;
-        }
-    }
-    
     uint64_t hash_array_value ( void * pX, int stride, int count, TypeInfo * info ) {
         if ( info->isPod ) {
             return hash_function(pX, stride * count);
@@ -49,19 +33,29 @@ namespace yzg
             uint64_t hash = 0;
             char * pA = (char *) pX;
             for ( int i=0; i!=count; ++i ) {
-                hash = _rotl(hash,2) ^ hash_value(pA, info, false);
+                hash = _rotl(hash,2) ^ hash_value(pA, info);
                 pA += stride;
             }
             return hash;
         }
     }
+
     
-    uint64_t hash_value ( void * pX, TypeInfo * info, bool useDim ) {
+    uint64_t hash_dim_value ( void * pX, TypeInfo * info ) {
+        TypeInfo copyInfo = *info;
+        assert(copyInfo.dimSize);
+        copyInfo.dimSize --;
+        int stride = getTypeBaseSize(info);
+        int count = getDimSize(info);
+        return hash_array_value(pX, stride, count, &copyInfo);
+    }
+    
+    uint64_t hash_value ( void * pX, TypeInfo * info ) {
         if ( info->ref ) {
             TypeInfo ti = *info;
             ti.ref = false;
             return hash_value(*(void **)pX, &ti);
-        } else if ( info->dimSize && useDim ) {
+        } else if ( info->dimSize ) {
             return hash_dim_value(pX, info);
         } else if ( info->type==Type::tArray ) {
             auto arr = (Array *) pX;
@@ -92,7 +86,7 @@ namespace yzg
     }
     
     uint64_t hash_function ( void * data, TypeInfo * type ) {
-        return hash_value(data, type, true);
+        return hash_value(data, type);
     }
 }
 

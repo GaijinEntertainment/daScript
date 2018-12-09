@@ -472,15 +472,10 @@ basic_type_declaration
     |   _VOID       { $$ = Type::tVoid; }
     ;
 
-optional_ptr_declaration
-    :           { $$ = false; }
-    |   '*'     { $$ = true; }
-    ;
-
 structure_type_declaration
-    :   NAME[name] optional_ptr_declaration[ptr] {
+    :   NAME[name]  {
         if ( auto pS = g_Program->findStructure(*$name) ) {
-            auto pTD = new TypeDecl($ptr ? Type::tPointer : Type::tStructure);
+            auto pTD = new TypeDecl(Type::tStructure);
             pTD->structType = pS.get();
             pTD->at = tokAt(@name);
             $$ = pTD;
@@ -494,17 +489,52 @@ structure_type_declaration
 type_declaration
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(@basicType); }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
-    |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' { if ( $typeDecl ) $typeDecl->dim.push_back($dimSize); $$ = $typeDecl; }
-    |   type_declaration[typeDecl] '&'                      { if ( $typeDecl ) $typeDecl->ref = true; $$ = $typeDecl; }
+    |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' {
+        if ( $typeDecl ) {
+            if ( $typeDecl->ref ) {
+                yyerror ( "can't be array of references" );
+            }
+            $typeDecl->dim.push_back($dimSize);
+        }
+        $$ = $typeDecl;
+    }
+    |   type_declaration[typeDecl] '&'                      {
+        if ( $typeDecl ) {
+            if ( $typeDecl->dim.size() ) {
+                yyerror ( "can't be array of references" );
+            }
+            if ( $typeDecl->ref ) {
+                yyerror ( "can't be reference of reference" );
+            }
+            $typeDecl->ref = true;
+        } else {
+            yyerror ( "can't be 'just reference'" );
+        }
+        $$ = $typeDecl;
+        
+    }
+    |   type_declaration[typeDecl] '*' {
+        if ( !$typeDecl ) {
+            yyerror ( "can't be 'just pointer'" );
+        }
+        $$ = new TypeDecl(Type::tPointer);
+        $$->firstType = TypeDeclPtr($typeDecl);
+    }
     |   _ARRAY[loc] '<' type_declaration[typeDecl] '>'      {
-        if ( $typeDecl->ref ) yyerror ( "can't have reference in the Array" );
+        if ( $typeDecl->ref ) {
+            yyerror ( "can't have reference in the Array" );
+        }
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
     |   _TABLE[loc] '<' type_declaration[keyTypeDecl] ',' type_declaration[valueTypeDecl] '>' {
-        if ( $keyTypeDecl->ref || $valueTypeDecl->ref ) yyerror( "can't have reference in the Table" );
-        if ( !$keyTypeDecl->isWorkhorseType() ) yyerror( "key has to be basic type" );
+        if ( $keyTypeDecl->ref || $valueTypeDecl->ref ) {
+            yyerror( "can't have reference in the Table" );
+        }
+        if ( !$keyTypeDecl->isWorkhorseType() ) {
+            yyerror( "key has to be basic 'hashable' type" );
+        }
         $$ = new TypeDecl(Type::tTable);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($keyTypeDecl);

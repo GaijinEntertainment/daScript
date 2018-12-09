@@ -102,7 +102,7 @@ namespace yzg
     }
     
     void debug_structure ( stringstream & ss, char * ps, StructInfo * info );
-    void debug_value ( stringstream & ss, void * pX, TypeInfo * info, bool useDim = true );
+    void debug_value ( stringstream & ss, void * pX, TypeInfo * info );
     
     void debug_structure ( stringstream & ss, char * ps, StructInfo * info )
     {
@@ -119,39 +119,35 @@ namespace yzg
         ss << ")";
     }
     
-    void debug_dim_value ( stringstream & ss, void * pX, TypeInfo * info )
-    {
-        char * pA = (char *) pX;
-        int stride = getTypeBaseSize(info);
-        int count = getDimSize(info);
-        ss << "(";
-        for ( int i=0; i!=count; ++i ) {
-            if ( i ) ss << " ";
-            debug_value(ss, pA, info, false);
-            pA += stride;
-        }
-        ss << ")";
-    }
-    
     void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info )
     {
         char * pA = (char *) pX;
         ss << "([size=" << count << ",stride=" << stride << "] ";
         for ( int i=0; i!=count; ++i ) {
             if ( i ) ss << " ";
-            debug_value(ss, pA, info, false);
+            debug_value(ss, pA, info);
             pA += stride;
         }
         ss << ")";
     }
     
-    void debug_value ( stringstream & ss, void * pX, TypeInfo * info, bool useDim )
+    void debug_dim_value ( stringstream & ss, void * pX, TypeInfo * info )
+    {
+        TypeInfo copyInfo = *info;
+        assert(copyInfo.dimSize);
+        copyInfo.dimSize --;
+        int stride = getTypeBaseSize(info);
+        int count = getDimSize(info);
+        debug_array_value(ss, pX, stride, count, &copyInfo);
+    }
+    
+    void debug_value ( stringstream & ss, void * pX, TypeInfo * info )
     {
         if ( info->ref ) {
             TypeInfo ti = *info;
             ti.ref = false;
             debug_value(ss, *(void **)pX, &ti);
-        } else if ( info->dimSize && useDim ) {
+        } else if ( info->dimSize ) {
             debug_dim_value(ss, pX, info);
         } else if ( info->type==Type::tArray ) {
             auto arr = (Array *) pX;
@@ -174,7 +170,13 @@ namespace yzg
                 case Type::tFloat2:     ss << *((float2 *)pX); break;
                 case Type::tFloat3:     ss << *((float3 *)pX); break;
                 case Type::tFloat4:     ss << *((float4 *)pX);; break;
-                case Type::tPointer:    ss << "*" << hex << intptr_t(pX) << dec << " ";
+                case Type::tPointer:    ss << "*" << hex << intptr_t(pX) << dec;
+                                        if ( info->firstType ) {
+                                            ss << " -> (";
+                                            debug_value(ss, pX, info->firstType );
+                                            ss << ")";
+                                        }
+                                        break;
                 case Type::tStructure:  debug_structure(ss, *(char **)pX, info->structType); break;
                 default:                assert(0 && "unsupported print type"); break;
             }
@@ -191,9 +193,9 @@ namespace yzg
             if ( tab.distance[i]>=0 ) {
                 if ( !first ) ss << " "; first = false;
                 ss << "("; // ss << "(@ " << i << " ";
-                debug_value ( ss, tab.keys + i*keySize, info->firstType, true );
+                debug_value ( ss, tab.keys + i*keySize, info->firstType );
                 ss << " -> ";
-                debug_value ( ss, tab.data + i*valueSize, info->secondType, true );
+                debug_value ( ss, tab.data + i*valueSize, info->secondType);
                 ss << ")";
             }
         }
@@ -233,6 +235,12 @@ namespace yzg
                 case Type::tFloat3:     ss << cast<float3>::to(x); break;
                 case Type::tFloat4:     ss << cast<float4>::to(x); break;
                 case Type::tPointer:    ss << "*" << hex << intptr_t(cast<void *>::to(x)) << dec << " ";
+                                        if ( info->firstType ) {
+                                            ss << " -> (";
+                                            debug_value(ss, cast<void *>::to(x), info->firstType );
+                                            ss << ")";
+                                        }
+                                        break;
                 case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType); break;
                 default:                assert(0 && "unsupported print type"); break;
             }
@@ -256,13 +264,13 @@ namespace yzg
     string debug_type ( TypeInfo * info )
     {
         stringstream stream;
-        if ( info->type==Type::tStructure || info->type==Type::tPointer ) {
+        if ( info->type==Type::tStructure ) {
             stream << info->structType->name;
+        } else if ( info->type==Type::tPointer ) {
+            stream << debug_type(info->firstType) << " *";
         } else {
             stream << to_string(info->type);
         }
-        if ( info->type ==Type::tPointer )
-            stream << " *";
         for ( uint32_t i=0; i!=info->dimSize; ++i ) {
             stream << " " << info->dim[i];
         }
