@@ -669,6 +669,16 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
+    class ExprFind : public ExprLooksLikeCall
+    {
+    public:
+        ExprFind() = default;
+        ExprFind ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, "find") {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+    
     class ExprSizeOf : public Expression
     {
     public:

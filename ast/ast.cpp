@@ -740,6 +740,7 @@ namespace yzg
     ExpressionPtr ExprErase::clone( const ExpressionPtr & expr ) const
     {
         auto cexpr = clonePtr<ExprErase>(expr);
+        ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
     
@@ -756,13 +757,14 @@ namespace yzg
         if ( containerType->isGoodArrayType() ) {
             if ( !valueType->isIndex() )
                 context.error("size must be int or uint", at);
+            type = make_shared<TypeDecl>(Type::tVoid);
         } else if ( containerType->isGoodTableType() ) {
             if ( !containerType->firstType->isSameType(*valueType,false) )
                 context.error("key must be of the same type as table<key,...>", at);
+            type = make_shared<TypeDecl>(Type::tBool);
         } else {
             context.error("first argument must be fully qualified array or table", at);
         }
-        type = make_shared<TypeDecl>(Type::tVoid);
     }
     
     SimNode * ExprErase::simulate (Context & context) const
@@ -780,6 +782,57 @@ namespace yzg
             return nullptr;
         }
     }
+    
+    // ExprFind
+    
+    ExpressionPtr ExprFind::clone( const ExpressionPtr & expr ) const
+    {
+        auto cexpr = clonePtr<ExprFind>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+    
+    void ExprFind::inferType(InferTypeContext & context)
+    {
+        if ( arguments.size()!=2 ) {
+            context.error("find(table,key) or find(array,value)", at);
+        }
+        ExprLooksLikeCall::inferType(context);
+        arguments[1] = Expression::autoDereference(arguments[1]);
+        auto containerType = arguments[0]->type;
+        auto valueType = arguments[1]->type;
+        if ( !containerType || !valueType ) return;
+        if ( containerType->isGoodArrayType() ) {
+            if ( !valueType->isSameType(*containerType->firstType) )
+                context.error("value must be of the same type as array<value>", at);
+        } else if ( containerType->isGoodTableType() ) {
+            if ( !containerType->firstType->isSameType(*valueType,false) )
+                context.error("key must be of the same type as table<key,...>", at);
+            type = make_shared<TypeDecl>(Type::tPointer);
+            type->firstType = make_shared<TypeDecl>(*containerType->secondType);
+        } else {
+            context.error("first argument must be fully qualified array or table", at);
+        }
+    }
+    
+    SimNode * ExprFind::simulate (Context & context) const
+    {
+        auto cont = arguments[0]->simulate(context);
+        auto val = arguments[1]->simulate(context);
+        if ( arguments[0]->type->isGoodArrayType() ) {
+            assert(0);
+            return nullptr;
+            // auto size = arguments[0]->type->firstType->getSizeOf();
+            // return context.makeNode<SimNode_ArrayErase>(at,cont,val,size);
+        } else if ( arguments[0]->type->isGoodTableType() ) {
+            uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
+            return context.makeValueNode<SimNode_TableFind>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
+        } else {
+            assert(0 && "we should not even be here");
+            return nullptr;
+        }
+    }
+
     
     // ExprSizeOf
     
@@ -1329,7 +1382,7 @@ namespace yzg
     
     ExpressionPtr ExprMove::clone( const ExpressionPtr & expr ) const
     {
-        auto cexpr = clonePtr<ExprCopy>(expr);
+        auto cexpr = clonePtr<ExprMove>(expr);
         ExprOp2::clone(cexpr);
         return cexpr;
     }
@@ -1362,7 +1415,7 @@ namespace yzg
         if ( !left->type ) return;
         if ( !right->type ) return;
         if ( !left->type->isSameType(*right->type,false) ) {
-            context.error("can only copy same type", at);
+            context.error("can only copy same type " + left->type->describe() + " vs " + right->type->describe() , at);
         } else if ( !left->type->isRef() ) {
             context.error("can only copy to reference", at);
         }

@@ -143,6 +143,10 @@ namespace yzg
     
     void debug_value ( stringstream & ss, void * pX, TypeInfo * info )
     {
+        if ( pX == nullptr ) {
+            ss << "null";
+            return;
+        }
         if ( info->ref ) {
             TypeInfo ti = *info;
             ti.ref = false;
@@ -173,7 +177,7 @@ namespace yzg
                 case Type::tPointer:    ss << "*" << hex << intptr_t(pX) << dec;
                                         if ( info->firstType ) {
                                             ss << " -> (";
-                                            debug_value(ss, pX, info->firstType );
+                                            debug_value(ss, *(void**)pX, info->firstType );
                                             ss << ")";
                                         }
                                         break;
@@ -242,6 +246,7 @@ namespace yzg
                                         }
                                         break;
                 case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType); break;
+                case Type::tVoid:       ss << "void"; break;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }

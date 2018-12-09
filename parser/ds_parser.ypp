@@ -324,6 +324,8 @@ expr
     |   STRING[const]                         { $$ = new ExprConstString(tokAt(@const),*$const); }
     |   _TRUE[loc]                            { $$ = new ExprConstBool(tokAt(@loc),true); }
     |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }
+    |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),Operator::boolNot,ExpressionPtr($subexpr)); }
+    |   '~'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),Operator::binNot,ExpressionPtr($subexpr)); }
     |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),Operator::sub,ExpressionPtr($subexpr)); }
     |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),Operator::add,ExpressionPtr($subexpr)); }
     |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
@@ -495,6 +497,8 @@ type_declaration
                 yyerror ( "can't be array of references" );
             }
             $typeDecl->dim.push_back($dimSize);
+        } else {
+            yyerror ( "can't be 'just array'" );
         }
         $$ = $typeDecl;
     }
@@ -516,6 +520,9 @@ type_declaration
     |   type_declaration[typeDecl] '*' {
         if ( !$typeDecl ) {
             yyerror ( "can't be 'just pointer'" );
+        }
+        if ( $typeDecl->ref ) {
+            yyerror ( "can't be pointer to reference" );
         }
         $$ = new TypeDecl(Type::tPointer);
         $$->firstType = TypeDeclPtr($typeDecl);

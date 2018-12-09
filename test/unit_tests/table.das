@@ -1,5 +1,6 @@
 def test : bool
     let(tab:table<string,int>;i,del:int;total:int=20)
+        assert(!erase(tab,"0"))
         i = 0
         while i!=total
             tab[string(i)] = i++
@@ -12,37 +13,34 @@ def test : bool
         // debug(tab)
         i = del = 0
         while i < total
-            erase(tab,string(i))
+            assert(erase(tab,string(i)))
+            assert(!erase(tab,string(i)))
             del ++
-            i += 8
+            i += 7
         assert(length(tab)==total-del)
+        // debug(tab)
+        i = 0
+        while i < total
+            let ( pKey:int* = find(tab,string(i)))
+                if pKey!=null
+                    assert(pKey->==i)
+                else
+                    assert(i%7==0)
+            i ++
+        // debug(tab)
+        i = 0
+        while i < total
+            tab[string(i)] = i
+            i += 7
+        assert(length(tab)==total)
+        // debug(tab)
+        i = 0
+        while i!=total
+            assert(tab[string(i)]==i++)
+        assert(length(tab)==total)
+        // debug(tab)
+        assert(erase(tab,"1"))
+        assert(!erase(tab,"-1"))
     return true
 
-//
-//        for ( int i=0; i!=total; ++i ) {
-//            auto it = Find<const char *,int>(tab, rhh, keys[i].c_str() );
-//            assert(it.second);
-//            assert(it.first == i);
-//        }
-//
-//        for ( int i=0; i<total; ++i ) {
-//            auto it = Find<const char *,int>(tab, rhh, keys[i].c_str() );
-//            if ( i%7 == 0 ) {
-//                assert(!it.second);
-//            } else {
-//                assert(it.second);
-//                assert(it.first == i);
-//            }
-//        }
-//
-//        for ( int i=0; i<total; i+=7 ) {
-//            Insert<const char *,int>(tab, rhh, keys[i].c_str(), i);
-//        }
-//
-//        for ( int i=0; i!=total; ++i ) {
-//            auto it = Find<const char *,int>(tab, rhh, keys[i].c_str() );
-//            assert(it.second);
-//            assert(it.first == i);
-//        }
-//    }
 

@@ -852,6 +852,7 @@ namespace yzg
     template <typename TT>
     struct SimPolicy_Bin : SimPolicy_Type<TT>
     {
+        static __forceinline __m128 Mod ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)%cast<TT>::to(b)); }
         static __forceinline __m128 BinNot ( __m128 x, Context & ) { return cast<TT>::from( ~cast<TT>::to(x)); }
         static __forceinline __m128 BinAnd ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) & cast<TT>::to(b)); }
         static __forceinline __m128 BinOr  ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) | cast<TT>::to(b)); }
@@ -872,11 +873,23 @@ namespace yzg
         static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return _mm_sub_ss(a,b); }
         static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return _mm_div_ss(a,b); }
         static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return _mm_mul_ss(a,b); }
+        static __forceinline __m128 Mod ( __m128 a, __m128 b, Context & ) {
+            return cast<float>::from(fmod(cast<float>::to(a),cast<float>::to(b)));
+        }
     };
     
     template <typename TT, int mask>
     struct SimPolicy_Vec
     {
+        // this is missing in SSE2 (but exists in SSE4?)
+        static __forceinline __m128 _mm_mod_ps(__m128  a, __m128 aDiv) {
+            __m128 c = _mm_div_ps(a,aDiv);
+            __m128i i = _mm_cvttps_epi32(c);
+            __m128 cTrunc = _mm_cvtepi32_ps(i);
+            __m128 base = _mm_mul_ps(cTrunc, aDiv);
+            __m128 r = _mm_sub_ps(a, base);
+            return r;
+        }
         // basic
         static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & )
             { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)==mask ); }
@@ -888,6 +901,7 @@ namespace yzg
         static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return _mm_add_ps(a,b); }
         static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return _mm_sub_ps(a,b); }
         static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return _mm_div_ps(a,b); }
+        static __forceinline __m128 Mod ( __m128 a, __m128 b, Context & ) { return _mm_mod_ps(a,b); }
         static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return _mm_mul_ps(a,b); }
         static __forceinline __m128 SetAdd  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_add_ps(cast<TT>::from(*pa), b)); return a;   }
@@ -913,6 +927,11 @@ namespace yzg
             C[0] = A[0]/B[0];   C[1] = A[1]/B[1];   C[2] = A[2]/B[2];   C[3] = A[3]/B[3];
             return C;
         }
+        static __forceinline __m128 _mm_mod_epi32 ( __m128 a, __m128 b ) {
+            __m128i A = a, B = b, C;
+            C[0] = A[0]%B[0];   C[1] = A[1]%B[1];   C[2] = A[2]%B[2];   C[3] = A[3]%B[3];
+            return C;
+        }
         // basic
         static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & )
             { return cast<bool>::from( (_mm_movemask_ps(_mm_cmpeq_epi32(a,b)) & mask)==mask ); }            // todo: verify
@@ -924,6 +943,7 @@ namespace yzg
         static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return _mm_add_epi32(a,b); }
         static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return _mm_sub_epi32(a,b); }
         static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return _mm_div_epi32(a,b); }
+        static __forceinline __m128 Mod ( __m128 a, __m128 b, Context & ) { return _mm_mod_epi32(a,b); }
         static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return _mm_mul_epi32(a,b); }
         static __forceinline __m128 SetAdd  ( __m128 a, __m128 b, Context & )
             {   TT * pa = cast<TT *>::to(a);   *pa = cast<TT>::to ( _mm_add_epi32(cast<TT>::from(*pa), b)); return a;   }
@@ -1014,6 +1034,7 @@ namespace yzg
     DEFINE_OP2_POLICY(Sub);
     DEFINE_OP2_POLICY(Div);
     DEFINE_OP2_POLICY(Mul);
+    DEFINE_OP2_POLICY(Mod);
     DEFINE_OP2_POLICY(BoolXor);
     DEFINE_OP2_POLICY(BinAnd);
     DEFINE_OP2_POLICY(BinOr);

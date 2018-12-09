@@ -77,7 +77,7 @@ namespace yzg
     
     // numeric types
     template <typename TT, typename SimPolicy_TT>
-    void addFunctionNumeric(Module & mod, const ModuleLibrary & lib)
+    void addFunctionNumeric(Module & mod, const ModuleLibrary & lib, bool hasMod = true)
     {
         addFunctionConcat<TT,SimPolicy_TT>(mod,lib);
         //                                    policy                        ret   arg1 arg2    name
@@ -89,6 +89,10 @@ namespace yzg
         mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     TT&,  TT&, TT>  >("-=",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetMul<SimPolicy_TT>,     TT&,  TT&, TT>  >("*=",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetDiv<SimPolicy_TT>,     TT&,  TT&, TT>  >("/=",     lib) );
+        
+        if ( hasMod ) {
+        mod.addFunction( make_shared<BuiltInFn<Sim_Mod<SimPolicy_TT>,        TT,   TT,  TT>  >("%",      lib) );
+        }
     }
     
     // inc-dec
@@ -243,6 +247,7 @@ namespace yzg
         
         // shared expressions
         addCall<ExprErase>("erase");
+        addCall<ExprFind>("find");
         
         // array expresisons
         addCall<ExprArrayPush>  ("push");

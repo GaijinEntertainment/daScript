@@ -217,11 +217,12 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             Table * tab = cast<Table *>::to(xtab);
             KeyType key = cast<KeyType>::to(xkey);
-            auto at = RobinHoodHash<KeyType>(&context,valueTypeSize).reserve(*tab, key);
+            RobinHoodHash<KeyType> rhh(&context,valueTypeSize);
+            auto at = rhh.reserve(*tab, key);
             if ( at.second ) {
                 KeyType * keys = (KeyType *)(tab->keys);
                 if ( !KeyCompare<KeyType>()(key,keys[at.first]) )
-                    at = RobinHoodHash<KeyType>(&context,valueTypeSize).find(*tab, key);
+                    at = rhh.find(*tab, key);
             }
             return cast<void *>::from(tab->data + at.first * valueTypeSize);
 
@@ -241,8 +242,26 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             Table * tab = cast<Table *>::to(xtab);
             KeyType key = cast<KeyType>::to(xkey);
-            RobinHoodHash<KeyType>(&context,valueTypeSize).erase(*tab, key);
-            return _mm_setzero_ps();
+            auto it = RobinHoodHash<KeyType>(&context,valueTypeSize).erase(*tab, key);
+            return cast<bool>::from(it.second);
+        }
+        SimNode * tabExpr;
+        SimNode * keyExpr;
+    };
+    
+    template <typename KeyType>
+    struct SimNode_TableFind : SimNode_Table {
+        SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
+            : SimNode_Table(at,vts), tabExpr(t), keyExpr(k) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 xtab = tabExpr->eval(context);
+            YZG_EXCEPTION_POINT;
+            __m128 xkey = keyExpr->eval(context);
+            YZG_EXCEPTION_POINT;
+            Table * tab = cast<Table *>::to(xtab);
+            KeyType key = cast<KeyType>::to(xkey);
+            auto at = RobinHoodHash<KeyType>(&context,valueTypeSize).find(*tab, key);
+            return at.second ? cast<void *>::from ( tab->data + at.first * valueTypeSize ) : _mm_setzero_ps();
         }
         SimNode * tabExpr;
         SimNode * keyExpr;

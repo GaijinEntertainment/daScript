@@ -3,6 +3,7 @@
 #include <xmmintrin.h>
 #include <signal.h>
 
+#include <cmath>
 #include <map>
 #include <string>
 #include <memory>
