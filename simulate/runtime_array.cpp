@@ -43,12 +43,28 @@ namespace yzg
         arr.size = newSize;
     }
     
+    // SimNode_Array
+    
+    __m128 SimNode_Array::eval ( Context & context ) {
+        __m128 ll = l->eval(context);
+        YZG_EXCEPTION_POINT;
+        __m128 rr = r->eval(context);
+        YZG_EXCEPTION_POINT;
+        Array * pA = cast<Array *>::to(ll);
+        uint32_t idx = cast<uint32_t>::to(rr);
+        return apply(context, pA, idx);
+    }
+    
     // PUSH VALUE
     
+    __m128 SimNode_ArrayPush::apply ( Context & context, Array * pA, uint32_t index ) {
+        return _mm_setzero_ps();
+    }
+    
     __m128 SimNode_ArrayPush::eval ( Context & context ) {
-        __m128 arr = array->eval(context);
+        __m128 arr = l->eval(context);
         YZG_EXCEPTION_POINT;
-        __m128 val = value->eval(context);
+        __m128 val = r->eval(context);
         YZG_EXCEPTION_POINT;
         auto * pA = cast<Array *>::to(arr);
         uint32_t idx = pA->size;
@@ -71,61 +87,38 @@ namespace yzg
     
     // AT (INDEX)
     
-    __m128 SimNode_ArrayAt::eval ( Context & context ) {
-        __m128 ll = value->eval(context);
-        YZG_EXCEPTION_POINT;
-        uint32_t idx = cast<uint32_t>::to(index->eval(context));
-        YZG_EXCEPTION_POINT;
-        Array * pA = cast<Array *>::to(ll);
-        if ( idx >= pA->size ) {
+    __m128 SimNode_ArrayAt::apply ( Context & context, Array * pA, uint32_t index ) {
+        if ( index >= pA->size ) {
             context.throw_error("index out of range");
             return _mm_setzero_ps();
         } else {
-            return cast<char *>::from(pA->data + idx*stride);
+            return cast<char *>::from(pA->data + index*stride);
         }
     }
     
     // ERASE
 
-    __m128 SimNode_ArrayErase::eval ( Context & context ) {
-        __m128 ll = l->eval(context);
-        YZG_EXCEPTION_POINT;
-        __m128 rr = r->eval(context);
-        YZG_EXCEPTION_POINT;
-        Array * pA = cast<Array *>::to(ll);
-        uint32_t idx = cast<uint32_t>::to(rr);
-        if ( idx >= pA->size ) {
+    __m128 SimNode_ArrayErase::apply ( Context & context, Array * pA, uint32_t index ) {
+        if ( index >= pA->size ) {
             context.throw_error("erase index out of range");
             return _mm_setzero_ps();
         }
-        memmove ( pA->data+idx*stride, pA->data+(idx+1)*stride, (pA->size-idx-1)*stride );
+        memmove ( pA->data+index*stride, pA->data+(index+1)*stride, (pA->size-index-1)*stride );
         array_resize(context, *pA, pA->size-1, stride, false);
         return _mm_setzero_ps();
     }
     
     // RESIZE
 
-    __m128 SimNode_ArrayResize::eval ( Context & context ) {
-        __m128 ll = l->eval(context);
-        YZG_EXCEPTION_POINT;
-        __m128 rr = r->eval(context);
-        YZG_EXCEPTION_POINT;
-        Array * pA = cast<Array *>::to(ll);
-        uint32_t newSize = cast<uint32_t>::to(rr);
+    __m128 SimNode_ArrayResize::apply ( Context & context, Array * pA, uint32_t newSize ) {
         array_resize(context, *pA, newSize, stride, true);
         return _mm_setzero_ps();
     }
     
     // RESERVE
 
-    __m128 SimNode_ArrayReserve::eval ( Context & context ) {
-        __m128 ll = l->eval(context);
-        YZG_EXCEPTION_POINT;
-        __m128 rr = r->eval(context);
-        YZG_EXCEPTION_POINT;
-        Array * pA = cast<Array *>::to(ll);
-        uint32_t newSize = cast<uint32_t>::to(rr);
-        array_reserve(context, *pA, newSize, stride);
+    __m128 SimNode_ArrayReserve::apply ( Context & context, Array * pA, uint32_t newCapacity ) {
+        array_reserve(context, *pA, newCapacity, stride);
         return _mm_setzero_ps();
     }
     

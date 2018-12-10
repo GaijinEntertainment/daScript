@@ -12,52 +12,45 @@ namespace yzg
     
     // BASIC ARRAY NODE
     struct SimNode_Array : SimNode {
-        SimNode_Array(const LineInfo & at, uint32_t s) : SimNode(at), stride(s) {}
+        SimNode_Array(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t s) : SimNode(at), l(ll), r(rr), stride(s) {}
+        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) = 0;
+        virtual __m128 eval ( Context & context ) override;
+        SimNode * l, * r;
         uint32_t stride;
     };
     
     // AT (INDEX)
     struct SimNode_ArrayAt : SimNode_Array {
-        SimNode_ArrayAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t sz )
-            : SimNode_Array(at,sz), value(rv), index(idx) {}
-        virtual __m128 eval ( Context & context ) override;
-        SimNode * value, * index;
+        SimNode_ArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
+        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
     };
     
-    // ERASE
-    // [1,2,3,4,5]
-    // erase(2)
-    //  move(i,i+1,oldSize-i-1)
+    // ERASE(INDEX)
     struct SimNode_ArrayErase : SimNode_Array {
-        SimNode_ArrayErase(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
-            : SimNode_Array(at,sz), l(ll), r(rr) {};
-        virtual __m128 eval ( Context & context ) override;
-        SimNode * l, * r;
+        SimNode_ArrayErase(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
+        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
     };
     
     // RESIZE(SIZE)
     struct SimNode_ArrayResize : SimNode_Array {
-        SimNode_ArrayResize(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
-            : SimNode_Array(at,sz), l(ll), r(rr) {};
-        virtual __m128 eval ( Context & context ) override;
-        SimNode * l, * r;
+        SimNode_ArrayResize(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
+        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
     };
     
     // RESERVE(CAPACITY)
     struct SimNode_ArrayReserve : SimNode_Array {
-        SimNode_ArrayReserve(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
-            : SimNode_Array(at,sz), l(ll), r(rr) {};
-        virtual __m128 eval ( Context & context ) override;
-        SimNode * l, * r;
+        SimNode_ArrayReserve(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {};
+        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
     };
     
     // PUSH VALUE
     struct SimNode_ArrayPush : SimNode_Array {
         SimNode_ArrayPush(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii, uint32_t sz)
-            : SimNode_Array(at, sz), array(ll), value(rr), index(ii) {};
+            : SimNode_Array(at, ll, rr, sz), index(ii) {};
         virtual void copyValue ( char * at, __m128 value ) = 0;
         virtual __m128 eval ( Context & context ) override;
-        SimNode * array, *value, *index;
+        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
+        SimNode *index;
     };
     
     // PUSH VALUE
