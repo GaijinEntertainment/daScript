@@ -17,7 +17,7 @@ namespace yzg
 
 // semantic erros
         
-    ,   invalid_type                            =   30101       //  int & a[], [], int&&, &, *, int&*
+    ,   invalid_type                            =   30101       //  int & a[], int&&, int&*
     ,   invalid_return_type                     =   30102       //  func():blah&
     ,   invalid_argument_type                   =   30103       //  func(a:boxed&)
     ,   invalid_structure_field_type            =   30104       //  struct a:void

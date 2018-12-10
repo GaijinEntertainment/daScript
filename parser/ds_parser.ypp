@@ -199,14 +199,10 @@ function_declaration
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
-        if ( pFunction->result->ref )
-        yyerror("function " + *$name + " can't return reference",tokAt(@loc),CompilationError::invalid_return_type);
-        else if ( pFunction->result->dim.size() )
+        if ( pFunction->result->dim.size() )
             yyerror("function " + *$name + " can't return array",tokAt(@loc),CompilationError::invalid_return_type);
-        else if (pFunction->result->baseType==Type::tStructure )
-            yyerror("function " + *$name + " can't return structure",tokAt(@loc),CompilationError::invalid_return_type);
-        else if ( pFunction->result->baseType==Type::tArray )
-            yyerror("function " + *$name + " can't return array",tokAt(@loc),CompilationError::invalid_return_type);
+        else if ( pFunction->result->isRef())
+            yyerror("function " + *$name + " can't return reference or boxed type",tokAt(@loc),CompilationError::invalid_return_type);
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -229,7 +225,7 @@ function_declaration
             }
         }
         if ( !g_Program->addFunction(pFunction) )
-            yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::argument_already_declared);
+            yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::function_already_declared);
     }
     ;
 
@@ -487,6 +483,7 @@ structure_type_declaration
         } else {
             yyerror("undefined type",tokAt(@name),CompilationError::type_not_found);
             $$ = nullptr;
+            YYABORT;
         }
     }
     ;
@@ -495,34 +492,23 @@ type_declaration
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(@basicType); }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' {
-        if ( $typeDecl ) {
-            if ( $typeDecl->ref ) {
-                yyerror("can't be array of references",tokAt(@dimSize),CompilationError::invalid_type);
-            }
-            $typeDecl->dim.push_back($dimSize);
-        } else {
-            yyerror("can't be 'just array'",tokAt(@dimSize),CompilationError::invalid_type);
+        if ( $typeDecl->ref ) {
+            yyerror("can't be array of references",tokAt(@dimSize),CompilationError::invalid_type);
         }
+        $typeDecl->dim.push_back($dimSize);
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] '&' {
-        if ( $typeDecl ) {
-            if ( $typeDecl->dim.size() ) {
-                yyerror("can't be array of references",tokAt(@typeDecl),CompilationError::invalid_type);
-            }
-            if ( $typeDecl->ref ) {
-                yyerror("can't be reference of reference",tokAt(@typeDecl),CompilationError::invalid_type);
-            }
-            $typeDecl->ref = true;
-        } else {
-            yyerror("can't be 'just reference'",tokAt(@typeDecl),CompilationError::invalid_type);
+        if ( $typeDecl->dim.size() ) {
+            yyerror("can't be reference of array",tokAt(@typeDecl),CompilationError::invalid_type);
         }
+        if ( $typeDecl->ref ) {
+            yyerror("can't be reference of reference",tokAt(@typeDecl),CompilationError::invalid_type);
+        }
+        $typeDecl->ref = true;
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] '*' {
-        if ( !$typeDecl ) {
-            yyerror("can't be 'just pointer'",tokAt(@typeDecl),CompilationError::invalid_type);
-        }
         if ( $typeDecl->ref ) {
             yyerror("can't be pointer to reference",tokAt(@typeDecl),CompilationError::invalid_type);
         }

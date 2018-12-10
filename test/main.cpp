@@ -8,7 +8,7 @@
 using namespace std;
 using namespace yzg;
 
-bool g_reportCompilationFailErrors = true;
+bool g_reportCompilationFailErrors = false;
 
 bool compilation_fail_test ( const string & fn ) {
     cout << fn << " ";
@@ -24,17 +24,26 @@ bool compilation_fail_test ( const string & fn ) {
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
     if ( auto program = parseDaScript(str.c_str(), [](const ProgramPtr & prog){}) ) {
         if ( program->failed() ) {
-            if ( g_reportCompilationFailErrors ) {
-                for ( auto & err : program->errors ) {
+            bool failed = false;
+            for ( auto & err : program->errors ) {
+                auto it = find_if(program->expectErrors.begin(), program->expectErrors.end(), [&](CompilationError ce){
+                    return err.cerr == ce;
+                });
+                if ( g_reportCompilationFailErrors || it == program->expectErrors.end() ) {
                     cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+                    failed = true;
                 }
+            }
+            if ( failed ) {
+                cout << "failed, unexpected errors\n";
+                return false;
             }
             for ( auto ce : program->expectErrors ) {
                 auto it = find_if(program->errors.begin(), program->errors.end(), [&](const Error & err){
                     return err.cerr == ce;
                 });
                 if ( it == program->errors.end() ) {
-                    cout << "failed, expected error " << int(ce) << "\n";
+                    cout << "failed, expecting error " << int(ce) << "\n";
                     return false;
                 }
             }
