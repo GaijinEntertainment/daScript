@@ -73,13 +73,7 @@ bool run_unit_tests( const string & path )
     return ok;
 }
 
-namespace yzg {
-    void test_robin_hood();
-}
-
 int main(int argc, const char * argv[]) {
-    // test_robin_hood();
-    
     bool ok = true;
     ok = run_unit_tests("../../test/unit_tests") && ok;
     cout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";

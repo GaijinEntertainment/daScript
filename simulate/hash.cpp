@@ -79,6 +79,7 @@ namespace yzg
                 case Type::tFloat3:     return hash_function(*((float3 *)pX));
                 case Type::tFloat4:     return hash_function(*((float4 *)pX));
                 case Type::tPointer:    return hash_function(intptr_t(pX));
+                case Type::tIterator:   return hash_function(intptr_t(pX));
                 case Type::tStructure:  return hash_structure(*(char **)pX, info->structType, getTypeSize(info), info->isPod);
                 default:                assert(0 && "unsupported print type"); return 0;
             }

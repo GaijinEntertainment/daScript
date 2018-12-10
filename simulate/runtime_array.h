@@ -223,4 +223,13 @@ namespace yzg
         SimNode *   source;
         uint32_t    stride;
     };
+    
+    struct SimNode_GoodArrayIterator : SimNode {
+        SimNode_GoodArrayIterator ( const LineInfo & at, SimNode * s, uint32_t stride )
+            : SimNode(at) { subexpr.source = s; subexpr.stride = stride; }
+        virtual __m128 eval ( Context & context ) override {
+            return cast<Iterator *>::from(&subexpr);
+        }
+        GoodArrayIterator subexpr;
+    };
 }

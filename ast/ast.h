@@ -94,6 +94,7 @@ namespace yzg
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;
         bool isArray() const;
+        bool isGoodIteratorType() const;
         bool isGoodArrayType() const;
         bool isGoodTableType() const;
         bool isVoid() const;
@@ -121,6 +122,7 @@ namespace yzg
     template <typename TT>  struct ToBasicType;
     template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
     template <typename QQ> struct ToBasicType<const QQ &> : ToBasicType<QQ> {};
+    template<> struct ToBasicType<Iterator *>   { enum { type = Type::tIterator }; };
     template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
     template<> struct ToBasicType<char *>       { enum { type = Type::tString }; };
     template<> struct ToBasicType<const char *> { enum { type = Type::tString }; };
@@ -562,6 +564,7 @@ namespace yzg
         uint32_t                fixedSize = 0;
         bool                    dynamicArrays = false;
         bool                    fixedArrays = false;
+        bool                    nativeIterators = false;
     };
     
     class ExprLooksLikeCall : public Expression
@@ -622,6 +625,43 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
+    template <typename SimNodeT, bool first>
+    class ExprTableKeysOrValues : public ExprLooksLikeCall
+    {
+    public:
+        ExprTableKeysOrValues() = default;
+        ExprTableKeysOrValues ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
+            auto cexpr = clonePtr<ExprTableKeysOrValues<SimNodeT,first>>(expr);
+            return cexpr;
+        }
+        virtual void inferType(InferTypeContext & context) override
+        {
+            if ( arguments.size()!=1 ) {
+                context.error("expecting " + name + "(table)", at);
+            }
+            ExprLooksLikeCall::inferType(context);
+            auto tableType = arguments[0]->type;
+            if ( !tableType ) return;
+            if ( !tableType->isGoodTableType() ) {
+                context.error("first argument must be fully qualified table", at);
+                return;
+            }
+            auto iterType = first ? tableType->firstType : tableType->secondType;
+            type = make_shared<TypeDecl>(Type::tIterator);
+            type->firstType = make_shared<TypeDecl>(*iterType);
+            type->firstType->ref = true;
+        }
+        virtual SimNode * simulate (Context & context) const override
+        {
+            auto subexpr = arguments[0]->simulate(context);
+            auto tableType = arguments[0]->type;
+            auto iterType = first ? tableType->firstType : tableType->secondType;
+            auto stride = iterType->getSizeOf();
+            return context.makeNode<SimNodeT>(at,subexpr,stride);
+        }
+    };
+    
     template <typename SimNodeT>
     class ExprArrayCallWithSizeOrIndex : public ExprLooksLikeCall
     {
@@ -641,7 +681,7 @@ namespace yzg
             auto arrayType = arguments[0]->type;
             auto valueType = arguments[1]->type;
             if ( !arrayType || !valueType ) return;
-            if ( !arrayType->isSimpleType(Type::tArray) || !arrayType->firstType ) {
+            if ( !arrayType->isGoodArrayType() ) {
                 context.error("first argument must be fully qualified array", at);
                 return;
             }

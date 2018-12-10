@@ -249,6 +249,10 @@ namespace yzg
         addCall<ExprErase>("erase");
         addCall<ExprFind>("find");
         
+        // table expressions
+        addCall<ExprTableKeysOrValues<SimNode_TableIterator<TableKeysIterator>,true>>    ("keys");
+        addCall<ExprTableKeysOrValues<SimNode_TableIterator<TableValuesIterator>,false>> ("values");
+        
         // array expresisons
         addCall<ExprArrayPush>  ("push");
         addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayResize>>  ("resize");

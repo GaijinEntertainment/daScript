@@ -16,6 +16,7 @@ namespace yzg
         {   Type::tUInt64,      "uint64"  },
         {   Type::tString,      "string" },
         {   Type::tPointer,     "pointer" },
+        {   Type::tIterator,     "iterator" },
         {   Type::tArray,       "array" },
         {   Type::tTable,       "table" },
         {   Type::tInt,         "int"   },
@@ -46,6 +47,7 @@ namespace yzg
     {
         switch ( type ) {
             case tPointer:      return sizeof(void *);          static_assert(sizeof(void *)==8, "64-bit");
+            case tIterator:     return sizeof(void *);          // Iterator *
             case tString:       return sizeof(char *);
             case tBool:         return sizeof(bool);            static_assert(sizeof(bool)==1,"4 byte bool");
             case tInt64:        return sizeof(int64_t);
@@ -174,6 +176,7 @@ namespace yzg
                 case Type::tFloat2:     ss << *((float2 *)pX); break;
                 case Type::tFloat3:     ss << *((float3 *)pX); break;
                 case Type::tFloat4:     ss << *((float4 *)pX);; break;
+                case Type::tIterator:   ss << "iterator"; break;
                 case Type::tPointer:    ss << "*" << hex << intptr_t(pX) << dec;
                                         if ( info->firstType ) {
                                             ss << " -> (";
@@ -238,6 +241,7 @@ namespace yzg
                 case Type::tFloat2:     ss << cast<float2>::to(x); break;
                 case Type::tFloat3:     ss << cast<float3>::to(x); break;
                 case Type::tFloat4:     ss << cast<float4>::to(x); break;
+                case Type::tIterator:   ss << "iterator"; break;
                 case Type::tPointer:    ss << "*" << hex << intptr_t(cast<void *>::to(x)) << dec << " ";
                                         if ( info->firstType ) {
                                             ss << " -> (";
@@ -273,6 +277,12 @@ namespace yzg
             stream << info->structType->name;
         } else if ( info->type==Type::tPointer ) {
             stream << debug_type(info->firstType) << " *";
+        } else if ( info->type==Type::tArray ) {
+            stream << "array <" << debug_type(info->firstType) << ">";
+        } else if ( info->type==Type::tTable ) {
+            stream << "table <" << debug_type(info->firstType) << "," << debug_type(info->secondType) << ">";
+        } else if ( info->type==Type::tIterator ) {
+            stream << "iterator <" << debug_type(info->firstType) << ">";
         } else {
             stream << to_string(info->type);
         }

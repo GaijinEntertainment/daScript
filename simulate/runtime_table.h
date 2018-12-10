@@ -201,6 +201,20 @@ namespace yzg
         }
     };
     
+    __forceinline void table_lock ( Context & context, Array & arr ) {
+        arr.lock ++;
+        if ( arr.lock==0 ) {
+            context.throw_error("table lock overflow");
+        }
+    }
+    
+    __forceinline void table_unlock ( Context & context, Array & arr ) {
+        if ( arr.lock==0 ) {
+            context.throw_error("table lock underflow");
+        }
+        arr.lock --;
+    }
+    
     struct SimNode_Table : SimNode {
         SimNode_Table(const LineInfo & at, uint32_t vts) : SimNode(at), valueTypeSize(vts) {}
         uint32_t valueTypeSize;
@@ -265,5 +279,37 @@ namespace yzg
         }
         SimNode * tabExpr;
         SimNode * keyExpr;
+    };
+    
+    struct TableIterator : Iterator {
+        __forceinline size_t nextValid ( Table * tab, size_t index ) {
+            for ( ; index < tab->capacity; index++ )
+                if ( tab->distance[index]>=0 )
+                    break;
+            return index;
+        }
+        virtual void close ( Context & context, IteratorContext & itc ) override;
+        SimNode *   source;
+        uint32_t    stride;
+    };
+    
+    struct TableKeysIterator : TableIterator {
+        virtual bool first ( Context & context, IteratorContext & itc ) override;
+        virtual bool next  ( Context & context, IteratorContext & itc ) override;
+    };
+    
+    struct TableValuesIterator : TableIterator {
+        virtual bool first ( Context & context, IteratorContext & itc ) override;
+        virtual bool next  ( Context & context, IteratorContext & itc ) override;
+    };
+    
+    template <typename IterType>
+    struct SimNode_TableIterator : SimNode {
+        SimNode_TableIterator(const LineInfo & at, SimNode * sk, uint32_t stride)
+            : SimNode(at) { subexpr.source = sk; subexpr.stride = stride; }
+        virtual __m128 eval ( Context & context ) override {
+            return cast<Iterator *>::from(&subexpr);
+        }
+        IterType   subexpr;
     };
 }

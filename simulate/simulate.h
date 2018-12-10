@@ -737,6 +737,10 @@ namespace yzg
         union {
             __m128 tail;
             struct {
+                char *  table_end;
+                Table * table;
+            };
+            struct {
                 char *  array_end;
                 Array * array;
             };
@@ -773,9 +777,18 @@ namespace yzg
         uint32_t    stride;
     };
     
+    struct SimNode_FixedArrayIterator : SimNode {
+        SimNode_FixedArrayIterator ( const LineInfo & at, SimNode * s, uint32_t size, uint32_t stride )
+            : SimNode(at) { subexpr.source = s; subexpr.size = size; subexpr.stride = stride; }
+        virtual __m128 eval ( Context & context ) override {
+            return cast<Iterator *>::from(&subexpr);
+        }
+        FixedArrayIterator subexpr;
+    };
+    
     struct SimNode_ForWithIteratorBase : SimNode {
         SimNode_ForWithIteratorBase ( const LineInfo & at ) : SimNode(at) {}
-        Iterator *  sources[MAX_FOR_ITERATORS];
+        SimNode *   source_iterators[MAX_FOR_ITERATORS];
         SimNode *   body;
         SimNode *   filter;
         uint32_t    stackTop[MAX_FOR_ITERATORS];
@@ -788,6 +801,12 @@ namespace yzg
             __m128 * pi[total];
             for ( int t=0; t!=total; ++t ) {
                 pi[t] = (__m128 *)(context.stackTop + stackTop[t]);
+            }
+            Iterator * sources[total] = {};
+            for ( int t=0; t!=total; ++t ) {
+                __m128 ll = source_iterators[t]->eval(context);
+                YZG_EXCEPTION_POINT;
+                sources[t] = cast<Iterator *>::to(ll);
             }
             IteratorContext ph[total];
             bool needLoop = true;
@@ -803,7 +822,7 @@ namespace yzg
                 if ( !filter || cast<bool>::to(filter->eval(context)) ) {
                     if ( !context.stopFlags ) {
                         body->eval(context);
-                        YZG_EXCEPTION_POINT;
+                        if ( context.stopFlags ) goto loopend;
                     }
                 }
                 for ( int t=0; t!=total; ++t ){

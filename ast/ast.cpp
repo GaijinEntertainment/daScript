@@ -123,6 +123,12 @@ namespace yzg
             } else {
                 stream << "void *";
             }
+        } else if ( decl.baseType==Type::tIterator ) {
+            if ( decl.firstType ) {
+                stream << "iterator<" << *decl.firstType << ">";
+            } else {
+                stream << "iterator";
+            }
         } else {
             stream << to_string(decl.baseType);
         }
@@ -186,6 +192,11 @@ namespace yzg
             if ( firstType ) {
                 ss << "#" << firstType->getMangledName();
             }
+        } else if ( baseType==Type::tIterator ) {
+            ss << "#iterator";
+            if ( firstType ) {
+                ss << "#" << firstType->getMangledName();
+            }
         } else if ( baseType==Type::tStructure ) {
             ss << structType->name;
         } else {
@@ -207,7 +218,7 @@ namespace yzg
             return false;
         if ( baseType==Type::tStructure && structType!=decl.structType )
             return false;
-        if ( baseType==Type::tPointer ) {
+        if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
@@ -233,6 +244,10 @@ namespace yzg
         return true;
     }
     
+    bool TypeDecl::isGoodIteratorType() const
+    {
+        return baseType==Type::tIterator && dim.size()==0 && firstType;
+    }
     
     bool TypeDecl::isGoodArrayType() const
     {
@@ -1710,6 +1725,8 @@ namespace yzg
                 fixedArrays = true;
             } else if ( src->type->isGoodArrayType() ) {
                 dynamicArrays = true;
+            } else if ( src->type->isGoodIteratorType() ) {
+                nativeIterators = true;
             }
         }
         int idx = 0;
@@ -1722,6 +1739,8 @@ namespace yzg
                 pVar->type = make_shared<TypeDecl>(*src->type);
                 pVar->type->ref = true;
                 pVar->type->dim.pop_back();
+            } else if ( src->type->isGoodIteratorType() ) {
+                pVar->type = make_shared<TypeDecl>(*src->type->firstType);
             } else if ( src->type->isGoodArrayType() ) {
                 pVar->type = make_shared<TypeDecl>(*src->type->firstType);
                 pVar->type->ref = true;
@@ -1752,21 +1771,23 @@ namespace yzg
     SimNode * ExprFor::simulate (Context & context) const
     {
         int total = sources.size();
-        if ( dynamicArrays && fixedArrays ) {
+        if ( (dynamicArrays && fixedArrays) || nativeIterators ) {
             SimNode_ForWithIteratorBase * result = (SimNode_ForWithIteratorBase *)
                 context.makeNodeUnroll<SimNode_ForWithIterator>(total, at);
             for ( int t=0; t!=total; ++t ) {
-                if ( sources[t]->type->isGoodArrayType() ) {
-                    auto iter = context.makeNode<GoodArrayIterator>();
-                    iter->source = sources[t]->simulate(context);
-                    iter->stride = sources[t]->type->firstType->getStride();
-                    result->sources[t] = iter;
+                if ( sources[t]->type->isGoodIteratorType() ) {
+                    result->source_iterators[t] = sources[t]->simulate(context);
+                } else if ( sources[t]->type->isGoodArrayType() ) {
+                    result->source_iterators[t] = context.makeNode<SimNode_GoodArrayIterator>(
+                        sources[t]->at,
+                        sources[t]->simulate(context),
+                        sources[t]->type->firstType->getStride());
                 } else if ( sources[t]->type->dim.size() ) {
-                    auto iter = context.makeNode<FixedArrayIterator>();
-                    iter->source = sources[t]->simulate(context);
-                    iter->stride = sources[t]->type->getStride();
-                    iter->size = sources[t]->type->dim.back();
-                    result->sources[t] = iter;
+                    result->source_iterators[t] = context.makeNode<SimNode_FixedArrayIterator>(
+                        sources[t]->at,
+                        sources[t]->simulate(context),
+                        sources[t]->type->getStride(),
+                        sources[t]->type->dim.back());
                 } else {
                     assert(0 && "we should not be here yet");
                     return nullptr;

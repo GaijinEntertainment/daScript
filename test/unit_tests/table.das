@@ -1,5 +1,5 @@
 def test : bool
-    let(tab:table<string,int>;i,del:int;total:int=1000)
+    let(tab:table<string,int>;i,del:int;total:int=10)
         assert(!erase(tab,"0"))
         i = 0
         while i!=total
@@ -39,6 +39,10 @@ def test : bool
             assert(tab[string(i)]==i++)
         assert(length(tab)==total)
         // debug(tab)
+        for k,v in keys(tab),values(tab)
+            // debug(k)
+            // debug(v)
+            assert(k==string(v))
         assert(erase(tab,"1"))
         assert(!erase(tab,"-1"))
     return true

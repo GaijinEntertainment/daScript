@@ -26,6 +26,7 @@ namespace yzg
         tString,
         tStructure,
         tPointer,
+        tIterator,
         tArray,
         tTable
     };
