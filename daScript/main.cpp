@@ -7,8 +7,7 @@ using namespace std;
 using namespace yzg;
 
 
-void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode )
-{
+void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
@@ -40,13 +39,11 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     }
 }
 
-void print_help()
-{
+void print_help() {
     cout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
 }
 
-int main(int argc, const char * argv[])
-{
+int main(int argc, const char * argv[]) {
     if ( argc<=1 ) {
         cout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
         return -1;

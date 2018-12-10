@@ -9,8 +9,7 @@ using namespace std;
 using namespace yzg;
 
 
-bool unit_test ( const string & fn )
-{
+bool unit_test ( const string & fn ) {
     cout << fn << " ";
     string str;
     ifstream t(fn);
@@ -57,8 +56,7 @@ bool unit_test ( const string & fn )
     }
 }
 
-bool run_unit_tests( const string & path )
-{
+bool run_unit_tests( const string & path ) {
     bool ok = true;
     DIR *dir;
     struct dirent *ent;

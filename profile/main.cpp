@@ -11,30 +11,26 @@ using namespace yzg;
 #define REPORT_ERRORS 1
 
 #pragma pack(1)
-struct Object
-{
+struct Object {
     float3   pos;
     float3   vel;
 };
 #pragma pack()
 
-__attribute__((noinline)) void updateObject ( Object * obj )
-{
+__attribute__((noinline)) void updateObject ( Object * obj ) {
     obj->pos.x += obj->vel.x;
     obj->pos.y += obj->vel.y;
     obj->pos.z += obj->vel.z;
 }
 
-__attribute__((noinline)) void updateTest ( Object * objects )
-{
+__attribute__((noinline)) void updateTest ( Object * objects ) {
     for ( int i=0; i<10000; ++i ) {
         updateObject(objects + i);
     }
 }
 
 Context * g_Context = nullptr;
-void stack_depth_4(const char * str)
-{
+void stack_depth_4(const char * str) {
     int fnIndex = g_Context->findFunction("stack_depth_5");
     const char * message = "from c++";
     __m128 args[1] = { cast<char *>::from((char *)message) };
@@ -66,8 +62,7 @@ inline double profileBlock ( int numIter, TT && block ) {
     return minT * s_timebase_info.numer / (1000000000.0 * s_timebase_info.denom);
 }
 
-void unit_test_array_of_structures ( const string & fn )
-{
+void unit_test_array_of_structures ( const string & fn ) {
     cout << fn << "\n";
     string str;
     ifstream t(fn);
@@ -164,8 +159,7 @@ void unit_test_array_of_structures ( const string & fn )
     }
 }
 
-void unit_test ( const string & fn, int numIter = 100 )
-{
+void unit_test ( const string & fn, int numIter = 100 ) {
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
