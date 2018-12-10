@@ -8,7 +8,7 @@
 using namespace std;
 using namespace yzg;
 
-bool g_reportCompilationFailErrors = false;
+bool g_reportCompilationFailErrors = true;
 
 bool compilation_fail_test ( const string & fn ) {
     cout << fn << " ";
@@ -26,7 +26,7 @@ bool compilation_fail_test ( const string & fn ) {
         if ( program->failed() ) {
             if ( g_reportCompilationFailErrors ) {
                 for ( auto & err : program->errors ) {
-                    cout << reportError(&str, err.at.line, err.at.column, err.what );
+                    cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
                 }
             }
             for ( auto ce : program->expectErrors ) {
@@ -66,7 +66,7 @@ bool unit_test ( const string & fn ) {
         if ( program->failed() ) {
             cout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                cout << reportError(&str, err.at.line, err.at.column, err.what );
+                cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {

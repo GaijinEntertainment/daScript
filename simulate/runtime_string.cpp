@@ -101,12 +101,15 @@ namespace yzg
         return ss.str();
     }
     
-    string reportError ( const string * st, int row, int col, const string & message ) {
+    string reportError ( const string * st, int row, int col, const string & message, CompilationError erc ) {
         stringstream ssw;
         if ( row && col ) {
             auto text = st ? getFewLines(*st, row, col ) : "";
-            ssw << "error at line " << row << " column " << col << "\n" << text << message << "\n";
+            ssw << "error at line " << row << " column " << col << "\n" << text;
+            if ( erc != CompilationError::unspecified ) ssw << int(erc) << ": ";
+            ssw << message << "\n";
         } else {
+            if ( erc != CompilationError::unspecified ) ssw << int(erc) << ": ";
             ssw << "error, " << message << "\n";
         }
         return ssw.str();

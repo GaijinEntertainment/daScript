@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cast.h"
+#include "compilation_errors.h"
 
 namespace yzg
 {
@@ -45,6 +46,6 @@ namespace yzg
     string unescapeString ( const string & input );
     string escapeString ( const string & input );
     string to_string_ex ( double dnum );
-    string reportError ( const string * st, int row, int col, const string & message );
+    string reportError ( const string * st, int row, int col, const string & message, CompilationError erc = CompilationError::unspecified );
 }
 
