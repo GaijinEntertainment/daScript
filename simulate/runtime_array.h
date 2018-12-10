@@ -103,4 +103,81 @@ namespace yzg
             : SimNode(at) { source = s; size = sz; stride = st; }
         virtual __m128 eval ( Context & context ) override;
     };
+    
+    // FOR BASE
+    struct SimNode_ForBase : SimNode {
+        SimNode_ForBase ( const LineInfo & at ) : SimNode(at) {}
+        SimNode *   sources [MAX_FOR_ITERATORS];
+        uint32_t    strides [MAX_FOR_ITERATORS];
+        uint32_t    stackTop[MAX_FOR_ITERATORS];
+        SimNode *   body;
+        SimNode *   filter;
+        uint32_t    size;
+    };
+    
+    template <int total>
+    struct SimNode_ForGoodArray : public SimNode_ForBase {
+        SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            Array * pha[total];
+            char * ph[total];
+            for ( int t=0; t!=total; ++t ) {
+                pha[t] = cast<Array *>::to(sources[t]->eval(context));
+                YZG_EXCEPTION_POINT;
+                array_lock(context, *pha[t]);
+                YZG_EXCEPTION_POINT;
+                ph[t]  = pha[t]->data;
+            }
+            char ** pi[total];
+            for ( int t=0; t!=total; ++t ) {
+                pi[t] = (char **)(context.stackTop + stackTop[t]);
+            }
+            for ( int i=0; !context.stopFlags; ++i ) {
+                for ( int t=0; t!=total; ++t ){
+                    if ( i >= pha[t]->size ) goto loopOver;
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                if ( !filter || cast<bool>::to(filter->eval(context)) )
+                    if ( !context.stopFlags )
+                        body->eval(context);
+            }
+        loopOver:
+            for ( int t=0; t!=total; ++t ) {
+                array_unlock(context, *pha[t]);
+                YZG_EXCEPTION_POINT;
+            }
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return _mm_setzero_ps();
+        }
+    };
+    
+    // FOR
+    template <int total>
+    struct SimNode_ForFixedArray : SimNode_ForBase {
+        SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual __m128 eval ( Context & context ) override {
+            char * ph[total];
+            for ( int t=0; t!=total; ++t ) {
+                ph[t] = cast<char *>::to(sources[t]->eval(context));
+                YZG_EXCEPTION_POINT;
+            }
+            char ** pi[total];
+            for ( int t=0; t!=total; ++t ) {
+                pi[t] = (char **)(context.stackTop + stackTop[t]);
+            }
+            for ( int i=0; i!=size && !context.stopFlags; ++i ) {
+                for ( int t=0; t!=total; ++t ){
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                if ( !filter || cast<bool>::to(filter->eval(context)) )
+                    if ( !context.stopFlags )
+                        body->eval(context);
+            }
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return _mm_setzero_ps();
+        }
+    };
+
 }
