@@ -8,6 +8,7 @@ namespace yzg
 {
     // TODO:
     //  -   return correct insert index of original value? is this at all possible?
+    //  -   throw runtime error in the context, when grow inside locked table (recover well)
     
     extern const char * rts_null;
     
@@ -29,42 +30,33 @@ namespace yzg
     
     
     template <typename KeyType>
-    class RobinHoodHash
-    {
+    class RobinHoodHash {
         Context *   context = nullptr;
         uint32_t    valueTypeSize = 0;
-        
         constexpr static uint32_t minCapacity = 64u;
         constexpr static uint32_t minLookups = 4u;
-        
     public:
         RobinHoodHash () = delete;
         RobinHoodHash ( const RobinHoodHash & ) = delete;
         RobinHoodHash ( Context * ctx, uint32_t vs ) : context(ctx), valueTypeSize(vs) {}
-        
         __forceinline void swap_value ( Table & tab, size_t index, void * b ) {
             char * a = tab.data + index * valueTypeSize;
             swap_ranges(a, a + valueTypeSize, (char *) b);
         }
-        
         __forceinline void copy_value ( Table & tab, size_t index, Table & ftab, size_t findex ) {
             memcpy ( tab.data + index*valueTypeSize, ftab.data + findex*valueTypeSize, valueTypeSize );
         }
-        
         __forceinline void copy_value ( Table & tab, size_t index, void * b ) {
             memcpy ( tab.data + index*valueTypeSize, b, valueTypeSize );
         }
-        
         __forceinline size_t indexForHash ( const Table & tab, size_t hash ) const {
             // tail end of the table is 'special' elements, no less than max lookup
             return hash % (tab.capacity - tab.maxLookups - 1);
         }
-        
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
             uint32_t desired = 32 - __builtin_clz(capacity-1);
             return std::max(minLookups, desired);
         }
-        
         pair<size_t,bool> find ( const Table & tab, const KeyType & key ) const {
             if ( tab.capacity==0 ) { return { 0, false }; }
             size_t index = indexForHash(tab, hash_function(key));
@@ -76,7 +68,6 @@ namespace yzg
             }
             return { 0, false };
         }
-        
         void grow ( Table & tab ) {
             uint32_t newCapacity = max(minCapacity, tab.capacity*2);
             Table newTab;
@@ -102,7 +93,6 @@ namespace yzg
             }
             swap(newTab, tab);
         }
-        
         // this moves on insert. be warned!!!
         // returns where it think it inserted, also if it inserted or not
         pair<size_t,bool> insert ( Table & tab, const KeyType & key, void * value ) {
@@ -118,7 +108,6 @@ namespace yzg
             }
             return insert_new(tab, dist, index, key, value);
         }
-        
         // returns where it think it inserted, also if it inserted or not
         pair<size_t,bool> reserve ( Table & tab, const KeyType & key ) {
             if ( tab.capacity==0 ) {  grow(tab); }
@@ -135,7 +124,6 @@ namespace yzg
             memset(value, 0, valueTypeSize);
             return insert_new(tab, dist, index, key, value);
         }
-        
         pair<size_t,bool> erase ( Table & tab, const KeyType & key ) {
             auto at = find(tab, key);
             if ( at.second ) {
@@ -145,7 +133,6 @@ namespace yzg
                 return { 0, false };
             }
         }
-        
     protected:
         pair<size_t,bool> insert_new ( Table & tab, int8_t dist, size_t index, const KeyType & key, void * value ) {
             KeyType * keys = (KeyType *)(tab.keys);
@@ -186,7 +173,6 @@ namespace yzg
                 }
             }
         }
-        
         void erase_existing ( Table & tab, size_t to_erase ) {
             size_t current = to_erase;
             tab.distance[current] = -1;

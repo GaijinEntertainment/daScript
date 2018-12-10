@@ -5,8 +5,7 @@ namespace yzg
     using namespace std;
     
     template <typename TT>
-    struct vec2
-    {
+    struct vec2 {
         TT   x, y;
         __forceinline friend ostream& operator<< (ostream& stream, const vec2<TT> & vec) {
             stream << vec.x << "," << vec.y;
@@ -18,8 +17,7 @@ namespace yzg
     };
     
     template <typename TT>
-    struct vec3
-    {
+    struct vec3 {
         TT   x, y, z;
         __forceinline friend ostream& operator<< (ostream& stream, const vec3<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z;
@@ -31,8 +29,7 @@ namespace yzg
     };
     
     template <typename TT>
-    struct vec4
-    {
+    struct vec4 {
         TT  x, y, z, w;
         __forceinline friend ostream& operator<< (ostream& stream, const vec4<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z << "," << vec.w;

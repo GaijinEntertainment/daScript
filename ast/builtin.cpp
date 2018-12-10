@@ -1,57 +1,30 @@
 #include "precomp.h"
 
 #include "ast.h"
-#include "runtime_array.h"
-#include "runtime_table.h"
-
-#include "ast_interop.h"
 
 namespace yzg
 {
-    // core functions
-    
-    __m128 builtin_print ( Context & context, SimNode_Call *, __m128 * args ) {
-        context.to_out(to_rts(args[0]));
-        return _mm_setzero_ps();
-    }
-    
-    __m128 builtin_breakpoint ( Context & context, SimNode_Call * call, __m128 * ) {
-        context.breakPoint(call->debug.column, call->debug.line);
-        return _mm_setzero_ps();
-    }
-    
-    __m128 builtin_stackwalk ( Context & context, SimNode_Call *, __m128 * ) {
-            context.stackWalk();
-        return _mm_setzero_ps();
-    }
-    
-    __m128 builtin_terminate ( Context & context, SimNode_Call *, __m128 * ) {
-        context.stopFlags |= EvalFlags::stopForTerminate;
-        return _mm_setzero_ps();
-    }
-    
-    // array functions
-    
-    int builtin_array_size ( Array * arr ) {
-        return arr->size;
-    }
-    
-    int builtin_array_capacity ( Array * arr ) {
-        return arr->capacity;
-    }
-    
-    int builtin_table_size ( Table * arr ) {
-        return arr->size;
-    }
-    
-    int builtin_table_capacity ( Table * arr ) {
-        return arr->capacity;
-    }
+    template  <typename SimT, typename RetT, typename ...Args>
+    class BuiltInFn : public BuiltInFunction {
+    public:
+        BuiltInFn(const string & fn, const ModuleLibrary & lib) : BuiltInFunction(fn) {
+            this->result = makeType<RetT>(lib);
+            vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
+            for ( int argi=0; argi != args.size(); ++argi ) {
+                auto arg = make_shared<Variable>();
+                arg->name = "arg" + std::to_string(argi);
+                arg->type = args[argi];
+                this->arguments.push_back(arg);
+            }
+        }
+        virtual SimNode * makeSimNode ( Context & context ) override {
+            return context.makeNode<SimT>(at);
+        }
+    };
     
     // basic operations
     template <typename TT, typename SimPolicy_TT>
-    void addFunctionBasic(Module & mod, const ModuleLibrary & lib)
-    {
+    void addFunctionBasic(Module & mod, const ModuleLibrary & lib) {
         //                                    policy                        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Equ<SimPolicy_TT>,        bool, TT,  TT>  >("==",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_NotEqu<SimPolicy_TT>,     bool, TT,  TT>  >("!=",     lib) );
@@ -59,8 +32,7 @@ namespace yzg
     
     // ordered types
     template <typename TT, typename SimPolicy_TT>
-    void addFunctionOrdered(Module & mod, const ModuleLibrary & lib)
-    {
+    void addFunctionOrdered(Module & mod, const ModuleLibrary & lib) {
         //                                    policy                        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_GtEqu<SimPolicy_TT>,      bool, TT,  TT>  >(">=",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_LessEqu<SimPolicy_TT>,    bool, TT,  TT>  >("<=",     lib) );
@@ -70,8 +42,7 @@ namespace yzg
     
     // concatination types
     template <typename TT, typename SimPolicy_TT>
-    void addFunctionConcat(Module & mod, const ModuleLibrary & lib)
-    {
+    void addFunctionConcat(Module & mod, const ModuleLibrary & lib) {
         //                                    policy                        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Add<SimPolicy_TT>,        TT,   TT,  TT>  >("+",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetAdd<SimPolicy_TT>,     TT&,  TT&, TT>  >("+=",     lib) );
@@ -79,8 +50,7 @@ namespace yzg
     
     // numeric types
     template <typename TT, typename SimPolicy_TT>
-    void addFunctionNumeric(Module & mod, const ModuleLibrary & lib, bool hasMod = true)
-    {
+    void addFunctionNumeric(Module & mod, const ModuleLibrary & lib, bool hasMod = true) {
         addFunctionConcat<TT,SimPolicy_TT>(mod,lib);
         //                                    policy                        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Unp<SimPolicy_TT>,        TT,   TT>       >("+",      lib) );
@@ -91,7 +61,7 @@ namespace yzg
         mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     TT&,  TT&, TT>  >("-=",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetMul<SimPolicy_TT>,     TT&,  TT&, TT>  >("*=",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetDiv<SimPolicy_TT>,     TT&,  TT&, TT>  >("/=",     lib) );
-        
+        // optional
         if ( hasMod ) {
         mod.addFunction( make_shared<BuiltInFn<Sim_Mod<SimPolicy_TT>,        TT,   TT,  TT>  >("%",      lib) );
         }
@@ -99,8 +69,7 @@ namespace yzg
     
     // inc-dec
     template <typename TT, typename SimPolicy_TT>
-    void addFunctionIncDec(Module & mod, const ModuleLibrary & lib)
-    {
+    void addFunctionIncDec(Module & mod, const ModuleLibrary & lib) {
         //                                    policy                        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Inc<SimPolicy_TT>,        TT&,  TT&>      >("++",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Dec<SimPolicy_TT>,        TT&,  TT&>      >("--",     lib) );
@@ -110,8 +79,7 @@ namespace yzg
     
     // built-in numeric types
     template <typename TT, typename SimPolicy_TT>
-    void addFunctionBit(Module & mod, const ModuleLibrary & lib)
-    {
+    void addFunctionBit(Module & mod, const ModuleLibrary & lib) {
         //                                    policy                        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_BinNot<SimPolicy_TT>,     TT,   TT>       >("~",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BinAnd<SimPolicy_TT>,     TT,   TT,  TT>  >("&",      lib) );
@@ -124,8 +92,7 @@ namespace yzg
     
     // built-in boolean types
     template <typename TT, typename SimPolicy_TT>
-    void addFunctionBoolean(Module & mod, const ModuleLibrary & lib)
-    {
+    void addFunctionBoolean(Module & mod, const ModuleLibrary & lib) {
         //                                    policy                        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolNot<SimPolicy_Bool>,  TT,   TT>       >("!",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolAnd,                  TT,   TT,  TT>  >("&",      lib) );
@@ -136,10 +103,8 @@ namespace yzg
         mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolXor<SimPolicy_Bool>,TT&, TT&, TT>  >("^=",     lib) );
     }
     
-    Module_BuiltIn::Module_BuiltIn()
-    {
+    Module_BuiltIn::Module_BuiltIn() {
         ModuleLibrary lib;
-        
         // pointer
         addFunctionBasic<void *,SimPolicy_Pointer>(*this,lib);
         // string
@@ -225,41 +190,7 @@ namespace yzg
         addFunctionBasic<uint4, SimPolicy_uVec<uint4,3>>(*this,lib);
         addFunctionNumeric<uint4, SimPolicy_uVec<uint4,3>>(*this,lib);
         addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<4>,uint4,uint32_t,uint32_t,uint32_t,uint32_t>>("uint4",lib) );
-        
-        // functions
-        addInterop<builtin_print,void,char *>   (*this, lib, "print");
-        addInterop<builtin_terminate,void>      (*this, lib, "terminate");
-        addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint");
-        addInterop<builtin_stackwalk,void>      (*this, lib, "stackwalk");
-        
-
-        
-        // function-like expresions
-        addCall<ExprAssert>     ("assert");
-        addCall<ExprDebug>      ("debug");
-        addCall<ExprHash>       ("hash");
-        
-        // table functions
-        addExtern<decltype(builtin_table_size), builtin_table_size>(*this, lib, "length");
-        addExtern<decltype(builtin_table_capacity), builtin_table_capacity>(*this, lib, "capacity");
-        
-        // array functions
-        addExtern<decltype(builtin_array_size), builtin_array_size>(*this, lib, "length");
-        addExtern<decltype(builtin_array_capacity), builtin_array_capacity>(*this, lib, "capacity");
-        
-        // shared expressions
-        addCall<ExprErase>("erase");
-        addCall<ExprFind>("find");
-        
-        // table expressions
-        addCall<ExprTableKeysOrValues<SimNode_TableIterator<TableKeysIterator>,true>>    ("keys");
-        addCall<ExprTableKeysOrValues<SimNode_TableIterator<TableValuesIterator>,false>> ("values");
-        
-        // array expresisons
-        addCall<ExprArrayPush>  ("push");
-        addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayResize>>  ("resize");
-        addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayReserve>> ("reserve");
-
+        // RUNTIME
+        addRuntime(lib);
     }
-
 }

@@ -22,8 +22,7 @@ namespace yzg
     class Context;
     struct SimNode;
     
-    struct GlobalVariable
-    {
+    struct GlobalVariable {
         char *      name;
         __m128      value;
         uint32_t    size;
@@ -31,23 +30,20 @@ namespace yzg
         SimNode *   init;
     };
     
-    struct SimFunction
-    {
+    struct SimFunction {
         char *      name;
         SimNode *   code;
         uint32_t    stackSize;
         FuncInfo *  debug;
     };
     
-    struct SimNode
-    {
+    struct SimNode {
         SimNode ( const LineInfo & at ) : debug(at) {}
         virtual __m128 eval ( Context & ) = 0;
         LineInfo debug;
     };
     
-    struct Prologue
-    {
+    struct Prologue {
         __m128      result;
         __m128 *    arguments;
         FuncInfo *  info;
@@ -55,16 +51,14 @@ namespace yzg
     };
     static_assert((sizeof(Prologue) & 0xf)==0, "it has to be 16 byte aligned");
     
-    enum EvalFlags : uint32_t
-    {
+    enum EvalFlags : uint32_t {
         stopForBreak        = 1 << 0
     ,   stopForReturn       = 1 << 1
     ,   stopForThrow        = 1 << 2
     ,   stopForTerminate    = 1 << 3
     };
     
-    class Context
-    {
+    class Context {
         friend struct SimNode_GetGlobal;
         friend class Program;
     public:
@@ -567,15 +561,13 @@ namespace yzg
     // POLICY BASED OPERATIONS
     
     template <typename TT>
-    struct SimPolicy_CoreType
-    {
+    struct SimPolicy_CoreType {
         static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)==cast<TT>::to(b));  }
         static __forceinline __m128 NotEqu  ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)!=cast<TT>::to(b));  }
     };
     
     template <typename TT>
-    struct SimPolicy_Type : SimPolicy_CoreType<TT>
-    {
+    struct SimPolicy_Type : SimPolicy_CoreType<TT> {
         // numeric
         static __forceinline __m128 Unp ( __m128 x, Context & ) { return x; }
         static __forceinline __m128 Unm ( __m128 x, Context & ) { return cast<TT>::from( -cast<TT>::to(x)); }
@@ -598,8 +590,7 @@ namespace yzg
         static __forceinline __m128 Gt      ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)>cast<TT>::to(b));  }
     };
     
-    struct SimPolicy_Bool : SimPolicy_CoreType<bool>
-    {
+    struct SimPolicy_Bool : SimPolicy_CoreType<bool> {
         static __forceinline __m128 BoolNot ( __m128 x, Context & ) { return cast<bool>::from( !cast<bool>::to(x)); }
         static __forceinline __m128 BoolAnd ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) && cast<bool>::to(b)); }
         static __forceinline __m128 BoolOr  ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) || cast<bool>::to(b)); }
@@ -613,8 +604,7 @@ namespace yzg
     };
     
     template <typename TT>
-    struct SimPolicy_Bin : SimPolicy_Type<TT>
-    {
+    struct SimPolicy_Bin : SimPolicy_Type<TT> {
         static __forceinline __m128 Mod ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)%cast<TT>::to(b)); }
         static __forceinline __m128 BinNot ( __m128 x, Context & ) { return cast<TT>::from( ~cast<TT>::to(x)); }
         static __forceinline __m128 BinAnd ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) & cast<TT>::to(b)); }
@@ -630,8 +620,7 @@ namespace yzg
     struct SimPolicy_Int64 : SimPolicy_Bin<int64_t> {};
     struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t> {};
     
-    struct SimPolicy_Float : SimPolicy_Type<float>
-    {
+    struct SimPolicy_Float : SimPolicy_Type<float> {
         static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return _mm_add_ss(a,b); }
         static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return _mm_sub_ss(a,b); }
         static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return _mm_div_ss(a,b); }
@@ -642,8 +631,7 @@ namespace yzg
     };
     
     template <typename TT, int mask>
-    struct SimPolicy_Vec
-    {
+    struct SimPolicy_Vec {
         // this is missing in SSE2 (but exists in SSE4?)
         static __forceinline __m128 _mm_mod_ps(__m128  a, __m128 aDiv) {
             __m128 c = _mm_div_ps(a,aDiv);
@@ -677,8 +665,7 @@ namespace yzg
     };
     
     template <typename TT, int mask>
-    struct SimPolicy_iVec
-    {
+    struct SimPolicy_iVec {
         // this is missing in SSE2 (but exists in SSE4?)
         static __forceinline __m128 _mm_mul_epi32 ( __m128 a, __m128 b ) {
             __m128i A = a, B = b, C;
@@ -719,8 +706,7 @@ namespace yzg
     };
     
     template <typename TT, int mask>
-    struct SimPolicy_uVec : SimPolicy_iVec<TT,mask>
-    {
+    struct SimPolicy_uVec : SimPolicy_iVec<TT,mask> {
         // this is missing in SSE2 (but exists in SSE4?)
         static __forceinline __m128 _mm_div_epu32 ( __m128 a, __m128 b) {
             __m128 c;  uint32_t * A = (uint32_t *)&a, * B = (uint32_t *)&b, * C = (uint32_t *)&c;

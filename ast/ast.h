@@ -34,8 +34,7 @@ namespace yzg
     
     class ModuleLibrary;
     
-    enum class Operator
-    {
+    enum class Operator {
         none,
         // 2-char
         r2l,
@@ -80,8 +79,7 @@ namespace yzg
     bool isBinaryOperator ( Operator op );
     bool isTrinaryOperator ( Operator op );
     
-    class TypeDecl : public enable_shared_from_this<TypeDecl>
-    {
+    class TypeDecl : public enable_shared_from_this<TypeDecl> {
     public:
         TypeDecl() = default;
         TypeDecl(const TypeDecl & decl);
@@ -157,16 +155,13 @@ namespace yzg
     };
     
     template <typename TT>
-    __forceinline TypeDeclPtr makeType(const ModuleLibrary & ctx)
-    {
+    __forceinline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
         return typeFactory<TT>::make(ctx);
     }
     
-    class Structure : public enable_shared_from_this<Structure>
-    {
+    class Structure : public enable_shared_from_this<Structure> {
     public:
-        struct FieldDeclaration
-        {
+        struct FieldDeclaration {
             string      name;
             TypeDeclPtr type;
             LineInfo    at;
@@ -185,8 +180,7 @@ namespace yzg
         LineInfo                    at;
     };
     
-    class Variable
-    {
+    class Variable {
     public:
         friend ostream& operator<< (ostream& stream, const Variable & var);
         VariablePtr clone() const;
@@ -199,11 +193,9 @@ namespace yzg
         uint32_t        stackTop = 0;
     };
     
-    class Expression : public enable_shared_from_this<Expression>
-    {
+    class Expression : public enable_shared_from_this<Expression> {
     public:
-        struct InferTypeContext
-        {
+        struct InferTypeContext {
             ProgramPtr              program;
             FunctionPtr             func;
             vector<VariablePtr>     local;
@@ -234,8 +226,7 @@ namespace yzg
         return expr ? static_pointer_cast<ExprType>(expr) : make_shared<ExprType>();
     }
     
-    class ExprRef2Value : public Expression   // &value to value
-    {
+    class ExprRef2Value : public Expression {
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
@@ -245,8 +236,7 @@ namespace yzg
         ExpressionPtr   subexpr;
     };
     
-    class ExprPtr2Ref : public Expression   // pointer to &value
-    {
+    class ExprPtr2Ref : public Expression {
     public:
         ExprPtr2Ref () = default;
         ExprPtr2Ref ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
@@ -258,8 +248,7 @@ namespace yzg
         ExpressionPtr   subexpr;
     };
     
-    class ExprNew : public Expression
-    {
+    class ExprNew : public Expression {
     public:
         ExprNew() = default;
         ExprNew ( const LineInfo & a, TypeDeclPtr t ) : Expression(a), typeexpr(t) {}
@@ -271,8 +260,7 @@ namespace yzg
         TypeDeclPtr     typeexpr;
     };
     
-    class ExprAt : public Expression
-    {
+    class ExprAt : public Expression {
     public:
         ExprAt() = default;
         ExprAt ( const LineInfo & a, ExpressionPtr s, ExpressionPtr i ) : Expression(a), subexpr(s), index(i) {}
@@ -285,8 +273,7 @@ namespace yzg
         ExpressionPtr   index;
     };
 
-    class ExprBlock : public Expression
-    {
+    class ExprBlock : public Expression {
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
@@ -296,8 +283,7 @@ namespace yzg
         vector<ExpressionPtr>   list;
     };
     
-    class ExprVar : public Expression
-    {
+    class ExprVar : public Expression {
     public:
         ExprVar () = default;
         ExprVar ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
@@ -313,8 +299,7 @@ namespace yzg
         int         argumentIndex = -1;
     };
     
-    class ExprField : public Expression
-    {
+    class ExprField : public Expression {
     public:
         ExprField () = default;
         ExprField ( const LineInfo & a, ExpressionPtr val, const string & n ) : Expression(a), value(val), name(n) {}
@@ -328,8 +313,7 @@ namespace yzg
         const Structure::FieldDeclaration * field = nullptr;
     };
     
-    class ExprOp : public Expression
-    {
+    class ExprOp : public Expression {
     public:
         ExprOp () = default;
         ExprOp ( const LineInfo & a, Operator o ) : Expression(a), op(o) {}
@@ -339,8 +323,8 @@ namespace yzg
         FunctionPtr     func;   // always built-in function
     };
     
-    class ExprOp1 : public ExprOp   // unary    !subexpr
-    {
+    // unary    !subexpr
+    class ExprOp1 : public ExprOp {
     public:
         ExprOp1 () = default;
         ExprOp1 ( const LineInfo & a, Operator o, ExpressionPtr s ) : ExprOp(a,o), subexpr(s) {}
@@ -352,8 +336,8 @@ namespace yzg
         ExpressionPtr   subexpr;
     };
     
-    class ExprOp2 : public ExprOp   // binary   left < right
-    {
+    // binary   left < right
+    class ExprOp2 : public ExprOp {
     public:
         ExprOp2 () = default;
         ExprOp2 ( const LineInfo & a, Operator o, ExpressionPtr l, ExpressionPtr r ) : ExprOp(a,o), left(l), right(r) {}
@@ -366,8 +350,7 @@ namespace yzg
     };
     
     // this copies one object to the other
-    class ExprCopy : public ExprOp2
-    {
+    class ExprCopy : public ExprOp2 {
     public:
         ExprCopy () = default;
         ExprCopy ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {};
@@ -378,8 +361,7 @@ namespace yzg
     };
     
     // this moves one object to the other
-    class ExprMove : public ExprOp2
-    {
+    class ExprMove : public ExprOp2 {
     public:
         ExprMove () = default;
         ExprMove ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {};
@@ -391,15 +373,14 @@ namespace yzg
     
     // this only exists during parsing, and can't be
     // and this is why it does not have CLONE
-    class ExprSequence : public ExprOp2
-    {
+    class ExprSequence : public ExprOp2 {
     public:
         ExprSequence ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {}
         virtual bool isSequence() const override { return true; }
     };
     
-    class ExprOp3 : public ExprOp   // trinary  subexpr ? left : right
-    {
+    // trinary  subexpr ? left : right
+    class ExprOp3 : public ExprOp {
     public:
         ExprOp3 () = default;
         ExprOp3 ( const LineInfo & a, Operator o, ExpressionPtr s, ExpressionPtr l, ExpressionPtr r )
@@ -412,8 +393,7 @@ namespace yzg
         ExpressionPtr   subexpr, left, right;
     };
     
-    class ExprTryCatch : public Expression
-    {
+    class ExprTryCatch : public Expression {
     public:
         ExprTryCatch() = default;
         ExprTryCatch ( const LineInfo & a, ExpressionPtr t, ExpressionPtr c ) : Expression(a), try_block(t), catch_block(c) {}
@@ -425,8 +405,7 @@ namespace yzg
         ExpressionPtr try_block, catch_block;
     };
     
-    class ExprReturn : public Expression
-    {
+    class ExprReturn : public Expression {
     public:
         ExprReturn() = default;
         ExprReturn ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
@@ -438,8 +417,7 @@ namespace yzg
         ExpressionPtr subexpr;
     };
     
-    class ExprBreak : public Expression
-    {
+    class ExprBreak : public Expression {
     public:
         ExprBreak() = default;
         ExprBreak ( const LineInfo & a ) : Expression(a) {}
@@ -450,8 +428,7 @@ namespace yzg
     };
     
     template <typename TT, typename ExprConstExt>
-    class ExprConst : public Expression
-    {
+    class ExprConst : public Expression {
     public:
         ExprConst(TT val = TT()) : value(val) {}
         ExprConst(const LineInfo & a, TT val = TT()) : Expression(a), value(val) {}
@@ -475,8 +452,7 @@ namespace yzg
         TT  value;
     };
     
-    class ExprConstPtr : public ExprConst<void *,ExprConstPtr>
-    {
+    class ExprConstPtr : public ExprConst<void *,ExprConstPtr> {
     public:
         ExprConstPtr(void * ptr = nullptr) : ExprConst(ptr) {}
         ExprConstPtr(const LineInfo & a, void * ptr = nullptr) : ExprConst(a,ptr) {}
@@ -485,39 +461,34 @@ namespace yzg
         }
     };
 
-    class ExprConstInt : public ExprConst<int32_t,ExprConstInt>
-    {
+    class ExprConstInt : public ExprConst<int32_t,ExprConstInt> {
     public:
         ExprConstInt(int32_t i = 0)  : ExprConst(i) {}
         ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConst(a, i) {}
     };
     
-    class ExprConstUInt : public ExprConst<uint32_t,ExprConstUInt>
-    {
+    class ExprConstUInt : public ExprConst<uint32_t,ExprConstUInt> {
     public:
         ExprConstUInt(uint32_t i = 0) : ExprConst(i) {}
         ExprConstUInt(const LineInfo & a, uint32_t i = 0) : ExprConst(a,i) {}
         virtual void log(ostream& stream, int depth) const override {  stream << "0x" << hex << value << dec; }
     };
     
-    class ExprConstBool : public ExprConst<bool,ExprConstBool>
-    {
+    class ExprConstBool : public ExprConst<bool,ExprConstBool> {
     public:
         ExprConstBool(bool i = false) : ExprConst(i) {}
         ExprConstBool(const LineInfo & a, bool i = false) : ExprConst(a,i) {}
         virtual void log(ostream& stream, int depth) const override {  stream << (value ? "true" : "false"); }
     };
 
-    class ExprConstFloat : public ExprConst<float,ExprConstFloat>
-    {
+    class ExprConstFloat : public ExprConst<float,ExprConstFloat> {
     public:
         ExprConstFloat(float i = 0.0f) : ExprConst(i) {}
         ExprConstFloat(const LineInfo & a, float i = 0.0f) : ExprConst(a,i) {}
         virtual void log(ostream& stream, int depth) const override { stream << to_string_ex(value); }
     };
     
-    class ExprConstString : public ExprConst<string,ExprConstString>
-    {
+    class ExprConstString : public ExprConst<string,ExprConstString> {
     public:
         ExprConstString(const string & str = string()) : ExprConst(unescapeString(str)) {}
         ExprConstString(const LineInfo & a, const string & str = string()) : ExprConst(a,unescapeString(str)) {}
@@ -529,8 +500,7 @@ namespace yzg
         virtual bool isStringConstant() const override { return true; }
     };
     
-    class ExprLet : public Expression
-    {
+    class ExprLet : public Expression {
     public:
         Variable * find ( const string & name ) const;
         virtual void log(ostream& stream, int depth) const override;
@@ -544,8 +514,7 @@ namespace yzg
     };
     
     // for a,b in foo,bar where a>b ...
-    class ExprFor : public Expression
-    {
+    class ExprFor : public Expression {
     public:
         ExprFor () = default;
         ExprFor ( const LineInfo & a ) : Expression(a) {}
@@ -567,8 +536,7 @@ namespace yzg
         bool                    nativeIterators = false;
     };
     
-    class ExprLooksLikeCall : public Expression
-    {
+    class ExprLooksLikeCall : public Expression {
     public:
         ExprLooksLikeCall () = default;
         ExprLooksLikeCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
@@ -585,8 +553,7 @@ namespace yzg
     };
     typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
     
-    class ExprAssert : public ExprLooksLikeCall
-    {
+    class ExprAssert : public ExprLooksLikeCall {
     public:
         ExprAssert () = default;
         ExprAssert ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a,name) {}
@@ -595,8 +562,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    class ExprDebug : public ExprLooksLikeCall
-    {
+    class ExprDebug : public ExprLooksLikeCall {
     public:
         ExprDebug () = default;
         ExprDebug ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
@@ -605,8 +571,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    class ExprHash : public ExprLooksLikeCall
-    {
+    class ExprHash : public ExprLooksLikeCall {
     public:
         ExprHash () = default;
         ExprHash ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
@@ -615,8 +580,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    class ExprArrayPush : public ExprLooksLikeCall
-    {
+    class ExprArrayPush : public ExprLooksLikeCall {
     public:
         ExprArrayPush() = default;
         ExprArrayPush ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
@@ -626,8 +590,7 @@ namespace yzg
     };
     
     template <typename SimNodeT, bool first>
-    class ExprTableKeysOrValues : public ExprLooksLikeCall
-    {
+    class ExprTableKeysOrValues : public ExprLooksLikeCall {
     public:
         ExprTableKeysOrValues() = default;
         ExprTableKeysOrValues ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
@@ -635,8 +598,7 @@ namespace yzg
             auto cexpr = clonePtr<ExprTableKeysOrValues<SimNodeT,first>>(expr);
             return cexpr;
         }
-        virtual void inferType(InferTypeContext & context) override
-        {
+        virtual void inferType(InferTypeContext & context) override {
             if ( arguments.size()!=1 ) {
                 context.error("expecting " + name + "(table)", at);
             }
@@ -652,8 +614,7 @@ namespace yzg
             type->firstType = make_shared<TypeDecl>(*iterType);
             type->firstType->ref = true;
         }
-        virtual SimNode * simulate (Context & context) const override
-        {
+        virtual SimNode * simulate (Context & context) const override {
             auto subexpr = arguments[0]->simulate(context);
             auto tableType = arguments[0]->type;
             auto iterType = first ? tableType->firstType : tableType->secondType;
@@ -663,8 +624,7 @@ namespace yzg
     };
     
     template <typename SimNodeT>
-    class ExprArrayCallWithSizeOrIndex : public ExprLooksLikeCall
-    {
+    class ExprArrayCallWithSizeOrIndex : public ExprLooksLikeCall {
     public:
         ExprArrayCallWithSizeOrIndex() = default;
         ExprArrayCallWithSizeOrIndex ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
@@ -672,8 +632,7 @@ namespace yzg
             auto cexpr = clonePtr<ExprArrayCallWithSizeOrIndex<SimNodeT>>(expr);
             return cexpr;
         }
-        virtual void inferType(InferTypeContext & context) override
-        {
+        virtual void inferType(InferTypeContext & context) override {
             if ( arguments.size()!=2 ) {
                 context.error("expecting array and size or index", at);
             }
@@ -690,8 +649,7 @@ namespace yzg
             arguments[1] = Expression::autoDereference(arguments[1]);
             type = make_shared<TypeDecl>(Type::tVoid);
         }
-        virtual SimNode * simulate (Context & context) const override
-        {
+        virtual SimNode * simulate (Context & context) const override {
             auto arr = arguments[0]->simulate(context);
             auto newSize = arguments[1]->simulate(context);
             auto size = arguments[0]->type->firstType->getSizeOf();
@@ -699,8 +657,7 @@ namespace yzg
         }
     };
     
-    class ExprErase : public ExprLooksLikeCall
-    {
+    class ExprErase : public ExprLooksLikeCall {
     public:
         ExprErase() = default;
         ExprErase ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, "erase") {}
@@ -709,8 +666,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    class ExprFind : public ExprLooksLikeCall
-    {
+    class ExprFind : public ExprLooksLikeCall {
     public:
         ExprFind() = default;
         ExprFind ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, "find") {}
@@ -719,8 +675,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    class ExprSizeOf : public Expression
-    {
+    class ExprSizeOf : public Expression {
     public:
         ExprSizeOf () = default;
         ExprSizeOf ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
@@ -733,8 +688,7 @@ namespace yzg
         TypeDeclPtr     typeexpr;
     };
 
-    class ExprCall : public ExprLooksLikeCall
-    {
+    class ExprCall : public ExprLooksLikeCall {
     public:
         ExprCall () = default;
         ExprCall ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) { }
@@ -746,8 +700,7 @@ namespace yzg
         uint32_t                stackTop = 0;
     };
     
-    class ExprIfThenElse : public Expression
-    {
+    class ExprIfThenElse : public Expression {
     public:
         ExprIfThenElse () = default;
         ExprIfThenElse ( const LineInfo & a, ExpressionPtr c, ExpressionPtr ift, ExpressionPtr iff )
@@ -760,8 +713,7 @@ namespace yzg
         ExpressionPtr   cond, if_true, if_false;
     };
     
-    class ExprWhile : public Expression
-    {
+    class ExprWhile : public Expression {
     public:
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
@@ -771,8 +723,7 @@ namespace yzg
         ExpressionPtr   cond, body;
     };
     
-    class Function
-    {
+    class Function {
     public:
         virtual ~Function() {}
         friend ostream& operator<< (ostream& stream, const Function & func);
@@ -791,22 +742,19 @@ namespace yzg
         LineInfo            at;
     };
     
-    class BuiltInFunction : public Function
-    {
+    class BuiltInFunction : public Function {
     public:
         BuiltInFunction ( const string & fn );
     };
     
-    struct Error
-    {
+    struct Error {
         Error ( const string & w, LineInfo a ) : what(w), at(a) {}
         __forceinline bool operator < ( const Error & err ) const { return at==err.at ? what < err.what : at<err.at; };
         string      what;
         LineInfo    at;
     };
     
-    class Module : public enable_shared_from_this<Module>
-    {
+    class Module : public enable_shared_from_this<Module> {
     public:
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
@@ -821,8 +769,7 @@ namespace yzg
         map<string, vector<FunctionPtr>>    functionsByName;    // all functions of the same name
     };
     
-    class Module_BuiltIn : public Module
-    {
+    class Module_BuiltIn : public Module {
         friend class Program;
     public:
         Module_BuiltIn();
@@ -832,11 +779,11 @@ namespace yzg
             callThis[fnName] = [fnName](const LineInfo & at) { return new TT(at, fnName); };
         }
     protected:
+        void addRuntime(ModuleLibrary & lib);
         map<string,ExprCallFactory> callThis;
     };
     
-    class ModuleLibrary
-    {
+    class ModuleLibrary {
     public:
         void addModule ( const ModulePtr & module ) { modules.push_back(module); }
         void foreach ( function<bool (const ModulePtr & module)> && func ) const;
@@ -848,8 +795,7 @@ namespace yzg
         vector<ModulePtr>   modules;
     };
     
-    class Program : public enable_shared_from_this<Program>
-    {
+    class Program : public enable_shared_from_this<Program> {
     public:
         Program();
         friend ostream& operator<< (ostream& stream, const Program & program);

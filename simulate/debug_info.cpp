@@ -33,18 +33,15 @@ namespace yzg
         {   Type::tFloat4,      "float4"}
     };
     
-    string to_string ( Type t )
-    {
+    string to_string ( Type t ) {
         return g_typeTable.find(t);
     }
     
-    Type nameToBasicType(const string & name)
-    {
+    Type nameToBasicType(const string & name) {
         return g_typeTable.find(name, Type::none);
     }
     
-    int getTypeBaseSize ( Type type )
-    {
+    int getTypeBaseSize ( Type type ) {
         switch ( type ) {
             case tPointer:      return sizeof(void *);          static_assert(sizeof(void *)==8, "64-bit");
             case tIterator:     return sizeof(void *);          // Iterator *
@@ -73,8 +70,7 @@ namespace yzg
         }
     }
     
-    int getStructSize ( StructInfo * info )
-    {
+    int getStructSize ( StructInfo * info ) {
         int size = 0;
         for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
             size += getTypeSize(info->fields[i]);
@@ -82,13 +78,11 @@ namespace yzg
         return size;
     }
     
-    int getTypeBaseSize ( TypeInfo * info )
-    {
+    int getTypeBaseSize ( TypeInfo * info ) {
         return info->type!=Type::tStructure ? getTypeBaseSize(info->type) : getStructSize(info->structType);
     }
     
-    int getDimSize ( TypeInfo * info )
-    {
+    int getDimSize ( TypeInfo * info ) {
         int size = 1;
         if ( info->dimSize ) {
             for ( uint32_t i=0; i!=info->dimSize; ++i ) {
@@ -98,16 +92,14 @@ namespace yzg
         return size;
     }
     
-    int getTypeSize ( TypeInfo * info )
-    {
+    int getTypeSize ( TypeInfo * info ) {
         return getDimSize(info) * getTypeBaseSize(info);
     }
     
     void debug_structure ( stringstream & ss, char * ps, StructInfo * info );
     void debug_value ( stringstream & ss, void * pX, TypeInfo * info );
     
-    void debug_structure ( stringstream & ss, char * ps, StructInfo * info )
-    {
+    void debug_structure ( stringstream & ss, char * ps, StructInfo * info ) {
         char * pf = ps;
         ss << "(";
         for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
@@ -121,8 +113,7 @@ namespace yzg
         ss << ")";
     }
     
-    void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info )
-    {
+    void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info ) {
         char * pA = (char *) pX;
         ss << "([size=" << count << ",stride=" << stride << "] ";
         for ( int i=0; i!=count; ++i ) {
@@ -133,8 +124,7 @@ namespace yzg
         ss << ")";
     }
     
-    void debug_dim_value ( stringstream & ss, void * pX, TypeInfo * info )
-    {
+    void debug_dim_value ( stringstream & ss, void * pX, TypeInfo * info ) {
         TypeInfo copyInfo = *info;
         assert(copyInfo.dimSize);
         copyInfo.dimSize --;
@@ -143,8 +133,7 @@ namespace yzg
         debug_array_value(ss, pX, stride, count, &copyInfo);
     }
     
-    void debug_value ( stringstream & ss, void * pX, TypeInfo * info )
-    {
+    void debug_value ( stringstream & ss, void * pX, TypeInfo * info ) {
         if ( pX == nullptr ) {
             ss << "null";
             return;
@@ -190,8 +179,7 @@ namespace yzg
         }
     }
     
-    void debug_table_value (  stringstream & ss, Table & tab, TypeInfo * info )
-    {
+    void debug_table_value (  stringstream & ss, Table & tab, TypeInfo * info ) {
         ss << "([" << tab.size << " of " << tab.capacity << "] ";
         bool first = true;
         int keySize = getTypeSize(info->firstType);
@@ -209,8 +197,7 @@ namespace yzg
         ss << ")";
     }
     
-    void debug_value ( stringstream & ss, __m128 x, TypeInfo * info )
-    {
+    void debug_value ( stringstream & ss, __m128 x, TypeInfo * info ) {
         if ( info->ref ) {
             TypeInfo ti = *info;
             ti.ref = false;
@@ -256,22 +243,19 @@ namespace yzg
         }
     }
     
-    string debug_value ( __m128 x, TypeInfo * info )
-    {
+    string debug_value ( __m128 x, TypeInfo * info ) {
         stringstream ss;
         debug_value(ss, x, info);
         return ss.str();
     }
     
-    string debug_value ( void * pX, TypeInfo * info )
-    {
+    string debug_value ( void * pX, TypeInfo * info ) {
         stringstream ss;
         debug_value(ss, pX, info);
         return ss.str();
     }
     
-    string debug_type ( TypeInfo * info )
-    {
+    string debug_type ( TypeInfo * info ) {
         stringstream stream;
         if ( info->type==Type::tStructure ) {
             stream << info->structType->name;

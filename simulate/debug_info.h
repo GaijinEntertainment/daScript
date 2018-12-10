@@ -4,8 +4,7 @@ namespace yzg
 {
     using namespace std;
     
-    enum Type : uint8_t
-    {
+    enum Type : uint8_t {
         none,
         tVoid,
         tBool,
@@ -33,8 +32,7 @@ namespace yzg
     
     struct StructInfo;
     
-    struct LineInfo
-    {
+    struct LineInfo {
         LineInfo() = default;
         LineInfo(int c, int l) : column(uint32_t(c)), line(uint32_t(l)) {}
         __forceinline bool operator < ( const LineInfo & info ) const { return (line==info.line) ? column<info.column : line<info.line; }
@@ -44,8 +42,7 @@ namespace yzg
         uint32_t    column = 0, line = 0;
     };
     
-    struct TypeInfo
-    {
+    struct TypeInfo {
         Type            type;
         StructInfo *    structType;
         TypeInfo *      firstType;      // map  from, or array
@@ -57,20 +54,17 @@ namespace yzg
         bool            isPod;
     };
     
-    struct VarInfo : TypeInfo
-    {
+    struct VarInfo : TypeInfo {
         char *      name;
     };
     
-    struct StructInfo
-    {
+    struct StructInfo {
         char *      name;
         VarInfo **  fields;
         uint32_t    fieldsSize;
     };
     
-    struct FuncInfo
-    {
+    struct FuncInfo {
         char *      name;
         VarInfo **  args;
         uint32_t    argsSize;

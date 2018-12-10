@@ -37,6 +37,7 @@ ast/ast.cpp
 ast/ast.h
 ast/ast_interop.h
 ast/builtin.cpp
+ast/builtin_runtime.cpp
 )
 SOURCE_GROUP_FILES("ast" AST_SRC)
 

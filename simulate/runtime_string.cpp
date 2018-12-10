@@ -7,8 +7,7 @@ namespace yzg
 {
     // string operations
     
-    __m128 SimPolicy_String::Add ( __m128 a, __m128 b, Context & context )
-    {
+    __m128 SimPolicy_String::Add ( __m128 a, __m128 b, Context & context ) {
         const char *  sA = to_rts(a); auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
         char * sAB = (char * ) context.allocate(la + lb + 1);
@@ -17,8 +16,7 @@ namespace yzg
         return from_rts(sAB);
     }
   
-    __m128 SimPolicy_String::SetAdd ( __m128 a, __m128 b, Context & context )
-    {
+    __m128 SimPolicy_String::SetAdd ( __m128 a, __m128 b, Context & context ) {
         char ** pA = cast<char **>::to(a);
         const char *  sA = *pA ? *pA : rts_null; auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
@@ -32,8 +30,7 @@ namespace yzg
     
     const char * rts_null = "";
     
-    string unescapeString ( const string & input )
-    {
+    string unescapeString ( const string & input ) {
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
         string result;
@@ -59,8 +56,7 @@ namespace yzg
         return result;
     }
     
-    string escapeString ( const string & input )
-    {
+    string escapeString ( const string & input ) {
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
         string result;
@@ -79,8 +75,7 @@ namespace yzg
         return result;
     }
     
-    string getFewLines ( const string & st, int ROW, int COL )
-    {
+    string getFewLines ( const string & st, int ROW, int COL ) {
         stringstream text;
         int col=1, row=1;
         auto it = st.begin();
@@ -98,8 +93,7 @@ namespace yzg
         return text.str();
     }
     
-    string to_string_ex ( double dnum )
-    {
+    string to_string_ex ( double dnum ) {
         stringstream ss;
         ss << dnum;
         if ( ss.str().find_first_of(".e")==string::npos )
@@ -107,8 +101,7 @@ namespace yzg
         return ss.str();
     }
     
-    string reportError ( const string * st, int row, int col, const string & message )
-    {
+    string reportError ( const string * st, int row, int col, const string & message ) {
         stringstream ssw;
         if ( row && col ) {
             auto text = st ? getFewLines(*st, row, col ) : "";

@@ -63,8 +63,7 @@ namespace yzg
         return t;
     }
     
-    bool isUnaryOperator ( Operator op )
-    {
+    bool isUnaryOperator ( Operator op ) {
         return
             (op==Operator::add)
         ||  (op==Operator::sub)
@@ -77,8 +76,7 @@ namespace yzg
         ;
     }
     
-    bool isBinaryOperator ( Operator op )
-    {
+    bool isBinaryOperator ( Operator op ) {
         return
             (op!=Operator::is)
         &&  (op!=Operator::boolNot)
@@ -90,15 +88,13 @@ namespace yzg
         ;
     }
     
-    bool isTrinaryOperator ( Operator op )
-    {
+    bool isTrinaryOperator ( Operator op ) {
         return (op==Operator::is);
     }
     
     // TypeDecl
     
-    ostream& operator<< (ostream& stream, const TypeDecl & decl)
-    {
+    ostream& operator<< (ostream& stream, const TypeDecl & decl) {
         if ( decl.baseType==Type::tArray ) {
             if ( decl.firstType ) {
                 stream << "array (" << *decl.firstType << ")";
@@ -140,8 +136,7 @@ namespace yzg
         return stream;
     }
     
-    TypeDecl::TypeDecl(const TypeDecl & decl)
-    {
+    TypeDecl::TypeDecl(const TypeDecl & decl) {
         baseType = decl.baseType;
         structType = decl.structType;
         dim = decl.dim;
@@ -153,8 +148,7 @@ namespace yzg
             secondType = make_shared<TypeDecl>(*decl.secondType);
     }
     
-    bool TypeDecl::canCopy() const
-    {
+    bool TypeDecl::canCopy() const {
         if ( baseType==Type::tArray || baseType==Type::tTable )
             return false;
         if ( baseType==Type::tStructure && structType )
@@ -162,8 +156,7 @@ namespace yzg
         return true;
     }
     
-    bool TypeDecl::isPod() const
-    {
+    bool TypeDecl::isPod() const {
         if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString )
             return false;
         if ( baseType==Type::tStructure && structType )
@@ -171,8 +164,7 @@ namespace yzg
         return true;
     }
     
-    string TypeDecl::getMangledName() const
-    {
+    string TypeDecl::getMangledName() const {
         stringstream ss;
         if ( baseType==Type::tArray ) {
             ss << "#array";
@@ -212,8 +204,7 @@ namespace yzg
         return ss.str();
     }
     
-    bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters ) const
-    {
+    bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters ) const {
         if ( baseType!=decl.baseType )
             return false;
         if ( baseType==Type::tStructure && structType!=decl.structType )
@@ -244,23 +235,19 @@ namespace yzg
         return true;
     }
     
-    bool TypeDecl::isGoodIteratorType() const
-    {
+    bool TypeDecl::isGoodIteratorType() const {
         return baseType==Type::tIterator && dim.size()==0 && firstType;
     }
     
-    bool TypeDecl::isGoodArrayType() const
-    {
+    bool TypeDecl::isGoodArrayType() const {
         return baseType==Type::tArray && dim.size()==0 && firstType;
     }
     
-    bool TypeDecl::isGoodTableType() const
-    {
+    bool TypeDecl::isGoodTableType() const {
         return baseType==Type::tTable && dim.size()==0 && firstType && secondType;
     }
     
-    bool TypeDecl::isIteratorType ( const TypeDecl & decl ) const
-    {
+    bool TypeDecl::isIteratorType ( const TypeDecl & decl ) const {
         if ( baseType!=decl.baseType )
             return false;
         if ( baseType==Type::tStructure && structType!=decl.structType )
@@ -272,18 +259,15 @@ namespace yzg
         return true;
     }
     
-    bool TypeDecl::isVoid() const
-    {
+    bool TypeDecl::isVoid() const {
         return (baseType==Type::tVoid) && (dim.size()==0);
     }
     
-    bool TypeDecl::isPointer() const
-    {
+    bool TypeDecl::isPointer() const {
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
     
-    bool TypeDecl::isSimpleType() const
-    {
+    bool TypeDecl::isSimpleType() const {
         if (    baseType==Type::none
             ||  baseType==Type::tVoid
             ||  baseType==Type::tStructure
@@ -294,8 +278,7 @@ namespace yzg
         return true;
     }
     
-    bool TypeDecl::isWorkhorseType() const
-    {
+    bool TypeDecl::isWorkhorseType() const {
         if ( dim.size() )
             return false;
         switch ( baseType ) {
@@ -322,46 +305,38 @@ namespace yzg
         }
     }
     
-    bool TypeDecl::isSimpleType(Type typ) const
-    {
+    bool TypeDecl::isSimpleType(Type typ) const {
         return baseType==typ && isSimpleType();
     }
     
-    bool TypeDecl::isArray() const
-    {
+    bool TypeDecl::isArray() const {
         return dim.size() != 0;
     }
     
-    bool TypeDecl::isRef() const
-    {
+    bool TypeDecl::isRef() const {
         return ref || baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || dim.size();
     }
     
-    bool TypeDecl::isRefType() const
-    {
+    bool TypeDecl::isRefType() const {
         return baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || dim.size();
     }
     
-    bool TypeDecl::isIndex() const
-    {
+    bool TypeDecl::isIndex() const {
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
     }
     
-    int TypeDecl::getBaseSizeOf() const
-    {
+    int TypeDecl::getBaseSizeOf() const {
         return baseType==Type::tStructure ? structType->getSizeOf() : getTypeBaseSize(baseType);
     }
     
-    int TypeDecl::getSizeOf() const
-    {
+    int TypeDecl::getSizeOf() const {
         int size = 1;
         for ( auto i : dim )
             size *= i;
         return getBaseSizeOf() * size;
     }
     
-    int TypeDecl::getStride() const
-    {
+    int TypeDecl::getStride() const {
         int size = 1;
         if ( dim.size() > 1 ) {
             for ( size_t i=0; i!=dim.size()-1; ++i )
@@ -372,8 +347,7 @@ namespace yzg
     
     // structure
     
-    bool Structure::canCopy() const
-    {
+    bool Structure::canCopy() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->canCopy() )
                 return false;
@@ -381,8 +355,7 @@ namespace yzg
         return true;
     }
     
-    bool Structure::isPod() const
-    {
+    bool Structure::isPod() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->isPod() )
                 return false;
@@ -390,8 +363,7 @@ namespace yzg
         return true;
     }
     
-    int Structure::getSizeOf() const
-    {
+    int Structure::getSizeOf() const {
         int size = 0;
         for ( const auto & fd : fields ) {
             size += fd.type->getSizeOf();
@@ -399,8 +371,7 @@ namespace yzg
         return size;
     }
     
-    const Structure::FieldDeclaration * Structure::findField ( const string & name ) const
-    {
+    const Structure::FieldDeclaration * Structure::findField ( const string & name ) const {
         for ( const auto & fd : fields ) {
             if ( fd.name==name ) {
                 return &fd;
@@ -409,8 +380,7 @@ namespace yzg
         return nullptr;
     }
     
-    ostream& operator<< (ostream& stream, const Structure & structure)
-    {
+    ostream& operator<< (ostream& stream, const Structure & structure) {
         stream << "(struct " << structure.name << "\n";
         for ( auto & decl : structure.fields ) {
             stream << "\t(" << *decl.type << " " << decl.name << ")\n";
@@ -421,14 +391,12 @@ namespace yzg
 
     // variable
     
-    ostream& operator<< (ostream& stream, const Variable & var)
-    {
+    ostream& operator<< (ostream& stream, const Variable & var) {
         stream << *var.type << " " << var.name;
         return stream;
     }
     
-    VariablePtr Variable::clone() const
-    {
+    VariablePtr Variable::clone() const {
         auto pVar = make_shared<Variable>();
         pVar->name = name;
         pVar->type = make_shared<TypeDecl>(*type);
@@ -437,12 +405,10 @@ namespace yzg
         pVar->at = at;
         return pVar;
     }
-
     
     // function
     
-    ostream& operator<< (ostream& stream, const Function & func)
-    {
+    ostream& operator<< (ostream& stream, const Function & func) {
         stream << "(defun (" << *func.result << " " << func.name << ")\n"; // //" << func.getMangledName() << "\n";
         for ( auto & decl : func.arguments ) {
             stream << "\t(" << *decl->type << " " << decl->name;
@@ -455,8 +421,7 @@ namespace yzg
         return stream;
     }
     
-    string Function::getMangledName() const
-    {
+    string Function::getMangledName() const {
         stringstream ss;
         ss << name;
         for ( auto & arg : arguments ) {
@@ -466,8 +431,7 @@ namespace yzg
         return ss.str();
     }
     
-    VariablePtr Function::findArgument(const string & name)
-    {
+    VariablePtr Function::findArgument(const string & name) {
         for ( auto & arg : arguments ) {
             if ( arg->name==name ) {
                 return arg;
@@ -476,8 +440,7 @@ namespace yzg
         return nullptr;
     }
     
-    SimNode * Function::simulate (Context & context) const
-    {
+    SimNode * Function::simulate (Context & context) const {
         if ( builtIn ) {
             assert(0 && "can only simulate non built-in function");
             return nullptr;
@@ -487,21 +450,18 @@ namespace yzg
     
     // built-in function
     
-    BuiltInFunction::BuiltInFunction ( const string & fn )
-    {
+    BuiltInFunction::BuiltInFunction ( const string & fn ) {
         builtIn = true;
         name = fn;
     }
     
     // expression
     
-    void Expression::InferTypeContext::error ( const string & err, const LineInfo & at )
-    {
+    void Expression::InferTypeContext::error ( const string & err, const LineInfo & at ) {
         program->error(err,at);
     }
     
-    ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
             assert(0 && "unsupported expression");
             return nullptr;
@@ -511,8 +471,7 @@ namespace yzg
         return expr;
     }
     
-    ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr )
-    {
+    ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr ) {
         if ( expr->type && expr->type->isRef() ) {
             auto ar2l = make_shared<ExprRef2Value>();
             ar2l->subexpr = expr;
@@ -525,35 +484,30 @@ namespace yzg
         }
     }
     
-    void Expression::logType(ostream& stream) const
-    {
+    void Expression::logType(ostream& stream) const {
         if ( g_logTypes )
             stream << "$ (" << *type << ") ";
     }
     
-    ostream& operator<< (ostream& stream, const Expression & expr)
-    {
+    ostream& operator<< (ostream& stream, const Expression & expr) {
         expr.log(stream, 1);
         return stream;
     }
     
     // ExprRef2Value
     
-    ExpressionPtr ExprRef2Value::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprRef2Value::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprRef2Value>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
     
-    void ExprRef2Value::log(ostream& stream, int depth) const
-    {
+    void ExprRef2Value::log(ostream& stream, int depth) const {
         stream << "(-> " << *subexpr << ")";
     }
     
-    void ExprRef2Value::inferType(InferTypeContext & context)
-    {
+    void ExprRef2Value::inferType(InferTypeContext & context) {
         subexpr->inferType(context);
         if ( !subexpr->type ) return;
         if ( !subexpr->type->isRef() ) {
@@ -568,28 +522,24 @@ namespace yzg
         }
     }
     
-    SimNode * ExprRef2Value::simulate (Context & context) const
-    {
+    SimNode * ExprRef2Value::simulate (Context & context) const {
         return context.makeValueNode<SimNode_Ref2Value>(type->baseType, at, subexpr->simulate(context));
     }
     
     // ExprPtr2Ref
     
-    ExpressionPtr ExprPtr2Ref::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprPtr2Ref::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprPtr2Ref>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
     
-    void ExprPtr2Ref::log(ostream& stream, int depth) const
-    {
+    void ExprPtr2Ref::log(ostream& stream, int depth) const {
         stream << "(=> " << *subexpr << ")";
     }
     
-    void ExprPtr2Ref::inferType(InferTypeContext & context)
-    {
+    void ExprPtr2Ref::inferType(InferTypeContext & context) {
         subexpr->inferType(context);
         subexpr = autoDereference(subexpr);
         if ( !subexpr->type ) return;
@@ -603,22 +553,19 @@ namespace yzg
         }
     }
     
-    SimNode * ExprPtr2Ref::simulate (Context & context) const
-    {
+    SimNode * ExprPtr2Ref::simulate (Context & context) const {
         return context.makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
 
     // ExprAssert
     
-    ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprAssert>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
     
-    void ExprAssert::inferType(InferTypeContext & context)
-    {
+    void ExprAssert::inferType(InferTypeContext & context) {
         if ( arguments.size()<1 || arguments.size()>2 ) {
             context.error("assert(expr) or assert(expr,string)", at);
         }
@@ -632,8 +579,7 @@ namespace yzg
         type = make_shared<TypeDecl>(Type::tVoid);
     }
     
-    SimNode * ExprAssert::simulate (Context & context) const
-    {
+    SimNode * ExprAssert::simulate (Context & context) const {
         string message;
         if ( arguments.size()==2 && arguments[1]->isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
@@ -642,15 +588,13 @@ namespace yzg
     
     // ExprDebug
     
-    ExpressionPtr ExprDebug::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprDebug::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprDebug>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
     
-    void ExprDebug::inferType(InferTypeContext & context)
-    {
+    void ExprDebug::inferType(InferTypeContext & context) {
         if ( arguments.size()<1 || arguments.size()>2 ) {
             context.error("debug(expr) or debug(expr,string)", at);
         }
@@ -661,8 +605,7 @@ namespace yzg
         type = make_shared<TypeDecl>(*arguments[0]->type);
     }
     
-    SimNode * ExprDebug::simulate (Context & context) const
-    {
+    SimNode * ExprDebug::simulate (Context & context) const {
         TypeInfo * pTypeInfo = context.makeNode<TypeInfo>();
         context.thisProgram->makeTypeInfo(pTypeInfo, context, arguments[0]->type);
         string message;
@@ -676,15 +619,13 @@ namespace yzg
 
     // ExprHash
     
-    ExpressionPtr ExprHash::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprHash::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprHash>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
     
-    void ExprHash::inferType(InferTypeContext & context)
-    {
+    void ExprHash::inferType(InferTypeContext & context) {
         if ( arguments.size()!=1 ) {
             context.error("hash(expr)", at);
         }
@@ -693,8 +634,7 @@ namespace yzg
         type = make_shared<TypeDecl>(Type::tUInt64);
     }
     
-    SimNode * ExprHash::simulate (Context & context) const
-    {
+    SimNode * ExprHash::simulate (Context & context) const {
         auto val = arguments[0]->simulate(context);
         if ( !arguments[0]->type->isRef() ) {
             return context.makeValueNode<SimNode_HashOfValue>(arguments[0]->type->baseType, at, val);
@@ -707,18 +647,15 @@ namespace yzg
         }
     }
 
-    
     // ExprArrayPush
     
-    ExpressionPtr ExprArrayPush::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprArrayPush::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprArrayPush>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
     
-    void ExprArrayPush::inferType(InferTypeContext & context)
-    {
+    void ExprArrayPush::inferType(InferTypeContext & context) {
         if ( arguments.size()!=2 && arguments.size()!=3 ) {
             context.error("push(array,value) or push(array,value,at)", at);
             return;
@@ -738,8 +675,7 @@ namespace yzg
         type = make_shared<TypeDecl>(Type::tVoid);
     }
     
-    SimNode * ExprArrayPush::simulate (Context & context) const
-    {
+    SimNode * ExprArrayPush::simulate (Context & context) const {
         auto arr = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
         auto idx = arguments.size()==3 ? arguments[2]->simulate(context) : nullptr;
@@ -752,15 +688,13 @@ namespace yzg
     
     // ExprErase
     
-    ExpressionPtr ExprErase::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprErase::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprErase>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
     
-    void ExprErase::inferType(InferTypeContext & context)
-    {
+    void ExprErase::inferType(InferTypeContext & context) {
         if ( arguments.size()!=2 ) {
             context.error("erase(table,key) or erase(array,index)", at);
         }
@@ -782,8 +716,7 @@ namespace yzg
         }
     }
     
-    SimNode * ExprErase::simulate (Context & context) const
-    {
+    SimNode * ExprErase::simulate (Context & context) const {
         auto cont = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
         if ( arguments[0]->type->isGoodArrayType() ) {
@@ -800,15 +733,13 @@ namespace yzg
     
     // ExprFind
     
-    ExpressionPtr ExprFind::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprFind::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprFind>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
     
-    void ExprFind::inferType(InferTypeContext & context)
-    {
+    void ExprFind::inferType(InferTypeContext & context) {
         if ( arguments.size()!=2 ) {
             context.error("find(table,key) or find(array,value)", at);
         }
@@ -830,8 +761,7 @@ namespace yzg
         }
     }
     
-    SimNode * ExprFind::simulate (Context & context) const
-    {
+    SimNode * ExprFind::simulate (Context & context) const {
         auto cont = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
         if ( arguments[0]->type->isGoodArrayType() ) {
@@ -848,11 +778,9 @@ namespace yzg
         }
     }
 
-    
     // ExprSizeOf
     
-    ExpressionPtr ExprSizeOf::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprSizeOf::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprSizeOf>(expr);
         Expression::clone(cexpr);
         if ( subexpr )
@@ -862,8 +790,7 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprSizeOf::log(ostream& stream, int depth) const
-    {
+    void ExprSizeOf::log(ostream& stream, int depth) const {
         stream << "(sizeof ";
         if ( subexpr )
             stream << *subexpr;
@@ -872,8 +799,7 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprSizeOf::inferType(InferTypeContext & context)
-    {
+    void ExprSizeOf::inferType(InferTypeContext & context) {
         if ( subexpr ) {
             subexpr->inferType(context);
             if ( subexpr->type )
@@ -882,29 +808,25 @@ namespace yzg
         type = make_shared<TypeDecl>(Type::tInt);
     }
     
-    SimNode * ExprSizeOf::simulate (Context & context) const
-    {
+    SimNode * ExprSizeOf::simulate (Context & context) const {
         int32_t size = typeexpr->getSizeOf();
         return context.makeNode<SimNode_ConstValue<int32_t>>(at,size);
     }
     
     // ExprNew
     
-    ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprNew>(expr);
         Expression::clone(cexpr);
         cexpr->typeexpr = typeexpr;
         return cexpr;
     }
     
-    void ExprNew::log(ostream& stream, int depth) const
-    {
+    void ExprNew::log(ostream& stream, int depth) const {
         stream << "(new (" << *typeexpr << "))";
     }
     
-    void ExprNew::inferType(InferTypeContext & context)
-    {
+    void ExprNew::inferType(InferTypeContext & context) {
         if ( typeexpr->baseType != Type::tStructure ) {
             context.error("can only new structures (for now)", typeexpr->at );
         } else if ( typeexpr->ref ) {
@@ -917,21 +839,18 @@ namespace yzg
         }
     }
     
-    SimNode * ExprNew::simulate (Context & context) const
-    {
+    SimNode * ExprNew::simulate (Context & context) const {
         int32_t bytes = typeexpr->getSizeOf();
         return context.makeNode<SimNode_New>(at,bytes);
     }
 
     // ExprAt
     
-    void ExprAt::log(ostream& stream, int depth) const
-    {
+    void ExprAt::log(ostream& stream, int depth) const {
         stream << "(@ " << *subexpr << " " << *index << ")";
     }
     
-    void ExprAt::inferType(InferTypeContext & context)
-    {
+    void ExprAt::inferType(InferTypeContext & context) {
         subexpr->inferType(context);
         if ( !subexpr->type ) return;
         index->inferType(context);
@@ -964,8 +883,7 @@ namespace yzg
         }
     }
     
-    ExpressionPtr ExprAt::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprAt::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprAt>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -973,8 +891,7 @@ namespace yzg
         return cexpr;
     }
 
-    SimNode * ExprAt::simulate (Context & context) const
-    {
+    SimNode * ExprAt::simulate (Context & context) const {
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
         if ( subexpr->type->isGoodTableType() ) {
@@ -992,8 +909,7 @@ namespace yzg
 
     // ExprBlock
     
-    ExpressionPtr ExprBlock::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprBlock::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprBlock>(expr);
         Expression::clone(cexpr);
         for ( auto & subexpr : list ) {
@@ -1002,8 +918,7 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprBlock::log(ostream& stream, int depth) const
-    {
+    void ExprBlock::log(ostream& stream, int depth) const {
         stream << "(";
         for ( int i = 0; i!=list.size(); ++i ) {
             if ( i )
@@ -1015,16 +930,14 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprBlock::inferType(InferTypeContext & context)
-    {
+    void ExprBlock::inferType(InferTypeContext & context) {
         type = make_shared<TypeDecl>();
         for ( auto & ex : list ) {
             ex->inferType(context);
         }
     }
     
-    SimNode * ExprBlock::simulate (Context & context) const
-    {
+    SimNode * ExprBlock::simulate (Context & context) const {
         // TODO: what if list size is 0?
         if ( list.size()!=1 ) {
             auto block = context.makeNode<SimNode_Block>(at);
@@ -1040,8 +953,7 @@ namespace yzg
     
     // ExprField
     
-    ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprField>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
@@ -1050,16 +962,14 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprField::log(ostream& stream, int depth) const
-    {
+    void ExprField::log(ostream& stream, int depth) const {
         logType(stream);
         stream << "(. ";
         value->log(stream,depth+1);
         stream << " " << name << ")";
     }
     
-    void ExprField::inferType(InferTypeContext & context)
-    {
+    void ExprField::inferType(InferTypeContext & context) {
         value->inferType(context);
         if ( !value->type ) return;
         auto valT = value->type;
@@ -1084,8 +994,7 @@ namespace yzg
         }
     }
     
-    SimNode * ExprField::simulate (Context & context) const
-    {
+    SimNode * ExprField::simulate (Context & context) const {
         if ( value->type->baseType==Type::tStructure )
             return context.makeNode<SimNode_Field>(at,value->simulate(context),field->offset);
         else
@@ -1094,8 +1003,7 @@ namespace yzg
     
     // ExprVar
     
-    ExpressionPtr ExprVar::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprVar::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprVar>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
@@ -1105,14 +1013,12 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprVar::log(ostream& stream, int depth) const
-    {
+    void ExprVar::log(ostream& stream, int depth) const {
         logType(stream);
         stream << name;
     }
     
-    void ExprVar::inferType(InferTypeContext & context)
-    {
+    void ExprVar::inferType(InferTypeContext & context) {
         // local (that on the stack)
         for ( auto it = context.local.rbegin(); it!=context.local.rend(); ++it ) {
             auto var = *it;
@@ -1147,8 +1053,7 @@ namespace yzg
         }
     }
     
-    SimNode * ExprVar::simulate (Context & context) const
-    {
+    SimNode * ExprVar::simulate (Context & context) const {
         if ( local ) {
             if ( variable->type->ref ) {
                 return context.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
@@ -1161,12 +1066,10 @@ namespace yzg
             return context.makeNode<SimNode_GetGlobal>(at, variable->index);
         }
     }
-
     
     // ExprOp
     
-    ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
             assert(0 && "can't clone ExprOp");
             return nullptr;
@@ -1179,24 +1082,21 @@ namespace yzg
     
     // ExprOp1
     
-    ExpressionPtr ExprOp1::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprOp1::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprOp1>(expr);
         ExprOp::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
     
-    void ExprOp1::log(ostream& stream, int depth) const
-    {
+    void ExprOp1::log(ostream& stream, int depth) const {
         logType(stream);
         stream << "(" << to_string(op) << " ";
         subexpr->log(stream, depth);
         stream << ")";
     }
     
-    void ExprOp1::inferType(InferTypeContext & context)
-    {
+    void ExprOp1::inferType(InferTypeContext & context) {
         subexpr->inferType(context);
         vector<TypeDeclPtr> types = { subexpr->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
@@ -1216,8 +1116,7 @@ namespace yzg
         }
     }
     
-    SimNode * ExprOp1::simulate (Context & context) const
-    {
+    SimNode * ExprOp1::simulate (Context & context) const {
         auto pSimOp1 = static_cast<SimNode_Op1 *>(func->makeSimNode(context));
         pSimOp1->x = subexpr->simulate(context);
         return pSimOp1;
@@ -1225,8 +1124,7 @@ namespace yzg
     
     // ExprOp2
     
-    ExpressionPtr ExprOp2::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprOp2::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprOp2>(expr);
         ExprOp::clone(cexpr);
         cexpr->left = left->clone();
@@ -1234,8 +1132,7 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprOp2::log(ostream& stream, int depth) const
-    {
+    void ExprOp2::log(ostream& stream, int depth) const {
         logType(stream);
         stream << "(" << to_string(op) << " ";
         left->log(stream, depth);
@@ -1244,8 +1141,7 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprOp2::inferType(InferTypeContext & context)
-    {
+    void ExprOp2::inferType(InferTypeContext & context) {
         left->inferType(context);
         right->inferType(context);
         if ( !left->type ) return;
@@ -1274,8 +1170,7 @@ namespace yzg
         }
     }
     
-    SimNode * ExprOp2::simulate (Context & context) const
-    {
+    SimNode * ExprOp2::simulate (Context & context) const {
         auto pSimOp2 = static_cast<SimNode_Op2 *>(func->makeSimNode(context));
         pSimOp2->l = left->simulate(context);
         pSimOp2->r = right->simulate(context);
@@ -1284,8 +1179,7 @@ namespace yzg
 
     // ExprOp3
     
-    ExpressionPtr ExprOp3::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprOp3::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprOp3>(expr);
         ExprOp::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1294,8 +1188,7 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprOp3::log(ostream& stream, int depth) const
-    {
+    void ExprOp3::log(ostream& stream, int depth) const {
         logType(stream);
         stream << "(" << to_string(op) << " ";
         subexpr->log(stream, depth);
@@ -1306,8 +1199,7 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprOp3::inferType(InferTypeContext & context)
-    {
+    void ExprOp3::inferType(InferTypeContext & context) {
         subexpr->inferType(context);
         if ( !subexpr->type->isSimpleType(Type::tBool) ) {
             context.error("cond operator condition must be boolean", at);
@@ -1335,16 +1227,14 @@ namespace yzg
         }
     }
     
-    SimNode * ExprOp3::simulate (Context & context) const
-    {
+    SimNode * ExprOp3::simulate (Context & context) const {
         assert(0 && "implement");
         return nullptr;
     }
     
     // common for move and copy
     
-    SimNode * makeCopy(const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right )
-    {
+    SimNode * makeCopy(const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
         assert ( rightType.canCopy() && "should check above" );
         if ( rightType.isRef() ) {
             return context.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
@@ -1353,8 +1243,7 @@ namespace yzg
         }
     }
     
-    SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right )
-    {
+    SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
         assert ( !rightType.canCopy() && "should check above" );
         if ( rightType.ref ) {
             return context.makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
@@ -1368,8 +1257,7 @@ namespace yzg
     
     // ExprMove
     
-    void ExprMove::log(ostream& stream, int depth) const
-    {
+    void ExprMove::log(ostream& stream, int depth) const {
         logType(stream);
         stream << "(<- ";
         left->log(stream, depth);
@@ -1378,8 +1266,7 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprMove::inferType(InferTypeContext & context)
-    {
+    void ExprMove::inferType(InferTypeContext & context) {
         left->inferType(context);
         right->inferType(context);
         if ( !left->type ) return;
@@ -1395,15 +1282,13 @@ namespace yzg
         type = make_shared<TypeDecl>(*left->type);  // we return left
     }
     
-    ExpressionPtr ExprMove::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprMove::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMove>(expr);
         ExprOp2::clone(cexpr);
         return cexpr;
     }
     
-    SimNode * ExprMove::simulate (Context & context) const
-    {
+    SimNode * ExprMove::simulate (Context & context) const {
         return makeMove(at,
                         context,
                         *right->type,
@@ -1413,8 +1298,7 @@ namespace yzg
     
     // ExprCopy
     
-    void ExprCopy::log(ostream& stream, int depth) const
-    {
+    void ExprCopy::log(ostream& stream, int depth) const {
         logType(stream);
         stream << "(= ";
         left->log(stream, depth);
@@ -1423,8 +1307,7 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprCopy::inferType(InferTypeContext & context)
-    {
+    void ExprCopy::inferType(InferTypeContext & context) {
         left->inferType(context);
         right->inferType(context);
         if ( !left->type ) return;
@@ -1440,22 +1323,19 @@ namespace yzg
         type = make_shared<TypeDecl>(*left->type);  // we return left
     }
     
-    ExpressionPtr ExprCopy::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprCopy::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprCopy>(expr);
         ExprOp2::clone(cexpr);
         return cexpr;
     }
     
-    SimNode * ExprCopy::simulate (Context & context) const
-    {
+    SimNode * ExprCopy::simulate (Context & context) const {
         return makeCopy(at, context, *right->type, left->simulate(context), right->simulate(context));
     }
     
     // ExprTryCatch
     
-    void ExprTryCatch::log(ostream& stream, int depth) const
-    {
+    void ExprTryCatch::log(ostream& stream, int depth) const {
         stream << "(try\n";
         stream << string(depth+2,'\t');
         try_block->log(stream, depth+1);
@@ -1464,22 +1344,19 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprTryCatch::inferType(InferTypeContext & context)
-    {
+    void ExprTryCatch::inferType(InferTypeContext & context) {
         try_block->inferType(context);
         catch_block->inferType(context);
         type = make_shared<TypeDecl>();
     }
     
-    SimNode * ExprTryCatch::simulate (Context & context) const
-    {
+    SimNode * ExprTryCatch::simulate (Context & context) const {
         return context.makeNode<SimNode_TryCatch>(at,
                                                   try_block->simulate(context),
                                                   catch_block->simulate(context));
     }
     
-    ExpressionPtr ExprTryCatch::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprTryCatch::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprTryCatch>(expr);
         Expression::clone(cexpr);
         cexpr->try_block = try_block->clone();
@@ -1489,8 +1366,7 @@ namespace yzg
     
     // ExprReturn
     
-    ExpressionPtr ExprReturn::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprReturn::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprReturn>(expr);
         Expression::clone(cexpr);
         if ( subexpr )
@@ -1498,8 +1374,7 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprReturn::log(ostream& stream, int depth) const
-    {
+    void ExprReturn::log(ostream& stream, int depth) const {
         if ( subexpr ) {
             stream << "(return ";
             subexpr->log(stream, depth);
@@ -1509,8 +1384,7 @@ namespace yzg
         }
     }
     
-    void ExprReturn::inferType(InferTypeContext & context)
-    {
+    void ExprReturn::inferType(InferTypeContext & context) {
         if ( subexpr ) {
             subexpr->inferType(context);
             if ( !subexpr->type ) return;
@@ -1533,41 +1407,35 @@ namespace yzg
         }
     }
     
-    SimNode * ExprReturn::simulate (Context & context) const
-    {
+    SimNode * ExprReturn::simulate (Context & context) const {
         return context.makeNode<SimNode_Return>(at, subexpr ? subexpr->simulate(context) : nullptr);
     }
     
     // ExprBreak
     
-    ExpressionPtr ExprBreak::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprBreak::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprBreak>(expr);
         Expression::clone(cexpr);
         return cexpr;
     }
     
-    void ExprBreak::log(ostream& stream, int depth) const
-    {
+    void ExprBreak::log(ostream& stream, int depth) const {
         stream << "break";
     }
     
-    void ExprBreak::inferType(InferTypeContext & context)
-    {
+    void ExprBreak::inferType(InferTypeContext & context) {
         if ( !context.loop.size() )
             context.error("break without loop", at);
         type = make_shared<TypeDecl>();
     }
     
-    SimNode * ExprBreak::simulate (Context & context) const
-    {
+    SimNode * ExprBreak::simulate (Context & context) const {
         return context.makeNode<SimNode_Break>(at);
     }
 
     // ExprIfThenElse
     
-    ExpressionPtr ExprIfThenElse::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprIfThenElse::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprIfThenElse>(expr);
         Expression::clone(cexpr);
         cexpr->cond = cond->clone();
@@ -1577,8 +1445,7 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprIfThenElse::log(ostream& stream, int depth) const
-    {
+    void ExprIfThenElse::log(ostream& stream, int depth) const {
         stream << "(if\n" << string(depth+1,'\t');
         cond->log(stream, depth+1);
         stream << "\n" << string(depth+2,'\t');
@@ -1590,8 +1457,7 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprIfThenElse::inferType(InferTypeContext & context)
-    {
+    void ExprIfThenElse::inferType(InferTypeContext & context) {
         cond->inferType(context);
         if ( !cond->type ) return;
         if ( !cond->type->isSimpleType(Type::tBool) ) {
@@ -1604,16 +1470,14 @@ namespace yzg
         }
     }
     
-    SimNode * ExprIfThenElse::simulate (Context & context) const
-    {
+    SimNode * ExprIfThenElse::simulate (Context & context) const {
         return context.makeNode<SimNode_IfThenElse>(at, cond->simulate(context), if_true->simulate(context),
                                                     if_false ? if_false->simulate(context) : nullptr);
     }
 
     // ExprWhile
     
-    ExpressionPtr ExprWhile::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprWhile::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprWhile>(expr);
         Expression::clone(cexpr);
         cexpr->cond = cond->clone();
@@ -1621,8 +1485,7 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprWhile::inferType(InferTypeContext & context)
-    {
+    void ExprWhile::inferType(InferTypeContext & context) {
         cond->inferType(context);
         if ( !cond->type ) return;
         if ( !cond->type->isSimpleType(Type::tBool) ) {
@@ -1635,8 +1498,7 @@ namespace yzg
         }
     }
     
-    void ExprWhile::log(ostream& stream, int depth) const
-    {
+    void ExprWhile::log(ostream& stream, int depth) const {
         stream << "(while\n"<< string(depth+1,'\t');
         cond->log(stream, depth+1);
         stream << "\n" << string(depth+2,'\t');
@@ -1644,15 +1506,13 @@ namespace yzg
         stream << ")";
     }
 
-    SimNode * ExprWhile::simulate (Context & context) const
-    {
+    SimNode * ExprWhile::simulate (Context & context) const {
         return context.makeNode<SimNode_While>(at, cond->simulate(context),body->simulate(context));
     }
     
     // ExprFor
 
-    ExpressionPtr ExprFor::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprFor::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprFor>(expr);
         Expression::clone(cexpr);
         cexpr->iterators = iterators;
@@ -1666,8 +1526,7 @@ namespace yzg
         return cexpr;
     }
     
-    Variable * ExprFor::findIterator(const string & name) const
-    {
+    Variable * ExprFor::findIterator(const string & name) const {
         for ( auto & v : iteratorVariables ) {
             if ( v->name==name ) {
                 return v.get();
@@ -1676,8 +1535,7 @@ namespace yzg
         return nullptr;
     }
     
-    void ExprFor::log(ostream& stream, int depth) const
-    {
+    void ExprFor::log(ostream& stream, int depth) const {
         stream << "(for (";
         for ( int i=0; i!=iterators.size(); ++i ) {
             if ( i ) stream << " ";
@@ -1699,8 +1557,7 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprFor::inferType(InferTypeContext & context)
-    {
+    void ExprFor::inferType(InferTypeContext & context) {
         if ( !iterators.size() ) {
             context.error("for needs at least one iterator", at);
             return;
@@ -1768,8 +1625,7 @@ namespace yzg
         type = make_shared<TypeDecl>();
     }
 
-    SimNode * ExprFor::simulate (Context & context) const
-    {
+    SimNode * ExprFor::simulate (Context & context) const {
         int total = sources.size();
         if ( (dynamicArrays && fixedArrays) || nativeIterators ) {
             SimNode_ForWithIteratorBase * result = (SimNode_ForWithIteratorBase *)
@@ -1825,8 +1681,7 @@ namespace yzg
     
     // ExprLet
     
-    ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprLet>(expr);
         Expression::clone(cexpr);
         for ( auto & var : variables )
@@ -1835,8 +1690,7 @@ namespace yzg
         return cexpr;
     }
 
-    Variable * ExprLet::find(const string & name) const
-    {
+    Variable * ExprLet::find(const string & name) const {
         for ( auto & v : variables ) {
             if ( v->name==name ) {
                 return v.get();
@@ -1845,8 +1699,7 @@ namespace yzg
         return nullptr;
     }
 
-    void ExprLet::log(ostream& stream, int depth) const
-    {
+    void ExprLet::log(ostream& stream, int depth) const {
         stream << "(let\n";
         for ( auto & var : variables ) {
             if ( var->init )
@@ -1859,8 +1712,7 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprLet::inferType(InferTypeContext & context)
-    {
+    void ExprLet::inferType(InferTypeContext & context) {
         auto sp = context.stackTop;
         auto sz = context.local.size();
         for ( auto & var : variables ) {
@@ -1889,8 +1741,7 @@ namespace yzg
         type = make_shared<TypeDecl>();
     }
     
-    SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local)
-    {
+    SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local) {
         SimNode * init = var->init->simulate(context);
         SimNode * get;
         if ( local )
@@ -1903,8 +1754,7 @@ namespace yzg
             return makeMove(var->init->at, context, *var->init->type, get, init);
     }
     
-    SimNode * ExprLet::simulate (Context & context) const
-    {
+    SimNode * ExprLet::simulate (Context & context) const {
         auto let = context.makeNode<SimNode_Let>(at);
         let->total = (uint32_t) variables.size();
         let->list = (SimNode **) context.allocate(let->total * sizeof(SimNode*));
@@ -1920,10 +1770,9 @@ namespace yzg
         return let;
     }
     
-    // ExprCall
+    // ExprLooksLikeCall
     
-    ExpressionPtr ExprLooksLikeCall::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprLooksLikeCall::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprLooksLikeCall>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
@@ -1933,8 +1782,7 @@ namespace yzg
         return cexpr;
     }
     
-    string ExprLooksLikeCall::describe() const
-    {
+    string ExprLooksLikeCall::describe() const {
         stringstream stream;
         stream << "(" << name;
         for ( auto & arg : arguments ) {
@@ -1947,8 +1795,7 @@ namespace yzg
         return stream.str();
     }
     
-    void ExprLooksLikeCall::log(ostream& stream, int depth) const
-    {
+    void ExprLooksLikeCall::log(ostream& stream, int depth) const {
         logType(stream);
         stream << "(" << name;
         for ( auto & arg : arguments ) {
@@ -1958,31 +1805,27 @@ namespace yzg
         stream << ")";
     }
     
-    void ExprLooksLikeCall::inferType(InferTypeContext & context)
-    {
+    void ExprLooksLikeCall::inferType(InferTypeContext & context) {
         for ( auto & ar : arguments ) {
             ar->inferType(context);
         }
     }
     
-    void ExprLooksLikeCall::autoDereference()
-    {
+    void ExprLooksLikeCall::autoDereference() {
         for ( size_t iA = 0; iA != arguments.size(); ++iA )
             arguments[iA] = Expression::autoDereference(arguments[iA]);
     }
     
     // ExprCall
     
-    ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const
-    {
+    ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprCall>(expr);
         ExprLooksLikeCall::clone(cexpr);
         cexpr->func = func;
         return cexpr;
     }
     
-    void ExprCall::inferType(InferTypeContext & context)
-    {
+    void ExprCall::inferType(InferTypeContext & context) {
         ExprLooksLikeCall::inferType(context);
         stackTop = context.stackTop;
         context.stackTop = (stackTop + arguments.size()*sizeof(__m128));
@@ -2013,8 +1856,7 @@ namespace yzg
         context.stackTop = stackTop;
     }
     
-    SimNode * ExprCall::simulate (Context & context) const
-    {
+    SimNode * ExprCall::simulate (Context & context) const {
         SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
         pCall->debug = at;
         pCall->fnIndex = func->index;
@@ -2035,23 +1877,19 @@ namespace yzg
 
     // program
     
-    StructurePtr Program::findStructure ( const string & name ) const
-    {
+    StructurePtr Program::findStructure ( const string & name ) const {
         return library.findStructure(name);
     }
     
-    VariablePtr Program::findVariable ( const string & name ) const
-    {
+    VariablePtr Program::findVariable ( const string & name ) const {
         return library.findVariable(name);
     }
     
-    FunctionPtr Program::findFunction ( const string & mangledName ) const
-    {
+    FunctionPtr Program::findFunction ( const string & mangledName ) const {
         return library.findFunction(mangledName);
     }
     
-    ostream& operator<< (ostream& stream, const Program & program)
-    {
+    ostream& operator<< (ostream& stream, const Program & program) {
         for ( const auto & st : program.thisModule->structures ) {
             stream << *st.second << "\n";
         }
@@ -2069,8 +1907,7 @@ namespace yzg
         return stream;
     }
     
-    void Program::inferTypes()
-    {
+    void Program::inferTypes() {
         // structure declarations (precompute offsets of fields)
         for ( auto & ist : thisModule->structures ) {
             auto & st = ist.second;
@@ -2116,8 +1953,7 @@ namespace yzg
         }
     }
         
-    vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const
-    {
+    vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const {
         /*
          TODO:
             arguments by name?
@@ -2137,14 +1973,6 @@ namespace yzg
                                 typesCompatible = false;
                                 break;
                             }
-                            // if we disable automatic boxing, we need to enable this
-                            // this checks for passing nonCopyable types by value
-                            /*
-                            if ( !passType->canCopy() && !passType->ref ) {
-                                typesCompatible = false;
-                                break;
-                            }
-                            */
                         }
                         bool tailCompatible = true;
                         for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
@@ -2163,8 +1991,7 @@ namespace yzg
         return result;
     }
     
-    FuncInfo * Program::makeFunctionDebugInfo ( Context & context, const Function & fn )
-    {
+    FuncInfo * Program::makeFunctionDebugInfo ( Context & context, const Function & fn ) {
         FuncInfo * fni = context.makeNode<FuncInfo>();
         fni->name = context.allocateName(fn.name);
         fni->stackSize = fn.totalStackSize;
@@ -2176,8 +2003,7 @@ namespace yzg
         return fni;
     }
     
-    StructInfo * Program::makeStructureDebugInfo ( Context & context, const Structure & st )
-    {
+    StructInfo * Program::makeStructureDebugInfo ( Context & context, const Structure & st ) {
         StructInfo * sti = context.makeNode<StructInfo>();
         sti->name = context.allocateName(st.name);
         sti->fieldsSize = (uint32_t) st.fields.size();
@@ -2192,8 +2018,7 @@ namespace yzg
         return sti;
     }
     
-    void Program::makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type )
-    {
+    void Program::makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type ) {
         info->type = type->baseType;
         info->dimSize = (uint32_t) type->dim.size();
         if ( info->dimSize ) {
@@ -2230,16 +2055,14 @@ namespace yzg
         }
     }
 
-    VarInfo * Program::makeVariableDebugInfo ( Context & context, const Variable & var )
-    {
+    VarInfo * Program::makeVariableDebugInfo ( Context & context, const Variable & var ) {
         VarInfo * vi = context.makeNode<VarInfo>();
         makeTypeInfo(vi, context, var.type);
         vi->name = context.allocateName(var.name);
         return vi;
     }
     
-    void Program::simulate ( Context & context )
-    {
+    void Program::simulate ( Context & context ) {
         context.thisProgram = this;
         context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(thisModule->globals.size()*sizeof(GlobalVariable)) );
         for ( auto & it : thisModule->globals ) {
@@ -2272,45 +2095,38 @@ namespace yzg
         context.restart();
     }
     
-    void Program::error ( const string & str, const LineInfo & at )
-    {
+    void Program::error ( const string & str, const LineInfo & at ) {
         // cout << "ERROR: " << str << ", at " << at.describe() << "\n";
         errors.emplace_back(str,at);
         failToCompile = true;
     }
     
-    void Program::addModule ( const ModulePtr & pm )
-    {
+    void Program::addModule ( const ModulePtr & pm ) {
         library.addModule(pm);
     }
     
-    bool Program::addVariable ( const VariablePtr & var )
-    {
+    bool Program::addVariable ( const VariablePtr & var ) {
         return thisModule->addVariable(var);
     }
     
-    bool Program::addStructure ( const StructurePtr & st )
-    {
+    bool Program::addStructure ( const StructurePtr & st ) {
         return thisModule->addStructure(st);
     }
     
-    bool Program::addFunction ( const FunctionPtr & fn )
-    {
+    bool Program::addFunction ( const FunctionPtr & fn ) {
         return thisModule->addFunction(fn);
     }
 
     ModulePtr Program::builtInModule;
     
-    Program::Program()
-    {
+    Program::Program() {
         thisModule = make_shared<Module>();
         if ( !builtInModule ) builtInModule = make_shared<Module_BuiltIn>();
         library.addModule(builtInModule);
         library.addModule(thisModule);
     }
     
-    ExprLooksLikeCall * Program::makeCall ( const LineInfo & at, const string & name )
-    {
+    ExprLooksLikeCall * Program::makeCall ( const LineInfo & at, const string & name ) {
         auto builtIn = static_pointer_cast<Module_BuiltIn>(builtInModule);
         auto it = builtIn->callThis.find(name);
         if ( it != builtIn->callThis.end() ) {
@@ -2322,18 +2138,15 @@ namespace yzg
     
     // MODULE
     
-    bool Module::addVariable ( const VariablePtr & var )
-    {
+    bool Module::addVariable ( const VariablePtr & var ) {
         return globals.insert(make_pair(var->name, var)).second;
     }
     
-    bool Module::addStructure ( const StructurePtr & st )
-    {
+    bool Module::addStructure ( const StructurePtr & st ) {
         return structures.insert(make_pair(st->name, st)).second;
     }
     
-    bool Module::addFunction ( const FunctionPtr & fn )
-    {
+    bool Module::addFunction ( const FunctionPtr & fn ) {
         auto mangledName = fn->getMangledName();
         if ( functions.insert(make_pair(mangledName, fn)).second ) {
             functionsByName[fn->name].push_back(fn);
@@ -2343,35 +2156,30 @@ namespace yzg
         }
     }
     
-    VariablePtr Module::findVariable ( const string & name ) const
-    {
+    VariablePtr Module::findVariable ( const string & name ) const {
         auto it = globals.find(name);
         return it != globals.end() ? it->second : VariablePtr();
     }
     
-    FunctionPtr Module::findFunction ( const string & mangledName ) const
-    {
+    FunctionPtr Module::findFunction ( const string & mangledName ) const {
         auto it = functions.find(mangledName);
         return it != functions.end() ? it->second : FunctionPtr();
     }
     
-    StructurePtr Module::findStructure ( const string & name ) const
-    {
+    StructurePtr Module::findStructure ( const string & name ) const {
         auto it = structures.find(name);
         return it != structures.end() ? it->second : StructurePtr();
     }
 
     // MODULE LIBRARY
     
-    void ModuleLibrary::foreach ( function<bool (const ModulePtr & module)> && func ) const
-    {
+    void ModuleLibrary::foreach ( function<bool (const ModulePtr & module)> && func ) const {
         for ( auto & pm : modules ) {
             if ( !func(pm) ) break;
         }
     }
     
-    VariablePtr ModuleLibrary::findVariable ( const string & name ) const
-    {
+    VariablePtr ModuleLibrary::findVariable ( const string & name ) const {
         VariablePtr ptr;
         foreach([&](const ModulePtr & pm) -> bool {
             ptr = pm->findVariable(name);
@@ -2380,8 +2188,7 @@ namespace yzg
         return ptr;
     }
     
-    FunctionPtr ModuleLibrary::findFunction ( const string & mangledName ) const
-    {
+    FunctionPtr ModuleLibrary::findFunction ( const string & mangledName ) const {
         FunctionPtr ptr;
         foreach([&](const ModulePtr & pm) -> bool {
             ptr = pm->findFunction(mangledName);
@@ -2390,8 +2197,7 @@ namespace yzg
         return ptr;
     }
     
-    StructurePtr ModuleLibrary::findStructure ( const string & name ) const
-    {
+    StructurePtr ModuleLibrary::findStructure ( const string & name ) const {
         StructurePtr ptr;
         foreach([&](const ModulePtr & pm) -> bool {
             ptr = pm->findStructure(name);
@@ -2400,8 +2206,7 @@ namespace yzg
         return ptr;
     }
     
-    TypeDeclPtr ModuleLibrary::makeStructureType ( const string & name ) const
-    {
+    TypeDeclPtr ModuleLibrary::makeStructureType ( const string & name ) const {
         auto t = make_shared<TypeDecl>();
         t->baseType = Type::tStructure;
         t->structType = findStructure(name).get();
@@ -2416,8 +2221,7 @@ namespace yzg
     
     ProgramPtr g_Program;
     
-    ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext )
-    {
+    ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext ) {
         int err;
         auto program = g_Program = make_shared<Program>();
         yybegin(script);

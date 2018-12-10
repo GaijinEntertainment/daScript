@@ -6,36 +6,14 @@ namespace yzg
 {
     using namespace std;
     
-    template  <typename SimT, typename RetT, typename ...Args>
-    class BuiltInFn : public BuiltInFunction
-    {
-    public:
-        BuiltInFn(const string & fn, const ModuleLibrary & lib) : BuiltInFunction(fn)
-        {
-            this->result = makeType<RetT>(lib);
-            vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
-            for ( int argi=0; argi != args.size(); ++argi ) {
-                auto arg = make_shared<Variable>();
-                arg->name = "arg" + std::to_string(argi);
-                arg->type = args[argi];
-                this->arguments.push_back(arg);
-            }
-        }
-        virtual SimNode * makeSimNode ( Context & context ) override {
-            return context.makeNode<SimT>(at);
-        }
-    };
-    
     template  <typename FuncT, FuncT fn>
-    class ExternalFn : public BuiltInFunction
-    {
+    class ExternalFn : public BuiltInFunction {
         template <typename ArgumentsType, size_t... I>
         __forceinline vector<TypeDeclPtr> makeArgs ( const ModuleLibrary & lib, index_sequence<I...> ) {
             return { makeType< typename tuple_element<I, ArgumentsType>::type>(lib)... };
         }
     public:
-        ExternalFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name)
-        {
+        ExternalFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
             using FunctionTrait = function_traits<FuncT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
             using Indices = make_index_sequence<nargs>;
@@ -59,11 +37,9 @@ namespace yzg
     };
     
     template  <InteropFunction func, typename RetT, typename ...Args>
-    class InteropFn : public BuiltInFunction
-    {
+    class InteropFn : public BuiltInFunction {
     public:
-        InteropFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name)
-        {
+        InteropFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
             for ( int argi=0; argi!=args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
