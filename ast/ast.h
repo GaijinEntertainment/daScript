@@ -757,6 +757,8 @@ namespace yzg
         int                         totalFunctions = 0;
         vector<Error>               errors;
         bool                        failToCompile = false;
+    public:
+        vector<CompilationError>    expectErrors;
     };
          
     ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext );

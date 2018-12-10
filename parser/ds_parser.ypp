@@ -61,7 +61,7 @@
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _IN     _ELIF       _ARRAY
 %token  _RETURN _NULL   _BREAK      _TRY
-%token  _WHERE  _TABLE
+%token  _WHERE  _TABLE  _EXPECT
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -131,6 +131,13 @@ program
     |   program structure_declaration
     |   program global_let
     |   program function_declaration
+    |   program expect_declaration
+    ;
+
+expect_declaration
+    :   _EXPECT INTEGER[err] {
+        g_Program->expectErrors.push_back(CompilationError($err));
+    }
     ;
 
 expression_else
@@ -547,11 +554,11 @@ type_declaration
 %%
 
 void yyerror(const string & error, const LineInfo & at, CompilationError cerr) {
-    g_Program->error(error,at);
+    g_Program->error(error,at,cerr);
 }
 
 void yyerror(const string & error, CompilationError cerr) {
-    g_Program->error(error,LineInfo(yylloc.first_column,yylloc.first_line));
+    g_Program->error(error,LineInfo(yylloc.first_column,yylloc.first_line),cerr);
 }
 
 vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {

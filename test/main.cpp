@@ -8,6 +8,8 @@
 using namespace std;
 using namespace yzg;
 
+bool g_reportCompilationFailErrors = false;
+
 bool compilation_fail_test ( const string & fn ) {
     cout << fn << " ";
     string str;
@@ -21,8 +23,27 @@ bool compilation_fail_test ( const string & fn ) {
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
     if ( auto program = parseDaScript(str.c_str(), [](const ProgramPtr & prog){}) ) {
-        cout << "ok\n";
-        return program->failed();
+        if ( program->failed() ) {
+            if ( g_reportCompilationFailErrors ) {
+                for ( auto & err : program->errors ) {
+                    cout << reportError(&str, err.at.line, err.at.column, err.what );
+                }
+            }
+            for ( auto ce : program->expectErrors ) {
+                auto it = find_if(program->errors.begin(), program->errors.end(), [&](const Error & err){
+                    return err.cerr == ce;
+                });
+                if ( it == program->errors.end() ) {
+                    cout << "failed, expected error " << int(ce) << "\n";
+                    return false;
+                }
+            }
+            cout << "ok\n";
+            return true;
+        } else {
+            cout << "failed, compiled without errors\n";
+            return false;
+        }
     } else {
         cout << "failed, not expected to compile\n";
         return false;
