@@ -35,6 +35,7 @@ ENDIF()
 SET(AST_SRC
 ast/ast.cpp
 ast/ast.h
+ast/ast_interop.h
 ast/builtin.cpp
 )
 SOURCE_GROUP_FILES("ast" AST_SRC)

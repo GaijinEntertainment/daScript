@@ -1,7 +1,7 @@
 #include "precomp.h"
 
 #include "ast.h"
-#include "interop.h"
+#include "ast_interop.h"
 
 #include <dirent.h>
 

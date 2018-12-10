@@ -4,6 +4,8 @@
 #include "runtime_array.h"
 #include "runtime_table.h"
 
+#include "ast_interop.h"
+
 namespace yzg
 {
     // core functions
