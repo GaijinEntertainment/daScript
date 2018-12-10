@@ -6,6 +6,7 @@
 #include "function_traits.h"
 #include "interop.h"
 #include "debug_info.h"
+#include "compilation_errors.h"
 
 namespace yzg
 {
@@ -196,7 +197,7 @@ namespace yzg
             vector<VariablePtr>     local;
             vector<ExpressionPtr>   loop;
             uint32_t                stackTop = 0;
-            void error ( const string & err, const LineInfo & at );
+            void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         };
         Expression() = default;
         Expression(const LineInfo & a) : at(a) {}
@@ -678,10 +679,11 @@ namespace yzg
     };
     
     struct Error {
-        Error ( const string & w, LineInfo a ) : what(w), at(a) {}
+        Error ( const string & w, LineInfo a, CompilationError ce ) : what(w), at(a), cerr(ce)  {}
         __forceinline bool operator < ( const Error & err ) const { return at==err.at ? what < err.what : at<err.at; };
-        string      what;
-        LineInfo    at;
+        string              what;
+        LineInfo            at;
+        CompilationError    cerr;
     };
     
     class Module : public enable_shared_from_this<Module> {
@@ -738,7 +740,7 @@ namespace yzg
         void inferTypes();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         void simulate ( Context & context );
-        void error ( const string & str, const LineInfo & at );
+        void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
     public:

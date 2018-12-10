@@ -457,8 +457,8 @@ namespace yzg
     
     // expression
     
-    void Expression::InferTypeContext::error ( const string & err, const LineInfo & at ) {
-        program->error(err,at);
+    void Expression::InferTypeContext::error ( const string & err, const LineInfo & at, CompilationError cerr ) {
+        program->error(err,at,cerr);
     }
     
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {
@@ -2095,9 +2095,9 @@ namespace yzg
         context.restart();
     }
     
-    void Program::error ( const string & str, const LineInfo & at ) {
+    void Program::error ( const string & str, const LineInfo & at, CompilationError cerr ) {
         // cout << "ERROR: " << str << ", at " << at.describe() << "\n";
-        errors.emplace_back(str,at);
+        errors.emplace_back(str,at,cerr);
         failToCompile = true;
     }
     

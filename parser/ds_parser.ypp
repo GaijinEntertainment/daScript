@@ -26,9 +26,10 @@
 
 %{
     #include "debug_info.h"
+    #include "compilation_errors.h"
     
-    void yyerror (const std::string & error);
-    void yyerror (const std::string & error, const yzg::LineInfo & at);
+    void yyerror (const std::string & error, yzg::CompilationError cerr = yzg::CompilationError::syntax_error);
+    void yyerror (const std::string & error, const yzg::LineInfo & at, yzg::CompilationError cerr = yzg::CompilationError::unspecified);
     int yylex();
     void yybegin(const char * str);
 %}
@@ -85,7 +86,6 @@
 %type <pTypeDecl>       type_declaration
 %type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
-%type <b>               optional_ptr_declaration
 %type <pVarDeclList>    variable_declaration_list
 %type <pVarDeclList>    struct_variable_declaration_list
 %type <pVarDeclList>    optional_function_argument_list
@@ -193,13 +193,13 @@ function_declaration
         pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
         if ( pFunction->result->ref )
-            yyerror("function " + *$name + " can't return reference",tokAt(@loc));
+        yyerror("function " + *$name + " can't return reference",tokAt(@loc),CompilationError::invalid_return_type);
         else if ( pFunction->result->dim.size() )
-            yyerror("function " + *$name + " can't return array",tokAt(@loc));
+            yyerror("function " + *$name + " can't return array",tokAt(@loc),CompilationError::invalid_return_type);
         else if (pFunction->result->baseType==Type::tStructure )
-            yyerror("function " + *$name + " can't return structure",tokAt(@loc));
+            yyerror("function " + *$name + " can't return structure",tokAt(@loc),CompilationError::invalid_return_type);
         else if ( pFunction->result->baseType==Type::tArray )
-            yyerror("function " + *$name + " can't return array",tokAt(@loc));
+            yyerror("function " + *$name + " can't return array",tokAt(@loc),CompilationError::invalid_return_type);
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -210,19 +210,19 @@ function_declaration
                             pVar->at = pDecl->at;
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pVar->type->ref && pVar->type->isRefType() ) {
-                                yyerror("can't pass boxed type by reference",pVar->at);
+                                yyerror("can't pass boxed type by reference",pVar->at,CompilationError::invalid_argument_type);
                             }
                             pVar->init = ExpressionPtr(pDecl->pInit);
                             pFunction->arguments.push_back(pVar);
                         } else {
-                            yyerror("function argument is already declared " + name,pDecl->at);
+                            yyerror("function argument is already declared " + name,pDecl->at,CompilationError::argument_already_declared);
                         }
                     }
                 }
             }
         }
         if ( !g_Program->addFunction(pFunction) )
-            yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc));
+            yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::argument_already_declared);
     }
     ;
 
@@ -254,7 +254,7 @@ expr_new
             auto pTypeDecl = make_shared<TypeDecl>(Type::tStructure);
             pTypeDecl->structType = g_Program->findStructure(*$structName).get();
             if ( !pTypeDecl->structType )
-                yyerror("structure type not found "+*$structName,tokAt(@loc));
+                yyerror("structure type not found "+*$structName,tokAt(@loc),CompilationError::structure_not_found);
             $$ = new ExprNew(tokAt(@loc),pTypeDecl);
     }
     ;
@@ -290,7 +290,7 @@ expression_let
                             pVar->init = pDecl->pInit->clone();
                         pLet->variables.push_back(pVar);
                     } else {
-                        yyerror("local variable is already declared " + name,tokAt(@list));
+                        yyerror("local variable is already declared " + name,tokAt(@list),CompilationError::local_variable_already_declared);
                     }
                 }
             }
@@ -304,7 +304,7 @@ expr_sizeof
     :   _SIZEOF[loc] '(' expr[subexpr] ')'          { $$ = new ExprSizeOf(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   _SIZEOF[loc] '(' _TYPE type_declaration[decl] ')' {
         if ( $decl->ref )
-            yyerror("sizeof(type " + $decl->getMangledName() + "), sizing reference is prohibited",tokAt(@loc));
+            yyerror("sizeof(type " + $decl->getMangledName() + "), sizing reference is prohibited",tokAt(@loc),CompilationError::sizeof_reference);
         $$ = new ExprConstInt(tokAt(@loc),$decl->getSizeOf());
         delete $decl;
     }
@@ -404,7 +404,7 @@ global_let
                     if ( pDecl->pInit )
                         pVar->init = pDecl->pInit->clone();
                     if ( !g_Program->addVariable(pVar) )
-                        yyerror("global variable is already declared " + name,pDecl->at);
+                        yyerror("global variable is already declared " + name,pDecl->at,CompilationError::global_variable_already_declared);
                 }
             }
         }
@@ -418,28 +418,24 @@ structure_declaration
         pStruct->at = tokAt(@loc);
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl->isVoid() ) {
-                yyerror("structure type can't be void",tokAt(@loc));
+                yyerror("structure type can't be void",tokAt(@loc),CompilationError::invalid_structure_field_type);
             } else if ( pDecl->pTypeDecl->ref ) {
-                yyerror("structure type can't be reference or array of references",tokAt(@loc));
-            } else if ( pDecl->pTypeDecl->isSimpleType(Type::tArray) ) {
-                yyerror("structure type can't be an array",tokAt(@loc));
-            } else if ( pDecl->pTypeDecl->isSimpleType(Type::tTable) ) {
-                yyerror("structure type can't be a table",tokAt(@loc));
+                yyerror("structure type can't be reference or array of references",tokAt(@loc),CompilationError::invalid_structure_field_type);
             } else if ( pDecl->pInit ) {
-                yyerror("structure field can't have initialization",tokAt(@loc));
+                yyerror("structure field can't have initialization",tokAt(@loc),CompilationError::cant_initialize);
             } else {
                 for ( const auto & name : *pDecl->pNameList ) {
                     if ( !pStruct->findField(name) ) {
                         auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                         pStruct->fields.push_back({name, td, pDecl->at});
                     } else {
-                        yyerror("structure field is already declared "+name,pDecl->at);
+                        yyerror("structure field is already declared "+name,pDecl->at,CompilationError::structure_field_already_declared);
                     }
                 }
             }
         }
         if ( !g_Program->addStructure(pStruct) )
-            yyerror("structure is alredy defined "+*$name,tokAt(@loc));
+            yyerror("structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
         deleteVariableDeclarationList($list);
     }
     ;
@@ -482,7 +478,7 @@ structure_type_declaration
             pTD->at = tokAt(@name);
             $$ = pTD;
         } else {
-            yyerror("undefined structure type",tokAt(@name));
+            yyerror("undefined type",tokAt(@name),CompilationError::type_not_found);
             $$ = nullptr;
         }
     }
@@ -494,42 +490,41 @@ type_declaration
     |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' {
         if ( $typeDecl ) {
             if ( $typeDecl->ref ) {
-                yyerror ( "can't be array of references" );
+                yyerror("can't be array of references",tokAt(@dimSize),CompilationError::invalid_type);
             }
             $typeDecl->dim.push_back($dimSize);
         } else {
-            yyerror ( "can't be 'just array'" );
+            yyerror("can't be 'just array'",tokAt(@dimSize),CompilationError::invalid_type);
         }
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] '&'                      {
+    |   type_declaration[typeDecl] '&' {
         if ( $typeDecl ) {
             if ( $typeDecl->dim.size() ) {
-                yyerror ( "can't be array of references" );
+                yyerror("can't be array of references",tokAt(@typeDecl),CompilationError::invalid_type);
             }
             if ( $typeDecl->ref ) {
-                yyerror ( "can't be reference of reference" );
+                yyerror("can't be reference of reference",tokAt(@typeDecl),CompilationError::invalid_type);
             }
             $typeDecl->ref = true;
         } else {
-            yyerror ( "can't be 'just reference'" );
+            yyerror("can't be 'just reference'",tokAt(@typeDecl),CompilationError::invalid_type);
         }
         $$ = $typeDecl;
-        
     }
     |   type_declaration[typeDecl] '*' {
         if ( !$typeDecl ) {
-            yyerror ( "can't be 'just pointer'" );
+            yyerror("can't be 'just pointer'",tokAt(@typeDecl),CompilationError::invalid_type);
         }
         if ( $typeDecl->ref ) {
-            yyerror ( "can't be pointer to reference" );
+            yyerror("can't be pointer to reference",tokAt(@typeDecl),CompilationError::invalid_type);
         }
         $$ = new TypeDecl(Type::tPointer);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   _ARRAY[loc] '<' type_declaration[typeDecl] '>'      {
+    |   _ARRAY[loc] '<' type_declaration[typeDecl] '>' {
         if ( $typeDecl->ref ) {
-            yyerror ( "can't have reference in the Array" );
+            yyerror("can't have reference in the Array",tokAt(@typeDecl),CompilationError::invalid_array_type);
         }
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);
@@ -537,10 +532,10 @@ type_declaration
     }
     |   _TABLE[loc] '<' type_declaration[keyTypeDecl] ',' type_declaration[valueTypeDecl] '>' {
         if ( $keyTypeDecl->ref || $valueTypeDecl->ref ) {
-            yyerror( "can't have reference in the Table" );
+            yyerror("can't have reference in the Table",tokAt(@loc),CompilationError::invalid_table_type);
         }
         if ( !$keyTypeDecl->isWorkhorseType() ) {
-            yyerror( "key has to be basic 'hashable' type" );
+            yyerror("key has to be basic 'hashable' type",tokAt(@keyTypeDecl),CompilationError::invalid_table_type);
         }
         $$ = new TypeDecl(Type::tTable);
         $$->at = tokAt(@loc);
@@ -551,18 +546,15 @@ type_declaration
 
 %%
 
-void yyerror(const string & error, const LineInfo & at)
-{
+void yyerror(const string & error, const LineInfo & at, CompilationError cerr) {
     g_Program->error(error,at);
 }
 
-void yyerror(const string & error)
-{
+void yyerror(const string & error, CompilationError cerr) {
     g_Program->error(error,LineInfo(yylloc.first_column,yylloc.first_line));
 }
 
-vector<ExpressionPtr> sequenceToList ( Expression * arguments )
-{
+vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
     vector<ExpressionPtr> argList;
     auto arg = arguments;
     if ( arg->isSequence() ) {
@@ -586,14 +578,12 @@ ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expressi
     return pCall;
 }
 
-void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list )
-{
+void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
     for ( auto pD : *list )
         delete pD;
     delete list;
 }
 
-LineInfo tokAt ( const struct YYLTYPE & li )
-{
+LineInfo tokAt ( const struct YYLTYPE & li ) {
     return LineInfo(li.first_column,li.first_line);
 }

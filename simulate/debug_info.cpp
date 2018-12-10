@@ -16,7 +16,7 @@ namespace yzg
         {   Type::tUInt64,      "uint64"  },
         {   Type::tString,      "string" },
         {   Type::tPointer,     "pointer" },
-        {   Type::tIterator,     "iterator" },
+        {   Type::tIterator,    "iterator" },
         {   Type::tArray,       "array" },
         {   Type::tTable,       "table" },
         {   Type::tInt,         "int"   },

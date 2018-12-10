@@ -1,0 +1,3 @@
+def test
+	sizeof(int&)
+	

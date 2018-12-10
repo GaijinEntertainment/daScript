@@ -33,6 +33,7 @@ IF(MSVC)
 ENDIF()
 
 SET(AST_SRC
+ast/compilation_errors.h
 ast/ast.cpp
 ast/ast.h
 ast/ast_interop.h
@@ -95,14 +96,19 @@ SETUP_CPP11(daScript)
 file(GLOB UNIT_TEST_SRC
 "test/unit_tests/*.das"
 )
-SOURCE_GROUP_FILES("test/unit test" UNIT_TEST_SRC)
+SOURCE_GROUP_FILES("test/unit" UNIT_TEST_SRC)
+
+file(GLOB COMPILATION_FAIL_TEST_SRC
+"test/compilation_fail_tests/*.das"
+)
+SOURCE_GROUP_FILES("test/compilation fail" COMPILATION_FAIL_TEST_SRC)
 
 SET(TEST_MAIN_SRC
 test/main.cpp
 )
 
 include_directories(daScriptTest PUBLIC ast lexer misc simulate test)
-add_executable(daScriptTest ${UNIT_TEST_SRC} ${TEST_MAIN_SRC} )
+add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${TEST_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)
