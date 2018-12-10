@@ -1,5 +1,5 @@
 def test : bool
-    let(tab:table<string,int>;i,del:int;total:int=10)
+    let(tab:table<string,int>;i,del:int;total:int=1000)
         assert(!erase(tab,"0"))
         i = 0
         while i!=total

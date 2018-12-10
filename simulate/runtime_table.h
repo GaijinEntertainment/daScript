@@ -201,35 +201,23 @@ namespace yzg
         }
     };
     
-    __forceinline void table_lock ( Context & context, Array & arr ) {
-        arr.lock ++;
-        if ( arr.lock==0 ) {
-            context.throw_error("table lock overflow");
-        }
-    }
-    
-    __forceinline void table_unlock ( Context & context, Array & arr ) {
-        if ( arr.lock==0 ) {
-            context.throw_error("table lock underflow");
-        }
-        arr.lock --;
-    }
+    void table_lock ( Context & context, Array & arr );
+    void table_unlock ( Context & context, Array & arr );
     
     struct SimNode_Table : SimNode {
-        SimNode_Table(const LineInfo & at, uint32_t vts) : SimNode(at), valueTypeSize(vts) {}
+        SimNode_Table(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
+            : SimNode(at), tabExpr(t), keyExpr(k), valueTypeSize(vts) {}
+        virtual __m128 tabEval ( Context & context, Table * tab, __m128 xkey ) = 0;
+        virtual __m128 eval ( Context & context ) override;
+        SimNode * tabExpr;
+        SimNode * keyExpr;
         uint32_t valueTypeSize;
     };
     
     template <typename KeyType>
     struct SimNode_TableIndex : SimNode_Table {
-        SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
-            : SimNode_Table(at,vts), tabExpr(t), keyExpr(k) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 xtab = tabExpr->eval(context);
-            YZG_EXCEPTION_POINT;
-            __m128 xkey = keyExpr->eval(context);
-            YZG_EXCEPTION_POINT;
-            Table * tab = cast<Table *>::to(xtab);
+        SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
+        virtual __m128 tabEval ( Context & context, Table * tab, __m128 xkey ) override {
             KeyType key = cast<KeyType>::to(xkey);
             RobinHoodHash<KeyType> rhh(&context,valueTypeSize);
             auto at = rhh.reserve(*tab, key);
@@ -239,68 +227,45 @@ namespace yzg
                     at = rhh.find(*tab, key);
             }
             return cast<void *>::from(tab->data + at.first * valueTypeSize);
-
         }
-        SimNode * tabExpr;
-        SimNode * keyExpr;
     };
     
     template <typename KeyType>
     struct SimNode_TableErase : SimNode_Table {
-        SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
-            : SimNode_Table(at,vts), tabExpr(t), keyExpr(k) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 xtab = tabExpr->eval(context);
-            YZG_EXCEPTION_POINT;
-            __m128 xkey = keyExpr->eval(context);
-            YZG_EXCEPTION_POINT;
-            Table * tab = cast<Table *>::to(xtab);
+        SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
+        virtual __m128 tabEval ( Context & context, Table * tab, __m128 xkey ) override {
             KeyType key = cast<KeyType>::to(xkey);
             auto it = RobinHoodHash<KeyType>(&context,valueTypeSize).erase(*tab, key);
             return cast<bool>::from(it.second);
         }
-        SimNode * tabExpr;
-        SimNode * keyExpr;
     };
     
     template <typename KeyType>
     struct SimNode_TableFind : SimNode_Table {
-        SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
-            : SimNode_Table(at,vts), tabExpr(t), keyExpr(k) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 xtab = tabExpr->eval(context);
-            YZG_EXCEPTION_POINT;
-            __m128 xkey = keyExpr->eval(context);
-            YZG_EXCEPTION_POINT;
-            Table * tab = cast<Table *>::to(xtab);
+        SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
+        virtual __m128 tabEval ( Context & context, Table * tab, __m128 xkey ) override {
             KeyType key = cast<KeyType>::to(xkey);
             auto at = RobinHoodHash<KeyType>(&context,valueTypeSize).find(*tab, key);
             return at.second ? cast<void *>::from ( tab->data + at.first * valueTypeSize ) : _mm_setzero_ps();
         }
-        SimNode * tabExpr;
-        SimNode * keyExpr;
     };
     
     struct TableIterator : Iterator {
-        __forceinline size_t nextValid ( Table * tab, size_t index ) {
-            for ( ; index < tab->capacity; index++ )
-                if ( tab->distance[index]>=0 )
-                    break;
-            return index;
-        }
+        size_t nextValid ( Table * tab, size_t index ) const;
+        virtual bool first ( Context & context, IteratorContext & itc ) override;
+        virtual bool next  ( Context & context, IteratorContext & itc ) override;
         virtual void close ( Context & context, IteratorContext & itc ) override;
+        virtual char * getData ( Table * tab ) const = 0;
         SimNode *   source;
         uint32_t    stride;
     };
     
     struct TableKeysIterator : TableIterator {
-        virtual bool first ( Context & context, IteratorContext & itc ) override;
-        virtual bool next  ( Context & context, IteratorContext & itc ) override;
+        virtual char * getData ( Table * tab ) const override;
     };
     
     struct TableValuesIterator : TableIterator {
-        virtual bool first ( Context & context, IteratorContext & itc ) override;
-        virtual bool next  ( Context & context, IteratorContext & itc ) override;
+        virtual char * getData ( Table * tab ) const override;
     };
     
     template <typename IterType>

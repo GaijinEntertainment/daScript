@@ -756,36 +756,6 @@ namespace yzg
         virtual void close ( Context & context, IteratorContext & itc ) = 0;    // can't throw
     };
     
-    struct FixedArrayIterator : Iterator {
-        virtual bool first ( Context & context, IteratorContext & itc ) override {
-            __m128 ll = source->eval(context);
-            YZG_ITERATOR_EXCEPTION_POINT;
-            char * data = cast<char *>::to(ll);
-            itc.value = cast<char *>::from(data);
-            itc.fixed_array_end = data + size*stride;
-            return size != 0;
-        }
-        virtual bool next  ( Context & context, IteratorContext & itc ) override {
-            char * data = cast<char *>::to(itc.value) + stride;
-            itc.value = cast<char *>::from(data);
-            return data != itc.fixed_array_end;
-        }
-        virtual void close ( Context & context, IteratorContext & itc ) override {
-        }
-        SimNode *   source;
-        uint32_t    size;
-        uint32_t    stride;
-    };
-    
-    struct SimNode_FixedArrayIterator : SimNode {
-        SimNode_FixedArrayIterator ( const LineInfo & at, SimNode * s, uint32_t size, uint32_t stride )
-            : SimNode(at) { subexpr.source = s; subexpr.size = size; subexpr.stride = stride; }
-        virtual __m128 eval ( Context & context ) override {
-            return cast<Iterator *>::from(&subexpr);
-        }
-        FixedArrayIterator subexpr;
-    };
-    
     struct SimNode_ForWithIteratorBase : SimNode {
         SimNode_ForWithIteratorBase ( const LineInfo & at ) : SimNode(at) {}
         SimNode *   source_iterators[MAX_FOR_ITERATORS];

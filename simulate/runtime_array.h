@@ -5,45 +5,12 @@
 
 namespace yzg
 {
-    __forceinline void array_lock ( Context & context, Array & arr ) {
-        arr.lock ++;
-        if ( arr.lock==0 ) {
-            context.throw_error("array lock overflow");
-        }
-    }
+    void array_lock ( Context & context, Array & arr );
+    void array_unlock ( Context & context, Array & arr );
+    void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride );
+    void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero );
     
-    __forceinline void array_unlock ( Context & context, Array & arr ) {
-        if ( arr.lock==0 ) {
-            context.throw_error("array lock underflow");
-        }
-        arr.lock --;
-    }
-    
-    __forceinline void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride ) {
-        if ( arr.lock ) {
-            context.throw_error("changing capacity of a locked array");
-            return;
-        }
-        if ( arr.capacity >= newCapacity ) return;
-        arr.data = (char *) context.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
-        arr.capacity = newCapacity;
-    }
-    
-    __forceinline void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero ) {
-        if ( arr.lock ) {
-            context.throw_error("resizing locked array");
-            return;
-        }
-        if ( newSize > arr.capacity ) {
-            uint32_t newCapacity = 1 << (32 - __builtin_clz (newSize - 1));
-            newCapacity = max(newCapacity, 16u);
-            array_reserve(context, arr, newCapacity, stride);
-        }
-        if ( zero && newSize>arr.size )
-            memset ( arr.data + arr.size*stride, 0, (newSize-arr.size)*stride );
-        arr.size = newSize;
-    }
-    
+    // BASIC ARRAY NODE
     struct SimNode_Array : SimNode {
         SimNode_Array(const LineInfo & at, uint32_t s) : SimNode(at), stride(s) {}
         uint32_t stride;
@@ -53,19 +20,7 @@ namespace yzg
     struct SimNode_ArrayAt : SimNode_Array {
         SimNode_ArrayAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t sz )
             : SimNode_Array(at,sz), value(rv), index(idx) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 ll = value->eval(context);
-            YZG_EXCEPTION_POINT;
-            uint32_t idx = cast<uint32_t>::to(index->eval(context));
-            YZG_EXCEPTION_POINT;
-            Array * pA = cast<Array *>::to(ll);
-            if ( idx >= pA->size ) {
-                context.throw_error("index out of range");
-                return _mm_setzero_ps();
-            } else {
-                return cast<char *>::from(pA->data + idx*stride);
-            }
-        }
+        virtual __m128 eval ( Context & context ) override;
         SimNode * value, * index;
     };
     
@@ -76,160 +31,83 @@ namespace yzg
     struct SimNode_ArrayErase : SimNode_Array {
         SimNode_ArrayErase(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
             : SimNode_Array(at,sz), l(ll), r(rr) {};
-        virtual __m128 eval ( Context & context ) override {
-            __m128 ll = l->eval(context);
-            YZG_EXCEPTION_POINT;
-            __m128 rr = r->eval(context);
-            YZG_EXCEPTION_POINT;
-            Array * pA = cast<Array *>::to(ll);
-            uint32_t idx = cast<uint32_t>::to(rr);
-            if ( idx >= pA->size ) {
-                context.throw_error("erase index out of range");
-                return _mm_setzero_ps();
-            }
-            memmove ( pA->data+idx*stride, pA->data+(idx+1)*stride, (pA->size-idx-1)*stride );
-            array_resize(context, *pA, pA->size-1, stride, false);
-            return _mm_setzero_ps();
-        }
+        virtual __m128 eval ( Context & context ) override;
         SimNode * l, * r;
     };
     
-    // RESIZE
+    // RESIZE(SIZE)
     struct SimNode_ArrayResize : SimNode_Array {
         SimNode_ArrayResize(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
             : SimNode_Array(at,sz), l(ll), r(rr) {};
-        virtual __m128 eval ( Context & context ) override {
-            __m128 ll = l->eval(context);
-            YZG_EXCEPTION_POINT;
-            __m128 rr = r->eval(context);
-            YZG_EXCEPTION_POINT;
-            Array * pA = cast<Array *>::to(ll);
-            uint32_t newSize = cast<uint32_t>::to(rr);
-            array_resize(context, *pA, newSize, stride, true);
-            return _mm_setzero_ps();
-        }
+        virtual __m128 eval ( Context & context ) override;
         SimNode * l, * r;
     };
     
-    // RESERVE
+    // RESERVE(CAPACITY)
     struct SimNode_ArrayReserve : SimNode_Array {
         SimNode_ArrayReserve(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
             : SimNode_Array(at,sz), l(ll), r(rr) {};
-        virtual __m128 eval ( Context & context ) override {
-            __m128 ll = l->eval(context);
-            YZG_EXCEPTION_POINT;
-            __m128 rr = r->eval(context);
-            YZG_EXCEPTION_POINT;
-            Array * pA = cast<Array *>::to(ll);
-            uint32_t newSize = cast<uint32_t>::to(rr);
-            array_reserve(context, *pA, newSize, stride);
-            return _mm_setzero_ps();
-        }
+        virtual __m128 eval ( Context & context ) override;
         SimNode * l, * r;
     };
     
-    // [1,2,i,4,5]
-    // insert(2)
-    //  move ( data + 3, data + 2, old_length - 2 );
+    // PUSH VALUE
+    struct SimNode_ArrayPush : SimNode_Array {
+        SimNode_ArrayPush(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii, uint32_t sz)
+            : SimNode_Array(at, sz), array(ll), value(rr), index(ii) {};
+        virtual void copyValue ( char * at, __m128 value ) = 0;
+        virtual __m128 eval ( Context & context ) override;
+        SimNode * array, *value, *index;
+    };
     
     // PUSH VALUE
     template <typename TT>
-    struct SimNode_ArrayPushValue : SimNode_Array {
+    struct SimNode_ArrayPushValue : SimNode_ArrayPush {
         SimNode_ArrayPushValue(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii)
-            : SimNode_Array(at, sizeof(TT)), array(ll), value(rr), index(ii) {};
-        virtual __m128 eval ( Context & context ) override {
-            __m128 arr = array->eval(context);
-            YZG_EXCEPTION_POINT;
-            __m128 val = value->eval(context);
-            YZG_EXCEPTION_POINT;
-            auto * pA = cast<Array *>::to(arr);
-            uint32_t idx = pA->size;
-            array_resize(context, *pA, idx + 1, stride, false);
-            YZG_EXCEPTION_POINT;
-            if ( index ) {
-                __m128 ati = index->eval(context);
-                YZG_EXCEPTION_POINT;
-                uint32_t i = cast<uint32_t>::to(ati);
-                if ( i >= pA->size ) {
-                    context.throw_error("insert index out of range");
-                    return _mm_setzero_ps();
-                }
-                memmove ( pA->data+(i+1)*stride, pA->data+i*stride, (idx-i)*stride );
-                idx = i;
-            }
-            TT * pl = (TT *) ( pA->data + idx*stride );
-            TT * pr = (TT *) &val;
+            : SimNode_ArrayPush(at, ll, rr, ii, sizeof(TT)) {};
+        virtual void copyValue ( char * at, __m128 value ) override {
+            TT * pl = (TT *) at;
+            TT * pr = (TT *) &value;
             *pl = *pr;
-            return _mm_setzero_ps();
         }
-        SimNode * array, *value, *index;
     };
     
     // PUSH REFERENCE VALUE
-    struct SimNode_ArrayPushRefValue : SimNode_Array {
+    struct SimNode_ArrayPushRefValue : SimNode_ArrayPush {
         SimNode_ArrayPushRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii, uint32_t sz)
-            : SimNode_Array(at, sz), array(ll), value(rr), index(ii) {};
-        virtual __m128 eval ( Context & context ) override {
-            __m128 arr = array->eval(context);
-            YZG_EXCEPTION_POINT;
-            __m128 val = value->eval(context);
-            YZG_EXCEPTION_POINT;
-            Array * pA = cast<Array *>::to(arr);
-            uint32_t idx = pA->size;
-            array_resize(context, *pA, idx + 1, stride, false);
-            YZG_EXCEPTION_POINT;
-            if ( index ) {
-                __m128 ati = index->eval(context);
-                YZG_EXCEPTION_POINT;
-                uint32_t i = cast<uint32_t>::to(ati);
-                if ( i >= pA->size ) {
-                    context.throw_error("insert index out of range");
-                    return _mm_setzero_ps();
-                }
-                memmove ( pA->data+(i+1)*stride, pA->data+i*stride, (idx-i)*stride );
-                idx = i;
-            }
-            void * pl = pA->data + idx*stride;
-            auto pr = cast<void *>::to(val);
-            memcpy ( pl, pr, stride );
-            return _mm_setzero_ps();
+            : SimNode_ArrayPush(at, ll, rr, ii, sz) {};
+        virtual void copyValue ( char * at, __m128 value ) override {
+            auto pr = cast<void *>::to(value);
+            memcpy ( at, pr, stride );
         }
-        SimNode * array, *value, *index;
     };
     
     struct GoodArrayIterator : Iterator {
-        virtual bool first ( Context & context, IteratorContext & itc ) override {
-            __m128 ll = source->eval(context);
-            YZG_ITERATOR_EXCEPTION_POINT;
-            auto pArray = cast<Array *>::to(ll);
-            array_lock(context, *pArray);
-            YZG_ITERATOR_EXCEPTION_POINT;
-            char * data    = pArray->data;
-            itc.value      = cast<char *>::from(data);
-            itc.array_end  = data + pArray->size * stride;
-            itc.array      = pArray;
-            return pArray->size != 0;
-        }
-        virtual bool next  ( Context & context, IteratorContext & itc ) override {
-            char * data = cast<char *>::to(itc.value) + stride;
-            itc.value = cast<char *>::from(data);
-            return data != itc.array_end;
-        }
-        virtual void close ( Context & context, IteratorContext & itc ) override {
-            if ( itc.array ) {
-                array_unlock(context, *itc.array);
-            }
-        }
+        virtual bool first ( Context & context, IteratorContext & itc ) override;
+        virtual bool next  ( Context & context, IteratorContext & itc ) override;
+        virtual void close ( Context & context, IteratorContext & itc ) override;
         SimNode *   source;
         uint32_t    stride;
     };
     
-    struct SimNode_GoodArrayIterator : SimNode {
-        SimNode_GoodArrayIterator ( const LineInfo & at, SimNode * s, uint32_t stride )
-            : SimNode(at) { subexpr.source = s; subexpr.stride = stride; }
-        virtual __m128 eval ( Context & context ) override {
-            return cast<Iterator *>::from(&subexpr);
-        }
-        GoodArrayIterator subexpr;
+    struct SimNode_GoodArrayIterator : SimNode, GoodArrayIterator {
+        SimNode_GoodArrayIterator ( const LineInfo & at, SimNode * s, uint32_t st )
+            : SimNode(at) { source = s; stride = st; }
+        virtual __m128 eval ( Context & context ) override;
+    };
+    
+    struct FixedArrayIterator : Iterator {
+        virtual bool first ( Context & context, IteratorContext & itc ) override;
+        virtual bool next  ( Context & context, IteratorContext & itc ) override;
+        virtual void close ( Context & context, IteratorContext & itc ) override;
+        SimNode *   source;
+        uint32_t    size;
+        uint32_t    stride;
+    };
+    
+    struct SimNode_FixedArrayIterator : SimNode, FixedArrayIterator {
+        SimNode_FixedArrayIterator ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t st )
+            : SimNode(at) { source = s; size = sz; stride = st; }
+        virtual __m128 eval ( Context & context ) override;
     };
 }

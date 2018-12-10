@@ -48,11 +48,14 @@ def test:bool
             verify_test_array(b,i++)
     let ( arr:array<int>; arr2:array<int>; val2:int=2 )
         assert(length(arr)==0,"array starts at 0 length")
-        push(arr,1)
-        push(arr,val2)
+        push(arr,1)     // push value
+        push(arr,val2)  // push reference
         push(arr,3)
         assert(length(arr)==3,"array length is 3")
         assert(capacity(arr)==16,"its 2x, but no less than 16")
+        assert(arr[0]==1)
+        assert(arr[1]==2)
+        assert(arr[2]==3)
         pass_array(arr)
         assert(length(arr)==4,"array length is 4")
         resize(arr,6)
