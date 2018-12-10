@@ -504,7 +504,7 @@ namespace yzg
     }
     
     void ExprRef2Value::log(ostream& stream, int depth) const {
-        stream << "(-> " << *subexpr << ")";
+        stream << "(=> " << *subexpr << ")";
     }
     
     void ExprRef2Value::inferType(InferTypeContext & context) {
@@ -536,7 +536,7 @@ namespace yzg
     }
     
     void ExprPtr2Ref::log(ostream& stream, int depth) const {
-        stream << "(=> " << *subexpr << ")";
+        stream << "(-> " << *subexpr << ")";
     }
     
     void ExprPtr2Ref::inferType(InferTypeContext & context) {
@@ -544,9 +544,9 @@ namespace yzg
         subexpr = autoDereference(subexpr);
         if ( !subexpr->type ) return;
         if ( !subexpr->type->isPointer() ) {
-            context.error("can only dereference pointer", at);
-        } if ( !subexpr->type->firstType ) {
-            context.error("can only dereference pointer to something", at);
+            context.error("can only dereference pointer", at, CompilationError::cant_dereference);
+        } else if ( !subexpr->type->firstType || subexpr->type->firstType->isVoid() ) {
+            context.error("can only dereference pointer to something", at, CompilationError::cant_dereference);
         } else {
             type = make_shared<TypeDecl>(*subexpr->type->firstType);
             type->ref = true;
@@ -567,15 +567,16 @@ namespace yzg
     
     void ExprAssert::inferType(InferTypeContext & context) {
         if ( arguments.size()<1 || arguments.size()>2 ) {
-            context.error("assert(expr) or assert(expr,string)", at);
+            context.error("assert(expr) or assert(expr,string)", at, CompilationError::invalid_argument_count);
+            return;
         }
         ExprLooksLikeCall::inferType(context);
         autoDereference();
         if ( !arguments[0]->type ) return;
         if ( !arguments[0]->type->isSimpleType(Type::tBool) )
-            context.error("assert condition must be boolean", at);
+            context.error("assert condition must be boolean", at, CompilationError::invalid_argument_type);
         if ( arguments.size()==2 && !arguments[1]->isStringConstant() )
-            context.error("assert comment must be string constant", at);
+            context.error("assert comment must be string constant", at, CompilationError::invalid_argument_type);
         type = make_shared<TypeDecl>(Type::tVoid);
     }
     

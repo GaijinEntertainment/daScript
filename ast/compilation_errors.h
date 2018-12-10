@@ -23,6 +23,7 @@ namespace yzg
     ,   invalid_structure_field_type            =   30104       //  struct a:void
     ,   invalid_array_type                      =   30105       //  array<int&>
     ,   invalid_table_type                      =   30106       //  table<wtf,int> table<string&,int> table<int,string&>
+    ,   invalid_argument_count                  =   30107       //  assert(), assert(blah,....)
         
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)
@@ -35,6 +36,9 @@ namespace yzg
     ,   structure_not_found                     =   30302       //  new wtf
         
     ,   cant_initialize                         =   30401       //  struct x=0
+        
+    ,   cant_dereference                        =   30501
+    
         
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };

@@ -505,6 +505,9 @@ type_declaration
         if ( $typeDecl->ref ) {
             yyerror("can't be reference of reference",tokAt(@typeDecl),CompilationError::invalid_type);
         }
+        if ( $typeDecl->isVoid() ) {
+            yyerror("can't be void reference",tokAt(@typeDecl),CompilationError::invalid_type);
+        }
         $typeDecl->ref = true;
         $$ = $typeDecl;
     }
