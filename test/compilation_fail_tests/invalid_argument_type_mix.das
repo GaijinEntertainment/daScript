@@ -1,4 +1,4 @@
-expect 30103:7   // invalid_argument_type
+expect 30103:10   // invalid_argument_type
 
 def test
     // assert(bool,comment)
@@ -15,4 +15,10 @@ def test
         push(a, 1, "at")        // index must be index
         push(a, 1)              // this one ok
         push(a, 1, 2)           // this one good too
+        erase(1,1)
+        erase(a,"blah")
+        erase(a,1)
+    let(a:table<string,int>)
+        erase(a,1)
+        erase(a,"2")
 

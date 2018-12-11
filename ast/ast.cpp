@@ -699,7 +699,8 @@ namespace yzg
     
     void ExprErase::inferType(InferTypeContext & context) {
         if ( arguments.size()!=2 ) {
-            context.error("erase(table,key) or erase(array,index)", at);
+            context.error("erase(table,key) or erase(array,index)", at, CompilationError::invalid_argument_count);
+            return;
         }
         ExprLooksLikeCall::inferType(context);
         arguments[1] = Expression::autoDereference(arguments[1]);
@@ -708,14 +709,14 @@ namespace yzg
         if ( !containerType || !valueType ) return;
         if ( containerType->isGoodArrayType() ) {
             if ( !valueType->isIndex() )
-                context.error("size must be int or uint", at);
+                context.error("size must be int or uint", at, CompilationError::invalid_argument_type);
             type = make_shared<TypeDecl>(Type::tVoid);
         } else if ( containerType->isGoodTableType() ) {
             if ( !containerType->firstType->isSameType(*valueType,false) )
-                context.error("key must be of the same type as table<key,...>", at);
+                context.error("key must be of the same type as table<key,...>", at, CompilationError::invalid_argument_type);
             type = make_shared<TypeDecl>(Type::tBool);
         } else {
-            context.error("first argument must be fully qualified array or table", at);
+            context.error("first argument must be fully qualified array or table", at, CompilationError::invalid_argument_type);
         }
     }
     
