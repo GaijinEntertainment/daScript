@@ -344,8 +344,8 @@ expr
     |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }
     |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),Operator::boolNot,ExpressionPtr($subexpr)); }
     |   '~'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),Operator::binNot,ExpressionPtr($subexpr)); }
-    |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),Operator::sub,ExpressionPtr($subexpr)); }
-    |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),Operator::add,ExpressionPtr($subexpr)); }
+    |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),Operator::add,ExpressionPtr($subexpr)); }
+    |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),Operator::sub,ExpressionPtr($subexpr)); }
     |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '='[loc]    expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
     |   expr[left] ADDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::addEqu, ExpressionPtr($left), ExpressionPtr($right)); }
