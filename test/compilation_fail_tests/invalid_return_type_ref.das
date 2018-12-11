@@ -1,4 +1,4 @@
-expect 30102    // invalid_return_type
+expect 30102:3    // invalid_return_type
 
 struct Foo
     a:int

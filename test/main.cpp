@@ -25,12 +25,17 @@ bool compilation_fail_test ( const string & fn ) {
     if ( auto program = parseDaScript(str.c_str(), [](const ProgramPtr & prog){}) ) {
         if ( program->failed() ) {
             bool failed = false;
-            for ( auto & err : program->errors ) {
-                auto it = find_if(program->expectErrors.begin(), program->expectErrors.end(), [&](CompilationError ce){
+            auto errors = program->expectErrors;
+            for ( auto err : program->errors ) {
+                auto it = find_if(errors.begin(), errors.end(), [&](CompilationError ce){
                     return err.cerr == ce;
                 });
-                if ( g_reportCompilationFailErrors || it == program->expectErrors.end() ) {
+                if ( g_reportCompilationFailErrors || it==errors.end() ) {
                     cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+                }
+                if ( it != errors.end() ) {
+                    errors.erase(it);
+                } else {
                     failed = true;
                 }
             }
@@ -38,14 +43,13 @@ bool compilation_fail_test ( const string & fn ) {
                 cout << "failed, unexpected errors\n";
                 return false;
             }
-            for ( auto ce : program->expectErrors ) {
-                auto it = find_if(program->errors.begin(), program->errors.end(), [&](const Error & err){
-                    return err.cerr == ce;
-                });
-                if ( it == program->errors.end() ) {
-                    cout << "failed, expecting error " << int(ce) << "\n";
-                    return false;
+            if ( errors.size() ) {
+                cout << "failed, expecting errors";
+                for ( auto cerr : errors  ) {
+                    cout << " " << int(cerr);
                 }
+                cout << "\n";
+                return false;
             }
             cout << "ok\n";
             return true;

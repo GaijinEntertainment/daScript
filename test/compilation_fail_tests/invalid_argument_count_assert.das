@@ -1,4 +1,4 @@
-expect 30107    // invalid_argument_count
+expect 30107:2    // invalid_argument_count
 
 def test
     assert()

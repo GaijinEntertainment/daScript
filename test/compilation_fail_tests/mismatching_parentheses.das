@@ -1,5 +1,4 @@
-expect 20000    // syntax_error
-expect 10001    // mismatching_parentheses
+expect 20000, 10001    // syntax_error, mismatching_parentheses
 
 def main
     let ( a:int ))

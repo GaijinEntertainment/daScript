@@ -135,8 +135,22 @@ program
     ;
 
 expect_declaration
-    :   _EXPECT INTEGER[err] {
+    :   _EXPECT expect_list
+    ;
+
+expect_list
+    :   expect_error
+    |   expect_list ',' expect_error
+    ;
+
+expect_error
+    : INTEGER[err] {
         g_Program->expectErrors.push_back(CompilationError($err));
+    }
+    | INTEGER[err] ':' INTEGER[count] {
+        for ( int cc=0; cc!=$count; ++cc ) {
+            g_Program->expectErrors.push_back(CompilationError($err));
+        }
     }
     ;
 
