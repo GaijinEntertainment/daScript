@@ -3,6 +3,7 @@
 #include "simulate.h"
 #include "vectypes.h"
 #include "arraytype.h"
+#include "rangetype.h"
 #include "function_traits.h"
 #include "interop.h"
 #include "debug_info.h"
@@ -106,7 +107,9 @@ namespace yzg
         string describe() const { stringstream ss; ss << *this; return ss.str(); }
         bool canCopy() const;
         bool isPod() const;
-        bool isWorkhorseType() const; // we can return this, or pass this,
+        bool isWorkhorseType() const; // we can return this, or pass this
+        bool isRange() const;
+        Type getRangeBaseType() const;
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
         TypeDeclPtr         firstType;      // map.first or array
@@ -140,6 +143,8 @@ namespace yzg
     template<> struct ToBasicType<uint2>        { enum { type = Type::tUInt2 }; };
     template<> struct ToBasicType<uint3>        { enum { type = Type::tUInt3 }; };
     template<> struct ToBasicType<uint4>        { enum { type = Type::tUInt4 }; };
+    template<> struct ToBasicType<range>        { enum { type = Type::tRange }; };
+    template<> struct ToBasicType<urange>       { enum { type = Type::tURange }; };
     template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
     template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
 
@@ -484,6 +489,7 @@ namespace yzg
         bool                    dynamicArrays = false;
         bool                    fixedArrays = false;
         bool                    nativeIterators = false;
+        bool                    rangeBase = false;
     };
     
     struct ExprLooksLikeCall : Expression {

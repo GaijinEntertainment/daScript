@@ -78,6 +78,8 @@ namespace yzg
                 case Type::tFloat2:     return hash_function(*((float2 *)pX));
                 case Type::tFloat3:     return hash_function(*((float3 *)pX));
                 case Type::tFloat4:     return hash_function(*((float4 *)pX));
+                case Type::tRange:      return hash_function(*((range *)pX));
+                case Type::tURange:     return hash_function(*((urange *)pX));
                 case Type::tPointer:    return hash_function(intptr_t(pX));
                 case Type::tIterator:   return hash_function(intptr_t(pX));
                 case Type::tStructure:  return hash_structure(*(char **)pX, info->structType, getTypeSize(info), info->isPod);

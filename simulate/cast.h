@@ -2,6 +2,7 @@
 
 #include "vectypes.h"
 #include "arraytype.h"
+#include "rangetype.h"
 
 namespace yzg
 {
@@ -58,6 +59,18 @@ namespace yzg
     struct cast <float> {
         static __forceinline float to ( __m128 x )              { return *((float *)&x); }
         static __forceinline __m128 from ( float x )            { return _mm_set_ss(x); }
+    };
+    
+    template <>
+    struct cast <range> {
+        static __forceinline range to ( __m128 x )              { return *((range *)&x); }
+        static __forceinline __m128 from ( range x )            { __m128 a; *((range *)&a) = x; return a; }
+    };
+    
+    template <>
+    struct cast <urange> {
+        static __forceinline urange to ( __m128 x )             { return *((urange *)&x); }
+        static __forceinline __m128 from ( urange x )           { __m128 a; *((urange *)&a) = x; return a; }
     };
     
     template <typename TT>

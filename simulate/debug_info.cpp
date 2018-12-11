@@ -30,7 +30,9 @@ namespace yzg
         {   Type::tFloat,       "float" },
         {   Type::tFloat2,      "float2"},
         {   Type::tFloat3,      "float3"},
-        {   Type::tFloat4,      "float4"}
+        {   Type::tFloat4,      "float4"},
+        {   Type::tRange,       "range" },
+        {   Type::tURange,      "urange"}
     };
     
     string to_string ( Type t ) {
@@ -50,17 +52,19 @@ namespace yzg
             case tInt64:        return sizeof(int64_t);
             case tUInt64:       return sizeof(uint64_t);
             case tInt:          return sizeof(int);
-            case tInt2:         return sizeof(int) * 2;
-            case tInt3:         return sizeof(int) * 3;
-            case tInt4:         return sizeof(int) * 4;
+            case tInt2:         return sizeof(int2);
+            case tInt3:         return sizeof(int3);
+            case tInt4:         return sizeof(int4);
             case tUInt:         return sizeof(uint);
-            case tUInt2:        return sizeof(uint) * 2;
-            case tUInt3:        return sizeof(uint) * 3;
-            case tUInt4:        return sizeof(uint) * 4;
+            case tUInt2:        return sizeof(uint2);
+            case tUInt3:        return sizeof(uint3);
+            case tUInt4:        return sizeof(uint4);
             case tFloat:        return sizeof(float);
-            case tFloat2:       return sizeof(float) * 2;
-            case tFloat3:       return sizeof(float) * 3;
-            case tFloat4:       return sizeof(float) * 4;
+            case tFloat2:       return sizeof(float2);
+            case tFloat3:       return sizeof(float3);
+            case tFloat4:       return sizeof(float4);
+            case tRange:        return sizeof(range);
+            case tURange:       return sizeof(urange);
             case tArray:        return sizeof(Array);
             case tTable:        return sizeof(Table);
             case tStructure:    return 0;
@@ -166,6 +170,8 @@ namespace yzg
                 case Type::tFloat2:     ss << *((float2 *)pX); break;
                 case Type::tFloat3:     ss << *((float3 *)pX); break;
                 case Type::tFloat4:     ss << *((float4 *)pX);; break;
+                case Type::tRange:      ss << *((range *)pX); break;
+                case Type::tURange:     ss << *((urange *)pX); break;
                 case Type::tIterator:   ss << "iterator"; break;
                 case Type::tPointer:    ss << "*" << hex << intptr_t(pX) << dec;
                                         if ( info->firstType ) {
@@ -229,6 +235,8 @@ namespace yzg
                 case Type::tFloat2:     ss << cast<float2>::to(x); break;
                 case Type::tFloat3:     ss << cast<float3>::to(x); break;
                 case Type::tFloat4:     ss << cast<float4>::to(x); break;
+                case Type::tRange:      ss << cast<range>::to(x); break;
+                case Type::tURange:     ss << cast<urange>::to(x); break;
                 case Type::tIterator:   ss << "iterator"; break;
                 case Type::tPointer:    ss << "*" << hex << intptr_t(cast<void *>::to(x)) << dec << " ";
                                         if ( info->firstType ) {

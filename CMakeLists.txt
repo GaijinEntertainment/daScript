@@ -48,6 +48,7 @@ misc/function_traits.h
 misc/platform.h
 misc/vectypes.h
 misc/arraytype.h
+misc/rangetype.h
 misc/precomp.h
 misc/precomp.cpp
 )
@@ -66,6 +67,8 @@ simulate/runtime_array.cpp
 simulate/runtime_array.h
 simulate/runtime_table.cpp
 simulate/runtime_table.h
+simulate/runtime_range.cpp
+simulate/runtime_range.h
 simulate/simulate.cpp
 simulate/simulate.h
 )

@@ -68,6 +68,7 @@
 %token  _INT    _INT2   _INT3   _INT4
 %token  _UINT   _UINT2  _UINT3  _UINT4
 %token  _FLOAT  _FLOAT2 _FLOAT3 _FLOAT4
+%token  _RANGE  _URANGE
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -485,6 +486,8 @@ basic_type_declaration
     |   _FLOAT3     { $$ = Type::tFloat3; }
     |   _FLOAT4     { $$ = Type::tFloat4; }
     |   _VOID       { $$ = Type::tVoid; }
+    |   _RANGE      { $$ = Type::tRange; }
+    |   _URANGE     { $$ = Type::tURange; }
     ;
 
 structure_type_declaration

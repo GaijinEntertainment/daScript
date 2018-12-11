@@ -22,6 +22,8 @@ namespace yzg
         tFloat2,
         tFloat3,
         tFloat4,
+        tRange,
+        tURange,
         tString,
         tStructure,
         tPointer,

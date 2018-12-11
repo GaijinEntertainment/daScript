@@ -7,6 +7,7 @@
 
 namespace yzg
 {
+    
     // core functions
     
     __m128 builtin_print ( Context & context, SimNode_Call *, __m128 * args ) {

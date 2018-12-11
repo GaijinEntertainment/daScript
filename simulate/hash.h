@@ -35,6 +35,11 @@ namespace yzg
         return hash_function(&x, sizeof(vec4<QQ>));
     }
     
+    template <typename QQ>
+    __forceinline uint64_t hash_function ( const RangeType<QQ> & x) {
+        return hash_function(&x, sizeof(RangeType<QQ>));
+    }
+    
     uint64_t hash_function ( void * data, TypeInfo * type );
     
     template <typename TT>

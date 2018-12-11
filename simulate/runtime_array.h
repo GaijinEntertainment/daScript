@@ -104,17 +104,6 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override;
     };
     
-    // FOR BASE
-    struct SimNode_ForBase : SimNode {
-        SimNode_ForBase ( const LineInfo & at ) : SimNode(at) {}
-        SimNode *   sources [MAX_FOR_ITERATORS];
-        uint32_t    strides [MAX_FOR_ITERATORS];
-        uint32_t    stackTop[MAX_FOR_ITERATORS];
-        SimNode *   body;
-        SimNode *   filter;
-        uint32_t    size;
-    };
-    
     template <int total>
     struct SimNode_ForGoodArray : public SimNode_ForBase {
         SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}

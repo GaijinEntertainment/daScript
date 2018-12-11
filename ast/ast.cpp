@@ -5,6 +5,7 @@
 
 #include "runtime_array.h"
 #include "runtime_table.h"
+#include "runtime_range.h"
 #include "hash.h"
 
 void yybegin(const char * str);
@@ -297,12 +298,30 @@ namespace yzg
             case Type::tFloat2:
             case Type::tFloat3:
             case Type::tFloat4:
+            case Type::tRange:
+            case Type::tURange:
             case Type::tString:
             case Type::tPointer:
                 return true;
             default:
                 return false;
         }
+    }
+    
+    Type TypeDecl::getRangeBaseType() const
+    {
+        switch ( baseType ) {
+            case Type::tRange:  return Type::tInt;
+            case Type::tURange: return Type::tUInt;
+            default:
+                assert(0 && "we should not even be here");
+                return Type::none;
+        }
+    }
+    
+    bool TypeDecl::isRange() const
+    {
+        return (baseType==Type::tRange || baseType==Type::tURange) && dim.size()==0;
     }
     
     bool TypeDecl::isSimpleType(Type typ) const {
@@ -1592,6 +1611,8 @@ namespace yzg
                 dynamicArrays = true;
             } else if ( src->type->isGoodIteratorType() ) {
                 nativeIterators = true;
+            } else if ( src->type->isRange() ) {
+                rangeBase = true;
             }
         }
         int idx = 0;
@@ -1609,6 +1630,9 @@ namespace yzg
             } else if ( src->type->isGoodArrayType() ) {
                 pVar->type = make_shared<TypeDecl>(*src->type->firstType);
                 pVar->type->ref = true;
+            } else if ( src->type->isRange() ) {
+                pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
+                pVar->type->ref = false;
             } else {
                 context.error("unsupported iteration type for " + pVar->name, at);
                 return;
@@ -1634,8 +1658,10 @@ namespace yzg
     }
 
     SimNode * ExprFor::simulate (Context & context) const {
-        int total = sources.size();
-        if ( (dynamicArrays && fixedArrays) || nativeIterators ) {
+        int  total = sources.size();
+        int  sourceTypes = int(dynamicArrays) + int(fixedArrays) + int(rangeBase);
+        bool hybridRange = rangeBase && (total>1);
+        if ( (sourceTypes>1) || hybridRange || nativeIterators ) {
             SimNode_ForWithIteratorBase * result = (SimNode_ForWithIteratorBase *)
                 context.makeNodeUnroll<SimNode_ForWithIterator>(total, at);
             for ( int t=0; t!=total; ++t ) {
@@ -1646,12 +1672,16 @@ namespace yzg
                         sources[t]->at,
                         sources[t]->simulate(context),
                         sources[t]->type->firstType->getStride());
+                } else if ( sources[t]->type->isRange() ) {
+                    result->source_iterators[t] = context.makeNode<SimNode_RangeIterator>(
+                        sources[t]->at,
+                        sources[t]->simulate(context));
                 } else if ( sources[t]->type->dim.size() ) {
                     result->source_iterators[t] = context.makeNode<SimNode_FixedArrayIterator>(
                         sources[t]->at,
                         sources[t]->simulate(context),
-                        sources[t]->type->getStride(),
-                        sources[t]->type->dim.back());
+                        sources[t]->type->dim.back(),
+                        sources[t]->type->getStride());
                 } else {
                     assert(0 && "we should not be here yet");
                     return nullptr;
@@ -1667,6 +1697,9 @@ namespace yzg
                 result = (SimNode_ForBase *) context.makeNodeUnroll<SimNode_ForGoodArray>(total, at);
             } else if ( fixedArrays ) {
                 result = (SimNode_ForBase *) context.makeNodeUnroll<SimNode_ForFixedArray>(total, at);
+            } else if ( rangeBase ) {
+                assert(total==1 && "simple range on 1 loop only");
+                result = context.makeNode<SimNode_ForRange>(at);
             } else {
                 assert(0 && "we should not be here yet");
                 return nullptr;

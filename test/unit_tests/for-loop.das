@@ -52,6 +52,25 @@ def test:bool
             assert(l>r)
             i++
         assert(i==4)
+    // 1 variable, range
+    let(i:int=0)
+        for a in range(0,10)
+            assert(a==i++)
+        assert(i==10)
+    // 2 variable, range hybrid
+    let(b:int[10];i:int=0)
+        for l,r in range(0,10),b
+            r = i++*2-5
+        assert(i==10)
+        i = 0
+        for l,r in range(0,10),b
+            assert(r==i*2-5)
+            assert(l==i++)
+        i = 0
+        for l,r in range(0,10),b where l>r
+            assert(l>r)
+            i++
+        assert(i==5)
     return true
 
 
