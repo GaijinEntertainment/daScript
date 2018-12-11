@@ -24,6 +24,7 @@ namespace yzg
     ,   invalid_array_type                      =   30105       //  array<int&>
     ,   invalid_table_type                      =   30106       //  table<wtf,int> table<string&,int> table<int,string&>
     ,   invalid_argument_count                  =   30107       //  assert(), assert(blah,....)
+    ,   invalid_variable_type                   =   30108       //  a:void
         
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)

@@ -96,11 +96,13 @@ SETUP_CPP11(daScript)
 file(GLOB UNIT_TEST_SRC
 "test/unit_tests/*.das"
 )
+list(SORT UNIT_TEST_SRC)
 SOURCE_GROUP_FILES("test/unit" UNIT_TEST_SRC)
 
 file(GLOB COMPILATION_FAIL_TEST_SRC
 "test/compilation_fail_tests/*.das"
 )
+list(SORT COMPILATION_FAIL_TEST_SRC)
 SOURCE_GROUP_FILES("test/compilation fail" COMPILATION_FAIL_TEST_SRC)
 
 SET(TEST_MAIN_SRC

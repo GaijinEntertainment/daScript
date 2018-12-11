@@ -535,6 +535,8 @@ type_declaration
     |   _ARRAY[loc] '<' type_declaration[typeDecl] '>' {
         if ( $typeDecl->ref ) {
             yyerror("can't have reference in the Array",tokAt(@typeDecl),CompilationError::invalid_array_type);
+        } else if ( $typeDecl->isVoid() ) {
+            yyerror("can't have void Array",tokAt(@typeDecl),CompilationError::invalid_array_type);
         }
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);
@@ -543,6 +545,9 @@ type_declaration
     |   _TABLE[loc] '<' type_declaration[keyTypeDecl] ',' type_declaration[valueTypeDecl] '>' {
         if ( $keyTypeDecl->ref || $valueTypeDecl->ref ) {
             yyerror("can't have reference in the Table",tokAt(@loc),CompilationError::invalid_table_type);
+        }
+        if ( $keyTypeDecl->isVoid() || $valueTypeDecl->isVoid() ) {
+            yyerror("can't have void Table",tokAt(@loc),CompilationError::invalid_array_type);
         }
         if ( !$keyTypeDecl->isWorkhorseType() ) {
             yyerror("key has to be basic 'hashable' type",tokAt(@keyTypeDecl),CompilationError::invalid_table_type);

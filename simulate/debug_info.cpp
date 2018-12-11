@@ -64,6 +64,7 @@ namespace yzg
             case tArray:        return sizeof(Array);
             case tTable:        return sizeof(Table);
             case tStructure:    return 0;
+            case tVoid:         return 0;
             default:
                 assert(0 && "not implemented");
                 return 0;

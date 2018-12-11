@@ -597,12 +597,13 @@ namespace yzg
     
     void ExprDebug::inferType(InferTypeContext & context) {
         if ( arguments.size()<1 || arguments.size()>2 ) {
-            context.error("debug(expr) or debug(expr,string)", at);
+            context.error("debug(expr) or debug(expr,string)", at, CompilationError::invalid_argument_count);
+            return;
         }
         ExprLooksLikeCall::inferType(context);
         if ( !arguments[0]->type ) return;
         if ( arguments.size()==2 && !arguments[1]->isStringConstant() )
-            context.error("debug comment must be string constant", at);
+            context.error("debug comment must be string constant", at, CompilationError::invalid_argument_type);
         type = make_shared<TypeDecl>(*arguments[0]->type);
     }
     
@@ -628,7 +629,8 @@ namespace yzg
     
     void ExprHash::inferType(InferTypeContext & context) {
         if ( arguments.size()!=1 ) {
-            context.error("hash(expr)", at);
+            context.error("hash(expr)", at, CompilationError::invalid_argument_count);
+            return;
         }
         ExprLooksLikeCall::inferType(context);
         if ( !arguments[0]->type ) return;
@@ -658,7 +660,7 @@ namespace yzg
     
     void ExprArrayPush::inferType(InferTypeContext & context) {
         if ( arguments.size()!=2 && arguments.size()!=3 ) {
-            context.error("push(array,value) or push(array,value,at)", at);
+            context.error("push(array,value) or push(array,value,at)", at, CompilationError::invalid_argument_count);
             return;
         }
         ExprLooksLikeCall::inferType(context);
@@ -666,13 +668,13 @@ namespace yzg
         auto valueType = arguments[1]->type;
         if ( !arrayType || !valueType ) return;
         if ( !arrayType->isGoodArrayType() ) {
-            context.error("push first argument must be fully qualified array", at);
+            context.error("push first argument must be fully qualified array", at, CompilationError::invalid_argument_type);
             return;
         }
         if ( !arrayType->firstType->isSameType(*valueType,false) )
-            context.error("can't push value of different type", at);
+            context.error("can't push value of different type", at, CompilationError::invalid_argument_type);
         if ( arguments.size()==3 && !arguments[2]->type->isIndex() )
-            context.error("push at must be an index", at);
+            context.error("push at must be an index", at, CompilationError::invalid_argument_type);
         type = make_shared<TypeDecl>(Type::tVoid);
     }
     
@@ -1718,7 +1720,9 @@ namespace yzg
         auto sz = context.local.size();
         for ( auto & var : variables ) {
             if ( var->type->ref )
-                context.error("local variable can't be reference", var->at);
+                context.error("local variable can't be reference", var->at, CompilationError::invalid_variable_type);
+            if ( var->type->isVoid() )
+                context.error("local variable can't be reference", var->at, CompilationError::invalid_variable_type);
             context.local.push_back(var);
             if ( var->init ) {
                 var->init->inferType(context);
