@@ -42,6 +42,7 @@ namespace yzg
         
     ,   cant_dereference                        =   30501
     ,   cant_index                              =   30502       //  wtf[a]
+    ,   cant_get_field                          =   30503       //  wtf.field
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };

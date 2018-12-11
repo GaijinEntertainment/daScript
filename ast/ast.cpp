@@ -984,7 +984,7 @@ namespace yzg
         if ( valT->baseType==Type::tPointer )
             value = autoDereference(value);
         if ( valT->isArray() ) {
-            context.error("can't get field of array", at);
+            context.error("can't get field of array", at, CompilationError::cant_get_field);
             return;
         }
         if ( valT->baseType==Type::tStructure ) {
@@ -995,7 +995,7 @@ namespace yzg
             }
         }
         if ( !field ) {
-            context.error("field " + name + " not found, expecting a structure or a pointer to a structure", at);
+            context.error("field " + name + " not found, expecting a structure or a pointer to a structure", at, CompilationError::cant_get_field);
         } else {
             type = make_shared<TypeDecl>(*field->type);
             type->ref = true;
