@@ -1,4 +1,4 @@
-expect 30103:10   // invalid_argument_type
+expect 30103:13   // invalid_argument_type
 
 def test
     // assert(bool,comment)
@@ -18,7 +18,12 @@ def test
         erase(1,1)
         erase(a,"blah")
         erase(a,1)
+        find(1,1)
+        find(a,"1")
+        find(a,1)               // this one fine
     let(a:table<string,int>)
         erase(a,1)
         erase(a,"2")
+        find(a,1)
+        find(a,"1")             // this one fine
 

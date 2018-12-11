@@ -745,7 +745,8 @@ namespace yzg
     
     void ExprFind::inferType(InferTypeContext & context) {
         if ( arguments.size()!=2 ) {
-            context.error("find(table,key) or find(array,value)", at);
+            context.error("find(table,key) or find(array,value)", at, CompilationError::invalid_argument_count);
+            return;
         }
         ExprLooksLikeCall::inferType(context);
         arguments[1] = Expression::autoDereference(arguments[1]);
@@ -754,14 +755,14 @@ namespace yzg
         if ( !containerType || !valueType ) return;
         if ( containerType->isGoodArrayType() ) {
             if ( !valueType->isSameType(*containerType->firstType) )
-                context.error("value must be of the same type as array<value>", at);
+                context.error("value must be of the same type as array<value>", at, CompilationError::invalid_argument_type);
         } else if ( containerType->isGoodTableType() ) {
             if ( !containerType->firstType->isSameType(*valueType,false) )
-                context.error("key must be of the same type as table<key,...>", at);
+                context.error("key must be of the same type as table<key,...>", at, CompilationError::invalid_argument_type);
             type = make_shared<TypeDecl>(Type::tPointer);
             type->firstType = make_shared<TypeDecl>(*containerType->secondType);
         } else {
-            context.error("first argument must be fully qualified array or table", at);
+            context.error("first argument must be fully qualified array or table", at, CompilationError::invalid_argument_type);
         }
     }
     
