@@ -831,13 +831,16 @@ namespace yzg
         stream << "(new (" << *typeexpr << "))";
     }
     
+    // TODO:
+    //  this would need proper testing, but only afrer parser is modified
+    //  curently none of the errors bellow can even be parsed
     void ExprNew::inferType(InferTypeContext & context) {
         if ( typeexpr->baseType != Type::tStructure ) {
-            context.error("can only new structures (for now)", typeexpr->at );
+            context.error("can only new structures (for now)", typeexpr->at, CompilationError::invalid_new_type);
         } else if ( typeexpr->ref ) {
-            context.error("can't new a ref", typeexpr->at);
+            context.error("can't new a ref", typeexpr->at, CompilationError::invalid_new_type);
         } else if ( typeexpr->dim.size() ) {
-            context.error("can only new single object", typeexpr->at );
+            context.error("can only new single object", typeexpr->at, CompilationError::invalid_new_type);
         } else {
             type = make_shared<TypeDecl>(Type::tPointer);
             type->firstType = make_shared<TypeDecl>(*typeexpr);
@@ -863,23 +866,23 @@ namespace yzg
         index = autoDereference(index);
         if ( subexpr->type->isGoodTableType() ) {
             if ( !subexpr->type->firstType->isSameType(*index->type) ) {
-                context.error("table index type mismatch", index->at);
+                context.error("table index type mismatch", index->at, CompilationError::invalid_index_type);
                 return;
             }
             type = make_shared<TypeDecl>(*subexpr->type->secondType);
             type->ref = true;
         } else {
             if ( !index->type->isIndex() ) {
-                context.error("index is int or uint", index->at);
+                context.error("index is int or uint", index->at, CompilationError::invalid_index_type);
                 return;
             }
             if ( subexpr->type->isGoodArrayType() ) {
                 type = make_shared<TypeDecl>(*subexpr->type->firstType);
                 type->ref = true;
             } else if ( !subexpr->type->isRef() ) {
-                context.error("can only index ref", subexpr->at);
+                context.error("can only index ref", subexpr->at, CompilationError::cant_index);
             } else if ( !subexpr->type->dim.size() ) {
-                context.error("can only index arrays", subexpr->at);
+                context.error("can only index arrays", subexpr->at, CompilationError::cant_index);
             } else {
                 type = make_shared<TypeDecl>(*subexpr->type);
                 type->ref = true;

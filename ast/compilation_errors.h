@@ -25,6 +25,8 @@ namespace yzg
     ,   invalid_table_type                      =   30106       //  table<wtf,int> table<string&,int> table<int,string&>
     ,   invalid_argument_count                  =   30107       //  assert(), assert(blah,....)
     ,   invalid_variable_type                   =   30108       //  a:void
+    ,   invalid_new_type                        =   30109       //  new int&, new int
+    ,   invalid_index_type                      =   30110       //  a[wtf]
         
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)
@@ -39,8 +41,8 @@ namespace yzg
     ,   cant_initialize                         =   30401       //  struct x=0
         
     ,   cant_dereference                        =   30501
+    ,   cant_index                              =   30502       //  wtf[a]
     
-        
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };
 }
