@@ -96,6 +96,9 @@ namespace yzg
     // TypeDecl
     
     ostream& operator<< (ostream& stream, const TypeDecl & decl) {
+        if ( decl.constant ) {
+            stream << "const ";
+        }
         if ( decl.baseType==Type::tArray ) {
             if ( decl.firstType ) {
                 stream << "array (" << *decl.firstType << ")";
@@ -142,6 +145,7 @@ namespace yzg
         structType = decl.structType;
         dim = decl.dim;
         ref = decl.ref;
+        constant = decl.constant;
         at = decl.at;
         if ( decl.firstType )
             firstType = make_shared<TypeDecl>(*decl.firstType);
@@ -167,6 +171,9 @@ namespace yzg
     
     string TypeDecl::getMangledName() const {
         stringstream ss;
+        if ( constant ) {
+            ss << "#const";
+        }
         if ( baseType==Type::tArray ) {
             ss << "#array";
             if ( firstType ) {
@@ -1128,7 +1135,8 @@ namespace yzg
         vector<TypeDeclPtr> types = { subexpr->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 ) {
-            context.error("no matching function '" + to_string(op) + "' with argument (" + subexpr->type->describe() + ")", at);
+            context.error("no matching operator '" + to_string(op)
+                          + "' with argument (" + subexpr->type->describe() + ")", at, CompilationError::operator_not_found);
         } else if ( functions.size()>1 ) {
             context.error("too many matching functions", at);
         } else {
@@ -1179,8 +1187,8 @@ namespace yzg
         vector<TypeDeclPtr> types = { left->type, right->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 ) {
-            context.error("no matching function '" + to_string(op)
-                + "' with arguments (" + left->type->describe() + ", " + right->type->describe() + ")", at);
+            context.error("no matching operator '" + to_string(op)
+                + "' with arguments (" + left->type->describe() + ", " + right->type->describe() + ")", at, CompilationError::operator_not_found);
         } else if ( functions.size()>1 ) {
             context.error("too many matching functions", at);
         } else {
@@ -1236,9 +1244,9 @@ namespace yzg
             vector<TypeDeclPtr> types = { subexpr->type, left->type, right->type };
             auto functions = context.program->findMatchingFunctions(to_string(op), types);
             if ( functions.size()==0 ) {
-                context.error("no matching function '" + to_string(op)
+                context.error("no matching operator '" + to_string(op)
                     + "' with arguments (" + subexpr->type->describe() + ", "
-                        + left->type->describe() + ", " + right->type->describe() + ")", at);
+                        + left->type->describe() + ", " + right->type->describe() + ")", at, CompilationError::operator_not_found);
             } else if ( functions.size()>1 ) {
                 context.error("too many matching functions", at);
             } else {
@@ -1302,6 +1310,8 @@ namespace yzg
             context.error("can only move same type", at);
         } else if ( !left->type->isRef() ) {
             context.error("can only move to reference", at);
+        } else if ( left->type->constant ) {
+            context.error("can't move to constant value", at, CompilationError::cant_move_to_const);
         }
         if ( left->type->canCopy() ) {
             context.error("this type can be copied, use copy instead of move", at);
@@ -1343,6 +1353,8 @@ namespace yzg
             context.error("can only copy same type " + left->type->describe() + " vs " + right->type->describe() , at);
         } else if ( !left->type->isRef() ) {
             context.error("can only copy to reference", at);
+        } else if ( left->type->constant ) {
+            context.error("can't write to constant value", at, CompilationError::cant_write_to_const);
         }
         if ( !left->type->canCopy() ) {
             context.error("this type can't be copied", at);
@@ -1880,7 +1892,7 @@ namespace yzg
         }
         auto functions = context.program->findMatchingFunctions(name, types);
         if ( functions.size()==0 ) {
-            context.error("no matching function " + describe(), at);
+            context.error("no matching function " + describe(), at, CompilationError::function_not_found);
         } else if ( functions.size()>1 ) {
             context.error("too many matching functions " + describe(), at);
         } else {
@@ -2013,6 +2025,10 @@ namespace yzg
                             auto & argType = pFn->arguments[ai]->type;
                             auto & passType = types[ai];
                             if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false)) ) {
+                                typesCompatible = false;
+                                break;
+                            }
+                            if ( argType->isRef() && !argType->constant && passType->constant ) {
                                 typesCompatible = false;
                                 break;
                             }

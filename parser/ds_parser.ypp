@@ -61,7 +61,7 @@
 %token  _TRUE   _FALSE  _SIZEOF     _NEW
 %token  _TYPE   _IN     _ELIF       _ARRAY
 %token  _RETURN _NULL   _BREAK      _TRY
-%token  _WHERE  _TABLE  _EXPECT
+%token  _WHERE  _TABLE  _EXPECT     _CONST
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -508,6 +508,10 @@ structure_type_declaration
 type_declaration
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(@basicType); }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
+    |   _CONST type_declaration[typeDecl] {
+        $typeDecl->constant = true;
+        $$ = $typeDecl;
+    }
     |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' {
         if ( $typeDecl->ref ) {
             yyerror("can't be array of references",tokAt(@dimSize),CompilationError::invalid_type);

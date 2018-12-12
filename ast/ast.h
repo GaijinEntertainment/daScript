@@ -116,16 +116,17 @@ namespace yzg
         TypeDeclPtr         secondType;     // map.second
         vector<uint32_t>    dim;
         bool                ref = false;
+        bool                constant = false;
         LineInfo            at;
     };
     
-    template <typename TT>  struct ToBasicType;
-    template <typename QQ> struct ToBasicType<QQ &> : ToBasicType<QQ> {};
-    template <typename QQ> struct ToBasicType<const QQ &> : ToBasicType<QQ> {};
+    template <typename TT> struct ToBasicType;
+    template <typename TT> struct ToBasicType<const TT *> : ToBasicType<TT *> {};
+    template <typename TT> struct ToBasicType<TT &> : ToBasicType<TT> {};
+    template <typename TT> struct ToBasicType<const TT &> : ToBasicType<TT> {};
     template<> struct ToBasicType<Iterator *>   { enum { type = Type::tIterator }; };
     template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
     template<> struct ToBasicType<char *>       { enum { type = Type::tString }; };
-    template<> struct ToBasicType<const char *> { enum { type = Type::tString }; };
     template<> struct ToBasicType<string>       { enum { type = Type::tString }; };
     template<> struct ToBasicType<bool>         { enum { type = Type::tBool }; };
     template<> struct ToBasicType<int64_t>      { enum { type = Type::tInt64 }; };
@@ -152,8 +153,9 @@ namespace yzg
     struct typeFactory {
         static TypeDeclPtr make(const ModuleLibrary &) {
             auto t = make_shared<TypeDecl>();
-            t->baseType = Type(ToBasicType<TT>::type);
+            t->baseType = Type( ToBasicType<TT>::type );
             t->ref = is_reference<TT>::value;
+            t->constant = is_const<TT>::value;
             return t;
         }
     };
@@ -561,6 +563,7 @@ namespace yzg
             type = make_shared<TypeDecl>(Type::tIterator);
             type->firstType = make_shared<TypeDecl>(*iterType);
             type->firstType->ref = true;
+            type->firstType->constant = first;
         }
         virtual SimNode * simulate (Context & context) const override {
             auto subexpr = arguments[0]->simulate(context);

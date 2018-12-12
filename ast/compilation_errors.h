@@ -37,12 +37,16 @@ namespace yzg
         
     ,   type_not_found                          =   30301       //  a:wtf
     ,   structure_not_found                     =   30302       //  new wtf
+    ,   operator_not_found                      =   30303       //  1 + 1.0
+    ,   function_not_found                      =   30304       //  wtf(x)
         
     ,   cant_initialize                         =   30401       //  struct x=0
         
     ,   cant_dereference                        =   30501
     ,   cant_index                              =   30502       //  wtf[a]
     ,   cant_get_field                          =   30503       //  wtf.field
+    ,   cant_write_to_const                     =   30504       //  const int & a = 5
+    ,   cant_move_to_const                      =   30505       //  const array<int> & a <- b
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };

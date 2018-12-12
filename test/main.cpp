@@ -135,6 +135,12 @@ bool run_compilation_fail_tests( const string & path ) {
 
 
 int main(int argc, const char * argv[]) {
+#if 0   // Debug this one test
+    compilation_fail_test("../../test/compilation_fail_tests/const_ref.das");
+    return 0;
+#endif
+    
+    
     bool ok = true;
     ok = run_compilation_fail_tests("../../test/compilation_fail_tests") && ok;
     ok = run_unit_tests("../../test/unit_tests") && ok;

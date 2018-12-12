@@ -32,19 +32,19 @@ namespace yzg
     
     // array functions
     
-    int builtin_array_size ( Array * arr ) {
+    int builtin_array_size ( const Array * arr ) {
         return arr->size;
     }
     
-    int builtin_array_capacity ( Array * arr ) {
+    int builtin_array_capacity ( const Array * arr ) {
         return arr->capacity;
     }
     
-    int builtin_table_size ( Table * arr ) {
+    int builtin_table_size ( const Table * arr ) {
         return arr->size;
     }
     
-    int builtin_table_capacity ( Table * arr ) {
+    int builtin_table_capacity ( const Table * arr ) {
         return arr->capacity;
     }
     
