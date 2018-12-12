@@ -75,6 +75,7 @@
 %token  SHLEQU      SHREQU      ANDEQU      OREQU       XOREQU
 %token  SHL         SHR         ADDADD      SUBSUB      LEEQU
 %token  GREQU       EQUEQU      NOTEQU      RARROW      LARROW
+%token  QQ          QDOT
 
 %token<i>   INTEGER
 %token<ui>  UNSIGNED_INTEGER
@@ -123,7 +124,7 @@
 %left   '-' '+'
 %left   '*' '/' '%'
 %right  UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
-%left   POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW
+%left   POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QQ
 
 %%
 
@@ -380,6 +381,7 @@ expr
             $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),to_string($type)),$arguments);
         }
     |   expr[subexpr] RARROW[loc]               { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   expr[subexpr] QQ[loc] expr[dval]        { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     ;

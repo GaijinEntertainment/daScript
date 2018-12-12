@@ -62,7 +62,7 @@ namespace yzg
         friend struct SimNode_GetGlobal;
         friend class Program;
     public:
-        Context(const string * lines);
+        Context(const string * lines, int las = 4*1024*1024);
         ~Context();
         
         void * reallocate ( void * oldData, uint32_t oldSize, uint32_t size );
@@ -174,7 +174,7 @@ namespace yzg
         }
         
     protected:
-        int linearAllocatorSize = 4*1024*1024;
+        int linearAllocatorSize;
         char * linearAllocator = nullptr;
         char * linearAllocatorBase = nullptr;
         char * linearAllocatorExecuteBase = nullptr;
@@ -397,6 +397,29 @@ namespace yzg
         SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override;
         SimNode * subexpr;
+    };
+    
+    // let(a:int?) x = a && 0
+    template <typename TT>
+    struct SimNode_NullCoalescing : SimNode_Ptr2Ref {
+        SimNode_NullCoalescing ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 ptr = subexpr->eval(context);
+            YZG_EXCEPTION_POINT;
+            if ( TT * pR = cast<TT *>::to(ptr) ) {
+                return cast<TT>::from(*pR);
+            } else {
+                return value->eval(context);
+            }
+        }
+        SimNode * value;
+    };
+    
+    // let(a:int?) x = a && default_a
+    struct SimNode_NullCoalescingRef : SimNode_Ptr2Ref {
+        SimNode_NullCoalescingRef ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
+        virtual __m128 eval ( Context & context ) override;
+        SimNode * value;
     };
     
     // NEW

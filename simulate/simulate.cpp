@@ -96,6 +96,18 @@ namespace yzg
         return ptr;
     }
     
+    // SimNode_Ptr2Ref
+    
+    __m128 SimNode_NullCoalescingRef::eval ( Context & context ) {
+        __m128 ptr = subexpr->eval(context);
+        YZG_EXCEPTION_POINT;
+        if ( cast<void *>::to(ptr) ) {
+            return ptr;
+        } else {
+            return value->eval(context);
+        }
+    }
+    
     // SimNode_New
     
     __m128 SimNode_New::eval ( Context & context ) {
@@ -177,7 +189,8 @@ namespace yzg
     
     // Context
     
-    Context::Context(const string * lines) {
+    Context::Context(const string * lines, int las) {
+        linearAllocatorSize = las;
         linearAllocator = linearAllocatorBase = (char *) _mm_malloc(linearAllocatorSize, 16);
         stack = (char *) _mm_malloc(stackSize, 16);
         stackTop = stack + stackSize;

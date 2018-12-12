@@ -221,6 +221,7 @@ namespace yzg
         virtual bool isStringConstant() const { return false; }
         LineInfo    at;
         TypeDeclPtr type;
+        bool        constexpression = false;
     };
     
     template <typename ExprType>
@@ -244,6 +245,17 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         ExpressionPtr   subexpr;
+    };
+    
+    struct ExprNullCoalescing : ExprPtr2Ref {
+        ExprNullCoalescing () = default;
+        ExprNullCoalescing ( const LineInfo & a, ExpressionPtr s, ExpressionPtr defVal )
+            : ExprPtr2Ref(a,s), defaultValue(defVal) {}
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        ExpressionPtr   defaultValue;
     };
     
     struct ExprNew : Expression {
@@ -410,6 +422,7 @@ namespace yzg
         }
         virtual void inferType(InferTypeContext & context) override {
             type = make_shared<TypeDecl>((Type)ToBasicType<TT>::type);
+            constexpression = true;
         }
         virtual SimNode * simulate (Context & context) const override {
             return context.makeNode<SimNode_ConstValue<TT>>(at,value);
@@ -425,7 +438,7 @@ namespace yzg
         ExprConstPtr(void * ptr = nullptr) : ExprConst(ptr) {}
         ExprConstPtr(const LineInfo & a, void * ptr = nullptr) : ExprConst(a,ptr) {}
         virtual void log(ostream& stream, int depth) const override {
-            if ( value ) stream << hex << "*0x" << intptr_t(value) << dec; else stream << "nil";
+            if ( value ) stream << hex << "*0x" << intptr_t(value) << dec; else stream << "null";
         }
     };
 

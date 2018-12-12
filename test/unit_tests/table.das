@@ -27,6 +27,22 @@ def test : bool
                 else
                     assert(i%7==0)
             i ++
+        let(j,k:int=0)
+            i = 0
+            while i < total
+                j += find(tab,string(i)) ?? 0
+                if i%7!=0
+                    k +=i
+                i ++
+            assert(j==k)
+        let(j,k,zero:int=0)
+            i = 0
+            while i < total
+                j += find(tab,string(i)) ?? zero
+                if i%7!=0
+                    k +=i
+                i ++
+            assert(j==k)
         // debug(tab)
         i = 0
         while i < total

@@ -597,6 +597,51 @@ namespace yzg
         return context.makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
 
+    // ExprPtr2Ref
+    
+    ExpressionPtr ExprNullCoalescing::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprNullCoalescing>(expr);
+        ExprPtr2Ref::clone(cexpr);
+        cexpr->defaultValue = defaultValue->clone();
+        return cexpr;
+    }
+    
+    void ExprNullCoalescing::log(ostream& stream, int depth) const {
+        stream << "(?? " << *subexpr << " " << *defaultValue << ")";
+    }
+    
+    void ExprNullCoalescing::inferType(InferTypeContext & context) {
+        subexpr->inferType(context);
+        subexpr = autoDereference(subexpr);
+        defaultValue->inferType(context);
+        if ( !subexpr->type || !defaultValue->type ) return;
+        auto seT = subexpr->type;
+        auto dvT = defaultValue->type;
+        if ( !seT->isPointer() ) {
+            context.error("can only dereference pointer", at, CompilationError::cant_dereference);
+        } else if ( !seT->firstType || seT->firstType->isVoid() ) {
+            context.error("can only dereference pointer to something", at, CompilationError::cant_dereference);
+        } else if ( !seT->firstType->isSameType(*dvT,false,false) ) {
+            context.error("default value type mismatch in " + seT->firstType->describe() + " vs " + dvT->describe(),
+                          at, CompilationError::cant_dereference);
+        } else if ( !seT->isConst() && dvT->isConst() ) {
+            context.error("default value type mismatch, constant matters in " + seT->describe() + " vs " + dvT->describe(),
+                          at, CompilationError::cant_dereference);
+        } else {
+            type = make_shared<TypeDecl>(*dvT);
+            type->constant |= subexpr->type->constant;
+        }
+    }
+    
+    SimNode * ExprNullCoalescing::simulate (Context & context) const {
+        if ( type->ref ) {
+            return context.makeNode<SimNode_NullCoalescingRef>(at,subexpr->simulate(context),defaultValue->simulate(context));
+        } else {
+            return context.makeValueNode<SimNode_NullCoalescing>(type->baseType,at,subexpr->simulate(context),defaultValue->simulate(context));
+        }
+    }
+
+    
     // ExprAssert
     
     ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const {
@@ -1023,7 +1068,7 @@ namespace yzg
         value->inferType(context);
         if ( !value->type ) return;
         auto valT = value->type;
-        if ( valT->baseType==Type::tPointer )
+        if ( valT->isPointer() )
             value = autoDereference(value);
         if ( valT->isArray() ) {
             context.error("can't get field of array", at, CompilationError::cant_get_field);
@@ -1031,7 +1076,7 @@ namespace yzg
         }
         if ( valT->baseType==Type::tStructure ) {
             field = valT->structType->findField(name);
-        } else if ( valT->baseType==Type::tPointer ) {
+        } else if ( valT->isPointer() ) {
             if ( valT->firstType->baseType==Type::tStructure ) {
                 field = valT->firstType->structType->findField(name);
             }
@@ -1166,6 +1211,7 @@ namespace yzg
                     subexpr = autoDereference(subexpr);
             }
         }
+        constexpression = subexpr->constexpression;
     }
     
     SimNode * ExprOp1::simulate (Context & context) const {
@@ -1220,6 +1266,7 @@ namespace yzg
                     right = autoDereference(right);
             }
         }
+        constexpression = left->constexpression && right->constexpression;
     }
     
     SimNode * ExprOp2::simulate (Context & context) const {
@@ -1277,6 +1324,7 @@ namespace yzg
                     right = autoDereference(right);
             }
         }
+        constexpression = subexpr->constexpression && left->constexpression && right->constexpression;
     }
     
     SimNode * ExprOp3::simulate (Context & context) const {

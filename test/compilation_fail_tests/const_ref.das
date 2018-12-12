@@ -6,17 +6,17 @@ expect 30505:1    // cant_move_to_const
 
 def const_iter(a:table<string,int>)
     for k,v in keys(a),values(a)
-        k = "foo"   // can't write to constant value
-        v = 1       // this one okay
+        k = "foo"       // can't write to constant value
+        v = 1           // this one okay
 
 def add(a:const int&; b:int)
-    a += b          // no matching operator
+    a += b              // no matching operator
 
 def set(a:const string&; b:string)
-    a = b           // can't write to constant value
+    a = b               // can't write to constant value
 
 def move_ar(a:const array<int>;b:array<int>)
-    a <- b          // can't move to constant value
+    a <- b              // can't move to constant value
 
 struct Foo
     a:int
@@ -29,20 +29,20 @@ def setFooPtr(f:Foo?)
     f.a = 0
 
 def goodPassThrough(a:int?):const int?
-    return a        // invalid return type
+    return a            // invalid return type
 
 def passThrough(a:const int?):int?
-    return a        // invalid return type
+    return a            // invalid return type
 
 def test
     let(a:const array<int>)
-        a[0] = 5    // can't write to constant value
+        a[0] = 5        // can't write to constant value
     let(an:Foo)
         an.a = 1
-        an.b = 2    // can't write to constant value
+        an.b = 2        // can't write to constant value
     let(ac:const Foo)
-        ac.a = 3    // can't write to constant value
-        ac.b = 4    // can't write to constant value
+        ac.a = 3        // can't write to constant value
+        ac.b = 4        // can't write to constant value
     let(pa:const Foo?;pb:Foo?)
         setFoo(pa->)    // no matching function
         setFoo(pb->)
@@ -53,6 +53,7 @@ def test
         b["key"]++      // no matching operator
     let(a:int?;b:const int?)
         a = b
+
 
 
 
