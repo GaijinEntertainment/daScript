@@ -519,6 +519,7 @@ namespace yzg
         string describe() const;
         string                  name;
         vector<ExpressionPtr>   arguments;
+        bool                    argumentsFailedToInfer = false;
     };
     typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
     
@@ -563,12 +564,14 @@ namespace yzg
             return cexpr;
         }
         virtual void inferType(InferTypeContext & context) override {
+            type.reset();
             if ( arguments.size()!=1 ) {
                 context.error("expecting " + name + "(table)", at);
             }
             ExprLooksLikeCall::inferType(context);
+            if ( argumentsFailedToInfer ) return;
+            // infer
             auto tableType = arguments[0]->type;
-            if ( !tableType ) return;
             if ( !tableType->isGoodTableType() ) {
                 context.error("first argument must be fully qualified table", at);
                 return;
@@ -597,13 +600,15 @@ namespace yzg
             return cexpr;
         }
         virtual void inferType(InferTypeContext & context) override {
+            type.reset();
             if ( arguments.size()!=2 ) {
                 context.error("expecting array and size or index", at);
             }
             ExprLooksLikeCall::inferType(context);
+            if ( argumentsFailedToInfer ) return;
+            // infer
             auto arrayType = arguments[0]->type;
             auto valueType = arguments[1]->type;
-            if ( !arrayType || !valueType ) return;
             if ( !arrayType->isGoodArrayType() ) {
                 context.error("first argument must be fully qualified array", at);
                 return;

@@ -547,8 +547,10 @@ namespace yzg
     }
     
     void ExprRef2Value::inferType(InferTypeContext & context) {
+        type.reset();
         subexpr->inferType(context);
         if ( !subexpr->type ) return;
+        // infer
         if ( !subexpr->type->isRef() ) {
             context.error("can only dereference ref", at);
         } else if ( !subexpr->type->isSimpleType() ) {
@@ -579,9 +581,11 @@ namespace yzg
     }
     
     void ExprPtr2Ref::inferType(InferTypeContext & context) {
+        type.reset();
         subexpr->inferType(context);
-        subexpr = autoDereference(subexpr);
         if ( !subexpr->type ) return;
+        // infer
+        subexpr = autoDereference(subexpr);
         if ( !subexpr->type->isPointer() ) {
             context.error("can only dereference pointer", at, CompilationError::cant_dereference);
         } else if ( !subexpr->type->firstType || subexpr->type->firstType->isVoid() ) {
@@ -612,9 +616,10 @@ namespace yzg
     
     void ExprNullCoalescing::inferType(InferTypeContext & context) {
         subexpr->inferType(context);
-        subexpr = autoDereference(subexpr);
         defaultValue->inferType(context);
         if ( !subexpr->type || !defaultValue->type ) return;
+        // infer
+        subexpr = autoDereference(subexpr);
         auto seT = subexpr->type;
         auto dvT = defaultValue->type;
         if ( !seT->isPointer() ) {
@@ -651,13 +656,15 @@ namespace yzg
     }
     
     void ExprAssert::inferType(InferTypeContext & context) {
+        type.reset();
+        ExprLooksLikeCall::inferType(context);
         if ( arguments.size()<1 || arguments.size()>2 ) {
             context.error("assert(expr) or assert(expr,string)", at, CompilationError::invalid_argument_count);
             return;
         }
-        ExprLooksLikeCall::inferType(context);
+        if ( argumentsFailedToInfer ) return;
+        // infer
         autoDereference();
-        if ( !arguments[0]->type ) return;
         if ( !arguments[0]->type->isSimpleType(Type::tBool) )
             context.error("assert condition must be boolean", at, CompilationError::invalid_argument_type);
         if ( arguments.size()==2 && !arguments[1]->isStringConstant() )
@@ -681,12 +688,14 @@ namespace yzg
     }
     
     void ExprDebug::inferType(InferTypeContext & context) {
+        type.reset();
         if ( arguments.size()<1 || arguments.size()>2 ) {
             context.error("debug(expr) or debug(expr,string)", at, CompilationError::invalid_argument_count);
             return;
         }
         ExprLooksLikeCall::inferType(context);
-        if ( !arguments[0]->type ) return;
+        if ( argumentsFailedToInfer ) return;
+        // infer
         if ( arguments.size()==2 && !arguments[1]->isStringConstant() )
             context.error("debug comment must be string constant", at, CompilationError::invalid_argument_type);
         type = make_shared<TypeDecl>(*arguments[0]->type);
@@ -713,12 +722,14 @@ namespace yzg
     }
     
     void ExprHash::inferType(InferTypeContext & context) {
+        type.reset();
         if ( arguments.size()!=1 ) {
             context.error("hash(expr)", at, CompilationError::invalid_argument_count);
             return;
         }
         ExprLooksLikeCall::inferType(context);
-        if ( !arguments[0]->type ) return;
+        if ( argumentsFailedToInfer ) return;
+        // infer
         type = make_shared<TypeDecl>(Type::tUInt64);
     }
     
@@ -744,14 +755,16 @@ namespace yzg
     }
     
     void ExprArrayPush::inferType(InferTypeContext & context) {
+        type.reset();
         if ( arguments.size()!=2 && arguments.size()!=3 ) {
             context.error("push(array,value) or push(array,value,at)", at, CompilationError::invalid_argument_count);
             return;
         }
         ExprLooksLikeCall::inferType(context);
+        if ( argumentsFailedToInfer ) return;
+        // infer
         auto arrayType = arguments[0]->type;
         auto valueType = arguments[1]->type;
-        if ( !arrayType || !valueType ) return;
         if ( !arrayType->isGoodArrayType() ) {
             context.error("push first argument must be fully qualified array", at, CompilationError::invalid_argument_type);
             return;
@@ -783,15 +796,17 @@ namespace yzg
     }
     
     void ExprErase::inferType(InferTypeContext & context) {
+        type.reset();
         if ( arguments.size()!=2 ) {
             context.error("erase(table,key) or erase(array,index)", at, CompilationError::invalid_argument_count);
             return;
         }
         ExprLooksLikeCall::inferType(context);
+        if ( argumentsFailedToInfer ) return;
+        // infer
         arguments[1] = Expression::autoDereference(arguments[1]);
         auto containerType = arguments[0]->type;
         auto valueType = arguments[1]->type;
-        if ( !containerType || !valueType ) return;
         if ( containerType->isGoodArrayType() ) {
             if ( !valueType->isIndex() )
                 context.error("size must be int or uint", at, CompilationError::invalid_argument_type);
@@ -829,15 +844,17 @@ namespace yzg
     }
     
     void ExprFind::inferType(InferTypeContext & context) {
+        type.reset();
         if ( arguments.size()!=2 ) {
             context.error("find(table,key) or find(array,value)", at, CompilationError::invalid_argument_count);
             return;
         }
         ExprLooksLikeCall::inferType(context);
+        if ( argumentsFailedToInfer ) return;
+        // infer
         arguments[1] = Expression::autoDereference(arguments[1]);
         auto containerType = arguments[0]->type;
         auto valueType = arguments[1]->type;
-        if ( !containerType || !valueType ) return;
         if ( containerType->isGoodArrayType() ) {
             if ( !valueType->isSameType(*containerType->firstType) )
                 context.error("value must be of the same type as array<value>", at, CompilationError::invalid_argument_type);
@@ -890,11 +907,11 @@ namespace yzg
     }
     
     void ExprSizeOf::inferType(InferTypeContext & context) {
-        if ( subexpr ) {
-            subexpr->inferType(context);
-            if ( subexpr->type )
-                typeexpr = make_shared<TypeDecl>(*subexpr->type);
-        }
+        type.reset();
+        subexpr->inferType(context);
+        if ( !subexpr->type ) return;
+        // infer
+        typeexpr = make_shared<TypeDecl>(*subexpr->type);
         type = make_shared<TypeDecl>(Type::tInt);
     }
     
@@ -920,6 +937,8 @@ namespace yzg
     //  this would need proper testing, but only afrer parser is modified
     //  curently none of the errors bellow can even be parsed
     void ExprNew::inferType(InferTypeContext & context) {
+        type.reset();
+        // infer
         if ( typeexpr->baseType != Type::tStructure ) {
             context.error("can only new structures (for now)", typeexpr->at, CompilationError::invalid_new_type);
         } else if ( typeexpr->ref ) {
@@ -944,10 +963,11 @@ namespace yzg
     }
     
     void ExprAt::inferType(InferTypeContext & context) {
+        type.reset();
         subexpr->inferType(context);
-        if ( !subexpr->type ) return;
         index->inferType(context);
-        if ( !index->type ) return;
+        if ( !subexpr->type || !index->type ) return;
+        // infer
         index = autoDereference(index);
         if ( subexpr->type->isGoodTableType() ) {
             if ( !subexpr->type->firstType->isSameType(*index->type) ) {
@@ -1026,7 +1046,8 @@ namespace yzg
     }
     
     void ExprBlock::inferType(InferTypeContext & context) {
-        type = make_shared<TypeDecl>();
+        type.reset();
+        // infer
         for ( auto & ex : list ) {
             ex->inferType(context);
         }
@@ -1065,11 +1086,14 @@ namespace yzg
     }
     
     void ExprField::inferType(InferTypeContext & context) {
+        type.reset();
         value->inferType(context);
         if ( !value->type ) return;
+        // infer
         auto valT = value->type;
-        if ( valT->isPointer() )
+        if ( valT->isPointer() ) {
             value = autoDereference(value);
+        }
         if ( valT->isArray() ) {
             context.error("can't get field of array", at, CompilationError::cant_get_field);
             return;
@@ -1115,6 +1139,8 @@ namespace yzg
     }
     
     void ExprVar::inferType(InferTypeContext & context) {
+        type.reset();
+        // infer
         // local (that on the stack)
         for ( auto it = context.local.rbegin(); it!=context.local.rend(); ++it ) {
             auto var = *it;
@@ -1193,7 +1219,10 @@ namespace yzg
     }
     
     void ExprOp1::inferType(InferTypeContext & context) {
+        type.reset();
         subexpr->inferType(context);
+        if ( !subexpr->type ) return;
+        // infer
         vector<TypeDeclPtr> types = { subexpr->type };
         auto functions = context.program->findMatchingFunctions(to_string(op), types);
         if ( functions.size()==0 ) {
@@ -1240,10 +1269,11 @@ namespace yzg
     }
     
     void ExprOp2::inferType(InferTypeContext & context) {
+        type.reset();
         left->inferType(context);
         right->inferType(context);
-        if ( !left->type ) return;
-        if ( !right->type ) return;
+        if ( !left->type || !right->type ) return;
+        // infer
         if ( left->type->isPointer() && right->type->isPointer() )
             if ( !left->type->isSameType(*right->type,false) )
                 context.error("operations on incompatible pointers are prohibited", at);
@@ -1299,12 +1329,15 @@ namespace yzg
     }
     
     void ExprOp3::inferType(InferTypeContext & context) {
+        type.reset();
         subexpr->inferType(context);
+        left->inferType(context);
+        right->inferType(context);
+        if ( !subexpr->type || !left->type || !right->type ) return;
+        // infer
         if ( !subexpr->type->isSimpleType(Type::tBool) ) {
             context.error("cond operator condition must be boolean", at);
         } else {
-            left->inferType(context);
-            right->inferType(context);
             vector<TypeDeclPtr> types = { subexpr->type, left->type, right->type };
             auto functions = context.program->findMatchingFunctions(to_string(op), types);
             if ( functions.size()==0 ) {
@@ -1367,10 +1400,11 @@ namespace yzg
     }
     
     void ExprMove::inferType(InferTypeContext & context) {
+        type.reset();
         left->inferType(context);
         right->inferType(context);
-        if ( !left->type ) return;
-        if ( !right->type ) return;
+        if ( !left->type || !right->type ) return;
+        // infer
         if ( !left->type->isSameType(*right->type,false,false) ) {
             context.error("can only move same type", at);
         } else if ( !left->type->isRef() ) {
@@ -1410,10 +1444,11 @@ namespace yzg
     }
     
     void ExprCopy::inferType(InferTypeContext & context) {
+        type.reset();
         left->inferType(context);
         right->inferType(context);
-        if ( !left->type ) return;
-        if ( !right->type ) return;
+        if ( !left->type || !right->type ) return;
+        // infer
         if ( !left->type->isSameType(*right->type,false,false) ) {
             context.error("can only copy same type " + left->type->describe() + " vs " + right->type->describe() , at);
         } else if ( !left->type->isRef() ) {
@@ -1449,9 +1484,10 @@ namespace yzg
     }
     
     void ExprTryCatch::inferType(InferTypeContext & context) {
+        type.reset();
+        // infer
         try_block->inferType(context);
         catch_block->inferType(context);
-        type = make_shared<TypeDecl>();
     }
     
     SimNode * ExprTryCatch::simulate (Context & context) const {
@@ -1489,11 +1525,13 @@ namespace yzg
     }
     
     void ExprReturn::inferType(InferTypeContext & context) {
+        type.reset();
         if ( subexpr ) {
             subexpr->inferType(context);
             if ( !subexpr->type ) return;
             subexpr = autoDereference(subexpr);
         }
+        // infer
         auto resType = context.func->result;
         if ( resType->isVoid() ) {
             if ( subexpr ) {
@@ -1514,7 +1552,7 @@ namespace yzg
                                   at, CompilationError::invalid_return_type);
                 }
                 type = make_shared<TypeDecl>(*context.func->result);
-                type->ref = true;
+                type->ref = true;   // we return func-result &
             }
         }
     }
@@ -1536,9 +1574,10 @@ namespace yzg
     }
     
     void ExprBreak::inferType(InferTypeContext & context) {
+        type.reset();
+        // infer
         if ( !context.loop.size() )
             context.error("break without loop", at);
-        type = make_shared<TypeDecl>();
     }
     
     SimNode * ExprBreak::simulate (Context & context) const {
@@ -1570,15 +1609,15 @@ namespace yzg
     }
     
     void ExprIfThenElse::inferType(InferTypeContext & context) {
+        type.reset();
         cond->inferType(context);
+        if_true->inferType(context);
+        if ( if_false )
+            if_false->inferType(context);
         if ( !cond->type ) return;
+        // infer
         if ( !cond->type->isSimpleType(Type::tBool) ) {
             context.error("if-then-else condition must be boolean", at);
-        } else {
-            if_true->inferType(context);
-            if ( if_false )
-                if_false->inferType(context);
-            type = make_shared<TypeDecl>();
         }
     }
     
@@ -1598,16 +1637,16 @@ namespace yzg
     }
     
     void ExprWhile::inferType(InferTypeContext & context) {
+        type.reset();
         cond->inferType(context);
         if ( !cond->type ) return;
+        // infer
         if ( !cond->type->isSimpleType(Type::tBool) ) {
             context.error("while loop condition must be boolean", at);
         } else {
             context.loop.push_back(shared_from_this());
             body->inferType(context);
-            context.loop.pop_back();
-            type = make_shared<TypeDecl>();
-        }
+            context.loop.pop_back();        }
     }
     
     void ExprWhile::log(ostream& stream, int depth) const {
@@ -1670,6 +1709,8 @@ namespace yzg
     }
     
     void ExprFor::inferType(InferTypeContext & context) {
+        type.reset();
+        // infer
         if ( !iterators.size() ) {
             context.error("for needs at least one iterator", at);
             return;
@@ -1739,7 +1780,6 @@ namespace yzg
         context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
         context.stackTop = sp;
         context.local.resize(sz);
-        type = make_shared<TypeDecl>();
     }
 
     SimNode * ExprFor::simulate (Context & context) const {
@@ -1839,6 +1879,8 @@ namespace yzg
     }
     
     void ExprLet::inferType(InferTypeContext & context) {
+        type.reset();
+        // infer
         auto sp = context.stackTop;
         auto sz = context.local.size();
         for ( auto & var : variables ) {
@@ -1867,7 +1909,6 @@ namespace yzg
         context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
         context.stackTop = sp;
         context.local.resize(sz);
-        type = make_shared<TypeDecl>();
     }
     
     SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local) {
@@ -1935,8 +1976,10 @@ namespace yzg
     }
     
     void ExprLooksLikeCall::inferType(InferTypeContext & context) {
+        argumentsFailedToInfer = false;
         for ( auto & ar : arguments ) {
             ar->inferType(context);
+            if ( !ar->type ) argumentsFailedToInfer = true;
         }
     }
     
@@ -1955,7 +1998,10 @@ namespace yzg
     }
     
     void ExprCall::inferType(InferTypeContext & context) {
+        type.reset();
         ExprLooksLikeCall::inferType(context);
+        if ( argumentsFailedToInfer ) return;
+        // infer
         stackTop = context.stackTop;
         context.stackTop = (stackTop + arguments.size()*sizeof(__m128));
         context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
@@ -2346,8 +2392,7 @@ namespace yzg
     }
     
     TypeDeclPtr ModuleLibrary::makeStructureType ( const string & name ) const {
-        auto t = make_shared<TypeDecl>();
-        t->baseType = Type::tStructure;
+        auto t = make_shared<TypeDecl>(Type::tStructure);
         t->structType = findStructure(name).get();
         if ( !t->structType ) {
             assert(0 && "can't make structure type");
