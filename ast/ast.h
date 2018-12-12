@@ -88,7 +88,7 @@ namespace yzg
         TypeDecl(Type tt) : baseType(tt) {}
         friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
         string getMangledName() const;
-        bool isSameType ( const TypeDecl & decl, bool refMatters = true ) const;
+        bool isSameType ( const TypeDecl & decl, bool refMatters = true, bool constMatters = true ) const;
         bool isIteratorType ( const TypeDecl & decl ) const;
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;

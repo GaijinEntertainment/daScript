@@ -222,7 +222,7 @@ namespace yzg
         return false;
     }
     
-    bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters ) const {
+    bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters, bool constMatters ) const {
         if ( baseType!=decl.baseType )
             return false;
         if ( baseType==Type::tStructure && structType!=decl.structType )
@@ -249,6 +249,9 @@ namespace yzg
             return false;
         if ( refMatters )
             if ( ref!=decl.ref )
+                return false;
+        if ( constMatters )
+            if ( constant!=decl.constant )
                 return false;
         return true;
     }
@@ -1320,7 +1323,7 @@ namespace yzg
         right->inferType(context);
         if ( !left->type ) return;
         if ( !right->type ) return;
-        if ( !left->type->isSameType(*right->type,false) ) {
+        if ( !left->type->isSameType(*right->type,false,false) ) {
             context.error("can only move same type", at);
         } else if ( !left->type->isRef() ) {
             context.error("can only move to reference", at);
@@ -1363,7 +1366,7 @@ namespace yzg
         right->inferType(context);
         if ( !left->type ) return;
         if ( !right->type ) return;
-        if ( !left->type->isSameType(*right->type,false) ) {
+        if ( !left->type->isSameType(*right->type,false,false) ) {
             context.error("can only copy same type " + left->type->describe() + " vs " + right->type->describe() , at);
         } else if ( !left->type->isRef() ) {
             context.error("can only copy to reference", at);
@@ -1443,7 +1446,8 @@ namespace yzg
             if ( !subexpr->type ) return;
             subexpr = autoDereference(subexpr);
         }
-        if ( context.func->result->isVoid() ) {
+        auto resType = context.func->result;
+        if ( resType->isVoid() ) {
             if ( subexpr ) {
                 context.error("void function has no return", at);
             }
@@ -1451,8 +1455,15 @@ namespace yzg
             if ( !subexpr ) {
                 context.error("must return value", at);
             } else {
-                if ( !context.func->result->isSameType(*subexpr->type) ) {
-                    context.error("incompatible return type", at);
+                if ( !resType->isSameType(*subexpr->type,true,false) ) {
+                    context.error("incompatible return type, expecting "
+                                  + resType->describe() + " vs " + subexpr->type->describe(),
+                                  at, CompilationError::invalid_return_type);
+                }
+                if ( resType->isPointer() && !resType->isConst() && subexpr->type->isConst() ) {
+                    context.error("incompatible return type, constant matters. expecting "
+                                  + resType->describe() + " vs " + subexpr->type->describe(),
+                                  at, CompilationError::invalid_return_type);
                 }
                 type = make_shared<TypeDecl>(*context.func->result);
                 type->ref = true;
@@ -1795,7 +1806,8 @@ namespace yzg
                     return;
                 }
                 if ( !var->type->isSameType(*var->init->type,false) ) {
-                    context.error("variable initialization type mismatch", var->at );
+                    context.error("variable initialization type mismatch, "
+                        + var->type->describe() + " = " + var->init->type->describe(), var->at );
                 } else if ( var->type->baseType==Type::tStructure ) {
                     context.error("can't initialize structures", var->at );
                 } 
@@ -2038,17 +2050,17 @@ namespace yzg
                         for ( auto ai = 0; ai != types.size(); ++ai ) {
                             auto & argType = pFn->arguments[ai]->type;
                             auto & passType = types[ai];
-                            if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false)) ) {
+                            if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false)) ) {
                                 typesCompatible = false;
                                 break;
                             }
                             // ref types can only add constness
-                            if ( argType->isRef() && !argType->isConst() && passType->isConst() ) {
+                            if ( argType->isRef() && !argType->constant && passType->constant ) {
                                 typesCompatible = false;
                                 break;
                             }
                             // pointer types can only add constant
-                            if ( argType->isPointer() && !argType->isConst() && passType->isConst() ) {
+                            if ( argType->isPointer() && !argType->constant && passType->constant ) {
                                 typesCompatible = false;
                                 break;
                             }
@@ -2313,6 +2325,7 @@ namespace yzg
             if ( defineContext )
                 defineContext(program);
             program->inferTypes();
+            sort(program->errors.begin(),program->errors.end());
             return program;
         }
     }
