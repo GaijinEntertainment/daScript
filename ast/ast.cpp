@@ -119,9 +119,9 @@ namespace yzg
             }
         } else if ( decl.baseType==Type::tPointer ) {
             if ( decl.firstType ) {
-                stream << *decl.firstType << " *";
+                stream << *decl.firstType << " ?";
             } else {
-                stream << "void *";
+                stream << "void ?";
             }
         } else if ( decl.baseType==Type::tIterator ) {
             if ( decl.firstType ) {
@@ -210,6 +210,16 @@ namespace yzg
             }
         }
         return ss.str();
+    }
+    
+    bool TypeDecl::isConst() const
+    {
+        if ( constant )
+            return true;
+        if ( baseType==Type::tPointer )
+            if ( firstType && firstType->constant )
+                return true;
+        return false;
     }
     
     bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters ) const {
@@ -576,6 +586,7 @@ namespace yzg
         } else {
             type = make_shared<TypeDecl>(*subexpr->type->firstType);
             type->ref = true;
+            type->constant |= subexpr->type->constant;
         }
     }
     
@@ -897,6 +908,7 @@ namespace yzg
             }
             type = make_shared<TypeDecl>(*subexpr->type->secondType);
             type->ref = true;
+            type->constant |= subexpr->type->constant;
         } else {
             if ( !index->type->isIndex() ) {
                 context.error("index is int or uint", index->at, CompilationError::invalid_index_type);
@@ -905,6 +917,7 @@ namespace yzg
             if ( subexpr->type->isGoodArrayType() ) {
                 type = make_shared<TypeDecl>(*subexpr->type->firstType);
                 type->ref = true;
+                type->constant |= subexpr->type->constant;
             } else if ( !subexpr->type->isRef() ) {
                 context.error("can only index ref", subexpr->at, CompilationError::cant_index);
             } else if ( !subexpr->type->dim.size() ) {
@@ -1025,6 +1038,7 @@ namespace yzg
         } else {
             type = make_shared<TypeDecl>(*field->type);
             type->ref = true;
+            type->constant |= value->type->constant;
         }
     }
     
@@ -2028,7 +2042,13 @@ namespace yzg
                                 typesCompatible = false;
                                 break;
                             }
-                            if ( argType->isRef() && !argType->constant && passType->constant ) {
+                            // ref types can only add constness
+                            if ( argType->isRef() && !argType->isConst() && passType->isConst() ) {
+                                typesCompatible = false;
+                                break;
+                            }
+                            // pointer types can only add constant
+                            if ( argType->isPointer() && !argType->isConst() && passType->isConst() ) {
                                 typesCompatible = false;
                                 break;
                             }

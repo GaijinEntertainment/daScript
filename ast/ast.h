@@ -109,6 +109,7 @@ namespace yzg
         bool isPod() const;
         bool isWorkhorseType() const; // we can return this, or pass this
         bool isRange() const;
+        bool isConst() const;
         Type getRangeBaseType() const;
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;

@@ -4,7 +4,7 @@ struct Foo
     a:int
 
 def test
-    let(a:Foo;pa:Foo*;b:Foo[10];c:int)
+    let(a:Foo;pa:Foo?;b:Foo[10];c:int)
         a.a = 0     // structure ok
         b.a = 0     // can't get field of array
         pa.a = 0    // pointer to structure ok

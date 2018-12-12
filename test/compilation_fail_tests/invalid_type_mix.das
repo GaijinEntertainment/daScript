@@ -5,7 +5,7 @@ def test(a:void&)       // can't have void &
         debug(a)
     let(a:int & &)      // can't have ref of ref
         debug(a)
-    let(a:int & *)      // can't have pointer to ref
+    let(a:int & ?)      // can't have pointer to ref
         debug(a)
     let(a:int & [10])   // can't have array of ref
         debug(a)

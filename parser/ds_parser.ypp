@@ -532,7 +532,7 @@ type_declaration
         $typeDecl->ref = true;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] '*' {
+    |   type_declaration[typeDecl] '?' {
         if ( $typeDecl->ref ) {
             yyerror("can't be pointer to reference",tokAt(@typeDecl),CompilationError::invalid_type);
         }
@@ -564,6 +564,7 @@ type_declaration
         $$->firstType = TypeDeclPtr($keyTypeDecl);
         $$->secondType = TypeDeclPtr($valueTypeDecl);
     }
+    | '(' type_declaration[typeDecl] ')'    { $$ = $typeDecl; }
     ;
 
 %%
