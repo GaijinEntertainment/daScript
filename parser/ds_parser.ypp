@@ -384,6 +384,9 @@ expr
         }
     |   expr[subexpr] RARROW[loc]               { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   expr[subexpr] QQ[loc] expr[dval]        { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
+    |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
+            $$ = new ExprOp3(tokAt(@loc),Operator::is,ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
+        }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     ;

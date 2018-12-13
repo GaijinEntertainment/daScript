@@ -241,7 +241,7 @@ namespace yzg
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
-            if ( secondType && decl.secondType && !firstType->isSameType(*decl.secondType) ) {
+            if ( secondType && decl.secondType && !secondType->isSameType(*decl.secondType) ) {
                 return false;
             }
         }
@@ -1382,34 +1382,31 @@ namespace yzg
         right->inferType(context);
         if ( !subexpr->type || !left->type || !right->type ) return;
         // infer
+        if ( op!=Operator::is ) {
+            context.error("Op3 currently only supports 'is'", at, CompilationError::operator_not_found);
+            return;
+        }
+        subexpr = autoDereference(subexpr);
         if ( !subexpr->type->isSimpleType(Type::tBool) ) {
-            context.error("cond operator condition must be boolean", at);
+            context.error("cond operator condition must be boolean", at, CompilationError::condition_must_be_bool);
+        } else if ( !left->type->isSameType(*right->type,false,false) ) {
+            context.error("cond operator must return same types on both sides", at, CompilationError::operator_not_found);
         } else {
-            vector<TypeDeclPtr> types = { subexpr->type, left->type, right->type };
-            auto functions = context.program->findMatchingFunctions(to_string(op), types);
-            if ( functions.size()==0 ) {
-                context.error("no matching operator '" + to_string(op)
-                    + "' with arguments (" + subexpr->type->describe() + ", "
-                        + left->type->describe() + ", " + right->type->describe() + ")", at, CompilationError::operator_not_found);
-            } else if ( functions.size()>1 ) {
-                context.error("too many matching functions", at);
-            } else {
-                func = functions[0];
-                type = make_shared<TypeDecl>(*func->result);
-                if ( !func->arguments[0]->type->isRef() )
-                    subexpr = autoDereference(subexpr);
-                if ( !func->arguments[1]->type->isRef() )
-                    left = autoDereference(left);
-                if ( !func->arguments[2]->type->isRef() )
-                    right = autoDereference(right);
+            if ( left->type->ref ^ right->type->ref ) { // if either one is not ref
+                left = autoDereference(left);
+                right = autoDereference(right);
             }
+            type = make_shared<TypeDecl>(*left->type);
+            type->constant |= right->type->constant;
         }
         constexpression = subexpr->constexpression && left->constexpression && right->constexpression;
     }
     
     SimNode * ExprOp3::simulate (Context & context) const {
-        assert(0 && "implement");
-        return nullptr;
+        return context.makeNode<SimNode_IfThenElse>(at,
+                                                    subexpr->simulate(context),
+                                                    left->simulate(context),
+                                                    right->simulate(context));
     }
     
     // common for move and copy
@@ -1453,14 +1450,14 @@ namespace yzg
         if ( !left->type || !right->type ) return;
         // infer
         if ( !left->type->isSameType(*right->type,false,false) ) {
-            context.error("can only move same type", at);
+            context.error("can only move same type", at, CompilationError::operator_not_found);
         } else if ( !left->type->isRef() ) {
-            context.error("can only move to reference", at);
+            context.error("can only move to reference", at, CompilationError::cant_write_to_non_reference);
         } else if ( left->type->constant ) {
             context.error("can't move to constant value", at, CompilationError::cant_move_to_const);
         }
         if ( left->type->canCopy() ) {
-            context.error("this type can be copied, use copy instead of move", at);
+            context.error("this type can be copied, use = instead", at, CompilationError::cant_move);
         }
         type = make_shared<TypeDecl>(*left->type);  // we return left
     }
@@ -1497,14 +1494,15 @@ namespace yzg
         if ( !left->type || !right->type ) return;
         // infer
         if ( !left->type->isSameType(*right->type,false,false) ) {
-            context.error("can only copy same type " + left->type->describe() + " vs " + right->type->describe() , at);
+            context.error("can only copy same type " + left->type->describe() + " vs " + right->type->describe(),
+                          at, CompilationError::operator_not_found);
         } else if ( !left->type->isRef() ) {
-            context.error("can only copy to reference", at);
+            context.error("can only copy to reference", at, CompilationError::cant_write_to_non_reference);
         } else if ( left->type->constant ) {
             context.error("can't write to constant value", at, CompilationError::cant_write_to_const);
         }
         if ( !left->type->canCopy() ) {
-            context.error("this type can't be copied", at);
+            context.error("this type can't be copied, use <- instead", at, CompilationError::cant_copy);
         }
         type = make_shared<TypeDecl>(*left->type);  // we return left
     }
@@ -1664,7 +1662,7 @@ namespace yzg
         if ( !cond->type ) return;
         // infer
         if ( !cond->type->isSimpleType(Type::tBool) ) {
-            context.error("if-then-else condition must be boolean", at);
+            context.error("if-then-else condition must be boolean", at, CompilationError::condition_must_be_bool);
         }
     }
     

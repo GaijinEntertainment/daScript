@@ -207,11 +207,12 @@ namespace yzg
         bool cmp = cast<bool>::to(cond->eval(context));
         YZG_EXCEPTION_POINT;
         if ( cmp ) {
-            if_true->eval(context);
-        } else if ( if_false ){
-            if_false->eval(context);
+            return if_true->eval(context);
+        } else if ( if_false ) {
+            return if_false->eval(context);
+        } else {
+            return _mm_setzero_ps();
         }
-        return _mm_setzero_ps();
     }
     
     // SimNode_While

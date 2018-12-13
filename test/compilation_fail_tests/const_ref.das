@@ -1,8 +1,10 @@
 expect 30102      // invalid_return_type
-expect 30303:2    // operator_not_found
+expect 30303:3    // operator_not_found
 expect 30304:2    // function_not_found
 expect 30504:6    // cant_write_to_const
-expect 30505:1    // cant_move_to_const
+expect 30505:2    // cant_move_to_const
+expect 30507      // cant_copy
+expect 30508      // cant_move
 
 def const_iter(a:table<string,int>)
     for k,v in keys(a),values(a)
@@ -52,6 +54,14 @@ def test
         a["key"]++
         b["key"]++      // no matching operator
     let(a:int?;b:const int?)
+        a = b
+    let(a,b:table<string,int>;c:const table<string,int>;d:int)
+        a = b           // this type can't be copied, use <- instead
+        a <- b
+        c <- a          // can't move to constant
+        c <- d          // can only move same type
+    let(a,b:int)
+        a <- b          // this type can't be moved, use = instead
         a = b
 
 

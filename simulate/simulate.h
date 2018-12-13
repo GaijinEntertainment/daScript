@@ -488,7 +488,7 @@ namespace yzg
         SimNode * subexpr = nullptr;
     };
     
-    // IF-THEN-ELSE
+    // IF-THEN-ELSE (also Cond)
     struct SimNode_IfThenElse : SimNode {
         SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}

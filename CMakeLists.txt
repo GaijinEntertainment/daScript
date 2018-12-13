@@ -108,12 +108,19 @@ file(GLOB COMPILATION_FAIL_TEST_SRC
 list(SORT COMPILATION_FAIL_TEST_SRC)
 SOURCE_GROUP_FILES("test/compilation fail" COMPILATION_FAIL_TEST_SRC)
 
+file(GLOB MIX_TEST_SRC
+"test/*.das"
+)
+list(SORT MIX_TEST_SRC)
+SOURCE_GROUP_FILES("test/mix" MIX_TEST_SRC)
+
 SET(TEST_MAIN_SRC
 test/main.cpp
 )
+SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)
 
 include_directories(daScriptTest PUBLIC ast lexer misc simulate test)
-add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${TEST_MAIN_SRC} )
+add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${TEST_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)

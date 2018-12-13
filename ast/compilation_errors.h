@@ -47,6 +47,11 @@ namespace yzg
     ,   cant_get_field                          =   30503       //  wtf.field
     ,   cant_write_to_const                     =   30504       //  const int & a = 5
     ,   cant_move_to_const                      =   30505       //  const array<int> & a <- b
+    ,   cant_write_to_non_reference             =   30506       //  1 = blah
+    ,   cant_copy                               =   30507       //  a = array<int>(x), expecting <-
+    ,   cant_move                               =   30508       //  int a; a <- 1
+        
+    ,   condition_must_be_bool                  =   30601       //  if ( 10 ) ...
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };
