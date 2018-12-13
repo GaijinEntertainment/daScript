@@ -96,6 +96,7 @@ namespace yzg
         bool isGoodIteratorType() const;
         bool isGoodArrayType() const;
         bool isGoodTableType() const;
+        bool isGoodBlockType() const;
         bool isVoid() const;
         bool isRef() const;
         bool isRefType() const;
@@ -796,7 +797,7 @@ namespace yzg
         vector<Error>               errors;
         bool                        failToCompile = false;
     public:
-        vector<CompilationError>    expectErrors;
+        map<CompilationError,int>   expectErrors;
     };
          
     ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext );

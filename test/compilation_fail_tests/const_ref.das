@@ -1,5 +1,5 @@
-expect 30102      // invalid_return_type
-expect 30303:3    // operator_not_found
+expect 30102:2    // invalid_return_type
+expect 30303:4    // operator_not_found
 expect 30304:2    // function_not_found
 expect 30504:6    // cant_write_to_const
 expect 30505:2    // cant_move_to_const
@@ -8,21 +8,21 @@ expect 30508      // cant_move
 
 def const_iter(a:table<string,int>)
     for k,v in keys(a),values(a)
-        k = "foo"       // can't write to constant value
+        k = "foo"       // can't write to constant value    (30504)
         v = 1           // this one okay
 
-def add(a:const int&; b:int)
-    a += b              // no matching operator
+def add(a:int const&; b:int)
+    a += b              // no matching operator             (30303)
 
-def set(a:const string&; b:string)
-    a = b               // can't write to constant value
+def set(a:string const&; b:string)
+    a = b               // can't write to constant value    (30504)
 
-def move_ar(a:const array<int>;b:array<int>)
-    a <- b              // can't move to constant value
+def move_ar(a:array<int> const;b:array<int>)
+    a <- b              // can't move to constant value     (30505)
 
 struct Foo
     a:int
-    b:const int
+    b:int const
 
 def setFoo(f:Foo)
     f.a = 0
@@ -30,38 +30,38 @@ def setFoo(f:Foo)
 def setFooPtr(f:Foo?)
     f.a = 0
 
-def goodPassThrough(a:int?):const int?
-    return a            // invalid return type
+def goodPassThrough(a:int?):int const?
+    return a            // invalid return type              (30102)
 
-def passThrough(a:const int?):int?
-    return a            // invalid return type
+def passThrough(a:int? const):int?
+    return a            // invalid return type, const       (30102)
 
 def test
-    let(a:const array<int>)
-        a[0] = 5        // can't write to constant value
+    let(a:array<int> const)
+        a[0] = 5        // can't write to constant value    (30504)
     let(an:Foo)
         an.a = 1
-        an.b = 2        // can't write to constant value
-    let(ac:const Foo)
-        ac.a = 3        // can't write to constant value
-        ac.b = 4        // can't write to constant value
-    let(pa:const Foo?;pb:Foo?)
-        setFoo(pa->)    // no matching function
+        an.b = 2        // can't write to constant value    (30504)
+    let(ac:Foo const)
+        ac.a = 3        // can't write to constant value    (30504)
+        ac.b = 4        // can't write to constant value    (30504)
+    let(pa:Foo const?;pb:Foo?)
+        setFoo(pa->)    // no matching function             (30304)
         setFoo(pb->)
-        setFooPtr(pa)   // no matching function
+        setFooPtr(pa)   // no matching function             (30304)
         setFooPtr(pb)
-    let(a:table<string,int>;b:const table<string,int>)
+    let(a:table<string,int>;b:table<string,int> const)
         a["key"]++
-        b["key"]++      // no matching operator
-    let(a:int?;b:const int?)
+        b["key"]++      // no matching operator             (30303)
+    let(a:int?;b:int const?)
         a = b
-    let(a,b:table<string,int>;c:const table<string,int>;d:int)
-        a = b           // this type can't be copied, use <- instead
+    let(a,b:table<string,int>;c:table<string,int> const;d:int)
+        a = b           // this type can't be copied        (30507)
         a <- b
-        c <- a          // can't move to constant
-        c <- d          // can only move same type
+        c <- a          // can't move to constant           (30505)
+        c <- d          // can only move same type          (30303)
     let(a,b:int)
-        a <- b          // this type can't be moved, use = instead
+        a <- b          // this type can't be moved         (30508)
         a = b
 
 

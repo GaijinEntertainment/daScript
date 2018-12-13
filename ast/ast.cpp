@@ -129,6 +129,8 @@ namespace yzg
             } else {
                 stream << "iterator";
             }
+        } else if ( decl.baseType==Type::tBlock ) {
+            stream << "block<" << *decl.firstType << ">";
         } else {
             stream << to_string(decl.baseType);
         }
@@ -154,7 +156,7 @@ namespace yzg
     }
     
     bool TypeDecl::canCopy() const {
-        if ( baseType==Type::tArray || baseType==Type::tTable )
+        if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tBlock )
             return false;
         if ( baseType==Type::tStructure && structType )
             return structType->canCopy();
@@ -162,7 +164,7 @@ namespace yzg
     }
     
     bool TypeDecl::isPod() const {
-        if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString )
+        if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString || baseType==Type::tBlock )
             return false;
         if ( baseType==Type::tStructure && structType )
             return structType->isPod();
@@ -197,6 +199,8 @@ namespace yzg
             if ( firstType ) {
                 ss << "#" << firstType->getMangledName();
             }
+        } else if ( baseType==Type::tBlock ) {
+            ss << "#block" << "#" << firstType->getMangledName();
         } else if ( baseType==Type::tStructure ) {
             ss << structType->name;
         } else {
@@ -245,6 +249,11 @@ namespace yzg
                 return false;
             }
         }
+        if ( baseType==Type::tBlock ) {
+            if ( firstType->isSameType(*decl.firstType) ) {
+                return false;
+            }
+        }
         if ( dim!=decl.dim )
             return false;
         if ( refMatters )
@@ -258,6 +267,10 @@ namespace yzg
     
     bool TypeDecl::isGoodIteratorType() const {
         return baseType==Type::tIterator && dim.size()==0 && firstType;
+    }
+    
+    bool TypeDecl::isGoodBlockType() const {
+        return baseType==Type::tBlock && dim.size()==0;
     }
     
     bool TypeDecl::isGoodArrayType() const {

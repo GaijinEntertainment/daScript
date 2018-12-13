@@ -18,6 +18,6 @@ def test
         debug(a ?? 0)   // can't dereference void pointer
     let(a:int?)
         debug(a ?? 1.0) // default value type mismatch
-    let(a:Foo?;b:const Foo)
+    let(a:Foo?;b:Foo const)
         debug(a ?? b)   // const matters
 

@@ -11,20 +11,20 @@ struct L1
     l2:L2?
 
 def test_safe_navigation
-    let(l:L1?;cl:const L1?;dummy:int)
-        l?.l2?.l3?.a ?? dummy = 0   // this is fine
-        l.l2.l3.a = 0               // this is fine too, but may throw
-        cl?.l2?.l3?.a ?? dummy = 0  // can't write to constant value
+    let(l:L1?;cl:L1? const;dummy:int)
+        l?.l2?.l3?.a ?? dummy = 0
+        l.l2.l3.a = 0
+        cl?.l2?.l3?.a ?? dummy = 0  // can't write to constant value(30504)
 
 def test
-    let(a:L3;pa:L3?;b:L3[10];c:int;pca:const L3?)
-        a.a = 0         // structure ok
-        b.a = 0         // can't get field of array
-        pa.a = 0        // pointer to structure ok
-        c.a = 0         // can't get field of some random type
-        a?.a = 0        // can't safe get field of non-pointer
-        pa?.a-> = 0     // pointer to structure ok
-        c?.a = 0        // can't get field of some random type
+    let(a:L3;pa:L3?;b:L3[10];c:int;pca:L3? const)
+        a.a = 0
+        b.a = 0         // can't get field of array                 (30503)
+        pa.a = 0
+        c.a = 0         // can't get field of some random type      (30503)
+        a?.a = 0        // can't safe get field of non-pointer      (30503)
+        pa?.a-> = 0
+        c?.a = 0        // can't get field of some random type      (30503)
 
 
 

@@ -108,6 +108,7 @@
 %type <pExpression>     expression_try_catch
 %type <pExpression>     expr_new
 %type <pExpression>     expr_sizeof
+%type <pExpression>     expr_block
 %type <pExpression>     expression_any
 %type <pExpression>     optional_initializer
 
@@ -148,12 +149,10 @@ expect_list
 
 expect_error
     : INTEGER[err] {
-        g_Program->expectErrors.push_back(CompilationError($err));
+        g_Program->expectErrors[CompilationError($err)] ++;
     }
     | INTEGER[err] ':' INTEGER[count] {
-        for ( int cc=0; cc!=$count; ++cc ) {
-            g_Program->expectErrors.push_back(CompilationError($err));
-        }
+        g_Program->expectErrors[CompilationError($err)] += $count;
     }
     ;
 
@@ -335,6 +334,10 @@ expr_list
     |   expr_list[left] ',' expr[right]     { $$ = new ExprSequence(tokAt(@left),ExpressionPtr($left),ExpressionPtr($right)); }
     ;
 
+expr_block
+    :   '$' expression_block[block]         { $$ = $block; }
+    ;
+
 expr
     :   _NULL[loc]                            { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
     |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); }
@@ -389,6 +392,7 @@ expr
         }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
+    |   expr_block[subexpr]                     { $$ = $subexpr; }
     ;
 
 struct_variable_declaration_list
@@ -515,7 +519,7 @@ structure_type_declaration
 type_declaration
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(@basicType); }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
-    |   _CONST type_declaration[typeDecl] {
+    |   type_declaration[typeDecl] _CONST {
         $typeDecl->constant = true;
         $$ = $typeDecl;
     }

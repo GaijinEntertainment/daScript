@@ -29,7 +29,8 @@ namespace yzg
         tPointer,
         tIterator,
         tArray,
-        tTable
+        tTable,
+        tBlock
     };
     
     struct StructInfo;

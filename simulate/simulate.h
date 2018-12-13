@@ -21,6 +21,7 @@ namespace yzg
     
     class Context;
     struct SimNode;
+    struct Block;
     
     struct GlobalVariable {
         char *      name;
@@ -190,6 +191,11 @@ namespace yzg
         char * stack = nullptr;
         int stackSize = 16*1024;
         uint32_t stopFlags = 0;
+    };
+    
+    struct Block {
+        char *      stackTop;
+        SimNode *   body;
     };
     
 #if YZG_ENABLE_EXCEPTIONS

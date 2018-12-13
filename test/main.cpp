@@ -27,26 +27,30 @@ bool compilation_fail_test ( const string & fn ) {
             bool failed = false;
             auto errors = program->expectErrors;
             for ( auto err : program->errors ) {
-                auto it = find_if(errors.begin(), errors.end(), [&](CompilationError ce){
-                    return err.cerr == ce;
-                });
-                if ( g_reportCompilationFailErrors || it==errors.end() ) {
+                int count = -- errors[err.cerr];
+                if ( g_reportCompilationFailErrors || count<0 ) {
                     cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
                 }
-                if ( it != errors.end() ) {
-                    errors.erase(it);
-                } else {
+                if ( count <0 ) {
                     failed = true;
                 }
             }
-            if ( failed ) {
-                cout << "failed, unexpected errors\n";
-                return false;
+            bool any_errors = false;
+            for ( auto err : errors ) {
+                if ( err.second > 0 ) {
+                    any_errors = true;
+                    break;
+                }
             }
-            if ( errors.size() ) {
-                cout << "failed, expecting errors";
-                for ( auto cerr : errors  ) {
-                    cout << " " << int(cerr);
+            if ( any_errors || failed ) {
+                cout << "failed";
+                if ( any_errors ) {
+                    cout << ", expecting errors";
+                    for ( auto cerr : errors  ) {
+                        if ( cerr.second > 0 ) {
+                            cout << " " << int(cerr.first) << ":" << cerr.second;
+                        }
+                    }
                 }
                 cout << "\n";
                 return false;

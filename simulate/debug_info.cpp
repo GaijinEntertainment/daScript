@@ -6,6 +6,7 @@
 #include "cast.h"
 #include "runtime_string.h"
 #include "arraytype.h"
+#include "simulate.h"
 
 namespace yzg
 {
@@ -69,6 +70,7 @@ namespace yzg
             case tTable:        return sizeof(Table);
             case tStructure:    return 0;
             case tVoid:         return 0;
+            case tBlock:        return sizeof(Block);
             default:
                 assert(0 && "not implemented");
                 return 0;
@@ -181,6 +183,7 @@ namespace yzg
                                         }
                                         break;
                 case Type::tStructure:  debug_structure(ss, *(char **)pX, info->structType); break;
+                case Type::tBlock:      ss << "block " << hex << intptr_t(((Block *)pX)->body) << dec;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }
