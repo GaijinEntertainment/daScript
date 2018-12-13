@@ -123,8 +123,9 @@
 %left   SHR SHL
 %left   '-' '+'
 %left   '*' '/' '%'
+%left   QQ
 %right  UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
-%left   POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QQ
+%left   POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT
 
 %%
 
@@ -375,6 +376,7 @@ expr
     |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); }
+    |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), ExpressionPtr($subexpr), *$name); }
     |   NAME[name] '(' ')'                       { $$ = g_Program->makeCall(tokAt(@name),*$name); }
     |   NAME[name] '(' expr_list[arguments] ')'  { $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@name),*$name),$arguments); }
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {

@@ -2,6 +2,15 @@ struct Ball
     position:float3
     radius:float
 
+def set_default_ball(b:Ball)
+    b.position=float3(1.0,2.0,3.0)
+    b.radius=5.0
+
+def make_default_ball:Ball?
+    let(b:Ball?=new Ball)
+        set_default_ball(b->)
+        return b
+
 def verify_default_ball(b:Ball)
     assert(b.position==float3(1.0,2.0,3.0))
     assert(b.radius==5.0)
@@ -12,6 +21,15 @@ def test_ref_ptr(a:Ball?&;b:Ball?)
 
 def test_ret_ptr(a:Ball?):Ball?
     return a
+
+struct L3
+    a:int
+
+struct L2
+    l3:L3?
+
+struct L1
+    l2:L2?
 
 def test:bool
     let ( b:Ball? = new Ball )
@@ -32,5 +50,20 @@ def test:bool
             assert(qd!=qc)
             xb = qb
             verify_default_ball(xb)
+    let ( b:Ball? = make_default_ball() )
+        verify_default_ball(b->)
+    let(l:L1?;dummy:int)
+        l?.l2?.l3?.a ?? dummy = 1
+        assert(dummy==1)
+        l = new L1
+        l?.l2?.l3?.a ?? dummy = 2
+        assert(dummy==2)
+        l.l2 = new L2
+        l?.l2?.l3?.a ?? dummy = 3
+        assert(dummy==3)
+        l.l2.l3 = new L3
+        l?.l2?.l3?.a ?? dummy = 4
+        assert(dummy==3)
+        assert(l?.l2?.l3?.a ?? 5==4)
     return true
 

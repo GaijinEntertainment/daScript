@@ -1,7 +1,11 @@
 expect 30501:6    // cant_dereference
 
+struct Bar
+    c:int
+
 struct Foo
     a:int
+    b:Bar?
 
 def test
     let(a:int)          // can't dereference not a pointer

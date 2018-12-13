@@ -108,6 +108,43 @@ namespace yzg
         }
     }
     
+    // FIELD
+    
+    __m128 SimNode_FieldDeref::eval ( Context & context ) {
+        __m128 rv = value->eval(context);
+        YZG_EXCEPTION_POINT;
+        if ( char * prv = cast<char *>::to(rv) ) {
+            return cast<char *>::from( prv + offset );
+        } else {
+            context.throw_error("dereferencing nil pointer");
+            return _mm_setzero_ps();
+        }
+    }
+    
+    // FIELD ?.
+    
+    __m128 SimNode_SafeFieldDeref::eval ( Context & context ) {
+        __m128 rv = value->eval(context);
+        YZG_EXCEPTION_POINT;
+        if ( char * prv = cast<char *>::to(rv) ) {
+            return cast<char *>::from( prv + offset );
+        } else {
+            return _mm_setzero_ps();
+        }
+    }
+    
+    // FIELD ?. ->
+    
+    __m128 SimNode_SafeFieldDerefPtr::eval ( Context & context ) {
+        __m128 rv = value->eval(context);
+        YZG_EXCEPTION_POINT;
+        if ( char ** prv = cast<char **>::to(rv) ) {
+            return cast<char *>::from( *(prv + offset) );
+        } else {
+            return _mm_setzero_ps();
+        }
+    }
+    
     // SimNode_New
     
     __m128 SimNode_New::eval ( Context & context ) {

@@ -1115,10 +1115,57 @@ namespace yzg
     }
     
     SimNode * ExprField::simulate (Context & context) const {
-        if ( value->type->baseType==Type::tStructure )
-            return context.makeNode<SimNode_Field>(at,value->simulate(context),field->offset);
-        else
-            return context.makeNode<SimNode_PtrField>(at,value->simulate(context),field->offset);
+        return context.makeNode<SimNode_FieldDeref>(at,value->simulate(context),field->offset);
+    }
+    
+    // ExprSafeField
+    
+    ExpressionPtr ExprSafeField::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprSafeField>(expr);
+        ExprField::clone(cexpr);
+        return cexpr;
+    }
+    
+    void ExprSafeField::log(ostream& stream, int depth) const {
+        logType(stream);
+        stream << "(?. ";
+        value->log(stream,depth+1);
+        stream << " " << name << ")";
+    }
+    
+    void ExprSafeField::inferType(InferTypeContext & context) {
+        type.reset();
+        value->inferType(context);
+        if ( !value->type ) return;
+        // infer
+        auto valT = value->type;
+        if ( !valT->isPointer() || !valT->firstType || !valT->firstType->structType ) {
+            context.error("can only safe dereference a pointer to a structure " + valT->describe(),
+                at, CompilationError::cant_get_field);
+            return;
+        }
+        value = autoDereference(value);
+        if ( valT->firstType->baseType==Type::tStructure ) {
+            field = valT->firstType->structType->findField(name);
+        }
+        if ( field->type->isPointer() ) {
+            skipQQ = true;
+            type = make_shared<TypeDecl>(*field->type);
+            type->constant |= valT->constant;
+        } else {
+            skipQQ = false;
+            type = make_shared<TypeDecl>(Type::tPointer);
+            type->firstType = make_shared<TypeDecl>(*field->type);
+            type->constant |= valT->constant;
+        }
+    }
+    
+    SimNode * ExprSafeField::simulate (Context & context) const {
+        if ( skipQQ ) {
+            return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),field->offset);
+        } else {
+            return context.makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),field->offset);
+        }
     }
     
     // ExprVar

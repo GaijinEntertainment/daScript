@@ -210,26 +210,25 @@ namespace yzg
         const char *    message;
     };
     
-    // FIELD
-    template <bool checkForNull>
+    // FIELD .
     struct SimNode_FieldDeref : SimNode {
         SimNode_FieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode(at), value(rv), offset(of) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 rv = value->eval(context);
-            YZG_EXCEPTION_POINT;
-            char * prv = cast<char *>::to(rv);
-            if ( checkForNull && !prv ) {
-                context.throw_error("dereferencing nil pointer");
-                return _mm_setzero_ps();
-            } else {
-                return cast<char *>::from( prv + offset );
-            }
-        }
+        virtual __m128 eval ( Context & context ) override;
         SimNode *   value;
         uint32_t    offset;
     };
-    typedef SimNode_FieldDeref<false> SimNode_Field;
-    typedef SimNode_FieldDeref<true> SimNode_PtrField;
+    
+    // FIELD ?.
+    struct SimNode_SafeFieldDeref : SimNode_FieldDeref {
+        SimNode_SafeFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
+        virtual __m128 eval ( Context & context ) override;
+    };
+    
+    // FIELD ?.->
+    struct SimNode_SafeFieldDerefPtr : SimNode_FieldDeref {
+        SimNode_SafeFieldDerefPtr ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
+        virtual __m128 eval ( Context & context ) override;
+    };
     
     // AT (INDEX)
     struct SimNode_At : SimNode {

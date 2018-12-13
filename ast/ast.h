@@ -312,6 +312,16 @@ namespace yzg
         const Structure::FieldDeclaration * field = nullptr;
     };
     
+    struct ExprSafeField : ExprField {
+        ExprSafeField () = default;
+        ExprSafeField ( const LineInfo & a, ExpressionPtr val, const string & n ) : ExprField(a,val,n) {}
+        virtual void log(ostream& stream, int depth) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        bool skipQQ = false;
+    };
+    
     struct ExprOp : Expression {
         ExprOp () = default;
         ExprOp ( const LineInfo & a, Operator o ) : Expression(a), op(o) {}
