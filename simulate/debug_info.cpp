@@ -6,7 +6,6 @@
 #include "cast.h"
 #include "runtime_string.h"
 #include "arraytype.h"
-#include "simulate.h"
 
 namespace yzg
 {

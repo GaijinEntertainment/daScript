@@ -83,6 +83,7 @@
 <normal>"struct"                                        need_oxford_comma = false; return _STRUCT;
 <normal>"try"                                           need_oxford_comma = false; return _TRY;
 <normal>"catch"                                         need_oxford_comma = false; return _CATCH;
+<normal>"block"                                         return _BLOCK;
 <normal>"const"                                         return _CONST;
 <normal>"expect"                                        return _EXPECT;
 <normal>"table"                                         return _TABLE;

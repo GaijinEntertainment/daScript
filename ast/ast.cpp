@@ -130,7 +130,11 @@ namespace yzg
                 stream << "iterator";
             }
         } else if ( decl.baseType==Type::tBlock ) {
-            stream << "block<" << *decl.firstType << ">";
+            if ( decl.firstType ) {
+                stream << "block<" << *decl.firstType << ">";
+            } else {
+                stream << "block";
+            }
         } else {
             stream << to_string(decl.baseType);
         }
@@ -153,6 +157,12 @@ namespace yzg
             firstType = make_shared<TypeDecl>(*decl.firstType);
         if ( decl.secondType )
             secondType = make_shared<TypeDecl>(*decl.secondType);
+    }
+    
+    bool TypeDecl::canMove() const {
+        if ( baseType==Type::tBlock )
+            return false;
+        return true;
     }
     
     bool TypeDecl::canCopy() const {
@@ -200,7 +210,10 @@ namespace yzg
                 ss << "#" << firstType->getMangledName();
             }
         } else if ( baseType==Type::tBlock ) {
-            ss << "#block" << "#" << firstType->getMangledName();
+            ss << "#block";
+            if ( firstType ) {
+                ss << "#" << firstType->getMangledName();
+            }
         } else if ( baseType==Type::tStructure ) {
             ss << structType->name;
         } else {
@@ -250,7 +263,7 @@ namespace yzg
             }
         }
         if ( baseType==Type::tBlock ) {
-            if ( firstType->isSameType(*decl.firstType) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
         }
@@ -726,6 +739,68 @@ namespace yzg
                                                context.allocateName(message));
     }
 
+    // ExprMakeBlock
+    
+    void ExprMakeBlock::inferType(InferTypeContext & context) {
+        type.reset();
+        block->inferType(context);
+        // infer
+        type = make_shared<TypeDecl>(Type::tBlock);
+        if ( block->type ) {
+            type->firstType = make_shared<TypeDecl>(*block->type);
+        }
+    }
+    
+    void ExprMakeBlock::log(ostream& stream, int depth) const {
+        stream << "(make_block\n";
+        stream << string(depth, '\t');
+        block->log(stream, depth+1);
+        stream << ")";
+    }
+    
+    SimNode * ExprMakeBlock::simulate (Context & context) const {
+        return context.makeNode<SimNode_MakeBlock>(at,block->simulate(context));
+    }
+    
+    ExpressionPtr ExprMakeBlock::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMakeBlock>(expr);
+        cexpr->block = block->clone();
+        return cexpr;
+    }
+    
+    // ExprInvoke
+    
+    ExpressionPtr ExprInvoke::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprInvoke>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+    
+    void ExprInvoke::inferType(InferTypeContext & context) {
+        type.reset();
+        if ( arguments.size()!=1 ) {
+            context.error("invoke(block)", at, CompilationError::invalid_argument_count);
+            return;
+        }
+        ExprLooksLikeCall::inferType(context);
+        if ( argumentsFailedToInfer ) return;
+        // infer
+        arguments[0] = Expression::autoDereference(arguments[0]);
+        auto blockT = arguments[0]->type;
+        if ( !blockT->isGoodBlockType() ) {
+            context.error("expecting block", at, CompilationError::invalid_argument_type);
+        }
+        if ( blockT->firstType ) {
+            type = make_shared<TypeDecl>(*blockT->firstType);
+        } else {
+            type = make_shared<TypeDecl>();
+        }
+    }
+    
+    SimNode * ExprInvoke::simulate (Context & context) const {
+        return context.makeNode<SimNode_Invoke>(at,arguments[0]->simulate(context));
+    }
+    
     // ExprHash
     
     ExpressionPtr ExprHash::clone( const ExpressionPtr & expr ) const {
@@ -1063,6 +1138,11 @@ namespace yzg
         // infer
         for ( auto & ex : list ) {
             ex->inferType(context);
+        }
+        // block type
+        auto tail = list.back();
+        if ( tail->type ) {
+            type = make_shared<TypeDecl>(*tail->type);
         }
     }
     
@@ -1468,8 +1548,9 @@ namespace yzg
             context.error("can only move to reference", at, CompilationError::cant_write_to_non_reference);
         } else if ( left->type->constant ) {
             context.error("can't move to constant value", at, CompilationError::cant_move_to_const);
-        }
-        if ( left->type->canCopy() ) {
+        } else if ( !left->type->canMove() ) {
+            context.error("this type can't be moved", at, CompilationError::cant_move);
+        } else if ( left->type->canCopy() ) {
             context.error("this type can be copied, use = instead", at, CompilationError::cant_move);
         }
         type = make_shared<TypeDecl>(*left->type);  // we return left
@@ -1958,7 +2039,9 @@ namespace yzg
                         + var->type->describe() + " = " + var->init->type->describe(), var->at );
                 } else if ( var->type->baseType==Type::tStructure ) {
                     context.error("can't initialize structures", var->at );
-                } 
+                } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
+                    context.error("this variable can't be initialized at all", var->at);
+                }
             }
             var->stackTop = context.stackTop;
             context.stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
@@ -1978,8 +2061,12 @@ namespace yzg
             get = context.makeNode<SimNode_GetGlobal>(var->init->at, var->index);
         if ( var->type->canCopy() )
             return makeCopy(var->init->at, context, *var->init->type, get, init);
-        else
+        else if ( var->type->canMove() )
             return makeMove(var->init->at, context, *var->init->type, get, init);
+        else {
+            assert(0 && "we should not be here");
+            return nullptr;
+        }
     }
     
     SimNode * ExprLet::simulate (Context & context) const {

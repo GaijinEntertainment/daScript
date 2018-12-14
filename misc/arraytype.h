@@ -2,6 +2,13 @@
 
 namespace yzg
 {
+    struct SimNode;
+    
+    struct Block {
+        char *      stackTop;
+        SimNode *   body;
+    };
+    
     struct Array {
         char *      data;
         uint32_t    size;

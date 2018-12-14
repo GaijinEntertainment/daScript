@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vectypes.h"
+#include "arraytype.h"
 #include "cast.h"
 #include "runtime_string.h"
 #include "debug_info.h"
@@ -193,11 +194,6 @@ namespace yzg
         uint32_t stopFlags = 0;
     };
     
-    struct Block {
-        char *      stackTop;
-        SimNode *   body;
-    };
-    
 #if YZG_ENABLE_EXCEPTIONS
     #define YZG_EXCEPTION_POINT \
         { if ( context.stopFlags ) return _mm_setzero_ps(); }
@@ -207,6 +203,20 @@ namespace yzg
     #define YZG_EXCEPTION_POINT
     #define YZG_ITERATOR_EXCEPTION_POINT
 #endif
+    
+    // Invoke
+    struct SimNode_Invoke : SimNode {
+        SimNode_Invoke ( const LineInfo & at, SimNode * s) : SimNode(at), subexpr(s) {}
+        virtual __m128 eval ( Context & context ) override;
+        SimNode *       subexpr;
+    };
+    
+    // MakeBlock
+    struct SimNode_MakeBlock : SimNode {
+        SimNode_MakeBlock ( const LineInfo & at, SimNode * s) : SimNode(at), subexpr(s) {}
+        virtual __m128 eval ( Context & context ) override;
+        SimNode *       subexpr;
+    };
     
     // ASSERT
     struct SimNode_Assert : SimNode {

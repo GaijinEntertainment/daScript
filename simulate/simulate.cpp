@@ -5,6 +5,27 @@
 
 namespace yzg
 {
+    // SimNode_MakeBlock
+    
+    __m128 SimNode_MakeBlock::eval ( Context & context )  {
+        Block block;
+        block.stackTop = context.stackTop;
+        block.body = subexpr;
+        return cast<Block>::from(block);
+    }
+    
+    // SimNode_Invoke
+    
+    __m128 SimNode_Invoke::eval ( Context & context )  {
+        Block block = cast<Block>::to(subexpr->eval(context));
+        YZG_EXCEPTION_POINT;
+        char * saveSp = context.stackTop;
+        context.stackTop = block.stackTop;
+        __m128 result = block.body->eval(context);
+        context.stackTop = saveSp;
+        return result;
+    }
+    
     // SimNode_At
     
     __m128 SimNode_At::eval ( Context & context )  {
@@ -187,9 +208,10 @@ namespace yzg
     // SimNode_Block
     
     __m128 SimNode_Block::eval ( Context & context ) {
+        __m128 result = _mm_setzero_ps();
         for ( int i = 0; i!=total && !context.stopFlags; ++i )
-            list[i]->eval(context);
-        return _mm_setzero_ps();
+            result = list[i]->eval(context);
+        return result;
     }
     
     // SimNode_Let

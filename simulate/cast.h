@@ -73,6 +73,12 @@ namespace yzg
         static __forceinline __m128 from ( urange x )           { __m128 a; *((urange *)&a) = x; return a; }
     };
     
+    template <>
+    struct cast <Block> {
+        static __forceinline Block to ( __m128 x )             { return *((Block *)&x); }
+        static __forceinline __m128 from ( Block x )           { __m128 a; *((Block *)&a) = x; return a; }
+    };
+    
     template <typename TT>
     struct cast_fVec {
         static __forceinline TT to ( __m128 x )                 { return *((TT *)&x); }

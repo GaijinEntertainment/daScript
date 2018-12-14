@@ -107,6 +107,7 @@ namespace yzg
         int getStride() const;
         string describe() const { stringstream ss; ss << *this; return ss.str(); }
         bool canCopy() const;
+        bool canMove() const;
         bool isPod() const;
         bool isWorkhorseType() const; // we can return this, or pass this
         bool isRange() const;
@@ -533,6 +534,24 @@ namespace yzg
         bool                    argumentsFailedToInfer = false;
     };
     typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
+    
+    struct ExprMakeBlock : Expression {
+        ExprMakeBlock () = default;
+        ExprMakeBlock ( const LineInfo & a, ExpressionPtr b ) : Expression(a), block(b) {}
+        virtual void inferType(InferTypeContext & context) override;
+        virtual void log(ostream& stream, int depth) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        ExpressionPtr block;
+    };
+    
+    struct ExprInvoke : ExprLooksLikeCall {
+        ExprInvoke () = default;
+        ExprInvoke ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a,name) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual void inferType(InferTypeContext & context) override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
     
     struct ExprAssert : ExprLooksLikeCall {
         ExprAssert () = default;

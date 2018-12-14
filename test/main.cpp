@@ -143,6 +143,10 @@ int main(int argc, const char * argv[]) {
     compilation_fail_test("../../test/hello_world.das");
     return 0;
 #endif
+#if 0 // Debug this one test
+    unit_test("../../test/hello_world.das");
+    return 0;
+#endif
     bool ok = true;
     ok = run_compilation_fail_tests("../../test/compilation_fail_tests") && ok;
     ok = run_unit_tests("../../test/unit_tests") && ok;

@@ -68,7 +68,7 @@
 %token  _INT    _INT2   _INT3   _INT4
 %token  _UINT   _UINT2  _UINT3  _UINT4
 %token  _FLOAT  _FLOAT2 _FLOAT3 _FLOAT4
-%token  _RANGE  _URANGE
+%token  _RANGE  _URANGE _BLOCK
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -335,7 +335,7 @@ expr_list
     ;
 
 expr_block
-    :   '$' expression_block[block]         { $$ = $block; }
+    :   expression_block[block]             { $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block)); }
     ;
 
 expr
@@ -575,7 +575,15 @@ type_declaration
         $$->firstType = TypeDeclPtr($keyTypeDecl);
         $$->secondType = TypeDeclPtr($valueTypeDecl);
     }
-    | '(' type_declaration[typeDecl] ')'    { $$ = $typeDecl; }
+    |   _BLOCK[loc] {
+        $$ = new TypeDecl(Type::tBlock);
+        $$->at = tokAt(@loc);
+    }
+    |   _BLOCK[loc] '<' type_declaration[blockType] '>' {
+        $$ = new TypeDecl(Type::tBlock);
+        $$->at = tokAt(@loc);
+        $$->firstType = TypeDeclPtr($blockType);
+    }
     ;
 
 %%

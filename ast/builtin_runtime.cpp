@@ -71,9 +71,10 @@ namespace yzg
         addCall<ExprTableKeysOrValues<SimNode_TableIterator<TableKeysIterator>,true>>    ("keys");
         addCall<ExprTableKeysOrValues<SimNode_TableIterator<TableValuesIterator>,false>> ("values");
         // array expresisons
-        addCall<ExprArrayPush>  ("push");
+        addCall<ExprArrayPush>("push");
         addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayResize>>  ("resize");
         addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayReserve>> ("reserve");
-
+        // blocks
+        addCall<ExprInvoke>("invoke");
     }
 }
