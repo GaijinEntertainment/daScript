@@ -215,7 +215,11 @@ namespace yzg
                 ss << "#" << firstType->getMangledName();
             }
         } else if ( baseType==Type::tStructure ) {
-            ss << structType->name;
+            if ( structType ) {
+                ss << structType->name;
+            } else {
+                ss << "structue?";
+            }
         } else {
             ss << to_string(baseType);
         }
@@ -2159,7 +2163,8 @@ namespace yzg
         }
         auto functions = context.program->findMatchingFunctions(name, types);
         if ( functions.size()==0 ) {
-            context.error("no matching function " + describe(), at, CompilationError::function_not_found);
+            string candidates = context.program->describeCandidates(context.program->findCandidates(name,types));
+            context.error("no matching function " + describe() + "\n" + candidates, at, CompilationError::function_not_found);
         } else if ( functions.size()>1 ) {
             context.error("too many matching functions " + describe(), at);
         } else {
@@ -2273,6 +2278,39 @@ namespace yzg
                 context.func->body->inferType(context);
             }
         }
+    }
+    
+    string Program::describeCandidates ( vector<FunctionPtr> result ) const {
+        if ( !result.size() ) {
+            return "";
+        }
+        stringstream ss;
+        ss << "candidates are:";
+        for ( auto & fn : result ) {
+            ss << "\n\t" << fn->getMangledName();
+        }
+        return ss.str();
+    }
+    
+    vector<FunctionPtr> Program::findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
+        /*
+         TODO:
+            arguments by name?
+         */
+        vector<FunctionPtr> result;
+        library.foreach([&](const ModulePtr & mod) -> bool {
+            auto itFnList = mod->functionsByName.find(name);
+            if ( itFnList != mod->functionsByName.end() ) {
+                auto & goodFunctions = itFnList->second;
+                for ( auto & pFn : goodFunctions ) {
+                    if ( pFn->arguments.size() >= types.size() ) {
+                        result.push_back(pFn);
+                    }
+                }
+            }
+            return true;
+        });
+        return result;
     }
         
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const {
@@ -2542,8 +2580,7 @@ namespace yzg
         auto t = make_shared<TypeDecl>(Type::tStructure);
         t->structType = findStructure(name).get();
         if ( !t->structType ) {
-            assert(0 && "can't make structure type");
-            return nullptr;
+            // assert(0 && "can't make structure type");
         }
         return t;
     }

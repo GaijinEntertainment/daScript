@@ -280,7 +280,9 @@ namespace yzg
         addFunctionBasic<char *,SimPolicy_String>(*this,lib);
         addFunctionOrdered<char *, SimPolicy_String>(*this,lib);
         addFunctionConcat<char *, SimPolicy_String>(*this,lib);
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,char *,int32_t>>("string",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t>>    ("string",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t>>   ("string",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float>>      ("string",lib) );
         // boolean
         addFunctionBasic<bool, SimPolicy_Bool>(*this,lib);
         addFunctionBoolean<bool, SimPolicy_Bool>(*this,lib);

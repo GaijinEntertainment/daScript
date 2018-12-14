@@ -11,11 +11,11 @@ def ks_update(pos:float3 &;vel:float3)
 def update(a:Object)
     a.position+=a.velocity
 
-def test
+def testSim
     for obj in objects
         update(obj)
 
-def interopTest
+def testInterop
     for obj in objects
         interopUpdate(obj)
 
@@ -28,3 +28,25 @@ def init
     let ( index:int = 0 )
         for obj in objects
             initObj(index++,obj)
+
+def test:bool
+    let(total:int=100;simT,cT,intT,manyT,manyKsT:float)
+        init()
+        simT = profile(total,"basic version") <$
+            testSim()
+        init()
+        cT = profile(total,"c++ version") <$
+            interopUpdateTest(objects)
+        init()
+        intT = profile(total,"interop version") <$
+            testInterop()
+        init()
+        manyT = profile(total,"interop 10000 version") <$
+            update10000(objects)
+        manyKsT = profile(total,"interop 10000-ks version") <$
+            update10000ks(objects)
+        print("ratio sim/c++: "+string(simT/cT)+"\n");
+        print("ratio interop/c++: "+string(intT/cT)+"\n");
+        print("ratio interop-10000/c++: "+string(manyT/cT)+"\n");
+        print("ratio interop-10000-ks/c++: "+string(manyKsT/cT)+"\n");
+    return true

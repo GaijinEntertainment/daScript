@@ -19,15 +19,7 @@ namespace yzg
     __m128 SimNode_Invoke::eval ( Context & context )  {
         Block block = cast<Block>::to(subexpr->eval(context));
         YZG_EXCEPTION_POINT;
-        char * saveSp = context.stackTop;
-        char * saveISp = context.invokeStackTop;
-        context.invokeStackTop = context.stackTop;
-        context.stackTop = block.stackTop;
-        // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
-        __m128 result = block.body->eval(context);
-        context.invokeStackTop = saveISp;
-        context.stackTop = saveSp;
-        return result;
+        return context.invoke(block);
     }
     
     // SimNode_At
@@ -306,6 +298,17 @@ namespace yzg
         } else {
             return nullptr;
         }
+    }
+    __m128 Context::invoke(const Block &block) {
+        char * saveSp = stackTop;
+        char * saveISp = invokeStackTop;
+        invokeStackTop = stackTop;
+        stackTop = block.stackTop;
+        // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
+        __m128 result = block.body->eval(*this);
+        invokeStackTop = saveISp;
+        stackTop = saveSp;
+        return result;
     }
 
     __m128 Context::call ( int fnIndex, __m128 * args, int line ) {

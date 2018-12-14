@@ -151,6 +151,7 @@ namespace yzg
     template<> struct ToBasicType<urange>       { enum { type = Type::tURange }; };
     template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
     template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
+    template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
 
     template <typename TT>
     struct typeFactory {
@@ -163,10 +164,21 @@ namespace yzg
         }
     };
     
+    template <typename TT, int dim>
+    struct typeFactory<TT[dim]> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = typeFactory<TT *>::make(lib);
+            t->dim.push_back(dim);
+            t->ref = false;
+            return t;
+        }
+    };
+    
     template <typename TT>
     __forceinline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
         return typeFactory<TT>::make(ctx);
     }
+
     
     class Structure : public enable_shared_from_this<Structure> {
     public:
@@ -799,6 +811,8 @@ namespace yzg
         void addModule ( const ModulePtr & pm );
         void inferTypes();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
+        vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
+        string describeCandidates ( vector<FunctionPtr> vec ) const;
         void simulate ( Context & context );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }

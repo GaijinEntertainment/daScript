@@ -149,7 +149,7 @@ L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yy
 }
 <normal>"\|\>"                              return RPIPE;
 <normal>"\<\|"                              return LPIPE;
-<normal>"\<\$"                              need_oxford_comma = false; return LBPIPE;
+<normal>"\<\$"                              need_oxford_comma = false; return LPIPE;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\."                              return QDOT;
 <normal>"\-\>"                              return RARROW;

@@ -1,11 +1,10 @@
-iterations took:0.000291
-c++ version took:0.000017
-interop version took:0.000109
-10000-interop version took:0.000280
-10000-interop ks version took:0.000111
-ratio sim / c: 16.631314
-ratio interop / c: 6.247354
-ratio 10000-interop / c: 16.020880
-ratio 10000-interop ks / c: 6.331217
-ratio sim / interop: 2.662137
-../../profile/profile_try_catch.das took:0.000117
+basic version took: 0.000291
+c++ version took: 0.000019
+interop version took: 0.000112
+interop 10000 version took: 0.000296
+interop 10000-ks version took: 0.000130
+ratio sim/c++: 15.574123
+ratio interop/c++: 5.960667
+ratio interop-10000/c++: 15.809374
+ratio interop-10000-ks/c++: 6.973760
+try-catch took: 0.000117

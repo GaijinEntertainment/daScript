@@ -171,6 +171,7 @@ namespace yzg
         }
         
         __m128 call ( int fnIndex, __m128 * args, int line );
+        __m128 invoke ( const Block & block );
         
         __forceinline const char * getException() const {
             return stopFlags & EvalFlags::stopForThrow ? exception : nullptr;

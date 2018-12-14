@@ -3,6 +3,7 @@
 #include "ast.h"
 #include "runtime_array.h"
 #include "runtime_table.h"
+#include "runtime_profile.h"
 #include "ast_interop.h"
 
 namespace yzg
@@ -76,5 +77,7 @@ namespace yzg
         addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayReserve>> ("reserve");
         // blocks
         addCall<ExprInvoke>("invoke");
+        // profile
+        addInterop<builtin_profile,float,int,char*,Block>(*this,lib,"profile");
     }
 }

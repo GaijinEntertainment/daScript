@@ -106,7 +106,6 @@
 %type <pExpression>     expression_else
 %type <pExpression>     expression_if_then_else
 %type <pExpression>     expression_try_catch
-%type <pExpression>     expression_pipe_block
 %type <pExpression>     expr_new
 %type <pExpression>     expr_sizeof
 %type <pExpression>     expr_block
@@ -127,7 +126,7 @@
 %left   '*' '/' '%'
 %left   QQ
 %right  UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
-%left   LPIPE RPIPE LBPIPE
+%left   LPIPE RPIPE
 %left   POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT
 
 %%
@@ -252,13 +251,13 @@ expression_block
     ;
 
 expression_any
-    :   expr[subexpr] ';'                   { $$ = $subexpr; }
-    |   expression_pipe_block[subexpr]      { $$ = $subexpr; }
+    :   ';'                                 { $$ = nullptr; }
+    |   expr[subexpr]                       { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
-    |   expression_break[subexpr]           { $$ = $subexpr; }
-    |   expression_return[subexpr]          { $$ = $subexpr; }
+    |   expression_break[subexpr] ';'       { $$ = $subexpr; }
+    |   expression_return[subexpr] ';'      { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
     ;
@@ -273,19 +272,6 @@ expressions
     }
     ;
 
-expression_pipe_block
-    :   expr[fncall] LBPIPE[loc] expr[arg] {
-        if ( $fncall->isCall() ) {
-            auto pCall = (ExprLooksLikeCall *) $fncall;
-            pCall->arguments.push_back(ExpressionPtr($arg));
-            $$ = $fncall;
-        } else {
-            yyerror("can only pipe into function call",tokAt(@loc),CompilationError::cant_pipe);
-            $$ = $fncall;
-        }
-    }
-;
-
 expr_new
     :   _NEW[loc] NAME[structName]   {
             auto pTypeDecl = make_shared<TypeDecl>(Type::tStructure);
@@ -297,12 +283,12 @@ expr_new
     ;
 
 expression_break
-    :   _BREAK[loc] ';'  { $$ = new ExprBreak(tokAt(@loc)); }
+    :   _BREAK[loc] { $$ = new ExprBreak(tokAt(@loc)); }
     ;
 
 expression_return
-    :   _RETURN[loc] ';'                { $$ = new ExprReturn(tokAt(@loc),nullptr); }
-    |   _RETURN[loc] expr[subexpr] ';'  { $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr)); }
+    :   _RETURN[loc]                    { $$ = new ExprReturn(tokAt(@loc),nullptr); }
+    |   _RETURN[loc] expr[subexpr]      { $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr)); }
     ;
 
 expression_try_catch

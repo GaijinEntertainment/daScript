@@ -69,6 +69,8 @@ simulate/runtime_table.cpp
 simulate/runtime_table.h
 simulate/runtime_range.cpp
 simulate/runtime_range.h
+simulate/runtime_profile.cpp
+simulate/runtime_profile.h
 simulate/simulate.cpp
 simulate/simulate.h
 )
@@ -136,6 +138,7 @@ SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 SET(PROFILE_MAIN_SRC
 profile/main.cpp
 )
+SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)
 
 include_directories(daScriptProfile PUBLIC ast lexer misc simulate test)
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} )
