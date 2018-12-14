@@ -1140,9 +1140,11 @@ namespace yzg
             ex->inferType(context);
         }
         // block type
-        auto tail = list.back();
-        if ( tail->type ) {
-            type = make_shared<TypeDecl>(*tail->type);
+        if ( list.size() ) {
+            auto tail = list.back();
+            if ( tail->type ) {
+                type = make_shared<TypeDecl>(*tail->type);
+            }
         }
     }
     

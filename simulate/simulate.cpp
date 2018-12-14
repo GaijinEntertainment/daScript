@@ -20,8 +20,12 @@ namespace yzg
         Block block = cast<Block>::to(subexpr->eval(context));
         YZG_EXCEPTION_POINT;
         char * saveSp = context.stackTop;
+        char * saveISp = context.invokeStackTop;
+        context.invokeStackTop = context.stackTop;
         context.stackTop = block.stackTop;
+        // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
         __m128 result = block.body->eval(context);
+        context.invokeStackTop = saveISp;
         context.stackTop = saveSp;
         return result;
     }
@@ -308,12 +312,16 @@ namespace yzg
         assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
         auto & fn = functions[fnIndex];
         // PUSH
-        if ( stack - ( stackTop - fn.stackSize ) > stackSize ) {
+        char * top = invokeStackTop ? invokeStackTop : stackTop;
+        if ( stack - ( top - fn.stackSize ) > stackSize ) {
             throw_error("stack overflow");
             return _mm_setzero_ps();
         }
         char * pushStack = stackTop;
-        stackTop -= fn.stackSize;
+        char * pushInvokeStack = invokeStackTop;
+        stackTop = top - fn.stackSize;
+        invokeStackTop = nullptr;
+        // cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
         // fill prologue
         Prologue * pp = (Prologue *) stackTop;
         pp->result =        _mm_setzero_ps();
@@ -327,6 +335,7 @@ namespace yzg
         __m128 result = abiResult();
         stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
         // POP
+        invokeStackTop = pushInvokeStack;
         stackTop = pushStack;
         return result;
     }
@@ -363,14 +372,15 @@ namespace yzg
     void Context::stackWalk() {
         stringstream ssw;
     #if YZG_ENABLE_STACK_WALK
-        ssw << "\nCALL STACK:\n";
+        ssw << "\nCALL STACK (sp=" << (stack + stackSize - stackTop) << "):\n";
         char * sp = stackTop;
         while ( sp>=stackTop && sp <(stack+stackSize) ) {
+            int isp = (stack + stackSize - sp);
             Prologue * pp = (Prologue *) sp;
             if ( pp->line ) {
-                ssw << pp->info->name << " at line " << pp->line << "\n";
+                ssw << pp->info->name << " at line " << pp->line << " (sp=" << isp << ")\n";
             } else {
-                ssw << pp->info->name << "\n";
+                ssw << pp->info->name << "(sp=" << isp << ")\n";
             }
             for ( uint32_t i = 0; i != pp->info->argsSize; ++i ) {
                 ssw << "\t" << pp->info->args[i]->name
@@ -383,7 +393,7 @@ namespace yzg
     #else
         ssw << "\nCALL STACK TRACKING DISABLED:\n\n";
     #endif
-        to_out(ssw.str().c_str());
+       to_out(ssw.str().c_str());
     }
     
     void Context::breakPoint(int column, int line) const {

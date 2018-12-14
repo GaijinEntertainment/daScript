@@ -136,6 +136,7 @@ namespace yzg
         
         __forceinline void restart( ) {
             linearAllocator = linearAllocatorExecuteBase;
+            invokeStackTop = nullptr;
             stackTop = stack + stackSize;
             stopFlags = 0;
         }
@@ -188,6 +189,7 @@ namespace yzg
     public:
         const string * debugInput = nullptr;
         class Program * thisProgram = nullptr;
+        char * invokeStackTop = nullptr;
         char * stackTop = nullptr;
         char * stack = nullptr;
         int stackSize = 16*1024;

@@ -249,6 +249,7 @@ namespace yzg
                                         break;
                 case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType); break;
                 case Type::tVoid:       ss << "void"; break;
+                case Type::tBlock:      ss << "block"; break;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }
