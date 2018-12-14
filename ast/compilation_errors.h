@@ -52,6 +52,8 @@ namespace yzg
     ,   cant_move                               =   30508       //  int a; a <- 1
         
     ,   condition_must_be_bool                  =   30601       //  if ( 10 ) ...
+        
+    ,   cant_pipe                               =   30701       //  wtf <| arg
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };

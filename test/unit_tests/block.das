@@ -37,18 +37,18 @@ def test:bool
     let(a,b:int=0)
         twice({ a++; })
         assert(a==2)
-        b = twice_good({ a++; })
+        b = twice_good() <| { a++; }
         assert(a==4 & b==(2+3))
-    let(x:int=0)
-        func1({
-            x++;
-            func2({
-                x++;
-            });
-            func4({
-                x++;
-            });
-        })
-        assert(x==3)
+    let(x,y:int=0)
+        func1() <$
+            x++
+            y += 2
+            func2() <$
+                x++
+                y += 3
+            func4() <$
+                x++
+                y += 4
+        assert(x==3 & y==9)
     return true
 

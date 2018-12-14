@@ -221,6 +221,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const = 0;
         virtual bool isSequence() const { return false; }
         virtual bool isStringConstant() const { return false; }
+        virtual bool isCall() const { return false; }
         LineInfo    at;
         TypeDeclPtr type;
         bool        constexpression = false;
@@ -529,6 +530,7 @@ namespace yzg
         void autoDereference();
         virtual SimNode * simulate (Context & context) const override { return nullptr; }
         string describe() const;
+        virtual bool isCall() const override { return true; }
         string                  name;
         vector<ExpressionPtr>   arguments;
         bool                    argumentsFailedToInfer = false;

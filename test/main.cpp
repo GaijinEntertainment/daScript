@@ -143,7 +143,7 @@ int main(int argc, const char * argv[]) {
     compilation_fail_test("../../test/hello_world.das");
     return 0;
 #endif
-#if 1 // Debug this one test
+#if 0 // Debug this one test
     unit_test("../../test/unit_tests/block.das");
     return 0;
 #endif
