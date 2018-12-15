@@ -152,6 +152,7 @@ namespace yzg
     template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
     template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
     template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
+    template<> struct ToBasicType<Context *>    { enum { type = Type::fakeContext }; };
 
     template <typename TT>
     struct typeFactory {

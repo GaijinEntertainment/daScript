@@ -5,12 +5,26 @@
 
 namespace yzg
 {
+    template <typename TT>
+    struct cast_arg {
+        static __forceinline TT to ( Context & ctx, __m128 x ) {
+            return cast<TT>::to(x);
+        }
+    };
+    
+    template <>
+    struct cast_arg<Context *> {
+        static __forceinline Context * to ( Context & ctx, __m128 ) {
+            return &ctx;
+        }
+    };
+    
     // convert arguments into a tuple of appropriate types
     template <typename ArgumentsType, size_t... I>
-    __forceinline auto cast_args (__m128 * args, index_sequence<I...> ) {
-        return make_tuple( cast< typename tuple_element<I, ArgumentsType>::type  >::to ( args[ I ] )... );
+    __forceinline auto cast_args ( Context & ctx, __m128 * args, index_sequence<I...> ) {
+        return make_tuple( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
     }
-    // void static function or lambda
+
     template <typename Result>
     struct ImplCallStaticFunction {
         template <typename FunctionType, typename TupleType, size_t... I>
@@ -28,7 +42,7 @@ namespace yzg
         }
     };
     
-    template <typename FuncT, FuncT fn>
+    template <typename FuncT, FuncT fn >
     struct SimNode_ExtFuncCall : SimNode_Call {
         SimNode_ExtFuncCall ( const LineInfo & at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
@@ -40,7 +54,7 @@ namespace yzg
             evalArgs(context);
             YZG_EXCEPTION_POINT;
             __m128 * args = abiArgValues(context);
-            auto cpp_args = cast_args<Arguments>(args, Indices());
+            auto cpp_args = cast_args<Arguments>(context, args, Indices());
         #if YZG_ENABLE_STACK_WALK
             // PUSH
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;

@@ -7,15 +7,13 @@
 
 namespace yzg
 {
-    __m128 builtin_profile ( Context & context, SimNode_Call *, __m128 * args ) {
-        int32_t count = max( cast<int32_t>::to(args[0]), 1);
-        char * category = cast<char *>::to(args[1]);
-        Block block = cast<Block>::to(args[2]);
+    float builtin_profile ( int32_t count, char * category, Block block, Context * context ) {
+        count = max(count,1);
         // profile
         uint64_t minT = -1;
         for ( int32_t i = 0; i != count; ++i ) {
             uint64_t t0 = mach_absolute_time();
-            context.invoke(block);
+            context->invoke(block);
             uint64_t t1 = mach_absolute_time();
             minT = min(t1-t0, minT);
         }
@@ -25,7 +23,7 @@ namespace yzg
         if ( category ) {
             cout << category << " took: " << fixed << tSec << "\n";
         }
-        return cast<float>::from(float(tSec));
+        return tSec;
     }
 }
 

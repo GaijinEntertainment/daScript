@@ -11,9 +11,8 @@ namespace yzg
     
     // core functions
     
-    __m128 builtin_print ( Context & context, SimNode_Call *, __m128 * args ) {
-        context.to_out(to_rts(args[0]));
-        return _mm_setzero_ps();
+    void builtin_print ( char * text, Context * context ) {
+        context->to_out(text);
     }
     
     __m128 builtin_breakpoint ( Context & context, SimNode_Call * call, __m128 * ) {
@@ -21,14 +20,12 @@ namespace yzg
         return _mm_setzero_ps();
     }
     
-    __m128 builtin_stackwalk ( Context & context, SimNode_Call *, __m128 * ) {
-        context.stackWalk();
-        return _mm_setzero_ps();
+    void builtin_stackwalk ( Context * context) {
+        context->stackWalk();
     }
     
-    __m128 builtin_terminate ( Context & context, SimNode_Call *, __m128 * ) {
-        context.stopFlags |= EvalFlags::stopForTerminate;
-        return _mm_setzero_ps();
+    void builtin_terminate ( Context * context ) {
+        context->stopFlags |= EvalFlags::stopForTerminate;
     }
     
     // array functions
@@ -51,10 +48,10 @@ namespace yzg
     
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // functions
-        addInterop<builtin_print,void,char *>   (*this, lib, "print");
-        addInterop<builtin_terminate,void>      (*this, lib, "terminate");
+        addExtern<decltype(builtin_print),builtin_print>         (*this, lib, "print");
+        addExtern<decltype(builtin_terminate),builtin_terminate> (*this, lib, "terminate");
+        addExtern<decltype(builtin_stackwalk),builtin_stackwalk> (*this, lib, "stackwalk");
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint");
-        addInterop<builtin_stackwalk,void>      (*this, lib, "stackwalk");
         // function-like expresions
         addCall<ExprAssert>     ("assert");
         addCall<ExprDebug>      ("debug");
@@ -78,6 +75,6 @@ namespace yzg
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile
-        addInterop<builtin_profile,float,int,char*,Block>(*this,lib,"profile");
+        addExtern<decltype(builtin_profile),builtin_profile>(*this,lib,"profile");
     }
 }

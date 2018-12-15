@@ -24,6 +24,9 @@ namespace yzg
                 auto arg = make_shared<Variable>();
                 arg->name = "arg" + std::to_string(argi);
                 arg->type = args[argi];
+                if ( arg->type->baseType==Type::fakeContext ) {
+                    arg->init = make_shared<ExprConstPtr>(at);
+                }
                 this->arguments.push_back(arg);
             }
             this->result = makeType<Result>(lib);
@@ -36,43 +39,42 @@ namespace yzg
         }
     };
     
-    template  <typename FuncT, FuncT fn, typename RetT, typename ...Args>
-    class ExternalFnEx : public BuiltInFunction {
+    template  <typename RetT, typename ...Args>
+    class InteropFnBase : public BuiltInFunction {
     public:
-        ExternalFnEx(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
+        InteropFnBase(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
             for ( int argi=0; argi!=args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
                 arg->name = "arg" + std::to_string(argi);
                 arg->type = args[argi];
+                if ( arg->type->baseType==Type::fakeContext ) {
+                    arg->init = make_shared<ExprConstPtr>(at);
+                }
                 this->arguments.push_back(arg);
             }
             this->result = makeType<RetT>(lib);
             this->totalStackSize = sizeof(Prologue);
         }
+    };
+    
+    template  <typename FuncT, FuncT fn, typename RetT, typename ...Args>
+    class ExternalFnEx : public InteropFnBase<RetT,Args...> {
+    public:
+        ExternalFnEx(const string & name, const ModuleLibrary & lib) : InteropFnBase<RetT,Args...>(name,lib) {}
         virtual SimNode * makeSimNode ( Context & context ) override {
-            auto pCall = context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(at);
+            auto pCall = context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(BuiltInFunction::at);
             pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
             return pCall;
         }
     };
     
     template  <InteropFunction func, typename RetT, typename ...Args>
-    class InteropFn : public BuiltInFunction {
+    class InteropFn : public InteropFnBase<RetT,Args...> {
     public:
-        InteropFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
-            vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
-            for ( int argi=0; argi!=args.size(); ++argi ) {
-                auto arg = make_shared<Variable>();
-                arg->name = "arg" + std::to_string(argi);
-                arg->type = args[argi];
-                this->arguments.push_back(arg);
-            }
-            this->result = makeType<RetT>(lib);
-            this->totalStackSize = sizeof(Prologue);
-        }
+        InteropFn(const string & name, const ModuleLibrary & lib) : InteropFnBase<RetT,Args...>(name,lib) {}
         virtual SimNode * makeSimNode ( Context & context ) override {
-            auto pCall = context.makeNode<SimNode_InteropFuncCall<func>>(at);
+            auto pCall = context.makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at);
             pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
             return pCall;
         }

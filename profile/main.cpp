@@ -29,26 +29,21 @@ void updateTest ( Object objects[10000] ) {
     }
 }
 
-__m128 update10000 ( Context & context, SimNode_Call *, __m128 * args ) {
-    int updateFn = context.findFunction("update");
-    Object * objects = cast<Object *>::to(args[0]);
+void update10000 ( Object objects[10000], Context * context ) {
+    int updateFn = context->findFunction("update");
     for ( int oi=0; oi != 10000; ++oi ) {
         __m128 args[1] = { cast<Object *>::from(objects+oi) };
-        context.eval(updateFn,  args);
+        context->eval(updateFn,  args);
     }
-    return _mm_setzero_ps();
 }
 
-__m128 update10000ks ( Context & context, SimNode_Call *, __m128 * args ) {
-    int ksUpdateFn = context.findFunction("ks_update");
-    Object * objects = cast<Object *>::to(args[0]);
+void update10000ks ( Object objects[10000], Context * context ) {
+    int ksUpdateFn = context->findFunction("ks_update");
     for ( int oi=0; oi != 10000; ++oi ) {
         __m128 args[2] = { cast<float3 *>::from(&objects[oi].pos), cast<float3>::from(objects[oi].vel) };
-        context.eval(ksUpdateFn,  args);
+        context->eval(ksUpdateFn,  args);
     }
-    return _mm_setzero_ps();
 }
-
 
 // this is how we declare type
 template <>
@@ -75,8 +70,8 @@ bool unit_test ( const string & fn ) {
     if ( auto program = parseDaScript(str.c_str(), [](const ProgramPtr & prog){
         addExtern<decltype(updateObject),updateObject>(*prog->thisModule,prog->library,"interopUpdate");
         addExternEx<decltype(updateTest),updateTest,void,Object[10000]>(*prog->thisModule,prog->library,"interopUpdateTest");
-        addInterop<update10000, void, Object[10000]>(*prog->thisModule,prog->library,"update10000");
-        addInterop<update10000ks, void, Object[10000]>(*prog->thisModule,prog->library,"update10000ks");
+        addExternEx<decltype(update10000), update10000, void, Object[10000], Context *>(*prog->thisModule,prog->library,"update10000");
+        addExternEx<decltype(update10000ks), update10000ks, void, Object[10000], Context *>(*prog->thisModule,prog->library,"update10000ks");
     }) ) {
         if ( program->failed() ) {
             cout << "failed to compile\n";

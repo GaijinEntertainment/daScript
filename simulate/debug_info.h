@@ -6,6 +6,7 @@ namespace yzg
     
     enum Type : uint8_t {
         none,
+        fakeContext,
         tVoid,
         tBool,
         tInt64,
