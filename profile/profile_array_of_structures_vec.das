@@ -32,18 +32,18 @@ def init
 def test:bool
     let(total:int=100;simT,cT,intT,manyT,manyKsT:float)
         init()
-        simT = profile(total,"basic version") <$
+        simT = profile(total,"basic version") <|
             testSim()
         init()
-        cT = profile(total,"c++ version") <$
+        cT = profile(total,"c++ version") <|
             interopUpdateTest(objects)
         init()
-        intT = profile(total,"interop version") <$
+        intT = profile(total,"interop version") <|
             testInterop()
         init()
-        manyT = profile(total,"interop 10000 version") <$
+        manyT = profile(total,"interop 10000 version") <|
             update10000(objects)
-        manyKsT = profile(total,"interop 10000-ks version") <$
+        manyKsT = profile(total,"interop 10000-ks version") <|
             update10000ks(objects)
         print("ratio sim/c++: "+string(simT/cT)+"\n");
         print("ratio interop/c++: "+string(intT/cT)+"\n");

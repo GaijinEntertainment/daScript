@@ -127,7 +127,7 @@
 %left   '*' '/' '%'
 %left   QQ
 %right  UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
-%left   LPIPE RPIPE
+%left   LPIPE RPIPE LBPIPE
 %left   POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT
 
 %%
@@ -253,7 +253,8 @@ expression_block
 
 expression_any
     :   ';'                                 { $$ = nullptr; }
-    |   expr[subexpr]                       { $$ = $subexpr; }
+    |   expr[subexpr] ';'                   { $$ = $subexpr; }
+    |   expr_pipe[subexpr]                  { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
@@ -274,9 +275,10 @@ expressions
     ;
 
 expr_pipe
-    :   expr[fncall] LPIPE[loc] expr_block[arg] {
-        if ( $fncall->isCall() ) {
-            auto pCall = (ExprLooksLikeCall *) $fncall;
+    :   expr[fncall] LBPIPE[loc] expr_block[arg] {
+        Expression * pipeCall = $fncall->tail();
+        if ( pipeCall->isCall() ) {
+            auto pCall = (ExprLooksLikeCall *) pipeCall;
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
         } else {
@@ -411,7 +413,16 @@ expr
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   expr_block[subexpr]                     { $$ = $subexpr; }
-    |   expr_pipe[subexpr]                      { $$ = $subexpr; }
+    |   expr[fncall] LPIPE[loc] expr[arg] {
+        if ( $fncall->isCall() ) {
+            auto pCall = (ExprLooksLikeCall *) $fncall;
+            pCall->arguments.push_back(ExpressionPtr($arg));
+            $$ = $fncall;
+        } else {
+            yyerror("can only pipe into function call",tokAt(@loc),CompilationError::cant_pipe);
+            $$ = $fncall;
+        }
+    }
     ;
 
 struct_variable_declaration_list

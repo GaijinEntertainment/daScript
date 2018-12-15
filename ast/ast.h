@@ -234,6 +234,7 @@ namespace yzg
         virtual bool isSequence() const { return false; }
         virtual bool isStringConstant() const { return false; }
         virtual bool isCall() const { return false; }
+        virtual Expression * tail() { return this; }
         LineInfo    at;
         TypeDeclPtr type;
         bool        constexpression = false;
@@ -353,6 +354,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual Expression * tail() override { return subexpr->tail(); }
         ExpressionPtr   subexpr;
     };
     
@@ -364,6 +366,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual Expression * tail() override { return right->tail(); }
         ExpressionPtr   left, right;
     };
     
@@ -403,6 +406,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual Expression * tail() override { return right->tail(); }
         ExpressionPtr   subexpr, left, right;
     };
     
