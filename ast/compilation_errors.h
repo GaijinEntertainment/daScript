@@ -54,6 +54,8 @@ namespace yzg
     ,   condition_must_be_bool                  =   30601       //  if ( 10 ) ...
         
     ,   cant_pipe                               =   30701       //  wtf <| arg
+        
+    ,   invalid_block                           =   30801       //  fn({ return; }), fn ({ break; })
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };

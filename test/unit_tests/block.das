@@ -41,6 +41,10 @@ def test:bool
         assert(a==4 & b==(2+3))
         b = twice_good() <|
             a++
+        assert(b==(4+5))
+        b = twice_good({ ++a; })
+        assert(a==8)
+        assert(b==(7+8))
     let(x,y:int=0)
         func1() <|
             x += 1

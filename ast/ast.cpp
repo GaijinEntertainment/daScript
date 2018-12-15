@@ -1137,6 +1137,13 @@ namespace yzg
         stream << ")";
     }
     
+    void ExprBlock::setBlockReturnsValue() {
+        returnsValue = true;
+        if ( list.size() ) {
+            list.back()->setBlockReturnsValue();
+        }
+    }
+    
     void ExprBlock::inferType(InferTypeContext & context) {
         type.reset();
         // infer
@@ -1144,9 +1151,10 @@ namespace yzg
             ex->inferType(context);
         }
         // block type
-        if ( list.size() ) {
-            auto tail = list.back();
+        if ( returnsValue && list.size() ) {
+            auto & tail = list.back();
             if ( tail->type ) {
+                tail = autoDereference(tail);
                 type = make_shared<TypeDecl>(*tail->type);
             }
         }
@@ -2023,6 +2031,11 @@ namespace yzg
         stream << ")";
     }
     
+    void ExprLet::setBlockReturnsValue() {
+        returnsValue = true;
+        subexpr->setBlockReturnsValue();
+    }
+    
     void ExprLet::inferType(InferTypeContext & context) {
         type.reset();
         // infer
@@ -2053,6 +2066,11 @@ namespace yzg
             context.stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
         }
         subexpr->inferType(context);
+        // block type
+        if ( returnsValue && subexpr->type ) {
+            subexpr = autoDereference(subexpr);
+            type = make_shared<TypeDecl>(*subexpr->type);
+        }
         context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
         context.stackTop = sp;
         context.local.resize(sz);

@@ -236,11 +236,12 @@ namespace yzg
         virtual bool isStringConstant() const { return false; }
         virtual bool isCall() const { return false; }
         virtual Expression * tail() { return this; }
+        virtual void setBlockReturnsValue() {}
         LineInfo    at;
         TypeDeclPtr type;
         bool        constexpression = false;
     };
-    
+
     template <typename ExprType>
     __forceinline shared_ptr<ExprType> clonePtr ( const ExpressionPtr & expr ) {
         return expr ? static_pointer_cast<ExprType>(expr) : make_shared<ExprType>();
@@ -300,7 +301,9 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual void setBlockReturnsValue() override;
         vector<ExpressionPtr>   list;
+        bool                    returnsValue = false;
     };
     
     struct ExprVar : Expression {
@@ -513,8 +516,10 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         static SimNode * simulateInit(Context & context, const VariablePtr & var, bool local);
+        virtual void setBlockReturnsValue() override;
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
+        bool                    returnsValue = false;
     };
     
     // for a,b in foo,bar where a>b ...
@@ -556,7 +561,8 @@ namespace yzg
     
     struct ExprMakeBlock : Expression {
         ExprMakeBlock () = default;
-        ExprMakeBlock ( const LineInfo & a, ExpressionPtr b ) : Expression(a), block(b) {}
+        ExprMakeBlock ( const LineInfo & a, ExpressionPtr b )
+            : Expression(a), block(b) { b->setBlockReturnsValue(); }
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
