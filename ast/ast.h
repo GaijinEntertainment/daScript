@@ -237,6 +237,7 @@ namespace yzg
         virtual bool isCall() const { return false; }
         virtual Expression * tail() { return this; }
         virtual void setBlockReturnsValue() {}
+        virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
         TypeDeclPtr type;
         bool        constexpression = false;
@@ -302,6 +303,7 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void setBlockReturnsValue() override;
+        virtual uint32_t getEvalFlags() const override;
         vector<ExpressionPtr>   list;
         bool                    returnsValue = false;
     };
@@ -421,6 +423,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual uint32_t getEvalFlags() const override;
         ExpressionPtr try_block, catch_block;
     };
     
@@ -431,6 +434,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForReturn; }
         ExpressionPtr subexpr;
     };
     
@@ -441,6 +445,7 @@ namespace yzg
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForBreak; }
     };
     
     template <typename TT, typename ExprConstExt>
@@ -517,6 +522,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
         static SimNode * simulateInit(Context & context, const VariablePtr & var, bool local);
         virtual void setBlockReturnsValue() override;
+        virtual uint32_t getEvalFlags() const override;
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
         bool                    returnsValue = false;
@@ -531,6 +537,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual uint32_t getEvalFlags() const override;
         vector<string>          iterators;
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
@@ -562,7 +569,7 @@ namespace yzg
     struct ExprMakeBlock : Expression {
         ExprMakeBlock () = default;
         ExprMakeBlock ( const LineInfo & a, ExpressionPtr b )
-            : Expression(a), block(b) { b->setBlockReturnsValue(); }
+            : Expression(a), block(b) { b->at = a; b->setBlockReturnsValue(); }
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -734,6 +741,7 @@ namespace yzg
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual uint32_t getEvalFlags() const override;
         ExpressionPtr   cond, body;
     };
     

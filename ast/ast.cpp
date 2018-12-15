@@ -1144,6 +1144,14 @@ namespace yzg
         }
     }
     
+    uint32_t ExprBlock::getEvalFlags() const {
+        uint32_t flags = 0;
+        for ( const auto & ex : list ) {
+            flags |= ex->getEvalFlags();
+        }
+        return flags;
+    }
+    
     void ExprBlock::inferType(InferTypeContext & context) {
         type.reset();
         // infer
@@ -1152,10 +1160,17 @@ namespace yzg
         }
         // block type
         if ( returnsValue && list.size() ) {
-            auto & tail = list.back();
-            if ( tail->type ) {
-                tail = autoDereference(tail);
-                type = make_shared<TypeDecl>(*tail->type);
+            uint32_t flags = getEvalFlags();
+            if ( flags & EvalFlags::stopForReturn ) {
+                context.error("captured block can't return outside of the block", at, CompilationError::invalid_block);
+            } else if ( flags & EvalFlags::stopForBreak ) {
+                context.error("captured block can't break outside of the block", at, CompilationError::invalid_block);
+            } else {
+                auto & tail = list.back();
+                if ( tail->type ) {
+                    tail = autoDereference(tail);
+                    type = make_shared<TypeDecl>(*tail->type);
+                }
             }
         }
     }
@@ -1636,6 +1651,10 @@ namespace yzg
         stream << ")";
     }
     
+    uint32_t ExprTryCatch::getEvalFlags() const {
+        return (try_block->getEvalFlags() | catch_block->getEvalFlags()) & ~EvalFlags::stopForThrow;
+    }
+    
     void ExprTryCatch::inferType(InferTypeContext & context) {
         type.reset();
         // infer
@@ -1789,6 +1808,10 @@ namespace yzg
         return cexpr;
     }
     
+    uint32_t ExprWhile::getEvalFlags() const {
+        return body->getEvalFlags() & ~EvalFlags::stopForBreak;
+    }
+    
     void ExprWhile::inferType(InferTypeContext & context) {
         type.reset();
         cond->inferType(context);
@@ -1859,6 +1882,10 @@ namespace yzg
         stream << string(depth+2, '\t');
         subexpr->log(stream, depth+2);
         stream << ")";
+    }
+    
+    uint32_t ExprFor::getEvalFlags() const {
+        return subexpr->getEvalFlags() & ~EvalFlags::stopForBreak;
     }
     
     void ExprFor::inferType(InferTypeContext & context) {
@@ -2034,6 +2061,10 @@ namespace yzg
     void ExprLet::setBlockReturnsValue() {
         returnsValue = true;
         subexpr->setBlockReturnsValue();
+    }
+    
+    uint32_t ExprLet::getEvalFlags() const {
+        return subexpr->getEvalFlags();
     }
     
     void ExprLet::inferType(InferTypeContext & context) {
