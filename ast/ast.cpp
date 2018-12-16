@@ -99,7 +99,9 @@ namespace yzg
         if ( decl.constant ) {
             stream << "const ";
         }
-        if ( decl.baseType==Type::tArray ) {
+        if ( decl.baseType==Type::tHandle ) {
+            stream << decl.annotation->name;
+        } else if ( decl.baseType==Type::tArray ) {
             if ( decl.firstType ) {
                 stream << "array (" << *decl.firstType << ")";
             } else {
@@ -1052,21 +1054,25 @@ namespace yzg
     void ExprNew::inferType(InferTypeContext & context) {
         type.reset();
         // infer
-        if ( typeexpr->baseType != Type::tStructure ) {
-            context.error("can only new structures (for now)", typeexpr->at, CompilationError::invalid_new_type);
-        } else if ( typeexpr->ref ) {
+        if ( typeexpr->ref ) {
             context.error("can't new a ref", typeexpr->at, CompilationError::invalid_new_type);
         } else if ( typeexpr->dim.size() ) {
             context.error("can only new single object", typeexpr->at, CompilationError::invalid_new_type);
-        } else {
+        } else if ( typeexpr->baseType==Type::tStructure || typeexpr->isHandle() ) {
             type = make_shared<TypeDecl>(Type::tPointer);
             type->firstType = make_shared<TypeDecl>(*typeexpr);
+        } else {
+            context.error("can only new structures or handles", typeexpr->at, CompilationError::invalid_new_type);
         }
     }
     
     SimNode * ExprNew::simulate (Context & context) const {
-        int32_t bytes = typeexpr->getSizeOf();
-        return context.makeNode<SimNode_New>(at,bytes);
+        if ( typeexpr->isHandle() ) {
+            return typeexpr->annotation->simulateGetNew(context, at);
+        } else {
+            int32_t bytes = typeexpr->getSizeOf();
+            return context.makeNode<SimNode_New>(at,bytes);
+        }
     }
 
     // ExprAt
@@ -1233,17 +1239,12 @@ namespace yzg
         value->inferType(context);
         if ( !value->type ) return;
         // infer
-        if ( value->type->isHandle() ) {
-            TypeDecl * fieldType = value->type->annotation->getField(name);
-            if ( !fieldType ) {
-                context.error("field " + name + " not found", at, CompilationError::cant_get_field);
-            } else {
-                type = make_shared<TypeDecl>(*fieldType);
-                type->constant |= value->type->constant;
-            }
-
+        TypeDecl * fieldType = nullptr;
+        auto valT = value->type;
+        if ( valT->isHandle() ) {
+            annotation = valT->annotation;
+            fieldType = annotation->getField(name);
         } else {
-            auto valT = value->type;
             if ( valT->isPointer() ) {
                 value = autoDereference(value);
             }
@@ -1256,21 +1257,26 @@ namespace yzg
             } else if ( valT->isPointer() ) {
                 if ( valT->firstType->baseType==Type::tStructure ) {
                     field = valT->firstType->structType->findField(name);
+                } else if ( valT->firstType->isHandle() ) {
+                    annotation = valT->firstType->annotation;
+                    fieldType = annotation->getField(name);
                 }
             }
-            if ( !field ) {
-                context.error("field " + name + " not found, expecting a structure or a pointer to a structure", at, CompilationError::cant_get_field);
-            } else {
-                type = make_shared<TypeDecl>(*field->type);
-                type->ref = true;
-                type->constant |= value->type->constant;
-            }
+        }
+        // handle
+        fieldType = field ? field->type.get() : fieldType;
+        if ( !fieldType ) {
+            context.error("field " + name + " not found", at, CompilationError::cant_get_field);
+        } else {
+            type = make_shared<TypeDecl>(*fieldType);
+            type->ref = true;
+            type->constant |= valT->constant;
         }
     }
     
     SimNode * ExprField::simulate (Context & context) const {
-        if ( value->type->isHandle() ) {
-            return value->type->annotation->simulateGetField(name, context, at, value->simulate(context));
+        if ( !field ) {
+            return annotation->simulateGetField(name, context, at, value->simulate(context));
         } else {
             return context.makeNode<SimNode_FieldDeref>(at,value->simulate(context),field->offset);
         }
@@ -1296,33 +1302,55 @@ namespace yzg
         value->inferType(context);
         if ( !value->type ) return;
         // infer
+        TypeDecl * fieldType = nullptr;
         auto valT = value->type;
-        if ( !valT->isPointer() || !valT->firstType || !valT->firstType->structType ) {
-            context.error("can only safe dereference a pointer to a structure " + valT->describe(),
-                at, CompilationError::cant_get_field);
+        if ( !valT->isPointer() || !valT->firstType ) {
+            context.error("can only safe dereference a pointer to a structure or handle " + valT->describe(),
+                          at, CompilationError::cant_get_field);
             return;
         }
         value = autoDereference(value);
-        if ( valT->firstType->baseType==Type::tStructure ) {
+        if ( valT->firstType->structType ) {
             field = valT->firstType->structType->findField(name);
+            fieldType = field->type.get();
+        } else if ( valT->firstType->isHandle() ) {
+            fieldType = valT->firstType->annotation->getField(name);
+            if ( !fieldType ) {
+                context.error("can't get field " + name,
+                          at, CompilationError::cant_get_field);
+            }
         }
-        if ( field->type->isPointer() ) {
+        if ( !fieldType ) {
+            context.error("can only safe dereference a pointer to a structure or handle " + valT->describe(),
+                          at, CompilationError::cant_get_field);
+            return;
+        }
+        if ( fieldType->isPointer() ) {
             skipQQ = true;
-            type = make_shared<TypeDecl>(*field->type);
+            type = make_shared<TypeDecl>(*fieldType);
             type->constant |= valT->constant;
         } else {
             skipQQ = false;
             type = make_shared<TypeDecl>(Type::tPointer);
-            type->firstType = make_shared<TypeDecl>(*field->type);
+            type->firstType = make_shared<TypeDecl>(*fieldType);
             type->constant |= valT->constant;
         }
     }
     
     SimNode * ExprSafeField::simulate (Context & context) const {
+        auto valFT = value->type->firstType;
         if ( skipQQ ) {
-            return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),field->offset);
+            if ( valFT->isHandle() ) {
+                return valFT->annotation->simulateSafeGetFieldPtr(name, context, at, value->simulate(context));
+            } else {
+                return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),field->offset);
+            }
         } else {
-            return context.makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),field->offset);
+            if ( valFT->isHandle() ) {
+                return valFT->annotation->simulateSafeGetField(name, context, at, value->simulate(context));
+            } else {
+                return context.makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),field->offset);
+            }
         }
     }
     

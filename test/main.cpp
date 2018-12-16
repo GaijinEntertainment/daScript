@@ -1,12 +1,49 @@
 #include "precomp.h"
 
 #include "ast.h"
+#include "ast_interop.h"
 #include "interop.h"
 
 #include <dirent.h>
 
 using namespace std;
 using namespace yzg;
+
+struct TestObjectFoo {
+    int fooData;
+};
+
+struct TestObjectBar {
+    TestObjectFoo * fooPtr;
+    float           barData;
+};
+
+struct TestObjectFooAnnotation : StructureTypeAnnotation<TestObjectFoo> {
+    TestObjectFooAnnotation() : StructureTypeAnnotation("TestObjectFoo") {
+        addField("fooData", offsetof(TestObjectFoo,fooData),make_shared<TypeDecl>(Type::tInt));
+    }
+};
+
+struct TestObjectBarAnnotation : StructureTypeAnnotation<TestObjectBar> {
+    TestObjectBarAnnotation(ModuleLibrary & lib) : StructureTypeAnnotation("TestObjectBar") {
+        auto fooPtr = make_shared<TypeDecl>(Type::tPointer);
+        fooPtr->firstType = lib.makeHandleType("TestObjectFoo");
+        addField("fooPtr", offsetof(TestObjectBar,fooPtr),fooPtr);
+        addField("barData", offsetof(TestObjectBar,barData),make_shared<TypeDecl>(Type::tFloat));
+    }
+};
+
+class Module_UnitTest : public Module {
+public:
+    Module_UnitTest() : Module("unitTest") {
+        ModuleLibrary lib;
+        lib.addModule(this);
+        lib.addBuiltInModule();
+        // register types
+        addHandle(make_unique<TestObjectFooAnnotation>());
+        addHandle(make_unique<TestObjectBarAnnotation>(lib));
+    }
+};
 
 bool g_reportCompilationFailErrors = false;
 
@@ -139,12 +176,15 @@ bool run_compilation_fail_tests( const string & path ) {
 
 
 int main(int argc, const char * argv[]) {
+    
+    auto module_unitTest = make_unique<Module_UnitTest>();
+    
 #if 0 // Debug this one test
     compilation_fail_test("../../test/hello_world.das");
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test("../../test/unit_tests/block.das");
+    unit_test("../../test/unit_tests/handle.das");
     return 0;
 #endif
     bool ok = true;

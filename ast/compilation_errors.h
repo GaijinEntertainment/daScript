@@ -58,6 +58,8 @@ namespace yzg
     ,   invalid_block                           =   30801       //  fn({ return; }), fn ({ break; })
         
     ,   module_not_found                        =   30901       //  require wtf
+        
+    ,   cant_new_handle                         =   31001       //  new Handle
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };

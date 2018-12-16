@@ -311,11 +311,21 @@ expr_pipe
 
 expr_new
     :   _NEW[loc] NAME[structName]   {
+        if ( auto pStructure = g_Program->findStructure(*$structName) ) {
             auto pTypeDecl = make_shared<TypeDecl>(Type::tStructure);
             pTypeDecl->structType = g_Program->findStructure(*$structName).get();
-            if ( !pTypeDecl->structType )
-                yyerror("structure type not found "+*$structName,tokAt(@loc),CompilationError::structure_not_found);
             $$ = new ExprNew(tokAt(@loc),pTypeDecl);
+        } else if ( auto pHandle = g_Program->findHandle(*$structName) ) {
+            if ( !pHandle->isNewable() ) {
+                yyerror("can't make new instance of "+*$structName,tokAt(@loc),CompilationError::cant_new_handle);
+            }
+            auto pTypeDecl = make_shared<TypeDecl>(Type::tHandle);
+            pTypeDecl->annotation = pHandle;
+            $$ = new ExprNew(tokAt(@loc),pTypeDecl);
+        } else {
+            yyerror("type not found "+*$structName,tokAt(@loc),CompilationError::structure_not_found);
+            $$ = nullptr;
+        }
     }
     ;
 

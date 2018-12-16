@@ -14,8 +14,10 @@ namespace yzg
             uint32_t    offset;
         };
         StructureTypeAnnotation(const string & n) : TypeAnnotation(n) {}
-        virtual size_t getSizeOf() const override   { return sizeof(OT); }
-        virtual bool isRefType() const override     { return true; }
+        virtual size_t getSizeOf() const override { return sizeof(OT); }
+        virtual bool isRefType() const override { return true; }
+        virtual bool isNullable() const override { return true; }
+        virtual bool isNewable() const override { return true; }
         virtual TypeDecl * getField ( const string & name ) const override {
             auto it = fields.find(name);
             return it!=fields.end() ? it->second.decl.get() : nullptr;
@@ -28,10 +30,29 @@ namespace yzg
                 return nullptr;
             }
         }
+        virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
+            return context.makeNode<SimNode_New>(at,sizeof(OT));
+        }
+        virtual SimNode * simulateSafeGetField ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
+            auto it = fields.find(name);
+            if ( it!=fields.end() ) {
+                return context.makeNode<SimNode_SafeFieldDeref>(at,value,it->second.offset);
+            } else {
+                return nullptr;
+            }
+        };
+        virtual SimNode * simulateSafeGetFieldPtr ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
+            auto it = fields.find(name);
+            if ( it!=fields.end() ) {
+                return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value,it->second.offset);
+            } else {
+                return nullptr;
+            }
+        };
         void addField ( const string & name, off_t offset, TypeDeclPtr pT ) {
             auto & field = fields[name]; assert(!field.decl && "field already exist");
             field.offset = offset;
-            field.decl = pT; pT->ref = true;
+            field.decl = pT;
         }
         map<string,StructureField> fields;
     };

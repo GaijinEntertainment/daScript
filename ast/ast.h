@@ -333,6 +333,7 @@ namespace yzg
         ExpressionPtr   value;
         string          name;
         const Structure::FieldDeclaration * field = nullptr;
+        TypeAnnotation * annotation = nullptr;
     };
     
     struct ExprSafeField : ExprField {
