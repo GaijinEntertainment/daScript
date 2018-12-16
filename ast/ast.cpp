@@ -367,6 +367,7 @@ namespace yzg
             case Type::tURange:
             case Type::tString:
             case Type::tPointer:
+                return true;
             default:
                 return false;
         }
