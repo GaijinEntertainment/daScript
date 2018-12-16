@@ -2727,7 +2727,7 @@ namespace yzg
     
     ProgramPtr g_Program;
     
-    ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext ) {
+    ProgramPtr parseDaScript ( const char * script ) {
         int err;
         auto program = g_Program = make_shared<Program>();
         yybegin(script);
@@ -2737,8 +2737,6 @@ namespace yzg
             sort(program->errors.begin(),program->errors.end());
             return program;
         } else {
-            if ( defineContext )
-                defineContext(program);
             program->inferTypes();
             sort(program->errors.begin(),program->errors.end());
             return program;

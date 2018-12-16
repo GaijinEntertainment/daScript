@@ -87,7 +87,8 @@ bool unit_test ( const string & fn ) {
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), [](const ProgramPtr & prog){}) ) {
+    t.close();
+    if ( auto program = parseDaScript(str.c_str()) ) {
         if ( program->failed() ) {
             cout << "failed to compile\n";
             for ( auto & err : program->errors ) {

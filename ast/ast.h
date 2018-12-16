@@ -868,7 +868,7 @@ namespace yzg
         map<CompilationError,int>   expectErrors;
     };
          
-    ProgramPtr parseDaScript ( const char * script, function<void (const ProgramPtr & prg)> && defineContext );
+    ProgramPtr parseDaScript ( const char * script );
 }
 
 

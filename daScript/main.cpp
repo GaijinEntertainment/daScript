@@ -18,7 +18,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), nullptr) ) {
+    if ( auto program = parseDaScript(str.c_str()) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
                 cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );

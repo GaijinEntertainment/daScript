@@ -48,7 +48,7 @@ namespace yzg
         switch ( type ) {
             case tPointer:      return sizeof(void *);          static_assert(sizeof(void *)==8, "64-bit");
             case tIterator:     return sizeof(void *);          // Iterator *
-            case tHandle:       return sizeof(void *);
+            case tHandle:       assert(0 && "we should not be here"); return sizeof(void *);
             case tString:       return sizeof(char *);
             case tBool:         return sizeof(bool);            static_assert(sizeof(bool)==1,"4 byte bool");
             case tInt64:        return sizeof(int64_t);
