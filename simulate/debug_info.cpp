@@ -185,6 +185,7 @@ namespace yzg
                                         break;
                 case Type::tStructure:  debug_structure(ss, *(char **)pX, info->structType); break;
                 case Type::tBlock:      ss << "block " << hex << intptr_t(((Block *)pX)->body) << dec;
+                case Type::tHandle:     info->annotation->debug(ss, pX); break;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }
@@ -252,7 +253,7 @@ namespace yzg
                 case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType); break;
                 case Type::tVoid:       ss << "void"; break;
                 case Type::tBlock:      ss << "block"; break;
-                case Type::tHandle:     ss << "handle"; break;
+                case Type::tHandle:     info->annotation->debug(ss, cast<void*>::to(x)); break;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }

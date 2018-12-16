@@ -22,6 +22,10 @@ struct TestObjectFooAnnotation : StructureTypeAnnotation<TestObjectFoo> {
     TestObjectFooAnnotation() : StructureTypeAnnotation("TestObjectFoo") {
         addField("fooData", offsetof(TestObjectFoo,fooData),make_shared<TypeDecl>(Type::tInt));
     }
+    virtual void debug ( stringstream & ss, void * data ) const override {
+        TestObjectFoo * of = (TestObjectFoo *) data;
+        ss << "{fooData=" << of->fooData << "}";
+    }
 };
 
 struct TestObjectBarAnnotation : StructureTypeAnnotation<TestObjectBar> {
@@ -30,6 +34,16 @@ struct TestObjectBarAnnotation : StructureTypeAnnotation<TestObjectBar> {
         fooPtr->firstType = lib.makeHandleType("TestObjectFoo");
         addField("fooPtr", offsetof(TestObjectBar,fooPtr),fooPtr);
         addField("barData", offsetof(TestObjectBar,barData),make_shared<TypeDecl>(Type::tFloat));
+    }
+    virtual void debug ( stringstream & ss, void * data ) const override {
+        TestObjectBar * ob = (TestObjectBar *) data;
+        ss << "{";
+        if ( ob->fooPtr ) {
+            ss << "fooPtr.fooData=" << ob->fooPtr->fooData;
+        } else {
+            ss << "fooPtr=null";
+        }
+        ss << ",barData=" << ob->barData << "}";
     }
 };
 

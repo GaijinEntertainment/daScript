@@ -21,6 +21,7 @@ namespace yzg {
         virtual SimNode * simulateSafeGetField ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; };
         virtual SimNode * simulateSafeGetFieldPtr ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; };
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
+        virtual void debug ( stringstream & ss, void * data ) const { ss << "handle<" << name << ">"; }
         string  name;
     };
     
