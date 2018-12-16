@@ -27,6 +27,7 @@ namespace yzg
         tURange,
         tString,
         tStructure,
+        tHandle,
         tPointer,
         tIterator,
         tArray,
@@ -35,6 +36,7 @@ namespace yzg
     };
     
     struct StructInfo;
+    struct TypeAnnotation;
     
     struct LineInfo {
         LineInfo() = default;
@@ -47,15 +49,16 @@ namespace yzg
     };
     
     struct TypeInfo {
-        Type            type;
-        StructInfo *    structType;
-        TypeInfo *      firstType;      // map  from, or array
-        TypeInfo *      secondType;     // map  to
-        uint32_t        dimSize;
-        uint32_t *      dim;
-        bool            ref;
-        bool            canCopy;
-        bool            isPod;
+        Type                type;
+        StructInfo *        structType;
+        TypeAnnotation *    annotation;
+        TypeInfo *          firstType;      // map  from, or array
+        TypeInfo *          secondType;     // map  to
+        uint32_t            dimSize;
+        uint32_t *          dim;
+        bool                ref;
+        bool                canCopy;
+        bool                isPod;
     };
     
     struct VarInfo : TypeInfo {

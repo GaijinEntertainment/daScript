@@ -6,6 +6,36 @@ namespace yzg
 {
     using namespace std;
     
+    template <typename OT>
+    struct StructureTypeAnnotation : TypeAnnotation {
+        struct StructureField {
+            string      name;
+            TypeDeclPtr decl;
+            uint32_t    offset;
+        };
+        StructureTypeAnnotation(const string & n) : TypeAnnotation(n) {}
+        virtual size_t getSizeOf() const override   { return sizeof(OT); }
+        virtual bool isRefType() const override     { return true; }
+        virtual TypeDecl * getField ( const string & name ) const override {
+            auto it = fields.find(name);
+            return it!=fields.end() ? it->second.decl.get() : nullptr;
+        }
+        virtual SimNode * simulateGetField ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
+            auto it = fields.find(name);
+            if ( it!=fields.end() ) {
+                return context.makeNode<SimNode_FieldDeref>(at,value,it->second.offset);
+            } else {
+                return nullptr;
+            }
+        }
+        void addField ( const string & name, off_t offset, TypeDeclPtr pT ) {
+            auto & field = fields[name]; assert(!field.decl && "field already exist");
+            field.offset = offset;
+            field.decl = pT; pT->ref = true;
+        }
+        map<string,StructureField> fields;
+    };
+    
     template  <typename FuncT, FuncT fn>
     class ExternalFn : public BuiltInFunction {
         template <typename ArgumentsType, size_t... I>

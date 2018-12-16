@@ -274,6 +274,7 @@ namespace yzg
     
     Module_BuiltIn::Module_BuiltIn() {
         ModuleLibrary lib;
+        lib.addModule(this);
         // pointer
         addFunctionBasic<void *,SimPolicy_Pointer>(*this,lib);
         // string

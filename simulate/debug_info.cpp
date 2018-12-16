@@ -6,6 +6,7 @@
 #include "cast.h"
 #include "runtime_string.h"
 #include "arraytype.h"
+#include "type_annotation.h"
 
 namespace yzg
 {
@@ -47,6 +48,7 @@ namespace yzg
         switch ( type ) {
             case tPointer:      return sizeof(void *);          static_assert(sizeof(void *)==8, "64-bit");
             case tIterator:     return sizeof(void *);          // Iterator *
+            case tHandle:       return sizeof(void *);
             case tString:       return sizeof(char *);
             case tBool:         return sizeof(bool);            static_assert(sizeof(bool)==1,"4 byte bool");
             case tInt64:        return sizeof(int64_t);
@@ -269,7 +271,9 @@ namespace yzg
     
     string debug_type ( TypeInfo * info ) {
         stringstream stream;
-        if ( info->type==Type::tStructure ) {
+        if ( info->type==Type::tHandle ) {
+            stream << "handle"; // TODO: << info->annotation->name << ">";
+        } else if ( info->type==Type::tStructure ) {
             stream << info->structType->name;
         } else if ( info->type==Type::tPointer ) {
             stream << debug_type(info->firstType) << " *";

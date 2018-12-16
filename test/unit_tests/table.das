@@ -21,9 +21,9 @@ def test : bool
         // debug(tab)
         i = 0
         while i < total
-            let ( pKey:int? = find(tab,string(i)))
-                if pKey!=null
-                    assert(pKey->==i)
+            let ( pValue:int? = find(tab,string(i)))
+                if pValue!=null
+                    assert(pValue->==i)
                 else
                     assert(i%7==0)
             i ++

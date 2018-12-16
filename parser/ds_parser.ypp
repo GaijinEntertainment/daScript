@@ -62,6 +62,7 @@
 %token  _TYPE   _IN     _ELIF       _ARRAY
 %token  _RETURN _NULL   _BREAK      _TRY
 %token  _WHERE  _TABLE  _EXPECT     _CONST
+%token  _REQUIRE
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -138,6 +139,26 @@ program
     |   program global_let
     |   program function_declaration
     |   program expect_declaration
+    |   program require_declaration
+    ;
+
+require_declaration
+    :   _REQUIRE require_list
+    ;
+
+require_list
+    :   require_module
+    |   require_list ',' require_module
+    ;
+
+require_module
+    :   NAME[name] {
+        if ( auto mod = ModuleLibrary::require(*$name) ) {
+            g_Program->addModule(mod);
+        } else {
+            yyerror("required module not found " + *$name,tokAt(@name),CompilationError::module_not_found);
+        }
+    }
     ;
 
 expect_declaration
@@ -538,8 +559,13 @@ structure_type_declaration
             pTD->structType = pS.get();
             pTD->at = tokAt(@name);
             $$ = pTD;
+        } else if ( auto pH = g_Program->findHandle(*$name) ) {
+            auto pTD = new TypeDecl(Type::tHandle);
+            pTD->annotation = pH;
+            pTD->at = tokAt(@name);
+            $$ = pTD;
         } else {
-            yyerror("undefined type",tokAt(@name),CompilationError::type_not_found);
+            yyerror("undefined type " + *$name,tokAt(@name),CompilationError::type_not_found);
             $$ = nullptr;
             YYABORT;
         }

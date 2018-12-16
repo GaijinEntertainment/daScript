@@ -60,6 +60,7 @@ simulate/hash.h
 simulate/hash.cpp
 simulate/debug_info.cpp
 simulate/debug_info.h
+simulate/type_annotation.h
 simulate/interop.h
 simulate/runtime_string.cpp
 simulate/runtime_string.h

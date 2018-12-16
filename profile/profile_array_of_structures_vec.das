@@ -1,6 +1,4 @@
-struct Object
-    position:float3
-    velocity:float3
+require testProfile
 
 let
     objects:Object[10000]

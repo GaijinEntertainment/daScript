@@ -149,6 +149,7 @@ namespace yzg
     TypeDecl::TypeDecl(const TypeDecl & decl) {
         baseType = decl.baseType;
         structType = decl.structType;
+        annotation = decl.annotation;
         dim = decl.dim;
         ref = decl.ref;
         constant = decl.constant;
@@ -160,12 +161,16 @@ namespace yzg
     }
     
     bool TypeDecl::canMove() const {
+        if ( baseType==Type::tHandle )
+            return annotation->canMove();
         if ( baseType==Type::tBlock )
             return false;
         return true;
     }
     
     bool TypeDecl::canCopy() const {
+        if ( baseType==Type::tHandle )
+            return annotation->canCopy();
         if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tBlock )
             return false;
         if ( baseType==Type::tStructure && structType )
@@ -178,6 +183,8 @@ namespace yzg
             return false;
         if ( baseType==Type::tStructure && structType )
             return structType->isPod();
+        if ( baseType==Type::tHandle )
+            return annotation->isPod();
         return true;
     }
     
@@ -186,7 +193,9 @@ namespace yzg
         if ( constant ) {
             ss << "#const";
         }
-        if ( baseType==Type::tArray ) {
+        if ( baseType==Type::tHandle ) {
+            ss << "#handle#" << annotation->name;
+        } else if ( baseType==Type::tArray ) {
             ss << "#array";
             if ( firstType ) {
                 ss << "#" << firstType->getMangledName();
@@ -245,6 +254,8 @@ namespace yzg
     
     bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters, bool constMatters ) const {
         if ( baseType!=decl.baseType )
+            return false;
+        if ( baseType==Type::tHandle && annotation!=decl.annotation )
             return false;
         if ( baseType==Type::tStructure && structType!=decl.structType )
             return false;
@@ -318,6 +329,10 @@ namespace yzg
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
     
+    bool TypeDecl::isHandle() const {
+        return (baseType==Type::tHandle) && (dim.size()==0);
+    }
+    
     bool TypeDecl::isSimpleType() const {
         if (    baseType==Type::none
             ||  baseType==Type::tVoid
@@ -352,7 +367,6 @@ namespace yzg
             case Type::tURange:
             case Type::tString:
             case Type::tPointer:
-                return true;
             default:
                 return false;
         }
@@ -383,10 +397,13 @@ namespace yzg
     }
     
     bool TypeDecl::isRef() const {
-        return ref || baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || dim.size();
+        return ref || isRefType();
     }
     
     bool TypeDecl::isRefType() const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->isRefType();
+        }
         return baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || dim.size();
     }
     
@@ -395,6 +412,9 @@ namespace yzg
     }
     
     int TypeDecl::getBaseSizeOf() const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->getSizeOf();
+        }
         return baseType==Type::tStructure ? structType->getSizeOf() : getTypeBaseSize(baseType);
     }
     
@@ -1212,32 +1232,47 @@ namespace yzg
         value->inferType(context);
         if ( !value->type ) return;
         // infer
-        auto valT = value->type;
-        if ( valT->isPointer() ) {
-            value = autoDereference(value);
-        }
-        if ( valT->isArray() ) {
-            context.error("can't get field of array", at, CompilationError::cant_get_field);
-            return;
-        }
-        if ( valT->baseType==Type::tStructure ) {
-            field = valT->structType->findField(name);
-        } else if ( valT->isPointer() ) {
-            if ( valT->firstType->baseType==Type::tStructure ) {
-                field = valT->firstType->structType->findField(name);
+        if ( value->type->isHandle() ) {
+            TypeDecl * fieldType = value->type->annotation->getField(name);
+            if ( !fieldType ) {
+                context.error("field " + name + " not found", at, CompilationError::cant_get_field);
+            } else {
+                type = make_shared<TypeDecl>(*fieldType);
+                type->constant |= value->type->constant;
             }
-        }
-        if ( !field ) {
-            context.error("field " + name + " not found, expecting a structure or a pointer to a structure", at, CompilationError::cant_get_field);
+
         } else {
-            type = make_shared<TypeDecl>(*field->type);
-            type->ref = true;
-            type->constant |= value->type->constant;
+            auto valT = value->type;
+            if ( valT->isPointer() ) {
+                value = autoDereference(value);
+            }
+            if ( valT->isArray() ) {
+                context.error("can't get field of array", at, CompilationError::cant_get_field);
+                return;
+            }
+            if ( valT->baseType==Type::tStructure ) {
+                field = valT->structType->findField(name);
+            } else if ( valT->isPointer() ) {
+                if ( valT->firstType->baseType==Type::tStructure ) {
+                    field = valT->firstType->structType->findField(name);
+                }
+            }
+            if ( !field ) {
+                context.error("field " + name + " not found, expecting a structure or a pointer to a structure", at, CompilationError::cant_get_field);
+            } else {
+                type = make_shared<TypeDecl>(*field->type);
+                type->ref = true;
+                type->constant |= value->type->constant;
+            }
         }
     }
     
     SimNode * ExprField::simulate (Context & context) const {
-        return context.makeNode<SimNode_FieldDeref>(at,value->simulate(context),field->offset);
+        if ( value->type->isHandle() ) {
+            return value->type->annotation->simulateGetField(name, context, at, value->simulate(context));
+        } else {
+            return context.makeNode<SimNode_FieldDeref>(at,value->simulate(context),field->offset);
+        }
     }
     
     // ExprSafeField
@@ -2253,6 +2288,10 @@ namespace yzg
 
     // program
     
+    TypeAnnotation * Program::findHandle ( const string & name ) const {
+        return library.findHandle(name);
+    }
+    
     StructurePtr Program::findStructure ( const string & name ) const {
         return library.findStructure(name);
     }
@@ -2347,7 +2386,7 @@ namespace yzg
             arguments by name?
          */
         vector<FunctionPtr> result;
-        library.foreach([&](const ModulePtr & mod) -> bool {
+        library.foreach([&](Module * mod) -> bool {
             auto itFnList = mod->functionsByName.find(name);
             if ( itFnList != mod->functionsByName.end() ) {
                 auto & goodFunctions = itFnList->second;
@@ -2368,7 +2407,7 @@ namespace yzg
             arguments by name?
          */
         vector<FunctionPtr> result;
-        library.foreach([&](const ModulePtr & mod) -> bool {
+        library.foreach([&](Module * mod) -> bool {
             auto itFnList = mod->functionsByName.find(name);
             if ( itFnList != mod->functionsByName.end() ) {
                 auto & goodFunctions = itFnList->second;
@@ -2440,6 +2479,7 @@ namespace yzg
     void Program::makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type ) {
         info->type = type->baseType;
         info->dimSize = (uint32_t) type->dim.size();
+        info->annotation = type->annotation;
         if ( info->dimSize ) {
             info->dim = (uint32_t *) context.allocate(sizeof(uint32_t) * info->dimSize );
             for ( uint32_t i=0; i != info->dimSize; ++i ) {
@@ -2520,7 +2560,7 @@ namespace yzg
         failToCompile = true;
     }
     
-    void Program::addModule ( const ModulePtr & pm ) {
+    void Program::addModule ( Module * pm ) {
         library.addModule(pm);
     }
     
@@ -2535,18 +2575,15 @@ namespace yzg
     bool Program::addFunction ( const FunctionPtr & fn ) {
         return thisModule->addFunction(fn);
     }
-
-    ModulePtr Program::builtInModule;
     
     Program::Program() {
-        thisModule = make_shared<Module>();
-        if ( !builtInModule ) builtInModule = make_shared<Module_BuiltIn>();
-        library.addModule(builtInModule);
-        library.addModule(thisModule);
+        thisModule = make_unique<Module>();
+        library.addBuiltInModule();
+        library.addModule(thisModule.get());
     }
     
     ExprLooksLikeCall * Program::makeCall ( const LineInfo & at, const string & name ) {
-        auto builtIn = static_pointer_cast<Module_BuiltIn>(builtInModule);
+        auto builtIn = static_cast<Module_BuiltIn *>(ModuleLibrary::builtInModule.get());
         auto it = builtIn->callThis.find(name);
         if ( it != builtIn->callThis.end() ) {
             return (it->second)(at);
@@ -2554,8 +2591,19 @@ namespace yzg
             return new ExprCall(at,name);
         }
     }
+
     
     // MODULE
+    
+    Module::Module ( const string & n ) : name(n) {
+        if ( !name.empty() ) {
+            ModuleLibrary::requireModules[name] = this;
+        }
+    }
+    
+    bool Module::addHandle ( unique_ptr<TypeAnnotation> && ptr ) {
+        return handleTypes.insert(make_pair(ptr->name, move(ptr))).second;
+    }
     
     bool Module::addVariable ( const VariablePtr & var ) {
         return globals.insert(make_pair(var->name, var)).second;
@@ -2589,18 +2637,49 @@ namespace yzg
         auto it = structures.find(name);
         return it != structures.end() ? it->second : StructurePtr();
     }
+    
+    TypeAnnotation * Module::findHandle ( const string & name ) const {
+        auto it = handleTypes.find(name);
+        return it != handleTypes.end() ? it->second.get() : nullptr;
+    }
 
     // MODULE LIBRARY
     
-    void ModuleLibrary::foreach ( function<bool (const ModulePtr & module)> && func ) const {
-        for ( auto & pm : modules ) {
+    unique_ptr<Module> ModuleLibrary::builtInModule;
+    map<string,Module *> ModuleLibrary::requireModules;
+    
+    void ModuleLibrary::addBuiltInModule () {
+        if ( !builtInModule ) {
+            builtInModule = make_unique<Module_BuiltIn>();
+        }
+        addModule(builtInModule.get());
+    }
+    
+    Module * ModuleLibrary::require ( const string & name ) {
+        auto it = requireModules.find(name);
+        if ( it == requireModules.end() )
+            return nullptr;
+        return it->second;
+    }
+    
+    void ModuleLibrary::foreach ( function<bool (Module * module)> && func ) const {
+        for ( auto pm : modules ) {
             if ( !func(pm) ) break;
         }
     }
     
+    TypeAnnotation * ModuleLibrary::findHandle ( const string & name ) const {
+        TypeAnnotation * ptr = nullptr;
+        foreach([&](Module * pm) -> bool {
+            ptr = pm->findHandle(name);
+            return !ptr;
+        });
+        return ptr;
+    }
+    
     VariablePtr ModuleLibrary::findVariable ( const string & name ) const {
         VariablePtr ptr;
-        foreach([&](const ModulePtr & pm) -> bool {
+        foreach([&](Module * pm) -> bool {
             ptr = pm->findVariable(name);
             return !ptr;
         });
@@ -2609,7 +2688,7 @@ namespace yzg
     
     FunctionPtr ModuleLibrary::findFunction ( const string & mangledName ) const {
         FunctionPtr ptr;
-        foreach([&](const ModulePtr & pm) -> bool {
+        foreach([&](Module * pm) -> bool {
             ptr = pm->findFunction(mangledName);
             return !ptr;
         });
@@ -2618,7 +2697,7 @@ namespace yzg
     
     StructurePtr ModuleLibrary::findStructure ( const string & name ) const {
         StructurePtr ptr;
-        foreach([&](const ModulePtr & pm) -> bool {
+        foreach([&](Module * pm) -> bool {
             ptr = pm->findStructure(name);
             return !ptr;
         });
@@ -2629,7 +2708,16 @@ namespace yzg
         auto t = make_shared<TypeDecl>(Type::tStructure);
         t->structType = findStructure(name).get();
         if ( !t->structType ) {
-            // assert(0 && "can't make structure type");
+            assert(0 && "can't make structure type");
+        }
+        return t;
+    }
+    
+    TypeDeclPtr ModuleLibrary::makeHandleType ( const string & name ) const {
+        auto t = make_shared<TypeDecl>(Type::tHandle);
+        t->annotation = findHandle(name);
+        if ( !t->annotation ) {
+            assert(0 && "can't make hanlde type");
         }
         return t;
     }

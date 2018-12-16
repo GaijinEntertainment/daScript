@@ -7,6 +7,7 @@
 #include "function_traits.h"
 #include "interop.h"
 #include "debug_info.h"
+#include "type_annotation.h"
 #include "compilation_errors.h"
 
 namespace yzg
@@ -32,7 +33,6 @@ namespace yzg
     typedef shared_ptr<TypeDecl> TypeDeclPtr;
     
     class Module;
-    typedef shared_ptr<Module> ModulePtr;
     
     class ModuleLibrary;
     
@@ -102,6 +102,7 @@ namespace yzg
         bool isRefType() const;
         bool isIndex() const;
         bool isPointer() const;
+        bool isHandle() const;
         int getSizeOf() const;
         int getBaseSizeOf() const;
         int getStride() const;
@@ -115,6 +116,7 @@ namespace yzg
         Type getRangeBaseType() const;
         Type                baseType = Type::tVoid;
         Structure *         structType = nullptr;
+        TypeAnnotation *    annotation = nullptr;
         TypeDeclPtr         firstType;      // map.first or array
         TypeDeclPtr         secondType;     // map.second
         vector<uint32_t>    dim;
@@ -179,7 +181,6 @@ namespace yzg
     __forceinline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
         return typeFactory<TT>::make(ctx);
     }
-
     
     class Structure : public enable_shared_from_this<Structure> {
     public:
@@ -777,19 +778,24 @@ namespace yzg
         CompilationError    cerr;
     };
     
-    class Module : public enable_shared_from_this<Module> {
+    class Module {
     public:
+        Module ( const string & n = "" );
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addFunction ( const FunctionPtr & fn );
+        bool addHandle ( unique_ptr<TypeAnnotation> && ptr );
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
+        TypeAnnotation * findHandle ( const string & name ) const;
     public:
+        map<string, unique_ptr<TypeAnnotation>>  handleTypes;
         map<string, StructurePtr>           structures;
         map<string, VariablePtr>            globals;
-        map<string, FunctionPtr>            functions;                  // mangled name 2 function name
+        map<string, FunctionPtr>            functions;          // mangled name 2 function name
         map<string, vector<FunctionPtr>>    functionsByName;    // all functions of the same name
+        string name;
     };
     
     class Module_BuiltIn : public Module {
@@ -806,15 +812,23 @@ namespace yzg
     };
     
     class ModuleLibrary {
+        friend class Module;
+        friend class Program;
     public:
-        void addModule ( const ModulePtr & module ) { modules.push_back(module); }
-        void foreach ( function<bool (const ModulePtr & module)> && func ) const;
+        void addBuiltInModule ();
+        void addModule ( Module * module ) { modules.push_back(module); }
+        void foreach ( function<bool (Module * module)> && func ) const;
+        TypeAnnotation * findHandle ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
+        TypeDeclPtr makeHandleType ( const string & name ) const;
+        static Module * require ( const string & name );
     protected:
-        vector<ModulePtr>   modules;
+        vector<Module *>                modules;
+        static unique_ptr<Module>       builtInModule;
+        static map<string,Module *>     requireModules;
     };
     
     class Program : public enable_shared_from_this<Program> {
@@ -824,10 +838,11 @@ namespace yzg
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
+        TypeAnnotation * findHandle ( const string & name ) const;
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addFunction ( const FunctionPtr & fn );
-        void addModule ( const ModulePtr & pm );
+        void addModule ( Module * pm );
         void inferTypes();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
@@ -844,8 +859,7 @@ namespace yzg
     public:
         map<string,StructInfo *>    sdebug;
     public:
-        static ModulePtr            builtInModule;
-        ModulePtr                   thisModule;
+        unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
         int                         totalFunctions = 0;
         vector<Error>               errors;

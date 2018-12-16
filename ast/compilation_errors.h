@@ -56,6 +56,8 @@ namespace yzg
     ,   cant_pipe                               =   30701       //  wtf <| arg
         
     ,   invalid_block                           =   30801       //  fn({ return; }), fn ({ break; })
+        
+    ,   module_not_found                        =   30901       //  require wtf
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };
