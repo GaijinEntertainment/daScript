@@ -1182,6 +1182,7 @@ namespace yzg
     void ExprBlock::inferType(InferTypeContext & context) {
         type.reset();
         // infer
+        auto sz = context.local.size();
         for ( auto & ex : list ) {
             ex->inferType(context);
         }
@@ -1200,6 +1201,7 @@ namespace yzg
                 }
             }
         }
+        context.local.resize(sz);
     }
     
     SimNode * ExprBlock::simulate (Context & context) const {
@@ -1400,7 +1402,7 @@ namespace yzg
         // global
         auto var = context.program->findVariable(name);
         if ( !var ) {
-            context.error("can't locate variable " + name, at);
+            context.error("can't locate variable " + name, at, CompilationError::variable_not_found);
         } else {
             variable = var;
             type = make_shared<TypeDecl>(*var->type);
@@ -2096,7 +2098,8 @@ namespace yzg
         Expression::clone(cexpr);
         for ( auto & var : variables )
             cexpr->variables.push_back(var->clone());
-        cexpr->subexpr = subexpr->clone();
+        if ( subexpr )
+            cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
 
@@ -2117,18 +2120,22 @@ namespace yzg
             else
                 stream << string(depth+1, '\t') << "(" << *var << ")\n";
         }
-        stream << string(depth+2, '\t');
-        subexpr->log(stream, depth+2);
+        if ( subexpr ) {
+            stream << string(depth+2, '\t');
+            subexpr->log(stream, depth+2);
+        }
         stream << ")";
     }
     
     void ExprLet::setBlockReturnsValue() {
         returnsValue = true;
-        subexpr->setBlockReturnsValue();
+        if ( subexpr ) {
+            subexpr->setBlockReturnsValue();
+        }
     }
     
     uint32_t ExprLet::getEvalFlags() const {
-        return subexpr->getEvalFlags();
+        return subexpr ? subexpr->getEvalFlags() : 0;
     }
     
     void ExprLet::inferType(InferTypeContext & context) {
@@ -2160,15 +2167,18 @@ namespace yzg
             var->stackTop = context.stackTop;
             context.stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
         }
-        subexpr->inferType(context);
+        if ( subexpr )
+            subexpr->inferType(context);
         // block type
-        if ( returnsValue && subexpr->type ) {
+        if ( returnsValue && subexpr && subexpr->type ) {
             subexpr = autoDereference(subexpr);
             type = make_shared<TypeDecl>(*subexpr->type);
         }
         context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
-        context.stackTop = sp;
-        context.local.resize(sz);
+        if ( scoped ) {
+            context.stackTop = sp;
+            context.local.resize(sz);
+        }
     }
     
     SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local) {
@@ -2200,7 +2210,7 @@ namespace yzg
                 let->list[vi++] = context.makeNode<SimNode_InitLocal>(at, var->stackTop, var->type->getSizeOf());
             }
         }
-        let->subexpr = subexpr->simulate(context);
+        let->subexpr = subexpr ? subexpr->simulate(context) : nullptr;
         return let;
     }
     

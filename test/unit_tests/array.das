@@ -1,8 +1,8 @@
 def make_test_array(a:array<int>;extra:int=0)
-    let (i:int=0)
-        resize(a,10)
-        for x in a
-            x = i++ + extra
+    let i:int=0
+    resize(a,10)
+    for x in a
+        x = i++ + extra
 
 def verify_test_array(a:array<int>;extra:int=0)
     assert(length(a)==10)

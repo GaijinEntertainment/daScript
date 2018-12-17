@@ -368,6 +368,27 @@ expression_let
         deleteVariableDeclarationList($list);
         $$ = pLet;
     }
+    |   _LET[loc] variable_declaration[decl] ';' {
+        auto pLet = new ExprLet();
+        pLet->scoped = false;
+        if ( $decl->pTypeDecl ) {
+            for ( const auto & name : *$decl->pNameList ) {
+                if ( !pLet->find(name) ) {
+                    VariablePtr pVar = make_shared<Variable>();
+                    pVar->name = name;
+                    pVar->at = $decl->at;
+                    pVar->type = make_shared<TypeDecl>(*$decl->pTypeDecl);
+                    if ( $decl->pInit )
+                    pVar->init = $decl->pInit->clone();
+                    pLet->variables.push_back(pVar);
+                } else {
+                    yyerror("local variable is already declared " + name,tokAt(@loc),CompilationError::local_variable_already_declared);
+                }
+            }
+        }
+        delete $decl;
+        $$ = pLet;
+    }
     ;
 
 expr_sizeof

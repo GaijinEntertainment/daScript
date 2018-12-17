@@ -215,7 +215,7 @@ namespace yzg
         for ( int i = 0; i!=total && !context.stopFlags; ++i )
             list[i]->eval(context);
         YZG_EXCEPTION_POINT;
-        return subexpr->eval(context);
+        return subexpr ? subexpr->eval(context) : _mm_setzero_ps();
     }
     
     // SimNode_IfThenElse

@@ -528,6 +528,7 @@ namespace yzg
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
         bool                    returnsValue = false;
+        bool                    scoped = true;
     };
     
     // for a,b in foo,bar where a>b ...

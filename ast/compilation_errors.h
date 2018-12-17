@@ -39,6 +39,7 @@ namespace yzg
     ,   structure_not_found                     =   30302       //  new wtf
     ,   operator_not_found                      =   30303       //  1 + 1.0
     ,   function_not_found                      =   30304       //  wtf(x)
+    ,   variable_not_found                      =   30305       //  wtf
         
     ,   cant_initialize                         =   30401       //  struct x=0
         
