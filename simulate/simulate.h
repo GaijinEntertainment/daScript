@@ -261,13 +261,11 @@ namespace yzg
     // FUNCTION CALL
     struct SimNode_Call : SimNode {
         SimNode_Call ( const LineInfo & at ) : SimNode(at) {}
-        __forceinline __m128 * abiArgValues ( Context & context ) const { return (__m128 *)(context.stackTop+stackTop); }
-        void evalArgs ( Context & context );
+        void evalArgs ( Context & context, __m128 * argValues );
         virtual __m128 eval ( Context & context ) override;
         SimNode ** arguments;
         int32_t  fnIndex;
         int32_t  nArguments;
-        uint32_t stackTop;
     };
     
     // CAST
@@ -298,8 +296,8 @@ namespace yzg
     struct SimNode_VecCtor : SimNode_Call {
         SimNode_VecCtor ( const LineInfo & at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
-            __m128 * argValues = abiArgValues(context);
-            evalArgs(context);
+            __m128 argValues[vecS];
+            evalArgs(context, argValues);
             if ( vecS==2 )
                 return _mm_setr_ps(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
                                    0.0f,0.0f);

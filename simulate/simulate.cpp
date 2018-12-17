@@ -39,16 +39,15 @@ namespace yzg
     
     // SimNode_Call
     
-    void SimNode_Call::evalArgs ( Context & context ) {
-        __m128 * argValues = abiArgValues(context);
+    void SimNode_Call::evalArgs ( Context & context, __m128 * argValues ) {
         for ( int i=0; i!=nArguments && !context.stopFlags; ++i ) {
             argValues[i] = arguments[i]->eval(context);
         }
     }
     
     __m128 SimNode_Call::eval ( Context & context ) {
-        __m128 * argValues = abiArgValues(context);
-        evalArgs(context);
+        __m128 argValues[nArguments];
+        evalArgs(context, argValues);
         YZG_EXCEPTION_POINT;
         return context.call(fnIndex, argValues, debug.line);
     }
@@ -304,10 +303,12 @@ namespace yzg
         char * saveISp = invokeStackTop;
         invokeStackTop = stackTop;
         stackTop = block.stackTop;
+        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
         // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
         __m128 result = block.body->eval(*this);
         invokeStackTop = saveISp;
         stackTop = saveSp;
+        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
         return result;
     }
 
@@ -323,6 +324,7 @@ namespace yzg
         char * pushStack = stackTop;
         char * pushInvokeStack = invokeStackTop;
         stackTop = top - fn.stackSize;
+        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
         invokeStackTop = nullptr;
         // cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
         // fill prologue
@@ -340,6 +342,7 @@ namespace yzg
         // POP
         invokeStackTop = pushInvokeStack;
         stackTop = pushStack;
+        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
         return result;
     }
     

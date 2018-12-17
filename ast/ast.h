@@ -724,7 +724,6 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         FunctionPtr             func;
-        uint32_t                stackTop = 0;
     };
     
     struct ExprIfThenElse : Expression {
