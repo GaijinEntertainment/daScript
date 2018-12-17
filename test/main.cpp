@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "ast_interop.h"
+#include "ast_handle.h"
 #include "interop.h"
 
 #include <dirent.h>

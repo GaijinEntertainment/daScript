@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "ast_interop.h"
+#include "ast_handle.h"
 
 #include <dirent.h>
 
@@ -13,31 +14,32 @@ struct Object {
     float3   vel;
 };
 
+typedef vector<Object> ObjectArray;
+
 __attribute__((noinline)) void updateObject ( Object * obj ) {
     obj->pos.x += obj->vel.x;
     obj->pos.y += obj->vel.y;
     obj->pos.z += obj->vel.z;
 }
 
-void updateTest ( Object objects[10000] ) {
-    for ( int i=0; i!=10000; ++i ) {
-        updateObject(objects + i);
+void updateTest ( ObjectArray * objects ) {
+    for ( auto & obj : *objects ) {
+        updateObject(&obj);
     }
 }
 
-void update10000 ( Object objects[10000], Context * context ) {
+void update10000 ( ObjectArray * objects, Context * context ) {
     int updateFn = context->findFunction("update");
-    for ( int oi=0; oi != 10000; ++oi ) {
-        __m128 args[1] = { cast<Object *>::from(objects+oi) };
+    for ( auto & obj : *objects ) {
+        __m128 args[1] = { cast<Object *>::from(&obj) };
         context->eval(updateFn,  args);
     }
 }
 
-void update10000ks ( Object objects[10000], Context * context ) {
+void update10000ks ( ObjectArray * objects, Context * context ) {
     int ksUpdateFn = context->findFunction("ks_update");
-    for ( int oi=0; oi != 10000; ++oi ) {
-        __m128 args[2] = {
-            cast<float3 *>::from(&objects[oi].pos), cast<float3>::from(objects[oi].vel) };
+    for ( auto & obj : *objects ) {
+        __m128 args[2] = { cast<float3 *>::from(&obj.pos), cast<float3>::from(obj.vel) };
         context->eval(ksUpdateFn,  args);
     }
 }
@@ -49,11 +51,17 @@ struct ObjectStructureTypeAnnotation : StructureTypeAnnotation<Object> {
     }
 };
 
-// this is how we declare type
 template <>
 struct typeFactory<Object *> {
     static TypeDeclPtr make(const ModuleLibrary & library ) {
         return library.makeHandleType("Object");
+    }
+};
+
+template <>
+struct typeFactory<ObjectArray *> {
+    static TypeDeclPtr make(const ModuleLibrary & library ) {
+        return library.makeHandleType("ObjectArray");
     }
 };
 
@@ -65,11 +73,12 @@ public:
         lib.addBuiltInModule();
         // register types
         addHandle(make_unique<ObjectStructureTypeAnnotation>());
+        addHandle(make_unique<VectorTypeAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
         // register functions
         addExtern<decltype(updateObject),updateObject>(*this,lib,"interopUpdate");
-        addExternEx<decltype(updateTest),updateTest,void,Object[10000]>(*this,lib,"interopUpdateTest");
-        addExternEx<decltype(update10000), update10000, void, Object[10000], Context *>(*this,lib,"update10000");
-        addExternEx<decltype(update10000ks), update10000ks, void, Object[10000], Context *>(*this,lib,"update10000ks");
+        addExtern<decltype(updateTest),updateTest>(*this,lib,"interopUpdateTest");
+        addExtern<decltype(update10000), update10000>(*this,lib,"update10000");
+        addExtern<decltype(update10000ks), update10000ks>(*this,lib,"update10000ks");
     }
 };
 
@@ -98,10 +107,15 @@ bool unit_test ( const string & fn ) {
             // cout << *program << "\n";
             Context ctx(&str);
             program->simulate(ctx);
+            // vector of 10000 objects
+            vector<Object> objects;
+            objects.resize(10000);
+            // run the test
             int fnTest = ctx.findFunction("test");
             if ( fnTest != -1 ) {
                 ctx.restart();
-                bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
+                __m128 args[1] = { cast<vector<Object> *>::from(&objects) };
+                bool result = cast<bool>::to(ctx.eval(fnTest, args));
                 if ( auto ex = ctx.getException() ) {
                     cout << "exception: " << ex << "\n";
                     return false;

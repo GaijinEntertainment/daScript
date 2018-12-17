@@ -37,6 +37,7 @@ ast/compilation_errors.h
 ast/ast.cpp
 ast/ast.h
 ast/ast_interop.h
+ast/ast_handle.h
 ast/builtin.cpp
 ast/builtin_runtime.cpp
 )

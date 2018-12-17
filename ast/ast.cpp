@@ -1096,6 +1096,13 @@ namespace yzg
             type = make_shared<TypeDecl>(*subexpr->type->secondType);
             type->ref = true;
             type->constant |= subexpr->type->constant;
+        } else if ( subexpr->type->isHandle() ) {
+            if ( !subexpr->type->annotation->isIndexable(index->type.get()) ) {
+                context.error("handle does not support this index type", index->at, CompilationError::invalid_index_type);
+                return;
+            }
+            type = make_shared<TypeDecl>(*subexpr->type->annotation->getIndex(index->type.get()));
+            type->constant |= subexpr->type->constant;
         } else {
             if ( !index->type->isIndex() ) {
                 context.error("index is int or uint", index->at, CompilationError::invalid_index_type);
@@ -1134,6 +1141,8 @@ namespace yzg
         } else if ( subexpr->type->isGoodArrayType() ) {
             uint32_t stride = subexpr->type->firstType->getSizeOf();
             return context.makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
+        } else if ( subexpr->type->isHandle() ) {
+            return subexpr->type->annotation->simulateGetAt(context, at, prv, pidx);
         } else {
             uint32_t stride = subexpr->type->getStride();
             uint32_t range = subexpr->type->dim.back();
@@ -1970,8 +1979,10 @@ namespace yzg
         auto sp = context.stackTop;
         auto sz = context.local.size();
         // determine iteration types
+        nativeIterators = false;
         fixedArrays = false;
         dynamicArrays = false;
+        rangeBase = false;
         fixedSize = UINT16_MAX;
         for ( auto & src : sources ) {
             src->inferType(context);
@@ -1982,6 +1993,8 @@ namespace yzg
             } else if ( src->type->isGoodArrayType() ) {
                 dynamicArrays = true;
             } else if ( src->type->isGoodIteratorType() ) {
+                nativeIterators = true;
+            } else if ( src->type->isHandle() ) {
                 nativeIterators = true;
             } else if ( src->type->isRange() ) {
                 rangeBase = true;
@@ -2005,6 +2018,8 @@ namespace yzg
             } else if ( src->type->isRange() ) {
                 pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
                 pVar->type->ref = false;
+            } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
+                pVar->type = make_shared<TypeDecl>(*src->type->annotation->getIterator());
             } else {
                 context.error("unsupported iteration type for " + pVar->name, at);
                 return;
@@ -2047,6 +2062,12 @@ namespace yzg
                     result->source_iterators[t] = context.makeNode<SimNode_RangeIterator>(
                         sources[t]->at,
                         sources[t]->simulate(context));
+                } else if ( sources[t]->type->isHandle() ) {
+                    result->source_iterators[t] = sources[t]->type->annotation->simulateGetIterator(
+                         context,
+                         sources[t]->at,
+                         sources[t]->simulate(context)
+                    );
                 } else if ( sources[t]->type->dim.size() ) {
                     result->source_iterators[t] = context.makeNode<SimNode_FixedArrayIterator>(
                         sources[t]->at,
@@ -2147,7 +2168,9 @@ namespace yzg
             if ( var->type->ref )
                 context.error("local variable can't be reference", var->at, CompilationError::invalid_variable_type);
             if ( var->type->isVoid() )
-                context.error("local variable can't be reference", var->at, CompilationError::invalid_variable_type);
+                context.error("local variable can't be void", var->at, CompilationError::invalid_variable_type);
+            if ( var->type->isHandle() && !var->type->annotation->isLocal() )
+                context.error("handled type " + var->type->annotation->name + "can't be local", var->at, CompilationError::invalid_variable_type);
             context.local.push_back(var);
             if ( var->init ) {
                 var->init->inferType(context);
@@ -2370,6 +2393,12 @@ namespace yzg
         for ( auto & it : thisModule->globals ) {
             auto pvar = it.second;
             pvar->index = gvi ++;
+            if ( pvar->type->ref )
+                error("global variable can't be reference", pvar->at, CompilationError::invalid_variable_type);
+            if ( pvar->type->isVoid() )
+                error("global variable can't be void", pvar->at, CompilationError::invalid_variable_type);
+            if ( pvar->type->isHandle() && !pvar->type->annotation->isLocal() )
+                error("handled type " + pvar->type->annotation->name + "can't be global", pvar->at, CompilationError::invalid_variable_type);
             if ( pvar->init ) {
                 Expression::InferTypeContext context;
                 pvar->init->inferType(context);
