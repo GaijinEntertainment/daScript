@@ -2320,7 +2320,7 @@ namespace yzg
             context.error("no matching function " + describe() + "\n" + candidates, at, CompilationError::function_not_found);
         } else if ( functions.size()>1 ) {
             string candidates = context.program->describeCandidates(functions);
-            context.error("too many matching functions " + describe() + "\n" + candidates, at);
+            context.error("too many matching functions " + describe() + "\n" + candidates, at, CompilationError::function_not_found);
         } else {
             func = functions[0];
             type = make_shared<TypeDecl>(*func->result);
@@ -2486,13 +2486,13 @@ namespace yzg
     }
     
     vector<FunctionPtr> Program::findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
-        /*
-         TODO:
-            arguments by name?
-         */
+        string moduleName, funcName;
+        bool inModuleOnly = splitTypeName(name, moduleName, funcName);
         vector<FunctionPtr> result;
         library.foreach([&](Module * mod) -> bool {
-            auto itFnList = mod->functionsByName.find(name);
+            if ( inModuleOnly && moduleName!=mod->name )
+                return true;
+            auto itFnList = mod->functionsByName.find(funcName);
             if ( itFnList != mod->functionsByName.end() ) {
                 auto & goodFunctions = itFnList->second;
                 result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
@@ -2503,13 +2503,13 @@ namespace yzg
     }
         
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const {
-        /*
-         TODO:
-            arguments by name?
-         */
+        string moduleName, funcName;
+        bool inModuleOnly = splitTypeName(name, moduleName, funcName);
         vector<FunctionPtr> result;
         library.foreach([&](Module * mod) -> bool {
-            auto itFnList = mod->functionsByName.find(name);
+            if ( inModuleOnly && moduleName!=mod->name )
+                return true;
+            auto itFnList = mod->functionsByName.find(funcName);
             if ( itFnList != mod->functionsByName.end() ) {
                 auto & goodFunctions = itFnList->second;
                 for ( auto & pFn : goodFunctions ) {

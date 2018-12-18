@@ -68,7 +68,7 @@ def test
     let(a,b:int)
         a <- b          // this type can't be moved         (30508)
         a = b
-    let(a:::TestObjectFoo;b:UnitTest::TestObjectFoo)
+    let(a: ::TestObjectFoo;b:UnitTest::TestObjectFoo)
         a = b           // not the same type
 
 

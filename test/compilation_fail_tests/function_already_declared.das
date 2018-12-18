@@ -5,3 +5,4 @@ def test
 
 def test
     assert(false)
+

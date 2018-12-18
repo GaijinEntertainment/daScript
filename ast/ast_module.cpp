@@ -154,6 +154,8 @@ namespace yzg
             funcName = name.substr(at+2);
             return true;
         } else {
+            moduleName = "";
+            funcName = name;
             return false;
         }
     }

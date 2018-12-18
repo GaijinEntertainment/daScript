@@ -94,7 +94,7 @@
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
-%type <s>               type_name
+%type <s>               name_in_namespace
 
 %type <pExpression>     expr
 %type <pExpression>     expr_list
@@ -116,21 +116,22 @@
 %type <pExpression>     optional_initializer
 
 /* operation precedence*/
-%left   ','
-%right  '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU SHREQU SHLEQU ANDEQU OREQU XOREQU LARROW
-%right  '?' ':'
-%left   '|'
-%left   '^'
-%left   '&'
-%left   EQUEQU NOTEQU
-%left   '<' '>' LEEQU GREQU
-%left   SHR SHL
-%left   '-' '+'
-%left   '*' '/' '%'
-%left   QQ
-%right  UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
-%left   LPIPE RPIPE LBPIPE
-%left   POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT
+%left       ','
+%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU SHREQU SHLEQU ANDEQU OREQU XOREQU LARROW
+%right      '?' ':'
+%left       '|'
+%left       '^'
+%left       '&'
+%left       EQUEQU NOTEQU
+%left       '<' '>' LEEQU GREQU
+%left       SHR SHL
+%left       '-' '+'
+%left       '*' '/' '%'
+%left       QQ
+%right      UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
+%left       LPIPE RPIPE LBPIPE
+%left       POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT
+%nonassoc   COLCOL
 
 %%
 
@@ -310,14 +311,14 @@ expr_pipe
     }
     ;
 
-type_name
-    :   NAME[name]                              { $$ = $name; }
-    |   NAME[namespace] ':' ':' NAME[name]      { *$namespace += "::"; *$namespace += *$name; delete $name; $$ = $namespace; }
-    |   ':' ':' NAME[name]                      { *$name = "::" + *$name; $$ = $name; }
+name_in_namespace
+    :   NAME[name]                             { $$ = $name; }
+    |   NAME[namespace] COLCOL NAME[name]      { *$namespace += "::"; *$namespace += *$name; delete $name; $$ = $namespace; }
+    |   COLCOL NAME[name]                      { *$name = "::" + *$name; $$ = $name; }
     ;
 
 expr_new
-    :   _NEW[loc] type_name[structName]   {
+    :   _NEW[loc] name_in_namespace[structName]   {
         auto structs = g_Program->findStructure(*$structName);
         auto handles = g_Program->findHandle(*$structName);
         if ( structs.size() && handles.size() ) {
@@ -480,8 +481,8 @@ expr
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), ExpressionPtr($subexpr), *$name); }
-    |   NAME[name] '(' ')'                       { $$ = g_Program->makeCall(tokAt(@name),*$name); }
-    |   NAME[name] '(' expr_list[arguments] ')'  { $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@name),*$name),$arguments); }
+    |   name_in_namespace[name] '(' ')'                       { $$ = g_Program->makeCall(tokAt(@name),*$name); }
+    |   name_in_namespace[name] '(' expr_list[arguments] ')'  { $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@name),*$name),$arguments); }
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
             $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),to_string($type)),$arguments);
         }
@@ -612,7 +613,7 @@ basic_type_declaration
     ;
 
 structure_type_declaration
-    :   type_name[name]  {
+    :   name_in_namespace[name]  {
         auto structs = g_Program->findStructure(*$name);
         auto handles = g_Program->findHandle(*$name);
         if ( structs.size() && handles.size() ) {

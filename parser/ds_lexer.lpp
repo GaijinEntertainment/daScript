@@ -150,6 +150,7 @@ L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yy
     nested_curly_braces ++;
     return '{';
 }
+<normal>"\:\:"                              return COLCOL;
 <normal>"\|\>"                              return RPIPE;
 <normal>\<\|[ \t\r]*\/\/.*\n                need_oxford_comma = false; unput('\n'); return LBPIPE;
 <normal>\<\|[ \t\r]*\n                      need_oxford_comma = false; unput('\n'); return LBPIPE;
