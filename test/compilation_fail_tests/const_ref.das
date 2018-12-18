@@ -1,5 +1,7 @@
+require UnitTest
+
 expect 30102:2    // invalid_return_type
-expect 30303:4    // operator_not_found
+expect 30303:5    // operator_not_found
 expect 30304:2    // function_not_found
 expect 30504:6    // cant_write_to_const
 expect 30505:2    // cant_move_to_const
@@ -23,6 +25,9 @@ def move_ar(a:array<int> const;b:array<int>)
 struct Foo
     a:int
     b:int const
+
+struct TestObjectFoo
+    a:int
 
 def setFoo(f:Foo)
     f.a = 0
@@ -63,9 +68,8 @@ def test
     let(a,b:int)
         a <- b          // this type can't be moved         (30508)
         a = b
-
-
-
+    let(a:::TestObjectFoo;b:UnitTest::TestObjectFoo)
+        a = b           // not the same type
 
 
 

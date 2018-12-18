@@ -39,21 +39,38 @@ namespace yzg
     }
     
     bool Module::addHandle ( unique_ptr<TypeAnnotation> && ptr ) {
-        return handleTypes.insert(make_pair(ptr->name, move(ptr))).second;
+        auto pp = ptr.get();
+        if ( handleTypes.insert(make_pair(ptr->name, move(ptr))).second ) {
+            pp->module = this;
+            return true;
+        } else {
+            return false;
+        }
     }
     
     bool Module::addVariable ( const VariablePtr & var ) {
-        return globals.insert(make_pair(var->name, var)).second;
+        if ( globals.insert(make_pair(var->name, var)).second ) {
+            var->module = this;
+            return true;
+        } else {
+            return false;
+        }
     }
     
     bool Module::addStructure ( const StructurePtr & st ) {
-        return structures.insert(make_pair(st->name, st)).second;
+        if ( structures.insert(make_pair(st->name, st)).second ) {
+            st->module = this;
+            return true;
+        } else {
+            return false;
+        }
     }
     
     bool Module::addFunction ( const FunctionPtr & fn ) {
         auto mangledName = fn->getMangledName();
         if ( functions.insert(make_pair(mangledName, fn)).second ) {
             functionsByName[fn->name].push_back(fn);
+            fn->module = this;
             return true;
         } else {
             // assert(0 && "can't add function");
@@ -98,12 +115,26 @@ namespace yzg
         }
     }
     
-    TypeAnnotation * ModuleLibrary::findHandle ( const string & name ) const {
-        TypeAnnotation * ptr = nullptr;
-        foreach([&](Module * pm) -> bool {
-            ptr = pm->findHandle(name);
-            return !ptr;
-        });
+    vector<TypeAnnotation *> ModuleLibrary::findHandle ( const string & name ) const {
+        vector<TypeAnnotation *> ptr;
+        string moduleName, annName;
+        if ( splitTypeName(name, moduleName, annName) ) {
+            foreach([&](Module * pm) -> bool {
+                if ( pm->name==moduleName ) {
+                    if ( auto pp = pm->findHandle(annName) )
+                        ptr.push_back(pp);
+                    return false;
+                } else {
+                    return true;
+                }
+            });
+        } else {
+            foreach([&](Module * pm) -> bool {
+                if ( auto pp = pm->findHandle(name) )
+                    ptr.push_back(pp);
+                return true;
+            });
+        }
         return ptr;
     }
     
@@ -116,28 +147,46 @@ namespace yzg
         return ptr;
     }
     
-    FunctionPtr ModuleLibrary::findFunction ( const string & mangledName ) const {
-        FunctionPtr ptr;
-        foreach([&](Module * pm) -> bool {
-            ptr = pm->findFunction(mangledName);
-            return !ptr;
-        });
-        return ptr;
+    bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
+        auto at = name.find("::");
+        if ( at!=string::npos ) {
+            moduleName = name.substr(0,at);
+            funcName = name.substr(at+2);
+            return true;
+        } else {
+            return false;
+        }
     }
     
-    StructurePtr ModuleLibrary::findStructure ( const string & name ) const {
-        StructurePtr ptr;
-        foreach([&](Module * pm) -> bool {
-            ptr = pm->findStructure(name);
-            return !ptr;
-        });
+    vector<StructurePtr> ModuleLibrary::findStructure ( const string & name ) const {
+        vector<StructurePtr> ptr;
+        string moduleName, funcName;
+        if ( splitTypeName(name, moduleName, funcName) ) {
+            foreach([&](Module * pm) -> bool {
+                if ( pm->name==moduleName ) {
+                    if ( auto pp = pm->findStructure(funcName) )
+                        ptr.push_back(pp);
+                    return false;
+                } else {
+                    return true;
+                }
+            });
+        } else {
+            foreach([&](Module * pm) -> bool {
+                if ( auto pp = pm->findStructure(name) )
+                    ptr.push_back(pp);
+                return true;
+            });
+        }
         return ptr;
     }
     
     TypeDeclPtr ModuleLibrary::makeStructureType ( const string & name ) const {
         auto t = make_shared<TypeDecl>(Type::tStructure);
-        t->structType = findStructure(name).get();
-        if ( !t->structType ) {
+        auto structs = findStructure(name);
+        if ( structs.size()==1 ) {
+            t->structType = structs.back().get();
+        } else {
             assert(0 && "can't make structure type");
         }
         return t;
@@ -145,8 +194,10 @@ namespace yzg
     
     TypeDeclPtr ModuleLibrary::makeHandleType ( const string & name ) const {
         auto t = make_shared<TypeDecl>(Type::tHandle);
-        t->annotation = findHandle(name);
-        if ( !t->annotation ) {
+        auto handles = findHandle(name);
+        if ( handles.size()==1 ) {
+            t->annotation = handles.back();
+        } else {
             assert(0 && "can't make hanlde type");
         }
         return t;

@@ -142,11 +142,11 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test("../../test/hello_world.das");
+    compilation_fail_test("../../test/compilation_fail_tests/structure_not_found.das");
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test("../../test/unit_tests/handle.das");
+    unit_test("../../test/hello_world.das");
     return 0;
 #endif
     bool ok = true;

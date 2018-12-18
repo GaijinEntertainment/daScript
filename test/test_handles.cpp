@@ -50,7 +50,7 @@ struct TestObjectBarAnnotation : StructureTypeAnnotation<TestObjectBar> {
 
 class Module_UnitTest : public Module {
 public:
-    Module_UnitTest() : Module("unitTest") {
+    Module_UnitTest() : Module("UnitTest") {
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();

@@ -1468,14 +1468,18 @@ namespace yzg
         if ( !subexpr->type ) return;
         // infer
         vector<TypeDeclPtr> types = { subexpr->type };
-        auto functions = context.program->findMatchingFunctions(to_string(op), types);
+        string name = to_string(op);
+        auto functions = context.program->findMatchingFunctions(name, types);
         if ( functions.size()==0 ) {
-            context.error("no matching operator '" + to_string(op)
+            string candidates = context.program->describeCandidates(context.program->findCandidates(name,types));
+            context.error("no matching operator '" + name
                           + "' with argument (" + subexpr->type->describe() + ")", at, CompilationError::operator_not_found);
         } else if ( functions.size()>1 ) {
-            context.error("too many matching functions", at);
+            string candidates = context.program->describeCandidates(functions);
+            context.error("too many matching operators '" + name
+                          + "' with argument (" + subexpr->type->describe() + ")", at, CompilationError::operator_not_found);
         } else {
-        func = functions[0];
+            func = functions[0];
             if ( !func->builtIn ) {
                 context.error("operator must point to built-in function every time", at);
             } else {
@@ -1522,12 +1526,18 @@ namespace yzg
             if ( !left->type->isSameType(*right->type,false) )
                 context.error("operations on incompatible pointers are prohibited", at);
         vector<TypeDeclPtr> types = { left->type, right->type };
-        auto functions = context.program->findMatchingFunctions(to_string(op), types);
+        string name = to_string(op);
+        auto functions = context.program->findMatchingFunctions(name, types);
         if ( functions.size()==0 ) {
-            context.error("no matching operator '" + to_string(op)
-                + "' with arguments (" + left->type->describe() + ", " + right->type->describe() + ")", at, CompilationError::operator_not_found);
+            string candidates = context.program->describeCandidates(context.program->findCandidates(name,types));
+            context.error("no matching operator '" + name
+                + "' with arguments (" + left->type->describe() + ", " + right->type->describe()
+                          + ")\n" + candidates, at, CompilationError::operator_not_found);
         } else if ( functions.size()>1 ) {
-            context.error("too many matching functions", at);
+            string candidates = context.program->describeCandidates(functions);
+            context.error("too many matching operators '" + name
+                          + "' with arguments (" + left->type->describe() + ", " + right->type->describe()
+                          + ")\n" + candidates, at, CompilationError::operator_not_found);
         } else {
             func = functions[0];
             if ( !func->builtIn ) {
@@ -2309,7 +2319,8 @@ namespace yzg
             string candidates = context.program->describeCandidates(context.program->findCandidates(name,types));
             context.error("no matching function " + describe() + "\n" + candidates, at, CompilationError::function_not_found);
         } else if ( functions.size()>1 ) {
-            context.error("too many matching functions " + describe(), at);
+            string candidates = context.program->describeCandidates(functions);
+            context.error("too many matching functions " + describe() + "\n" + candidates, at);
         } else {
             func = functions[0];
             type = make_shared<TypeDecl>(*func->result);
@@ -2344,20 +2355,16 @@ namespace yzg
 
     // program
     
-    TypeAnnotation * Program::findHandle ( const string & name ) const {
+    vector<TypeAnnotation *> Program::findHandle ( const string & name ) const {
         return library.findHandle(name);
     }
     
-    StructurePtr Program::findStructure ( const string & name ) const {
+    vector<StructurePtr> Program::findStructure ( const string & name ) const {
         return library.findStructure(name);
     }
     
     VariablePtr Program::findVariable ( const string & name ) const {
         return library.findVariable(name);
-    }
-    
-    FunctionPtr Program::findFunction ( const string & mangledName ) const {
-        return library.findFunction(mangledName);
     }
     
     ostream& operator<< (ostream& stream, const Program & program) {
@@ -2430,14 +2437,50 @@ namespace yzg
         }
     }
     
-    string Program::describeCandidates ( vector<FunctionPtr> result ) const {
+    string Program::describeCandidates ( const vector<FunctionPtr> & result, bool needHeader ) const {
         if ( !result.size() ) {
             return "";
         }
         stringstream ss;
-        ss << "candidates are:";
+        if ( needHeader )
+            ss << "candidates are:";
         for ( auto & fn : result ) {
-            ss << "\n\t" << fn->getMangledName();
+            ss << "\n\t";
+            if ( fn->module && !fn->module->name.empty() )
+                ss << fn->module->name << "::";
+            ss << fn->getMangledName();
+        }
+        return ss.str();
+    }
+    
+    string Program::describeCandidates ( const vector<StructurePtr> & result, bool needHeader ) const {
+        if ( !result.size() ) {
+            return "";
+        }
+        stringstream ss;
+        if ( needHeader )
+            ss << "candidates are:";
+        for ( auto & var : result ) {
+            ss << "\n\t";
+            if ( var->module && !var->module->name.empty() )
+                ss << var->module->name << "::";
+            ss << var->name;
+        }
+        return ss.str();
+    }
+    
+    string Program::describeCandidates ( const vector<TypeAnnotation *> & result, bool needHeader ) const {
+        if ( !result.size() ) {
+            return "";
+        }
+        stringstream ss;
+        if ( needHeader )
+            ss << "candidates are:";
+        for ( auto & handle : result ) {
+            ss << "\n\t";
+            if ( handle->module && !handle->module->name.empty() )
+                ss << handle->module->name << "::";
+            ss << handle->name;
         }
         return ss.str();
     }
@@ -2452,11 +2495,7 @@ namespace yzg
             auto itFnList = mod->functionsByName.find(name);
             if ( itFnList != mod->functionsByName.end() ) {
                 auto & goodFunctions = itFnList->second;
-                for ( auto & pFn : goodFunctions ) {
-                    if ( pFn->arguments.size() >= types.size() ) {
-                        result.push_back(pFn);
-                    }
-                }
+                result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
             }
             return true;
         });

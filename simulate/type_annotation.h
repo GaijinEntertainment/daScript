@@ -5,6 +5,7 @@ namespace yzg {
     struct TypeDecl;
     class Context;
     struct LineInfo;
+    class Module;
     class ModuleLibrary;
     
     struct TypeAnnotation {
@@ -30,7 +31,8 @@ namespace yzg {
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual void debug ( stringstream & ss, void * data ) const { ss << "handle<" << name << ">"; }
-        string  name;
+        string      name;
+        Module *    module = nullptr;
     };
     
 }

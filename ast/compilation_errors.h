@@ -40,6 +40,7 @@ namespace yzg
     ,   operator_not_found                      =   30303       //  1 + 1.0
     ,   function_not_found                      =   30304       //  wtf(x)
     ,   variable_not_found                      =   30305       //  wtf
+    ,   handle_not_found                        =   30306       //  external type has colliding name
         
     ,   cant_initialize                         =   30401       //  struct x=0
         

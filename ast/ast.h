@@ -182,6 +182,8 @@ namespace yzg
         return typeFactory<TT>::make(ctx);
     }
     
+    bool splitTypeName ( const string & name, string & moduleName, string & funcName );
+    
     class Structure : public enable_shared_from_this<Structure> {
     public:
         struct FieldDeclaration {
@@ -201,6 +203,7 @@ namespace yzg
         string                      name;
         vector<FieldDeclaration>    fields;
         LineInfo                    at;
+        Module *                    module = nullptr;
     };
     
     struct Variable {
@@ -212,6 +215,7 @@ namespace yzg
         LineInfo        at;
         int             index = -1;
         uint32_t        stackTop = 0;
+        Module *        module = nullptr;
     };
     
     struct Expression : enable_shared_from_this<Expression> {
@@ -764,6 +768,7 @@ namespace yzg
         int                 index = -1;
         uint32_t            totalStackSize = 0;
         LineInfo            at;
+        Module *            module = nullptr;
     };
     
     class BuiltInFunction : public Function {
@@ -842,10 +847,9 @@ namespace yzg
         void addBuiltInModule ();
         void addModule ( Module * module );
         void foreach ( function<bool (Module * module)> && func ) const;
-        TypeAnnotation * findHandle ( const string & name ) const;
+        vector<TypeAnnotation *> findHandle ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
-        FunctionPtr findFunction ( const string & mangledName ) const;
-        StructurePtr findStructure ( const string & name ) const;
+        vector<StructurePtr> findStructure ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
     protected:
@@ -857,9 +861,8 @@ namespace yzg
         Program();
         friend ostream& operator<< (ostream& stream, const Program & program);
         VariablePtr findVariable ( const string & name ) const;
-        FunctionPtr findFunction ( const string & mangledName ) const;
-        StructurePtr findStructure ( const string & name ) const;
-        TypeAnnotation * findHandle ( const string & name ) const;
+        vector<StructurePtr> findStructure ( const string & name ) const;
+        vector<TypeAnnotation *> findHandle ( const string & name ) const;
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addFunction ( const FunctionPtr & fn );
@@ -867,7 +870,9 @@ namespace yzg
         void inferTypes();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
-        string describeCandidates ( vector<FunctionPtr> vec ) const;
+        string describeCandidates ( const vector<FunctionPtr> & vec, bool needHeader = true ) const;
+        string describeCandidates ( const vector<StructurePtr> & str, bool needHeader = true ) const;
+        string describeCandidates ( const vector<TypeAnnotation *> & hnd, bool needHeader = true ) const;
         void simulate ( Context & context );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }

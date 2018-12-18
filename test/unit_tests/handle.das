@@ -1,4 +1,4 @@
-require unitTest
+require UnitTest
 
 struct TestObjectFooNative
     fooData : int
