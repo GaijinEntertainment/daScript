@@ -1,5 +1,5 @@
 expect 30801:2  // invalid_block
-expect 30304    // function_not_found
+expect 30304    // operator_not_found
 
 def take_any(b:block)
     invoke(b)
@@ -20,5 +20,5 @@ def test:bool
                 while true
                     break   // this one ok
         take_int({ a++; })
-        take_int({ b++; })  // no mtaching function ( block<float> )
+        take_int({ b++; })  // no matching function ( block<float> )
     return true

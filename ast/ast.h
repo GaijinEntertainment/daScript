@@ -782,6 +782,7 @@ namespace yzg
     class Module {
     public:
         Module ( const string & n = "" );
+        virtual ~Module();
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addFunction ( const FunctionPtr & fn );
@@ -790,6 +791,7 @@ namespace yzg
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
         TypeAnnotation * findHandle ( const string & name ) const;
+        static Module * require ( const string & name );
     public:
         map<string, unique_ptr<TypeAnnotation>>  handleTypes;
         map<string, StructurePtr>           structures;
@@ -797,7 +799,28 @@ namespace yzg
         map<string, FunctionPtr>            functions;          // mangled name 2 function name
         map<string, vector<FunctionPtr>>    functionsByName;    // all functions of the same name
         string name;
+    public:
+        static intptr_t Karma;
+    private:
+        Module * next = nullptr;
+        static Module * modules;
     };
+    
+    #define REGISTER_MODULE(ClassName) \
+        intptr_t register_##ClassName () { \
+            static ClassName module_##ClassName; \
+            return intptr_t(&module_##ClassName); \
+        }
+    
+    #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
+        intptr_t register_##ClassName () { \
+        static Namespace::ClassName module_##ClassName; \
+            return intptr_t(&module_##ClassName); \
+        }
+    
+    #define NEED_MODULE(ClassName) \
+        extern intptr_t register_##ClassName (); \
+        Module::Karma += register_##ClassName();
     
     class Module_BuiltIn : public Module {
         friend class Program;
@@ -817,7 +840,7 @@ namespace yzg
         friend class Program;
     public:
         void addBuiltInModule ();
-        void addModule ( Module * module ) { modules.push_back(module); }
+        void addModule ( Module * module );
         void foreach ( function<bool (Module * module)> && func ) const;
         TypeAnnotation * findHandle ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
@@ -825,11 +848,8 @@ namespace yzg
         StructurePtr findStructure ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
-        static Module * require ( const string & name );
     protected:
         vector<Module *>                modules;
-        static unique_ptr<Module>       builtInModule;
-        static map<string,Module *>     requireModules;
     };
     
     class Program : public enable_shared_from_this<Program> {

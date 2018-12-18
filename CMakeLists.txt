@@ -35,6 +35,7 @@ ENDIF()
 SET(AST_SRC
 ast/compilation_errors.h
 ast/ast.cpp
+ast/ast_module.cpp
 ast/ast.h
 ast/ast_interop.h
 ast/ast_handle.h
@@ -120,6 +121,7 @@ SOURCE_GROUP_FILES("test/mix" MIX_TEST_SRC)
 
 SET(TEST_MAIN_SRC
 test/main.cpp
+test/test_handles.cpp
 )
 SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)
 
@@ -139,6 +141,7 @@ SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
 profile/main.cpp
+profile/test_profile.cpp
 )
 SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)
 

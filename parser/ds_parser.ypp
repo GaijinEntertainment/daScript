@@ -153,7 +153,7 @@ require_list
 
 require_module
     :   NAME[name] {
-        if ( auto mod = ModuleLibrary::require(*$name) ) {
+        if ( auto mod = Module::require(*$name) ) {
             g_Program->addModule(mod);
         } else {
             yyerror("required module not found " + *$name,tokAt(@name),CompilationError::module_not_found);

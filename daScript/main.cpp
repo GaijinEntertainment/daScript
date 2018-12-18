@@ -74,6 +74,9 @@ int main(int argc, const char * argv[]) {
             i ++;
         }
     }
+    // register modules
+    NEED_MODULE(Module_BuiltIn);
+    // compile and run
     for ( const auto & fn : files ) {
         compile_and_run(fn, mainName, outputProgramCode);
     }

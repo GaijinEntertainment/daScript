@@ -2,6 +2,8 @@
 
 #include "ast.h"
 
+REGISTER_MODULE_IN_NAMESPACE(Module_BuiltIn,yzg);
+
 namespace yzg
 {
     template  <typename SimT, typename RetT, typename ...Args>
@@ -271,8 +273,8 @@ namespace yzg
         mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolOr<SimPolicy_Bool>, TT&, TT&, TT>  >("|=",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolXor<SimPolicy_Bool>,TT&, TT&, TT>  >("^=",     lib) );
     }
-    
-    Module_BuiltIn::Module_BuiltIn() {
+
+    Module_BuiltIn::Module_BuiltIn() : Module("$") {
         ModuleLibrary lib;
         lib.addModule(this);
         // pointer
@@ -363,11 +365,11 @@ namespace yzg
         addFunctionNumeric<uint4, SimPolicy_uVec<uint4,3>>(*this,lib);
         addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<4>,uint4,uint32_t,uint32_t,uint32_t,uint32_t>>("uint4",lib) );
         // range
-        addFunctionBasic<void *,SimPolicy_Range>(*this,lib);
+        addFunctionBasic<range,SimPolicy_Range>(*this,lib);
         addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<2>,range,int32_t,int32_t>>("range",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<2>,urange,uint32_t,uint32_t>>("urange",lib) );
         // urange
-        addFunctionBasic<void *,SimPolicy_URange>(*this,lib);
+        addFunctionBasic<urange,SimPolicy_URange>(*this,lib);
+        addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<2>,urange,uint32_t,uint32_t>>("urange",lib) );
         // RUNTIME
         addRuntime(lib);
     }
