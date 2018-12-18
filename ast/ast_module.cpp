@@ -98,6 +98,11 @@ namespace yzg
         return it != handleTypes.end() ? it->second.get() : nullptr;
     }
     
+    ExprCallFactory * Module::findCall ( const string & name ) const {
+        auto it = callThis.find(name);
+        return it != callThis.end() ? &it->second : nullptr;
+    }
+    
     // MODULE LIBRARY
     
     void ModuleLibrary::addBuiltInModule () {

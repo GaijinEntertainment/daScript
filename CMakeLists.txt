@@ -39,10 +39,17 @@ ast/ast_module.cpp
 ast/ast.h
 ast/ast_interop.h
 ast/ast_handle.h
-ast/builtin.cpp
-ast/builtin_runtime.cpp
+ast/ast_policy_types.h
 )
 SOURCE_GROUP_FILES("ast" AST_SRC)
+
+SET(BUILTIN_SRC
+builtin/module_builtin.h
+builtin/module_builtin.cpp
+builtin/module_builtin_runtime.cpp
+builtin/module_builtin_vector.cpp
+)
+SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 
 SET(MISC_SRC
 misc/enums.h
@@ -80,7 +87,7 @@ simulate/simulate.h
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
 include_directories(libDaScript PUBLIC ast misc simulate)
-ADD_LIBRARY(libDaScript ${AST_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
+ADD_LIBRARY(libDaScript ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
 ADD_PRECOMPILED_HEADER(libDaScript misc/precomp.h misc/precomp.h)
 

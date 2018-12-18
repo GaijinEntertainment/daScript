@@ -2683,12 +2683,68 @@ namespace yzg
         library.addModule(thisModule.get());
     }
     
-    ExprLooksLikeCall * Program::makeCall ( const LineInfo & at, const string & name ) {
-        auto builtIn = static_cast<Module_BuiltIn *>(Module::require("$"));
-        auto it = builtIn->callThis.find(name);
-        if ( it != builtIn->callThis.end() ) {
-            return (it->second)(at);
+    TypeDecl * Program::makeTypeDeclaration(const LineInfo &at, const string &name) {
+        auto structs = findStructure(name);
+        auto handles = findHandle(name);
+        if ( structs.size() && handles.size() ) {
+            string candidates = describeCandidates(structs);
+            candidates += describeCandidates(handles, false);
+            error("undefined type "+name + "\n" + candidates,at,CompilationError::type_not_found);
+            return nullptr;
+        } else if ( structs.size() ) {
+            if ( structs.size()==1 ) {
+                auto pTD = new TypeDecl(Type::tStructure);
+                pTD->structType = structs.back().get();
+                pTD->at = at;
+                return pTD;
+            } else {
+                string candidates = describeCandidates(structs);
+                error("too many options for "+name + "\n" + candidates,at,CompilationError::type_not_found);
+                return nullptr;
+            }
+        } else if ( handles.size() ) {
+            if ( handles.size()==1 ) {
+                auto pTD = new TypeDecl(Type::tHandle);
+                pTD->annotation = handles.back();
+                pTD->at = at;
+                return pTD;
+            } else {
+                string candidates = describeCandidates(handles);
+                error("too many options for "+name + "\n" + candidates,at,CompilationError::type_not_found);
+                return nullptr;
+            }
         } else {
+            error("undefined type " + name,at,CompilationError::type_not_found);
+            return nullptr;
+        }
+    }
+    
+    ExprLooksLikeCall * Program::makeCall ( const LineInfo & at, const string & name ) {
+        vector<ExprCallFactory *> ptr;
+        string moduleName, funcName;
+        if ( splitTypeName(name, moduleName, funcName) ) {
+            library.foreach([&](Module * pm) -> bool {
+                if ( pm->name==moduleName ) {
+                    if ( auto pp = pm->findCall(funcName) )
+                        ptr.push_back(pp);
+                    return false;
+                } else {
+                    return true;
+                }
+            });
+        } else {
+            library.foreach([&](Module * pm) -> bool {
+                if ( auto pp = pm->findCall(name) )
+                    ptr.push_back(pp);
+                return true;
+            });
+        }
+        if ( ptr.size()==1 ) {
+            return (*ptr.back())(at);
+        } else if ( ptr.size()==0 ) {
+            return new ExprCall(at,name);
+        } else {
+            error("too many options for " + name, at, CompilationError::function_not_found);
             return new ExprCall(at,name);
         }
     }
@@ -2712,5 +2768,4 @@ namespace yzg
             return program;
         }
     }
-    
 }

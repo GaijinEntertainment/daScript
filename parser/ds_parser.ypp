@@ -319,42 +319,8 @@ name_in_namespace
 
 expr_new
     :   _NEW[loc] name_in_namespace[structName]   {
-        auto structs = g_Program->findStructure(*$structName);
-        auto handles = g_Program->findHandle(*$structName);
-        if ( structs.size() && handles.size() ) {
-            string candidates = g_Program->describeCandidates(structs);
-            candidates += g_Program->describeCandidates(handles, false);
-            yyerror("can't make new instance of "+*$structName + "\n" + candidates,tokAt(@loc),CompilationError::type_not_found);
-            $$ = nullptr;
-        } else if ( structs.size() ) {
-            if ( structs.size()==1 ) {
-                auto pTypeDecl = make_shared<TypeDecl>(Type::tStructure);
-                pTypeDecl->structType = structs.back().get();
-                $$ = new ExprNew(tokAt(@loc),pTypeDecl);
-            } else {
-                string candidates = g_Program->describeCandidates(structs);
-                yyerror("can't make new instance of "+*$structName + "\n" + candidates,tokAt(@loc),CompilationError::structure_not_found);
-                $$ = nullptr;
-            }
-        } else if ( handles.size() ) {
-            if ( handles.size()==1 ) {
-                auto pHandle = handles.back();
-                if ( !pHandle->isNewable() ) {
-                    yyerror("can't make new instance of "+*$structName,tokAt(@loc),CompilationError::cant_new_handle);
-                    $$ = nullptr;
-                }
-                auto pTypeDecl = make_shared<TypeDecl>(Type::tHandle);
-                pTypeDecl->annotation = pHandle;
-                $$ = new ExprNew(tokAt(@loc),pTypeDecl);
-            } else {
-                string candidates = g_Program->describeCandidates(handles);
-                yyerror("can't make new instance of "+*$structName + "\n" + candidates,tokAt(@loc),CompilationError::handle_not_found);
-                $$ = nullptr;
-            }
-        } else {
-            yyerror("type not found "+*$structName,tokAt(@loc),CompilationError::type_not_found);
-            $$ = nullptr;
-        }
+        auto pTypeDecl = g_Program->makeTypeDeclaration(tokAt(@loc), *$structName);
+        $$ = new ExprNew(tokAt(@loc),TypeDeclPtr(pTypeDecl));
     }
     ;
 
@@ -614,42 +580,9 @@ basic_type_declaration
 
 structure_type_declaration
     :   name_in_namespace[name]  {
-        auto structs = g_Program->findStructure(*$name);
-        auto handles = g_Program->findHandle(*$name);
-        if ( structs.size() && handles.size() ) {
-            string candidates = g_Program->describeCandidates(structs);
-            candidates += g_Program->describeCandidates(handles, false);
-            yyerror("undefined type "+*$name + "\n" + candidates,tokAt(@name),CompilationError::type_not_found);
-            $$ = nullptr;
-            YYABORT;
-        } else if ( structs.size() ) {
-            if ( structs.size()==1 ) {
-                auto pTD = new TypeDecl(Type::tStructure);
-                pTD->structType = structs.back().get();
-                pTD->at = tokAt(@name);
-                $$ = pTD;
-            } else {
-                string candidates = g_Program->describeCandidates(structs);
-                yyerror("can't make new instance of "+*$name + "\n" + candidates,tokAt(@name),CompilationError::type_not_found);
-                $$ = nullptr;
-                YYABORT;
-            }
-        } else if ( handles.size() ) {
-            if ( handles.size()==1 ) {
-                auto pTD = new TypeDecl(Type::tHandle);
-                pTD->annotation = handles.back();
-                pTD->at = tokAt(@name);
-                $$ = pTD;
-            } else {
-                string candidates = g_Program->describeCandidates(handles);
-                yyerror("can't make new instance of "+*$name + "\n" + candidates,tokAt(@name),CompilationError::type_not_found);
-                $$ = nullptr;
-                YYABORT;
-            }
-        } else {
-            yyerror("undefined type " + *$name,tokAt(@name),CompilationError::type_not_found);
-            $$ = nullptr;
-            YYABORT;
+        $$ = g_Program->makeTypeDeclaration(tokAt(@name),*$name);
+        if ( !$$ ) {
+            $$ = new TypeDecl(Type::tVoid);
         }
     }
     ;

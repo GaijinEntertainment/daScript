@@ -796,13 +796,20 @@ namespace yzg
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
         TypeAnnotation * findHandle ( const string & name ) const;
+        ExprCallFactory * findCall ( const string & name ) const;
         static Module * require ( const string & name );
+    public:
+        template <typename TT>
+        __forceinline void addCall ( const string & fnName ) {
+            callThis[fnName] = [fnName](const LineInfo & at) { return new TT(at, fnName); };
+        }
     public:
         map<string, unique_ptr<TypeAnnotation>>  handleTypes;
         map<string, StructurePtr>           structures;
         map<string, VariablePtr>            globals;
         map<string, FunctionPtr>            functions;          // mangled name 2 function name
         map<string, vector<FunctionPtr>>    functionsByName;    // all functions of the same name
+        mutable map<string, ExprCallFactory>    callThis;
         string name;
     public:
         static intptr_t Karma;
@@ -826,19 +833,6 @@ namespace yzg
     #define NEED_MODULE(ClassName) \
         extern intptr_t register_##ClassName (); \
         Module::Karma += register_##ClassName();
-    
-    class Module_BuiltIn : public Module {
-        friend class Program;
-    public:
-        Module_BuiltIn();
-    protected:
-        template <typename TT>
-        __forceinline void addCall ( const string & fnName ) {
-            callThis[fnName] = [fnName](const LineInfo & at) { return new TT(at, fnName); };
-        }
-        void addRuntime(ModuleLibrary & lib);
-        map<string,ExprCallFactory> callThis;
-    };
     
     class ModuleLibrary {
         friend class Module;
@@ -877,6 +871,7 @@ namespace yzg
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
+        TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
     public:
         void makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type );
         VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );
