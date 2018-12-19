@@ -10,6 +10,7 @@
 
 void yybegin(const char * str);
 int yyparse();
+int yylex_destroy();
 
 namespace yzg
 {
@@ -2758,7 +2759,8 @@ namespace yzg
         auto program = g_Program = make_shared<Program>();
         yybegin(script);
         err = yyparse();        // TODO: add mutex or make thread safe?
-        g_Program = nullptr;
+        yylex_destroy();
+        g_Program.reset();
         if ( err || program->failed() ) {
             sort(program->errors.begin(),program->errors.end());
             return program;

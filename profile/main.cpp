@@ -68,5 +68,7 @@ int main(int argc, const char * argv[]) {
     // run tests
     unit_test("../../profile/profile_array_of_structures_vec.das");
     unit_test("../../profile/profile_try_catch.das");
+    // and done
+    Module::Shutdown();
     return 0;
 }

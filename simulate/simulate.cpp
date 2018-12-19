@@ -270,9 +270,7 @@ namespace yzg
             linearAllocator += extra;
             return oldData;
         } else {
-            void * data = allocate(size);
-            memcpy ( data, oldData, oldSize );
-            return data;
+            return allocate(size);
         }
     }
     

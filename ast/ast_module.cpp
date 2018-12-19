@@ -9,6 +9,15 @@ namespace yzg
     intptr_t Module::Karma = 0;
     Module * Module::modules = nullptr;
     
+    void Module::Shutdown() {
+        auto m = modules;
+        while ( m ) {
+            auto pM = m;
+            m = m->next;
+            delete pM;
+        }
+    }
+    
     Module * Module::require ( const string & name ) {
         for ( auto m = modules; m != nullptr; m = m->next ) {
             if ( m->name == name ) {

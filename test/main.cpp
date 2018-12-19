@@ -136,22 +136,25 @@ bool run_compilation_fail_tests( const string & path ) {
     return run_tests(path, compilation_fail_test);
 }
 
-
 int main(int argc, const char * argv[]) {
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test("../../test/compilation_fail_tests/function_already_declared.das");
+    compilation_fail_test("../../test/compilation_fail_tests/cant_index.das");
+    Module::Shutdown();
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test("../../test/hello_world.das");
+    unit_test("../../test/unit_tests/for-loop.das");
+    Module::Shutdown();
     return 0;
 #endif
     bool ok = true;
     ok = run_compilation_fail_tests("../../test/compilation_fail_tests") && ok;
     ok = run_unit_tests("../../test/unit_tests") && ok;
     cout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
+    // shutdown
+    Module::Shutdown();
     return ok ? 0 : -1;
 }

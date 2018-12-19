@@ -160,6 +160,7 @@ require_module
         } else {
             yyerror("required module not found " + *$name,tokAt(@name),CompilationError::module_not_found);
         }
+        delete $name;
     }
     ;
 
@@ -240,10 +241,11 @@ function_declaration
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
-        if ( pFunction->result->dim.size() )
+        if ( pFunction->result->dim.size() ) {
             yyerror("function " + *$name + " can't return array",tokAt(@loc),CompilationError::invalid_return_type);
-        else if ( pFunction->result->isRef())
+        } else if ( pFunction->result->isRef()) {
             yyerror("function " + *$name + " can't return reference or boxed type",tokAt(@loc),CompilationError::invalid_return_type);
+        }
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -256,7 +258,8 @@ function_declaration
                             if ( pVar->type->ref && pVar->type->isRefType() ) {
                                 yyerror("can't pass boxed type by reference",pVar->at,CompilationError::invalid_argument_type);
                             }
-                            pVar->init = ExpressionPtr(pDecl->pInit);
+                            if ( pDecl->pInit )
+                                pVar->init = ExpressionPtr(pDecl->pInit->clone());
                             pFunction->arguments.push_back(pVar);
                         } else {
                             yyerror("function argument is already declared " + name,pDecl->at,CompilationError::argument_already_declared);
@@ -264,14 +267,18 @@ function_declaration
                     }
                 }
             }
+            deleteVariableDeclarationList($list);
         }
-        if ( !g_Program->addFunction(pFunction) )
+        if ( !g_Program->addFunction(pFunction) ) {
             yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::function_already_declared);
+            pFunction.reset();
+        }
+        delete $name;
     }
     ;
 
 expression_block
-    :   '{' expressions[block] '}'      { $$ = $block; }
+    :   '{' expressions[block] '}'          { $$ = $block; }
     ;
 
 expression_any
@@ -313,7 +320,12 @@ expr_pipe
 
 name_in_namespace
     :   NAME[name]                             { $$ = $name; }
-    |   NAME[namespace] COLCOL NAME[name]      { *$namespace += "::"; *$namespace += *$name; delete $name; $$ = $namespace; }
+    |   NAME[namespace] COLCOL NAME[name]      {
+            *$namespace += "::";
+            *$namespace += *$name;
+            delete $name;
+            $$ = $namespace;
+        }
     |   COLCOL NAME[name]                      { *$name = "::" + *$name; $$ = $name; }
     ;
 
@@ -321,6 +333,7 @@ expr_new
     :   _NEW[loc] name_in_namespace[structName]   {
         auto pTypeDecl = g_Program->makeTypeDeclaration(tokAt(@loc), *$structName);
         $$ = new ExprNew(tokAt(@loc),TypeDeclPtr(pTypeDecl));
+        delete $structName;
     }
     ;
 
@@ -407,11 +420,11 @@ expr_block
 
 expr
     :   _NULL[loc]                            { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
-    |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); }
+    |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
     |   INTEGER[const]                        { $$ = new ExprConstInt(tokAt(@const),(int32_t)$const); }
     |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(@const),(uint32_t)$const); }
     |   DOUBLE[const]                         { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }
-    |   STRING[const]                         { $$ = new ExprConstString(tokAt(@const),*$const); }
+    |   STRING[const]                         { $$ = new ExprConstString(tokAt(@const),*$const); delete $const; }
     |   _TRUE[loc]                            { $$ = new ExprConstBool(tokAt(@loc),true); }
     |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }
     |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),Operator::boolNot,ExpressionPtr($subexpr)); }
@@ -445,10 +458,16 @@ expr
     |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(@loc),Operator::postDec, ExpressionPtr($subexpr)); }
     |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
-    |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); }
-    |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), ExpressionPtr($subexpr), *$name); }
-    |   name_in_namespace[name] '(' ')'                       { $$ = g_Program->makeCall(tokAt(@name),*$name); }
-    |   name_in_namespace[name] '(' expr_list[arguments] ')'  { $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@name),*$name),$arguments); }
+    |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
+    |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
+    |   name_in_namespace[name] '(' ')' {
+            $$ = g_Program->makeCall(tokAt(@name),*$name);
+            delete $name;
+        }
+    |   name_in_namespace[name] '(' expr_list[arguments] ')' {
+            $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@name),*$name),$arguments);
+            delete $name;
+        }
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
             $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),to_string($type)),$arguments);
         }
@@ -543,6 +562,7 @@ structure_declaration
         if ( !g_Program->addStructure(pStruct) )
             yyerror("structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
         deleteVariableDeclarationList($list);
+        delete($name);
     }
     ;
 
@@ -551,10 +571,12 @@ variable_name_list
         auto pSL = new vector<string>();
         pSL->push_back(*$name);
         $$ = pSL;
+        delete $name;
     }
     |   variable_name_list[list] ',' NAME[name] {
         $list->push_back(*$name);
         $$ = $list;
+        delete $name;
     }
     ;
 
@@ -584,6 +606,7 @@ structure_type_declaration
         if ( !$$ ) {
             $$ = new TypeDecl(Type::tVoid);
         }
+        delete $name;
     }
     ;
 

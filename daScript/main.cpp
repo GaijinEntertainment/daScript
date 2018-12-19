@@ -80,6 +80,8 @@ int main(int argc, const char * argv[]) {
     for ( const auto & fn : files ) {
         compile_and_run(fn, mainName, outputProgramCode);
     }
+    // and done
+    Module::Shutdown();
     return 0;
 }
 

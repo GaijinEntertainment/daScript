@@ -263,7 +263,7 @@ namespace yzg
     
     struct ExprPtr2Ref : Expression {
         ExprPtr2Ref () = default;
-        ExprPtr2Ref ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
+        ExprPtr2Ref ( const LineInfo & a, const ExpressionPtr & s ) : Expression(a), subexpr(s) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -273,7 +273,7 @@ namespace yzg
     
     struct ExprNullCoalescing : ExprPtr2Ref {
         ExprNullCoalescing () = default;
-        ExprNullCoalescing ( const LineInfo & a, ExpressionPtr s, ExpressionPtr defVal )
+        ExprNullCoalescing ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & defVal )
             : ExprPtr2Ref(a,s), defaultValue(defVal) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
@@ -294,7 +294,8 @@ namespace yzg
     
     struct ExprAt : Expression {
         ExprAt() = default;
-        ExprAt ( const LineInfo & a, ExpressionPtr s, ExpressionPtr i ) : Expression(a), subexpr(s), index(i) {}
+        ExprAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i )
+            : Expression(a), subexpr(s), index(i) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -329,7 +330,8 @@ namespace yzg
     
     struct ExprField : Expression {
         ExprField () = default;
-        ExprField ( const LineInfo & a, ExpressionPtr val, const string & n ) : Expression(a), value(val), name(n) {}
+        ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+            : Expression(a), value(val), name(n) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -342,7 +344,8 @@ namespace yzg
     
     struct ExprSafeField : ExprField {
         ExprSafeField () = default;
-        ExprSafeField ( const LineInfo & a, ExpressionPtr val, const string & n ) : ExprField(a,val,n) {}
+        ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+            : ExprField(a,val,n) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -361,7 +364,8 @@ namespace yzg
     // unary    !subexpr
     struct ExprOp1 : ExprOp {
         ExprOp1 () = default;
-        ExprOp1 ( const LineInfo & a, Operator o, ExpressionPtr s ) : ExprOp(a,o), subexpr(s) {}
+        ExprOp1 ( const LineInfo & a, Operator o, const ExpressionPtr & s )
+            : ExprOp(a,o), subexpr(s) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -373,7 +377,8 @@ namespace yzg
     // binary   left < right
     struct ExprOp2 : ExprOp {
         ExprOp2 () = default;
-        ExprOp2 ( const LineInfo & a, Operator o, ExpressionPtr l, ExpressionPtr r ) : ExprOp(a,o), left(l), right(r) {}
+        ExprOp2 ( const LineInfo & a, Operator o, const ExpressionPtr & l, const ExpressionPtr & r )
+            : ExprOp(a,o), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -385,7 +390,8 @@ namespace yzg
     // this copies one object to the other
     struct ExprCopy : ExprOp2 {
         ExprCopy () = default;
-        ExprCopy ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {};
+        ExprCopy ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
+            : ExprOp2(a, Operator::none, l, r) {};
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -395,7 +401,8 @@ namespace yzg
     // this moves one object to the other
     struct ExprMove : ExprOp2 {
         ExprMove () = default;
-        ExprMove ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {};
+        ExprMove ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
+            : ExprOp2(a, Operator::none, l, r) {};
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -405,14 +412,16 @@ namespace yzg
     // this only exists during parsing, and can't be
     // and this is why it does not have CLONE
     struct ExprSequence : ExprOp2 {
-        ExprSequence ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r ) : ExprOp2(a, Operator::none, l, r) {}
+        ExprSequence ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
+            : ExprOp2(a, Operator::none, l, r) {}
         virtual bool isSequence() const override { return true; }
     };
     
     // trinary  subexpr ? left : right
     struct ExprOp3 : ExprOp {
         ExprOp3 () = default;
-        ExprOp3 ( const LineInfo & a, Operator o, ExpressionPtr s, ExpressionPtr l, ExpressionPtr r )
+        ExprOp3 ( const LineInfo & a, Operator o, const ExpressionPtr & s,
+                 const ExpressionPtr & l, const ExpressionPtr & r )
             : ExprOp(a,o), subexpr(s), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
@@ -424,7 +433,8 @@ namespace yzg
     
     struct ExprTryCatch : Expression {
         ExprTryCatch() = default;
-        ExprTryCatch ( const LineInfo & a, ExpressionPtr t, ExpressionPtr c ) : Expression(a), try_block(t), catch_block(c) {}
+        ExprTryCatch ( const LineInfo & a, const ExpressionPtr & t, const ExpressionPtr & c )
+            : Expression(a), try_block(t), catch_block(c) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -435,7 +445,8 @@ namespace yzg
     
     struct ExprReturn : Expression {
         ExprReturn() = default;
-        ExprReturn ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
+        ExprReturn ( const LineInfo & a, const ExpressionPtr & s )
+            : Expression(a), subexpr(s) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -575,7 +586,7 @@ namespace yzg
     
     struct ExprMakeBlock : Expression {
         ExprMakeBlock () = default;
-        ExprMakeBlock ( const LineInfo & a, ExpressionPtr b )
+        ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b )
             : Expression(a), block(b) { b->at = a; b->setBlockReturnsValue(); }
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
@@ -713,7 +724,8 @@ namespace yzg
     
     struct ExprSizeOf : Expression {
         ExprSizeOf () = default;
-        ExprSizeOf ( const LineInfo & a, ExpressionPtr s ) : Expression(a), subexpr(s) {}
+        ExprSizeOf ( const LineInfo & a, const ExpressionPtr & s )
+            : Expression(a), subexpr(s) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -733,7 +745,8 @@ namespace yzg
     
     struct ExprIfThenElse : Expression {
         ExprIfThenElse () = default;
-        ExprIfThenElse ( const LineInfo & a, ExpressionPtr c, ExpressionPtr ift, ExpressionPtr iff )
+        ExprIfThenElse ( const LineInfo & a, const ExpressionPtr & c,
+                        const ExpressionPtr & ift, const ExpressionPtr & iff )
             : Expression(a), cond(c), if_true(ift), if_false(iff) {}
         virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
@@ -798,6 +811,7 @@ namespace yzg
         TypeAnnotation * findHandle ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
         static Module * require ( const string & name );
+        static void Shutdown();
     public:
         template <typename TT>
         __forceinline void addCall ( const string & fnName ) {
@@ -819,20 +833,20 @@ namespace yzg
     };
     
     #define REGISTER_MODULE(ClassName) \
-        intptr_t register_##ClassName () { \
-            static ClassName module_##ClassName; \
-            return intptr_t(&module_##ClassName); \
+        yzg::Module * register_##ClassName () { \
+            static ClassName * module_##ClassName = new ClassName(); \
+            return module_##ClassName; \
         }
     
     #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
-        intptr_t register_##ClassName () { \
-        static Namespace::ClassName module_##ClassName; \
-            return intptr_t(&module_##ClassName); \
+        yzg::Module * register_##ClassName () { \
+            static Namespace::ClassName * module_##ClassName = new Namespace::ClassName(); \
+            return module_##ClassName; \
         }
     
     #define NEED_MODULE(ClassName) \
-        extern intptr_t register_##ClassName (); \
-        Module::Karma += register_##ClassName();
+        extern yzg::Module * register_##ClassName (); \
+        Module::Karma += intptr_t(register_##ClassName());
     
     class ModuleLibrary {
         friend class Module;
