@@ -115,7 +115,7 @@ namespace yzg
     struct typeFactory {
         static TypeDeclPtr make(const ModuleLibrary &) {
             auto t = make_shared<TypeDecl>();
-            t->baseType = Type( ToBasicType<TT>::type );
+            t->baseType = Type( ToBasicType< typename remove_reference<TT>::type >::type );
             t->ref = is_reference<TT>::value;
             t->constant = is_const<TT>::value;
             return t;
@@ -125,12 +125,13 @@ namespace yzg
     template <typename TT, int dim>
     struct typeFactory<TT[dim]> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = typeFactory<TT *>::make(lib);
+            auto t = typeFactory<TT>::make(lib);
             t->dim.push_back(dim);
             t->ref = false;
             return t;
         }
     };
+
     
     template <typename TT>
     __forceinline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
