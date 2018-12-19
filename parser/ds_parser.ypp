@@ -56,13 +56,13 @@
 %token  LEXER_ERROR
 
 /* keywords */
-%token  _STRUCT _LET    _DEF        _WHILE
-%token  _IF     _ELSE   _FOR        _CATCH
-%token  _TRUE   _FALSE  _SIZEOF     _NEW
-%token  _TYPE   _IN     _ELIF       _ARRAY
-%token  _RETURN _NULL   _BREAK      _TRY
-%token  _WHERE  _TABLE  _EXPECT     _CONST
-%token  _REQUIRE
+%token  _STRUCT     _LET        _DEF        _WHILE
+%token  _IF         _ELSE       _FOR        _CATCH
+%token  _TRUE       _FALSE      _SIZEOF     _NEW
+%token  _TYPE       _IN         _ELIF       _ARRAY
+%token  _RETURN     _NULL       _BREAK      _TRY
+%token  _WHERE      _TABLE      _EXPECT     _CONST
+%token  _REQUIRE    _OPERATOR
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -95,6 +95,7 @@
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
 %type <s>               name_in_namespace
+%type <s>               function_name
 
 %type <pExpression>     expr
 %type <pExpression>     expr_list
@@ -235,8 +236,38 @@ optional_function_type
     |   ':' type_declaration[typeDecl]  { $$ = $typeDecl; $$->at = tokAt(@typeDecl); }
     ;
 
+function_name
+    :   NAME[name]        { $$ = $name; }
+    |   _OPERATOR '!'     { $$ = new string("!"); }
+    |   _OPERATOR '~'     { $$ = new string("~"); }
+    |   _OPERATOR ADDEQU  { $$ = new string("+="); }
+    |   _OPERATOR SUBEQU  { $$ = new string("-="); }
+    |   _OPERATOR MULEQU  { $$ = new string("*="); }
+    |   _OPERATOR DIVEQU  { $$ = new string("/="); }
+    |   _OPERATOR MODEQU  { $$ = new string("%="); }
+    |   _OPERATOR '+'     { $$ = new string("+"); }
+    |   _OPERATOR '-'     { $$ = new string("-"); }
+    |   _OPERATOR '*'     { $$ = new string("*"); }
+    |   _OPERATOR '/'     { $$ = new string("/"); }
+    |   _OPERATOR '%'     { $$ = new string("%"); }
+    |   _OPERATOR '<'     { $$ = new string("<"); }
+    |   _OPERATOR '>'     { $$ = new string(">"); }
+    |   _OPERATOR EQUEQU  { $$ = new string("=="); }
+    |   _OPERATOR NOTEQU  { $$ = new string("!="); }
+    |   _OPERATOR LEEQU   { $$ = new string("<="); }
+    |   _OPERATOR GREQU   { $$ = new string(">="); }
+    |   _OPERATOR '&'     { $$ = new string("&"); }
+    |   _OPERATOR '|'     { $$ = new string("|"); }
+    |   _OPERATOR '^'     { $$ = new string("^"); }
+    |   ADDADD _OPERATOR  { $$ = new string("++"); }
+    |   SUBSUB _OPERATOR  { $$ = new string("--"); }
+    |   _OPERATOR ADDADD  { $$ = new string("+++"); }
+    |   _OPERATOR SUBSUB  { $$ = new string("---"); }
+    ;
+
+
 function_declaration
-    :   _DEF[loc] NAME[name] optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
+    :   _DEF[loc] function_name[name] optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         auto pFunction = make_shared<Function>();
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);

@@ -1403,21 +1403,27 @@ namespace yzg
                           + "' with argument (" + subexpr->type->describe() + ")", at, CompilationError::operator_not_found);
         } else {
             func = functions[0];
-            if ( !func->builtIn ) {
-                context.error("operator must point to built-in function every time", at);
-            } else {
-                type = make_shared<TypeDecl>(*func->result);
-                if ( !func->arguments[0]->type->isRef() )
-                    subexpr = autoDereference(subexpr);
-            }
+            type = make_shared<TypeDecl>(*func->result);
+            if ( !func->arguments[0]->type->isRef() )
+                subexpr = autoDereference(subexpr);
         }
         constexpression = subexpr->constexpression;
     }
     
     SimNode * ExprOp1::simulate (Context & context) const {
-        auto pSimOp1 = static_cast<SimNode_Op1 *>(func->makeSimNode(context));
-        pSimOp1->x = subexpr->simulate(context);
-        return pSimOp1;
+        if ( func->builtIn ) {
+            auto pSimOp1 = static_cast<SimNode_Op1 *>(func->makeSimNode(context));
+            pSimOp1->x = subexpr->simulate(context);
+            return pSimOp1;
+        } else {
+            SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
+            pCall->debug = at;
+            pCall->fnIndex = func->index;
+            pCall->arguments = (SimNode **) context.allocate(1 * sizeof(SimNode *));
+            pCall->nArguments = 1;
+            pCall->arguments[0] = subexpr->simulate(context);
+            return pCall;
+        }
     }
     
     // ExprOp2
@@ -1462,24 +1468,31 @@ namespace yzg
                           + ")\n" + candidates, at, CompilationError::operator_not_found);
         } else {
             func = functions[0];
-            if ( !func->builtIn ) {
-                context.error("operator must point to built-in function every time", at);
-            } else {
-                type = make_shared<TypeDecl>(*func->result);
-                if ( !func->arguments[0]->type->isRef() )
-                    left = autoDereference(left);
-                if ( !func->arguments[1]->type->isRef() )
-                    right = autoDereference(right);
-            }
+            type = make_shared<TypeDecl>(*func->result);
+            if ( !func->arguments[0]->type->isRef() )
+                left = autoDereference(left);
+            if ( !func->arguments[1]->type->isRef() )
+                right = autoDereference(right);
         }
         constexpression = left->constexpression && right->constexpression;
     }
     
     SimNode * ExprOp2::simulate (Context & context) const {
-        auto pSimOp2 = static_cast<SimNode_Op2 *>(func->makeSimNode(context));
-        pSimOp2->l = left->simulate(context);
-        pSimOp2->r = right->simulate(context);
-        return pSimOp2;
+        if ( func->builtIn ) {
+            auto pSimOp2 = static_cast<SimNode_Op2 *>(func->makeSimNode(context));
+            pSimOp2->l = left->simulate(context);
+            pSimOp2->r = right->simulate(context);
+            return pSimOp2;
+        } else {
+            SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
+            pCall->debug = at;
+            pCall->fnIndex = func->index;
+            pCall->arguments = (SimNode **) context.allocate(2 * sizeof(SimNode *));
+            pCall->nArguments = 2;
+            pCall->arguments[0] = left->simulate(context);
+            pCall->arguments[1] = right->simulate(context);
+            return pCall;
+        }
     }
 
     // ExprOp3
