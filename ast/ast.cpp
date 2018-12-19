@@ -14,86 +14,6 @@ int yylex_destroy();
 
 namespace yzg
 {
-    bool g_logTypes = false;
-    
-    // operator goo
-    
-    Enum<Operator> g_opTable2 = {
-        {   Operator::r2l,          "=>"    },
-        {   Operator::p2r,          "->"    },
-        {   Operator::addEqu,       "+="    },
-        {   Operator::subEqu,       "-="    },
-        {   Operator::divEqu,       "/="    },
-        {   Operator::mulEqu,       "*="    },
-        {   Operator::modEqu,       "%="    },
-        {   Operator::eqEq,         "=="    },
-        {   Operator::lessEqu,      "<="    },
-        {   Operator::greaterEqu,   ">="    },
-        {   Operator::notEqu,       "!="    },
-        {   Operator::binNotEqu,    "~="    },
-        {   Operator::andEqu,       "&="    },
-        {   Operator::orEqu,        "|="    },
-        {   Operator::xorEqu,       "^="    },
-        {   Operator::inc,          "++"    },
-        {   Operator::dec,          "--"    },
-        {   Operator::postInc,      "+++"   },
-        {   Operator::postDec,      "---"   },
-    };
-    
-    Enum<Operator> g_opTable1 = {
-        {   Operator::at,       "@"    },
-        {   Operator::dot,      "."    },
-        {   Operator::add,      "+"    },
-        {   Operator::sub,      "-"    },
-        {   Operator::div,      "/"    },
-        {   Operator::mul,      "*"    },
-        {   Operator::mod,      "%"    },
-        {   Operator::is,       "?"    },
-        {   Operator::boolNot,  "!"    },
-        {   Operator::binNot,   "~"    },
-        {   Operator::less,     "<"    },
-        {   Operator::greater,  ">"    },
-        {   Operator::binand,   "&"    },
-        {   Operator::binor,    "|"    },
-        {   Operator::binxor,   "^"    },
-    };
-    
-    string to_string ( Operator o ) {
-        string t = g_opTable2.find(o);
-        if ( t.empty() )
-            t = g_opTable1.find(o);
-        return t;
-    }
-    
-    bool isUnaryOperator ( Operator op ) {
-        return
-            (op==Operator::add)
-        ||  (op==Operator::sub)
-        ||  (op==Operator::boolNot)
-        ||  (op==Operator::binNot)
-        ||  (op==Operator::inc)
-        ||  (op==Operator::dec)
-        ||  (op==Operator::postInc)
-        ||  (op==Operator::postDec)
-        ;
-    }
-    
-    bool isBinaryOperator ( Operator op ) {
-        return
-            (op!=Operator::is)
-        &&  (op!=Operator::boolNot)
-        &&  (op!=Operator::binNot)
-        &&  (op==Operator::inc)
-        &&  (op==Operator::dec)
-        &&  (op==Operator::postInc)
-        &&  (op==Operator::postDec)
-        ;
-    }
-    
-    bool isTrinaryOperator ( Operator op ) {
-        return (op==Operator::is);
-    }
-    
     // TypeDecl
     
     ostream& operator<< (ostream& stream, const TypeDecl & decl) {
@@ -578,8 +498,7 @@ namespace yzg
     }
     
     void Expression::logType(ostream& stream) const {
-        if ( g_logTypes )
-            stream << "$ (" << *type << ") ";
+        // stream << "$ (" << *type << ") ";
     }
     
     ostream& operator<< (ostream& stream, const Expression & expr) {
@@ -1462,7 +1381,7 @@ namespace yzg
     
     void ExprOp1::log(ostream& stream, int depth) const {
         logType(stream);
-        stream << "(" << to_string(op) << " ";
+        stream << "(" << op << " ";
         subexpr->log(stream, depth);
         stream << ")";
     }
@@ -1473,15 +1392,14 @@ namespace yzg
         if ( !subexpr->type ) return;
         // infer
         vector<TypeDeclPtr> types = { subexpr->type };
-        string name = to_string(op);
-        auto functions = context.program->findMatchingFunctions(name, types);
+        auto functions = context.program->findMatchingFunctions(op, types);
         if ( functions.size()==0 ) {
-            string candidates = context.program->describeCandidates(context.program->findCandidates(name,types));
-            context.error("no matching operator '" + name
+            string candidates = context.program->describeCandidates(context.program->findCandidates(op,types));
+            context.error("no matching operator '" + op
                           + "' with argument (" + subexpr->type->describe() + ")", at, CompilationError::operator_not_found);
         } else if ( functions.size()>1 ) {
             string candidates = context.program->describeCandidates(functions);
-            context.error("too many matching operators '" + name
+            context.error("too many matching operators '" + op
                           + "' with argument (" + subexpr->type->describe() + ")", at, CompilationError::operator_not_found);
         } else {
             func = functions[0];
@@ -1514,7 +1432,7 @@ namespace yzg
     
     void ExprOp2::log(ostream& stream, int depth) const {
         logType(stream);
-        stream << "(" << to_string(op) << " ";
+        stream << "(" << op << " ";
         left->log(stream, depth);
         stream << " ";
         right->log(stream, depth);
@@ -1531,16 +1449,15 @@ namespace yzg
             if ( !left->type->isSameType(*right->type,false) )
                 context.error("operations on incompatible pointers are prohibited", at);
         vector<TypeDeclPtr> types = { left->type, right->type };
-        string name = to_string(op);
-        auto functions = context.program->findMatchingFunctions(name, types);
+        auto functions = context.program->findMatchingFunctions(op, types);
         if ( functions.size()==0 ) {
-            string candidates = context.program->describeCandidates(context.program->findCandidates(name,types));
-            context.error("no matching operator '" + name
+            string candidates = context.program->describeCandidates(context.program->findCandidates(op,types));
+            context.error("no matching operator '" + op
                 + "' with arguments (" + left->type->describe() + ", " + right->type->describe()
                           + ")\n" + candidates, at, CompilationError::operator_not_found);
         } else if ( functions.size()>1 ) {
             string candidates = context.program->describeCandidates(functions);
-            context.error("too many matching operators '" + name
+            context.error("too many matching operators '" + op
                           + "' with arguments (" + left->type->describe() + ", " + right->type->describe()
                           + ")\n" + candidates, at, CompilationError::operator_not_found);
         } else {
@@ -1578,7 +1495,7 @@ namespace yzg
     
     void ExprOp3::log(ostream& stream, int depth) const {
         logType(stream);
-        stream << "(" << to_string(op) << " ";
+        stream << "(" << op << " ";
         subexpr->log(stream, depth);
         stream << " ";
         left->log(stream, depth);
@@ -1594,7 +1511,7 @@ namespace yzg
         right->inferType(context);
         if ( !subexpr->type || !left->type || !right->type ) return;
         // infer
-        if ( op!=Operator::is ) {
+        if ( op!="?" ) {
             context.error("Op3 currently only supports 'is'", at, CompilationError::operator_not_found);
             return;
         }

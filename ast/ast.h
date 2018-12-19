@@ -36,51 +36,6 @@ namespace yzg
     
     class ModuleLibrary;
     
-    enum class Operator {
-        none,
-        // 2-char
-        r2l,
-        p2r,
-        addEqu,
-        subEqu,
-        divEqu,
-        mulEqu,
-        modEqu,
-        andEqu,
-        orEqu,
-        xorEqu,
-        eqEq,
-        lessEqu,
-        greaterEqu,
-        notEqu,
-        binNotEqu,
-        inc,
-        dec,
-        postInc,
-        postDec,
-        // 1-char
-        at,         // @
-        dot,        // .
-        binand,
-        binor,
-        binxor,
-        add,
-        sub,
-        div,
-        mul,
-        mod,
-        is,         // ?
-        boolNot,    // !
-        binNot,     // ~
-        less,
-        greater
-    };
-    
-    string to_string ( Operator op );
-    bool isUnaryOperator ( Operator op );
-    bool isBinaryOperator ( Operator op );
-    bool isTrinaryOperator ( Operator op );
-    
     struct TypeDecl : enable_shared_from_this<TypeDecl> {
         TypeDecl() = default;
         TypeDecl(const TypeDecl & decl);
@@ -355,16 +310,16 @@ namespace yzg
     
     struct ExprOp : Expression {
         ExprOp () = default;
-        ExprOp ( const LineInfo & a, Operator o ) : Expression(a), op(o) {}
+        ExprOp ( const LineInfo & a, const string & o ) : Expression(a), op(o) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        Operator        op;
-        FunctionPtr     func;   // always built-in function
+        string      op;
+        FunctionPtr func;   // always built-in function
     };
     
     // unary    !subexpr
     struct ExprOp1 : ExprOp {
         ExprOp1 () = default;
-        ExprOp1 ( const LineInfo & a, Operator o, const ExpressionPtr & s )
+        ExprOp1 ( const LineInfo & a, const string & o, const ExpressionPtr & s )
             : ExprOp(a,o), subexpr(s) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
@@ -377,7 +332,7 @@ namespace yzg
     // binary   left < right
     struct ExprOp2 : ExprOp {
         ExprOp2 () = default;
-        ExprOp2 ( const LineInfo & a, Operator o, const ExpressionPtr & l, const ExpressionPtr & r )
+        ExprOp2 ( const LineInfo & a, const string & o, const ExpressionPtr & l, const ExpressionPtr & r )
             : ExprOp(a,o), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
@@ -391,7 +346,7 @@ namespace yzg
     struct ExprCopy : ExprOp2 {
         ExprCopy () = default;
         ExprCopy ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, Operator::none, l, r) {};
+            : ExprOp2(a, "=", l, r) {};
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -402,7 +357,7 @@ namespace yzg
     struct ExprMove : ExprOp2 {
         ExprMove () = default;
         ExprMove ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, Operator::none, l, r) {};
+            : ExprOp2(a, "<-", l, r) {};
         virtual void inferType(InferTypeContext & context) override;
         virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -413,14 +368,14 @@ namespace yzg
     // and this is why it does not have CLONE
     struct ExprSequence : ExprOp2 {
         ExprSequence ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, Operator::none, l, r) {}
+            : ExprOp2(a, ",", l, r) {}
         virtual bool isSequence() const override { return true; }
     };
     
     // trinary  subexpr ? left : right
     struct ExprOp3 : ExprOp {
         ExprOp3 () = default;
-        ExprOp3 ( const LineInfo & a, Operator o, const ExpressionPtr & s,
+        ExprOp3 ( const LineInfo & a, const string & o, const ExpressionPtr & s,
                  const ExpressionPtr & l, const ExpressionPtr & r )
             : ExprOp(a,o), subexpr(s), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;

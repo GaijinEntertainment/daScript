@@ -427,35 +427,35 @@ expr
     |   STRING[const]                         { $$ = new ExprConstString(tokAt(@const),*$const); delete $const; }
     |   _TRUE[loc]                            { $$ = new ExprConstBool(tokAt(@loc),true); }
     |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }
-    |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),Operator::boolNot,ExpressionPtr($subexpr)); }
-    |   '~'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),Operator::binNot,ExpressionPtr($subexpr)); }
-    |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),Operator::add,ExpressionPtr($subexpr)); }
-    |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),Operator::sub,ExpressionPtr($subexpr)); }
+    |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),"!",ExpressionPtr($subexpr)); }
+    |   '~'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),"~",ExpressionPtr($subexpr)); }
+    |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),"+",ExpressionPtr($subexpr)); }
+    |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),"-",ExpressionPtr($subexpr)); }
     |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '='[loc]    expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
-    |   expr[left] ADDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::addEqu, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] SUBEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::subEqu, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] MULEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::mulEqu, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] DIVEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::divEqu, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] MODEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::modEqu, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '+'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::add, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '-'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::sub, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '*'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::mul, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '/'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::div, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '%'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::mod, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '<'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::less, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '>'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::greater, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] EQUEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::eqEq, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] NOTEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::notEqu, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] LEEQU[loc]  expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::lessEqu, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] GREQU[loc]  expr[right]   { $$ = new ExprOp2(tokAt(@loc),Operator::greaterEqu, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '&'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),Operator::binand, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '|'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),Operator::binor, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '^'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),Operator::binxor, ExpressionPtr($left), ExpressionPtr($right)); }
-    |   ADDADD[loc] expr[subexpr] %prec PRE_INC  { $$ = new ExprOp1(tokAt(@loc),Operator::inc, ExpressionPtr($subexpr)); }
-    |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokAt(@loc),Operator::dec, ExpressionPtr($subexpr)); }
-    |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokAt(@loc),Operator::postInc, ExpressionPtr($subexpr)); }
-    |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(@loc),Operator::postDec, ExpressionPtr($subexpr)); }
+    |   expr[left] ADDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] SUBEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"-=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] MULEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] DIVEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"/=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] MODEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"%=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '+'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '-'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"-", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '*'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '/'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"/", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '%'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"%", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '<'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"<", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '>'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),">", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] EQUEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"==", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] NOTEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"!=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] LEEQU[loc]  expr[right]   { $$ = new ExprOp2(tokAt(@loc),"<=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] GREQU[loc]  expr[right]   { $$ = new ExprOp2(tokAt(@loc),">=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '&'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),"&", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '|'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),"|", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] '^'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),"^", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   ADDADD[loc] expr[subexpr] %prec PRE_INC  { $$ = new ExprOp1(tokAt(@loc),"++", ExpressionPtr($subexpr)); }
+    |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokAt(@loc),"--", ExpressionPtr($subexpr)); }
+    |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokAt(@loc),"+++", ExpressionPtr($subexpr)); }
+    |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(@loc),"---", ExpressionPtr($subexpr)); }
     |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
@@ -474,7 +474,7 @@ expr
     |   expr[subexpr] RARROW[loc]               { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   expr[subexpr] QQ[loc] expr[dval]        { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
-            $$ = new ExprOp3(tokAt(@loc),Operator::is,ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
+            $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
         }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
