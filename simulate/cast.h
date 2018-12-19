@@ -17,6 +17,12 @@ namespace yzg
         static __forceinline __m128 from ( TT * p )             { __m128 x; ((TT **)&x)[0] = p; return x; }
     };
     
+    template <typename TT>
+    struct cast <TT &> {
+        static __forceinline TT & to ( __m128 a )               { return *((TT **)&a)[0]; }
+        static __forceinline __m128 from ( TT & p )             { __m128 x; ((TT **)&x)[0] = &p; return x; }
+    };
+    
     template <>
     struct cast <string> {
         static __forceinline string to ( __m128 x )             { return cast<char *>::to(x); }

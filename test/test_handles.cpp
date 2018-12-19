@@ -15,7 +15,7 @@ struct TestObjectFoo {
 };
 
 template <>
-struct typeFactory<TestObjectFoo *> {
+struct typeFactory<TestObjectFoo> {
     static TypeDeclPtr make(const ModuleLibrary & library ) {
         return library.makeHandleType("TestObjectFoo");
     }
@@ -27,7 +27,7 @@ struct TestObjectBar {
 };
 
 template <>
-struct typeFactory<TestObjectBar *> {
+struct typeFactory<TestObjectBar> {
     static TypeDeclPtr make(const ModuleLibrary & library ) {
         return library.makeHandleType("TestObjectBar");
     }
@@ -62,8 +62,12 @@ struct TestObjectBarAnnotation : StructureTypeAnnotation<TestObjectBar> {
     }
 };
 
-void testFoo ( TestObjectFoo * foo ) {
-    foo->fooData = 1234;
+void testFoo ( TestObjectFoo & foo ) {
+    foo.fooData = 1234;
+}
+
+void testAdd ( int & a, int b ) {
+    a += b;
 }
 
 class Module_UnitTest : public Module {
@@ -77,6 +81,7 @@ public:
         addHandle(make_unique<TestObjectBarAnnotation>(lib));
         // register function
         addExtern<decltype(testFoo), testFoo>(*this, lib, "testFoo");
+        addExtern<decltype(testAdd), testAdd>(*this, lib, "testAdd");
     }
 };
 

@@ -18,26 +18,20 @@ namespace yzg
             return &ctx;
         }
     };
-    
-    // convert arguments into a tuple of appropriate types
-    template <typename ArgumentsType, size_t... I>
-    __forceinline auto cast_args ( Context & ctx, __m128 * args, index_sequence<I...> ) {
-        return make_tuple( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
-    }
 
     template <typename Result>
     struct ImplCallStaticFunction {
-        template <typename FunctionType, typename TupleType, size_t... I>
-        static __forceinline __m128 call(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
-            return cast<Result>::from ( fn(get<I>(forward<TupleType>(args))...) );
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline __m128 call(FunctionType & fn, Context & ctx, __m128 * args, index_sequence<I...> ) {
+            return cast<Result>::from ( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ) );
         }
     };
     
     template <>
     struct ImplCallStaticFunction<void> {
-        template <typename FunctionType, typename TupleType, size_t... I>
-        static __forceinline __m128 call(FunctionType & fn, TupleType && args, index_sequence<I...> ) {
-            fn(get<I>(forward<TupleType>(args))...);
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline __m128 call(FunctionType & fn, Context & ctx, __m128 * args, index_sequence<I...> ) {
+            fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
             return _mm_setzero_ps();
         }
     };
@@ -48,13 +42,12 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;
             using Result = typename FunctionTrait::return_type;
-            const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
-            using Indices = make_index_sequence<nargs>;
             using Arguments = typename FunctionTrait::arguments;
+            const int nargs = tuple_size<Arguments>::value;
+            using Indices = make_index_sequence<nargs>;
             __m128 args[nArguments];
             evalArgs(context, args);
             YZG_EXCEPTION_POINT;
-            auto cpp_args = cast_args<Arguments>(context, args, Indices());
         #if YZG_ENABLE_STACK_WALK
             // PUSH
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
@@ -76,7 +69,7 @@ namespace yzg
             pp->line =          debug.line;
         #endif
             // calc
-            auto res = ImplCallStaticFunction<Result>::call(*fn, move(cpp_args), Indices());
+            auto res = ImplCallStaticFunction<Result>::template call<FuncT,Arguments>(*fn, context, args, Indices());
             // POP
         #if YZG_ENABLE_STACK_WALK
             context.invokeStackTop = pushInvokeStack;

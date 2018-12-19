@@ -1,3 +1,5 @@
+require UnitTest
+
 def interval(t1,t2:clock):float
     return t2 - t1
 
@@ -13,4 +15,7 @@ def test:bool
         assert(a1 <= a2)
         dt = interval(a1,a2)
         print("dt = " + string(dt) + "\n")
+    let(a,b:int=2)
+        testAdd(a,b)
+        assert(a==4)
     return true
