@@ -1,11 +1,10 @@
-basic version took: 0.000347
-c++ version took: 0.000019
-interop version took: 0.000164
-interop 10000 version took: 0.000296
-interop 10000-ks version took: 0.000130
-ratio sim/c++: 18.437344
-ratio interop/c++: 8.728056
-ratio interop-10000/c++: 15.735978
-ratio interop-10000-ks/c++: 6.903238
-try-catch took: 0.000118
-Program ended with exit code: 0
+basic version took: 0.000337
+c++ version took: 0.000017
+interop version took: 0.000163
+interop 10000 version took: 0.000282
+interop 10000-ks version took: 0.000126
+ratio sim/c++: 19.769917
+ratio interop/c++: 9.551928
+ratio interop-10000/c++: 16.559032
+ratio interop-10000-ks/c++: 7.400457
+try-catch took: 0.000117

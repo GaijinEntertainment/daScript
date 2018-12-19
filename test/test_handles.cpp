@@ -77,8 +77,8 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
         // register types
-        addHandle(make_unique<TestObjectFooAnnotation>());
-        addHandle(make_unique<TestObjectBarAnnotation>(lib));
+        addHandle(make_shared<TestObjectFooAnnotation>());
+        addHandle(make_shared<TestObjectBarAnnotation>(lib));
         // register function
         addExtern<decltype(testFoo), testFoo>(*this, lib, "testFoo");
         addExtern<decltype(testAdd), testAdd>(*this, lib, "testAdd");

@@ -47,10 +47,9 @@ namespace yzg
         }
     }
     
-    bool Module::addHandle ( unique_ptr<TypeAnnotation> && ptr ) {
-        auto pp = ptr.get();
+    bool Module::addHandle ( const TypeAnnotationPtr & ptr ) {
         if ( handleTypes.insert(make_pair(ptr->name, move(ptr))).second ) {
-            pp->module = this;
+            ptr->module = this;
             return true;
         } else {
             return false;
@@ -102,9 +101,9 @@ namespace yzg
         return it != structures.end() ? it->second : StructurePtr();
     }
     
-    TypeAnnotation * Module::findHandle ( const string & name ) const {
+    TypeAnnotationPtr Module::findHandle ( const string & name ) const {
         auto it = handleTypes.find(name);
-        return it != handleTypes.end() ? it->second.get() : nullptr;
+        return it != handleTypes.end() ? it->second : nullptr;
     }
     
     ExprCallFactory * Module::findCall ( const string & name ) const {
@@ -129,8 +128,8 @@ namespace yzg
         }
     }
     
-    vector<TypeAnnotation *> ModuleLibrary::findHandle ( const string & name ) const {
-        vector<TypeAnnotation *> ptr;
+    vector<TypeAnnotationPtr> ModuleLibrary::findHandle ( const string & name ) const {
+        vector<TypeAnnotationPtr> ptr;
         string moduleName, annName;
         if ( splitTypeName(name, moduleName, annName) ) {
             foreach([&](Module * pm) -> bool {
@@ -201,7 +200,7 @@ namespace yzg
         auto t = make_shared<TypeDecl>(Type::tStructure);
         auto structs = findStructure(name);
         if ( structs.size()==1 ) {
-            t->structType = structs.back().get();
+            t->structType = structs.back();
         } else {
             assert(0 && "can't make structure type");
         }

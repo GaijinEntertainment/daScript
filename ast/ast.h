@@ -70,9 +70,9 @@ namespace yzg
         bool isConst() const;
         Type getRangeBaseType() const;
         Type                baseType = Type::tVoid;
-        Structure *         structType = nullptr;
-        TypeAnnotation *    annotation = nullptr;
-        TypeDeclPtr         firstType;      // map.first or array
+        StructurePtr        structType;
+        TypeAnnotationPtr   annotation;
+        TypeDeclPtr         firstType;      // map.first or array, or pointer
         TypeDeclPtr         secondType;     // map.second
         vector<uint32_t>    dim;
         bool                ref = false;
@@ -768,11 +768,11 @@ namespace yzg
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addFunction ( const FunctionPtr & fn );
-        bool addHandle ( unique_ptr<TypeAnnotation> && ptr );
+        bool addHandle ( const TypeAnnotationPtr & ptr );
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
-        TypeAnnotation * findHandle ( const string & name ) const;
+        TypeAnnotationPtr findHandle ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
         static Module * require ( const string & name );
         static void Shutdown();
@@ -782,11 +782,11 @@ namespace yzg
             callThis[fnName] = [fnName](const LineInfo & at) { return new TT(at, fnName); };
         }
     public:
-        map<string, unique_ptr<TypeAnnotation>>  handleTypes;
-        map<string, StructurePtr>           structures;
-        map<string, VariablePtr>            globals;
-        map<string, FunctionPtr>            functions;          // mangled name 2 function name
-        map<string, vector<FunctionPtr>>    functionsByName;    // all functions of the same name
+        map<string, TypeAnnotationPtr>          handleTypes;
+        map<string, StructurePtr>               structures;
+        map<string, VariablePtr>                globals;
+        map<string, FunctionPtr>                functions;          // mangled name 2 function name
+        map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
         mutable map<string, ExprCallFactory>    callThis;
         string name;
     public:
@@ -819,7 +819,7 @@ namespace yzg
         void addBuiltInModule ();
         void addModule ( Module * module );
         void foreach ( function<bool (Module * module)> && func ) const;
-        vector<TypeAnnotation *> findHandle ( const string & name ) const;
+        vector<TypeAnnotationPtr> findHandle ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
@@ -834,7 +834,7 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const Program & program);
         VariablePtr findVariable ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
-        vector<TypeAnnotation *> findHandle ( const string & name ) const;
+        vector<TypeAnnotationPtr> findHandle ( const string & name ) const;
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addFunction ( const FunctionPtr & fn );
@@ -844,7 +844,7 @@ namespace yzg
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
         string describeCandidates ( const vector<FunctionPtr> & vec, bool needHeader = true ) const;
         string describeCandidates ( const vector<StructurePtr> & str, bool needHeader = true ) const;
-        string describeCandidates ( const vector<TypeAnnotation *> & hnd, bool needHeader = true ) const;
+        string describeCandidates ( const vector<TypeAnnotationPtr> & hnd, bool needHeader = true ) const;
         void simulate ( Context & context );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }

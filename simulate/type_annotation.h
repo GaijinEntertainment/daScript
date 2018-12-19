@@ -36,5 +36,6 @@ namespace yzg {
         string      name;
         Module *    module = nullptr;
     };
+    typedef shared_ptr<TypeAnnotation> TypeAnnotationPtr;
     
 }

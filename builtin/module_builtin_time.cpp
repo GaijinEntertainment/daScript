@@ -48,7 +48,7 @@ namespace yzg {
     }
     
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
-        addHandle(make_unique<ClockTypeAnnotation>());
+        addHandle(make_shared<ClockTypeAnnotation>());
         addExtern<decltype(builtin_clock),builtin_clock>(*this, lib, "getClock");
         addExtern<decltype(builtin_clockToString),builtin_clockToString>(*this, lib, "string");
         // clock operators

@@ -1177,7 +1177,7 @@ namespace yzg
         TypeDecl * fieldType = nullptr;
         auto valT = value->type;
         if ( valT->isHandle() ) {
-            annotation = valT->annotation;
+            annotation = valT->annotation.get();
             fieldType = annotation->getField(name);
         } else {
             if ( valT->isPointer() ) {
@@ -1193,7 +1193,7 @@ namespace yzg
                 if ( valT->firstType->baseType==Type::tStructure ) {
                     field = valT->firstType->structType->findField(name);
                 } else if ( valT->firstType->isHandle() ) {
-                    annotation = valT->firstType->annotation;
+                    annotation = valT->firstType->annotation.get();
                     fieldType = annotation->getField(name);
                 }
             }
@@ -2279,7 +2279,7 @@ namespace yzg
 
     // program
     
-    vector<TypeAnnotation *> Program::findHandle ( const string & name ) const {
+    vector<TypeAnnotationPtr> Program::findHandle ( const string & name ) const {
         return library.findHandle(name);
     }
     
@@ -2393,7 +2393,7 @@ namespace yzg
         return ss.str();
     }
     
-    string Program::describeCandidates ( const vector<TypeAnnotation *> & result, bool needHeader ) const {
+    string Program::describeCandidates ( const vector<TypeAnnotationPtr> & result, bool needHeader ) const {
         if ( !result.size() ) {
             return "";
         }
@@ -2504,7 +2504,7 @@ namespace yzg
     void Program::makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type ) {
         info->type = type->baseType;
         info->dimSize = (uint32_t) type->dim.size();
-        info->annotation = type->annotation;
+        info->annotation = type->annotation.get();
         if ( info->dimSize ) {
             info->dim = (uint32_t *) context.allocate(sizeof(uint32_t) * info->dimSize );
             for ( uint32_t i=0; i != info->dimSize; ++i ) {
@@ -2618,7 +2618,7 @@ namespace yzg
         } else if ( structs.size() ) {
             if ( structs.size()==1 ) {
                 auto pTD = new TypeDecl(Type::tStructure);
-                pTD->structType = structs.back().get();
+                pTD->structType = structs.back();
                 pTD->at = at;
                 return pTD;
             } else {
