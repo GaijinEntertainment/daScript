@@ -1,17 +1,16 @@
-def foo
-    assert(true)
-
-def foo(a:int)
-    debug(a)
-
-def add(a,b:int):int
-    return a+b
-
-def add(a:int&;b:int):int
-    return a+b
+def interval(t1,t2:clock):float
+    return t2 - t1
 
 def test:bool
-    let a:int = 1;
-    foo(a,1)
-    add(a,1)
+    let(a1,a2:clock;dt:float)
+        a1 = getClock()
+        print(string(a1)+"\n")
+        for z in range(0,30000) // ~1 sec on my laptop
+            let(a,b:int[1000])
+                for x,y in a,b
+                    x += y
+        a2 = getClock()
+        assert(a1 <= a2)
+        dt = interval(a1,a2)
+        print("dt = " + string(dt) + "\n")
     return true

@@ -126,5 +126,23 @@ namespace yzg
         }
         TypeDeclPtr vecType;
     };
+    
+    template <typename OT>
+    struct ValueTypeAnnoation : TypeAnnotation {
+        static_assert(sizeof(OT)<=sizeof(__m128), "value types have to fit in ABI");
+        ValueTypeAnnoation(const string & n) : TypeAnnotation(n) {}
+        virtual bool isLocal() const override { return true; }
+        virtual size_t getSizeOf() const override { return sizeof(OT); }
+        virtual bool isRefType() const override { return false; }
+        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+            return context.makeNode<SimNode_CopyValue<OT>>(at, l, r);
+        }
+        virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const override {
+            return context.makeNode<SimNode_Ref2Value<OT>>(at, l);
+        }
+        virtual void debug ( stringstream & ss, void * data ) const override {
+            ss << (* (OT*)data);
+        }
+    };
 }
 

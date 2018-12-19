@@ -65,6 +65,8 @@ namespace yzg
         addVectorTypes(lib);
         // RUNTIME
         addRuntime(lib);
+        // TIME
+        addTime(lib);
     }
 }
 

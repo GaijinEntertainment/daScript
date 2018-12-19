@@ -24,9 +24,11 @@ namespace yzg {
         virtual TypeDecl * getField ( const string & ) const { return nullptr; }
         virtual TypeDecl * getIndex ( TypeDecl * ) const { return nullptr; }
         virtual TypeDecl * getIterator () const { return nullptr; }
-        virtual SimNode * simulateGetField ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; };
-        virtual SimNode * simulateSafeGetField ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; };
-        virtual SimNode * simulateSafeGetFieldPtr ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; };
+        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const { return nullptr; }
+        virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const { return nullptr; }
+        virtual SimNode * simulateGetField ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateSafeGetField ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateSafeGetFieldPtr ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }

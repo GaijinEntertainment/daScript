@@ -29,27 +29,35 @@ namespace  yzg {
     };
     
     template <typename TT>
-    struct SimPolicy_Type : SimPolicy_CoreType<TT> {
-        // numeric
+    struct SimPolicy_GroupByAdd : SimPolicy_CoreType<TT> {
         static __forceinline __m128 Unp ( __m128 x, Context & ) { return x; }
         static __forceinline __m128 Unm ( __m128 x, Context & ) { return cast<TT>::from( -cast<TT>::to(x)); }
-        static __forceinline __m128 Inc ( __m128 x, Context & ) { (*cast<TT*>::to(x))++; return x; }
-        static __forceinline __m128 Dec ( __m128 x, Context & ) { (*cast<TT*>::to(x))--; return x; }
-        static __forceinline __m128 IncPost ( __m128 x, Context & ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X++); }
-        static __forceinline __m128 DecPost ( __m128 x, Context & ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X--); }
         static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)+cast<TT>::to(b)); }
         static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)-cast<TT>::to(b)); }
-        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)/cast<TT>::to(b)); }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)*cast<TT>::to(b)); }
         static __forceinline __m128 SetAdd  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) += cast<TT>::to(b); return a; }
         static __forceinline __m128 SetSub  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) -= cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) *= cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) /= cast<TT>::to(b); return a; }
+    };
+    
+    template <typename TT>
+    struct SimPolicy_Ordered {
         // ordered
         static __forceinline __m128 LessEqu ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)<=cast<TT>::to(b));  }
         static __forceinline __m128 GtEqu   ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)>=cast<TT>::to(b));  }
         static __forceinline __m128 Less    ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)<cast<TT>::to(b));  }
         static __forceinline __m128 Gt      ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<TT>::to(a)>cast<TT>::to(b));  }
+    };
+    
+    template <typename TT>
+    struct SimPolicy_Type : SimPolicy_GroupByAdd<TT>, SimPolicy_Ordered<TT> {
+        // numeric
+        static __forceinline __m128 Inc ( __m128 x, Context & ) { (*cast<TT*>::to(x))++; return x; }
+        static __forceinline __m128 Dec ( __m128 x, Context & ) { (*cast<TT*>::to(x))--; return x; }
+        static __forceinline __m128 IncPost ( __m128 x, Context & ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X++); }
+        static __forceinline __m128 DecPost ( __m128 x, Context & ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X--); }
+        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)/cast<TT>::to(b)); }
+        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)*cast<TT>::to(b)); }
+        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) *= cast<TT>::to(b); return a; }
+        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) /= cast<TT>::to(b); return a; }
     };
     
     struct SimPolicy_Bool : SimPolicy_CoreType<bool> {
@@ -120,10 +128,21 @@ namespace  yzg {
         mod.addFunction( make_shared<BuiltInFn<Sim_SetAdd<SimPolicy_TT>,     TT&,  TT&, TT>  >("+=",     lib) );
     }
     
+    // group by add
+    template <typename TT, typename SimPolicy_TT>
+    void addFunctionGroupByAdd(Module & mod, const ModuleLibrary & lib, bool hasMod = true) {
+        addFunctionConcat<TT,SimPolicy_TT>(mod,lib);
+        //                                    policy                        ret   arg1 arg2    name
+        mod.addFunction( make_shared<BuiltInFn<Sim_Unp<SimPolicy_TT>,        TT,   TT>       >("+",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Unm<SimPolicy_TT>,        TT,   TT>       >("-",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Sub<SimPolicy_TT>,        TT,   TT,  TT>  >("-",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     TT&,  TT&, TT>  >("-=",     lib) );
+    }
+    
     // numeric types
     template <typename TT, typename SimPolicy_TT>
     void addFunctionNumeric(Module & mod, const ModuleLibrary & lib, bool hasMod = true) {
-        addFunctionConcat<TT,SimPolicy_TT>(mod,lib);
+        addFunctionGroupByAdd<TT,SimPolicy_TT>(mod,lib);
         //                                    policy                        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Unp<SimPolicy_TT>,        TT,   TT>       >("+",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Unm<SimPolicy_TT>,        TT,   TT>       >("-",      lib) );

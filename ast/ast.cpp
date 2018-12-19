@@ -618,7 +618,11 @@ namespace yzg
     }
     
     SimNode * ExprRef2Value::simulate (Context & context) const {
-        return context.makeValueNode<SimNode_Ref2Value>(type->baseType, at, subexpr->simulate(context));
+        if ( type->isHandle() ) {
+            return type->annotation->simulateRef2Value(context, at, subexpr->simulate(context));
+        } else {
+            return context.makeValueNode<SimNode_Ref2Value>(type->baseType, at, subexpr->simulate(context));
+        }
     }
     
     // ExprPtr2Ref
@@ -1623,6 +1627,8 @@ namespace yzg
         assert ( rightType.canCopy() && "should check above" );
         if ( rightType.isRef() ) {
             return context.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+        } else if ( rightType.isHandle() ) {
+            return rightType.annotation->simulateCopy(context, at, left, right);
         } else {
             return context.makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
@@ -2181,7 +2187,7 @@ namespace yzg
             if ( var->type->isVoid() )
                 context.error("local variable can't be void", var->at, CompilationError::invalid_variable_type);
             if ( var->type->isHandle() && !var->type->annotation->isLocal() )
-                context.error("handled type " + var->type->annotation->name + "can't be local", var->at, CompilationError::invalid_variable_type);
+                context.error("handled type " + var->type->annotation->name + " can't be local", var->at, CompilationError::invalid_variable_type);
             context.local.push_back(var);
             if ( var->init ) {
                 var->init->inferType(context);

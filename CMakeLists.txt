@@ -48,6 +48,7 @@ builtin/module_builtin.h
 builtin/module_builtin.cpp
 builtin/module_builtin_runtime.cpp
 builtin/module_builtin_vector.cpp
+builtin/module_builtin_time.cpp
 )
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 

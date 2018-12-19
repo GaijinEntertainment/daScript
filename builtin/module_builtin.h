@@ -9,5 +9,6 @@ namespace yzg {
     protected:
         void addRuntime(ModuleLibrary & lib);
         void addVectorTypes(ModuleLibrary & lib);
+        void addTime(ModuleLibrary & lib);
     };
 }
