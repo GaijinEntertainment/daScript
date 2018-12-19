@@ -51,6 +51,7 @@
     TypeDecl                        *pTypeDecl;
     Expression                      *pExpression;
     Type                            type;
+    TypeAnnotation *                annotation;
 }
 
 %token  LEXER_ERROR
@@ -96,6 +97,7 @@
 %type <pVarDecl>        variable_declaration
 %type <s>               name_in_namespace
 %type <s>               function_name
+%type <annotation>      optional_annotation
 
 %type <pExpression>     expr
 %type <pExpression>     expr_list
@@ -568,8 +570,28 @@ global_let
     }
     ;
 
+optional_annotation
+    :   { $$ = nullptr; }
+    |   '[' name_in_namespace[name] ']' {
+        auto handles = g_Program->findHandle(*$name);
+        if ( handles.size() ) {
+            if ( handles.size()==1 ) {
+                $$ = handles.back().get();
+            } else {
+                string candidates = g_Program->describeCandidates(handles);
+                yyerror("too many options for "+*$name + "\n" + candidates,tokAt(@name),CompilationError::handle_not_found);
+                $$ = nullptr;
+            }
+        } else {
+            yyerror("annotation not found "+*$name + "\n",tokAt(@name),CompilationError::annotation_not_found);
+            $$ = nullptr;
+        }
+        delete $name;
+    }
+    ;
+
 structure_declaration
-    : _STRUCT[loc] NAME[name] '{' struct_variable_declaration_list[list] '}' {
+    : optional_annotation[annotation] _STRUCT[loc] NAME[name] '{' struct_variable_declaration_list[list] '}' {
         auto pStruct = make_shared<Structure>(*$name);
         pStruct->at = tokAt(@loc);
         for ( auto pDecl : *$list ) {
@@ -590,8 +612,14 @@ structure_declaration
                 }
             }
         }
-        if ( !g_Program->addStructure(pStruct) )
-            yyerror("structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
+        if ( $annotation ) {
+            if ( !g_Program->addHandle(pStruct, $annotation->shared_from_this()) ) {
+                yyerror("handled structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
+            }
+        } else {
+            if ( !g_Program->addStructure(pStruct) )
+                yyerror("structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
+        }
         deleteVariableDeclarationList($list);
         delete($name);
     }

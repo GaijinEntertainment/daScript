@@ -7,16 +7,15 @@ namespace yzg
     using namespace std;
     
     template <typename OT>
-    struct StructureTypeAnnotation : TypeAnnotation {
+    struct ManagedStructureAnnotation  : TypeAnnotation {
         struct StructureField {
             string      name;
             TypeDeclPtr decl;
             uint32_t    offset;
         };
-        StructureTypeAnnotation(const string & n) : TypeAnnotation(n) {}
+        ManagedStructureAnnotation (const string & n) : TypeAnnotation(n) {}
         virtual size_t getSizeOf() const override { return sizeof(OT); }
         virtual bool isRefType() const override { return true; }
-        virtual bool isNullable() const override { return true; }
         virtual bool isNewable() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual TypeDecl * getField ( const string & name ) const override {
@@ -59,7 +58,7 @@ namespace yzg
     };
     
     template <typename OT>
-    struct VectorTypeAnnotation : TypeAnnotation {
+    struct ManagedVectorAnnotation : TypeAnnotation {
         typedef vector<OT> VectorType;
         struct SimNode_AtVector : SimNode_At {
             SimNode_AtVector ( const LineInfo & at, SimNode * rv, SimNode * idx )
@@ -106,13 +105,12 @@ namespace yzg
                 return cast<Iterator *>::from(static_cast<VectorIterator *>(this));
             }
         };
-        VectorTypeAnnotation(const string & n, const TypeDeclPtr & d)
+        ManagedVectorAnnotation(const string & n, const TypeDeclPtr & d)
         : TypeAnnotation(n), vecType(d) {
             vecType->ref = true;
         }
         virtual size_t getSizeOf() const override { return sizeof(VectorType); }
         virtual bool isRefType() const override { return true; }
-        virtual bool isNullable() const override { return true; }
         virtual bool isIndexable ( TypeDecl * indexType ) const override { return indexType->isIndex(); }
         virtual bool isIterable ( ) const override { return true; }
         virtual TypeDecl * getIndex ( TypeDecl * ) const override { return vecType.get(); }
@@ -128,9 +126,9 @@ namespace yzg
     };
     
     template <typename OT>
-    struct ValueTypeAnnoation : TypeAnnotation {
+    struct ManagedValueAnnotation : TypeAnnotation {
         static_assert(sizeof(OT)<=sizeof(__m128), "value types have to fit in ABI");
-        ValueTypeAnnoation(const string & n) : TypeAnnotation(n) {}
+        ManagedValueAnnotation(const string & n) : TypeAnnotation(n) {}
         virtual bool isLocal() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }
         virtual bool isRefType() const override { return false; }

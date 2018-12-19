@@ -37,8 +37,8 @@ void update10000ks ( ObjectArray & objects, Context * context ) {
     }
 }
 
-struct ObjectStructureTypeAnnotation : StructureTypeAnnotation<Object> {
-    ObjectStructureTypeAnnotation() : StructureTypeAnnotation("Object") {
+struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
+    ObjectStructureTypeAnnotation() : ManagedStructureAnnotation ("Object") {
         addField("position", offsetof(Object,pos),make_shared<TypeDecl>(Type::tFloat3));
         addField("velocity", offsetof(Object,vel),make_shared<TypeDecl>(Type::tFloat3));
     }
@@ -66,7 +66,7 @@ public:
         lib.addBuiltInModule();
         // register types
         addHandle(make_shared<ObjectStructureTypeAnnotation>());
-        addHandle(make_shared<VectorTypeAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
+        addHandle(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
         // register functions
         addExtern<decltype(updateObject),updateObject>(*this,lib,"interopUpdate");
         addExtern<decltype(updateTest),updateTest>(*this,lib,"interopUpdateTest");

@@ -27,6 +27,7 @@ namespace yzg
     ,   invalid_variable_type                   =   30108       //  a:void
     ,   invalid_new_type                        =   30109       //  new int&, new int
     ,   invalid_index_type                      =   30110       //  a[wtf]
+    ,   invalid_annotation                      =   30111       //  [wtf] a
         
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)
@@ -41,6 +42,7 @@ namespace yzg
     ,   function_not_found                      =   30304       //  wtf(x)
     ,   variable_not_found                      =   30305       //  wtf
     ,   handle_not_found                        =   30306       //  external type has colliding name
+    ,   annotation_not_found                    =   30307       //  [wtf] struct or [wtf] function
         
     ,   cant_initialize                         =   30401       //  struct x=0
         

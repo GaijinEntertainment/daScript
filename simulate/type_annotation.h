@@ -7,19 +7,28 @@ namespace yzg {
     struct LineInfo;
     class Module;
     class ModuleLibrary;
+    class Structure;
+    struct TypeAnnotation;
     
-    struct TypeAnnotation {
+    typedef shared_ptr<TypeAnnotation> TypeAnnotationPtr;
+    
+    struct TypeAnnotation : enable_shared_from_this<TypeAnnotation> {
         TypeAnnotation ( const string & n ) : name(n) {}
         virtual ~TypeAnnotation() {}
+        virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const {
+            assert(p && "can only clone real type");
+            p->name = name;
+            return p;
+        }
         virtual bool canMove() const { return true; }
         virtual bool canCopy() const { return true; }
         virtual bool isPod() const { return true; }
         virtual bool isRefType() const { return false; }
-        virtual bool isNullable() const { return false; }
         virtual bool isLocal() const { return false; }
         virtual bool isNewable() const { return false; }
         virtual bool isIndexable ( TypeDecl * indexType ) const { return false; }
         virtual bool isIterable ( ) const { return false; }
+        virtual bool isStructureAnnotation() const { return false; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual TypeDecl * getField ( const string & ) const { return nullptr; }
         virtual TypeDecl * getIndex ( TypeDecl * ) const { return nullptr; }
@@ -36,6 +45,26 @@ namespace yzg {
         string      name;
         Module *    module = nullptr;
     };
-    typedef shared_ptr<TypeAnnotation> TypeAnnotationPtr;
+    
+    // annotated structure
+    //  needs to override
+    //      create,clone, simulateGetField, SafeGetField, and SafeGetFieldPtr
+    struct StructureTypeAnnotation : TypeAnnotation {
+        StructureTypeAnnotation ( const string & n ) : TypeAnnotation(n) {}
+        virtual bool isStructureAnnotation() const override { return true; }
+        virtual bool canCopy() const override { return false; }
+        virtual bool isPod() const override { return false; }
+        virtual bool isRefType() const override { return false; }
+        virtual bool create ( const shared_ptr<Structure> & st, string & /* err */ ) {
+            structureType = st;
+            return true;
+        }
+        virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
+            shared_ptr<StructureTypeAnnotation> cp =  p ? static_pointer_cast<StructureTypeAnnotation>(p) : make_shared<StructureTypeAnnotation>(name);
+            cp->structureType = structureType;
+            return TypeAnnotation::clone(cp);
+        }
+        shared_ptr<Structure>   structureType;
+    };
     
 }

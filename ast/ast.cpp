@@ -2614,6 +2614,24 @@ namespace yzg
         return thisModule->addFunction(fn);
     }
     
+    bool Program::addHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann ) {
+        if ( ann->isStructureAnnotation() ) {
+            auto annotation = static_pointer_cast<StructureTypeAnnotation>(ann->clone());
+            annotation->name = st->name;
+            string err;
+            if ( annotation->create(st,err) ) {
+                thisModule->addHandle(annotation);
+                return true;
+            } else {
+                error("can't create structure handle "+ann->name + "\n" + err,st->at,CompilationError::invalid_annotation);
+                return false;
+            }
+        } else {
+            error("not a structure annotation "+ann->name,st->at,CompilationError::invalid_annotation);
+            return false;
+        }
+    }
+    
     Program::Program() {
         thisModule = make_unique<Module>();
         library.addBuiltInModule();
@@ -2636,7 +2654,7 @@ namespace yzg
                 return pTD;
             } else {
                 string candidates = describeCandidates(structs);
-                error("too many options for "+name + "\n" + candidates,at,CompilationError::type_not_found);
+                error("too many options for "+name + "\n" + candidates,at,CompilationError::structure_not_found);
                 return nullptr;
             }
         } else if ( handles.size() ) {
@@ -2647,7 +2665,7 @@ namespace yzg
                 return pTD;
             } else {
                 string candidates = describeCandidates(handles);
-                error("too many options for "+name + "\n" + candidates,at,CompilationError::type_not_found);
+                error("too many options for "+name + "\n" + candidates,at,CompilationError::handle_not_found);
                 return nullptr;
             }
         } else {

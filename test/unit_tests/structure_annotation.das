@@ -17,4 +17,3 @@ def test:bool
     UnitTest::testFields()
     return true
 
-

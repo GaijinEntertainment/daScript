@@ -837,6 +837,7 @@ namespace yzg
         vector<TypeAnnotationPtr> findHandle ( const string & name ) const;
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
+        bool addHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann );
         bool addFunction ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void inferTypes();

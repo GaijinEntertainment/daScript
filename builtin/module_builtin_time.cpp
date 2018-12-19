@@ -22,8 +22,8 @@ namespace yzg {
         static __forceinline __m128 from ( time_t x )  { __m128 a; *((time_t *)&a) = x; return a; }
     };
     
-    struct ClockTypeAnnotation : ValueTypeAnnoation<time_t> {
-        ClockTypeAnnotation() : ValueTypeAnnoation<time_t>("clock") {}
+    struct ClockTypeAnnotation : ManagedValueAnnotation<time_t> {
+        ClockTypeAnnotation() : ManagedValueAnnotation<time_t>("clock") {}
         virtual void debug ( stringstream & ss, void * data ) const override {
             ss << std::asctime(std::localtime((time_t *)data));
         }
