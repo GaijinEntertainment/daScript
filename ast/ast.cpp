@@ -468,6 +468,12 @@ namespace yzg
         name = fn;
     }
     
+    // type annotation
+    
+    void debugType ( TypeAnnotation * ta, stringstream & ss , void * data ) {
+        ta->debug(ss, data);
+    }
+    
     // expression
     
     void Expression::InferTypeContext::error ( const string & err, const LineInfo & at, CompilationError cerr ) {
@@ -1021,11 +1027,11 @@ namespace yzg
             type->ref = true;
             type->constant |= subexpr->type->constant;
         } else if ( subexpr->type->isHandle() ) {
-            if ( !subexpr->type->annotation->isIndexable(index->type.get()) ) {
+            if ( !subexpr->type->annotation->isIndexable(index->type) ) {
                 context.error("handle does not support this index type", index->at, CompilationError::invalid_index_type);
                 return;
             }
-            type = make_shared<TypeDecl>(*subexpr->type->annotation->getIndex(index->type.get()));
+            type = subexpr->type->annotation->makeField(index->type);
             type->constant |= subexpr->type->constant;
         } else {
             if ( !index->type->isIndex() ) {
@@ -1174,37 +1180,33 @@ namespace yzg
         value->inferType(context);
         if ( !value->type ) return;
         // infer
-        TypeDecl * fieldType = nullptr;
         auto valT = value->type;
+        if ( valT->isArray() ) {
+            context.error("can't get field of array", at, CompilationError::cant_get_field);
+            return;
+        }
         if ( valT->isHandle() ) {
-            annotation = valT->annotation.get();
-            fieldType = annotation->getField(name);
-        } else {
-            if ( valT->isPointer() ) {
-                value = autoDereference(value);
-            }
-            if ( valT->isArray() ) {
-                context.error("can't get field of array", at, CompilationError::cant_get_field);
-                return;
-            }
-            if ( valT->baseType==Type::tStructure ) {
-                field = valT->structType->findField(name);
-            } else if ( valT->isPointer() ) {
-                if ( valT->firstType->baseType==Type::tStructure ) {
-                    field = valT->firstType->structType->findField(name);
-                } else if ( valT->firstType->isHandle() ) {
-                    annotation = valT->firstType->annotation.get();
-                    fieldType = annotation->getField(name);
-                }
+            annotation = valT->annotation;
+            type = annotation->makeIndex(name);
+        } else if ( valT->baseType==Type::tStructure ) {
+            field = valT->structType->findField(name);
+        } else if ( valT->isPointer() ) {
+            value = autoDereference(value);
+            if ( valT->firstType->baseType==Type::tStructure ) {
+                field = valT->firstType->structType->findField(name);
+            } else if ( valT->firstType->isHandle() ) {
+                annotation = valT->firstType->annotation;
+                type = annotation->makeIndex(name);
             }
         }
         // handle
-        fieldType = field ? field->type.get() : fieldType;
-        if ( !fieldType ) {
+        if ( field ) {
+            type = make_shared<TypeDecl>(*field->type);
+            type->ref = true;
+            type->constant |= valT->constant;
+        } else if ( !type ) {
             context.error("field " + name + " not found", at, CompilationError::cant_get_field);
         } else {
-            type = make_shared<TypeDecl>(*fieldType);
-            type->ref = true;
             type->constant |= valT->constant;
         }
     }
@@ -1237,7 +1239,6 @@ namespace yzg
         value->inferType(context);
         if ( !value->type ) return;
         // infer
-        TypeDecl * fieldType = nullptr;
         auto valT = value->type;
         if ( !valT->isPointer() || !valT->firstType ) {
             context.error("can only safe dereference a pointer to a structure or handle " + valT->describe(),
@@ -1247,42 +1248,43 @@ namespace yzg
         value = autoDereference(value);
         if ( valT->firstType->structType ) {
             field = valT->firstType->structType->findField(name);
-            fieldType = field->type.get();
-        } else if ( valT->firstType->isHandle() ) {
-            fieldType = valT->firstType->annotation->getField(name);
-            if ( !fieldType ) {
-                context.error("can't get field " + name,
-                          at, CompilationError::cant_get_field);
+            if ( !field ) {
+                context.error("can't get field " + name, at, CompilationError::cant_get_field);
+                return;
             }
-        }
-        if ( !fieldType ) {
+            type = make_shared<TypeDecl>(*field->type);
+        } else if ( valT->firstType->isHandle() ) {
+            annotation = valT->firstType->annotation;
+            type = annotation->makeIndex(name);
+            if ( !type ) {
+                context.error("can't get field " + name, at, CompilationError::cant_get_field);
+                return;
+            }
+            type->ref = false;
+        } else {
             context.error("can only safe dereference a pointer to a structure or handle " + valT->describe(),
                           at, CompilationError::cant_get_field);
             return;
         }
-        if ( fieldType->isPointer() ) {
-            skipQQ = true;
-            type = make_shared<TypeDecl>(*fieldType);
-            type->constant |= valT->constant;
-        } else {
-            skipQQ = false;
+        skipQQ = type->isPointer();
+        if ( !skipQQ ) {
+            auto fieldType = type;
             type = make_shared<TypeDecl>(Type::tPointer);
-            type->firstType = make_shared<TypeDecl>(*fieldType);
-            type->constant |= valT->constant;
+            type->firstType = fieldType;
         }
+        type->constant |= valT->constant;
     }
     
     SimNode * ExprSafeField::simulate (Context & context) const {
-        auto valFT = value->type->firstType;
         if ( skipQQ ) {
-            if ( valFT->isHandle() ) {
-                return valFT->annotation->simulateSafeGetFieldPtr(name, context, at, value->simulate(context));
+            if ( annotation ) {
+                return annotation->simulateSafeGetFieldPtr(name, context, at, value->simulate(context));
             } else {
                 return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),field->offset);
             }
         } else {
-            if ( valFT->isHandle() ) {
-                return valFT->annotation->simulateSafeGetField(name, context, at, value->simulate(context));
+            if ( annotation ) {
+                return annotation->simulateSafeGetField(name, context, at, value->simulate(context));
             } else {
                 return context.makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),field->offset);
             }
@@ -1966,7 +1968,7 @@ namespace yzg
                 pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
                 pVar->type->ref = false;
             } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
-                pVar->type = make_shared<TypeDecl>(*src->type->annotation->getIterator());
+                pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIterator());
             } else {
                 context.error("unsupported iteration type for " + pVar->name, at);
                 return;

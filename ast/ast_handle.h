@@ -18,9 +18,15 @@ namespace yzg
         virtual bool isRefType() const override { return true; }
         virtual bool isNewable() const override { return true; }
         virtual bool isLocal() const override { return true; }
-        virtual TypeDecl * getField ( const string & name ) const override {
+        virtual TypeDeclPtr makeIndex ( const string & name ) const override {
             auto it = fields.find(name);
-            return it!=fields.end() ? it->second.decl.get() : nullptr;
+            if ( it!=fields.end() ) {
+                auto fieldT = make_shared<TypeDecl>(*it->second.decl);
+                fieldT->ref = true;
+                return fieldT;
+            } else {
+                return nullptr;
+            }
         }
         virtual SimNode * simulateGetField ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(name);
@@ -111,11 +117,11 @@ namespace yzg
         }
         virtual size_t getSizeOf() const override { return sizeof(VectorType); }
         virtual bool isRefType() const override { return true; }
-        virtual bool isIndexable ( TypeDecl * indexType ) const override { return indexType->isIndex(); }
+        virtual bool isIndexable ( const TypeDeclPtr & indexType ) const override { return indexType->isIndex(); }
         virtual bool isIterable ( ) const override { return true; }
-        virtual TypeDecl * getIndex ( TypeDecl * ) const override { return vecType.get(); }
-        virtual TypeDecl * getIterator () const override { return vecType.get(); }
-        virtual TypeDecl * getField ( const string & ) const override { return vecType.get(); }
+        virtual TypeDeclPtr makeField ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
+        virtual TypeDeclPtr makeIterator () const override { return make_shared<TypeDecl>(*vecType); }
+        virtual TypeDeclPtr makeIndex ( const string & ) const override { return make_shared<TypeDecl>(*vecType); }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, SimNode * rv, SimNode * idx ) const override {
             return context.makeNode<SimNode_AtVector>(at, rv, idx);
         }

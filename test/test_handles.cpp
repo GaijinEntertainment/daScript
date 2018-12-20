@@ -137,9 +137,9 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         }
         return !fail;
     }
-    virtual TypeDecl * getField ( const string & name ) const override {
+    virtual TypeDeclPtr makeIndex ( const string & name ) const override {
         if ( auto pF = structureType->findField(name) ) {
-            return pF->type.get();
+            return make_shared<TypeDecl>(*pF->type);
         } else {
             return nullptr;
         }
