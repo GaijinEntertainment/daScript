@@ -150,6 +150,17 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     virtual SimNode * simulateSafeGetField ( const string & name, Context & context, const LineInfo & at, SimNode * rv ) const  override {
         return context.makeNode<SimNode_SafeIntFieldDeref>(at,rv,context.allocateName(name));
     }
+    virtual void debug ( stringstream & ss, void * data ) const override {
+        IntFields * prv = (IntFields *) data;
+        if ( !prv ) {
+            ss << "null";
+            return;
+        }
+        ss << "{";
+        for ( auto & f : prv->fields )
+            ss << " " << f.first << ":" << f.second;
+        ss << " }";
+    }
 };
 
 void testFields ( Context * ctx ) {
