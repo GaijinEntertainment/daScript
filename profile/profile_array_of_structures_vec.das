@@ -23,6 +23,7 @@ def init(objects:ObjectArray)
     let index:int = 0
     for obj in objects
         initObj(index++,obj)
+    assert(index==objects.length)
 
 def verify(total:int;objects:ObjectArray)
     // print("\n")

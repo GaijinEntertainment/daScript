@@ -202,9 +202,10 @@ namespace yzg
         virtual bool isIterable ( ) const { return false; }
         virtual bool isStructureAnnotation() const { return false; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
-        virtual TypeDeclPtr makeIndex ( const string & ) const { return nullptr; }
-        virtual TypeDeclPtr makeField ( TypeDeclPtr & ) const { return nullptr; }
-        virtual TypeDeclPtr makeIterator () const { return nullptr; }
+        virtual TypeDeclPtr makeFieldType ( const string & ) const { return nullptr; }
+        virtual TypeDeclPtr makeSafeFieldType ( const string & ) const { return nullptr; }
+        virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const { return nullptr; }
+        virtual TypeDeclPtr makeIteratorType () const { return nullptr; }
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const { return nullptr; }
         virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const { return nullptr; }
         virtual SimNode * simulateGetField ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; }

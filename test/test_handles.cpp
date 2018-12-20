@@ -137,12 +137,17 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         }
         return !fail;
     }
-    virtual TypeDeclPtr makeIndex ( const string & name ) const override {
-        if ( auto pF = structureType->findField(name) ) {
-            return make_shared<TypeDecl>(*pF->type);
+    virtual TypeDeclPtr makeFieldType ( const string & name ) const override {
+        if ( auto pF = makeSafeFieldType(name) ) {
+            pF->ref = true;
+            return pF;
         } else {
             return nullptr;
         }
+    }
+    virtual TypeDeclPtr makeSafeFieldType ( const string & name ) const override {
+        auto pF = structureType->findField(name);
+        return pF ? make_shared<TypeDecl>(*pF->type) : nullptr;
     }
     virtual SimNode * simulateGetField ( const string & name, Context & context, const LineInfo & at, SimNode * rv ) const  override {
         return context.makeNode<SimNode_IntFieldDeref>(at,rv,context.allocateName(name));

@@ -1031,7 +1031,7 @@ namespace yzg
                 context.error("handle does not support this index type", index->at, CompilationError::invalid_index_type);
                 return;
             }
-            type = subexpr->type->annotation->makeField(index->type);
+            type = subexpr->type->annotation->makeIndexType(index->type);
             type->constant |= subexpr->type->constant;
         } else {
             if ( !index->type->isIndex() ) {
@@ -1187,7 +1187,7 @@ namespace yzg
         }
         if ( valT->isHandle() ) {
             annotation = valT->annotation;
-            type = annotation->makeIndex(name);
+            type = annotation->makeFieldType(name);
         } else if ( valT->baseType==Type::tStructure ) {
             field = valT->structType->findField(name);
         } else if ( valT->isPointer() ) {
@@ -1196,7 +1196,7 @@ namespace yzg
                 field = valT->firstType->structType->findField(name);
             } else if ( valT->firstType->isHandle() ) {
                 annotation = valT->firstType->annotation;
-                type = annotation->makeIndex(name);
+                type = annotation->makeFieldType(name);
             }
         }
         // handle
@@ -1255,12 +1255,11 @@ namespace yzg
             type = make_shared<TypeDecl>(*field->type);
         } else if ( valT->firstType->isHandle() ) {
             annotation = valT->firstType->annotation;
-            type = annotation->makeIndex(name);
+            type = annotation->makeSafeFieldType(name);
             if ( !type ) {
                 context.error("can't get field " + name, at, CompilationError::cant_get_field);
                 return;
             }
-            type->ref = false;
         } else {
             context.error("can only safe dereference a pointer to a structure or handle " + valT->describe(),
                           at, CompilationError::cant_get_field);
@@ -1968,7 +1967,7 @@ namespace yzg
                 pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
                 pVar->type->ref = false;
             } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
-                pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIterator());
+                pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIteratorType());
             } else {
                 context.error("unsupported iteration type for " + pVar->name, at);
                 return;

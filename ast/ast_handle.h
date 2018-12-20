@@ -18,15 +18,17 @@ namespace yzg
         virtual bool isRefType() const override { return true; }
         virtual bool isNewable() const override { return true; }
         virtual bool isLocal() const override { return true; }
-        virtual TypeDeclPtr makeIndex ( const string & name ) const override {
-            auto it = fields.find(name);
-            if ( it!=fields.end() ) {
-                auto fieldT = make_shared<TypeDecl>(*it->second.decl);
-                fieldT->ref = true;
-                return fieldT;
+        virtual TypeDeclPtr makeFieldType ( const string & name ) const override {
+            if ( auto t = makeSafeFieldType(name) ) {
+                t->ref = true;
+                return t;
             } else {
                 return nullptr;
             }
+        }
+        virtual TypeDeclPtr makeSafeFieldType ( const string & name ) const override {
+            auto it = fields.find(name);
+            return it!=fields.end() ? make_shared<TypeDecl>(*it->second.decl) : nullptr;
         }
         virtual SimNode * simulateGetField ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(name);
@@ -66,6 +68,16 @@ namespace yzg
     template <typename OT>
     struct ManagedVectorAnnotation : TypeAnnotation {
         typedef vector<OT> VectorType;
+        struct SimNode_VectorLength : SimNode {
+            SimNode_VectorLength ( const LineInfo & at, SimNode * rv )
+                : SimNode(at), value(rv) {}
+            virtual __m128 eval ( Context & context ) override {
+                VectorType * pValue = cast<VectorType *>::to(value->eval(context));
+                YZG_EXCEPTION_POINT;
+                return cast<int32_t>::from(int32_t(pValue->size()));
+            }
+            SimNode * value;
+        };
         struct SimNode_AtVector : SimNode_At {
             SimNode_AtVector ( const LineInfo & at, SimNode * rv, SimNode * idx )
             : SimNode_At(at, rv, idx, 0, 0) {}
@@ -119,14 +131,21 @@ namespace yzg
         virtual bool isRefType() const override { return true; }
         virtual bool isIndexable ( const TypeDeclPtr & indexType ) const override { return indexType->isIndex(); }
         virtual bool isIterable ( ) const override { return true; }
-        virtual TypeDeclPtr makeField ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
-        virtual TypeDeclPtr makeIterator () const override { return make_shared<TypeDecl>(*vecType); }
-        virtual TypeDeclPtr makeIndex ( const string & ) const override { return make_shared<TypeDecl>(*vecType); }
+        virtual TypeDeclPtr makeFieldType ( const string & name ) const override {
+            if ( name=="length" ) return make_shared<TypeDecl>(Type::tInt);
+            return nullptr;
+        }
+        virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
+        virtual TypeDeclPtr makeIteratorType () const override { return make_shared<TypeDecl>(*vecType); }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, SimNode * rv, SimNode * idx ) const override {
             return context.makeNode<SimNode_AtVector>(at, rv, idx);
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
             return context.makeNode<SimNode_VectorIterator>(at, rv);
+        }
+        virtual SimNode * simulateGetField ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
+            if ( name=="length" ) return context.makeNode<SimNode_VectorLength>(at,value);
+            return nullptr;
         }
         TypeDeclPtr vecType;
     };
