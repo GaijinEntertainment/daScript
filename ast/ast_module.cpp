@@ -4,6 +4,15 @@
 
 namespace yzg
 {
+    // ANNOTATION
+    
+    const AnnotationArgument * AnnotationArgumentList::find ( const string & name, Type type ) const {
+        auto it = find_if(arguments.begin(), arguments.end(), [&](const AnnotationArgument & arg){
+            return (arg.name==name) && (type==Type::tVoid || type==arg.type);
+        });
+        return it==arguments.end() ? nullptr : &*it;
+    }
+    
     // MODULE
     
     intptr_t Module::Karma = 0;

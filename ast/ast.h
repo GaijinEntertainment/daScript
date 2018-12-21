@@ -209,7 +209,10 @@ namespace yzg
         AnnotationArgument ( const string & n, float f ) : type(Type::tString), name(n), fValue(f) {}
     };
     
-    typedef vector<AnnotationArgument> AnnotationArgumentList;
+    struct AnnotationArgumentList {
+        const AnnotationArgument * find ( const string & name, Type type ) const;
+        vector<AnnotationArgument>  arguments;
+    };
     
     struct Annotation {
         Annotation ( const string & n ) : name(n) {}
@@ -225,7 +228,7 @@ namespace yzg
     struct FunctionAnnotation : Annotation, enable_shared_from_this<FunctionAnnotation> {
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool isFunctionAnnotation() const override { return true; }
-        virtual void Apply ( const FunctionPtr & func, const AnnotationArgumentList & args ) = 0;
+        virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) = 0;
     };
     
     struct TypeAnnotation : Annotation, enable_shared_from_this<TypeAnnotation> {

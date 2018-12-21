@@ -190,13 +190,144 @@ void testFields ( Context * ctx ) {
     assert(t==8);
 }
 
+struct EsAttribute {
+    string      name;
+    uint32_t    size = 0;
+    __m128      def = _mm_setzero_ps();
+};
+
+struct EsAttributeTable {
+    string  pass;
+    string  functionName;
+    int32_t functionIndex = -2;
+    vector<EsAttribute> attributes;
+};
+
+struct EsComponent {
+    string      name;
+    void *      data = nullptr;
+    uint32_t    size = 0;
+    uint32_t    stride = 0;
+    bool        boxed = false;
+};
+
+vector<EsAttributeTable>    g_esPassTable;
+
 struct EsFunctionAnnotation : FunctionAnnotation {
-    EsFunctionAnnotation() : FunctionAnnotation("es") {
-    };
-    virtual void Apply ( const FunctionPtr & func, const AnnotationArgumentList & args ) override {
-        cout << "in functon " << func->name << endl;
+    EsFunctionAnnotation() : FunctionAnnotation("es") { }
+    virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
+        bool fail = false;
+        EsAttributeTable tab;
+        if ( auto pp = args.find("pass", Type::tString) ) {
+            tab.pass = pp->sValue;
+        } else {
+            err += "pass is not specified\n";
+            fail = true;
+        }
+        tab.functionName = func->name;
+        for ( const auto & arg : func->arguments ) {
+            if ( !arg->type->isRef() ) {
+                err  += "argument " + arg->name + " is not a reference\n";
+                fail = true;
+            } else {
+                EsAttribute attr;
+                attr.name = arg->name;
+                attr.size = arg->type->getSizeOf();
+                tab.attributes.push_back(attr);
+            }
+        }
+        if ( !fail ) {
+            g_esPassTable.push_back(tab);
+            return true;
+        } else {
+            return false;
+        }
     };
 };
+
+bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
+    if ( table.functionIndex==-2 )
+        table.functionIndex = context.findFunction(table.functionName.c_str());
+    if ( table.functionIndex==-1 )
+        return false;
+    int fnIndex = table.functionIndex;
+    context.restart();
+    uint32_t nAttr = table.attributes.size();
+    __m128   args   [nAttr];
+    char *   data   [nAttr];
+    uint32_t stride [nAttr];
+    bool     boxed  [nAttr];
+    __m128   def    [nAttr];
+    for ( uint32_t a=0; a!=nAttr; ++a ) {
+        auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
+            return esc.name == table.attributes[a].name;
+        });
+        if ( it != components.end() ) {
+            data[a]   = (char *) it->data;
+            stride[a] = it->stride;
+            boxed[a]  = it->boxed;
+        } else {
+            data[a] = nullptr;
+        }
+        def[a] = table.attributes[a].def;
+    }
+    for ( uint32_t i=0; i != totalComponents; ++i ) {
+        for ( uint32_t a=0; a!=nAttr; ++a ) {
+            if ( data[a] ) {
+                args[a] = cast<void *>::from(boxed[a] ? *((char **)data[a]) : data[a]);
+                data[a] += stride[a];
+            } else {
+                args[a] = def[a];
+            }
+        }
+        context.eval(fnIndex, args);
+        if ( context.stopFlags & EvalFlags::stopForThrow ) {
+            // TODO: report exception here??
+            return false;
+        }
+    }
+    return true;
+}
+
+constexpr int g_total = 10000;
+vector<float3>   g_pos ( g_total );
+vector<float3>   g_vel ( g_total );
+vector<float3 *> g_velBoxed ( g_total );
+vector<EsComponent> g_components;
+
+void initEsComponents() {
+    // build components
+    for ( int i=0; i != g_total; ++i ) {
+        float f = i;
+        g_pos[i] = { f, f*2, f*3 };
+        g_vel[i] = { f+1, f+2, f+3 };
+        g_velBoxed[i] = &g_vel[i];
+    }
+    g_components.clear();
+    g_components.push_back({"pos",      g_pos.data(),      sizeof(float3), sizeof(float3),   false});
+    g_components.push_back({"vel",      g_vel.data(),      sizeof(float3), sizeof(float3),   false});
+    g_components.push_back({"velBoxed", g_velBoxed.data(), sizeof(float3), sizeof(float3 *), true });
+}
+
+void verifyEsComponents() {
+    for ( int i=0; i != g_total; ++i ) {
+        float f = i;
+        float3 pos = { f, f*2, f*3 };
+        float3 vel = { f+1, f+2, f+3 };
+        pos.x += vel.x;
+        pos.y += vel.y;
+        pos.z += vel.z;
+        assert(g_pos[i].x==pos.x && g_pos[i].y==pos.y &&g_pos[i].z==pos.z );
+    }
+}
+
+void testEsUpdate ( char * pass, Context * ctx ) {
+    for ( auto & tab : g_esPassTable ) {
+        if ( tab.pass==pass ) {
+            EsRunPass(*ctx, tab, g_components, g_total);
+        }
+    }
+}
 
 class Module_UnitTest : public Module {
 public:
@@ -215,6 +346,9 @@ public:
         addExtern<decltype(testFoo), testFoo>(*this, lib, "testFoo");
         addExtern<decltype(testAdd), testAdd>(*this, lib, "testAdd");
         addExtern<decltype(testFields), testFields>(*this, lib, "testFields");
+        addExtern<decltype(testEsUpdate), testEsUpdate>(*this, lib, "testEsUpdate");
+        addExtern<decltype(initEsComponents), initEsComponents>(*this, lib, "initEsComponents");
+        addExtern<decltype(verifyEsComponents), verifyEsComponents>(*this, lib, "verifyEsComponents");
     }
 };
 

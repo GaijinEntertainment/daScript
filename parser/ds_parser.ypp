@@ -255,8 +255,16 @@ annotation_argument
     ;
 
 annotation_argument_list
-    :   annotation_argument[arg]                                        { $$ = new AnnotationArgumentList(); $$->push_back(*$arg); delete $arg; }
-    |   annotation_argument_list[argL] ',' annotation_argument[arg]     { $$ = $argL; $$->push_back(*$arg); delete $arg; }
+    :   annotation_argument[arg]  {
+        $$ = new AnnotationArgumentList();
+        $$->arguments.push_back(*$arg);
+        delete $arg;
+    }
+    |   annotation_argument_list[argL] ',' annotation_argument[arg] {
+            $$ = $argL;
+            $$->arguments.push_back(*$arg);
+            delete $arg;
+    }
     ;
 
 annotation_declaration
@@ -362,7 +370,10 @@ function_declaration
                 if ( pA->annotation ) {
                     if ( pA->annotation->isFunctionAnnotation() ) {
                         auto ann = (FunctionAnnotation *) pA->annotation;
-                        ann->Apply(pFunction, pA->arguments ? *pA->arguments : AnnotationArgumentList());
+                        string err;
+                        if ( !ann->apply(pFunction, pA->arguments ? *pA->arguments : AnnotationArgumentList(), err) ) {
+                            yyerror("can't apply annotation\n" + err, tokAt(@loc), CompilationError::invalid_annotation);
+                        }
                     } else {
                         yyerror("function can only have function annotations", tokAt(@loc), CompilationError::invalid_annotation);
                     }

@@ -20,6 +20,11 @@ def update(pos:float3&;vel:float3 const &)
 
 def test:bool
     UnitTest::testFields()
+    UnitTest::initEsComponents()
+    UnitTest::testEsUpdate("ks")
+    UnitTest::verifyEsComponents()
+    profile(1000,"es-update") <|
+        UnitTest::testEsUpdate("ks")
     return true
 
 
