@@ -18,10 +18,17 @@ def testFields(x:Fields?):int
 def update(pos:float3&;vel:float3 const &)
     pos += vel
 
+[es (pass="ksBoxed")]
+def updateBoxed(pos:float3&;velBoxed:float3 const &)
+    pos += velBoxed
+
 def test:bool
     UnitTest::testFields()
     UnitTest::initEsComponents()
     UnitTest::testEsUpdate("ks")
+    UnitTest::verifyEsComponents()
+    UnitTest::initEsComponents()
+    UnitTest::testEsUpdate("ksBoxed")
     UnitTest::verifyEsComponents()
     profile(1000,"es-update") <|
         UnitTest::testEsUpdate("ks")
