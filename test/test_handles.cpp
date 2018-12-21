@@ -252,40 +252,45 @@ bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsCom
         return false;
     int fnIndex = table.functionIndex;
     context.restart();
-    uint32_t nAttr = table.attributes.size();
-    __m128   args   [nAttr];
-    char *   data   [nAttr];
-    uint32_t stride [nAttr];
-    bool     boxed  [nAttr];
-    __m128   def    [nAttr];
-    for ( uint32_t a=0; a!=nAttr; ++a ) {
-        auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
-            return esc.name == table.attributes[a].name;
-        });
-        if ( it != components.end() ) {
-            data[a]   = (char *) it->data;
-            stride[a] = it->stride;
-            boxed[a]  = it->boxed;
-        } else {
-            data[a] = nullptr;
-        }
-        def[a] = table.attributes[a].def;
-    }
-    for ( uint32_t i=0; i != totalComponents; ++i ) {
+    __m128   _args   [table.attributes.size()];
+    context.callEx(fnIndex, _args, 0, [&](SimNode * code){
+        uint32_t nAttr = table.attributes.size();
+        __m128 * args = _args;
+        char *   data   [nAttr];
+        uint32_t stride [nAttr];
+        bool     boxed  [nAttr];
+        __m128   def    [nAttr];
         for ( uint32_t a=0; a!=nAttr; ++a ) {
-            if ( data[a] ) {
-                args[a] = cast<void *>::from(boxed[a] ? *((char **)data[a]) : data[a]);
-                data[a] += stride[a];
+            auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
+                return esc.name == table.attributes[a].name;
+            });
+            if ( it != components.end() ) {
+                data[a]   = (char *) it->data;
+                stride[a] = it->stride;
+                boxed[a]  = it->boxed;
             } else {
-                args[a] = def[a];
+                data[a] = nullptr;
+                def[a] = table.attributes[a].def;
+            }
+            
+        }
+        for ( uint32_t i=0; i != totalComponents; ++i ) {
+            for ( uint32_t a=0; a!=nAttr; ++a ) {
+                if ( data[a] ) {
+                    *((void **)&args[a]) = boxed[a] ? *((char **)data[a]) : data[a];
+                    data[a] += stride[a];
+                } else {
+                    args[a] = def[a];
+                }
+            }
+            code->eval(context);
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            if ( context.stopFlags & EvalFlags::stopForThrow ) {
+                // TODO: report exception here??
+                return;
             }
         }
-        context.eval(fnIndex, args);
-        if ( context.stopFlags & EvalFlags::stopForThrow ) {
-            // TODO: report exception here??
-            return false;
-        }
-    }
+    });
     return true;
 }
 
