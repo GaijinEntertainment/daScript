@@ -31,8 +31,14 @@ namespace yzg
     struct TypeDecl;
     typedef shared_ptr<TypeDecl> TypeDeclPtr;
     
+    struct Annotation;
+    typedef shared_ptr<Annotation> AnnotationPtr;
+    
     struct TypeAnnotation;
     typedef shared_ptr<TypeAnnotation> TypeAnnotationPtr;
+    
+    struct FunctionAnnotation;
+    typedef shared_ptr<FunctionAnnotation> FunctionAnnotationPtr;
     
     class Module;
     
@@ -165,6 +171,7 @@ namespace yzg
         int getSizeOf() const;
         bool canCopy() const;
         bool isPod() const;
+        string describe() const { return name; }
     public:
         string                      name;
         vector<FieldDeclaration>    fields;
@@ -184,9 +191,45 @@ namespace yzg
         Module *        module = nullptr;
     };
     
-    struct TypeAnnotation : enable_shared_from_this<TypeAnnotation> {
-        TypeAnnotation ( const string & n ) : name(n) {}
-        virtual ~TypeAnnotation() {}
+    //      [annotation (value,value,...,value)]
+    //  or  [annotation (key=value,key,value,...,key=value)]
+    struct AnnotationArgument {
+        Type    type;       // only tInt, tFloat, tBool, and tString are allowed
+        string  name;
+        string  sValue;
+        union {
+            bool    bValue;
+            int     iValue;
+            float   fValue;
+        };
+        AnnotationArgument () : type(Type::tVoid) {}
+        AnnotationArgument ( const string & n, const string & s ) : type(Type::tString), name(n), sValue(s) {}
+        AnnotationArgument ( const string & n, bool  b ) : type(Type::tString), name(n), bValue(b) {}
+        AnnotationArgument ( const string & n, int   i ) : type(Type::tString), name(n), iValue(i) {}
+        AnnotationArgument ( const string & n, float f ) : type(Type::tString), name(n), fValue(f) {}
+    };
+    
+    typedef vector<AnnotationArgument> AnnotationArgumentList;
+    
+    struct Annotation {
+        Annotation ( const string & n ) : name(n) {}
+        virtual ~Annotation() {}
+        virtual bool isHandledTypeAnnotation() const { return false; }
+        virtual bool isStructureAnnotation() const { return false; }
+        virtual bool isFunctionAnnotation() const { return false; }
+        string describe() const { return name; }
+        string      name;
+        Module *    module = nullptr;
+    };
+    
+    struct FunctionAnnotation : Annotation, enable_shared_from_this<FunctionAnnotation> {
+        FunctionAnnotation ( const string & n ) : Annotation(n) {}
+        virtual bool isFunctionAnnotation() const override { return true; }
+        virtual void Apply ( const FunctionPtr & func, const AnnotationArgumentList & args ) = 0;
+    };
+    
+    struct TypeAnnotation : Annotation, enable_shared_from_this<TypeAnnotation> {
+        TypeAnnotation ( const string & n ) : Annotation(n) {}
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const {
             assert(p && "can only clone real type");
             p->name = name;
@@ -200,7 +243,6 @@ namespace yzg
         virtual bool isNewable() const { return false; }
         virtual bool isIndexable ( const TypeDeclPtr & indexType ) const { return false; }
         virtual bool isIterable ( ) const { return false; }
-        virtual bool isStructureAnnotation() const { return false; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual TypeDeclPtr makeFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeSafeFieldType ( const string & ) const { return nullptr; }
@@ -215,8 +257,6 @@ namespace yzg
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual void debug ( stringstream & ss, void * data ) const { ss << "handle<" << name << ">"; }
-        string      name;
-        Module *    module = nullptr;
     };
     
     // annotated structure
@@ -225,6 +265,7 @@ namespace yzg
     struct StructureTypeAnnotation : TypeAnnotation {
         StructureTypeAnnotation ( const string & n ) : TypeAnnotation(n) {}
         virtual bool isStructureAnnotation() const override { return true; }
+        virtual bool isHandledTypeAnnotation() const override { return true; }
         virtual bool canCopy() const override { return false; }
         virtual bool isPod() const override { return false; }
         virtual bool isRefType() const override { return false; }
@@ -794,6 +835,7 @@ namespace yzg
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context ) { return context.makeNode<SimNode_Call>(at); }
+        string describe() const { return getMangledName(); }
     public:
         string              name;
         vector<VariablePtr> arguments;
@@ -826,11 +868,11 @@ namespace yzg
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addFunction ( const FunctionPtr & fn );
-        bool addHandle ( const TypeAnnotationPtr & ptr );
+        bool addHandle ( const AnnotationPtr & ptr );
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
-        TypeAnnotationPtr findHandle ( const string & name ) const;
+        AnnotationPtr findHandle ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
         static Module * require ( const string & name );
         static void Shutdown();
@@ -840,7 +882,7 @@ namespace yzg
             callThis[fnName] = [fnName](const LineInfo & at) { return new TT(at, fnName); };
         }
     public:
-        map<string, TypeAnnotationPtr>          handleTypes;
+        map<string, AnnotationPtr>              handleTypes;
         map<string, StructurePtr>               structures;
         map<string, VariablePtr>                globals;
         map<string, FunctionPtr>                functions;          // mangled name 2 function name
@@ -876,9 +918,8 @@ namespace yzg
     public:
         void addBuiltInModule ();
         void addModule ( Module * module );
-        void foreach ( function<bool (Module * module)> && func ) const;
-        vector<TypeAnnotationPtr> findHandle ( const string & name ) const;
-        VariablePtr findVariable ( const string & name ) const;
+        void foreach ( function<bool (Module * module)> && func, const string & name ) const;
+        vector<AnnotationPtr> findHandle ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
@@ -892,7 +933,7 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const Program & program);
         VariablePtr findVariable ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
-        vector<TypeAnnotationPtr> findHandle ( const string & name ) const;
+        vector<AnnotationPtr> findHandle ( const string & name ) const;
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann );
@@ -901,9 +942,6 @@ namespace yzg
         void inferTypes();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
-        string describeCandidates ( const vector<FunctionPtr> & vec, bool needHeader = true ) const;
-        string describeCandidates ( const vector<StructurePtr> & str, bool needHeader = true ) const;
-        string describeCandidates ( const vector<TypeAnnotationPtr> & hnd, bool needHeader = true ) const;
         void simulate ( Context & context );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
@@ -914,6 +952,20 @@ namespace yzg
         VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );
         StructInfo * makeStructureDebugInfo ( Context & context, const Structure & st );
         FuncInfo * makeFunctionDebugInfo ( Context & context, const Function & fn );
+    public:
+        template <typename TT>
+        string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {
+            if ( !result.size() ) return "";
+            stringstream ss;
+            if ( needHeader ) ss << "candidates are:";
+            for ( auto & fn : result ) {
+                ss << "\n\t";
+                if ( fn->module && !fn->module->name.empty() )
+                    ss << fn->module->name << "::";
+                ss << fn->describe();
+            }
+            return ss.str();
+        }
     public:
         map<string,StructInfo *>    sdebug;
     public:

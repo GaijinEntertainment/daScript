@@ -2293,7 +2293,8 @@ namespace yzg
 
     // program
     
-    vector<TypeAnnotationPtr> Program::findHandle ( const string & name ) const {
+    
+    vector<AnnotationPtr> Program::findHandle ( const string & name ) const {
         return library.findHandle(name);
     }
     
@@ -2302,7 +2303,7 @@ namespace yzg
     }
     
     VariablePtr Program::findVariable ( const string & name ) const {
-        return library.findVariable(name);
+        return thisModule->findVariable(name);
     }
     
     ostream& operator<< (ostream& stream, const Program & program) {
@@ -2375,78 +2376,26 @@ namespace yzg
         }
     }
     
-    string Program::describeCandidates ( const vector<FunctionPtr> & result, bool needHeader ) const {
-        if ( !result.size() ) {
-            return "";
-        }
-        stringstream ss;
-        if ( needHeader )
-            ss << "candidates are:";
-        for ( auto & fn : result ) {
-            ss << "\n\t";
-            if ( fn->module && !fn->module->name.empty() )
-                ss << fn->module->name << "::";
-            ss << fn->getMangledName();
-        }
-        return ss.str();
-    }
-    
-    string Program::describeCandidates ( const vector<StructurePtr> & result, bool needHeader ) const {
-        if ( !result.size() ) {
-            return "";
-        }
-        stringstream ss;
-        if ( needHeader )
-            ss << "candidates are:";
-        for ( auto & var : result ) {
-            ss << "\n\t";
-            if ( var->module && !var->module->name.empty() )
-                ss << var->module->name << "::";
-            ss << var->name;
-        }
-        return ss.str();
-    }
-    
-    string Program::describeCandidates ( const vector<TypeAnnotationPtr> & result, bool needHeader ) const {
-        if ( !result.size() ) {
-            return "";
-        }
-        stringstream ss;
-        if ( needHeader )
-            ss << "candidates are:";
-        for ( auto & handle : result ) {
-            ss << "\n\t";
-            if ( handle->module && !handle->module->name.empty() )
-                ss << handle->module->name << "::";
-            ss << handle->name;
-        }
-        return ss.str();
-    }
-    
     vector<FunctionPtr> Program::findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
         string moduleName, funcName;
-        bool inModuleOnly = splitTypeName(name, moduleName, funcName);
+        splitTypeName(name, moduleName, funcName);
         vector<FunctionPtr> result;
         library.foreach([&](Module * mod) -> bool {
-            if ( inModuleOnly && moduleName!=mod->name )
-                return true;
             auto itFnList = mod->functionsByName.find(funcName);
             if ( itFnList != mod->functionsByName.end() ) {
                 auto & goodFunctions = itFnList->second;
                 result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
             }
             return true;
-        });
+        },moduleName);
         return result;
     }
         
     vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const {
         string moduleName, funcName;
-        bool inModuleOnly = splitTypeName(name, moduleName, funcName);
+        splitTypeName(name, moduleName, funcName);
         vector<FunctionPtr> result;
         library.foreach([&](Module * mod) -> bool {
-            if ( inModuleOnly && moduleName!=mod->name )
-                return true;
             auto itFnList = mod->functionsByName.find(funcName);
             if ( itFnList != mod->functionsByName.end() ) {
                 auto & goodFunctions = itFnList->second;
@@ -2484,7 +2433,7 @@ namespace yzg
                 }
             }
             return true;
-        });
+        },moduleName);
         return result;
     }
     
@@ -2660,10 +2609,15 @@ namespace yzg
             }
         } else if ( handles.size() ) {
             if ( handles.size()==1 ) {
-                auto pTD = new TypeDecl(Type::tHandle);
-                pTD->annotation = handles.back();
-                pTD->at = at;
-                return pTD;
+                if ( handles.back()->isHandledTypeAnnotation() ) {
+                    auto pTD = new TypeDecl(Type::tHandle);
+                    pTD->annotation = static_pointer_cast<TypeAnnotation>(handles.back());
+                    pTD->at = at;
+                    return pTD;
+                } else {
+                    error("not a handled type annotation "+name,at,CompilationError::handle_not_found);
+                    return nullptr;
+                }
             } else {
                 string candidates = describeCandidates(handles);
                 error("too many options for "+name + "\n" + candidates,at,CompilationError::handle_not_found);
@@ -2678,23 +2632,12 @@ namespace yzg
     ExprLooksLikeCall * Program::makeCall ( const LineInfo & at, const string & name ) {
         vector<ExprCallFactory *> ptr;
         string moduleName, funcName;
-        if ( splitTypeName(name, moduleName, funcName) ) {
-            library.foreach([&](Module * pm) -> bool {
-                if ( pm->name==moduleName ) {
-                    if ( auto pp = pm->findCall(funcName) )
-                        ptr.push_back(pp);
-                    return false;
-                } else {
-                    return true;
-                }
-            });
-        } else {
-            library.foreach([&](Module * pm) -> bool {
-                if ( auto pp = pm->findCall(name) )
-                    ptr.push_back(pp);
-                return true;
-            });
-        }
+        splitTypeName(name, moduleName, funcName);
+        library.foreach([&](Module * pm) -> bool {
+            if ( auto pp = pm->findCall(funcName) )
+                ptr.push_back(pp);
+            return false;
+        }, moduleName);
         if ( ptr.size()==1 ) {
             return (*ptr.back())(at);
         } else if ( ptr.size()==0 ) {

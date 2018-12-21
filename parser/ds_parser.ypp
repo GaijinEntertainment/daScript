@@ -17,11 +17,21 @@
         Expression      *pInit;
     };
     
+    struct AnnotationDeclaration {
+        Annotation * annotation = nullptr;
+        AnnotationArgumentList * arguments = nullptr;
+    };
+    
+    typedef vector<AnnotationDeclaration *> AnnotationList;
+    
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     
     LineInfo tokAt ( const struct YYLTYPE & li );
+    
+    Annotation * findAnnotation ( const string & name, const LineInfo & at );
+    void deleteAnnotationList ( AnnotationList * pList );
 }
 
 %{
@@ -43,15 +53,19 @@
     int                             i;
     uint                            ui;
     double                          d;
-    string                          *s;
-    vector<string>                  *pNameList;
-    Structure                       *pStruct;
-    VariableDeclaration             *pVarDecl;
-    vector<VariableDeclaration*>    *pVarDeclList;
-    TypeDecl                        *pTypeDecl;
-    Expression                      *pExpression;
+    string *                        s;
+    vector<string> *                pNameList;
+    Structure *                     pStruct;
+    VariableDeclaration *           pVarDecl;
+    vector<VariableDeclaration*> *  pVarDeclList;
+    TypeDecl *                      pTypeDecl;
+    Expression *                    pExpression;
     Type                            type;
     TypeAnnotation *                annotation;
+    AnnotationArgument *            aa;
+    AnnotationArgumentList *        aaList;
+    AnnotationDeclaration *         fa;
+    AnnotationList *                faList;
 }
 
 %token  LEXER_ERROR
@@ -97,7 +111,11 @@
 %type <pVarDecl>        variable_declaration
 %type <s>               name_in_namespace
 %type <s>               function_name
-%type <annotation>      optional_annotation
+%type <aa>              annotation_argument
+%type <aaList>          annotation_argument_list
+%type <fa>              annotation_declaration
+%type <faList>          annotation_list
+%type <faList>          optional_annotation_list
 
 %type <pExpression>     expr
 %type <pExpression>     expr_list
@@ -228,6 +246,43 @@ expression_while_loop
     }
     ;
 
+annotation_argument
+    :   NAME[name] '=' STRING[value]    { $$ = new AnnotationArgument(*$name,*$value); delete $value; }
+    |   NAME[name] '=' INTEGER[value]   { $$ = new AnnotationArgument(*$name,$value);  }
+    |   NAME[name] '=' DOUBLE[value]    { $$ = new AnnotationArgument(*$name,float($value));  }
+    |   NAME[name] '=' _TRUE            { $$ = new AnnotationArgument(*$name,true);  }
+    |   NAME[name] '=' _FALSE           { $$ = new AnnotationArgument(*$name,false);  }
+    ;
+
+annotation_argument_list
+    :   annotation_argument[arg]                                        { $$ = new AnnotationArgumentList(); $$->push_back(*$arg); delete $arg; }
+    |   annotation_argument_list[argL] ',' annotation_argument[arg]     { $$ = $argL; $$->push_back(*$arg); delete $arg; }
+    ;
+
+annotation_declaration
+    :   name_in_namespace[name] {
+        $$ = new AnnotationDeclaration();
+        $$->annotation = findAnnotation(*$name,tokAt(@name));
+        delete $name;
+    }
+    |   name_in_namespace[name] '(' annotation_argument_list[argL] ')' {
+        $$ = new AnnotationDeclaration();
+        $$->annotation = findAnnotation(*$name,tokAt(@name));
+        $$->arguments = $argL;
+        delete $name;
+    }
+    ;
+
+annotation_list
+    :   annotation_declaration[ann]                             { $$ = new AnnotationList(); $$->push_back($ann); }
+    |   annotation_list[annL] ',' annotation_declaration[ann]   { $$ = $annL; $$->push_back($ann); }
+    ;
+
+optional_annotation_list
+    :                                   { $$ = nullptr; }
+    |   '[' annotation_list[annL] ']'   { $$ = $annL; }
+    ;
+
 optional_function_argument_list
     :                                           { $$ = nullptr; }
     |   '(' function_argument_list[list] ')'    { $$ = $list; }
@@ -267,9 +322,9 @@ function_name
     |   _OPERATOR SUBSUB  { $$ = new string("---"); }
     ;
 
-
 function_declaration
-    :   _DEF[loc] function_name[name] optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
+    :   optional_annotation_list[annL] _DEF[loc] function_name[name]
+            optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         auto pFunction = make_shared<Function>();
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
@@ -301,6 +356,19 @@ function_declaration
                 }
             }
             deleteVariableDeclarationList($list);
+        }
+        if ( $annL ) {
+            for ( auto pA : *$annL ) {
+                if ( pA->annotation ) {
+                    if ( pA->annotation->isFunctionAnnotation() ) {
+                        auto ann = (FunctionAnnotation *) pA->annotation;
+                        ann->Apply(pFunction, pA->arguments ? *pA->arguments : AnnotationArgumentList());
+                    } else {
+                        yyerror("function can only have function annotations", tokAt(@loc), CompilationError::invalid_annotation);
+                    }
+                }
+            }
+            deleteAnnotationList($annL);
         }
         if ( !g_Program->addFunction(pFunction) ) {
             yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::function_already_declared);
@@ -570,28 +638,8 @@ global_let
     }
     ;
 
-optional_annotation
-    :   { $$ = nullptr; }
-    |   '[' name_in_namespace[name] ']' {
-        auto handles = g_Program->findHandle(*$name);
-        if ( handles.size() ) {
-            if ( handles.size()==1 ) {
-                $$ = handles.back().get();
-            } else {
-                string candidates = g_Program->describeCandidates(handles);
-                yyerror("too many options for "+*$name + "\n" + candidates,tokAt(@name),CompilationError::handle_not_found);
-                $$ = nullptr;
-            }
-        } else {
-            yyerror("annotation not found "+*$name + "\n",tokAt(@name),CompilationError::annotation_not_found);
-            $$ = nullptr;
-        }
-        delete $name;
-    }
-    ;
-
 structure_declaration
-    : optional_annotation[annotation] _STRUCT[loc] NAME[name] '{' struct_variable_declaration_list[list] '}' {
+    : optional_annotation_list[annL] _STRUCT[loc] NAME[name] '{' struct_variable_declaration_list[list] '}' {
         auto pStruct = make_shared<Structure>(*$name);
         pStruct->at = tokAt(@loc);
         for ( auto pDecl : *$list ) {
@@ -612,10 +660,18 @@ structure_declaration
                 }
             }
         }
-        if ( $annotation ) {
-            if ( !g_Program->addHandle(pStruct, $annotation->shared_from_this()) ) {
-                yyerror("handled structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
+        if ( $annL ) {
+            if ( $annL->size()!=1 ) {
+                yyerror("structures only allowed one annotation", tokAt(@loc),CompilationError::invalid_annotation);
+            } else {
+                auto annotation = $annL->back()->annotation;
+                if ( !annotation->isStructureAnnotation() ) {
+                    yyerror("structures only allowed structure annotation", tokAt(@loc),CompilationError::invalid_annotation);
+                } else if ( !g_Program->addHandle(pStruct, ((StructureTypeAnnotation *)annotation)->shared_from_this()) ) {
+                    yyerror("handled structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
+                }
             }
+            deleteAnnotationList($annL);
         } else {
             if ( !g_Program->addStructure(pStruct) )
                 yyerror("structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
@@ -782,3 +838,24 @@ void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
 LineInfo tokAt ( const struct YYLTYPE & li ) {
     return LineInfo(li.first_column,li.first_line);
 }
+
+Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
+    auto ann = g_Program->findHandle(name);
+    if ( ann.size()==1 ) {
+        return ann.back().get();
+    } else if ( ann.size()==0 ) {
+        yyerror("annotation " + name + " not found", at, CompilationError::annotation_not_found );
+        return nullptr;
+    } else {
+        string candidates = g_Program->describeCandidates(ann);
+        yyerror("too many options for annotation " + name, at, CompilationError::annotation_not_found );
+        return nullptr;
+    }
+}
+
+void deleteAnnotationList ( AnnotationList * list ) {
+    for ( auto pD : *list )
+        delete pD;
+    delete list;
+}
+

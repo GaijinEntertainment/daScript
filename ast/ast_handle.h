@@ -14,6 +14,7 @@ namespace yzg
             uint32_t    offset;
         };
         ManagedStructureAnnotation (const string & n) : TypeAnnotation(n) {}
+        virtual bool isHandledTypeAnnotation() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }
         virtual bool isRefType() const override { return true; }
         virtual bool isNewable() const override { return true; }
@@ -127,6 +128,7 @@ namespace yzg
         : TypeAnnotation(n), vecType(d) {
             vecType->ref = true;
         }
+        virtual bool isHandledTypeAnnotation() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(VectorType); }
         virtual bool isRefType() const override { return true; }
         virtual bool isIndexable ( const TypeDeclPtr & indexType ) const override { return indexType->isIndex(); }
@@ -154,6 +156,7 @@ namespace yzg
     struct ManagedValueAnnotation : TypeAnnotation {
         static_assert(sizeof(OT)<=sizeof(__m128), "value types have to fit in ABI");
         ManagedValueAnnotation(const string & n) : TypeAnnotation(n) {}
+        virtual bool isHandledTypeAnnotation() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }
         virtual bool isRefType() const override { return false; }

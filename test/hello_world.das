@@ -14,6 +14,10 @@ def testFields(x:Fields?):int
         debug(x)
         return t
 
+[es]
+def update(pos:float3&;vel:float3 const &)
+    pos += vel
+
 def test:bool
     UnitTest::testFields()
     return true

@@ -47,7 +47,7 @@ namespace yzg
         }
     }
     
-    bool Module::addHandle ( const TypeAnnotationPtr & ptr ) {
+    bool Module::addHandle ( const AnnotationPtr & ptr ) {
         if ( handleTypes.insert(make_pair(ptr->name, move(ptr))).second ) {
             ptr->module = this;
             return true;
@@ -101,7 +101,7 @@ namespace yzg
         return it != structures.end() ? it->second : StructurePtr();
     }
     
-    TypeAnnotationPtr Module::findHandle ( const string & name ) const {
+    AnnotationPtr Module::findHandle ( const string & name ) const {
         auto it = handleTypes.find(name);
         return it != handleTypes.end() ? it->second : nullptr;
     }
@@ -113,6 +113,19 @@ namespace yzg
     
     // MODULE LIBRARY
     
+    bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
+        auto at = name.find("::");
+        if ( at!=string::npos ) {
+            moduleName = name.substr(0,at);
+            funcName = name.substr(at+2);
+            return true;
+        } else {
+            moduleName = "*";
+            funcName = name;
+            return false;
+        }
+    }
+    
     void ModuleLibrary::addBuiltInModule () {
         addModule(Module::require("$"));
     }
@@ -122,77 +135,35 @@ namespace yzg
         modules.push_back(module);
     }
 
-    void ModuleLibrary::foreach ( function<bool (Module * module)> && func ) const {
+    void ModuleLibrary::foreach ( function<bool (Module * module)> && func, const string & moduleName ) const {
+        bool any = moduleName=="*";
         for ( auto pm : modules ) {
+            if ( !any && pm->name!=moduleName ) continue;
             if ( !func(pm) ) break;
         }
     }
     
-    vector<TypeAnnotationPtr> ModuleLibrary::findHandle ( const string & name ) const {
-        vector<TypeAnnotationPtr> ptr;
+    vector<AnnotationPtr> ModuleLibrary::findHandle ( const string & name ) const {
+        vector<AnnotationPtr> ptr;
         string moduleName, annName;
-        if ( splitTypeName(name, moduleName, annName) ) {
-            foreach([&](Module * pm) -> bool {
-                if ( pm->name==moduleName ) {
-                    if ( auto pp = pm->findHandle(annName) )
-                        ptr.push_back(pp);
-                    return false;
-                } else {
-                    return true;
-                }
-            });
-        } else {
-            foreach([&](Module * pm) -> bool {
-                if ( auto pp = pm->findHandle(name) )
-                    ptr.push_back(pp);
-                return true;
-            });
-        }
-        return ptr;
-    }
-    
-    VariablePtr ModuleLibrary::findVariable ( const string & name ) const {
-        VariablePtr ptr;
+        splitTypeName(name, moduleName, annName);
         foreach([&](Module * pm) -> bool {
-            ptr = pm->findVariable(name);
-            return !ptr;
-        });
-        return ptr;
-    }
-    
-    bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
-        auto at = name.find("::");
-        if ( at!=string::npos ) {
-            moduleName = name.substr(0,at);
-            funcName = name.substr(at+2);
+            if ( auto pp = pm->findHandle(annName) )
+                ptr.push_back(pp);
             return true;
-        } else {
-            moduleName = "";
-            funcName = name;
-            return false;
-        }
+        }, moduleName);
+        return ptr;
     }
     
     vector<StructurePtr> ModuleLibrary::findStructure ( const string & name ) const {
         vector<StructurePtr> ptr;
         string moduleName, funcName;
-        if ( splitTypeName(name, moduleName, funcName) ) {
-            foreach([&](Module * pm) -> bool {
-                if ( pm->name==moduleName ) {
-                    if ( auto pp = pm->findStructure(funcName) )
-                        ptr.push_back(pp);
-                    return false;
-                } else {
-                    return true;
-                }
-            });
-        } else {
-            foreach([&](Module * pm) -> bool {
-                if ( auto pp = pm->findStructure(name) )
-                    ptr.push_back(pp);
-                return true;
-            });
-        }
+        splitTypeName(name, moduleName, funcName);
+        foreach([&](Module * pm) -> bool {
+            if ( auto pp = pm->findStructure(funcName) )
+                ptr.push_back(pp);
+            return true;
+        }, moduleName);
         return ptr;
     }
     
@@ -211,9 +182,15 @@ namespace yzg
         auto t = make_shared<TypeDecl>(Type::tHandle);
         auto handles = findHandle(name);
         if ( handles.size()==1 ) {
-            t->annotation = handles.back();
+            if ( handles.back()->isHandledTypeAnnotation() ) {
+                t->annotation = static_pointer_cast<TypeAnnotation>(handles.back());
+            } else {
+                assert(0 && "can't make hanlde type");
+                return nullptr;
+            }
         } else {
             assert(0 && "can't make hanlde type");
+            return nullptr;
         }
         return t;
     }

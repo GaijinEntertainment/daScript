@@ -190,16 +190,27 @@ void testFields ( Context * ctx ) {
     assert(t==8);
 }
 
+struct EsFunctionAnnotation : FunctionAnnotation {
+    EsFunctionAnnotation() : FunctionAnnotation("es") {
+    };
+    virtual void Apply ( const FunctionPtr & func, const AnnotationArgumentList & args ) override {
+        cout << "in functon " << func->name << endl;
+    };
+};
+
 class Module_UnitTest : public Module {
 public:
     Module_UnitTest() : Module("UnitTest") {
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();
+        // function annotations
+        addHandle(make_shared<EsFunctionAnnotation>());
+        // structure annotations
+        addHandle(make_shared<IntFieldsAnnotation>());
         // register types
         addHandle(make_shared<TestObjectFooAnnotation>());
         addHandle(make_shared<TestObjectBarAnnotation>(lib));
-        addHandle(make_shared<IntFieldsAnnotation>());
         // register function
         addExtern<decltype(testFoo), testFoo>(*this, lib, "testFoo");
         addExtern<decltype(testAdd), testAdd>(*this, lib, "testAdd");
