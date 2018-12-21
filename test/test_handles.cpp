@@ -272,7 +272,6 @@ bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsCom
                 data[a] = nullptr;
                 def[a] = table.attributes[a].def;
             }
-            
         }
         for ( uint32_t i=0; i != totalComponents; ++i ) {
             for ( uint32_t a=0; a!=nAttr; ++a ) {

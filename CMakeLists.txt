@@ -36,6 +36,7 @@ SET(AST_SRC
 ast/compilation_errors.h
 ast/ast.cpp
 ast/ast_module.cpp
+ast/ast_visitor.cpp
 ast/ast.h
 ast/ast_interop.h
 ast/ast_handle.h

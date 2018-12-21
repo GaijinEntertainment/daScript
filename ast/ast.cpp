@@ -514,6 +514,12 @@ namespace yzg
     
     // ExprRef2Value
     
+    ExpressionPtr ExprRef2Value::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprRef2Value::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprRef2Value>(expr);
         Expression::clone(cexpr);
@@ -552,6 +558,12 @@ namespace yzg
     
     // ExprPtr2Ref
     
+    ExpressionPtr ExprPtr2Ref::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprPtr2Ref::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprPtr2Ref>(expr);
         Expression::clone(cexpr);
@@ -584,7 +596,14 @@ namespace yzg
         return context.makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
 
-    // ExprPtr2Ref
+    // ExprNullCoalescing
+    
+    ExpressionPtr ExprNullCoalescing::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        defaultValue = defaultValue->visit(vis);
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprNullCoalescing::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprNullCoalescing>(expr);
@@ -697,6 +716,12 @@ namespace yzg
     }
 
     // ExprMakeBlock
+    
+    ExpressionPtr ExprMakeBlock::visit(Visitor & vis) {
+        vis.preVisit(this);
+        block = block->visit(vis);
+        return vis.visit(this);
+    }
     
     void ExprMakeBlock::inferType(InferTypeContext & context) {
         type.reset();
@@ -932,6 +957,11 @@ namespace yzg
 
     // ExprSizeOf
     
+    ExpressionPtr ExprSizeOf::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprSizeOf::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprSizeOf>(expr);
         Expression::clone(cexpr);
@@ -966,6 +996,11 @@ namespace yzg
     }
     
     // ExprNew
+    
+    ExpressionPtr ExprNew::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprNew>(expr);
@@ -1006,6 +1041,13 @@ namespace yzg
     }
 
     // ExprAt
+    
+    ExpressionPtr ExprAt::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        index = index->visit(vis);
+        return vis.visit(this);
+    }
     
     void ExprAt::log(ostream& stream, int depth) const {
         stream << "(@ " << *subexpr << " " << *index << ")";
@@ -1081,6 +1123,13 @@ namespace yzg
     }
 
     // ExprBlock
+    
+    ExpressionPtr ExprBlock::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto & subexpr : list )
+            subexpr = subexpr->visit(vis);
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprBlock::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprBlock>(expr);
@@ -1159,6 +1208,12 @@ namespace yzg
     
     // ExprField
     
+    ExpressionPtr ExprField::visit(Visitor & vis) {
+        vis.preVisit(this);
+        value = value->visit(vis);
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprField>(expr);
         Expression::clone(cexpr);
@@ -1220,6 +1275,12 @@ namespace yzg
     }
     
     // ExprSafeField
+    
+    ExpressionPtr ExprSafeField::visit(Visitor & vis) {
+        vis.preVisit(this);
+        value = value->visit(vis);
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprSafeField::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprSafeField>(expr);
@@ -1291,6 +1352,11 @@ namespace yzg
     }
     
     // ExprVar
+    
+    ExpressionPtr ExprVar::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprVar::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprVar>(expr);
@@ -1373,6 +1439,12 @@ namespace yzg
     
     // ExprOp1
     
+    ExpressionPtr ExprOp1::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprOp1::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprOp1>(expr);
         ExprOp::clone(cexpr);
@@ -1428,6 +1500,13 @@ namespace yzg
     }
     
     // ExprOp2
+    
+    ExpressionPtr ExprOp2::visit(Visitor & vis) {
+        vis.preVisit(this);
+        left = left->visit(vis);
+        right = right->visit(vis);
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprOp2::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprOp2>(expr);
@@ -1497,6 +1576,14 @@ namespace yzg
     }
 
     // ExprOp3
+    
+    ExpressionPtr ExprOp3::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        left = left->visit(vis);
+        right = right->visit(vis);
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprOp3::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprOp3>(expr);
@@ -1579,6 +1666,13 @@ namespace yzg
     
     // ExprMove
     
+    ExpressionPtr ExprMove::visit(Visitor & vis) {
+        vis.preVisit(this);
+        left = left->visit(vis);
+        right = right->visit(vis);
+        return vis.visit(this);
+    }
+    
     void ExprMove::log(ostream& stream, int depth) const {
         logType(stream);
         stream << "(<- ";
@@ -1624,6 +1718,13 @@ namespace yzg
     
     // ExprCopy
     
+    ExpressionPtr ExprCopy::visit(Visitor & vis) {
+        vis.preVisit(this);
+        left = left->visit(vis);
+        right = right->visit(vis);
+        return vis.visit(this);
+    }
+    
     void ExprCopy::log(ostream& stream, int depth) const {
         logType(stream);
         stream << "(= ";
@@ -1665,6 +1766,13 @@ namespace yzg
     
     // ExprTryCatch
     
+    ExpressionPtr ExprTryCatch::visit(Visitor & vis) {
+        vis.preVisit(this);
+        try_block = try_block->visit(vis);
+        catch_block = catch_block->visit(vis);
+        return vis.visit(this);
+    }
+    
     void ExprTryCatch::log(ostream& stream, int depth) const {
         stream << "(try\n";
         stream << string(depth+2,'\t');
@@ -1700,6 +1808,12 @@ namespace yzg
     }
     
     // ExprReturn
+    
+    ExpressionPtr ExprReturn::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprReturn::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprReturn>(expr);
@@ -1758,6 +1872,11 @@ namespace yzg
     
     // ExprBreak
     
+    ExpressionPtr ExprBreak::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprBreak::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprBreak>(expr);
         Expression::clone(cexpr);
@@ -1778,8 +1897,49 @@ namespace yzg
     SimNode * ExprBreak::simulate (Context & context) const {
         return context.makeNode<SimNode_Break>(at);
     }
+    
+    // CONSTANTS
+    
+    ExpressionPtr ExprConstPtr::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+    
+    ExpressionPtr ExprConstInt::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+    
+    ExpressionPtr ExprConstUInt::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+    
+    ExpressionPtr ExprConstBool::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprConstFloat::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+    
+    ExpressionPtr ExprConstString::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
 
     // ExprIfThenElse
+    
+    ExpressionPtr ExprIfThenElse::visit(Visitor & vis) {
+        vis.preVisit(this);
+        cond = cond->visit(vis);
+        if_true = if_true->visit(vis);
+        if ( if_false )
+            if_false = if_false->visit(vis);
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprIfThenElse::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprIfThenElse>(expr);
@@ -1823,6 +1983,13 @@ namespace yzg
 
     // ExprWhile
     
+    ExpressionPtr ExprWhile::visit(Visitor & vis) {
+        vis.preVisit(this);
+        cond = cond->visit(vis);
+        body = body->visit(vis);
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprWhile::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprWhile>(expr);
         Expression::clone(cexpr);
@@ -1862,6 +2029,23 @@ namespace yzg
     
     // ExprFor
 
+    ExpressionPtr ExprFor::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto & var : iteratorVariables ) {
+            vis.preVisitFor(var);
+        }
+        for ( auto & var : iteratorVariables ) {
+            var = vis.visitFor(var);
+        }
+        for ( auto & src : sources ) {
+            src = src->visit(vis);
+        }
+        subexpr = subexpr->visit(vis);
+        if ( filter )
+            filter = subexpr->visit(vis);
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprFor::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprFor>(expr);
         Expression::clone(cexpr);
@@ -2062,6 +2246,20 @@ namespace yzg
     
     // ExprLet
     
+    ExpressionPtr ExprLet::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto & var : variables ) {
+            vis.preVisitLet(var);
+        }
+        for ( auto & var : variables ) {
+            if ( var->init )
+                var->init = var->init->visit(vis);
+            var = vis.visitLet(var);
+        }
+        subexpr = subexpr->visit(vis);
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprLet>(expr);
         Expression::clone(cexpr);
@@ -2187,6 +2385,14 @@ namespace yzg
     
     // ExprLooksLikeCall
     
+    ExpressionPtr ExprLooksLikeCall::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto & arg : arguments ) {
+            arg = arg->visit(vis);
+        }
+        return vis.visit(this);
+    }
+    
     ExpressionPtr ExprLooksLikeCall::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprLooksLikeCall>(expr);
         Expression::clone(cexpr);
@@ -2234,6 +2440,14 @@ namespace yzg
     }
     
     // ExprCall
+    
+    ExpressionPtr ExprCall::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto & arg : arguments ) {
+            arg = arg->visit(vis);
+        }
+        return vis.visit(this);
+    }
     
     ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprCall>(expr);
