@@ -125,8 +125,8 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         shared_ptr<IntFieldsAnnotation> cp =  p ? static_pointer_cast<IntFieldsAnnotation>(p) : make_shared<IntFieldsAnnotation>();
         return StructureTypeAnnotation::clone(cp);
     }
-    virtual bool create ( const shared_ptr<Structure> & st, string & err ) override {
-        if( !StructureTypeAnnotation::create(st,err) )
+    virtual bool create ( const shared_ptr<Structure> & st, const AnnotationArgumentList & args, string & err ) override {
+        if( !StructureTypeAnnotation::create(st,args,err) )
             return false;
         bool fail = false;
         for ( auto & f : st->fields ) {
@@ -205,12 +205,12 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
         // function annotations
-        addHandle(make_shared<EsFunctionAnnotation>());
+        addAnnotation(make_shared<EsFunctionAnnotation>());
         // structure annotations
-        addHandle(make_shared<IntFieldsAnnotation>());
+        addAnnotation(make_shared<IntFieldsAnnotation>());
         // register types
-        addHandle(make_shared<TestObjectFooAnnotation>());
-        addHandle(make_shared<TestObjectBarAnnotation>(lib));
+        addAnnotation(make_shared<TestObjectFooAnnotation>());
+        addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
         // register function
         addExtern<decltype(testFoo), testFoo>(*this, lib, "testFoo");
         addExtern<decltype(testAdd), testAdd>(*this, lib, "testAdd");

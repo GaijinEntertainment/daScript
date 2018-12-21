@@ -269,7 +269,7 @@ namespace yzg
         virtual bool canCopy() const override { return false; }
         virtual bool isPod() const override { return false; }
         virtual bool isRefType() const override { return false; }
-        virtual bool create ( const shared_ptr<Structure> & st, string & /* err */ ) {
+        virtual bool create ( const shared_ptr<Structure> & st, const AnnotationArgumentList & /*args*/, string & /*err*/ ) {
             structureType = st;
             return true;
         }
@@ -868,11 +868,11 @@ namespace yzg
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addFunction ( const FunctionPtr & fn );
-        bool addHandle ( const AnnotationPtr & ptr );
+        bool addAnnotation ( const AnnotationPtr & ptr );
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
-        AnnotationPtr findHandle ( const string & name ) const;
+        AnnotationPtr findAnnotation ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
         static Module * require ( const string & name );
         static void Shutdown();
@@ -919,7 +919,7 @@ namespace yzg
         void addBuiltInModule ();
         void addModule ( Module * module );
         void foreach ( function<bool (Module * module)> && func, const string & name ) const;
-        vector<AnnotationPtr> findHandle ( const string & name ) const;
+        vector<AnnotationPtr> findAnnotation ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
@@ -933,10 +933,10 @@ namespace yzg
         friend ostream& operator<< (ostream& stream, const Program & program);
         VariablePtr findVariable ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
-        vector<AnnotationPtr> findHandle ( const string & name ) const;
+        vector<AnnotationPtr> findAnnotation ( const string & name ) const;
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
-        bool addHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann );
+        bool addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg );
         bool addFunction ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void inferTypes();

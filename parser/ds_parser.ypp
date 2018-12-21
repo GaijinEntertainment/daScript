@@ -665,9 +665,11 @@ structure_declaration
                 yyerror("structures only allowed one annotation", tokAt(@loc),CompilationError::invalid_annotation);
             } else {
                 auto annotation = $annL->back()->annotation;
+                auto args = $annL->back()->arguments;
                 if ( !annotation->isStructureAnnotation() ) {
                     yyerror("structures only allowed structure annotation", tokAt(@loc),CompilationError::invalid_annotation);
-                } else if ( !g_Program->addHandle(pStruct, ((StructureTypeAnnotation *)annotation)->shared_from_this()) ) {
+                } else if ( !g_Program->addStructureHandle(pStruct, ((StructureTypeAnnotation *)annotation)->shared_from_this(),
+                    args ? *args : AnnotationArgumentList()) ) {
                     yyerror("handled structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
                 }
             }
@@ -840,7 +842,7 @@ LineInfo tokAt ( const struct YYLTYPE & li ) {
 }
 
 Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
-    auto ann = g_Program->findHandle(name);
+    auto ann = g_Program->findAnnotation(name);
     if ( ann.size()==1 ) {
         return ann.back().get();
     } else if ( ann.size()==0 ) {

@@ -11,10 +11,10 @@ def testFields(x:Fields?):int
         t += x?.b ?? 0
         t += x?.c ?? 0
         t += x?.d ?? 0
-        debug(x)
+        // debug(x)
         return t
 
-[es]
+[es (pass="ks")]
 def update(pos:float3&;vel:float3 const &)
     pos += vel
 

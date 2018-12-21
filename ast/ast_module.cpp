@@ -47,7 +47,7 @@ namespace yzg
         }
     }
     
-    bool Module::addHandle ( const AnnotationPtr & ptr ) {
+    bool Module::addAnnotation ( const AnnotationPtr & ptr ) {
         if ( handleTypes.insert(make_pair(ptr->name, move(ptr))).second ) {
             ptr->module = this;
             return true;
@@ -101,7 +101,7 @@ namespace yzg
         return it != structures.end() ? it->second : StructurePtr();
     }
     
-    AnnotationPtr Module::findHandle ( const string & name ) const {
+    AnnotationPtr Module::findAnnotation ( const string & name ) const {
         auto it = handleTypes.find(name);
         return it != handleTypes.end() ? it->second : nullptr;
     }
@@ -143,12 +143,12 @@ namespace yzg
         }
     }
     
-    vector<AnnotationPtr> ModuleLibrary::findHandle ( const string & name ) const {
+    vector<AnnotationPtr> ModuleLibrary::findAnnotation ( const string & name ) const {
         vector<AnnotationPtr> ptr;
         string moduleName, annName;
         splitTypeName(name, moduleName, annName);
         foreach([&](Module * pm) -> bool {
-            if ( auto pp = pm->findHandle(annName) )
+            if ( auto pp = pm->findAnnotation(annName) )
                 ptr.push_back(pp);
             return true;
         }, moduleName);
@@ -180,7 +180,7 @@ namespace yzg
     
     TypeDeclPtr ModuleLibrary::makeHandleType ( const string & name ) const {
         auto t = make_shared<TypeDecl>(Type::tHandle);
-        auto handles = findHandle(name);
+        auto handles = findAnnotation(name);
         if ( handles.size()==1 ) {
             if ( handles.back()->isHandledTypeAnnotation() ) {
                 t->annotation = static_pointer_cast<TypeAnnotation>(handles.back());

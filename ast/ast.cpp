@@ -2294,8 +2294,8 @@ namespace yzg
     // program
     
     
-    vector<AnnotationPtr> Program::findHandle ( const string & name ) const {
-        return library.findHandle(name);
+    vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {
+        return library.findAnnotation(name);
     }
     
     vector<StructurePtr> Program::findStructure ( const string & name ) const {
@@ -2564,13 +2564,13 @@ namespace yzg
         return thisModule->addFunction(fn);
     }
     
-    bool Program::addHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann ) {
+    bool Program::addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg ) {
         if ( ann->isStructureAnnotation() ) {
             auto annotation = static_pointer_cast<StructureTypeAnnotation>(ann->clone());
             annotation->name = st->name;
             string err;
-            if ( annotation->create(st,err) ) {
-                thisModule->addHandle(annotation);
+            if ( annotation->create(st,arg,err) ) {
+                thisModule->addAnnotation(annotation);
                 return true;
             } else {
                 error("can't create structure handle "+ann->name + "\n" + err,st->at,CompilationError::invalid_annotation);
@@ -2590,7 +2590,7 @@ namespace yzg
     
     TypeDecl * Program::makeTypeDeclaration(const LineInfo &at, const string &name) {
         auto structs = findStructure(name);
-        auto handles = findHandle(name);
+        auto handles = findAnnotation(name);
         if ( structs.size() && handles.size() ) {
             string candidates = describeCandidates(structs);
             candidates += describeCandidates(handles, false);

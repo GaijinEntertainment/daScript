@@ -65,8 +65,8 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
         // register types
-        addHandle(make_shared<ObjectStructureTypeAnnotation>());
-        addHandle(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
+        addAnnotation(make_shared<ObjectStructureTypeAnnotation>());
+        addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
         // register functions
         addExtern<decltype(updateObject),updateObject>(*this,lib,"interopUpdate");
         addExtern<decltype(updateTest),updateTest>(*this,lib,"interopUpdateTest");
