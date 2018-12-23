@@ -181,7 +181,7 @@ namespace yzg
         Module *                    module = nullptr;
     };
     
-    struct Variable {
+    struct Variable : public enable_shared_from_this<Variable> {
         friend ostream& operator<< (ostream& stream, const Variable & var);
         VariablePtr clone() const;
         string          name;
@@ -299,11 +299,9 @@ namespace yzg
         Expression(const LineInfo & a) : at(a) {}
         virtual ~Expression() {}
         friend ostream& operator<< (ostream& stream, const Expression & func);
-        virtual void log(ostream& stream, int depth) const = 0;
         virtual void inferType(InferTypeContext & context) = 0;
         virtual ExpressionPtr visit(Visitor & vis) = 0;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
-        void logType(ostream& stream) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
         virtual SimNode * simulate (Context & context) const = 0;
         virtual bool isSequence() const { return false; }
@@ -314,7 +312,9 @@ namespace yzg
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
         TypeDeclPtr type;
-        bool        constexpression = false;
+        bool        constexpression= false;
+        bool        topLevel = false;
+        bool        argLevel = false;
     };
     
     template <typename ExprType>
@@ -323,7 +323,6 @@ namespace yzg
     }
     
     struct ExprRef2Value : Expression {
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -334,7 +333,6 @@ namespace yzg
     struct ExprPtr2Ref : Expression {
         ExprPtr2Ref () = default;
         ExprPtr2Ref ( const LineInfo & a, const ExpressionPtr & s ) : Expression(a), subexpr(s) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -346,7 +344,6 @@ namespace yzg
         ExprNullCoalescing () = default;
         ExprNullCoalescing ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & defVal )
             : ExprPtr2Ref(a,s), defaultValue(defVal) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -357,7 +354,6 @@ namespace yzg
     struct ExprNew : Expression {
         ExprNew() = default;
         ExprNew ( const LineInfo & a, TypeDeclPtr t ) : Expression(a), typeexpr(t) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -369,7 +365,6 @@ namespace yzg
         ExprAt() = default;
         ExprAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i )
             : Expression(a), subexpr(s), index(i) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -378,7 +373,6 @@ namespace yzg
     };
 
     struct ExprBlock : Expression {
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -387,12 +381,12 @@ namespace yzg
         virtual ExpressionPtr visit(Visitor & vis) override;
         vector<ExpressionPtr>   list;
         bool                    returnsValue = false;
+        bool                    closure = false;
     };
     
     struct ExprVar : Expression {
         ExprVar () = default;
         ExprVar ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -408,7 +402,6 @@ namespace yzg
         ExprField () = default;
         ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
             : Expression(a), value(val), name(n) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -423,7 +416,6 @@ namespace yzg
         ExprSafeField () = default;
         ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
             : ExprField(a,val,n) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -445,7 +437,6 @@ namespace yzg
         ExprOp1 ( const LineInfo & a, const string & o, const ExpressionPtr & s )
             : ExprOp(a,o), subexpr(s) {}
         virtual void inferType(InferTypeContext & context) override;
-        virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -459,7 +450,6 @@ namespace yzg
         ExprOp2 ( const LineInfo & a, const string & o, const ExpressionPtr & l, const ExpressionPtr & r )
             : ExprOp(a,o), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;
-        virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -473,7 +463,6 @@ namespace yzg
         ExprCopy ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
             : ExprOp2(a, "=", l, r) {};
         virtual void inferType(InferTypeContext & context) override;
-        virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -485,7 +474,6 @@ namespace yzg
         ExprMove ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
             : ExprOp2(a, "<-", l, r) {};
         virtual void inferType(InferTypeContext & context) override;
-        virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -506,7 +494,6 @@ namespace yzg
                  const ExpressionPtr & l, const ExpressionPtr & r )
             : ExprOp(a,o), subexpr(s), left(l), right(r) {}
         virtual void inferType(InferTypeContext & context) override;
-        virtual void log(ostream& stream, int depth) const override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual Expression * tail() override { return right->tail(); }
@@ -519,7 +506,6 @@ namespace yzg
         ExprTryCatch ( const LineInfo & a, const ExpressionPtr & t, const ExpressionPtr & c )
             : Expression(a), try_block(t), catch_block(c) {}
         virtual void inferType(InferTypeContext & context) override;
-        virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -532,7 +518,6 @@ namespace yzg
         ExprReturn ( const LineInfo & a, const ExpressionPtr & s )
             : Expression(a), subexpr(s) {}
         virtual void inferType(InferTypeContext & context) override;
-        virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -544,7 +529,6 @@ namespace yzg
         ExprBreak() = default;
         ExprBreak ( const LineInfo & a ) : Expression(a) {}
         virtual void inferType(InferTypeContext & context) override;
-        virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -568,9 +552,6 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override {
             return context.makeNode<SimNode_ConstValue<TT>>(at,value);
         }
-        virtual void log(ostream& stream, int depth) const override {
-            stream << value;
-        }
         TT getValue() const { return value; }
         TT  value;
     };
@@ -579,9 +560,6 @@ namespace yzg
         ExprConstPtr(void * ptr = nullptr) : ExprConst(ptr) {}
         ExprConstPtr(const LineInfo & a, void * ptr = nullptr) : ExprConst(a,ptr) {}
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void log(ostream& stream, int depth) const override {
-            if ( value ) stream << hex << "*0x" << intptr_t(value) << dec; else stream << "null";
-        }
     };
 
     struct ExprConstInt : ExprConst<int32_t,ExprConstInt> {
@@ -594,21 +572,18 @@ namespace yzg
         ExprConstUInt(uint32_t i = 0) : ExprConst(i) {}
         ExprConstUInt(const LineInfo & a, uint32_t i = 0) : ExprConst(a,i) {}
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void log(ostream& stream, int depth) const override {  stream << "0x" << hex << value << dec; }
     };
     
     struct ExprConstBool : ExprConst<bool,ExprConstBool> {
         ExprConstBool(bool i = false) : ExprConst(i) {}
         ExprConstBool(const LineInfo & a, bool i = false) : ExprConst(a,i) {}
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void log(ostream& stream, int depth) const override {  stream << (value ? "true" : "false"); }
     };
 
     struct ExprConstFloat : ExprConst<float,ExprConstFloat> {
         ExprConstFloat(float i = 0.0f) : ExprConst(i) {}
         ExprConstFloat(const LineInfo & a, float i = 0.0f) : ExprConst(a,i) {}
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void log(ostream& stream, int depth) const override { stream << to_string_ex(value); }
     };
     
     struct ExprConstString : ExprConst<string,ExprConstString> {
@@ -619,13 +594,11 @@ namespace yzg
             char * str = context.allocateName(value);
             return context.makeNode<SimNode_ConstValue<char *>>(at,str);
         }
-        virtual void log(ostream& stream, int depth) const override {  stream << "\"" << escapeString(value) << "\""; }
         virtual bool isStringConstant() const override { return true; }
     };
     
     struct ExprLet : Expression {
         Variable * find ( const string & name ) const;
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -644,7 +617,6 @@ namespace yzg
         ExprFor () = default;
         ExprFor ( const LineInfo & a ) : Expression(a) {}
         Variable * findIterator ( const string & name ) const;
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -665,7 +637,6 @@ namespace yzg
     struct ExprLooksLikeCall : Expression {
         ExprLooksLikeCall () = default;
         ExprLooksLikeCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         void autoDereference();
@@ -684,7 +655,6 @@ namespace yzg
         ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b )
             : Expression(a), block(b) { b->at = a; b->setBlockReturnsValue(); }
         virtual void inferType(InferTypeContext & context) override;
-        virtual void log(ostream& stream, int depth) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -822,7 +792,6 @@ namespace yzg
         ExprSizeOf () = default;
         ExprSizeOf ( const LineInfo & a, const ExpressionPtr & s )
             : Expression(a), subexpr(s) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -846,7 +815,6 @@ namespace yzg
         ExprIfThenElse ( const LineInfo & a, const ExpressionPtr & c,
                         const ExpressionPtr & ift, const ExpressionPtr & iff )
             : Expression(a), cond(c), if_true(ift), if_false(iff) {}
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -855,7 +823,6 @@ namespace yzg
     };
     
     struct ExprWhile : Expression {
-        virtual void log(ostream& stream, int depth) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -864,59 +831,7 @@ namespace yzg
         ExpressionPtr   cond, body;
     };
     
-    class Visitor {
-    public:
-        // ANY
-        virtual void preVisitExpression ( Expression * ) {}
-        virtual void visitExpression ( Expression * ) {}
-        // VARIABLES
-#define VISIT_VAR(Type) \
-        virtual void preVisit##Type ( const VariablePtr & ) {} \
-        virtual VariablePtr visit##Type ( const VariablePtr & var ) { return var; }
-        // all visitable variables
-        VISIT_VAR(For)
-        VISIT_VAR(Let)
-#undef VISIT_VAR
-        // EXPRESSIONS
-#define VISIT_EXPR(ExprType) \
-        virtual void preVisit ( ExprType * that ) { preVisitExpression(that); } \
-        virtual ExpressionPtr visit ( ExprType * that ) { visitExpression(that); return that->shared_from_this(); }
-        // all visitable expressions
-        VISIT_EXPR(ExprRef2Value)
-        VISIT_EXPR(ExprPtr2Ref)
-        VISIT_EXPR(ExprNullCoalescing)
-        VISIT_EXPR(ExprNew)
-        VISIT_EXPR(ExprAt)
-        VISIT_EXPR(ExprBlock)
-        VISIT_EXPR(ExprVar)
-        VISIT_EXPR(ExprField)
-        VISIT_EXPR(ExprSafeField)
-        VISIT_EXPR(ExprOp1)
-        VISIT_EXPR(ExprOp2)
-        VISIT_EXPR(ExprOp3)
-        VISIT_EXPR(ExprCopy)
-        VISIT_EXPR(ExprMove)
-        VISIT_EXPR(ExprTryCatch)
-        VISIT_EXPR(ExprReturn)
-        VISIT_EXPR(ExprBreak)
-        VISIT_EXPR(ExprConstPtr)
-        VISIT_EXPR(ExprConstInt)
-        VISIT_EXPR(ExprConstUInt)
-        VISIT_EXPR(ExprConstBool)
-        VISIT_EXPR(ExprConstFloat)
-        VISIT_EXPR(ExprConstString)
-        VISIT_EXPR(ExprLet)
-        VISIT_EXPR(ExprFor)
-        VISIT_EXPR(ExprLooksLikeCall)
-        VISIT_EXPR(ExprMakeBlock)
-        VISIT_EXPR(ExprSizeOf)
-        VISIT_EXPR(ExprCall)
-        VISIT_EXPR(ExprIfThenElse)
-        VISIT_EXPR(ExprWhile)
-#undef VISIT_EXPR
-    };
-    
-    class Function {
+    class Function : public enable_shared_from_this<Function> {
     public:
         virtual ~Function() {}
         friend ostream& operator<< (ostream& stream, const Function & func);
@@ -925,6 +840,7 @@ namespace yzg
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context ) { return context.makeNode<SimNode_Call>(at); }
         string describe() const { return getMangledName(); }
+        virtual FunctionPtr visit(Visitor & vis);
     public:
         string              name;
         vector<VariablePtr> arguments;
@@ -1036,6 +952,7 @@ namespace yzg
         bool failed() const { return failToCompile; }
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
+        void visit(Visitor & vis);
     public:
         void makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type );
         VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );
@@ -1068,6 +985,101 @@ namespace yzg
     };
          
     ProgramPtr parseDaScript ( const char * script );
+    
+    class Visitor {
+    public:
+        // FUNCTON
+        virtual void preVisit ( Function * ) {}
+        virtual FunctionPtr visit ( Function * that ) { return that->shared_from_this(); }
+        virtual void preVisitArgument ( Function *, const VariablePtr &, bool lastArg ) {}
+        virtual VariablePtr visitArgument ( Function *, const VariablePtr & that, bool lastArg ) { return that; }
+        virtual void preVisitArgumentInit ( Function *, Expression * ) {}
+        virtual ExpressionPtr visitArgumentInit ( Function *, Expression * that ) { return that->shared_from_this(); }
+        virtual void preVisitFunctionBody ( Function *,Expression * ) {}
+        virtual ExpressionPtr visitFunctionBody ( Function *, Expression * that ) { return that->shared_from_this(); }
+        // ANY
+        virtual void preVisitExpression ( Expression * ) {}
+        virtual ExpressionPtr visitExpression ( Expression * that ) { return that->shared_from_this(); }
+        // BLOCK
+        virtual void preVisitBlockExpression ( ExprBlock *, Expression * ) {}
+        virtual ExpressionPtr visitBlockExpression (  ExprBlock *, Expression * that ) { return that->shared_from_this(); }
+        // LET
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr &, bool ) {} \
+        virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool ) { return var; }
+        virtual void preVisitLetInit ( ExprLet *, Expression * ) {}
+        virtual ExpressionPtr visitLetInit ( ExprLet *, Expression * that ) { return that->shared_from_this(); }
+        // CALL
+        virtual void preVisitCallArg ( ExprCall *, Expression *, bool ) {}
+        virtual ExpressionPtr visitCallArg ( ExprCall *, Expression * that , bool ) { return that->shared_from_this(); }
+        // CALL
+        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall *, Expression *, bool ) {}
+        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall *, Expression * that , bool ) { return that->shared_from_this(); }
+        // NULL COAELESCING
+        virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * , Expression * ) {}
+        // AT
+        virtual void preVisitAtIndex ( ExprAt *, Expression * ) {}
+        // OP2
+        virtual void preVisitRight ( ExprOp2 *, Expression * ) {}
+        // OP3
+        virtual void preVisitLeft  ( ExprOp3 *, Expression * ) {}
+        virtual void preVisitRight ( ExprOp3 *, Expression * ) {}
+        // COPY
+        virtual void preVisitRight ( ExprCopy *, Expression * ) {}
+        // MOVE
+        virtual void preVisitRight ( ExprMove *, Expression * ) {}
+        // WHILE
+        virtual void preVisitWhileBody ( ExprWhile *, Expression * ) {}
+        // TRY-CATCH
+        virtual void preVisitCatch ( ExprTryCatch *, Expression * ) {}
+        // IF-THEN-ELSE
+        virtual void preVisitIfBlock ( ExprIfThenElse *, Expression * ) {}
+        virtual void preVisitElseBlock ( ExprIfThenElse *, Expression * ) {}
+        // FOR
+        virtual void preVisitFor ( ExprFor *, const VariablePtr &, bool ) {}
+        virtual VariablePtr visitFor ( ExprFor *, const VariablePtr & var, bool ) { return var; }
+        virtual void preVisitForFilter ( ExprFor *, Expression * ) {}
+        virtual void preVisitForBody ( ExprFor *, Expression * ) {}
+        virtual void preVisitForSource ( ExprFor *, Expression *, bool ) {}
+        virtual ExpressionPtr visitForSource ( ExprFor *, Expression * that , bool ) { return that->shared_from_this(); }
+        // EXPRESSIONS
+#define VISIT_EXPR(ExprType) \
+        virtual void preVisit ( ExprType * that ) { preVisitExpression(that); } \
+        virtual ExpressionPtr visit ( ExprType * that ) { return visitExpression(that); }
+        // all visitable expressions
+        VISIT_EXPR(ExprRef2Value)
+        VISIT_EXPR(ExprPtr2Ref)
+        VISIT_EXPR(ExprNullCoalescing)
+        VISIT_EXPR(ExprNew)
+        VISIT_EXPR(ExprAt)
+        VISIT_EXPR(ExprBlock)
+        VISIT_EXPR(ExprVar)
+        VISIT_EXPR(ExprField)
+        VISIT_EXPR(ExprSafeField)
+        VISIT_EXPR(ExprOp1)
+        VISIT_EXPR(ExprOp2)
+        VISIT_EXPR(ExprOp3)
+        VISIT_EXPR(ExprCopy)
+        VISIT_EXPR(ExprMove)
+        VISIT_EXPR(ExprTryCatch)
+        VISIT_EXPR(ExprReturn)
+        VISIT_EXPR(ExprBreak)
+        VISIT_EXPR(ExprConstPtr)
+        VISIT_EXPR(ExprConstInt)
+        VISIT_EXPR(ExprConstUInt)
+        VISIT_EXPR(ExprConstBool)
+        VISIT_EXPR(ExprConstFloat)
+        VISIT_EXPR(ExprConstString)
+        VISIT_EXPR(ExprLet)
+        VISIT_EXPR(ExprFor)
+        VISIT_EXPR(ExprLooksLikeCall)
+        VISIT_EXPR(ExprMakeBlock)
+        VISIT_EXPR(ExprSizeOf)
+        VISIT_EXPR(ExprCall)
+        VISIT_EXPR(ExprIfThenElse)
+        VISIT_EXPR(ExprWhile)
+#undef VISIT_EXPR
+    };
+
 }
 
 

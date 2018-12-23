@@ -17,20 +17,17 @@ namespace yzg
     // TypeDecl
     
     ostream& operator<< (ostream& stream, const TypeDecl & decl) {
-        if ( decl.constant ) {
-            stream << "const ";
-        }
         if ( decl.baseType==Type::tHandle ) {
             stream << decl.annotation->name;
         } else if ( decl.baseType==Type::tArray ) {
             if ( decl.firstType ) {
-                stream << "array (" << *decl.firstType << ")";
+                stream << "array<" << *decl.firstType << ">";
             } else {
                 stream << "array";
             }
         } else if ( decl.baseType==Type::tTable ) {
             if ( decl.firstType && decl.secondType ) {
-                stream << "table (" << *decl.firstType << "," << *decl.secondType << ")";
+                stream << "table<" << *decl.firstType << "," << *decl.secondType << ">";
             } else {
                 stream << "table";
             }
@@ -42,7 +39,7 @@ namespace yzg
             }
         } else if ( decl.baseType==Type::tPointer ) {
             if ( decl.firstType ) {
-                stream << *decl.firstType << " ?";
+                stream << *decl.firstType << "?";
             } else {
                 stream << "void ?";
             }
@@ -61,11 +58,14 @@ namespace yzg
         } else {
             stream << to_string(decl.baseType);
         }
+        if ( decl.constant ) {
+            stream << " const";
+        }
         for ( auto d : decl.dim ) {
-            stream << " " << d;
+            stream << "[" << d << "]";
         }
         if ( decl.ref )
-            stream << " &";
+            stream << "&";
         return stream;
     }
     
@@ -421,19 +421,6 @@ namespace yzg
     
     // function
     
-    ostream& operator<< (ostream& stream, const Function & func) {
-        stream << "(defun (" << *func.result << " " << func.name << ")\n"; // //" << func.getMangledName() << "\n";
-        for ( auto & decl : func.arguments ) {
-            stream << "\t(" << *decl->type << " " << decl->name;
-            if ( decl->init )
-                stream << " " << *decl->init;
-            stream << ")\n";
-        }
-        stream << "\t" << *func.body;
-        stream << ")\n";
-        return stream;
-    }
-    
     string Function::getMangledName() const {
         stringstream ss;
         ss << name;
@@ -459,6 +446,23 @@ namespace yzg
             return nullptr;
         }
         return body->simulate(context);
+    }
+    
+    FunctionPtr Function::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto & arg : arguments ) {
+            vis.preVisitArgument(this, arg, arg==arguments.back() );
+            if ( arg->init ) {
+                vis.preVisitArgumentInit(this, arg->init.get());
+                arg->init = arg->init->visit(vis);
+                arg->init = vis.visitArgumentInit(this, arg->init.get());
+            }
+            arg = vis.visitArgument(this, arg, arg==arguments.back() );
+        }
+        vis.preVisitFunctionBody(this, body.get());
+        body = body->visit(vis);
+        body = vis.visitFunctionBody(this, body.get());
+        return vis.visit(this);
     }
     
     // built-in function
@@ -497,19 +501,13 @@ namespace yzg
             ar2l->at = expr->at;
             ar2l->type = make_shared<TypeDecl>(*expr->type);
             ar2l->type->ref = false;
+            ar2l->topLevel = expr->topLevel;
+            ar2l->argLevel = expr->argLevel;
+            expr->topLevel = expr->argLevel = false;
             return ar2l;
         } else {
             return expr;
         }
-    }
-    
-    void Expression::logType(ostream& stream) const {
-        // stream << "$ (" << *type << ") ";
-    }
-    
-    ostream& operator<< (ostream& stream, const Expression & expr) {
-        expr.log(stream, 1);
-        return stream;
     }
     
     // ExprRef2Value
@@ -525,10 +523,6 @@ namespace yzg
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
-    }
-    
-    void ExprRef2Value::log(ostream& stream, int depth) const {
-        stream << "(=> " << *subexpr << ")";
     }
     
     void ExprRef2Value::inferType(InferTypeContext & context) {
@@ -571,10 +565,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprPtr2Ref::log(ostream& stream, int depth) const {
-        stream << "(-> " << *subexpr << ")";
-    }
-    
     void ExprPtr2Ref::inferType(InferTypeContext & context) {
         type.reset();
         subexpr->inferType(context);
@@ -601,6 +591,7 @@ namespace yzg
     ExpressionPtr ExprNullCoalescing::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
+        vis.preVisitNullCoaelescingDefault(this, defaultValue.get());
         defaultValue = defaultValue->visit(vis);
         return vis.visit(this);
     }
@@ -610,10 +601,6 @@ namespace yzg
         ExprPtr2Ref::clone(cexpr);
         cexpr->defaultValue = defaultValue->clone();
         return cexpr;
-    }
-    
-    void ExprNullCoalescing::log(ostream& stream, int depth) const {
-        stream << "(?? " << *subexpr << " " << *defaultValue << ")";
     }
     
     void ExprNullCoalescing::inferType(InferTypeContext & context) {
@@ -725,19 +712,13 @@ namespace yzg
     
     void ExprMakeBlock::inferType(InferTypeContext & context) {
         type.reset();
+        static_pointer_cast<ExprBlock>(block)->closure = true;
         block->inferType(context);
         // infer
         type = make_shared<TypeDecl>(Type::tBlock);
         if ( block->type ) {
             type->firstType = make_shared<TypeDecl>(*block->type);
         }
-    }
-    
-    void ExprMakeBlock::log(ostream& stream, int depth) const {
-        stream << "(make_block\n";
-        stream << string(depth, '\t');
-        block->log(stream, depth+1);
-        stream << ")";
     }
     
     SimNode * ExprMakeBlock::simulate (Context & context) const {
@@ -972,15 +953,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprSizeOf::log(ostream& stream, int depth) const {
-        stream << "(sizeof ";
-        if ( subexpr )
-            stream << *subexpr;
-        else
-            stream << "(" << *typeexpr << ")";
-        stream << ")";
-    }
-    
     void ExprSizeOf::inferType(InferTypeContext & context) {
         type.reset();
         subexpr->inferType(context);
@@ -1008,11 +980,7 @@ namespace yzg
         cexpr->typeexpr = typeexpr;
         return cexpr;
     }
-    
-    void ExprNew::log(ostream& stream, int depth) const {
-        stream << "(new (" << *typeexpr << "))";
-    }
-    
+
     // TODO:
     //  this would need proper testing, but only afrer parser is modified
     //  curently none of the errors bellow can even be parsed
@@ -1045,12 +1013,9 @@ namespace yzg
     ExpressionPtr ExprAt::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
+        vis.preVisitAtIndex(this, index.get());
         index = index->visit(vis);
         return vis.visit(this);
-    }
-    
-    void ExprAt::log(ostream& stream, int depth) const {
-        stream << "(@ " << *subexpr << " " << *index << ")";
     }
     
     void ExprAt::inferType(InferTypeContext & context) {
@@ -1126,8 +1091,11 @@ namespace yzg
     
     ExpressionPtr ExprBlock::visit(Visitor & vis) {
         vis.preVisit(this);
-        for ( auto & subexpr : list )
+        for ( auto & subexpr : list ) {
+            vis.preVisitBlockExpression(this, subexpr.get());
             subexpr = subexpr->visit(vis);
+            subexpr = vis.visitBlockExpression(this, subexpr.get());
+        }
         return vis.visit(this);
     }
     
@@ -1138,18 +1106,6 @@ namespace yzg
             cexpr->list.push_back(subexpr->clone());
         }
         return cexpr;
-    }
-    
-    void ExprBlock::log(ostream& stream, int depth) const {
-        stream << "(";
-        for ( int i = 0; i!=list.size(); ++i ) {
-            if ( i )
-                stream << string(depth, '\t');
-            list[i]->log(stream, depth+1);
-            if ( i != list.size()-1 )
-                stream << "\n";
-        }
-        stream << ")";
     }
     
     void ExprBlock::setBlockReturnsValue() {
@@ -1172,6 +1128,7 @@ namespace yzg
         // infer
         auto sz = context.local.size();
         for ( auto & ex : list ) {
+            ex->topLevel = true;
             ex->inferType(context);
         }
         // block type
@@ -1221,13 +1178,6 @@ namespace yzg
         cexpr->value = value->clone();
         cexpr->field = field;
         return cexpr;
-    }
-    
-    void ExprField::log(ostream& stream, int depth) const {
-        logType(stream);
-        stream << "(. ";
-        value->log(stream,depth+1);
-        stream << " " << name << ")";
     }
     
     void ExprField::inferType(InferTypeContext & context) {
@@ -1286,13 +1236,6 @@ namespace yzg
         auto cexpr = clonePtr<ExprSafeField>(expr);
         ExprField::clone(cexpr);
         return cexpr;
-    }
-    
-    void ExprSafeField::log(ostream& stream, int depth) const {
-        logType(stream);
-        stream << "(?. ";
-        value->log(stream,depth+1);
-        stream << " " << name << ")";
     }
     
     void ExprSafeField::inferType(InferTypeContext & context) {
@@ -1366,11 +1309,6 @@ namespace yzg
         cexpr->local = local;
         cexpr->argument = argument;
         return cexpr;
-    }
-    
-    void ExprVar::log(ostream& stream, int depth) const {
-        logType(stream);
-        stream << name;
     }
     
     void ExprVar::inferType(InferTypeContext & context) {
@@ -1452,13 +1390,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprOp1::log(ostream& stream, int depth) const {
-        logType(stream);
-        stream << "(" << op << " ";
-        subexpr->log(stream, depth);
-        stream << ")";
-    }
-    
     void ExprOp1::inferType(InferTypeContext & context) {
         type.reset();
         subexpr->inferType(context);
@@ -1504,6 +1435,7 @@ namespace yzg
     ExpressionPtr ExprOp2::visit(Visitor & vis) {
         vis.preVisit(this);
         left = left->visit(vis);
+        vis.preVisitRight(this, right.get());
         right = right->visit(vis);
         return vis.visit(this);
     }
@@ -1514,15 +1446,6 @@ namespace yzg
         cexpr->left = left->clone();
         cexpr->right = right->clone();
         return cexpr;
-    }
-    
-    void ExprOp2::log(ostream& stream, int depth) const {
-        logType(stream);
-        stream << "(" << op << " ";
-        left->log(stream, depth);
-        stream << " ";
-        right->log(stream, depth);
-        stream << ")";
     }
     
     void ExprOp2::inferType(InferTypeContext & context) {
@@ -1580,7 +1503,9 @@ namespace yzg
     ExpressionPtr ExprOp3::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
+        vis.preVisitLeft(this, left.get());
         left = left->visit(vis);
+        vis.preVisitRight(this, right.get());
         right = right->visit(vis);
         return vis.visit(this);
     }
@@ -1592,17 +1517,6 @@ namespace yzg
         cexpr->left = left->clone();
         cexpr->right = right->clone();
         return cexpr;
-    }
-    
-    void ExprOp3::log(ostream& stream, int depth) const {
-        logType(stream);
-        stream << "(" << op << " ";
-        subexpr->log(stream, depth);
-        stream << " ";
-        left->log(stream, depth);
-        stream << " ";
-        right->log(stream, depth);
-        stream << ")";
     }
     
     void ExprOp3::inferType(InferTypeContext & context) {
@@ -1669,17 +1583,9 @@ namespace yzg
     ExpressionPtr ExprMove::visit(Visitor & vis) {
         vis.preVisit(this);
         left = left->visit(vis);
+        vis.preVisitRight(this, right.get());
         right = right->visit(vis);
         return vis.visit(this);
-    }
-    
-    void ExprMove::log(ostream& stream, int depth) const {
-        logType(stream);
-        stream << "(<- ";
-        left->log(stream, depth);
-        stream << " ";
-        right->log(stream, depth);
-        stream << ")";
     }
     
     void ExprMove::inferType(InferTypeContext & context) {
@@ -1721,17 +1627,9 @@ namespace yzg
     ExpressionPtr ExprCopy::visit(Visitor & vis) {
         vis.preVisit(this);
         left = left->visit(vis);
+        vis.preVisitRight(this, right.get());
         right = right->visit(vis);
         return vis.visit(this);
-    }
-    
-    void ExprCopy::log(ostream& stream, int depth) const {
-        logType(stream);
-        stream << "(= ";
-        left->log(stream, depth);
-        stream << " ";
-        right->log(stream, depth);
-        stream << ")";
     }
     
     void ExprCopy::inferType(InferTypeContext & context) {
@@ -1769,17 +1667,9 @@ namespace yzg
     ExpressionPtr ExprTryCatch::visit(Visitor & vis) {
         vis.preVisit(this);
         try_block = try_block->visit(vis);
+        vis.preVisitCatch(this,catch_block.get());
         catch_block = catch_block->visit(vis);
         return vis.visit(this);
-    }
-    
-    void ExprTryCatch::log(ostream& stream, int depth) const {
-        stream << "(try\n";
-        stream << string(depth+2,'\t');
-        try_block->log(stream, depth+1);
-        stream << "\n" << string(depth+2,'\t');
-        catch_block->log(stream, depth+1);
-        stream << ")";
     }
     
     uint32_t ExprTryCatch::getEvalFlags() const {
@@ -1823,19 +1713,10 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprReturn::log(ostream& stream, int depth) const {
-        if ( subexpr ) {
-            stream << "(return ";
-            subexpr->log(stream, depth);
-            stream << ")";
-        } else {
-            stream << "return";
-        }
-    }
-    
     void ExprReturn::inferType(InferTypeContext & context) {
         type.reset();
         if ( subexpr ) {
+            subexpr->argLevel = true;
             subexpr->inferType(context);
             if ( !subexpr->type ) return;
             subexpr = autoDereference(subexpr);
@@ -1881,10 +1762,6 @@ namespace yzg
         auto cexpr = clonePtr<ExprBreak>(expr);
         Expression::clone(cexpr);
         return cexpr;
-    }
-    
-    void ExprBreak::log(ostream& stream, int depth) const {
-        stream << "break";
     }
     
     void ExprBreak::inferType(InferTypeContext & context) {
@@ -1935,9 +1812,12 @@ namespace yzg
     ExpressionPtr ExprIfThenElse::visit(Visitor & vis) {
         vis.preVisit(this);
         cond = cond->visit(vis);
+        vis.preVisitIfBlock(this, if_true.get());
         if_true = if_true->visit(vis);
-        if ( if_false )
+        if ( if_false ) {
+            vis.preVisitElseBlock(this, if_false.get());
             if_false = if_false->visit(vis);
+        }
         return vis.visit(this);
     }
     
@@ -1951,20 +1831,9 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprIfThenElse::log(ostream& stream, int depth) const {
-        stream << "(if\n" << string(depth+1,'\t');
-        cond->log(stream, depth+1);
-        stream << "\n" << string(depth+2,'\t');
-        if_true->log(stream, depth+2);
-        if ( if_false ) {
-            stream << "\n" << string(depth+2,'\t');
-            if_false->log(stream, depth+2);
-        }
-        stream << ")";
-    }
-    
     void ExprIfThenElse::inferType(InferTypeContext & context) {
         type.reset();
+        cond->topLevel = true;
         cond->inferType(context);
         if_true->inferType(context);
         if ( if_false )
@@ -1986,6 +1855,7 @@ namespace yzg
     ExpressionPtr ExprWhile::visit(Visitor & vis) {
         vis.preVisit(this);
         cond = cond->visit(vis);
+        vis.preVisitWhileBody(this, body.get());
         body = body->visit(vis);
         return vis.visit(this);
     }
@@ -2004,6 +1874,7 @@ namespace yzg
     
     void ExprWhile::inferType(InferTypeContext & context) {
         type.reset();
+        cond->topLevel = true;
         cond->inferType(context);
         if ( !cond->type ) return;
         // infer
@@ -2013,14 +1884,6 @@ namespace yzg
             context.loop.push_back(shared_from_this());
             body->inferType(context);
             context.loop.pop_back();        }
-    }
-    
-    void ExprWhile::log(ostream& stream, int depth) const {
-        stream << "(while\n"<< string(depth+1,'\t');
-        cond->log(stream, depth+1);
-        stream << "\n" << string(depth+2,'\t');
-        body->log(stream, depth+2);
-        stream << ")";
     }
 
     SimNode * ExprWhile::simulate (Context & context) const {
@@ -2032,17 +1895,20 @@ namespace yzg
     ExpressionPtr ExprFor::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto & var : iteratorVariables ) {
-            vis.preVisitFor(var);
-        }
-        for ( auto & var : iteratorVariables ) {
-            var = vis.visitFor(var);
+            vis.preVisitFor(this, var, var==iteratorVariables.back());
+            var = vis.visitFor(this, var, var==iteratorVariables.back());
         }
         for ( auto & src : sources ) {
+            vis.preVisitForSource(this, src.get(), src==sources.back());
             src = src->visit(vis);
+            src = vis.visitForSource(this, src.get(), src==sources.back());
         }
+        if ( filter ) {
+            vis.preVisitForFilter(this, filter.get());
+            filter = filter->visit(vis);
+        }
+        vis.preVisitForBody(this, subexpr.get());
         subexpr = subexpr->visit(vis);
-        if ( filter )
-            filter = subexpr->visit(vis);
         return vis.visit(this);
     }
     
@@ -2067,28 +1933,6 @@ namespace yzg
             }
         }
         return nullptr;
-    }
-    
-    void ExprFor::log(ostream& stream, int depth) const {
-        stream << "(for (";
-        for ( int i=0; i!=iterators.size(); ++i ) {
-            if ( i ) stream << " ";
-            stream << iterators[i];
-        }
-        stream << ")\n";
-        for ( auto & src : sources ) {
-            stream << string(depth+2, '\t') << "(";
-            src->log(stream, depth+2);
-            stream << ")\n";
-        }
-        if ( filter ) {
-            stream << string(depth+2, '\t') << "(";
-            filter->log(stream, depth+2);
-            stream << ")\n";
-        }
-        stream << string(depth+2, '\t');
-        subexpr->log(stream, depth+2);
-        stream << ")";
     }
     
     uint32_t ExprFor::getEvalFlags() const {
@@ -2249,14 +2093,16 @@ namespace yzg
     ExpressionPtr ExprLet::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto & var : variables ) {
-            vis.preVisitLet(var);
-        }
-        for ( auto & var : variables ) {
-            if ( var->init )
+            vis.preVisitLet(this, var, var==variables.back());
+            if ( var->init ) {
+                vis.preVisitLetInit(this, var->init.get());
                 var->init = var->init->visit(vis);
-            var = vis.visitLet(var);
+                var->init = vis.visitLetInit(this, var->init.get());
+            }
+            var = vis.visitLet(this, var, var==variables.back());
         }
-        subexpr = subexpr->visit(vis);
+        if ( subexpr )
+            subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
     
@@ -2277,21 +2123,6 @@ namespace yzg
             }
         }
         return nullptr;
-    }
-
-    void ExprLet::log(ostream& stream, int depth) const {
-        stream << "(let\n";
-        for ( auto & var : variables ) {
-            if ( var->init )
-                stream << string(depth+1, '\t') << "(" << *var << " " << *var->init << ")\n";
-            else
-                stream << string(depth+1, '\t') << "(" << *var << ")\n";
-        }
-        if ( subexpr ) {
-            stream << string(depth+2, '\t');
-            subexpr->log(stream, depth+2);
-        }
-        stream << ")";
     }
     
     void ExprLet::setBlockReturnsValue() {
@@ -2416,27 +2247,19 @@ namespace yzg
         return stream.str();
     }
     
-    void ExprLooksLikeCall::log(ostream& stream, int depth) const {
-        logType(stream);
-        stream << "(" << name;
-        for ( auto & arg : arguments ) {
-            stream << " ";
-            arg->log(stream, depth);
-        }
-        stream << ")";
-    }
-    
     void ExprLooksLikeCall::inferType(InferTypeContext & context) {
         argumentsFailedToInfer = false;
         for ( auto & ar : arguments ) {
+            ar->argLevel = true;
             ar->inferType(context);
             if ( !ar->type ) argumentsFailedToInfer = true;
         }
     }
     
     void ExprLooksLikeCall::autoDereference() {
-        for ( size_t iA = 0; iA != arguments.size(); ++iA )
+        for ( size_t iA = 0; iA != arguments.size(); ++iA ) {
             arguments[iA] = Expression::autoDereference(arguments[iA]);
+        }
     }
     
     // ExprCall
@@ -2444,7 +2267,9 @@ namespace yzg
     ExpressionPtr ExprCall::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto & arg : arguments ) {
+            vis.preVisitCallArg(this, arg.get(), arg==arguments.back());
             arg = arg->visit(vis);
+            arg = vis.visitCallArg(this, arg.get(), arg==arguments.back());
         }
         return vis.visit(this);
     }
@@ -2518,24 +2343,6 @@ namespace yzg
     
     VariablePtr Program::findVariable ( const string & name ) const {
         return thisModule->findVariable(name);
-    }
-    
-    ostream& operator<< (ostream& stream, const Program & program) {
-        for ( const auto & st : program.thisModule->structures ) {
-            stream << *st.second << "\n";
-        }
-        if ( program.thisModule->globals.size() ) {
-            stream << "(let\n";
-            for ( auto & pv : program.thisModule->globals ) {
-                stream << "\t(" <<  *pv.second << ")\n";
-            }
-            stream << ")\n\n";
-        }
-        for ( const auto & st : program.thisModule->functions ) {
-            if ( !st.second->builtIn )
-                stream << *st.second << "\n";
-        }
-        return stream;
     }
     
     void Program::inferTypes() {
@@ -2859,6 +2666,12 @@ namespace yzg
         } else {
             error("too many options for " + name, at, CompilationError::function_not_found);
             return new ExprCall(at,name);
+        }
+    }
+    
+    void Program::visit(Visitor & vis) {
+        for ( auto & fn : thisModule->functions ) {
+            fn.second = fn.second->visit(vis);
         }
     }
 
