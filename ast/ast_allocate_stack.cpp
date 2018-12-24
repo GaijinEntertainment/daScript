@@ -18,8 +18,6 @@ namespace yzg {
         vector<uint32_t>        stackTopStack;
         vector<size_t>          varStack;
         int                     totalFunctions = 0;
-        int                     fieldOffset = 0;
-        int                     globalVarIndex = 0;
     protected:
         void pushStack()    { stackTopStack.push_back(stackTop); }
         void popStack()     { stackTop = stackTopStack.back(); stackTopStack.pop_back(); }
