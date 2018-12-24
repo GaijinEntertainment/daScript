@@ -947,6 +947,10 @@ namespace yzg
     
     class Visitor {
     public:
+        // STRUCTURE
+        virtual void preVisit ( Structure * that ) { }
+        virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) {}
+        virtual StructurePtr visit ( Structure * that ) { return that->shared_from_this(); }
         // FUNCTON
         virtual void preVisit ( Function * ) {}
         virtual FunctionPtr visit ( Function * that ) { return that->shared_from_this(); }
@@ -968,6 +972,11 @@ namespace yzg
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool ) { return var; }
         virtual void preVisitLetInit ( ExprLet *, const VariablePtr & var, Expression * ) {}
         virtual ExpressionPtr visitLetInit ( ExprLet *, const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
+        // GLOBAL LET
+        virtual void preVisitGlobalLet ( const VariablePtr & ) {}
+        virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) { return var; }
+        virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * ) {}
+        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
         // CALL
         virtual void preVisitCallArg ( ExprCall *, Expression *, bool ) {}
         virtual ExpressionPtr visitCallArg ( ExprCall *, Expression * that , bool ) { return that->shared_from_this(); }

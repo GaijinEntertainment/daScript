@@ -1557,7 +1557,6 @@ namespace yzg
 
     // program
     
-    
     vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {
         return library.findAnnotation(name);
     }
@@ -1843,6 +1842,26 @@ namespace yzg
     }
     
     void Program::visit(Visitor & vis) {
+        // structures
+        for ( auto & ist : thisModule->structures ) {
+            vis.preVisit(ist.second.get());
+            for ( auto & fi : ist.second->fields ) {
+                vis.preVisitStructureField(ist.second.get(), fi, &fi==&ist.second->fields.back());
+            }
+            ist.second = vis.visit(ist.second.get());
+        }
+        // globals
+        for ( auto & it : thisModule->globals ) {
+            auto & var = it.second;
+            vis.preVisitGlobalLet(var);
+            if ( var->init ) {
+                vis.preVisitGlobalLetInit(var, var->init.get());
+                var->init = var->init->visit(vis);
+                var->init = vis.visitGlobalLetInit(var, var->init.get());
+            }
+            var = vis.visitGlobalLet(var);
+        }
+        // functions
         for ( auto & fn : thisModule->functions ) {
             if ( !fn.second->builtIn ) {
                 fn.second = fn.second->visit(vis);

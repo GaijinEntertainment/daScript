@@ -14,12 +14,50 @@ namespace yzg {
         vector<uint32_t> stackTopStack;
         vector<size_t> varStack;
         int totalFunctions = 0;
+        int fieldOffset = 0;
+        int globalVarIndex = 0;
     protected:
         void pushStack()    { stackTopStack.push_back(stackTop); }
         void popStack()     { stackTop = stackTopStack.back(); stackTopStack.pop_back(); }
         void pushVarStack() { varStack.push_back(local.size()); }
         void popVarStack()  { local.resize(varStack.back()); varStack.pop_back(); }
     protected:
+    // strcuture
+        virtual void preVisit ( Structure * that ) override {
+            Visitor::preVisit(that);
+            fieldOffset = 0;
+        }
+        virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
+            Visitor::preVisitStructureField(that, decl, last);
+            decl.offset = fieldOffset;
+            fieldOffset += decl.type->getSizeOf();
+        }
+    // globals
+        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
+            Visitor::preVisitGlobalLet(var);
+            var->index = globalVarIndex ++;
+        }
+        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
+            if ( !var->init->type ) return Visitor::visitGlobalLetInit(var, init);
+            if ( !var->type->isSameType(*var->init->type,false) ) {
+                error("global variable initialization type mismatch, "
+                      + var->type->describe() + " = " + var->init->type->describe(), var->at );
+            } else if ( var->type->baseType==Type::tStructure ) {
+                error("can't initialize structures", var->at );
+            } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
+                error("this global variable can't be initialized at all", var->at);
+            }
+            return Visitor::visitGlobalLetInit(var, init);
+        }
+        virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
+            if ( var->type->ref )
+                error("global variable can't be reference", var->at, CompilationError::invalid_variable_type);
+            if ( var->type->isVoid() )
+                error("global variable can't be void", var->at, CompilationError::invalid_variable_type);
+            if ( var->type->isHandle() && !var->type->annotation->isLocal() )
+                error("handled type " + var->type->annotation->name + "can't be global", var->at, CompilationError::invalid_variable_type);
+            return Visitor::visitGlobalLet(var);
+        }
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -32,6 +70,10 @@ namespace yzg {
                 error("function argument default value type mismatch", arg->init->at);
             }
             return Visitor::visitArgumentInit(f, arg, that);
+        }
+        virtual FunctionPtr visit ( Function * that ) override {
+            func.reset();
+            return Visitor::visit(that);
         }
     // any expression
         virtual void preVisitExpression ( Expression * expr ) override {
@@ -899,36 +941,7 @@ namespace yzg {
     // program
     
     void Program::inferTypes() {
-        
         InferTypes context(shared_from_this());
-        
-        // structure declarations (precompute offsets of fields)
-        for ( auto & ist : thisModule->structures ) {
-            auto & st = ist.second;
-            int offset = 0;
-            for ( auto & fi : st->fields ) {
-                fi.offset = offset;
-                offset += fi.type->getSizeOf();
-            }
-        }
-        // global variables
-        int gvi = 0;
-        for ( auto & it : thisModule->globals ) {
-            auto pvar = it.second;
-            pvar->index = gvi ++;
-            if ( pvar->type->ref )
-                error("global variable can't be reference", pvar->at, CompilationError::invalid_variable_type);
-            if ( pvar->type->isVoid() )
-                error("global variable can't be void", pvar->at, CompilationError::invalid_variable_type);
-            if ( pvar->type->isHandle() && !pvar->type->annotation->isLocal() )
-                error("handled type " + pvar->type->annotation->name + "can't be global", pvar->at, CompilationError::invalid_variable_type);
-            if ( pvar->init ) {
-                pvar->init = pvar->init->visit(context);
-                if ( failed() )
-                    return;
-            }
-        }
-        // functions
         visit(context);
         totalFunctions = context.getFuncCount();
     }

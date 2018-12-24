@@ -15,6 +15,29 @@ namespace yzg {
                 lastNewLine = ss.tellp();
             }
         }
+    // strcuture
+        virtual void preVisit ( Structure * that ) override {
+            Visitor::preVisit(that);
+            ss << "struct " << that->name << "\n";
+        }
+        virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
+            Visitor::preVisitStructureField(that, decl, last);
+            ss << "\t" << decl.name << " : " << decl.type->describe() << "\n";
+            if ( last ) ss << "\n";
+        }
+    // global
+        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
+            Visitor::preVisitGlobalLet(var);
+            ss << "let\n\t" << var->name << " : " << var->type->describe();
+        }
+        virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
+            ss << "\n\n";
+            return Visitor::visitGlobalLet(var);
+        }
+        virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
+            Visitor::preVisitGlobalLetInit(var, init);
+            ss << " = ";
+        }
     // function
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
