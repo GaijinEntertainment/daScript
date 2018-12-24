@@ -6,8 +6,8 @@ namespace yzg {
 
     class Printer : public Visitor {
     public:
-        Printer() {}
         string str() const { return ss.str(); };
+    protected:
         void newLine () {
             auto nlPos = ss.tellp();
             if ( nlPos != lastNewLine ) {
@@ -17,18 +17,22 @@ namespace yzg {
         }
     // function
         virtual void preVisit ( Function * fn) override {
+            Visitor::preVisit(fn);
             ss << "def " << fn->name;
             if ( fn->arguments.size() ) ss << " ( ";
         }
-        virtual void preVisitFunctionBody ( Function * fn,Expression * ) override {
+        virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
+            Visitor::preVisitFunctionBody(fn,expr);
             if ( fn->arguments.size() ) ss << " )";
             if ( fn->result && !fn->result->isVoid() ) ss << " : " << fn->result->describe();
             ss << "\n";
         }
-        virtual void preVisitArgument ( Function *, const VariablePtr & var, bool ) override {
-            ss << var->name << ":" << var->type->describe();
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
+            Visitor::preVisitArgument(fn,arg,last);
+            ss << arg->name << ":" << arg->type->describe();
         }
-        virtual void preVisitArgumentInit ( Function *, Expression * ) override {
+        virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & arg, Expression * expr ) override {
+            Visitor::preVisitArgumentInit(fn,arg,expr);
             ss << " = ";
         }
         virtual VariablePtr visitArgument ( Function * fn, const VariablePtr & that, bool last ) override {
@@ -40,25 +44,29 @@ namespace yzg {
             return Visitor::visit(fn);
         }
     // block
-        virtual void preVisitBlockExpression ( ExprBlock * block, Expression * ) override {
-            if ( !block->closure ) ss << string(tab,'\t');
+        virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
+            Visitor::preVisitBlockExpression(block, expr);
+            if ( !block->returnsValue ) ss << string(tab,'\t');
         }
         virtual ExpressionPtr visitBlockExpression ( ExprBlock * block, Expression * that ) override {
-            if ( block->closure ) ss << ";"; else newLine();
+            if ( block->returnsValue ) ss << ";"; else newLine();
             return Visitor::visitBlockExpression(block, that);
         }
         virtual void preVisit ( ExprBlock * block ) override {
-            if ( block->closure ) ss << "{"; else tab ++;
+            Visitor::preVisit(block);
+            if ( block->returnsValue ) ss << "{"; else tab ++;
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
-            if ( block->closure ) ss << "}"; else tab --;
+            if ( block->returnsValue ) ss << "}"; else tab --;
             return Visitor::visit(block);
         }
     // let
         virtual void preVisit ( ExprLet * let ) override {
+            Visitor::preVisit(let);
             ss << (let->subexpr ? "let (" : "let ");
         }
-        virtual void preVisitLet ( ExprLet *, const VariablePtr & var, bool ) override {
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(let, var, last);
             ss << var->name << ":" << var->type->describe();
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
@@ -66,38 +74,48 @@ namespace yzg {
             if ( last && let->subexpr ) ss << ")\n";
             return Visitor::visitLet(let, var, last);
         }
-        virtual void preVisitLetInit ( ExprLet *, Expression * ) override {
+        virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
+            Visitor::preVisitLetInit(let,var,expr);
             ss << " = ";
         }
     // if then else
-        virtual void preVisit ( ExprIfThenElse * ) override {
+        virtual void preVisit ( ExprIfThenElse * ifte ) override {
+            Visitor::preVisit(ifte);
             ss << "if ";
         }
-        virtual void preVisitIfBlock ( ExprIfThenElse *, Expression * ) override {
+        virtual void preVisitIfBlock ( ExprIfThenElse * ifte, Expression * block ) override {
+            Visitor::preVisitIfBlock(ifte,block);
             ss << "\n";
         }
-        virtual void preVisitElseBlock ( ExprIfThenElse *, Expression * ) override {
+        virtual void preVisitElseBlock ( ExprIfThenElse * ifte, Expression * block ) override {
+            Visitor::preVisitElseBlock(ifte, block);
             ss << string(tab,'\t') << "else\n";
         }
-        // try-catch
-        virtual void preVisit ( ExprTryCatch * ) override {
+    // try-catch
+        virtual void preVisit ( ExprTryCatch * tc ) override {
+            Visitor::preVisit(tc);
             ss << "try\n";
         }
-        virtual void preVisitCatch ( ExprTryCatch *, Expression * ) override {
+        virtual void preVisitCatch ( ExprTryCatch * tc, Expression * block ) override {
+            Visitor::preVisitCatch(tc, block);
             ss << string(tab,'\t') << "catch\n";
         }
     // for
-        virtual void preVisit ( ExprFor * ) override {
+        virtual void preVisit ( ExprFor * ffor ) override {
+            Visitor::preVisit(ffor);
             ss << "for ";
         }
-        virtual void preVisitFor ( ExprFor *, const VariablePtr & var, bool last ) override {
+        virtual void preVisitFor ( ExprFor * ffor, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitFor(ffor,var,last);
             ss << var->name;
             if ( !last ) ss << ","; else ss << " in ";
         }
-        virtual void preVisitForFilter ( ExprFor *, Expression * ) override {
+        virtual void preVisitForFilter ( ExprFor * ffor, Expression * filter ) override {
+            Visitor::preVisitForFilter(ffor,filter);
             ss << " where ";
         }
-        virtual void preVisitForBody ( ExprFor *, Expression * ) override {
+        virtual void preVisitForBody ( ExprFor * ffor, Expression * body ) override {
+            Visitor::preVisitForBody(ffor, body);
             ss << "\n";
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
@@ -105,14 +123,17 @@ namespace yzg {
             return Visitor::visitForSource(ffor, that, last);
         }
     // while
-        virtual void preVisit ( ExprWhile * ) override {
+        virtual void preVisit ( ExprWhile * wh ) override {
+            Visitor::preVisit(wh);
             ss << "while ";
         }
-        virtual void preVisitWhileBody ( ExprWhile *, Expression * ) override {
+        virtual void preVisitWhileBody ( ExprWhile * wh, Expression * body ) override {
+            Visitor::preVisitWhileBody(wh,body);
             ss << "\n";
         }
     // call
         virtual void preVisit ( ExprCall * call ) override {
+            Visitor::preVisit(call);
             ss << call->name << "(";
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
@@ -125,6 +146,7 @@ namespace yzg {
         }
     // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
+            Visitor::preVisit(call);
             ss << call->name << "(";
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
@@ -189,11 +211,13 @@ namespace yzg {
             return Visitor::visit(enew);
         }
     // null coaelescing
-        virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing *, Expression * ) override {
+        virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * nc, Expression * expr ) override {
+            Visitor::preVisitNullCoaelescingDefault(nc,expr);
             ss << " ?? ";
         }
     // at
-        virtual void preVisitAtIndex ( ExprAt *, Expression * ) override {
+        virtual void preVisitAtIndex ( ExprAt * that, Expression * index ) override {
+            Visitor::preVisitAtIndex(that, index);
             ss << "[";
         }
         virtual ExpressionPtr visit ( ExprAt * that ) override {
@@ -202,6 +226,7 @@ namespace yzg {
         }
     // op1
         virtual void preVisit ( ExprOp1 * that ) override {
+            Visitor::preVisit(that);
             if ( that->op!="+++" && that->op!="---" ) {
                 ss << that->op;
             }
@@ -216,9 +241,11 @@ namespace yzg {
         }
     // op2
         virtual void preVisit ( ExprOp2 * that ) override {
+            Visitor::preVisit(that);
             if ( !(that->topLevel || that->argLevel) ) ss << "(";
         }
-        virtual void preVisitRight ( ExprOp2 * op2, Expression * ) override {
+        virtual void preVisitRight ( ExprOp2 * op2, Expression * right ) override {
+            Visitor::preVisitRight(op2,right);
             ss << " " << op2->op << " ";
         }
         virtual ExpressionPtr visit ( ExprOp2 * that ) override {
@@ -227,12 +254,15 @@ namespace yzg {
         }
     // op3
         virtual void preVisit ( ExprOp3 * that ) override {
+            Visitor::preVisit(that);
             if ( !(that->topLevel || that->argLevel) ) ss << "(";
         }
-        virtual void preVisitLeft  ( ExprOp3 *, Expression * ) override {
+        virtual void preVisitLeft  ( ExprOp3 * that, Expression * left ) override {
+            Visitor::preVisitLeft(that,left);
             ss << " ? ";
         }
-        virtual void preVisitRight ( ExprOp3 *, Expression * ) override {
+        virtual void preVisitRight ( ExprOp3 * that, Expression * right ) override {
+            Visitor::preVisitRight(that,right);
             ss << " : ";
         }
         virtual ExpressionPtr visit ( ExprOp3 * that ) override {
@@ -240,22 +270,27 @@ namespace yzg {
             return Visitor::visit(that);
         }
     // copy & move
-        virtual void preVisitRight ( ExprCopy *, Expression * ) override {
+        virtual void preVisitRight ( ExprCopy * that, Expression * right ) override {
+            Visitor::preVisitRight(that,right);
             ss << " = ";
         }
-        virtual void preVisitRight ( ExprMove *, Expression * ) override {
+        virtual void preVisitRight ( ExprMove * that, Expression * right ) override {
+            Visitor::preVisitRight(that,right);
             ss << " <- ";
         }
     // return
-        virtual void preVisit ( ExprReturn *) override {
+        virtual void preVisit ( ExprReturn * that ) override {
+            Visitor::preVisit(that);
             ss << "return ";
         }
     // break
-        virtual void preVisit ( ExprBreak *) override {
+        virtual void preVisit ( ExprBreak * that ) override {
+            Visitor::preVisit(that);
             ss << "break";
         }
     // sizeof
         virtual void preVisit ( ExprSizeOf * that ) override {
+            Visitor::preVisit(that);
             ss << "sizeof(";
         }
         virtual ExpressionPtr visit ( ExprSizeOf * that ) override {

@@ -8,6 +8,8 @@
 #include "interop.h"
 #include "debug_info.h"
 #include "compilation_errors.h"
+#include "runtime_table.h"
+#include "runtime_array.h"
 
 namespace yzg
 {
@@ -381,7 +383,6 @@ namespace yzg
         virtual ExpressionPtr visit(Visitor & vis) override;
         vector<ExpressionPtr>   list;
         bool                    returnsValue = false;
-        bool                    closure = false;
     };
     
     struct ExprVar : Expression {
@@ -650,6 +651,13 @@ namespace yzg
     };
     typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
     
+    template <typename TT>
+    struct ExprLikeCall : ExprLooksLikeCall {
+        ExprLikeCall () = default;
+        ExprLikeCall ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) {}
+        virtual ExpressionPtr visit ( Visitor & vis ) override;
+    };
+    
     struct ExprMakeBlock : Expression {
         ExprMakeBlock () = default;
         ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b )
@@ -661,52 +669,52 @@ namespace yzg
         ExpressionPtr block;
     };
     
-    struct ExprInvoke : ExprLooksLikeCall {
+    struct ExprInvoke : ExprLikeCall<ExprInvoke> {
         ExprInvoke () = default;
-        ExprInvoke ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a,name) {}
+        ExprInvoke ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprInvoke>(a,name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    struct ExprAssert : ExprLooksLikeCall {
+    struct ExprAssert : ExprLikeCall<ExprAssert> {
         ExprAssert () = default;
-        ExprAssert ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a,name) {}
+        ExprAssert ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprAssert>(a,name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    struct ExprDebug : ExprLooksLikeCall {
+    struct ExprDebug : ExprLikeCall<ExprDebug> {
         ExprDebug () = default;
-        ExprDebug ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        ExprDebug ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprDebug>(a, name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    struct ExprHash : ExprLooksLikeCall {
+    struct ExprHash : ExprLikeCall<ExprHash> {
         ExprHash () = default;
-        ExprHash ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        ExprHash ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprHash>(a, name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    struct ExprArrayPush : ExprLooksLikeCall {
+    struct ExprArrayPush : ExprLikeCall<ExprArrayPush> {
         ExprArrayPush() = default;
-        ExprArrayPush ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        ExprArrayPush ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprArrayPush>(a, name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    template <typename SimNodeT, bool first>
+    template <typename It, typename SimNodeT, bool first>
     struct ExprTableKeysOrValues : ExprLooksLikeCall {
         ExprTableKeysOrValues() = default;
         ExprTableKeysOrValues ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
-            auto cexpr = clonePtr<ExprTableKeysOrValues<SimNodeT,first>>(expr);
+            auto cexpr = clonePtr<ExprTableKeysOrValues<It,SimNodeT,first>>(expr);
             return cexpr;
         }
         virtual void inferType(InferTypeContext & context) override {
@@ -735,14 +743,27 @@ namespace yzg
             auto stride = iterType->getSizeOf();
             return context.makeNode<SimNodeT>(at,subexpr,stride);
         }
+        virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
     
-    template <typename SimNodeT>
+    struct ExprKeys : ExprTableKeysOrValues<ExprKeys,SimNode_TableIterator<TableKeysIterator>,true> {
+        ExprKeys() = default;
+        ExprKeys ( const LineInfo & a, const string & n )
+            : ExprTableKeysOrValues<ExprKeys,SimNode_TableIterator<TableKeysIterator>,true>(a, n) {}
+    };
+    
+    struct ExprValues : ExprTableKeysOrValues<ExprValues,SimNode_TableIterator<TableValuesIterator>,false> {
+        ExprValues() = default;
+        ExprValues ( const LineInfo & a, const string & n )
+            : ExprTableKeysOrValues<ExprValues,SimNode_TableIterator<TableValuesIterator>,false>(a, n) {}
+    };
+    
+    template <typename It, typename SimNodeT>
     struct ExprArrayCallWithSizeOrIndex : ExprLooksLikeCall {
         ExprArrayCallWithSizeOrIndex() = default;
         ExprArrayCallWithSizeOrIndex ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
-            auto cexpr = clonePtr<ExprArrayCallWithSizeOrIndex<SimNodeT>>(expr);
+            auto cexpr = clonePtr<ExprArrayCallWithSizeOrIndex<It,SimNodeT>>(expr);
             return cexpr;
         }
         virtual void inferType(InferTypeContext & context) override {
@@ -770,19 +791,32 @@ namespace yzg
             auto size = arguments[0]->type->firstType->getSizeOf();
             return context.makeNode<SimNodeT>(at,arr,newSize,size);
         }
+        virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
     
-    struct ExprErase : ExprLooksLikeCall {
+    struct ExprArrayResize : ExprArrayCallWithSizeOrIndex<ExprArrayResize, SimNode_ArrayResize> {
+        ExprArrayResize() = default;
+        ExprArrayResize ( const LineInfo & a, const string & n )
+            : ExprArrayCallWithSizeOrIndex<ExprArrayResize, SimNode_ArrayResize>(a,n) {}
+    };
+    
+    struct ExprArrayReserve : ExprArrayCallWithSizeOrIndex<ExprArrayReserve, SimNode_ArrayReserve> {
+        ExprArrayReserve() = default;
+        ExprArrayReserve ( const LineInfo & a, const string & n )
+            : ExprArrayCallWithSizeOrIndex<ExprArrayReserve, SimNode_ArrayReserve>(a,n) {}
+    };
+    
+    struct ExprErase : ExprLikeCall<ExprErase> {
         ExprErase() = default;
-        ExprErase ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, "erase") {}
+        ExprErase ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprErase>(a, "erase") {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    struct ExprFind : ExprLooksLikeCall {
+    struct ExprFind : ExprLikeCall<ExprFind> {
         ExprFind() = default;
-        ExprFind ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, "find") {}
+        ExprFind ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprFind>(a, "find") {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void inferType(InferTypeContext & context) override;
         virtual SimNode * simulate (Context & context) const override;
@@ -993,8 +1027,8 @@ namespace yzg
         virtual FunctionPtr visit ( Function * that ) { return that->shared_from_this(); }
         virtual void preVisitArgument ( Function *, const VariablePtr &, bool lastArg ) {}
         virtual VariablePtr visitArgument ( Function *, const VariablePtr & that, bool lastArg ) { return that; }
-        virtual void preVisitArgumentInit ( Function *, Expression * ) {}
-        virtual ExpressionPtr visitArgumentInit ( Function *, Expression * that ) { return that->shared_from_this(); }
+        virtual void preVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) {}
+        virtual ExpressionPtr visitArgumentInit ( Function *, const VariablePtr &, Expression * that ) { return that->shared_from_this(); }
         virtual void preVisitFunctionBody ( Function *,Expression * ) {}
         virtual ExpressionPtr visitFunctionBody ( Function *, Expression * that ) { return that->shared_from_this(); }
         // ANY
@@ -1004,10 +1038,11 @@ namespace yzg
         virtual void preVisitBlockExpression ( ExprBlock *, Expression * ) {}
         virtual ExpressionPtr visitBlockExpression (  ExprBlock *, Expression * that ) { return that->shared_from_this(); }
         // LET
-        virtual void preVisitLet ( ExprLet * let, const VariablePtr &, bool ) {} \
+        virtual void preVisitLetStack ( ExprLet * ) {}
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr &, bool ) {} 
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool ) { return var; }
-        virtual void preVisitLetInit ( ExprLet *, Expression * ) {}
-        virtual ExpressionPtr visitLetInit ( ExprLet *, Expression * that ) { return that->shared_from_this(); }
+        virtual void preVisitLetInit ( ExprLet *, const VariablePtr & var, Expression * ) {}
+        virtual ExpressionPtr visitLetInit ( ExprLet *, const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
         // CALL
         virtual void preVisitCallArg ( ExprCall *, Expression *, bool ) {}
         virtual ExpressionPtr visitCallArg ( ExprCall *, Expression * that , bool ) { return that->shared_from_this(); }
@@ -1037,6 +1072,7 @@ namespace yzg
         // FOR
         virtual void preVisitFor ( ExprFor *, const VariablePtr &, bool ) {}
         virtual VariablePtr visitFor ( ExprFor *, const VariablePtr & var, bool ) { return var; }
+        virtual void preVisitForStack ( ExprFor * ) {}
         virtual void preVisitForFilter ( ExprFor *, Expression * ) {}
         virtual void preVisitForBody ( ExprFor *, Expression * ) {}
         virtual void preVisitForSource ( ExprFor *, Expression *, bool ) {}
@@ -1049,6 +1085,17 @@ namespace yzg
         VISIT_EXPR(ExprRef2Value)
         VISIT_EXPR(ExprPtr2Ref)
         VISIT_EXPR(ExprNullCoalescing)
+        VISIT_EXPR(ExprAssert)
+        VISIT_EXPR(ExprDebug)
+        VISIT_EXPR(ExprInvoke)
+        VISIT_EXPR(ExprHash)
+        VISIT_EXPR(ExprKeys)
+        VISIT_EXPR(ExprValues)
+        VISIT_EXPR(ExprArrayPush)
+        VISIT_EXPR(ExprArrayResize)
+        VISIT_EXPR(ExprArrayReserve)
+        VISIT_EXPR(ExprErase)
+        VISIT_EXPR(ExprFind)
         VISIT_EXPR(ExprNew)
         VISIT_EXPR(ExprAt)
         VISIT_EXPR(ExprBlock)
@@ -1080,6 +1127,26 @@ namespace yzg
 #undef VISIT_EXPR
     };
 
+    template <typename TT>
+    ExpressionPtr ExprLikeCall<TT>::visit(Visitor & vis) {
+        vis.preVisit(static_cast<TT *>(this));
+        auto llk = ExprLooksLikeCall::visit(vis);
+        return llk.get()==this ? vis.visit(static_cast<TT *>(this)) : llk;
+    }
+    
+    template <typename It, typename SimNodeT, bool first>
+    ExpressionPtr ExprTableKeysOrValues<It,SimNodeT,first>::visit(Visitor & vis) {
+        vis.preVisit(static_cast<It *>(this));
+        auto llk = ExprLooksLikeCall::visit(vis);
+        return llk.get()==this ? vis.visit(static_cast<It *>(this)) : llk;
+    }
+    
+    template <typename It, typename SimNodeT>
+    ExpressionPtr ExprArrayCallWithSizeOrIndex<It,SimNodeT>::visit(Visitor & vis) {
+        vis.preVisit(static_cast<It *>(this));
+        auto llk = ExprLooksLikeCall::visit(vis);
+        return llk.get()==this ? vis.visit(static_cast<It *>(this)) : llk;
+    }
 }
 
 

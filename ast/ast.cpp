@@ -453,9 +453,9 @@ namespace yzg
         for ( auto & arg : arguments ) {
             vis.preVisitArgument(this, arg, arg==arguments.back() );
             if ( arg->init ) {
-                vis.preVisitArgumentInit(this, arg->init.get());
+                vis.preVisitArgumentInit(this, arg, arg->init.get());
                 arg->init = arg->init->visit(vis);
-                arg->init = vis.visitArgumentInit(this, arg->init.get());
+                arg->init = vis.visitArgumentInit(this, arg, arg->init.get());
             }
             arg = vis.visitArgument(this, arg, arg==arguments.back() );
         }
@@ -712,7 +712,6 @@ namespace yzg
     
     void ExprMakeBlock::inferType(InferTypeContext & context) {
         type.reset();
-        static_pointer_cast<ExprBlock>(block)->closure = true;
         block->inferType(context);
         // infer
         type = make_shared<TypeDecl>(Type::tBlock);
@@ -765,7 +764,7 @@ namespace yzg
     }
     
     // ExprHash
-    
+
     ExpressionPtr ExprHash::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprHash>(expr);
         ExprLooksLikeCall::clone(cexpr);
@@ -1128,7 +1127,6 @@ namespace yzg
         // infer
         auto sz = context.local.size();
         for ( auto & ex : list ) {
-            ex->topLevel = true;
             ex->inferType(context);
         }
         // block type
@@ -1716,7 +1714,6 @@ namespace yzg
     void ExprReturn::inferType(InferTypeContext & context) {
         type.reset();
         if ( subexpr ) {
-            subexpr->argLevel = true;
             subexpr->inferType(context);
             if ( !subexpr->type ) return;
             subexpr = autoDereference(subexpr);
@@ -1833,7 +1830,6 @@ namespace yzg
     
     void ExprIfThenElse::inferType(InferTypeContext & context) {
         type.reset();
-        cond->topLevel = true;
         cond->inferType(context);
         if_true->inferType(context);
         if ( if_false )
@@ -1874,7 +1870,6 @@ namespace yzg
     
     void ExprWhile::inferType(InferTypeContext & context) {
         type.reset();
-        cond->topLevel = true;
         cond->inferType(context);
         if ( !cond->type ) return;
         // infer
@@ -1903,6 +1898,7 @@ namespace yzg
             src = src->visit(vis);
             src = vis.visitForSource(this, src.get(), src==sources.back());
         }
+        vis.preVisitForStack(this);
         if ( filter ) {
             vis.preVisitForFilter(this, filter.get());
             filter = filter->visit(vis);
@@ -2095,12 +2091,13 @@ namespace yzg
         for ( auto & var : variables ) {
             vis.preVisitLet(this, var, var==variables.back());
             if ( var->init ) {
-                vis.preVisitLetInit(this, var->init.get());
+                vis.preVisitLetInit(this, var, var->init.get());
                 var->init = var->init->visit(vis);
-                var->init = vis.visitLetInit(this, var->init.get());
+                var->init = vis.visitLetInit(this, var, var->init.get());
             }
             var = vis.visitLet(this, var, var==variables.back());
         }
+        vis.preVisitLetStack(this);
         if ( subexpr )
             subexpr = subexpr->visit(vis);
         return vis.visit(this);
@@ -2219,7 +2216,9 @@ namespace yzg
     ExpressionPtr ExprLooksLikeCall::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto & arg : arguments ) {
+            vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
             arg = arg->visit(vis);
+            arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
         }
         return vis.visit(this);
     }
@@ -2250,7 +2249,6 @@ namespace yzg
     void ExprLooksLikeCall::inferType(InferTypeContext & context) {
         argumentsFailedToInfer = false;
         for ( auto & ar : arguments ) {
-            ar->argLevel = true;
             ar->inferType(context);
             if ( !ar->type ) argumentsFailedToInfer = true;
         }

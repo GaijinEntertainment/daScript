@@ -213,6 +213,7 @@ expression_else
 
 expression_if_then_else
     :   _IF[loc] expr[cond] expression_block[block] expression_else[then] {
+        $cond->topLevel = true;
         $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),ExpressionPtr($block),ExpressionPtr($then));
     }
     ;
@@ -240,6 +241,7 @@ expression_for_loop
 expression_while_loop
     :   _WHILE expr[condition] expression_block[block] {
         auto pWhile = new ExprWhile();
+        $condition->topLevel = true;
         pWhile->cond = ExpressionPtr($condition);
         pWhile->body = ExpressionPtr($block);
         $$ = pWhile;
@@ -411,6 +413,7 @@ expressions
     |   expressions[block] expression_any[subexpr]      {
         $$ = $block;
         if ( $subexpr ) {
+            $subexpr->topLevel = true;
             static_cast<ExprBlock*>($block)->list.push_back(ExpressionPtr($subexpr));
         }
     }
@@ -455,7 +458,7 @@ expression_break
 
 expression_return
     :   _RETURN[loc]                    { $$ = new ExprReturn(tokAt(@loc),nullptr); }
-    |   _RETURN[loc] expr[subexpr]      { $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   _RETURN[loc] expr[subexpr]      { $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr)); $subexpr->argLevel = true; }
     ;
 
 expression_try_catch
@@ -839,6 +842,9 @@ vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
 
 ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments ) {
     pCall->arguments = sequenceToList(arguments);
+    for ( auto & arg : pCall->arguments ) {
+        arg->argLevel = true;
+    }
     return pCall;
 }
 

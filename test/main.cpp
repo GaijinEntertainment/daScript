@@ -86,7 +86,7 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            // cout << *program << "\n";
+            cout << *program << "\n";
             Context ctx(&str);
             program->simulate(ctx);
             int fnTest = ctx.findFunction("test");

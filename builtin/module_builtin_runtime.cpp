@@ -67,12 +67,12 @@ namespace yzg
         addCall<ExprErase>("erase");
         addCall<ExprFind>("find");
         // table expressions
-        addCall<ExprTableKeysOrValues<SimNode_TableIterator<TableKeysIterator>,true>>    ("keys");
-        addCall<ExprTableKeysOrValues<SimNode_TableIterator<TableValuesIterator>,false>> ("values");
+        addCall<ExprKeys>("keys");
+        addCall<ExprValues>("values");
         // array expresisons
         addCall<ExprArrayPush>("push");
-        addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayResize>>  ("resize");
-        addCall<ExprArrayCallWithSizeOrIndex<SimNode_ArrayReserve>> ("reserve");
+        addCall<ExprArrayResize>("resize");
+        addCall<ExprArrayReserve>("reserve");
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile
