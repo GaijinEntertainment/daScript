@@ -23,9 +23,6 @@ namespace yzg {
         void popStack()     { stackTop = stackTopStack.back(); stackTopStack.pop_back(); }
         void pushVarStack() { varStack.push_back(local.size()); }
         void popVarStack()  { local.resize(varStack.back()); varStack.pop_back(); }
-        void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) {
-            program->error(err,at,cerr);
-        }
     protected:
     // function
         virtual void preVisit ( Function * f ) override {
