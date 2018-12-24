@@ -9,6 +9,7 @@ namespace yzg {
         InferTypes( const ProgramPtr & prog ) {
             program = prog;
         }
+        int getFuncCount() const { return totalFunctions; }
     protected:
         vector<uint32_t> stackTopStack;
         vector<size_t> varStack;
@@ -36,6 +37,37 @@ namespace yzg {
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
             expr->type.reset();
+        }
+    // const
+        virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
+            c->type = make_shared<TypeDecl>(Type::tPointer);
+            c->constexpression = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstInt * c ) override {
+            c->type = make_shared<TypeDecl>(Type::tInt);
+            c->constexpression = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt * c ) override {
+            c->type = make_shared<TypeDecl>(Type::tUInt);
+            c->constexpression = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstBool * c ) override {
+            c->type = make_shared<TypeDecl>(Type::tBool);
+            c->constexpression = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
+            c->type = make_shared<TypeDecl>(Type::tFloat);
+            c->constexpression = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstString * c ) override {
+            c->type = make_shared<TypeDecl>(Type::tString);
+            c->constexpression = true;
+            return Visitor::visit(c);
         }
     // ExprRef2Value
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
@@ -476,9 +508,9 @@ namespace yzg {
             } else {
                 expr->func = functions[0];
                 expr->type = make_shared<TypeDecl>(*expr->func->result);
-                if ( !func->arguments[0]->type->isRef() )
+                if ( !expr->func->arguments[0]->type->isRef() )
                     expr->left = Expression::autoDereference(expr->left);
-                if ( !func->arguments[1]->type->isRef() )
+                if ( !expr->func->arguments[1]->type->isRef() )
                     expr->right = Expression::autoDereference(expr->right);
             }
             expr->constexpression = expr->left->constexpression && expr->right->constexpression;
@@ -683,9 +715,11 @@ namespace yzg {
             popStack();
             popVarStack();
             loop.pop_back();
-            if ( !expr->filter->type ) return Visitor::visit(expr);
-            if ( !expr->filter->type->isSimpleType(Type::tBool) ) {
-                error("where clause must be boolean", expr->at);
+            if ( expr->filter ) {
+                if ( !expr->filter->type ) return Visitor::visit(expr);
+                if ( !expr->filter->type->isSimpleType(Type::tBool) ) {
+                    error("where clause must be boolean", expr->at);
+                }
             }
             return Visitor::visit(expr);
         }
@@ -860,11 +894,14 @@ namespace yzg {
             return Visitor::visit(expr);
         }
         
-    /*
+    };
      
     // program
     
     void Program::inferTypes() {
+        
+        InferTypes context(shared_from_this());
+        
         // structure declarations (precompute offsets of fields)
         for ( auto & ist : thisModule->structures ) {
             auto & st = ist.second;
@@ -886,36 +923,14 @@ namespace yzg {
             if ( pvar->type->isHandle() && !pvar->type->annotation->isLocal() )
                 error("handled type " + pvar->type->annotation->name + "can't be global", pvar->at, CompilationError::invalid_variable_type);
             if ( pvar->init ) {
-                Expression::InferTypeContext context;
-                pvar->init->inferType(context);
+                pvar->init = pvar->init->visit(context);
                 if ( failed() )
                     return;
             }
         }
         // functions
-        totalFunctions = 0;
-        for ( auto & fit : thisModule->functions ) {
-            Expression::InferTypeContext context;
-            program = shared_from_this();
-            func = fit.second;
-            if ( !func->builtIn ) {
-                func->totalStackSize = stackTop = sizeof(Prologue);
-                func->index = totalFunctions ++;
-                for ( auto & arg : func->arguments ) {
-                    if ( arg->init ) {
-                        arg->init->inferType(context);
-                        if ( failed() )
-                            return;
-                        if ( !arg->type->isSameType(*arg->init->type, true) ) {
-                            error("function argument default value type mismatch", arg->init->at);
-                        }
-                    }
-                }
-                func->body->inferType(context);
-            }
-        }
+        visit(context);
+        totalFunctions = context.getFuncCount();
     }
-     */
-    };
 }
 

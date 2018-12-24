@@ -525,23 +525,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprRef2Value::inferType(InferTypeContext & context) {
-        type.reset();
-        subexpr->inferType(context);
-        if ( !subexpr->type ) return;
-        // infer
-        if ( !subexpr->type->isRef() ) {
-            context.error("can only dereference ref", at);
-        } else if ( !subexpr->type->isSimpleType() ) {
-            context.error("can only dereference a simple type", at);
-        } if ( !subexpr->type->canCopy() ) {
-            context.error("can't dereference non-copyable type", at);
-        } else {
-            type = make_shared<TypeDecl>(*subexpr->type);
-            type->ref = false;
-        }
-    }
-    
     SimNode * ExprRef2Value::simulate (Context & context) const {
         if ( type->isHandle() ) {
             return type->annotation->simulateRef2Value(context, at, subexpr->simulate(context));
@@ -565,23 +548,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprPtr2Ref::inferType(InferTypeContext & context) {
-        type.reset();
-        subexpr->inferType(context);
-        if ( !subexpr->type ) return;
-        // infer
-        subexpr = autoDereference(subexpr);
-        if ( !subexpr->type->isPointer() ) {
-            context.error("can only dereference pointer", at, CompilationError::cant_dereference);
-        } else if ( !subexpr->type->firstType || subexpr->type->firstType->isVoid() ) {
-            context.error("can only dereference pointer to something", at, CompilationError::cant_dereference);
-        } else {
-            type = make_shared<TypeDecl>(*subexpr->type->firstType);
-            type->ref = true;
-            type->constant |= subexpr->type->constant;
-        }
-    }
-    
     SimNode * ExprPtr2Ref::simulate (Context & context) const {
         return context.makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
@@ -603,30 +569,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprNullCoalescing::inferType(InferTypeContext & context) {
-        subexpr->inferType(context);
-        defaultValue->inferType(context);
-        if ( !subexpr->type || !defaultValue->type ) return;
-        // infer
-        subexpr = autoDereference(subexpr);
-        auto seT = subexpr->type;
-        auto dvT = defaultValue->type;
-        if ( !seT->isPointer() ) {
-            context.error("can only dereference pointer", at, CompilationError::cant_dereference);
-        } else if ( !seT->firstType || seT->firstType->isVoid() ) {
-            context.error("can only dereference pointer to something", at, CompilationError::cant_dereference);
-        } else if ( !seT->firstType->isSameType(*dvT,false,false) ) {
-            context.error("default value type mismatch in " + seT->firstType->describe() + " vs " + dvT->describe(),
-                          at, CompilationError::cant_dereference);
-        } else if ( !seT->isConst() && dvT->isConst() ) {
-            context.error("default value type mismatch, constant matters in " + seT->describe() + " vs " + dvT->describe(),
-                          at, CompilationError::cant_dereference);
-        } else {
-            type = make_shared<TypeDecl>(*dvT);
-            type->constant |= subexpr->type->constant;
-        }
-    }
-    
     SimNode * ExprNullCoalescing::simulate (Context & context) const {
         if ( type->ref ) {
             return context.makeNode<SimNode_NullCoalescingRef>(at,subexpr->simulate(context),defaultValue->simulate(context));
@@ -644,23 +586,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprAssert::inferType(InferTypeContext & context) {
-        type.reset();
-        ExprLooksLikeCall::inferType(context);
-        if ( arguments.size()<1 || arguments.size()>2 ) {
-            context.error("assert(expr) or assert(expr,string)", at, CompilationError::invalid_argument_count);
-            return;
-        }
-        if ( argumentsFailedToInfer ) return;
-        // infer
-        autoDereference();
-        if ( !arguments[0]->type->isSimpleType(Type::tBool) )
-            context.error("assert condition must be boolean", at, CompilationError::invalid_argument_type);
-        if ( arguments.size()==2 && !arguments[1]->isStringConstant() )
-            context.error("assert comment must be string constant", at, CompilationError::invalid_argument_type);
-        type = make_shared<TypeDecl>(Type::tVoid);
-    }
-    
     SimNode * ExprAssert::simulate (Context & context) const {
         string message;
         if ( arguments.size()==2 && arguments[1]->isStringConstant() )
@@ -674,20 +599,6 @@ namespace yzg
         auto cexpr = clonePtr<ExprDebug>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
-    }
-    
-    void ExprDebug::inferType(InferTypeContext & context) {
-        type.reset();
-        if ( arguments.size()<1 || arguments.size()>2 ) {
-            context.error("debug(expr) or debug(expr,string)", at, CompilationError::invalid_argument_count);
-            return;
-        }
-        ExprLooksLikeCall::inferType(context);
-        if ( argumentsFailedToInfer ) return;
-        // infer
-        if ( arguments.size()==2 && !arguments[1]->isStringConstant() )
-            context.error("debug comment must be string constant", at, CompilationError::invalid_argument_type);
-        type = make_shared<TypeDecl>(*arguments[0]->type);
     }
     
     SimNode * ExprDebug::simulate (Context & context) const {
@@ -710,16 +621,6 @@ namespace yzg
         return vis.visit(this);
     }
     
-    void ExprMakeBlock::inferType(InferTypeContext & context) {
-        type.reset();
-        block->inferType(context);
-        // infer
-        type = make_shared<TypeDecl>(Type::tBlock);
-        if ( block->type ) {
-            type->firstType = make_shared<TypeDecl>(*block->type);
-        }
-    }
-    
     SimNode * ExprMakeBlock::simulate (Context & context) const {
         return context.makeNode<SimNode_MakeBlock>(at,block->simulate(context));
     }
@@ -738,27 +639,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprInvoke::inferType(InferTypeContext & context) {
-        type.reset();
-        if ( arguments.size()!=1 ) {
-            context.error("invoke(block)", at, CompilationError::invalid_argument_count);
-            return;
-        }
-        ExprLooksLikeCall::inferType(context);
-        if ( argumentsFailedToInfer ) return;
-        // infer
-        arguments[0] = Expression::autoDereference(arguments[0]);
-        auto blockT = arguments[0]->type;
-        if ( !blockT->isGoodBlockType() ) {
-            context.error("expecting block", at, CompilationError::invalid_argument_type);
-        }
-        if ( blockT->firstType ) {
-            type = make_shared<TypeDecl>(*blockT->firstType);
-        } else {
-            type = make_shared<TypeDecl>();
-        }
-    }
-    
     SimNode * ExprInvoke::simulate (Context & context) const {
         return context.makeNode<SimNode_Invoke>(at,arguments[0]->simulate(context));
     }
@@ -769,18 +649,6 @@ namespace yzg
         auto cexpr = clonePtr<ExprHash>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
-    }
-    
-    void ExprHash::inferType(InferTypeContext & context) {
-        type.reset();
-        if ( arguments.size()!=1 ) {
-            context.error("hash(expr)", at, CompilationError::invalid_argument_count);
-            return;
-        }
-        ExprLooksLikeCall::inferType(context);
-        if ( argumentsFailedToInfer ) return;
-        // infer
-        type = make_shared<TypeDecl>(Type::tUInt64);
     }
     
     SimNode * ExprHash::simulate (Context & context) const {
@@ -804,28 +672,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprArrayPush::inferType(InferTypeContext & context) {
-        type.reset();
-        if ( arguments.size()!=2 && arguments.size()!=3 ) {
-            context.error("push(array,value) or push(array,value,at)", at, CompilationError::invalid_argument_count);
-            return;
-        }
-        ExprLooksLikeCall::inferType(context);
-        if ( argumentsFailedToInfer ) return;
-        // infer
-        auto arrayType = arguments[0]->type;
-        auto valueType = arguments[1]->type;
-        if ( !arrayType->isGoodArrayType() ) {
-            context.error("push first argument must be fully qualified array", at, CompilationError::invalid_argument_type);
-            return;
-        }
-        if ( !arrayType->firstType->isSameType(*valueType,false) )
-            context.error("can't push value of different type", at, CompilationError::invalid_argument_type);
-        if ( arguments.size()==3 && !arguments[2]->type->isIndex() )
-            context.error("push at must be an index", at, CompilationError::invalid_argument_type);
-        type = make_shared<TypeDecl>(Type::tVoid);
-    }
-    
     SimNode * ExprArrayPush::simulate (Context & context) const {
         auto arr = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
@@ -843,31 +689,6 @@ namespace yzg
         auto cexpr = clonePtr<ExprErase>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
-    }
-    
-    void ExprErase::inferType(InferTypeContext & context) {
-        type.reset();
-        if ( arguments.size()!=2 ) {
-            context.error("erase(table,key) or erase(array,index)", at, CompilationError::invalid_argument_count);
-            return;
-        }
-        ExprLooksLikeCall::inferType(context);
-        if ( argumentsFailedToInfer ) return;
-        // infer
-        arguments[1] = Expression::autoDereference(arguments[1]);
-        auto containerType = arguments[0]->type;
-        auto valueType = arguments[1]->type;
-        if ( containerType->isGoodArrayType() ) {
-            if ( !valueType->isIndex() )
-                context.error("size must be int or uint", at, CompilationError::invalid_argument_type);
-            type = make_shared<TypeDecl>(Type::tVoid);
-        } else if ( containerType->isGoodTableType() ) {
-            if ( !containerType->firstType->isSameType(*valueType,false) )
-                context.error("key must be of the same type as table<key,...>", at, CompilationError::invalid_argument_type);
-            type = make_shared<TypeDecl>(Type::tBool);
-        } else {
-            context.error("first argument must be fully qualified array or table", at, CompilationError::invalid_argument_type);
-        }
     }
     
     SimNode * ExprErase::simulate (Context & context) const {
@@ -891,31 +712,6 @@ namespace yzg
         auto cexpr = clonePtr<ExprFind>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
-    }
-    
-    void ExprFind::inferType(InferTypeContext & context) {
-        type.reset();
-        if ( arguments.size()!=2 ) {
-            context.error("find(table,key) or find(array,value)", at, CompilationError::invalid_argument_count);
-            return;
-        }
-        ExprLooksLikeCall::inferType(context);
-        if ( argumentsFailedToInfer ) return;
-        // infer
-        arguments[1] = Expression::autoDereference(arguments[1]);
-        auto containerType = arguments[0]->type;
-        auto valueType = arguments[1]->type;
-        if ( containerType->isGoodArrayType() ) {
-            if ( !valueType->isSameType(*containerType->firstType) )
-                context.error("value must be of the same type as array<value>", at, CompilationError::invalid_argument_type);
-        } else if ( containerType->isGoodTableType() ) {
-            if ( !containerType->firstType->isSameType(*valueType,false) )
-                context.error("key must be of the same type as table<key,...>", at, CompilationError::invalid_argument_type);
-            type = make_shared<TypeDecl>(Type::tPointer);
-            type->firstType = make_shared<TypeDecl>(*containerType->secondType);
-        } else {
-            context.error("first argument must be fully qualified array or table", at, CompilationError::invalid_argument_type);
-        }
     }
     
     SimNode * ExprFind::simulate (Context & context) const {
@@ -952,15 +748,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprSizeOf::inferType(InferTypeContext & context) {
-        type.reset();
-        subexpr->inferType(context);
-        if ( !subexpr->type ) return;
-        // infer
-        typeexpr = make_shared<TypeDecl>(*subexpr->type);
-        type = make_shared<TypeDecl>(Type::tInt);
-    }
-    
     SimNode * ExprSizeOf::simulate (Context & context) const {
         int32_t size = typeexpr->getSizeOf();
         return context.makeNode<SimNode_ConstValue<int32_t>>(at,size);
@@ -978,24 +765,6 @@ namespace yzg
         Expression::clone(cexpr);
         cexpr->typeexpr = typeexpr;
         return cexpr;
-    }
-
-    // TODO:
-    //  this would need proper testing, but only afrer parser is modified
-    //  curently none of the errors bellow can even be parsed
-    void ExprNew::inferType(InferTypeContext & context) {
-        type.reset();
-        // infer
-        if ( typeexpr->ref ) {
-            context.error("can't new a ref", typeexpr->at, CompilationError::invalid_new_type);
-        } else if ( typeexpr->dim.size() ) {
-            context.error("can only new single object", typeexpr->at, CompilationError::invalid_new_type);
-        } else if ( typeexpr->baseType==Type::tStructure || typeexpr->isHandle() ) {
-            type = make_shared<TypeDecl>(Type::tPointer);
-            type->firstType = make_shared<TypeDecl>(*typeexpr);
-        } else {
-            context.error("can only new structures or handles", typeexpr->at, CompilationError::invalid_new_type);
-        }
     }
     
     SimNode * ExprNew::simulate (Context & context) const {
@@ -1015,49 +784,6 @@ namespace yzg
         vis.preVisitAtIndex(this, index.get());
         index = index->visit(vis);
         return vis.visit(this);
-    }
-    
-    void ExprAt::inferType(InferTypeContext & context) {
-        type.reset();
-        subexpr->inferType(context);
-        index->inferType(context);
-        if ( !subexpr->type || !index->type ) return;
-        // infer
-        index = autoDereference(index);
-        if ( subexpr->type->isGoodTableType() ) {
-            if ( !subexpr->type->firstType->isSameType(*index->type) ) {
-                context.error("table index type mismatch", index->at, CompilationError::invalid_index_type);
-                return;
-            }
-            type = make_shared<TypeDecl>(*subexpr->type->secondType);
-            type->ref = true;
-            type->constant |= subexpr->type->constant;
-        } else if ( subexpr->type->isHandle() ) {
-            if ( !subexpr->type->annotation->isIndexable(index->type) ) {
-                context.error("handle does not support this index type", index->at, CompilationError::invalid_index_type);
-                return;
-            }
-            type = subexpr->type->annotation->makeIndexType(index->type);
-            type->constant |= subexpr->type->constant;
-        } else {
-            if ( !index->type->isIndex() ) {
-                context.error("index is int or uint", index->at, CompilationError::invalid_index_type);
-                return;
-            }
-            if ( subexpr->type->isGoodArrayType() ) {
-                type = make_shared<TypeDecl>(*subexpr->type->firstType);
-                type->ref = true;
-                type->constant |= subexpr->type->constant;
-            } else if ( !subexpr->type->isRef() ) {
-                context.error("can only index ref", subexpr->at, CompilationError::cant_index);
-            } else if ( !subexpr->type->dim.size() ) {
-                context.error("can only index arrays", subexpr->at, CompilationError::cant_index);
-            } else {
-                type = make_shared<TypeDecl>(*subexpr->type);
-                type->ref = true;
-                type->dim.pop_back();
-            }
-        }
     }
     
     ExpressionPtr ExprAt::clone( const ExpressionPtr & expr ) const {
@@ -1122,31 +848,6 @@ namespace yzg
         return flags;
     }
     
-    void ExprBlock::inferType(InferTypeContext & context) {
-        type.reset();
-        // infer
-        auto sz = context.local.size();
-        for ( auto & ex : list ) {
-            ex->inferType(context);
-        }
-        // block type
-        if ( returnsValue && list.size() ) {
-            uint32_t flags = getEvalFlags();
-            if ( flags & EvalFlags::stopForReturn ) {
-                context.error("captured block can't return outside of the block", at, CompilationError::invalid_block);
-            } else if ( flags & EvalFlags::stopForBreak ) {
-                context.error("captured block can't break outside of the block", at, CompilationError::invalid_block);
-            } else {
-                auto & tail = list.back();
-                if ( tail->type ) {
-                    tail = autoDereference(tail);
-                    type = make_shared<TypeDecl>(*tail->type);
-                }
-            }
-        }
-        context.local.resize(sz);
-    }
-    
     SimNode * ExprBlock::simulate (Context & context) const {
         // TODO: what if list size is 0?
         if ( list.size()!=1 ) {
@@ -1178,42 +879,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprField::inferType(InferTypeContext & context) {
-        type.reset();
-        value->inferType(context);
-        if ( !value->type ) return;
-        // infer
-        auto valT = value->type;
-        if ( valT->isArray() ) {
-            context.error("can't get field of array", at, CompilationError::cant_get_field);
-            return;
-        }
-        if ( valT->isHandle() ) {
-            annotation = valT->annotation;
-            type = annotation->makeFieldType(name);
-        } else if ( valT->baseType==Type::tStructure ) {
-            field = valT->structType->findField(name);
-        } else if ( valT->isPointer() ) {
-            value = autoDereference(value);
-            if ( valT->firstType->baseType==Type::tStructure ) {
-                field = valT->firstType->structType->findField(name);
-            } else if ( valT->firstType->isHandle() ) {
-                annotation = valT->firstType->annotation;
-                type = annotation->makeFieldType(name);
-            }
-        }
-        // handle
-        if ( field ) {
-            type = make_shared<TypeDecl>(*field->type);
-            type->ref = true;
-            type->constant |= valT->constant;
-        } else if ( !type ) {
-            context.error("field " + name + " not found", at, CompilationError::cant_get_field);
-        } else {
-            type->constant |= valT->constant;
-        }
-    }
-    
     SimNode * ExprField::simulate (Context & context) const {
         if ( !field ) {
             return annotation->simulateGetField(name, context, at, value->simulate(context));
@@ -1234,46 +899,6 @@ namespace yzg
         auto cexpr = clonePtr<ExprSafeField>(expr);
         ExprField::clone(cexpr);
         return cexpr;
-    }
-    
-    void ExprSafeField::inferType(InferTypeContext & context) {
-        type.reset();
-        value->inferType(context);
-        if ( !value->type ) return;
-        // infer
-        auto valT = value->type;
-        if ( !valT->isPointer() || !valT->firstType ) {
-            context.error("can only safe dereference a pointer to a structure or handle " + valT->describe(),
-                          at, CompilationError::cant_get_field);
-            return;
-        }
-        value = autoDereference(value);
-        if ( valT->firstType->structType ) {
-            field = valT->firstType->structType->findField(name);
-            if ( !field ) {
-                context.error("can't get field " + name, at, CompilationError::cant_get_field);
-                return;
-            }
-            type = make_shared<TypeDecl>(*field->type);
-        } else if ( valT->firstType->isHandle() ) {
-            annotation = valT->firstType->annotation;
-            type = annotation->makeSafeFieldType(name);
-            if ( !type ) {
-                context.error("can't get field " + name, at, CompilationError::cant_get_field);
-                return;
-            }
-        } else {
-            context.error("can only safe dereference a pointer to a structure or handle " + valT->describe(),
-                          at, CompilationError::cant_get_field);
-            return;
-        }
-        skipQQ = type->isPointer();
-        if ( !skipQQ ) {
-            auto fieldType = type;
-            type = make_shared<TypeDecl>(Type::tPointer);
-            type->firstType = fieldType;
-        }
-        type->constant |= valT->constant;
     }
     
     SimNode * ExprSafeField::simulate (Context & context) const {
@@ -1307,43 +932,6 @@ namespace yzg
         cexpr->local = local;
         cexpr->argument = argument;
         return cexpr;
-    }
-    
-    void ExprVar::inferType(InferTypeContext & context) {
-        type.reset();
-        // infer
-        // local (that on the stack)
-        for ( auto it = context.local.rbegin(); it!=context.local.rend(); ++it ) {
-            auto var = *it;
-            if ( var->name==name ) {
-                variable = var;
-                local = true;
-                type = make_shared<TypeDecl>(*var->type);
-                type->ref = true;
-                return;
-            }
-        }
-        // function argument
-        argumentIndex = 0;
-        for ( auto & arg : context.func->arguments ) {
-            if ( arg->name==name ) {
-                variable = arg;
-                argument = true;
-                type = make_shared<TypeDecl>(*arg->type);
-                type->ref = arg->type->ref;
-                return;
-            }
-            argumentIndex ++;
-        }
-        // global
-        auto var = context.program->findVariable(name);
-        if ( !var ) {
-            context.error("can't locate variable " + name, at, CompilationError::variable_not_found);
-        } else {
-            variable = var;
-            type = make_shared<TypeDecl>(*var->type);
-            type->ref = true;
-        }
     }
     
     SimNode * ExprVar::simulate (Context & context) const {
@@ -1388,30 +976,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprOp1::inferType(InferTypeContext & context) {
-        type.reset();
-        subexpr->inferType(context);
-        if ( !subexpr->type ) return;
-        // infer
-        vector<TypeDeclPtr> types = { subexpr->type };
-        auto functions = context.program->findMatchingFunctions(op, types);
-        if ( functions.size()==0 ) {
-            string candidates = context.program->describeCandidates(context.program->findCandidates(op,types));
-            context.error("no matching operator '" + op
-                          + "' with argument (" + subexpr->type->describe() + ")", at, CompilationError::operator_not_found);
-        } else if ( functions.size()>1 ) {
-            string candidates = context.program->describeCandidates(functions);
-            context.error("too many matching operators '" + op
-                          + "' with argument (" + subexpr->type->describe() + ")", at, CompilationError::operator_not_found);
-        } else {
-            func = functions[0];
-            type = make_shared<TypeDecl>(*func->result);
-            if ( !func->arguments[0]->type->isRef() )
-                subexpr = autoDereference(subexpr);
-        }
-        constexpression = subexpr->constexpression;
-    }
-    
     SimNode * ExprOp1::simulate (Context & context) const {
         if ( func->builtIn ) {
             auto pSimOp1 = static_cast<SimNode_Op1 *>(func->makeSimNode(context));
@@ -1444,38 +1008,6 @@ namespace yzg
         cexpr->left = left->clone();
         cexpr->right = right->clone();
         return cexpr;
-    }
-    
-    void ExprOp2::inferType(InferTypeContext & context) {
-        type.reset();
-        left->inferType(context);
-        right->inferType(context);
-        if ( !left->type || !right->type ) return;
-        // infer
-        if ( left->type->isPointer() && right->type->isPointer() )
-            if ( !left->type->isSameType(*right->type,false) )
-                context.error("operations on incompatible pointers are prohibited", at);
-        vector<TypeDeclPtr> types = { left->type, right->type };
-        auto functions = context.program->findMatchingFunctions(op, types);
-        if ( functions.size()==0 ) {
-            string candidates = context.program->describeCandidates(context.program->findCandidates(op,types));
-            context.error("no matching operator '" + op
-                + "' with arguments (" + left->type->describe() + ", " + right->type->describe()
-                          + ")\n" + candidates, at, CompilationError::operator_not_found);
-        } else if ( functions.size()>1 ) {
-            string candidates = context.program->describeCandidates(functions);
-            context.error("too many matching operators '" + op
-                          + "' with arguments (" + left->type->describe() + ", " + right->type->describe()
-                          + ")\n" + candidates, at, CompilationError::operator_not_found);
-        } else {
-            func = functions[0];
-            type = make_shared<TypeDecl>(*func->result);
-            if ( !func->arguments[0]->type->isRef() )
-                left = autoDereference(left);
-            if ( !func->arguments[1]->type->isRef() )
-                right = autoDereference(right);
-        }
-        constexpression = left->constexpression && right->constexpression;
     }
     
     SimNode * ExprOp2::simulate (Context & context) const {
@@ -1515,33 +1047,6 @@ namespace yzg
         cexpr->left = left->clone();
         cexpr->right = right->clone();
         return cexpr;
-    }
-    
-    void ExprOp3::inferType(InferTypeContext & context) {
-        type.reset();
-        subexpr->inferType(context);
-        left->inferType(context);
-        right->inferType(context);
-        if ( !subexpr->type || !left->type || !right->type ) return;
-        // infer
-        if ( op!="?" ) {
-            context.error("Op3 currently only supports 'is'", at, CompilationError::operator_not_found);
-            return;
-        }
-        subexpr = autoDereference(subexpr);
-        if ( !subexpr->type->isSimpleType(Type::tBool) ) {
-            context.error("cond operator condition must be boolean", at, CompilationError::condition_must_be_bool);
-        } else if ( !left->type->isSameType(*right->type,false,false) ) {
-            context.error("cond operator must return same types on both sides", at, CompilationError::operator_not_found);
-        } else {
-            if ( left->type->ref ^ right->type->ref ) { // if either one is not ref
-                left = autoDereference(left);
-                right = autoDereference(right);
-            }
-            type = make_shared<TypeDecl>(*left->type);
-            type->constant |= right->type->constant;
-        }
-        constexpression = subexpr->constexpression && left->constexpression && right->constexpression;
     }
     
     SimNode * ExprOp3::simulate (Context & context) const {
@@ -1586,26 +1091,6 @@ namespace yzg
         return vis.visit(this);
     }
     
-    void ExprMove::inferType(InferTypeContext & context) {
-        type.reset();
-        left->inferType(context);
-        right->inferType(context);
-        if ( !left->type || !right->type ) return;
-        // infer
-        if ( !left->type->isSameType(*right->type,false,false) ) {
-            context.error("can only move same type", at, CompilationError::operator_not_found);
-        } else if ( !left->type->isRef() ) {
-            context.error("can only move to reference", at, CompilationError::cant_write_to_non_reference);
-        } else if ( left->type->constant ) {
-            context.error("can't move to constant value", at, CompilationError::cant_move_to_const);
-        } else if ( !left->type->canMove() ) {
-            context.error("this type can't be moved", at, CompilationError::cant_move);
-        } else if ( left->type->canCopy() ) {
-            context.error("this type can be copied, use = instead", at, CompilationError::cant_move);
-        }
-        type = make_shared<TypeDecl>(*left->type);  // we return left
-    }
-    
     ExpressionPtr ExprMove::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMove>(expr);
         ExprOp2::clone(cexpr);
@@ -1628,26 +1113,6 @@ namespace yzg
         vis.preVisitRight(this, right.get());
         right = right->visit(vis);
         return vis.visit(this);
-    }
-    
-    void ExprCopy::inferType(InferTypeContext & context) {
-        type.reset();
-        left->inferType(context);
-        right->inferType(context);
-        if ( !left->type || !right->type ) return;
-        // infer
-        if ( !left->type->isSameType(*right->type,false,false) ) {
-            context.error("can only copy same type " + left->type->describe() + " vs " + right->type->describe(),
-                          at, CompilationError::operator_not_found);
-        } else if ( !left->type->isRef() ) {
-            context.error("can only copy to reference", at, CompilationError::cant_write_to_non_reference);
-        } else if ( left->type->constant ) {
-            context.error("can't write to constant value", at, CompilationError::cant_write_to_const);
-        }
-        if ( !left->type->canCopy() ) {
-            context.error("this type can't be copied, use <- instead", at, CompilationError::cant_copy);
-        }
-        type = make_shared<TypeDecl>(*left->type);  // we return left
     }
     
     ExpressionPtr ExprCopy::clone( const ExpressionPtr & expr ) const {
@@ -1673,14 +1138,7 @@ namespace yzg
     uint32_t ExprTryCatch::getEvalFlags() const {
         return (try_block->getEvalFlags() | catch_block->getEvalFlags()) & ~EvalFlags::stopForThrow;
     }
-    
-    void ExprTryCatch::inferType(InferTypeContext & context) {
-        type.reset();
-        // infer
-        try_block->inferType(context);
-        catch_block->inferType(context);
-    }
-    
+
     SimNode * ExprTryCatch::simulate (Context & context) const {
         return context.makeNode<SimNode_TryCatch>(at,
                                                   try_block->simulate(context),
@@ -1710,40 +1168,7 @@ namespace yzg
             cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
-    
-    void ExprReturn::inferType(InferTypeContext & context) {
-        type.reset();
-        if ( subexpr ) {
-            subexpr->inferType(context);
-            if ( !subexpr->type ) return;
-            subexpr = autoDereference(subexpr);
-        }
-        // infer
-        auto resType = context.func->result;
-        if ( resType->isVoid() ) {
-            if ( subexpr ) {
-                context.error("void function has no return", at);
-            }
-        } else {
-            if ( !subexpr ) {
-                context.error("must return value", at);
-            } else {
-                if ( !resType->isSameType(*subexpr->type,true,false) ) {
-                    context.error("incompatible return type, expecting "
-                                  + resType->describe() + " vs " + subexpr->type->describe(),
-                                  at, CompilationError::invalid_return_type);
-                }
-                if ( resType->isPointer() && !resType->isConst() && subexpr->type->isConst() ) {
-                    context.error("incompatible return type, constant matters. expecting "
-                                  + resType->describe() + " vs " + subexpr->type->describe(),
-                                  at, CompilationError::invalid_return_type);
-                }
-                type = make_shared<TypeDecl>(*context.func->result);
-                type->ref = true;   // we return func-result &
-            }
-        }
-    }
-    
+
     SimNode * ExprReturn::simulate (Context & context) const {
         return context.makeNode<SimNode_Return>(at, subexpr ? subexpr->simulate(context) : nullptr);
     }
@@ -1759,13 +1184,6 @@ namespace yzg
         auto cexpr = clonePtr<ExprBreak>(expr);
         Expression::clone(cexpr);
         return cexpr;
-    }
-    
-    void ExprBreak::inferType(InferTypeContext & context) {
-        type.reset();
-        // infer
-        if ( !context.loop.size() )
-            context.error("break without loop", at);
     }
     
     SimNode * ExprBreak::simulate (Context & context) const {
@@ -1828,19 +1246,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprIfThenElse::inferType(InferTypeContext & context) {
-        type.reset();
-        cond->inferType(context);
-        if_true->inferType(context);
-        if ( if_false )
-            if_false->inferType(context);
-        if ( !cond->type ) return;
-        // infer
-        if ( !cond->type->isSimpleType(Type::tBool) ) {
-            context.error("if-then-else condition must be boolean", at, CompilationError::condition_must_be_bool);
-        }
-    }
-    
     SimNode * ExprIfThenElse::simulate (Context & context) const {
         return context.makeNode<SimNode_IfThenElse>(at, cond->simulate(context), if_true->simulate(context),
                                                     if_false ? if_false->simulate(context) : nullptr);
@@ -1866,19 +1271,6 @@ namespace yzg
     
     uint32_t ExprWhile::getEvalFlags() const {
         return body->getEvalFlags() & ~EvalFlags::stopForBreak;
-    }
-    
-    void ExprWhile::inferType(InferTypeContext & context) {
-        type.reset();
-        cond->inferType(context);
-        if ( !cond->type ) return;
-        // infer
-        if ( !cond->type->isSimpleType(Type::tBool) ) {
-            context.error("while loop condition must be boolean", at);
-        } else {
-            context.loop.push_back(shared_from_this());
-            body->inferType(context);
-            context.loop.pop_back();        }
     }
 
     SimNode * ExprWhile::simulate (Context & context) const {
@@ -1935,86 +1327,6 @@ namespace yzg
         return subexpr->getEvalFlags() & ~EvalFlags::stopForBreak;
     }
     
-    void ExprFor::inferType(InferTypeContext & context) {
-        type.reset();
-        // infer
-        if ( !iterators.size() ) {
-            context.error("for needs at least one iterator", at);
-            return;
-        } else if ( iterators.size() != sources.size() ) {
-            context.error("for needs as many iterators as there are sources", at);
-            return;
-        } else if ( sources.size()>MAX_FOR_ITERATORS ) {
-            context.error("too many sources for now", at);
-            return;
-        }
-        auto sp = context.stackTop;
-        auto sz = context.local.size();
-        // determine iteration types
-        nativeIterators = false;
-        fixedArrays = false;
-        dynamicArrays = false;
-        rangeBase = false;
-        fixedSize = UINT16_MAX;
-        for ( auto & src : sources ) {
-            src->inferType(context);
-            if ( !src->type ) return;
-            if ( src->type->isArray() ) {
-                fixedSize = min(fixedSize, src->type->dim.back());
-                fixedArrays = true;
-            } else if ( src->type->isGoodArrayType() ) {
-                dynamicArrays = true;
-            } else if ( src->type->isGoodIteratorType() ) {
-                nativeIterators = true;
-            } else if ( src->type->isHandle() ) {
-                nativeIterators = true;
-            } else if ( src->type->isRange() ) {
-                rangeBase = true;
-            }
-        }
-        int idx = 0;
-        for ( auto & src : sources ) {
-            if ( !src->type ) return;
-            auto pVar = make_shared<Variable>();
-            pVar->name = iterators[idx];
-            pVar->at = at;
-            if ( src->type->dim.size() ) {
-                pVar->type = make_shared<TypeDecl>(*src->type);
-                pVar->type->ref = true;
-                pVar->type->dim.pop_back();
-            } else if ( src->type->isGoodIteratorType() ) {
-                pVar->type = make_shared<TypeDecl>(*src->type->firstType);
-            } else if ( src->type->isGoodArrayType() ) {
-                pVar->type = make_shared<TypeDecl>(*src->type->firstType);
-                pVar->type->ref = true;
-            } else if ( src->type->isRange() ) {
-                pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
-                pVar->type->ref = false;
-            } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
-                pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIteratorType());
-            } else {
-                context.error("unsupported iteration type for " + pVar->name, at);
-                return;
-            }
-            context.local.push_back(pVar);
-            pVar->stackTop = context.stackTop;
-            context.stackTop += (pVar->type->getSizeOf() + 0xf) & ~0xf;
-            iteratorVariables.push_back(pVar);
-            ++ idx;
-        }
-        if ( filter ) {
-            filter->inferType(context);
-            if ( !filter->type ) return;
-            if ( !filter->type->isSimpleType(Type::tBool) ) {
-                context.error("where clause must be boolean", at);
-            }
-        }
-        subexpr->inferType(context);
-        context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
-        context.stackTop = sp;
-        context.local.resize(sz);
-    }
-
     SimNode * ExprFor::simulate (Context & context) const {
         int  total = sources.size();
         int  sourceTypes = int(dynamicArrays) + int(fixedArrays) + int(rangeBase);
@@ -2133,51 +1445,6 @@ namespace yzg
         return subexpr ? subexpr->getEvalFlags() : 0;
     }
     
-    void ExprLet::inferType(InferTypeContext & context) {
-        type.reset();
-        // infer
-        auto sp = context.stackTop;
-        auto sz = context.local.size();
-        for ( auto & var : variables ) {
-            if ( var->type->ref )
-                context.error("local variable can't be reference", var->at, CompilationError::invalid_variable_type);
-            if ( var->type->isVoid() )
-                context.error("local variable can't be void", var->at, CompilationError::invalid_variable_type);
-            if ( var->type->isHandle() && !var->type->annotation->isLocal() )
-                context.error("handled type " + var->type->annotation->name + " can't be local", var->at, CompilationError::invalid_variable_type);
-            context.local.push_back(var);
-            if ( var->init ) {
-                var->init->inferType(context);
-                if ( !var->init->type ) {
-                    var->init->inferType(context);
-                    return;
-                }
-                if ( !var->type->isSameType(*var->init->type,false) ) {
-                    context.error("variable initialization type mismatch, "
-                        + var->type->describe() + " = " + var->init->type->describe(), var->at );
-                } else if ( var->type->baseType==Type::tStructure ) {
-                    context.error("can't initialize structures", var->at );
-                } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
-                    context.error("this variable can't be initialized at all", var->at);
-                }
-            }
-            var->stackTop = context.stackTop;
-            context.stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
-        }
-        if ( subexpr )
-            subexpr->inferType(context);
-        // block type
-        if ( returnsValue && subexpr && subexpr->type ) {
-            subexpr = autoDereference(subexpr);
-            type = make_shared<TypeDecl>(*subexpr->type);
-        }
-        context.func->totalStackSize = max(context.func->totalStackSize, context.stackTop);
-        if ( scoped ) {
-            context.stackTop = sp;
-            context.local.resize(sz);
-        }
-    }
-    
     SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local) {
         SimNode * init = var->init->simulate(context);
         SimNode * get;
@@ -2246,14 +1513,6 @@ namespace yzg
         return stream.str();
     }
     
-    void ExprLooksLikeCall::inferType(InferTypeContext & context) {
-        argumentsFailedToInfer = false;
-        for ( auto & ar : arguments ) {
-            ar->inferType(context);
-            if ( !ar->type ) argumentsFailedToInfer = true;
-        }
-    }
-    
     void ExprLooksLikeCall::autoDereference() {
         for ( size_t iA = 0; iA != arguments.size(); ++iA ) {
             arguments[iA] = Expression::autoDereference(arguments[iA]);
@@ -2277,38 +1536,6 @@ namespace yzg
         ExprLooksLikeCall::clone(cexpr);
         cexpr->func = func;
         return cexpr;
-    }
-    
-    void ExprCall::inferType(InferTypeContext & context) {
-        type.reset();
-        ExprLooksLikeCall::inferType(context);
-        if ( argumentsFailedToInfer ) return;
-        // infer
-        vector<TypeDeclPtr> types;
-        types.reserve(arguments.size());
-        for ( auto & ar : arguments ) {
-            types.push_back(ar->type);
-        }
-        auto functions = context.program->findMatchingFunctions(name, types);
-        if ( functions.size()==0 ) {
-            string candidates = context.program->describeCandidates(context.program->findCandidates(name,types));
-            context.error("no matching function " + describe() + "\n" + candidates, at, CompilationError::function_not_found);
-        } else if ( functions.size()>1 ) {
-            string candidates = context.program->describeCandidates(functions);
-            context.error("too many matching functions " + describe() + "\n" + candidates, at, CompilationError::function_not_found);
-        } else {
-            func = functions[0];
-            type = make_shared<TypeDecl>(*func->result);
-            for ( size_t iT = arguments.size(); iT != func->arguments.size(); ++iT ) {
-                auto newArg = func->arguments[iT]->init->clone();
-                if ( !newArg->type )
-                    newArg->inferType(context);
-                arguments.push_back(newArg);
-            }
-            for ( size_t iA = 0; iA != arguments.size(); ++iA )
-                if ( !func->arguments[iA]->type->isRef() )
-                    arguments[iA] = Expression::autoDereference(arguments[iA]);
-        }
     }
     
     SimNode * ExprCall::simulate (Context & context) const {
@@ -2341,58 +1568,6 @@ namespace yzg
     
     VariablePtr Program::findVariable ( const string & name ) const {
         return thisModule->findVariable(name);
-    }
-    
-    void Program::inferTypes() {
-        // structure declarations (precompute offsets of fields)
-        for ( auto & ist : thisModule->structures ) {
-            auto & st = ist.second;
-            int offset = 0;
-            for ( auto & fi : st->fields ) {
-                fi.offset = offset;
-                offset += fi.type->getSizeOf();
-            }
-        }
-        // global variables
-        int gvi = 0;
-        for ( auto & it : thisModule->globals ) {
-            auto pvar = it.second;
-            pvar->index = gvi ++;
-            if ( pvar->type->ref )
-                error("global variable can't be reference", pvar->at, CompilationError::invalid_variable_type);
-            if ( pvar->type->isVoid() )
-                error("global variable can't be void", pvar->at, CompilationError::invalid_variable_type);
-            if ( pvar->type->isHandle() && !pvar->type->annotation->isLocal() )
-                error("handled type " + pvar->type->annotation->name + "can't be global", pvar->at, CompilationError::invalid_variable_type);
-            if ( pvar->init ) {
-                Expression::InferTypeContext context;
-                pvar->init->inferType(context);
-                if ( failed() )
-                    return;
-            }
-        }
-        // functions
-        totalFunctions = 0;
-        for ( auto & fit : thisModule->functions ) {
-            Expression::InferTypeContext context;
-            context.program = shared_from_this();
-            context.func = fit.second;
-            if ( !context.func->builtIn ) {
-                context.func->totalStackSize = context.stackTop = sizeof(Prologue);
-                context.func->index = totalFunctions ++;
-                for ( auto & arg : context.func->arguments ) {
-                    if ( arg->init ) {
-                        arg->init->inferType(context);
-                        if ( failed() )
-                            return;
-                        if ( !arg->type->isSameType(*arg->init->type, true) ) {
-                            context.error("function argument default value type mismatch", arg->init->at);
-                        }
-                    }
-                }
-                context.func->body->inferType(context);
-            }
-        }
     }
     
     vector<FunctionPtr> Program::findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
@@ -2669,7 +1844,9 @@ namespace yzg
     
     void Program::visit(Visitor & vis) {
         for ( auto & fn : thisModule->functions ) {
-            fn.second = fn.second->visit(vis);
+            if ( !fn.second->builtIn ) {
+                fn.second = fn.second->visit(vis);
+            }
         }
     }
 
