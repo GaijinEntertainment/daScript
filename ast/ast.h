@@ -289,14 +289,6 @@ namespace yzg
     };
     
     struct Expression : enable_shared_from_this<Expression> {
-        struct InferTypeContext {
-            ProgramPtr              program;
-            FunctionPtr             func;
-            vector<VariablePtr>     local;
-            vector<ExpressionPtr>   loop;
-            uint32_t                stackTop = 0;
-            void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
-        };
         Expression() = default;
         Expression(const LineInfo & a) : at(a) {}
         virtual ~Expression() {}
@@ -313,9 +305,15 @@ namespace yzg
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
         TypeDeclPtr type;
-        bool        constexpression= false;
-        bool        topLevel = false;
-        bool        argLevel = false;
+        union {
+            struct {
+                bool    constexpression : 1;
+                bool    topLevel :  1;
+                bool    argLevel : 1;
+                bool    bottomLevel : 1;
+            };
+            uint32_t    flags = 0;
+        };
     };
     
     template <typename ExprType>
@@ -948,9 +946,9 @@ namespace yzg
     class Visitor {
     public:
         // STRUCTURE
-        virtual void preVisit ( Structure * that ) { }
-        virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) {}
-        virtual StructurePtr visit ( Structure * that ) { return that->shared_from_this(); }
+        virtual void preVisit ( Structure * var ) { }
+        virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
+        virtual StructurePtr visit ( Structure * var ) { return var->shared_from_this(); }
         // FUNCTON
         virtual void preVisit ( Function * ) {}
         virtual FunctionPtr visit ( Function * that ) { return that->shared_from_this(); }
@@ -961,8 +959,8 @@ namespace yzg
         virtual void preVisitFunctionBody ( Function *,Expression * ) {}
         virtual ExpressionPtr visitFunctionBody ( Function *, Expression * that ) { return that->shared_from_this(); }
         // ANY
-        virtual void preVisitExpression ( Expression * ) {}
-        virtual ExpressionPtr visitExpression ( Expression * that ) { return that->shared_from_this(); }
+        virtual void preVisitExpression ( Expression * expr ) {}
+        virtual ExpressionPtr visitExpression ( Expression * expr ) { return expr->shared_from_this(); }
         // BLOCK
         virtual void preVisitBlockExpression ( ExprBlock *, Expression * ) {}
         virtual ExpressionPtr visitBlockExpression (  ExprBlock *, Expression * that ) { return that->shared_from_this(); }
@@ -978,11 +976,11 @@ namespace yzg
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * ) {}
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
         // CALL
-        virtual void preVisitCallArg ( ExprCall *, Expression *, bool ) {}
-        virtual ExpressionPtr visitCallArg ( ExprCall *, Expression * that , bool ) { return that->shared_from_this(); }
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) {}
+        virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) { return arg->shared_from_this(); }
         // CALL
-        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall *, Expression *, bool ) {}
-        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall *, Expression * that , bool ) { return that->shared_from_this(); }
+        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) {}
+        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) { return arg->shared_from_this(); }
         // NULL COAELESCING
         virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * , Expression * ) {}
         // AT

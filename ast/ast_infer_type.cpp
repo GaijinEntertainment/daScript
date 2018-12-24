@@ -4,23 +4,31 @@
 
 namespace yzg {
 
-    class InferTypes : public Visitor, public Expression::InferTypeContext {
+    class InferTypes : public Visitor {
     public:
         InferTypes( const ProgramPtr & prog ) {
             program = prog;
         }
         int getFuncCount() const { return totalFunctions; }
     protected:
-        vector<uint32_t> stackTopStack;
-        vector<size_t> varStack;
-        int totalFunctions = 0;
-        int fieldOffset = 0;
-        int globalVarIndex = 0;
+        ProgramPtr              program;
+        FunctionPtr             func;
+        vector<VariablePtr>     local;
+        vector<ExpressionPtr>   loop;
+        uint32_t                stackTop = 0;
+        vector<uint32_t>        stackTopStack;
+        vector<size_t>          varStack;
+        int                     totalFunctions = 0;
+        int                     fieldOffset = 0;
+        int                     globalVarIndex = 0;
     protected:
         void pushStack()    { stackTopStack.push_back(stackTop); }
         void popStack()     { stackTop = stackTopStack.back(); stackTopStack.pop_back(); }
         void pushVarStack() { varStack.push_back(local.size()); }
         void popVarStack()  { local.resize(varStack.back()); varStack.pop_back(); }
+        void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) {
+            program->error(err,at,cerr);
+        }
     protected:
     // strcuture
         virtual void preVisit ( Structure * that ) override {

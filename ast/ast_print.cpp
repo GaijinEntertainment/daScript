@@ -3,6 +3,80 @@
 #include "ast.h"
 
 namespace yzg {
+    
+    class SetPrinterFlags : public Visitor {
+    // ExprBlock
+        virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
+            Visitor::preVisitBlockExpression(block, expr);
+            expr->topLevel = true;
+        }
+    // ExprCall
+        virtual void preVisitCallArg ( ExprCall * call, Expression * expr , bool last ) override {
+            Visitor::preVisitCallArg(call,expr,last);
+            expr->argLevel = true;
+        }
+    // ExprLooksLikeCall
+        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * expr , bool last ) override {
+            Visitor::preVisitLooksLikeCallArg(call,expr,last);
+            expr->argLevel = true;
+        }
+    // ExprIfThenElse
+        virtual void preVisit ( ExprIfThenElse * expr ) override {
+            Visitor::preVisit(expr);
+            expr->cond->argLevel = true;
+        }
+    // ExprWhile
+        virtual void preVisit ( ExprWhile * expr ) override {
+            Visitor::preVisit(expr);
+            expr->cond->argLevel = true;
+        }
+    // ExprFor
+        virtual void preVisit ( ExprFor * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->filter ) expr->filter->argLevel = true;
+        }
+    // ExprReturn
+        virtual void preVisit ( ExprReturn * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->subexpr ) expr->subexpr->argLevel = true;
+        }
+    // ExprCopy
+        virtual void preVisit ( ExprCopy * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->topLevel || expr->argLevel )
+                expr->right->argLevel = true;
+        }
+    // ExprVar
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            expr->bottomLevel = true;
+        }
+        // const
+        virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
+            c->bottomLevel = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstInt * c ) override {
+            c->bottomLevel = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt * c ) override {
+            c->bottomLevel = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstBool * c ) override {
+            c->bottomLevel = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
+            c->bottomLevel = true;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstString * c ) override {
+            c->bottomLevel = true;
+            return Visitor::visit(c);
+        }
+    };
 
     class Printer : public Visitor {
     public:
@@ -14,6 +88,9 @@ namespace yzg {
                 ss << "\n";
                 lastNewLine = ss.tellp();
             }
+        }
+        __forceinline static bool noBracket ( Expression * expr ) {
+            return expr->topLevel || expr->bottomLevel || expr->argLevel;
         }
     // strcuture
         virtual void preVisit ( Structure * that ) override {
@@ -253,32 +330,32 @@ namespace yzg {
             if ( that->op!="+++" && that->op!="---" ) {
                 ss << that->op;
             }
-            if ( !(that->topLevel || that->argLevel) ) ss << "(";
+            if ( !noBracket(that) && !that->subexpr->bottomLevel ) ss << "(";
         }
         virtual ExpressionPtr visit ( ExprOp1 * that ) override {
-            if ( !(that->topLevel || that->argLevel) ) ss << ")";
             if ( that->op=="+++" || that->op=="---" ) {
                 ss << that->op[0] << that->op[1];
             }
+            if ( !noBracket(that) && !that->subexpr->bottomLevel ) ss << ")";
             return Visitor::visit(that);
         }
     // op2
         virtual void preVisit ( ExprOp2 * that ) override {
             Visitor::preVisit(that);
-            if ( !(that->topLevel || that->argLevel) ) ss << "(";
+            if ( !noBracket(that) ) ss << "(";
         }
         virtual void preVisitRight ( ExprOp2 * op2, Expression * right ) override {
             Visitor::preVisitRight(op2,right);
             ss << " " << op2->op << " ";
         }
         virtual ExpressionPtr visit ( ExprOp2 * that ) override {
-            if ( !(that->topLevel || that->argLevel) ) ss << ")";
+            if ( !noBracket(that) ) ss << ")";
             return Visitor::visit(that);
         }
     // op3
         virtual void preVisit ( ExprOp3 * that ) override {
             Visitor::preVisit(that);
-            if ( !(that->topLevel || that->argLevel) ) ss << "(";
+            if ( !noBracket(that) ) ss << "(";
         }
         virtual void preVisitLeft  ( ExprOp3 * that, Expression * left ) override {
             Visitor::preVisitLeft(that,left);
@@ -289,7 +366,7 @@ namespace yzg {
             ss << " : ";
         }
         virtual ExpressionPtr visit ( ExprOp3 * that ) override {
-            if ( !(that->topLevel || that->argLevel) ) ss << ")";
+            if ( !noBracket(that) ) ss << ")";
             return Visitor::visit(that);
         }
     // copy & move
@@ -321,29 +398,30 @@ namespace yzg {
             return Visitor::visit(that);
         }
     protected:
-        stringstream ss;
+        stringstream        ss;
         ostream::pos_type   lastNewLine = -1;
-        int tab = 0;
+        int                 tab = 0;
     };
     
-    ostream& operator<< (ostream& stream, const Program & program) {
+    template <typename TT>
+    __forceinline ostream&  print ( ostream& stream, const TT & value ) {
+        SetPrinterFlags flags;
+        const_cast<TT&>(value).visit(flags);
         Printer log;
-        const_cast<Program&>(program).visit(log);
+        const_cast<TT&>(value).visit(log);
         stream << log.str();
         return stream;
+    }
+    
+    ostream& operator<< (ostream& stream, const Program & program) {
+        return print(stream,program);
     }
     
     ostream& operator<< (ostream& stream, const Expression & expr) {
-        Printer log;
-        const_cast<Expression&>(expr).visit(log);
-        stream << log.str();
-        return stream;
+        return print(stream,expr);
     }
     
     ostream& operator<< (ostream& stream, const Function & func) {
-        Printer log;
-        const_cast<Function&>(func).visit(log);
-        stream << log.str();
-        return stream;
+        return print(stream,func);
     }
 }

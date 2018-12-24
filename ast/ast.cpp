@@ -480,10 +480,6 @@ namespace yzg
     
     // expression
     
-    void Expression::InferTypeContext::error ( const string & err, const LineInfo & at, CompilationError cerr ) {
-        program->error(err,at,cerr);
-    }
-    
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
             assert(0 && "unsupported expression");
@@ -501,9 +497,6 @@ namespace yzg
             ar2l->at = expr->at;
             ar2l->type = make_shared<TypeDecl>(*expr->type);
             ar2l->type->ref = false;
-            ar2l->topLevel = expr->topLevel;
-            ar2l->argLevel = expr->argLevel;
-            expr->topLevel = expr->argLevel = false;
             return ar2l;
         } else {
             return expr;
