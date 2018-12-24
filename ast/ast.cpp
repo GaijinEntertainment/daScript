@@ -1878,7 +1878,11 @@ namespace yzg
             return program;
         } else {
             program->inferTypes();
-            sort(program->errors.begin(),program->errors.end());
+            if ( program->failed() ) {
+                sort(program->errors.begin(),program->errors.end());
+            } else {
+                program->allocateStack();
+            }
             return program;
         }
     }

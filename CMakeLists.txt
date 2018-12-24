@@ -38,6 +38,7 @@ ast/ast.cpp
 ast/ast_module.cpp
 ast/ast_print.cpp
 ast/ast_infer_type.cpp
+ast/ast_allocate_stack.cpp
 ast/ast.h
 ast/ast_interop.h
 ast/ast_handle.h

@@ -9,21 +9,15 @@ namespace yzg {
         InferTypes( const ProgramPtr & prog ) {
             program = prog;
         }
-        int getFuncCount() const { return totalFunctions; }
     protected:
         ProgramPtr              program;
         FunctionPtr             func;
         vector<VariablePtr>     local;
         vector<ExpressionPtr>   loop;
-        uint32_t                stackTop = 0;
-        vector<uint32_t>        stackTopStack;
         vector<size_t>          varStack;
-        int                     totalFunctions = 0;
         int                     fieldOffset = 0;
         int                     globalVarIndex = 0;
     protected:
-        void pushStack()    { stackTopStack.push_back(stackTop); }
-        void popStack()     { stackTop = stackTopStack.back(); stackTopStack.pop_back(); }
         void pushVarStack() { varStack.push_back(local.size()); }
         void popVarStack()  { local.resize(varStack.back()); varStack.pop_back(); }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) {
@@ -70,8 +64,6 @@ namespace yzg {
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
             func = f->shared_from_this();
-            func->totalStackSize = stackTop = sizeof(Prologue);
-            func->index = totalFunctions ++;
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
             if ( !arg->type->isSameType(*arg->init->type, true) ) {
@@ -694,7 +686,6 @@ namespace yzg {
             Visitor::preVisit(expr);
             loop.push_back(expr->shared_from_this());
             pushVarStack();
-            pushStack();
         }
         virtual void preVisitForStack ( ExprFor * expr ) override {
             Visitor::preVisitForStack(expr);
@@ -754,15 +745,11 @@ namespace yzg {
                     return;
                 }
                 local.push_back(pVar);
-                pVar->stackTop = stackTop;
-                stackTop += (pVar->type->getSizeOf() + 0xf) & ~0xf;
                 expr->iteratorVariables.push_back(pVar);
                 ++ idx;
             }
         }
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
-            func->totalStackSize = max(func->totalStackSize, stackTop);
-            popStack();
             popVarStack();
             loop.pop_back();
             if ( expr->filter ) {
@@ -777,7 +764,6 @@ namespace yzg {
         virtual void preVisit ( ExprLet * expr ) override {
             Visitor::preVisit(expr);
             pushVarStack();
-            pushStack();
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
@@ -790,8 +776,6 @@ namespace yzg {
             local.push_back(var);
         }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
-            var->stackTop = stackTop;
-            stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
             return Visitor::visitLet(expr,var,last);
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
@@ -811,9 +795,7 @@ namespace yzg {
                 expr->subexpr = Expression::autoDereference(expr->subexpr);
                 expr->type = make_shared<TypeDecl>(*expr->subexpr->type);
             }
-            func->totalStackSize = max(func->totalStackSize, stackTop);
             if ( expr->scoped ) {
-                popStack();
                 popVarStack();
             }
             return Visitor::visit(expr);
@@ -951,7 +933,6 @@ namespace yzg {
     void Program::inferTypes() {
         InferTypes context(shared_from_this());
         visit(context);
-        totalFunctions = context.getFuncCount();
     }
 }
 

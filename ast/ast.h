@@ -902,6 +902,7 @@ namespace yzg
         bool addFunction ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void inferTypes();
+        void allocateStack();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
         void simulate ( Context & context );
