@@ -39,6 +39,7 @@ ast/ast_module.cpp
 ast/ast_print.cpp
 ast/ast_infer_type.cpp
 ast/ast_allocate_stack.cpp
+ast/ast_const_folding.cpp
 ast/ast.h
 ast/ast_interop.h
 ast/ast_handle.h
@@ -123,6 +124,12 @@ file(GLOB COMPILATION_FAIL_TEST_SRC
 list(SORT COMPILATION_FAIL_TEST_SRC)
 SOURCE_GROUP_FILES("test/compilation fail" COMPILATION_FAIL_TEST_SRC)
 
+file(GLOB OPTIMIZATION_SRC
+"test/optimizations/*.das"
+)
+list(SORT OPTIMIZATION_SRC)
+SOURCE_GROUP_FILES("test/optimizations" OPTIMIZATION_SRC)
+
 file(GLOB MIX_TEST_SRC
 "test/*.das"
 )
@@ -136,7 +143,7 @@ test/test_handles.cpp
 SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)
 
 include_directories(daScriptTest PUBLIC ast lexer misc simulate test)
-add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${TEST_MAIN_SRC} )
+add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC})
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)

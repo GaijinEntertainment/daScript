@@ -83,32 +83,26 @@ namespace yzg {
     // const
         virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
             c->type = make_shared<TypeDecl>(Type::tPointer);
-            c->constexpression = true;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {
             c->type = make_shared<TypeDecl>(Type::tInt);
-            c->constexpression = true;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt * c ) override {
             c->type = make_shared<TypeDecl>(Type::tUInt);
-            c->constexpression = true;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstBool * c ) override {
             c->type = make_shared<TypeDecl>(Type::tBool);
-            c->constexpression = true;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
             c->type = make_shared<TypeDecl>(Type::tFloat);
-            c->constexpression = true;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
             c->type = make_shared<TypeDecl>(Type::tString);
-            c->constexpression = true;
             return Visitor::visit(c);
         }
     // ExprRef2Value
@@ -525,7 +519,6 @@ namespace yzg {
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
             }
-            expr->constexpression = expr->subexpr->constexpression;
             return Visitor::visit(expr);
         }
     // ExprOp2
@@ -555,7 +548,6 @@ namespace yzg {
                 if ( !expr->func->arguments[1]->type->isRef() )
                     expr->right = Expression::autoDereference(expr->right);
             }
-            expr->constexpression = expr->left->constexpression && expr->right->constexpression;
             return Visitor::visit(expr);
         }
     // ExprOp3
@@ -579,7 +571,6 @@ namespace yzg {
                 expr->type = make_shared<TypeDecl>(*expr->left->type);
                 expr->type->constant |= expr->right->type->constant;
             }
-            expr->constexpression = expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression;
             return Visitor::visit(expr);
         }
     // ExprMove

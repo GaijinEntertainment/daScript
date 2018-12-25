@@ -86,7 +86,7 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            cout << *program << "\n";
+            cout << "\n" << *program << "\n";
             Context ctx(&str);
             program->simulate(ctx);
             int fnTest = ctx.findFunction("test");
@@ -153,6 +153,7 @@ int main(int argc, const char * argv[]) {
     bool ok = true;
     ok = run_compilation_fail_tests("../../test/compilation_fail_tests") && ok;
     ok = run_unit_tests("../../test/unit_tests") && ok;
+    ok = run_unit_tests("../../test/optimizations") && ok;
     cout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown
     Module::Shutdown();

@@ -809,10 +809,13 @@ namespace yzg
     
     ExpressionPtr ExprBlock::visit(Visitor & vis) {
         vis.preVisit(this);
-        for ( auto & subexpr : list ) {
+        for ( auto it = list.begin(); it!=list.end(); ) {
+            auto & subexpr = *it;
             vis.preVisitBlockExpression(this, subexpr.get());
             subexpr = subexpr->visit(vis);
-            subexpr = vis.visitBlockExpression(this, subexpr.get());
+            if ( subexpr )
+                subexpr = vis.visitBlockExpression(this, subexpr.get());
+            if ( subexpr ) ++it; else it = list.erase(it);
         }
         return vis.visit(this);
     }
@@ -1721,8 +1724,7 @@ namespace yzg
             gfun.debug = makeFunctionDebugInfo(context, *pfun);
         }
         sdebug.clear();
-        context.thisProgram = nullptr;
-        context.linearAllocatorExecuteBase = context.linearAllocator;
+        context.simEnd();
         context.restart();
         context.runInitScript();
         context.restart();
@@ -1834,6 +1836,17 @@ namespace yzg
         }
     }
     
+    ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, __m128 value ) {
+        if ( type->dim.size() || type->ref ) return nullptr;
+        switch ( type->baseType ) {
+            case Type::tBool:       return make_shared<ExprConstBool>(at, cast<bool>::to(value));
+            case Type::tInt:        return make_shared<ExprConstInt>(at, cast<int32_t>::to(value));
+            case Type::tUInt:       return make_shared<ExprConstUInt>(at, cast<uint32_t>::to(value));
+            case Type::tFloat:      return make_shared<ExprConstFloat>(at, cast<float>::to(value));
+            default:                return nullptr;
+        }
+    }
+    
     void Program::visit(Visitor & vis) {
         // structures
         for ( auto & ist : thisModule->structures ) {
@@ -1881,6 +1894,9 @@ namespace yzg
             if ( program->failed() ) {
                 sort(program->errors.begin(),program->errors.end());
             } else {
+                // OPTIMIZATIONS
+                program->optimizationConstFolding();
+                // prepare for Simulation
                 program->allocateStack();
             }
             return program;

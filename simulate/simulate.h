@@ -134,6 +134,11 @@ namespace yzg
             return globalVariables[index].value;
         }
         
+        __forceinline void simEnd() {
+            thisProgram = nullptr;
+            linearAllocatorExecuteBase = linearAllocator;
+        }
+        
         __forceinline void restart( ) {
             linearAllocator = linearAllocatorExecuteBase;
             invokeStackTop = nullptr;

@@ -902,12 +902,14 @@ namespace yzg
         bool addFunction ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void inferTypes();
+        bool optimizationConstFolding();
         void allocateStack();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
         void simulate ( Context & context );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
+        static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, __m128 value );
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
         void visit(Visitor & vis);
@@ -963,8 +965,8 @@ namespace yzg
         virtual void preVisitExpression ( Expression * expr ) {}
         virtual ExpressionPtr visitExpression ( Expression * expr ) { return expr->shared_from_this(); }
         // BLOCK
-        virtual void preVisitBlockExpression ( ExprBlock *, Expression * ) {}
-        virtual ExpressionPtr visitBlockExpression (  ExprBlock *, Expression * that ) { return that->shared_from_this(); }
+        virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) {}
+        virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
         // LET
         virtual void preVisitLetStack ( ExprLet * ) {}
         virtual void preVisitLet ( ExprLet * let, const VariablePtr &, bool ) {} 
