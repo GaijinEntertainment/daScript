@@ -68,6 +68,19 @@
     AnnotationList *                faList;
 }
 
+%destructor { delete $$; } <s>
+%destructor { delete $$; } <pNameList>
+%destructor { delete $$; } <pStruct>
+%destructor { delete $$; } <pVarDecl>
+%destructor { deleteVariableDeclarationList($$); } <pVarDeclList>
+%destructor { delete $$; } <pTypeDecl>
+%destructor { delete $$; } <pExpressoin>
+%destructor { delete $$; } <annotation>
+%destructor { delete $$; } <aa>
+%destructor { delete $$; } <aaList>
+%destructor { delete $$; } <fa>
+%destructor { delete $$; } <faList>
+
 %token  LEXER_ERROR
 
 /* keywords */
@@ -413,6 +426,9 @@ expressions
         if ( $subexpr ) {
             static_cast<ExprBlock*>($block)->list.push_back(ExpressionPtr($subexpr));
         }
+    }
+    |   expressions[block] error {
+        delete $block; $$ = nullptr; YYABORT;
     }
     ;
 
@@ -843,6 +859,7 @@ ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expressi
 }
 
 void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
+    if ( !list ) return;
     for ( auto pD : *list )
         delete pD;
     delete list;

@@ -86,7 +86,7 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            cout << "\n" << *program << "\n";
+            // cout << "\n" << *program << "\n";
             Context ctx(&str);
             program->simulate(ctx);
             int fnTest = ctx.findFunction("test");
@@ -141,7 +141,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test("../../test/compilation_fail_tests/cant_index.das");
+    compilation_fail_test("../../test/compilation_fail_tests/mismatching_curly_bracers.das");
     Module::Shutdown();
     return 0;
 #endif
