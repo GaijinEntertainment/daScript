@@ -840,13 +840,6 @@ namespace yzg
         return cexpr;
     }
     
-    void ExprBlock::setBlockReturnsValue() {
-        returnsValue = true;
-        if ( list.size() ) {
-            list.back()->setBlockReturnsValue();
-        }
-    }
-    
     uint32_t ExprBlock::getEvalFlags() const {
         uint32_t flags = 0;
         for ( const auto & ex : list ) {
@@ -863,8 +856,9 @@ namespace yzg
             }
         }
         // TODO: what if list size is 0?
-        if ( simlist.size()!=1 ) {
-            auto block = context.makeNode<SimNode_Block>(at);
+        if ( simlist.size()!=1 || returnsValue ) {
+            auto block = returnsValue ? context.makeNode<SimNode_ClosureBlock>(at, type!=nullptr)
+                : context.makeNode<SimNode_Block>(at);
             block->total = int(simlist.size());
             block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
             for ( int i = 0; i != block->total; ++i )
@@ -1445,13 +1439,6 @@ namespace yzg
             }
         }
         return nullptr;
-    }
-    
-    void ExprLet::setBlockReturnsValue() {
-        returnsValue = true;
-        if ( subexpr ) {
-            subexpr->setBlockReturnsValue();
-        }
     }
     
     uint32_t ExprLet::getEvalFlags() const {

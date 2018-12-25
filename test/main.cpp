@@ -141,12 +141,12 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test("../../test/compilation_fail_tests/mismatching_curly_bracers.das");
+    compilation_fail_test("../../test/compilation_fail_tests/const_ref.das");
     Module::Shutdown();
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test("../../test/unit_tests/for-loop.das");
+    unit_test("../../test/unit_tests/block.das");
     Module::Shutdown();
     return 0;
 #endif

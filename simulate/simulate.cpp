@@ -203,10 +203,21 @@ namespace yzg
     // SimNode_Block
     
     __m128 SimNode_Block::eval ( Context & context ) {
-        __m128 result = _mm_setzero_ps();
         for ( int i = 0; i!=total && !context.stopFlags; ++i )
-            result = list[i]->eval(context);
-        return result;
+            list[i]->eval(context);
+        return _mm_setzero_ps();
+    }
+    
+    __m128 SimNode_ClosureBlock::eval ( Context & context ) {
+        for ( int i = 0; i!=total && !context.stopFlags; ++i )
+            list[i]->eval(context);
+        if ( context.stopFlags & EvalFlags::stopForReturn ) {
+            context.stopFlags &= ~EvalFlags::stopForReturn;
+            return context.abiResult();
+        } else {
+            if ( needResult ) context.throw_error("end of block without return");
+            return _mm_setzero_ps();
+        }
     }
     
     // SimNode_Let

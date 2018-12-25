@@ -14,6 +14,7 @@ namespace yzg {
         FunctionPtr             func;
         vector<VariablePtr>     local;
         vector<ExpressionPtr>   loop;
+        vector<ExprBlock *>     blocks;
         vector<size_t>          varStack;
         int                     fieldOffset = 0;
         int                     globalVarIndex = 0;
@@ -383,23 +384,19 @@ namespace yzg {
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
+            if ( block->returnsValue )
+                blocks.push_back(block);
             pushVarStack();
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             popVarStack();
+            if ( block->returnsValue )
+                blocks.pop_back();
             if ( block->returnsValue && block->list.size() ) {
                 uint32_t flags = block->getEvalFlags();
-                if ( flags & EvalFlags::stopForReturn ) {
-                    error("captured block can't return outside of the block", block->at, CompilationError::invalid_block);
-                } else if ( flags & EvalFlags::stopForBreak ) {
+                if ( flags & EvalFlags::stopForBreak ) {
                     error("captured block can't break outside of the block", block->at, CompilationError::invalid_block);
-                } else {
-                    auto & tail = block->list.back();
-                    if ( tail->type ) {
-                        tail = Expression::autoDereference(tail);
-                        block->type = make_shared<TypeDecl>(*tail->type);
-                    }
-                }
+                } 
             }
             return Visitor::visit(block);
         }
@@ -633,16 +630,10 @@ namespace yzg {
                 if ( !expr->subexpr->type ) return Visitor::visit(expr);
                 expr->subexpr = Expression::autoDereference(expr->subexpr);
             }
-            // infer
-            auto resType = func->result;
-            if ( resType->isVoid() ) {
-                if ( expr->subexpr ) {
-                    error("void function has no return", expr->at);
-                }
-            } else {
-                if ( !expr->subexpr ) {
-                    error("must return value", expr->at);
-                } else {
+            if ( blocks.size() ) {
+                ExprBlock * block = blocks.back();
+                if ( block->type ) {
+                    const auto & resType = block->type;
                     if ( !resType->isSameType(*expr->subexpr->type,true,false) ) {
                         error("incompatible return type, expecting "
                               + resType->describe() + " vs " + expr->subexpr->type->describe(),
@@ -653,10 +644,34 @@ namespace yzg {
                               + resType->describe() + " vs " + expr->subexpr->type->describe(),
                               expr->at, CompilationError::invalid_return_type);
                     }
-                    expr->type = make_shared<TypeDecl>(*func->result);
-                    expr->type->ref = true;   // we return func-result &
+                } else {
+                    block->type = make_shared<TypeDecl>(*expr->subexpr->type);
+                }
+            } else {
+                // infer
+                auto resType = func->result;
+                if ( resType->isVoid() ) {
+                    if ( expr->subexpr ) {
+                        error("void function has no return", expr->at);
+                    }
+                } else {
+                    if ( !expr->subexpr ) {
+                        error("must return value", expr->at);
+                    } else {
+                        if ( !resType->isSameType(*expr->subexpr->type,true,false) ) {
+                            error("incompatible return type, expecting "
+                                  + resType->describe() + " vs " + expr->subexpr->type->describe(),
+                                  expr->at, CompilationError::invalid_return_type);
+                        }
+                        if ( resType->isPointer() && !resType->isConst() && expr->subexpr->type->isConst() ) {
+                            error("incompatible return type, constant matters. expecting "
+                                  + resType->describe() + " vs " + expr->subexpr->type->describe(),
+                                  expr->at, CompilationError::invalid_return_type);
+                        }
+                    }
                 }
             }
+            expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
         }
     // ExprBreak
@@ -798,10 +813,6 @@ namespace yzg {
             return Visitor::visitLetInit(expr, var, init);
         }
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
-            if ( expr->returnsValue && expr->subexpr && expr->subexpr->type ) {
-                expr->subexpr = Expression::autoDereference(expr->subexpr);
-                expr->type = make_shared<TypeDecl>(*expr->subexpr->type);
-            }
             if ( expr->scoped ) {
                 popVarStack();
             }

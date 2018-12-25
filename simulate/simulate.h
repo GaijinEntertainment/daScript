@@ -504,6 +504,12 @@ namespace yzg
         uint32_t total = 0;
     };
     
+    struct SimNode_ClosureBlock : SimNode_Block {
+        SimNode_ClosureBlock ( const LineInfo & at, bool nr ) : SimNode_Block(at), needResult(nr) {}
+        virtual __m128 eval ( Context & context ) override;
+        bool needResult = false;
+    };
+    
     // LET
     struct SimNode_Let : SimNode_Block {
         SimNode_Let ( const LineInfo & at ) : SimNode_Block(at) {}
