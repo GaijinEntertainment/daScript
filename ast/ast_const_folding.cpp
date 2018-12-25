@@ -4,9 +4,9 @@
 
 namespace yzg {
     
-    class ConstFolding : public Visitor {
+    class FoldingVisitor : public Visitor {
     public:
-        ConstFolding( const ProgramPtr & prog ) : ctx(nullptr) {
+        FoldingVisitor( const ProgramPtr & prog ) : ctx(nullptr) {
             program = prog;
         }
         bool didAnything () const { return anyFolding; }
@@ -48,6 +48,11 @@ namespace yzg {
             sim->constexpression = true;
             return sim;
         }
+    };
+    
+    class ConstFolding : public FoldingVisitor {
+    public:
+        ConstFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
     protected:
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
@@ -73,7 +78,7 @@ namespace yzg {
     // ExprIfThenElse
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             if ( expr->cond->constexpression ) {
-                bool res = cast<bool>::to(eval(expr));
+                bool res = cast<bool>::to(eval(expr->cond.get()));
                 if ( res ) {
                     return expr->if_true;
                 } else {
@@ -117,10 +122,39 @@ namespace yzg {
         }
     };
     
+    class StaticAssertFolding : public FoldingVisitor {
+    public:
+        StaticAssertFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
+    protected:
+        virtual ExpressionPtr visit ( ExprStaticAssert * expr ) override {
+            auto cond = expr->arguments[0];
+            if ( !cond->constexpression  ) {
+                program->error("static assert condition is not constexpr", expr->at);
+                return nullptr;
+            }
+            if ( !cast<bool>::to(eval(cond.get())) ) {
+                string message;
+                if ( expr->arguments.size()==2 ) {
+                    message = cast<char *>::to(eval(expr->arguments[1].get()));
+                } else {
+                    message = "static assert failed";
+                }
+                program->error(message, expr->at);
+            }
+            return nullptr;
+        }
+    };
+    
     // program
     
     bool Program::optimizationConstFolding() {
         ConstFolding context(shared_from_this());
+        visit(context);
+        return context.didAnything();
+    }
+    
+    bool Program::staticAsserts() {
+        StaticAssertFolding context(shared_from_this());
         visit(context);
         return context.didAnything();
     }

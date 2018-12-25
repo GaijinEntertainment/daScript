@@ -54,9 +54,10 @@ namespace yzg
         addExtern<decltype(builtin_stackwalk),builtin_stackwalk> (*this, lib, "stackwalk");
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint");
         // function-like expresions
-        addCall<ExprAssert>     ("assert");
-        addCall<ExprDebug>      ("debug");
-        addCall<ExprHash>       ("hash");
+        addCall<ExprAssert>         ("assert");
+        addCall<ExprStaticAssert>   ("static_assert");
+        addCall<ExprDebug>          ("debug");
+        addCall<ExprHash>           ("hash");
         // table functions
         addExtern<decltype(builtin_table_size), builtin_table_size>(*this, lib, "length");
         addExtern<decltype(builtin_table_capacity), builtin_table_capacity>(*this, lib, "capacity");

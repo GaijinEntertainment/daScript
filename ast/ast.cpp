@@ -570,6 +570,17 @@ namespace yzg
         }
     }
 
+    // ExprStaticAssert
+    
+    ExpressionPtr ExprStaticAssert::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprStaticAssert>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+    
+    SimNode * ExprStaticAssert::simulate (Context & context) const {
+        return nullptr;
+    }
     
     // ExprAssert
     
@@ -581,7 +592,7 @@ namespace yzg
     
     SimNode * ExprAssert::simulate (Context & context) const {
         string message;
-        if ( arguments.size()==2 && arguments[1]->isStringConstant() )
+        if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
         return context.makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.allocateName(message));
     }
@@ -598,7 +609,7 @@ namespace yzg
         TypeInfo * pTypeInfo = context.makeNode<TypeInfo>();
         context.thisProgram->makeTypeInfo(pTypeInfo, context, arguments[0]->type);
         string message;
-        if ( arguments.size()==2 && arguments[1]->isStringConstant() )
+        if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
         return context.makeNode<SimNode_Debug>(at,
                                                arguments[0]->simulate(context),
@@ -845,16 +856,22 @@ namespace yzg
     }
     
     SimNode * ExprBlock::simulate (Context & context) const {
+        vector<SimNode *> simlist;
+        for ( auto & node : list ) {
+            if ( auto simE = node->simulate(context) ) {
+                simlist.push_back(simE);
+            }
+        }
         // TODO: what if list size is 0?
-        if ( list.size()!=1 ) {
+        if ( simlist.size()!=1 ) {
             auto block = context.makeNode<SimNode_Block>(at);
-            block->total = int(list.size());
+            block->total = int(simlist.size());
             block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
             for ( int i = 0; i != block->total; ++i )
-                block->list[i] = list[i]->simulate(context);
+                block->list[i] = simlist[i];
             return block;
         } else {
-            return list[0]->simulate(context);
+            return simlist[0];
         }
     }
     
@@ -1698,7 +1715,7 @@ namespace yzg
         return vi;
     }
     
-    void Program::simulate ( Context & context ) {
+    bool Program::simulate ( Context & context ) {
         context.thisProgram = this;
         context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(thisModule->globals.size()*sizeof(GlobalVariable)) );
         for ( auto & it : thisModule->globals ) {
@@ -1728,6 +1745,7 @@ namespace yzg
         context.restart();
         context.runInitScript();
         context.restart();
+        return errors.size() == 0;
     }
     
     void Program::error ( const string & str, const LineInfo & at, CompilationError cerr ) {
@@ -1874,6 +1892,18 @@ namespace yzg
             }
         }
     }
+    
+    void Program::optimize() {
+        bool any, once;
+        once = true;
+        do {
+            any = false;
+            any |= optimizationConstFolding();  if ( failed() ) break;
+            any |= optimizationBlockFolding();  if ( failed() ) break;
+            any |= once && staticAsserts();     if ( failed() ) break;
+            once = false;
+        } while ( any );
+    }
 
     // PARSER
     
@@ -1894,9 +1924,7 @@ namespace yzg
             if ( program->failed() ) {
                 sort(program->errors.begin(),program->errors.end());
             } else {
-                // OPTIMIZATIONS
-                program->optimizationConstFolding();
-                // prepare for Simulation
+                program->optimize();
                 program->allocateStack();
             }
             return program;

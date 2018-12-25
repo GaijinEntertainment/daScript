@@ -419,7 +419,7 @@ expressions
 expr_pipe
     :   expr[fncall] LBPIPE[loc] expr_block[arg] {
         Expression * pipeCall = $fncall->tail();
-        if ( pipeCall->isCall() ) {
+        if ( pipeCall->rtti_isCall() ) {
             auto pCall = (ExprLooksLikeCall *) pipeCall;
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
@@ -592,7 +592,7 @@ expr
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   expr_block[subexpr]                     { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg] {
-        if ( $fncall->isCall() ) {
+        if ( $fncall->rtti_isCall() ) {
             auto pCall = (ExprLooksLikeCall *) $fncall;
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
@@ -821,10 +821,10 @@ void yyerror(const string & error, CompilationError cerr) {
 vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
     vector<ExpressionPtr> argList;
     auto arg = arguments;
-    if ( arg->isSequence() ) {
-        while ( arg->isSequence() ) {
+    if ( arg->rtti_isSequence() ) {
+        while ( arg->rtti_isSequence() ) {
             auto pSeq = static_cast<ExprSequence *>(arg);
-            assert(!pSeq->right->isSequence());
+            assert(!pSeq->right->rtti_isSequence());
             argList.push_back(pSeq->right);
             arg = pSeq->left.get();
         }

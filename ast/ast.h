@@ -297,9 +297,12 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
         virtual SimNode * simulate (Context & context) const = 0;
-        virtual bool isSequence() const { return false; }
-        virtual bool isStringConstant() const { return false; }
-        virtual bool isCall() const { return false; }
+        virtual bool rtti_isSequence() const { return false; }
+        virtual bool rtti_isStringConstant() const { return false; }
+        virtual bool rtti_isCall() const { return false; }
+        virtual bool rtti_isReturn() const { return false; }
+        virtual bool rtti_isBreak() const { return false; }
+        virtual bool rtti_isBlock() const { return false; }
         virtual Expression * tail() { return this; }
         virtual void setBlockReturnsValue() {}
         virtual uint32_t getEvalFlags() const { return 0; }
@@ -372,6 +375,7 @@ namespace yzg
         virtual void setBlockReturnsValue() override;
         virtual uint32_t getEvalFlags() const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isBlock() const override { return true; }
         vector<ExpressionPtr>   list;
         bool                    returnsValue = false;
     };
@@ -469,7 +473,7 @@ namespace yzg
     struct ExprSequence : ExprOp2 {
         ExprSequence ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
             : ExprOp2(a, ",", l, r) {}
-        virtual bool isSequence() const override { return true; }
+        virtual bool rtti_isSequence() const override { return true; }
     };
     
     // trinary  subexpr ? left : right
@@ -504,6 +508,7 @@ namespace yzg
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForReturn; }
+        virtual bool rtti_isReturn() const override { return true; }
         ExpressionPtr subexpr;
     };
     
@@ -514,6 +519,7 @@ namespace yzg
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForBreak; }
+        virtual bool rtti_isBreak() const override { return true; }
     };
     
     template <typename TT, typename ExprConstExt>
@@ -571,7 +577,7 @@ namespace yzg
             char * str = context.allocateName(value);
             return context.makeNode<SimNode_ConstValue<char *>>(at,str);
         }
-        virtual bool isStringConstant() const override { return true; }
+        virtual bool rtti_isStringConstant() const override { return true; }
     };
     
     struct ExprLet : Expression {
@@ -617,7 +623,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override { return nullptr; }
         virtual ExpressionPtr visit(Visitor & vis) override;
         string describe() const;
-        virtual bool isCall() const override { return true; }
+        virtual bool rtti_isCall() const override { return true; }
         string                  name;
         vector<ExpressionPtr>   arguments;
         bool                    argumentsFailedToInfer = false;
@@ -651,6 +657,13 @@ namespace yzg
     struct ExprAssert : ExprLikeCall<ExprAssert> {
         ExprAssert () = default;
         ExprAssert ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprAssert>(a,name) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+    
+    struct ExprStaticAssert : ExprLikeCall<ExprStaticAssert> {
+        ExprStaticAssert () = default;
+        ExprStaticAssert ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprStaticAssert>(a,name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
@@ -903,10 +916,13 @@ namespace yzg
         void addModule ( Module * pm );
         void inferTypes();
         bool optimizationConstFolding();
+        bool optimizationBlockFolding();
+        bool staticAsserts();
+        void optimize();
         void allocateStack();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
-        void simulate ( Context & context );
+        bool simulate ( Context & context );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, __m128 value );
@@ -1021,6 +1037,7 @@ namespace yzg
         VISIT_EXPR(ExprPtr2Ref)
         VISIT_EXPR(ExprNullCoalescing)
         VISIT_EXPR(ExprAssert)
+        VISIT_EXPR(ExprStaticAssert)
         VISIT_EXPR(ExprDebug)
         VISIT_EXPR(ExprInvoke)
         VISIT_EXPR(ExprHash)

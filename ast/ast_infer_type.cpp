@@ -160,6 +160,22 @@ namespace yzg {
             }
             return Visitor::visit(expr);
         }
+    // ExprStaticAssert
+        virtual ExpressionPtr visit ( ExprStaticAssert * expr ) override {
+            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->arguments.size()<1 || expr->arguments.size()>2  ) {
+                error("static_assert(expr) or static_assert(expr,string)", expr->at, CompilationError::invalid_argument_count);
+                return Visitor::visit(expr);
+            }
+            // infer
+            expr->autoDereference();
+            if ( !expr->arguments[0]->type->isSimpleType(Type::tBool) )
+                error("static assert condition must be boolean", expr->at, CompilationError::invalid_argument_type);
+            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() )
+                error("static assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
+            expr->type = make_shared<TypeDecl>(Type::tVoid);
+            return Visitor::visit(expr);
+        }
     // ExprAssert
         virtual ExpressionPtr visit ( ExprAssert * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
@@ -171,7 +187,7 @@ namespace yzg {
             expr->autoDereference();
             if ( !expr->arguments[0]->type->isSimpleType(Type::tBool) )
                 error("assert condition must be boolean", expr->at, CompilationError::invalid_argument_type);
-            if ( expr->arguments.size()==2 && !expr->arguments[1]->isStringConstant() )
+            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() )
                 error("assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
@@ -184,7 +200,7 @@ namespace yzg {
                 return Visitor::visit(expr);
             }
             // infer
-            if ( expr->arguments.size()==2 && !expr->arguments[1]->isStringConstant() )
+            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() )
                 error("debug comment must be string constant", expr->at, CompilationError::invalid_argument_type);
             expr->type = make_shared<TypeDecl>(*expr->arguments[0]->type);
             return Visitor::visit(expr);

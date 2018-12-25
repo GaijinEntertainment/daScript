@@ -1,0 +1,24 @@
+def two_plus_two : int
+    return 2 + 2
+
+def test_dead_code(X:int):int
+    let ( x : int = X )
+        while x < 5
+            x ++
+            break
+            static_assert(false,"fail to eliminate dead code after break")
+        if true
+            return x--
+            static_assert(false,"fail to eliminate dead code after return")
+        else
+            static_assert(false,"fail to eliminate dead code in the if")
+
+def test:bool
+    if (3 + ( 2>3 ? 0 : 1 ))!=4
+        3 + ( 2>3 ? 0 : 1 )
+        static_assert(false,"fail to eliminate dead code")
+    else
+        3 + ( 2>3 ? 0 : 1 )
+    // static_assert(false,"this static assert always fails")
+    return true
+
