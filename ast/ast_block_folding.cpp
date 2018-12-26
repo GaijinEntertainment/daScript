@@ -8,7 +8,12 @@ namespace yzg {
     //  r2v(var)            = @var
     //  r2v(expr.field)     = expr.@field
     //  r2v(expr[index])    = expr@[index]
+    //  r2v(a ? b : c)      = a ? r2v(b) : r2v(c)
     class RefFolding : public Visitor {
+    public:
+        bool didAnything () const { return anyFolding; }
+    protected:
+        bool        anyFolding = false;
     protected:
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
             if ( expr->subexpr->rtti_isVar() ) {
@@ -26,6 +31,13 @@ namespace yzg {
                 eat->r2v = true;
                 eat->type->ref = false;
                 return eat;
+            } else if ( expr->subexpr->rtti_isOp3() ) {
+                anyFolding = true;
+                auto op3 = static_pointer_cast<ExprOp3>(expr->subexpr);
+                op3->left = Expression::autoDereference(op3->left);
+                op3->right = Expression::autoDereference(op3->right);
+                op3->type->ref = false;
+                return expr->subexpr;
             } else {
                 return Visitor::visit(expr);
             }
@@ -74,9 +86,10 @@ namespace yzg {
     
     // program
     
-    void Program::refFolding() {
+    bool Program::optimizationRefFolding() {
         RefFolding context;
         visit(context);
+        return context.didAnything();
     }
     
     bool Program::optimizationBlockFolding() {

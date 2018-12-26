@@ -29,6 +29,10 @@ namespace yzg {
                 auto at = (ExprAt *) expr;
                 at->r2cr = true;
                 propagate(at->subexpr.get());
+            } else if ( expr->rtti_isOp3() ) {
+                auto op3 = (ExprOp3 *) expr;
+                propagate(op3->left.get());
+                propagate(op3->right.get());
             }
         }
     protected:
@@ -79,6 +83,10 @@ namespace yzg {
             Visitor::preVisitArgumentInit(fn, var, init);
             var->access_init = true;
         }
+    // for loop sources
+        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override {
+            var->access_init = true;
+        }
     // var
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
@@ -106,6 +114,10 @@ namespace yzg {
                 anyFolding = true;
                 return nullptr;
             }
+            if ( !var->access_ref && !var->init && var->type->isFoldable() ) {  // uninitialized read-only foldable var is const 0
+                anyFolding = true;
+                return nullptr;
+            }
             return Visitor::visitLet(let,var,last);
         }
     // ExprVar
@@ -117,9 +129,9 @@ namespace yzg {
                         return expr->variable->init->clone();
                     }
                 } else {
-                    if ( expr->type->isFoldable() ) {
-                        // TODO:
-                        //  ZERO
+                    if ( expr->type->isFoldable() && !expr->variable->access_init ) {
+                        anyFolding = true;
+                        return Program::makeConst(expr->at, expr->type, _mm_setzero_ps());
                     }
                 }
             }

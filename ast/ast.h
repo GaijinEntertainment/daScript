@@ -315,6 +315,7 @@ namespace yzg
         virtual bool rtti_isVar() const { return false; }
         virtual bool rtti_isField() const { return false; }
         virtual bool rtti_isAt() const { return false; }
+        virtual bool rtti_isOp3() const { return false; };
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
@@ -322,6 +323,7 @@ namespace yzg
         union {
             struct {
                 bool    constexpression : 1;
+                bool    noSideEffects : 1;
                 bool    topLevel :  1;
                 bool    argLevel : 1;
                 bool    bottomLevel : 1;
@@ -521,6 +523,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
         virtual Expression * tail() override { return right->tail(); }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isOp3() const override { return true; };
         ExpressionPtr   subexpr, left, right;
     };
     
@@ -995,7 +998,7 @@ namespace yzg
         bool addFunction ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void inferTypes();
-        void refFolding();
+        bool optimizationRefFolding();
         bool optimizationConstFolding();
         bool optimizationBlockFolding();
         bool optimizationUnused();
@@ -1103,8 +1106,8 @@ namespace yzg
         virtual void preVisitIfBlock ( ExprIfThenElse *, Expression * ) {}
         virtual void preVisitElseBlock ( ExprIfThenElse *, Expression * ) {}
         // FOR
-        virtual void preVisitFor ( ExprFor *, const VariablePtr &, bool ) {}
-        virtual VariablePtr visitFor ( ExprFor *, const VariablePtr & var, bool ) { return var; }
+        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) {}
+        virtual VariablePtr visitFor ( ExprFor * expr, const VariablePtr & var, bool last ) { return var; }
         virtual void preVisitForStack ( ExprFor * ) {}
         virtual void preVisitForFilter ( ExprFor *, Expression * ) {}
         virtual void preVisitForBody ( ExprFor *, Expression * ) {}

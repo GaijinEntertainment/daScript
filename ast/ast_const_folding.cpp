@@ -6,8 +6,6 @@
  TODO:
     // ExprAssert
         assert(true)    ->  nop
-    // ExprOp3
-        const ? a : b
  */
 
 namespace yzg {
@@ -42,8 +40,19 @@ namespace yzg {
             sim->constexpression = true;
             return sim;
         }
+        bool isSameFoldValue ( const TypeDeclPtr & t, __m128 a, __m128 b ) const {
+            return memcmp(&a,&b,t->getSizeOf()) == 0;
+        }
     };
     
+    /*
+        op1 constexpr = op1(constexpr)
+        op2 constexpr,constexpr = op2(constexpr,constexpr)
+        op3 constexpr,a,b = constexpr ? a or b
+        op3 cond,a,a = a
+        if ( constexpr ) a; else b;    =   constexpr ? a : b
+        constexpr; = nop
+     */
     class ConstFolding : public FoldingVisitor {
     public:
         ConstFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
@@ -66,6 +75,17 @@ namespace yzg {
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
             if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression ) {
                 return evalAndFold(expr);
+            } else if ( expr->type->isFoldable() && expr->subexpr->noSideEffects && expr->left->constexpression && expr->right->constexpression ) {
+                __m128 left = eval(expr->left.get());
+                __m128 right = eval(expr->right.get());
+                if ( isSameFoldValue(expr->type, left, right) ) {
+                    anyFolding = true;
+                    return expr->left->clone();
+                }
+            } else if ( expr->subexpr->constexpression ) {
+                bool res = cast<bool>::to(eval(expr->subexpr.get()));
+                anyFolding = true;
+                return res ? expr->left : expr->right;
             }
             return Visitor::visit(expr);
         }
@@ -73,11 +93,8 @@ namespace yzg {
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             if ( expr->cond->constexpression ) {
                 bool res = cast<bool>::to(eval(expr->cond.get()));
-                if ( res ) {
-                    return expr->if_true;
-                } else {
-                    return expr->if_false;
-                }
+                anyFolding = true;
+                return res ? expr->if_true : expr->if_false;
             }
             return Visitor::visit(expr);
         }

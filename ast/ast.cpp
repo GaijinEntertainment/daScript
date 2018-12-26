@@ -1936,6 +1936,7 @@ namespace yzg
         once = true;
         do {
             any = false;
+            any |= optimizationRefFolding();    if ( failed() ) break;
             any |= optimizationConstFolding();  if ( failed() ) break;
             any |= optimizationBlockFolding();  if ( failed() ) break;
             any |= optimizationUnused();        if ( failed() ) break;
@@ -1960,13 +1961,11 @@ namespace yzg
             return program;
         } else {
             program->inferTypes();
-            program->refFolding();
-            if ( program->failed() ) {
-                sort(program->errors.begin(),program->errors.end());
-            } else {
+            if ( !program->failed() ) {
                 program->optimize();
                 program->allocateStack();
             }
+            sort(program->errors.begin(),program->errors.end());
             return program;
         }
     }
