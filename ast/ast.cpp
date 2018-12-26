@@ -252,6 +252,20 @@ namespace yzg
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
     
+    bool TypeDecl::isFoldable() const {
+        if ( dim.size() || ref )
+            return false;
+        switch ( baseType ) {
+            case Type::tBool:
+            case Type::tInt:
+            case Type::tUInt:
+            case Type::tFloat:
+                return true;
+            default:
+                return false;
+        }
+    }
+    
     bool TypeDecl::isHandle() const {
         return (baseType==Type::tHandle) && (dim.size()==0);
     }

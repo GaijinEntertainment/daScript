@@ -1,6 +1,10 @@
 def two_plus_two : int
     return 2 + 2
 
+def var_two_plus_two : int
+    let x, y : int = 2;
+    return x + y
+
 def test_dead_code(X:int):int
     let ( x : int = X )
         while x < 5

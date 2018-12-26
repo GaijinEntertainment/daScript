@@ -6,6 +6,8 @@
  TODO:
     // ExprAssert
         assert(true)    ->  nop
+    // ExprOp3
+        const ? a : b
  */
 
 namespace yzg {
@@ -21,20 +23,6 @@ namespace yzg {
         ProgramPtr  program;
         bool        anyFolding = false;
     protected:
-        __forceinline static bool isFoldable( Expression * expr ) {
-            const auto & et = expr->type;
-            if ( et->dim.size() && et->ref )
-                return false;
-            switch ( et->baseType ) {
-                case Type::tBool:
-                case Type::tInt:
-                case Type::tUInt:
-                case Type::tFloat:
-                    return true;
-                default:
-                    return false;
-            }
-        }
         __m128 eval ( Expression * expr ) {
             ctx.simEnd();
             ctx.restart();
@@ -62,21 +50,21 @@ namespace yzg {
     protected:
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
-            if ( isFoldable(expr) && expr->subexpr->constexpression ) {
+            if ( expr->type->isFoldable() && expr->subexpr->constexpression ) {
                 return evalAndFold(expr);
             }
             return Visitor::visit(expr);
         }
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
-            if ( isFoldable(expr) && expr->left->constexpression && expr->right->constexpression ) {
+            if ( expr->type->isFoldable() && expr->left->constexpression && expr->right->constexpression ) {
                 return evalAndFold(expr);
             }
             return Visitor::visit(expr);
         }
     // op3
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
-            if ( isFoldable(expr) && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression ) {
+            if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression ) {
                 return evalAndFold(expr);
             }
             return Visitor::visit(expr);

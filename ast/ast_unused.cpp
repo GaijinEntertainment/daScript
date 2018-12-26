@@ -9,6 +9,7 @@ namespace yzg {
         cond ? a : b
         a ?? b
         ?.
+        ->
      */
     
     // here we propagate r2cr flag
@@ -95,12 +96,34 @@ namespace yzg {
     protected:
         bool        anyFolding = false;
     protected:
+    // ExprLet
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             if ( !var->access_get && !var->access_ref && !var->access_init ) {
                 anyFolding = true;
                 return nullptr;
             }
+            if ( !var->access_ref && var->init && var->init->constexpression ) {
+                anyFolding = true;
+                return nullptr;
+            }
             return Visitor::visitLet(let,var,last);
+        }
+    // ExprVar
+        virtual ExpressionPtr visit ( ExprVar * expr ) override {
+            if ( !expr->variable->access_ref ) {
+                if ( expr->variable->init ) {
+                    if ( expr->variable->init->constexpression ) {
+                        anyFolding = true;
+                        return expr->variable->init->clone();
+                    }
+                } else {
+                    if ( expr->type->isFoldable() ) {
+                        // TODO:
+                        //  ZERO
+                    }
+                }
+            }
+            return Visitor::visit(expr);
         }
     };
     

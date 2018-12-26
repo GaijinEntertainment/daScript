@@ -80,6 +80,7 @@ namespace yzg
         bool isWorkhorseType() const; // we can return this, or pass this
         bool isRange() const;
         bool isConst() const;
+        bool isFoldable() const;
         Type getRangeBaseType() const;
         Type                baseType = Type::tVoid;
         StructurePtr        structType;
