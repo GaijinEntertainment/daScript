@@ -2,6 +2,15 @@ struct Ball
     position:float3
     radius:float
 
+struct Balls
+    a,b:Ball
+
+def get_ball_radius(b:Ball):float
+    return b.radius
+
+def get_balls_radius(b:Balls):float
+    return b.a.radius + b.b.radius
+
 def set_default_ball(b:Ball)
     b.position=float3(1.0,2.0,3.0)
     b.radius=5.0

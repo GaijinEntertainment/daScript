@@ -2,6 +2,12 @@
 
 #include "ast.h"
 
+/*
+ TODO:
+    // ExprAssert
+        assert(true)    ->  nop
+ */
+
 namespace yzg {
     
     class FoldingVisitor : public Visitor {

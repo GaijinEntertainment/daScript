@@ -82,6 +82,7 @@ namespace yzg {
     public:
         string str() const { return ss.str(); };
         const bool printRef = true;
+        const bool printVarAccess = true;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -106,7 +107,9 @@ namespace yzg {
     // global
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
-            ss << "let\n\t" << var->name << " : " << var->type->describe();
+            ss << "let\n\t";
+            if ( printVarAccess && !var->access_ref ) ss << "$";
+            ss << var->name << " : " << var->type->describe();
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
             ss << "\n\n";
@@ -130,6 +133,7 @@ namespace yzg {
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
+            if ( printVarAccess && !arg->access_ref ) ss << "$";
             ss << arg->name << ":" << arg->type->describe();
         }
         virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & arg, Expression * expr ) override {
@@ -176,6 +180,7 @@ namespace yzg {
         }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
+            if ( printVarAccess && !var->access_ref ) ss << "$";
             ss << var->name << ":" << var->type->describe();
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
@@ -297,12 +302,24 @@ namespace yzg {
         }
     // var
         virtual ExpressionPtr visit ( ExprVar * var ) override {
-            ss << var->name;
+            if ( printRef && var->r2v ) {
+                ss << "@" << var->name;
+            } else if ( printRef && var->r2cr ) {
+                ss << "$" << var->name;
+            } else {
+                ss << var->name;
+            }
             return Visitor::visit(var);
         }
     // field
         virtual ExpressionPtr visit ( ExprField * field ) override {
-            ss << "." << field->name;
+            if ( printRef && field->r2v ) {
+                ss << ".@" << field->name;
+            } if ( printRef && field->r2cr ) {
+                ss << ".$" << field->name;
+            } else {
+                ss << "." << field->name;
+            }
             return Visitor::visit(field);
         }
         virtual ExpressionPtr visit ( ExprSafeField * field ) override {
@@ -325,9 +342,15 @@ namespace yzg {
             ss << " ?? ";
         }
     // at
-        virtual void preVisitAtIndex ( ExprAt * that, Expression * index ) override {
-            Visitor::preVisitAtIndex(that, index);
-            ss << "[";
+        virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override {
+            Visitor::preVisitAtIndex(expr, index);
+            if ( printRef && expr->r2v ) {
+                ss << "@[";
+            } else if ( printRef && expr->r2cr ) {
+                ss << "$[";
+            } else {
+                ss << "[";
+            }
         }
         virtual ExpressionPtr visit ( ExprAt * that ) override {
             ss << "]";

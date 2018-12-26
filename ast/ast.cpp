@@ -1429,7 +1429,8 @@ namespace yzg
     
     ExpressionPtr ExprLet::visit(Visitor & vis) {
         vis.preVisit(this);
-        for ( auto & var : variables ) {
+        for ( auto it = variables.begin(); it!=variables.end(); ) {
+            auto & var = *it;
             vis.preVisitLet(this, var, var==variables.back());
             if ( var->init ) {
                 vis.preVisitLetInit(this, var, var->init.get());
@@ -1437,6 +1438,7 @@ namespace yzg
                 var->init = vis.visitLetInit(this, var, var->init.get());
             }
             var = vis.visitLet(this, var, var==variables.back());
+            if ( var ) ++it; else it = variables.erase(it);
         }
         vis.preVisitLetStack(this);
         if ( subexpr )
@@ -1909,6 +1911,7 @@ namespace yzg
             any = false;
             any |= optimizationConstFolding();  if ( failed() ) break;
             any |= optimizationBlockFolding();  if ( failed() ) break;
+            any |= optimizationUnused();        if ( failed() ) break;
             any |= once && staticAsserts();     if ( failed() ) break;
             once = false;
         } while ( any );

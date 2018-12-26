@@ -195,8 +195,8 @@ namespace yzg
         Module *        module = nullptr;
         union {
             struct {
-                bool    access_read : 1;
-                bool    access_write : 1;
+                bool    access_get : 1;
+                bool    access_ref : 1;
                 bool    access_init : 1;
             };
             uint32_t flags = 0;
@@ -382,6 +382,7 @@ namespace yzg
         union {
             struct {
                 bool        r2v : 1;
+                bool        r2cr : 1;
             };
             uint32_t flags = 0;
         };
@@ -411,7 +412,8 @@ namespace yzg
             struct {
                 bool        local : 1;
                 bool        argument : 1;
-                bool        r2v : 1;
+                bool        r2v  : 1;       // built-in ref2value   (read-only)
+                bool        r2cr : 1;       // built-in ref2contref (read-only, but stay ref)
             };
             uint32_t flags = 0;
         };
@@ -432,6 +434,7 @@ namespace yzg
         union {
             struct {
                 bool        r2v : 1;
+                bool        r2cr : 1;
             };
             uint32_t flags = 0;
         };
@@ -1002,9 +1005,9 @@ namespace yzg
         // FUNCTON
         virtual void preVisit ( Function * ) {}
         virtual FunctionPtr visit ( Function * that ) { return that->shared_from_this(); }
-        virtual void preVisitArgument ( Function *, const VariablePtr &, bool lastArg ) {}
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) {}
         virtual VariablePtr visitArgument ( Function *, const VariablePtr & that, bool lastArg ) { return that; }
-        virtual void preVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) {}
+        virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & var, Expression * init ) {}
         virtual ExpressionPtr visitArgumentInit ( Function *, const VariablePtr &, Expression * that ) { return that->shared_from_this(); }
         virtual void preVisitFunctionBody ( Function *,Expression * ) {}
         virtual ExpressionPtr visitFunctionBody ( Function *, Expression * that ) { return that->shared_from_this(); }
@@ -1016,9 +1019,9 @@ namespace yzg
         virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
         // LET
         virtual void preVisitLetStack ( ExprLet * ) {}
-        virtual void preVisitLet ( ExprLet * let, const VariablePtr &, bool ) {} 
-        virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool ) { return var; }
-        virtual void preVisitLetInit ( ExprLet *, const VariablePtr & var, Expression * ) {}
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) {} 
+        virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) { return var; }
+        virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) {}
         virtual ExpressionPtr visitLetInit ( ExprLet *, const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
         // GLOBAL LET
         virtual void preVisitGlobalLet ( const VariablePtr & ) {}

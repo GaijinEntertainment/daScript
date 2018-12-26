@@ -5,9 +5,9 @@
 namespace yzg {
     
     // this folds the following, by setting r2v flag on expressions
-    //  r2v(var)            = var
-    //  r2v(expr.field)     = expr.field
-    //  r2v(expr[index])    = expr[index]
+    //  r2v(var)            = @var
+    //  r2v(expr.field)     = expr.@field
+    //  r2v(expr[index])    = expr@[index]
     class RefFolding : public Visitor {
     protected:
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
@@ -61,6 +61,14 @@ namespace yzg {
                 anyFolding = true;
             }
             return Visitor::visit(block);
+        }
+    // ExprLet
+        virtual ExpressionPtr visit ( ExprLet * let ) {
+            if ( let->variables.size()==0 ) {
+                anyFolding = true;
+                return let->subexpr;
+            }
+            return Visitor::visit(let);
         }
     };
     
