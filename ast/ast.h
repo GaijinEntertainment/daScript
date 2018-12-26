@@ -385,7 +385,7 @@ namespace yzg
                 bool        r2v : 1;
                 bool        r2cr : 1;
             };
-            uint32_t flags = 0;
+            uint32_t atFlags = 0;
         };
     };
 
@@ -416,7 +416,7 @@ namespace yzg
                 bool        r2v  : 1;       // built-in ref2value   (read-only)
                 bool        r2cr : 1;       // built-in ref2contref (read-only, but stay ref)
             };
-            uint32_t flags = 0;
+            uint32_t varFlags = 0;
         };
     };
     
@@ -437,7 +437,7 @@ namespace yzg
                 bool        r2v : 1;
                 bool        r2cr : 1;
             };
-            uint32_t flags = 0;
+            uint32_t fieldFlags = 0;
         };
     };
     
@@ -557,62 +557,109 @@ namespace yzg
         virtual bool rtti_isBreak() const override { return true; }
     };
     
-    template <typename TT, typename ExprConstExt>
     struct ExprConst : Expression {
-        ExprConst(TT val = TT()) : value(val) {}
-        ExprConst(const LineInfo & a, TT val = TT()) : Expression(a), value(val) {}
+        ExprConst ( Type t ) : baseType(t) {}
+        ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) {}
+        virtual SimNode * simulate (Context & context) const override;
+        __m128  value;
+        Type    baseType;
+    };
+    
+    template <typename TT, typename ExprConstExt>
+    struct ExprConstT : ExprConst {
+        ExprConstT ( TT val, Type bt ) : ExprConst(bt) { value = cast<TT>::from(val); }
+        ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) { value = cast<TT>::from(val); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
             auto cexpr = clonePtr<ExprConstExt>(expr);
             Expression::clone(cexpr);
             cexpr->value = value;
             return cexpr;
         }
-        virtual SimNode * simulate (Context & context) const override {
-            return context.makeNode<SimNode_ConstValue<TT>>(at,value);
-        }
-        TT getValue() const { return value; }
-        TT  value;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        TT getValue() const { return cast<TT>::to(value); }
     };
     
-    struct ExprConstPtr : ExprConst<void *,ExprConstPtr> {
-        ExprConstPtr(void * ptr = nullptr) : ExprConst(ptr) {}
-        ExprConstPtr(const LineInfo & a, void * ptr = nullptr) : ExprConst(a,ptr) {}
-        virtual ExpressionPtr visit(Visitor & vis) override;
+    struct ExprConstPtr : ExprConstT<void *,ExprConstPtr> {
+        ExprConstPtr(void * ptr = nullptr) : ExprConstT(ptr,Type::tPointer) {}
+        ExprConstPtr(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a,ptr,Type::tPointer) {}
     };
 
-    struct ExprConstInt : ExprConst<int32_t,ExprConstInt> {
-        ExprConstInt(int32_t i = 0)  : ExprConst(i) {}
-        ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConst(a, i) {}
-        virtual ExpressionPtr visit(Visitor & vis) override;
+    struct ExprConstInt : ExprConstT<int32_t,ExprConstInt> {
+        ExprConstInt(int32_t i = 0)  : ExprConstT(i,Type::tInt) {}
+        ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConstT(a,i,Type::tInt) {}
     };
     
-    struct ExprConstUInt : ExprConst<uint32_t,ExprConstUInt> {
-        ExprConstUInt(uint32_t i = 0) : ExprConst(i) {}
-        ExprConstUInt(const LineInfo & a, uint32_t i = 0) : ExprConst(a,i) {}
-        virtual ExpressionPtr visit(Visitor & vis) override;
+    struct ExprConstInt2 : ExprConstT<int2,ExprConstInt2> {
+        ExprConstInt2(int2 i = int2())  : ExprConstT(i,Type::tInt2) {}
+        ExprConstInt2(const LineInfo & a, int2 i)  : ExprConstT(a,i,Type::tInt2) {}
     };
     
-    struct ExprConstBool : ExprConst<bool,ExprConstBool> {
-        ExprConstBool(bool i = false) : ExprConst(i) {}
-        ExprConstBool(const LineInfo & a, bool i = false) : ExprConst(a,i) {}
-        virtual ExpressionPtr visit(Visitor & vis) override;
+    struct ExprConstInt3 : ExprConstT<int3,ExprConstInt3> {
+        ExprConstInt3(int3 i = int3())  : ExprConstT(i,Type::tInt3) {}
+        ExprConstInt3(const LineInfo & a, int3 i)  : ExprConstT(a,i,Type::tInt3) {}
+    };
+    
+    struct ExprConstInt4 : ExprConstT<int4,ExprConstInt4> {
+        ExprConstInt4(int4 i = int4())  : ExprConstT(i,Type::tInt4) {}
+        ExprConstInt4(const LineInfo & a, int4 i)  : ExprConstT(a,i,Type::tInt4) {}
+    };
+    
+    struct ExprConstUInt : ExprConstT<uint32_t,ExprConstUInt> {
+        ExprConstUInt(uint32_t i = 0) : ExprConstT(i,Type::tUInt) {}
+        ExprConstUInt(const LineInfo & a, uint32_t i = 0) : ExprConstT(a,i,Type::tUInt) {}
+    };
+    
+    struct ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
+        ExprConstUInt2(uint2 i = uint2())  : ExprConstT(i,Type::tUInt2) {}
+        ExprConstUInt2(const LineInfo & a, uint2 i)  : ExprConstT(a,i,Type::tUInt2) {}
+    };
+    
+    struct ExprConstUInt3 : ExprConstT<uint3,ExprConstUInt3> {
+        ExprConstUInt3(uint3 i = uint3())  : ExprConstT(i,Type::tUInt3) {}
+        ExprConstUInt3(const LineInfo & a, uint3 i)  : ExprConstT(a,i,Type::tUInt3) {}
+    };
+    
+    struct ExprConstUInt4 : ExprConstT<uint4,ExprConstUInt4> {
+        ExprConstUInt4(uint4 i = uint4())  : ExprConstT(i,Type::tUInt4) {}
+        ExprConstUInt4(const LineInfo & a, uint4 i)  : ExprConstT(a,i,Type::tUInt4) {}
+    };
+    
+    struct ExprConstBool : ExprConstT<bool,ExprConstBool> {
+        ExprConstBool(bool i = false) : ExprConstT(i,Type::tBool) {}
+        ExprConstBool(const LineInfo & a, bool i = false) : ExprConstT(a,i,Type::tBool) {}
     };
 
-    struct ExprConstFloat : ExprConst<float,ExprConstFloat> {
-        ExprConstFloat(float i = 0.0f) : ExprConst(i) {}
-        ExprConstFloat(const LineInfo & a, float i = 0.0f) : ExprConst(a,i) {}
-        virtual ExpressionPtr visit(Visitor & vis) override;
+    struct ExprConstFloat : ExprConstT<float,ExprConstFloat> {
+        ExprConstFloat(float i = 0.0f) : ExprConstT(i,Type::tFloat) {}
+        ExprConstFloat(const LineInfo & a, float i = 0.0f) : ExprConstT(a,i,Type::tFloat) {}
     };
     
-    struct ExprConstString : ExprConst<string,ExprConstString> {
-        ExprConstString(const string & str = string()) : ExprConst(unescapeString(str)) {}
-        ExprConstString(const LineInfo & a, const string & str = string()) : ExprConst(a,unescapeString(str)) {}
+    struct ExprConstFloat2 : ExprConstT<float2,ExprConstFloat2> {
+        ExprConstFloat2(float2 i = float2())  : ExprConstT(i,Type::tFloat2) {}
+        ExprConstFloat2(const LineInfo & a, float2 i)  : ExprConstT(a,i,Type::tFloat2) {}
+    };
+    
+    struct ExprConstFloat3 : ExprConstT<float3,ExprConstFloat3> {
+        ExprConstFloat3(float3 i = float3())  : ExprConstT(i,Type::tFloat) {}
+        ExprConstFloat3(const LineInfo & a, float3 i)  : ExprConstT(a,i,Type::tFloat3) {}
+    };
+    
+    struct ExprConstFloat4 : ExprConstT<float4,ExprConstFloat4> {
+        ExprConstFloat4(float4 i = float4())  : ExprConstT(i,Type::tFloat4) {}
+        ExprConstFloat4(const LineInfo & a, float4 i)  : ExprConstT(a,i,Type::tFloat4) {}
+    };
+    
+    struct ExprConstString : ExprConst {
+        ExprConstString(const string & str = string())
+            : ExprConst(Type::tString), text(unescapeString(str)) {}
+        ExprConstString(const LineInfo & a, const string & str = string())
+            : ExprConst(a,Type::tString), text(unescapeString(str)) {}
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual SimNode * simulate (Context & context) const override {
-            char * str = context.allocateName(value);
-            return context.makeNode<SimNode_ConstValue<char *>>(at,str);
-        }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        const string & getValue() const { return text; }
         virtual bool rtti_isStringConstant() const override { return true; }
+        string text;
     };
     
     struct ExprLet : Expression {
@@ -1097,11 +1144,21 @@ namespace yzg
         VISIT_EXPR(ExprTryCatch)
         VISIT_EXPR(ExprReturn)
         VISIT_EXPR(ExprBreak)
+        VISIT_EXPR(ExprConst)
         VISIT_EXPR(ExprConstPtr)
         VISIT_EXPR(ExprConstInt)
+        VISIT_EXPR(ExprConstInt2)
+        VISIT_EXPR(ExprConstInt3)
+        VISIT_EXPR(ExprConstInt4)
         VISIT_EXPR(ExprConstUInt)
+        VISIT_EXPR(ExprConstUInt2)
+        VISIT_EXPR(ExprConstUInt3)
+        VISIT_EXPR(ExprConstUInt4)
         VISIT_EXPR(ExprConstBool)
         VISIT_EXPR(ExprConstFloat)
+        VISIT_EXPR(ExprConstFloat2)
+        VISIT_EXPR(ExprConstFloat3)
+        VISIT_EXPR(ExprConstFloat4)
         VISIT_EXPR(ExprConstString)
         VISIT_EXPR(ExprLet)
         VISIT_EXPR(ExprFor)
@@ -1133,6 +1190,15 @@ namespace yzg
         vis.preVisit(static_cast<It *>(this));
         auto llk = ExprLooksLikeCall::visit(vis);
         return llk.get()==this ? vis.visit(static_cast<It *>(this)) : llk;
+    }
+    
+    template <typename TT, typename ExprConstExt>
+    ExpressionPtr ExprConstT<TT,ExprConstExt>::visit(Visitor & vis) {
+        vis.preVisit((ExprConst*)this);
+        vis.preVisit((ExprConstExt*)this);
+        auto res = vis.visit((ExprConstExt*)this);
+        if ( res.get()!=this ) return res;
+        return vis.visit((ExprConst *)this);
     }
 }
 

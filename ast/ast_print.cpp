@@ -273,31 +273,76 @@ namespace yzg {
         }
     // const
         virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
-            if ( c->value ) {
-                ss << "*0x" << hex << intptr_t(c->value) << dec;
+            if ( c->getValue() ) {
+                ss << "*0x" << hex << intptr_t(c->getValue()) << dec;
             } else {
                 ss << "null";
             }
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {
-            ss << c->value;
+            ss << c->getValue();
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt * c ) override {
-            ss << "0x" << hex << c->value << dec;
+            ss << "0x" << hex << c->getValue() << dec;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstBool * c ) override {
-            ss << (c->value ? "true" : "false");
+            ss << (c->getValue() ? "true" : "false");
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            ss << c->value;
+            ss << c->getValue();
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
-            ss << "\"" << escapeString(c->value) << "\"";
+            ss << "\"" << escapeString(c->text) << "\"";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstInt2 * c ) override {
+            auto val = c->getValue();
+            ss << "int2(" << val.x << "," << val.y << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstInt3 * c ) override {
+            auto val = c->getValue();
+            ss << "int3(" << val.x << "," << val.y << "," << val.z << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstInt4 * c ) override {
+            auto val = c->getValue();
+            ss << "int4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt2 * c ) override {
+            auto val = c->getValue();
+            ss << "int2(" << val.x << "," << val.y << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt3 * c ) override {
+            auto val = c->getValue();
+            ss << "int3(" << val.x << "," << val.y << "," << val.z << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt4 * c ) override {
+            auto val = c->getValue();
+            ss << "int4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstFloat2 * c ) override {
+            auto val = c->getValue();
+            ss << "int2(" << val.x << "," << val.y << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstFloat3 * c ) override {
+            auto val = c->getValue();
+            ss << "int3(" << val.x << "," << val.y << "," << val.z << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstFloat4 * c ) override {
+            auto val = c->getValue();
+            ss << "int4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
             return Visitor::visit(c);
         }
     // var

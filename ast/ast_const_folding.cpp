@@ -90,27 +90,7 @@ namespace yzg {
             return Visitor::visitBlockExpression(block, expr);
         }
     // const
-        virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
-            c->constexpression = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstInt * c ) override {
-            c->constexpression = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstUInt * c ) override {
-            c->constexpression = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstBool * c ) override {
-            c->constexpression = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            c->constexpression = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstString * c ) override {
+        virtual ExpressionPtr visit ( ExprConst * c ) override {
             c->constexpression = true;
             return Visitor::visit(c);
         }

@@ -82,28 +82,8 @@ namespace yzg {
             expr->type.reset();
         }
     // const
-        virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
-            c->type = make_shared<TypeDecl>(Type::tPointer);
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstInt * c ) override {
-            c->type = make_shared<TypeDecl>(Type::tInt);
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstUInt * c ) override {
-            c->type = make_shared<TypeDecl>(Type::tUInt);
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstBool * c ) override {
-            c->type = make_shared<TypeDecl>(Type::tBool);
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            c->type = make_shared<TypeDecl>(Type::tFloat);
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstString * c ) override {
-            c->type = make_shared<TypeDecl>(Type::tString);
+        virtual ExpressionPtr visit ( ExprConst * c ) override {
+            c->type = make_shared<TypeDecl>(c->baseType);
             return Visitor::visit(c);
         }
     // ExprRef2Value

@@ -258,8 +258,17 @@ namespace yzg
         switch ( baseType ) {
             case Type::tBool:
             case Type::tInt:
+            case Type::tInt2:
+            case Type::tInt3:
+            case Type::tInt4:
             case Type::tUInt:
+            case Type::tUInt2:
+            case Type::tUInt3:
+            case Type::tUInt4:
             case Type::tFloat:
+            case Type::tFloat2:
+            case Type::tFloat3:
+            case Type::tFloat4:
                 return true;
             default:
                 return false;
@@ -587,6 +596,33 @@ namespace yzg
             return context.makeValueNode<SimNode_NullCoalescing>(type->baseType,at,subexpr->simulate(context),defaultValue->simulate(context));
         }
     }
+    
+    // Const
+    
+    SimNode * ExprConst::simulate (Context & context) const {
+        return context.makeNode<SimNode_ConstValue>(at,value);
+    }
+    
+    ExpressionPtr ExprConstString::visit(Visitor & vis) {
+        vis.preVisit((ExprConst *)this);
+        vis.preVisit(this);
+        auto res = vis.visit(this);
+        if ( res.get() != this )
+            return res;
+        return vis.visit((ExprConst *)this);
+    }
+    
+    ExpressionPtr ExprConstString::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprConstString>(expr);
+        Expression::clone(cexpr);
+        cexpr->value = value;
+        return cexpr;
+    }
+    
+    SimNode * ExprConstString::simulate (Context & context) const {
+        char * str = context.allocateName(text);
+        return context.makeNode<SimNode_ConstValue>(at,cast<char *>::from(str));
+    }
 
     // ExprStaticAssert
     
@@ -771,8 +807,8 @@ namespace yzg
     }
     
     SimNode * ExprSizeOf::simulate (Context & context) const {
-        int32_t size = typeexpr->getSizeOf();
-        return context.makeNode<SimNode_ConstValue<int32_t>>(at,size);
+        uint32_t size = typeexpr->getSizeOf();
+        return context.makeNode<SimNode_ConstValue>(at,cast<uint32_t>::from(size));
     }
     
     // ExprNew
@@ -1231,38 +1267,6 @@ namespace yzg
     
     SimNode * ExprBreak::simulate (Context & context) const {
         return context.makeNode<SimNode_Break>(at);
-    }
-    
-    // CONSTANTS
-    
-    ExpressionPtr ExprConstPtr::visit(Visitor & vis) {
-        vis.preVisit(this);
-        return vis.visit(this);
-    }
-    
-    ExpressionPtr ExprConstInt::visit(Visitor & vis) {
-        vis.preVisit(this);
-        return vis.visit(this);
-    }
-    
-    ExpressionPtr ExprConstUInt::visit(Visitor & vis) {
-        vis.preVisit(this);
-        return vis.visit(this);
-    }
-    
-    ExpressionPtr ExprConstBool::visit(Visitor & vis) {
-        vis.preVisit(this);
-        return vis.visit(this);
-    }
-
-    ExpressionPtr ExprConstFloat::visit(Visitor & vis) {
-        vis.preVisit(this);
-        return vis.visit(this);
-    }
-    
-    ExpressionPtr ExprConstString::visit(Visitor & vis) {
-        vis.preVisit(this);
-        return vis.visit(this);
     }
 
     // ExprIfThenElse
@@ -1884,8 +1888,17 @@ namespace yzg
         switch ( type->baseType ) {
             case Type::tBool:       return make_shared<ExprConstBool>(at, cast<bool>::to(value));
             case Type::tInt:        return make_shared<ExprConstInt>(at, cast<int32_t>::to(value));
+            case Type::tInt2:       return make_shared<ExprConstInt2>(at, cast<int2>::to(value));
+            case Type::tInt3:       return make_shared<ExprConstInt3>(at, cast<int3>::to(value));
+            case Type::tInt4:       return make_shared<ExprConstInt4>(at, cast<int4>::to(value));
             case Type::tUInt:       return make_shared<ExprConstUInt>(at, cast<uint32_t>::to(value));
+            case Type::tUInt2:      return make_shared<ExprConstUInt2>(at, cast<uint2>::to(value));
+            case Type::tUInt3:      return make_shared<ExprConstUInt3>(at, cast<uint3>::to(value));
+            case Type::tUInt4:      return make_shared<ExprConstUInt4>(at, cast<uint4>::to(value));
             case Type::tFloat:      return make_shared<ExprConstFloat>(at, cast<float>::to(value));
+            case Type::tFloat2:     return make_shared<ExprConstFloat2>(at, cast<float2>::to(value));
+            case Type::tFloat3:     return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
+            case Type::tFloat4:     return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
             default:                return nullptr;
         }
     }

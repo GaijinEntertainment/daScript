@@ -451,9 +451,8 @@ namespace yzg
     };
     
     // CONST-VALUE
-    template <typename TT>
     struct SimNode_ConstValue : SimNode {
-        SimNode_ConstValue(const LineInfo & at, TT c) : SimNode(at), value(cast<TT>::from(c)) {}
+        SimNode_ConstValue(const LineInfo & at, __m128 c) : SimNode(at), value(c) {}
         virtual __m128 eval ( Context & context ) override {
             return value;
         }
