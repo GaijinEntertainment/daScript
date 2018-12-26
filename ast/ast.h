@@ -193,6 +193,14 @@ namespace yzg
         int             index = -1;
         uint32_t        stackTop = 0;
         Module *        module = nullptr;
+        union {
+            struct {
+                bool    access_read : 1;
+                bool    access_write : 1;
+                bool    access_init : 1;
+            };
+            uint32_t flags = 0;
+        };
     };
     
     //      [annotation (value,value,...,value)]
@@ -303,6 +311,9 @@ namespace yzg
         virtual bool rtti_isReturn() const { return false; }
         virtual bool rtti_isBreak() const { return false; }
         virtual bool rtti_isBlock() const { return false; }
+        virtual bool rtti_isVar() const { return false; }
+        virtual bool rtti_isField() const { return false; }
+        virtual bool rtti_isAt() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
@@ -327,6 +338,7 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        static SimNode * GetR2V ( Context & context, const LineInfo & a, const TypeDeclPtr & type, SimNode * expr );
         ExpressionPtr   subexpr;
     };
     
@@ -365,7 +377,14 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isAt() const override { return true; }
         ExpressionPtr   subexpr, index;
+        union {
+            struct {
+                bool        r2v : 1;
+            };
+            uint32_t flags = 0;
+        };
     };
 
     struct ExprBlock : Expression {
@@ -384,11 +403,18 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isVar() const override { return true; }
         string      name;
         VariablePtr variable;
-        bool        local = false;
-        bool        argument = false;
         int         argumentIndex = -1;
+        union {
+            struct {
+                bool        local : 1;
+                bool        argument : 1;
+                bool        r2v : 1;
+            };
+            uint32_t flags = 0;
+        };
     };
     
     struct ExprField : Expression {
@@ -398,10 +424,17 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isField() const override { return true; }
         ExpressionPtr   value;
         string          name;
         const Structure::FieldDeclaration * field = nullptr;
         TypeAnnotationPtr annotation;
+        union {
+            struct {
+                bool        r2v : 1;
+            };
+            uint32_t flags = 0;
+        };
     };
     
     struct ExprSafeField : ExprField {
@@ -911,8 +944,10 @@ namespace yzg
         bool addFunction ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void inferTypes();
+        void refFolding();
         bool optimizationConstFolding();
         bool optimizationBlockFolding();
+        bool optimizationUnused();
         bool staticAsserts();
         void optimize();
         void allocateStack();

@@ -81,6 +81,7 @@ namespace yzg {
     class Printer : public Visitor {
     public:
         string str() const { return ss.str(); };
+        const bool printRef = true;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -142,6 +143,14 @@ namespace yzg {
         virtual FunctionPtr visit ( Function * fn ) override {
             ss << "\n";
             return Visitor::visit(fn);
+        }
+        virtual void preVisit ( ExprRef2Value * expr ) override {
+            Visitor::preVisit(expr);
+            if ( printRef ) ss << "r2v(";
+        }
+        virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
+            if ( printRef ) ss << ")";
+            return Visitor::visit(expr);
         }
     // block
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {

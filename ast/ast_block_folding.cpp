@@ -4,6 +4,34 @@
 
 namespace yzg {
     
+    // this folds the following, by setting r2v flag on expressions
+    //  r2v(var)            = var
+    //  r2v(expr.field)     = expr.field
+    //  r2v(expr[index])    = expr[index]
+    class RefFolding : public Visitor {
+    protected:
+        virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
+            if ( expr->subexpr->rtti_isVar() ) {
+                auto evar = static_pointer_cast<ExprVar>(expr->subexpr);
+                evar->r2v = true;
+                evar->type->ref = false;
+                return evar;
+            } else if ( expr->subexpr->rtti_isField() ) {
+                auto efield = static_pointer_cast<ExprField>(expr->subexpr);
+                efield->r2v = true;
+                efield->type->ref = false;
+                return efield;
+            } else if ( expr->subexpr->rtti_isAt() ) {
+                auto eat = static_pointer_cast<ExprAt>(expr->subexpr);
+                eat->r2v = true;
+                eat->type->ref = false;
+                return eat;
+            } else {
+                return Visitor::visit(expr);
+            }
+        }
+    };
+    
     class BlockFolding : public Visitor {
     public:
         bool didAnything () const { return anyFolding; }
@@ -37,6 +65,11 @@ namespace yzg {
     };
     
     // program
+    
+    void Program::refFolding() {
+        RefFolding context;
+        visit(context);
+    }
     
     bool Program::optimizationBlockFolding() {
         BlockFolding context;

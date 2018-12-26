@@ -518,12 +518,16 @@ namespace yzg
         return cexpr;
     }
     
-    SimNode * ExprRef2Value::simulate (Context & context) const {
+    SimNode * ExprRef2Value::GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {
         if ( type->isHandle() ) {
-            return type->annotation->simulateRef2Value(context, at, subexpr->simulate(context));
+            return type->annotation->simulateRef2Value(context, at, expr);
         } else {
-            return context.makeValueNode<SimNode_Ref2Value>(type->baseType, at, subexpr->simulate(context));
+            return context.makeValueNode<SimNode_Ref2Value>(type->baseType, at, expr);
         }
+    }
+    
+    SimNode * ExprRef2Value::simulate (Context & context) const {
+        return GetR2V(context, at, type, subexpr->simulate(context));
     }
     
     // ExprPtr2Ref
@@ -801,18 +805,24 @@ namespace yzg
     SimNode * ExprAt::simulate (Context & context) const {
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
+        SimNode * result;
         if ( subexpr->type->isGoodTableType() ) {
             uint32_t valueTypeSize = subexpr->type->secondType->getSizeOf();
-            return context.makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize);
+            result = context.makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize);
         } else if ( subexpr->type->isGoodArrayType() ) {
             uint32_t stride = subexpr->type->firstType->getSizeOf();
-            return context.makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
+            result = context.makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
         } else if ( subexpr->type->isHandle() ) {
-            return subexpr->type->annotation->simulateGetAt(context, at, prv, pidx);
+            result = subexpr->type->annotation->simulateGetAt(context, at, prv, pidx);
         } else {
             uint32_t stride = subexpr->type->getStride();
             uint32_t range = subexpr->type->dim.back();
-            return context.makeNode<SimNode_At>(at, prv, pidx, stride, range);
+            result = context.makeNode<SimNode_At>(at, prv, pidx, stride, range);
+        }
+        if ( r2v ) {
+            return ExprRef2Value::GetR2V(context, at, type, result);
+        } else {
+            return result;
         }
     }
 
@@ -887,10 +897,16 @@ namespace yzg
     }
     
     SimNode * ExprField::simulate (Context & context) const {
+        SimNode * result;
         if ( !field ) {
-            return annotation->simulateGetField(name, context, at, value->simulate(context));
+            result = annotation->simulateGetField(name, context, at, value->simulate(context));
         } else {
-            return context.makeNode<SimNode_FieldDeref>(at,value->simulate(context),field->offset);
+            result = context.makeNode<SimNode_FieldDeref>(at,value->simulate(context),field->offset);
+        }
+        if ( r2v ) {
+            return ExprRef2Value::GetR2V(context, at, type, result);
+        } else {
+            return result;
         }
     }
     
@@ -942,16 +958,22 @@ namespace yzg
     }
     
     SimNode * ExprVar::simulate (Context & context) const {
+        SimNode * result;
         if ( local ) {
             if ( variable->type->ref ) {
-                return context.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
+                result = context.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
             } else {
-                return context.makeNode<SimNode_GetLocal>(at, variable->stackTop);
+                result = context.makeNode<SimNode_GetLocal>(at, variable->stackTop);
             }
         } else if ( argument) {
-            return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
+            result = context.makeNode<SimNode_GetArgument>(at, argumentIndex);
         } else {
-            return context.makeNode<SimNode_GetGlobal>(at, variable->index);
+            result = context.makeNode<SimNode_GetGlobal>(at, variable->index);
+        }
+        if ( r2v ) {
+            return ExprRef2Value::GetR2V(context, at, type, result);
+        } else {
+            return result;
         }
     }
     
@@ -1908,6 +1930,7 @@ namespace yzg
             return program;
         } else {
             program->inferTypes();
+            program->refFolding();
             if ( program->failed() ) {
                 sort(program->errors.begin(),program->errors.end());
             } else {

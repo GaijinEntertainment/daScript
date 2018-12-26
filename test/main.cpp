@@ -86,7 +86,7 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            // cout << "\n" << *program << "\n";
+            cout << "\n" << *program << "\n";
             Context ctx(&str);
             program->simulate(ctx);
             int fnTest = ctx.findFunction("test");
@@ -146,7 +146,7 @@ int main(int argc, const char * argv[]) {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test("../../test/unit_tests/block.das");
+    unit_test("../../test/unit_tests/for-loop.das");
     Module::Shutdown();
     return 0;
 #endif

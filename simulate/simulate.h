@@ -338,12 +338,11 @@ namespace yzg
     };
     
     // WHEN LOCAL VARIABLE STORES REFERENCE
-    struct SimNode_GetLocalRef : SimNode {
-        SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode(at), stackTop(sp) {}
+    struct SimNode_GetLocalRef : SimNode_GetLocal {
+        SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp) {}
         virtual __m128 eval ( Context & context ) override {
             return *(__m128 *)(context.stackTop + stackTop);
         }
-        uint32_t stackTop;
     };
     
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
