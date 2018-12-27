@@ -9,6 +9,10 @@ def var_op3_two_plus_two(cond:bool) : int
     let ( x, y : int = 2 )
         return (cond ? x : y) + 2
 
+def var_op3_arg_two_plus_two(cond:bool) : int
+    let ( x, y : int = 2; cc : bool = cond )
+        return (cc ? x : y) + 2
+
 def test_dead_code(X:int):int
     let ( x : int = X )
         while x < 5
@@ -28,5 +32,9 @@ def test:bool
     else
         3 + ( 2>3 ? 0 : 1 )
     // static_assert(false,"this static assert always fails")
+    let ( x,y:int = 3 )
+        x
+        x + y
+        hash(x) + hash(y)
     return true
 

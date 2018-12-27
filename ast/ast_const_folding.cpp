@@ -2,13 +2,86 @@
 
 #include "ast.h"
 
-/*
- TODO:
-    // ExprAssert
-        assert(true)    ->  nop
- */
-
 namespace yzg {
+    
+    class SideEffectVisitor : public Visitor {
+    protected:
+    // any expression
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            expr->noSideEffects = false;
+        }
+    // const
+        virtual void preVisit ( ExprConst * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+        }
+    // sizeof
+        virtual void preVisit ( ExprSizeOf * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+        }
+    // find
+        virtual void preVisit ( ExprFind * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+        }
+    // hash
+        virtual void preVisit ( ExprHash * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+        }
+    // keys
+        virtual void preVisit ( ExprKeys * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+        }
+    // values
+        virtual void preVisit ( ExprValues * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+        }
+    // variable
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = expr->isReading();
+        }
+    // field
+        virtual void preVisit ( ExprField * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = expr->r2v || expr->r2cr;
+        }
+    // at
+        virtual void preVisit ( ExprAt * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = expr->r2v || expr->r2cr;
+        }
+    // op1
+        virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
+            expr->noSideEffects = expr->subexpr->noSideEffects && expr->func->noSideEffects;
+            return Visitor::visit(expr);
+        }
+    // op2
+        virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
+            expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && expr->func->noSideEffects;
+            return Visitor::visit(expr);
+        }
+    // op3
+        virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
+            expr->noSideEffects = expr->subexpr->noSideEffects && expr->left->noSideEffects && expr->right->noSideEffects;
+            return Visitor::visit(expr);
+        }
+    // call
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            expr->noSideEffects = expr->func->noSideEffects;
+            if ( expr->noSideEffects ) {
+                for ( auto & arg : expr->arguments ) {
+                    expr->noSideEffects &= arg->noSideEffects;
+                }
+            }
+            return Visitor::visit(expr);
+        }
+    };
     
     class FoldingVisitor : public Visitor {
     public:
@@ -52,6 +125,7 @@ namespace yzg {
         op3 cond,a,a = a
         if ( constexpr ) a; else b;    =   constexpr ? a : b
         constexpr; = nop
+        assert(true,...) = nop
      */
     class ConstFolding : public FoldingVisitor {
     public:
@@ -104,6 +178,10 @@ namespace yzg {
                 anyFolding = true;
                 return nullptr;
             }
+            if ( expr->noSideEffects ) {    // top level expressions like a + 5;
+                anyFolding = true;
+                return nullptr;
+            }
             return Visitor::visitBlockExpression(block, expr);
         }
     // const
@@ -111,8 +189,21 @@ namespace yzg {
             c->constexpression = true;
             return Visitor::visit(c);
         }
+    // assert
+        virtual ExpressionPtr visit ( ExprAssert * expr ) override {
+            if ( expr->arguments[0]->constexpression ) {
+                bool res = cast<bool>::to(eval(expr->arguments[0].get()));
+                if ( res ) {
+                    anyFolding = true;
+                    return nullptr;
+                }
+            }
+            return Visitor::visit(expr);
+        }
     };
     
+    //  turn static-assert into nop
+    //  fail if condition is not there
     class StaticAssertFolding : public FoldingVisitor {
     public:
         StaticAssertFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
@@ -139,6 +230,8 @@ namespace yzg {
     // program
     
     bool Program::optimizationConstFolding() {
+        SideEffectVisitor se;
+        visit(se);
         ConstFolding context(shared_from_this());
         visit(context);
         return context.didAnything();

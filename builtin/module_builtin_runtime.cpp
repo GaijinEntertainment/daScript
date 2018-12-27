@@ -59,11 +59,11 @@ namespace yzg
         addCall<ExprDebug>          ("debug");
         addCall<ExprHash>           ("hash");
         // table functions
-        addExtern<decltype(builtin_table_size), builtin_table_size>(*this, lib, "length");
-        addExtern<decltype(builtin_table_capacity), builtin_table_capacity>(*this, lib, "capacity");
+        addExtern<decltype(builtin_table_size), builtin_table_size>(*this, lib, "length", false);
+        addExtern<decltype(builtin_table_capacity), builtin_table_capacity>(*this, lib, "capacity", false);
         // array functions
-        addExtern<decltype(builtin_array_size), builtin_array_size>(*this, lib, "length");
-        addExtern<decltype(builtin_array_capacity), builtin_array_capacity>(*this, lib, "capacity");
+        addExtern<decltype(builtin_array_size), builtin_array_size>(*this, lib, "length", false);
+        addExtern<decltype(builtin_array_capacity), builtin_array_capacity>(*this, lib, "capacity", false);
         // shared expressions
         addCall<ExprErase>("erase");
         addCall<ExprFind>("find");

@@ -58,17 +58,6 @@ namespace yzg
         }
     };
     
-    template  <typename FuncT, FuncT fn, typename RetT, typename ...Args>
-    class ExternalFnEx : public InteropFnBase<RetT,Args...> {
-    public:
-        ExternalFnEx(const string & name, const ModuleLibrary & lib) : InteropFnBase<RetT,Args...>(name,lib) {}
-        virtual SimNode * makeSimNode ( Context & context ) override {
-            auto pCall = context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(BuiltInFunction::at);
-            pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
-            return pCall;
-        }
-    };
-    
     template  <InteropFunction func, typename RetT, typename ...Args>
     class InteropFn : public InteropFnBase<RetT,Args...> {
     public:
@@ -81,18 +70,13 @@ namespace yzg
     };
     
     template <typename FuncT, FuncT fn>
-    __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name ) {
-        mod.addFunction(make_shared<ExternalFn<FuncT,fn>>(name,lib));
-    }
-    
-    template <typename FuncT, FuncT fn, typename RetT, typename ...Args>
-    __forceinline void addExternEx ( Module & mod, const ModuleLibrary & lib, const string & name ) {
-        mod.addFunction(make_shared<ExternalFnEx<FuncT,fn,RetT,Args...>>(name,lib));
+    __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, bool hasSideEffects = true ) {
+        mod.addFunction(make_shared<ExternalFn<FuncT,fn>>(name,lib)->sideEffects(hasSideEffects));
     }
     
     template <InteropFunction func, typename RetT, typename ...Args>
-    __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name ) {
-        mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib));
+    __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, bool hasSideEffects = true ) {
+        mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib)->sideEffects(hasSideEffects));
     }
 }
 

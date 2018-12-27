@@ -75,7 +75,7 @@ namespace yzg {
     // function arguments
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
-            var->access_init = false;
+            var->access_init = true;
             var->access_get = false;
             var->access_ref = false;
         }
@@ -90,7 +90,7 @@ namespace yzg {
     // var
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->r2v || expr->r2cr ) {
+            if ( expr->isReading() ) {
                 expr->variable->access_get = true;
             } else {
                 expr->variable->access_ref = true;
@@ -115,6 +115,10 @@ namespace yzg {
                 return nullptr;
             }
             if ( !var->access_ref && !var->init && var->type->isFoldable() ) {  // uninitialized read-only foldable var is const 0
+                anyFolding = true;
+                return nullptr;
+            }
+            if ( !var->access_ref && !var->access_get && var->init->noSideEffects ) {
                 anyFolding = true;
                 return nullptr;
             }

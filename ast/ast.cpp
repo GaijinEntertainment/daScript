@@ -1026,6 +1026,16 @@ namespace yzg
             return result;
         }
     }
+
+    bool ExprVar::isReading() const {
+        if ( r2v || r2cr ) {
+            return true;
+        } else if ( argument && !variable->type->isRef() ) {
+            return true;
+        } else {
+            return false;
+        }
+    }
     
     // ExprOp
     

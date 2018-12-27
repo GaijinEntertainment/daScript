@@ -408,6 +408,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isVar() const override { return true; }
+        bool isReading() const;
         string      name;
         VariablePtr variable;
         int         argumentIndex = -1;
@@ -894,16 +895,23 @@ namespace yzg
         virtual SimNode * makeSimNode ( Context & context ) { return context.makeNode<SimNode_Call>(at); }
         string describe() const { return getMangledName(); }
         virtual FunctionPtr visit(Visitor & vis);
+        FunctionPtr sideEffects ( bool hasSideEffects ) { noSideEffects = !hasSideEffects; return shared_from_this(); }
     public:
         string              name;
         vector<VariablePtr> arguments;
         TypeDeclPtr         result;
         ExpressionPtr       body;
-        bool                builtIn = false;
         int                 index = -1;
         uint32_t            totalStackSize = 0;
         LineInfo            at;
         Module *            module = nullptr;
+        union {
+            struct {
+                bool    builtIn : 1;
+                bool    noSideEffects : 1;
+            };
+            uint32_t flags = 0;
+        };
     };
     
     class BuiltInFunction : public Function {
