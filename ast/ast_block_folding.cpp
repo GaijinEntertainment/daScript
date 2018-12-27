@@ -26,6 +26,11 @@ namespace yzg {
                 efield->r2v = true;
                 efield->type->ref = false;
                 return efield;
+            } else if ( expr->subexpr->rtti_isSafeField() ) {
+                auto efield = static_pointer_cast<ExprSafeField>(expr->subexpr);
+                efield->r2v = true;
+                efield->type->ref = false;
+                return efield;
             } else if ( expr->subexpr->rtti_isAt() ) {
                 auto eat = static_pointer_cast<ExprAt>(expr->subexpr);
                 eat->r2v = true;

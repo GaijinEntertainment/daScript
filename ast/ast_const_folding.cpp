@@ -49,12 +49,17 @@ namespace yzg {
     // field
         virtual void preVisit ( ExprField * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = expr->r2v || expr->r2cr;
+            expr->noSideEffects = !expr->write;
+        }
+    // safe-field
+        virtual void preVisit ( ExprSafeField * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = !expr->write;
         }
     // at
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = expr->r2v || expr->r2cr;
+            expr->noSideEffects = !expr->write;
         }
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
