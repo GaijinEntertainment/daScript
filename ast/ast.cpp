@@ -950,16 +950,17 @@ namespace yzg
     }
     
     SimNode * ExprField::simulate (Context & context) const {
-        SimNode * result;
         if ( !field ) {
-            result = annotation->simulateGetField(name, context, at, value->simulate(context));
-        } else {
-            result = context.makeNode<SimNode_FieldDeref>(at,value->simulate(context),field->offset);
-        }
-        if ( r2v ) {
-            return ExprRef2Value::GetR2V(context, at, type, result);
-        } else {
+            auto result = annotation->simulateGetField(name, context, at, value->simulate(context));
+            if ( r2v ) {
+                result = ExprRef2Value::GetR2V(context, at, type, result);
+            }
             return result;
+        } else {
+            if ( r2v )
+                return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,value->simulate(context),field->offset);
+            else
+                return context.makeNode<SimNode_FieldDeref>(at,value->simulate(context),field->offset);
         }
     }
     

@@ -243,6 +243,22 @@ namespace yzg
         uint32_t    offset;
     };
     
+    template <typename TT>
+    struct SimNode_FieldDerefR2V : SimNode_FieldDeref {
+        SimNode_FieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 rv = value->eval(context);
+            YZG_EXCEPTION_POINT;
+            if ( char * prv = cast<char *>::to(rv) ) {
+                TT * pR = (TT *)( prv + offset );
+                return cast<TT>::from(*pR);
+            } else {
+                context.throw_error("dereferencing null pointer");
+                return _mm_setzero_ps();
+            }
+        }
+    };
+    
     // FIELD ?.
     struct SimNode_SafeFieldDeref : SimNode_FieldDeref {
         SimNode_SafeFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
