@@ -7,9 +7,9 @@ namespace yzg
 {
 	// ideas from http://isthe.com/chongo/tech/comp/fnv/
 	uint64_t hash_block(uint8_t * block, size_t size) {
-		const uint64_t fnv_prime = 1099511628211;
-		const uint64_t fnv_bias = 14695981039346656037;
-		uint64_t offset_basis = 0;
+		const uint64_t fnv_prime = 1099511628211UL;
+		const uint64_t fnv_bias = 14695981039346656037UL;
+		uint64_t offset_basis = fnv_bias;
 		for (; size; size--, block++) {
 			offset_basis = offset_basis * fnv_prime ^ *block;
 		}

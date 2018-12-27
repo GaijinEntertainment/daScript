@@ -1,10 +1,17 @@
 #pragma once
 
+#ifdef _MSC_VER
 #include <intrin.h>
+#endif
+
 #include <xmmintrin.h>
 #include <signal.h>
 #include <assert.h>
+
+#ifdef _MSC_VER
 #include <intsafe.h>
+#endif
+
 #include <stdint.h>
 
 #include <cmath>

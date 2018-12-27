@@ -92,7 +92,7 @@ simulate/simulate.h
 )
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
-include_directories(libDaScript PUBLIC ast misc simulate)
+include_directories(libDaScript PUBLIC ast misc simulate ".")
 ADD_LIBRARY(libDaScript ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
 ADD_PRECOMPILED_HEADER(libDaScript precomp.h precomp.h)
