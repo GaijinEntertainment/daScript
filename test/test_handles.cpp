@@ -254,25 +254,14 @@ bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsCom
         return false;
     int fnIndex = table.functionIndex;
     context.restart();
-#ifdef _MSC_VER
 	__m128 * _args = (__m128 *)(alloca(table.attributes.size() * sizeof(__m128)));
-#else
-    __m128   _args   [table.attributes.size()];
-#endif
     context.callEx(fnIndex, _args, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
         __m128 * args = _args;
-#ifdef _MSC_VER
 		char **		data	= (char **) alloca(nAttr * sizeof(char *));
 		uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(char));
 		bool *		boxed	= (bool *) alloca(nAttr * sizeof(char));
 		__m128 *	def		= (__m128 *) alloca(nAttr * sizeof(char));
-#else
-		char *   data   [nAttr];
-        uint32_t stride [nAttr];
-        bool     boxed  [nAttr];
-        __m128   def    [nAttr];
-#endif
         for ( uint32_t a=0; a!=nAttr; ++a ) {
             auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
                 return esc.name == table.attributes[a].name;

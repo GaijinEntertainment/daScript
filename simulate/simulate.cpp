@@ -46,11 +46,7 @@ namespace yzg
     }
     
     __m128 SimNode_Call::eval ( Context & context ) {
-#ifdef _MSC_VER
 		__m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
-#else
-		__m128 argValues[nArguments];
-#endif
         evalArgs(context, argValues);
         YZG_EXCEPTION_POINT;
         return context.call(fnIndex, argValues, debug.line);

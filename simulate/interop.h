@@ -45,11 +45,7 @@ namespace yzg
             using Arguments = typename FunctionTrait::arguments;
             const int nargs = tuple_size<Arguments>::value;
             using Indices = make_index_sequence<nargs>;
-#ifdef _MSC_VER
 			__m128 * args = (__m128 *)(alloca(nArguments*sizeof(__m128)));
-#else
-			__m128 args[nArguments];
-#endif
 			evalArgs(context, args);
             YZG_EXCEPTION_POINT;
         #if YZG_ENABLE_STACK_WALK
@@ -91,11 +87,7 @@ namespace yzg
     struct SimNode_InteropFuncCall : SimNode_Call {
         SimNode_InteropFuncCall ( const LineInfo & at ) : SimNode_Call(at) {}
         virtual __m128 eval ( Context & context ) override {
-#ifdef _MSC_VER
 			__m128 * args = (__m128 *)(alloca(nArguments * sizeof(__m128)));
-#else
-			__m128 args[nArguments];
-#endif
             evalArgs(context, args);
             YZG_EXCEPTION_POINT;
 #if YZG_ENABLE_STACK_WALK
