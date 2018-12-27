@@ -40,7 +40,7 @@ namespace yzg
             }
         }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.makeNode<SimNode_New>(at,sizeof(OT));
+            return context.makeNode<SimNode_New>(at,int32_t(sizeof(OT)));
         }
         virtual SimNode * simulateSafeGetField ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(name);
@@ -102,7 +102,7 @@ namespace yzg
                 VectorType * pArray = cast<VectorType *>::to(ll);
                 YZG_ITERATOR_EXCEPTION_POINT;
                 char * data    = (char *) pArray->data();
-                uint32_t size = pArray->size();
+                uint32_t size = (uint32_t) pArray->size();
                 itc.value      = cast<char *>::from(data);
                 itc.array_end  = data + size * sizeof(OT);
                 itc.array      = nullptr;

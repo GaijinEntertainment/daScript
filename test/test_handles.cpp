@@ -5,8 +5,6 @@
 #include "ast_handle.h"
 #include "interop.h"
 
-#include <dirent.h>
-
 using namespace std;
 using namespace yzg;
 
@@ -209,6 +207,10 @@ struct EsComponent {
     uint32_t    size = 0;
     uint32_t    stride = 0;
     bool        boxed = false;
+
+	EsComponent() = default;
+	EsComponent(const string & n, void * d, uint32_t sz, uint32_t st, bool bx) :
+		name(n), data(d), size(sz), stride(st), boxed(bx) {}
 };
 
 vector<EsAttributeTable>    g_esPassTable;
@@ -252,14 +254,25 @@ bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsCom
         return false;
     int fnIndex = table.functionIndex;
     context.restart();
+#ifdef _MSC_VER
+	__m128 * _args = (__m128 *)(alloca(table.attributes.size() * sizeof(__m128)));
+#else
     __m128   _args   [table.attributes.size()];
+#endif
     context.callEx(fnIndex, _args, 0, [&](SimNode * code){
-        uint32_t nAttr = table.attributes.size();
+        uint32_t nAttr = (uint32_t) table.attributes.size();
         __m128 * args = _args;
-        char *   data   [nAttr];
+#ifdef _MSC_VER
+		char **		data	= (char **) alloca(nAttr * sizeof(char *));
+		uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(char));
+		bool *		boxed	= (bool *) alloca(nAttr * sizeof(char));
+		__m128 *	def		= (__m128 *) alloca(nAttr * sizeof(char));
+#else
+		char *   data   [nAttr];
         uint32_t stride [nAttr];
         bool     boxed  [nAttr];
         __m128   def    [nAttr];
+#endif
         for ( uint32_t a=0; a!=nAttr; ++a ) {
             auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
                 return esc.name == table.attributes[a].name;
@@ -302,20 +315,20 @@ vector<EsComponent> g_components;
 void initEsComponents() {
     // build components
     for ( int i=0; i != g_total; ++i ) {
-        float f = i;
+        float f = float(i);
         g_pos[i] = { f, f*2, f*3 };
         g_vel[i] = { f+1, f+2, f+3 };
         g_velBoxed[i] = &g_vel[i];
     }
     g_components.clear();
-    g_components.push_back({"pos",      g_pos.data(),      sizeof(float3), sizeof(float3),   false});
-    g_components.push_back({"vel",      g_vel.data(),      sizeof(float3), sizeof(float3),   false});
-    g_components.push_back({"velBoxed", g_velBoxed.data(), sizeof(float3), sizeof(float3 *), true });
+    g_components.emplace_back("pos",      g_pos.data(),      sizeof(float3), sizeof(float3),   false);
+    g_components.emplace_back("vel",      g_vel.data(),      sizeof(float3), sizeof(float3),   false);
+    g_components.emplace_back("velBoxed", g_velBoxed.data(), sizeof(float3), sizeof(float3 *), true );
 }
 
 void verifyEsComponents() {
     for ( int i=0; i != g_total; ++i ) {
-        float f = i;
+        float f = float(i);
         float3 pos = { f, f*2, f*3 };
         float3 vel = { f+1, f+2, f+3 };
         pos.x += vel.x;

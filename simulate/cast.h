@@ -34,7 +34,7 @@ namespace yzg
     template <>
     struct cast <bool> {
         static __forceinline bool to ( __m128 x )               { return *((int *)&x) != 0; }
-        static __forceinline __m128 from ( bool x )             { return _mm_set1_epi32(x); }
+        static __forceinline __m128 from ( bool x )             { return _mm_castsi128_ps(_mm_set1_epi32(x)); }
     };
     
     template <>
@@ -98,7 +98,7 @@ namespace yzg
     template <typename TT>
     struct cast_iVec {
         static __forceinline TT to ( __m128 x )                 { return *((TT *)&x); }
-        static __forceinline __m128 from ( const TT & x )       { return _mm_loadu_si128((__m128i*)&x.x); }
+        static __forceinline __m128 from ( const TT & x )       { return  _mm_castsi128_ps(_mm_loadu_si128((__m128i*)&x.x)); }
     };
     
     template <> struct cast <int2>  : cast_iVec<int2> {};

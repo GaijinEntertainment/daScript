@@ -58,7 +58,7 @@ namespace yzg
             case tInt2:         return sizeof(int2);
             case tInt3:         return sizeof(int3);
             case tInt4:         return sizeof(int4);
-            case tUInt:         return sizeof(uint);
+            case tUInt:         return sizeof(uint32_t);
             case tUInt2:        return sizeof(uint2);
             case tUInt3:        return sizeof(uint3);
             case tUInt4:        return sizeof(uint4);

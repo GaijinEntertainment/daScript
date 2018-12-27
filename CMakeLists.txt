@@ -65,8 +65,8 @@ misc/platform.h
 misc/vectypes.h
 misc/arraytype.h
 misc/rangetype.h
-misc/precomp.h
-misc/precomp.cpp
+precomp.h
+precomp.cpp
 )
 SOURCE_GROUP_FILES("misc" MISC_SRC)
 
@@ -95,7 +95,7 @@ SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 include_directories(libDaScript PUBLIC ast misc simulate)
 ADD_LIBRARY(libDaScript ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
-ADD_PRECOMPILED_HEADER(libDaScript misc/precomp.h misc/precomp.h)
+ADD_PRECOMPILED_HEADER(libDaScript precomp.h precomp.h)
 
 add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
 add_dependencies(libDaScript daScriptGenDir)
@@ -111,6 +111,7 @@ add_executable(daScript ${DASCRIPT_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScript libDaScript)
 ADD_DEPENDENCIES(daScript libDaScript)
 SETUP_CPP11(daScript)
+ADD_PRECOMPILED_HEADER(daScript precomp.h precomp.h)
 
 # Test
 
@@ -139,6 +140,8 @@ list(SORT MIX_TEST_SRC)
 SOURCE_GROUP_FILES("test/mix" MIX_TEST_SRC)
 
 SET(TEST_MAIN_SRC
+precomp.h
+precomp.cpp
 test/main.cpp
 test/test_handles.cpp
 )
@@ -149,6 +152,7 @@ add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)
+ADD_PRECOMPILED_HEADER(daScriptTest precomp.h precomp.h)
 
 # Profile
 
@@ -159,6 +163,8 @@ profile/profile_try_catch.das
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
+precomp.h
+precomp.cpp
 profile/main.cpp
 profile/test_profile.cpp
 )
@@ -169,4 +175,5 @@ add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScriptProfile libDaScript)
 ADD_DEPENDENCIES(daScriptProfile libDaScript)
 SETUP_CPP11(daScriptProfile)
+ADD_PRECOMPILED_HEADER(daScriptProfile precomp.h precomp.h)
 

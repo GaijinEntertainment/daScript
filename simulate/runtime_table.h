@@ -120,7 +120,11 @@ namespace yzg
                     return { index, false };
                 }
             }
+#ifdef _MSC_VER
+			char * value = (char *) alloca(valueTypeSize);
+#else
             char value[valueTypeSize];
+#endif
             memset(value, 0, valueTypeSize);
             return insert_new(tab, dist, index, key, value);
         }

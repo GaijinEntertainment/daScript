@@ -10,7 +10,7 @@ namespace yzg
     __m128 SimPolicy_String::Add ( __m128 a, __m128 b, Context & context ) {
         const char *  sA = to_rts(a); auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
-        char * sAB = (char * ) context.allocate(la + lb + 1);
+        char * sAB = (char * ) context.allocate(uint32_t(la + lb + 1));
         memcpy ( sAB, sA, la );
         memcpy ( sAB+la, sB, lb+1 );
         return from_rts(sAB);
@@ -20,7 +20,7 @@ namespace yzg
         char ** pA = cast<char **>::to(a);
         const char *  sA = *pA ? *pA : rts_null; auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
-        *pA = (char * ) context.allocate(la + lb + 1);
+        *pA = (char * ) context.allocate(uint32_t(la + lb + 1));
         memcpy ( *pA , sA, la );
         memcpy ( *pA +la, sB, lb+1 );
         return a;

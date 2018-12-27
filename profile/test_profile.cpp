@@ -9,7 +9,10 @@
 using namespace std;
 using namespace yzg;
 
-__attribute__((noinline)) void updateObject ( Object & obj ) {
+#ifndef _MSC_VER
+__attribute__((noinline)) 
+#endif
+void updateObject ( Object & obj ) {
     obj.pos.x += obj.vel.x;
     obj.pos.y += obj.vel.y;
     obj.pos.z += obj.vel.z;

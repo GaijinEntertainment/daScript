@@ -3,8 +3,6 @@
 #include "ast.h"
 #include "test_profile.h"
 
-#include <dirent.h>
-
 using namespace std;
 using namespace yzg;
 
@@ -62,12 +60,19 @@ bool unit_test ( const string & fn ) {
 
 
 int main(int argc, const char * argv[]) {
+
+#ifdef _MSC_VER
+	#define	TEST_PATH "../"
+#else
+	#define TEST_PATH "../../"
+#endif
+
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_TestProfile);
     // run tests
-    unit_test("../../profile/profile_array_of_structures_vec.das");
-    unit_test("../../profile/profile_try_catch.das");
+    unit_test(TEST_PATH "profile/profile_array_of_structures_vec.das");
+    unit_test(TEST_PATH "profile/profile_try_catch.das");
     // and done
     Module::Shutdown();
     return 0;

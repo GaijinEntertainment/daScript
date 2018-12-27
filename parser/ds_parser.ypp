@@ -35,6 +35,7 @@
 }
 
 %{
+	#include "platform.h"
     #include "debug_info.h"
     #include "compilation_errors.h"
     
@@ -51,17 +52,15 @@
 %union {
     bool                            b;
     int                             i;
-    uint                            ui;
+    uint32_t                        ui;
     double                          d;
     string *                        s;
     vector<string> *                pNameList;
-    Structure *                     pStruct;
     VariableDeclaration *           pVarDecl;
     vector<VariableDeclaration*> *  pVarDeclList;
     TypeDecl *                      pTypeDecl;
     Expression *                    pExpression;
     Type                            type;
-    TypeAnnotation *                annotation;
     AnnotationArgument *            aa;
     AnnotationArgumentList *        aaList;
     AnnotationDeclaration *         fa;
@@ -70,12 +69,10 @@
 
 %destructor { delete $$; } <s>
 %destructor { delete $$; } <pNameList>
-%destructor { delete $$; } <pStruct>
 %destructor { delete $$; } <pVarDecl>
 %destructor { deleteVariableDeclarationList($$); } <pVarDeclList>
 %destructor { delete $$; } <pTypeDecl>
-%destructor { delete $$; } <pExpressoin>
-%destructor { delete $$; } <annotation>
+%destructor { delete $$; } <pExpression>
 %destructor { delete $$; } <aa>
 %destructor { delete $$; } <aaList>
 %destructor { delete $$; } <fa>
@@ -680,7 +677,7 @@ structure_declaration
                 for ( const auto & name : *pDecl->pNameList ) {
                     if ( !pStruct->findField(name) ) {
                         auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        pStruct->fields.push_back({name, td, pDecl->at});
+                        pStruct->fields.emplace_back(name, td, pDecl->at);
                     } else {
                         yyerror("structure field is already declared "+name,pDecl->at,CompilationError::structure_field_already_declared);
                     }

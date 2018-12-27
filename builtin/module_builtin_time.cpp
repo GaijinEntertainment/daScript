@@ -16,11 +16,13 @@ namespace yzg {
         }
     };
     
+#ifndef _MSC_VER
     template <>
     struct cast <time_t> {
         static __forceinline time_t to ( __m128 x )    { return *((time_t *)&x); }
         static __forceinline __m128 from ( time_t x )  { __m128 a; *((time_t *)&a) = x; return a; }
     };
+#endif
     
     struct ClockTypeAnnotation : ManagedValueAnnotation<time_t> {
         ClockTypeAnnotation() : ManagedValueAnnotation<time_t>("clock") {}
@@ -33,7 +35,7 @@ namespace yzg {
         static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) {
             time_t A = cast<time_t>::to(a);
             time_t B = cast<time_t>::to(b);
-            return cast<float>::from( difftime(A, B) );
+            return cast<float>::from( float(difftime(A, B)) );
         }
     };
     

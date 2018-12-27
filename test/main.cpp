@@ -2,7 +2,11 @@
 
 #include "ast.h"
 
-#include <dirent.h>
+#ifdef _MSC_VER
+	#include <io.h>
+#else
+	#include <dirent.h>
+#endif
 
 using namespace std;
 using namespace yzg;
@@ -114,6 +118,20 @@ bool unit_test ( const string & fn ) {
 }
 
 bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
+
+#ifdef _MSC_VER
+	bool ok = true;
+	_finddata_t c_file;
+	intptr_t hFile;
+	string findPath = path + "/*.das";
+	if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
+		do {
+			ok = test_fn(path + "/" + c_file.name) && ok;
+		} while (_findnext(hFile, &c_file) == 0);
+	}
+	_findclose(hFile);
+	return ok;
+#else
     bool ok = true;
     DIR *dir;
     struct dirent *ent;
@@ -126,6 +144,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
         closedir (dir);
     }
     return ok;
+#endif
 }
 
 bool run_unit_tests( const string & path ) {
@@ -137,23 +156,30 @@ bool run_compilation_fail_tests( const string & path ) {
 }
 
 int main(int argc, const char * argv[]) {
+
+#ifdef _MSC_VER
+	#define	TEST_PATH "../"
+#else
+	#define TEST_PATH "../../"
+#endif
+
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test("../../test/compilation_fail_tests/const_ref.das");
+    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/const_ref.das");
     Module::Shutdown();
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test("../../test/hello_world.das");
+    unit_test(TEST_PATH "test/hello_world.das");
     Module::Shutdown();
     return 0;
 #endif
     bool ok = true;
-    ok = run_compilation_fail_tests("../../test/compilation_fail_tests") && ok;
-    ok = run_unit_tests("../../test/unit_tests") && ok;
-    ok = run_unit_tests("../../test/optimizations") && ok;
+    ok = run_compilation_fail_tests(TEST_PATH "test/compilation_fail_tests") && ok;
+    ok = run_unit_tests(TEST_PATH "test/unit_tests") && ok;
+    ok = run_unit_tests(TEST_PATH "test/optimizations") && ok;
     cout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown
     Module::Shutdown();

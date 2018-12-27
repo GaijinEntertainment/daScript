@@ -163,11 +163,13 @@ namespace yzg
     
     class Structure : public enable_shared_from_this<Structure> {
     public:
-        struct FieldDeclaration {
-            string      name;
-            TypeDeclPtr type;
-            LineInfo    at;
-            int         offset = 0;
+		struct FieldDeclaration {
+			string      name;
+			TypeDeclPtr type;
+			LineInfo    at;
+			int         offset = 0;
+			FieldDeclaration() = default;
+			FieldDeclaration(const string & n, const TypeDeclPtr & t, const LineInfo & a) : name(n), type(t), at(a) {}
         };
     public:
         Structure ( const string & n ) : name(n) {}

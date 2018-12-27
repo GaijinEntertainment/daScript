@@ -5,9 +5,11 @@
 namespace yzg
 {
     using namespace std;
+
+	uint64_t hash_block(uint8_t * block, size_t size);
     
     __forceinline uint64_t hash_function ( const void * x, size_t size ) {
-        return hash<string_view>()(string_view((const char *)x,size));
+		return hash_block((uint8_t *)x, size);
     }
     
     template <typename TT>
@@ -17,7 +19,7 @@ namespace yzg
     
     template <>
     __forceinline uint64_t hash_function ( char * x ) {
-        return hash<string_view>()(string_view(x));
+		return hash_function(x, strlen(x));
     }
     
     template <typename QQ>

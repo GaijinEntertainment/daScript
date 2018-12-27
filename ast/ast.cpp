@@ -361,7 +361,7 @@ namespace yzg
     
     int TypeDecl::getBaseSizeOf() const {
         if ( baseType==Type::tHandle ) {
-            return annotation->getSizeOf();
+            return int(annotation->getSizeOf());
         }
         return baseType==Type::tStructure ? structType->getSizeOf() : getTypeBaseSize(baseType);
     }
@@ -1379,7 +1379,7 @@ namespace yzg
     }
     
     SimNode * ExprFor::simulate (Context & context) const {
-        int  total = sources.size();
+        int  total = int(sources.size());
         int  sourceTypes = int(dynamicArrays) + int(fixedArrays) + int(rangeBase);
         bool hybridRange = rangeBase && (total>1);
         if ( (sourceTypes>1) || hybridRange || nativeIterators ) {

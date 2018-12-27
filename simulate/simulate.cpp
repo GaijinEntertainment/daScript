@@ -46,7 +46,11 @@ namespace yzg
     }
     
     __m128 SimNode_Call::eval ( Context & context ) {
-        __m128 argValues[nArguments];
+#ifdef _MSC_VER
+		__m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
+#else
+		__m128 argValues[nArguments];
+#endif
         evalArgs(context, argValues);
         YZG_EXCEPTION_POINT;
         return context.call(fnIndex, argValues, debug.line);
@@ -425,7 +429,7 @@ namespace yzg
         ssw << "\nCALL STACK (sp=" << (stack + stackSize - stackTop) << "):\n";
         char * sp = stackTop;
         while ( sp>=stackTop && sp <(stack+stackSize) ) {
-            int isp = (stack + stackSize - sp);
+            int isp = int(stack + stackSize - sp);
             Prologue * pp = (Prologue *) sp;
             if ( pp->line ) {
                 ssw << pp->info->name << " at line " << pp->line << " (sp=" << isp << ")\n";
@@ -447,7 +451,11 @@ namespace yzg
     }
     
     void Context::breakPoint(int column, int line) const {
+#ifdef _MSC_VER
+		__debugbreak();
+#else
         raise(SIGTRAP);
+#endif
     }
     
     void Context::to_out ( const char * message ) {
