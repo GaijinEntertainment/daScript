@@ -1027,16 +1027,6 @@ namespace yzg
         }
     }
 
-    bool ExprVar::isReading() const {
-        if ( r2v || r2cr ) {
-            return true;
-        } else if ( argument && !variable->type->isRef() ) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-    
     // ExprOp
     
     ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const {
@@ -1942,14 +1932,20 @@ namespace yzg
     }
     
     void Program::optimize() {
+        const bool log = false;
         bool any, once;
         once = true;
         do {
+            if ( log ) cout << "OPTIMIZE:\n" << *this;
             any = false;
             any |= optimizationRefFolding();    if ( failed() ) break;
+            if ( log ) cout << "REF FOLDING:\n" << *this;
             any |= optimizationConstFolding();  if ( failed() ) break;
+            if ( log ) cout << "CONST FOLDING:\n" << *this;
             any |= optimizationBlockFolding();  if ( failed() ) break;
+            if ( log ) cout << "BLOCK FOLDING:\n" << *this;
             any |= optimizationUnused();        if ( failed() ) break;
+            if ( log ) cout << "REMOVE UNUSED:\n" << *this;
             any |= once && staticAsserts();     if ( failed() ) break;
             once = false;
         } while ( any );

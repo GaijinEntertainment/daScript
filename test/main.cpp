@@ -145,8 +145,8 @@ int main(int argc, const char * argv[]) {
     Module::Shutdown();
     return 0;
 #endif
-#if 1 // Debug this one test
-    unit_test("../../test/hello_world.das");
+#if 0 // Debug this one test
+    unit_test("../../test/unit_tests/table.das");
     Module::Shutdown();
     return 0;
 #endif

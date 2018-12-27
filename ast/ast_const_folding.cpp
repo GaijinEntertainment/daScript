@@ -44,7 +44,7 @@ namespace yzg {
     // variable
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = expr->isReading();
+            expr->noSideEffects = !expr->write;
         }
     // field
         virtual void preVisit ( ExprField * expr ) override {

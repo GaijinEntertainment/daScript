@@ -347,27 +347,24 @@ namespace yzg {
         }
     // var
         virtual ExpressionPtr visit ( ExprVar * var ) override {
-            if ( printRef && var->r2v ) {
-                ss << "@" << var->name;
-            } else if ( printRef && var->r2cr ) {
-                ss << "$" << var->name;
-            } else {
-                ss << var->name;
-            }
+            if ( printRef && var->r2v ) ss << "@";
+            if ( printRef && var->r2cr ) ss << "$";
+            if ( printRef && var->write ) ss << "#";
+            ss << var->name;
             return Visitor::visit(var);
         }
     // field
         virtual ExpressionPtr visit ( ExprField * field ) override {
-            if ( printRef && field->r2v ) {
-                ss << ".@" << field->name;
-            } if ( printRef && field->r2cr ) {
-                ss << ".$" << field->name;
-            } else {
-                ss << "." << field->name;
-            }
+            if ( printRef && field->r2v ) ss << "@";
+            if ( printRef && field->r2cr ) ss << "$";
+            if ( printRef && field->write ) ss << "#";
+            ss << "." << field->name;
             return Visitor::visit(field);
         }
         virtual ExpressionPtr visit ( ExprSafeField * field ) override {
+            if ( printRef && field->r2v ) ss << "@";
+            if ( printRef && field->r2cr ) ss << "$";
+            if ( printRef && field->write ) ss << "#";
             ss << ".?" << field->name;
             return Visitor::visit(field);
         }
@@ -389,13 +386,11 @@ namespace yzg {
     // at
         virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override {
             Visitor::preVisitAtIndex(expr, index);
-            if ( printRef && expr->r2v ) {
-                ss << "@[";
-            } else if ( printRef && expr->r2cr ) {
-                ss << "$[";
-            } else {
-                ss << "[";
-            }
+            if ( printRef && expr->r2v ) ss << "@";
+            if ( printRef && expr->r2cr ) ss << "$";
+            if ( printRef && expr->write ) ss << "#";
+            ss << "[";
+
         }
         virtual ExpressionPtr visit ( ExprAt * that ) override {
             ss << "]";

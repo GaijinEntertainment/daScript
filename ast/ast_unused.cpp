@@ -15,36 +15,128 @@ namespace yzg {
     // here we propagate r2cr flag
     //  a.@b    ->  $a.@b
     //  a@[b]   ->  $a@[b]
-    //  a.b.@c  ->  $a.$b.@c    
+    //  a.b.@c  ->  $a.$b.@c
+    //  a = 5   ->  #a = 5
     class TrackFieldAndAtFlags : public Visitor {
-        void propagate ( Expression * expr ) {
+        void propagateRead ( Expression * expr ) {
             if ( expr->rtti_isVar() ) {
                 auto var = (ExprVar *) expr;
                 var->r2cr = true;
-            } else if ( expr->rtti_isField() ) {
+            } else if ( expr->rtti_isField() || expr->rtti_isSafeField() ) {
                 auto field = (ExprField *) expr;
                 field->r2cr = true;
-                propagate(field->value.get());
+                propagateRead(field->value.get());
             } else if ( expr->rtti_isAt() ) {
                 auto at = (ExprAt *) expr;
                 at->r2cr = true;
-                propagate(at->subexpr.get());
+                propagateRead(at->subexpr.get());
             } else if ( expr->rtti_isOp3() ) {
                 auto op3 = (ExprOp3 *) expr;
-                propagate(op3->left.get());
-                propagate(op3->right.get());
+                propagateRead(op3->left.get());
+                propagateRead(op3->right.get());
+            } else if ( expr->rtti_isNullCoalescing() ) {
+                auto nc = (ExprNullCoalescing *) expr;
+                propagateRead(nc->subexpr.get());
+                propagateRead(nc->defaultValue.get());
+            }
+        }
+        void propagateWrite ( Expression * expr ) {
+            if ( expr->rtti_isVar() ) {
+                auto var = (ExprVar *) expr;
+                var->write = true;
+            } else if ( expr->rtti_isField() || expr->rtti_isSafeField() ) {
+                auto field = (ExprField *) expr;
+                field->write = true;
+                propagateWrite(field->value.get());
+            } else if ( expr->rtti_isAt() ) {
+                auto at = (ExprAt *) expr;
+                at->write = true;
+                propagateWrite(at->subexpr.get());
+            } else if ( expr->rtti_isOp3() ) {
+                auto op3 = (ExprOp3 *) expr;
+                propagateWrite(op3->left.get());
+                propagateWrite(op3->right.get());
+            } else if ( expr->rtti_isNullCoalescing() ) {
+                auto nc = (ExprNullCoalescing *) expr;
+                propagateWrite(nc->subexpr.get());
+                propagateWrite(nc->defaultValue.get());
             }
         }
     protected:
-        // field
+    // ExprField
         virtual void preVisit ( ExprField * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->r2v ) propagate(expr->value.get());
+            if ( expr->r2v ) propagateRead(expr->value.get());
         }
-        // at
+    // ExprSafeField
+        virtual void preVisit ( ExprSafeField * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->r2v ) propagateRead(expr->value.get());
+        }
+    // ExprAt
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->r2v ) propagate(expr->subexpr.get());
+            if ( expr->r2v ) propagateRead(expr->subexpr.get());
+        }
+    // ExprMove
+        virtual void preVisit ( ExprMove * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->left.get());
+            propagateWrite(expr->right.get());
+        }
+    // ExprCopy
+        virtual void preVisit ( ExprCopy * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->left.get());
+        }
+    // Op1
+        virtual void preVisit ( ExprOp1 * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->func->noSideEffects ) propagateWrite(expr->subexpr.get());
+        }
+    // Op2
+        virtual void preVisit ( ExprOp2 * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->func->noSideEffects ) {
+                propagateWrite(expr->left.get());
+            }
+        }
+    // Call
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->func->noSideEffects ) {
+                for ( int ai=0; ai != expr->arguments.size(); ++ai ) {
+                    const auto & argT = expr->func->arguments[ai]->type;
+                    if ( argT->isRef() && !argT->isConst() ) {
+                        propagateWrite(expr->arguments[ai].get());
+                    }
+                }
+            }
+        }
+    // Invoke
+        virtual void preVisit ( ExprInvoke * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->arguments[0].get());
+        }
+    // ArrayPush
+        virtual void preVisit ( ExprArrayPush * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->arguments[0].get());
+        }
+    // ArrayResize
+        virtual void preVisit ( ExprArrayResize * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->arguments[0].get());
+        }
+    // ArrayReserve
+        virtual void preVisit ( ExprArrayReserve * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->arguments[0].get());
+        }
+    // Erase
+        virtual void preVisit ( ExprErase * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->arguments[0].get());
         }
     };
     
@@ -90,10 +182,10 @@ namespace yzg {
     // var
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->isReading() ) {
-                expr->variable->access_get = true;
-            } else {
+            if ( expr->write ) {
                 expr->variable->access_ref = true;
+            } else {
+                expr->variable->access_get = true;
             }
         }
     };

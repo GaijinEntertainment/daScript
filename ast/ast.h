@@ -314,8 +314,10 @@ namespace yzg
         virtual bool rtti_isBlock() const { return false; }
         virtual bool rtti_isVar() const { return false; }
         virtual bool rtti_isField() const { return false; }
+        virtual bool rtti_isSafeField() const { return false; }
         virtual bool rtti_isAt() const { return false; }
-        virtual bool rtti_isOp3() const { return false; };
+        virtual bool rtti_isOp3() const { return false; }
+        virtual bool rtti_isNullCoalescing() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
@@ -361,6 +363,7 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isNullCoalescing() const override { return true; }
         ExpressionPtr   defaultValue;
     };
     
@@ -386,6 +389,7 @@ namespace yzg
             struct {
                 bool        r2v : 1;
                 bool        r2cr : 1;
+                bool        write : 1;
             };
             uint32_t atFlags = 0;
         };
@@ -408,7 +412,6 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isVar() const override { return true; }
-        bool isReading() const;
         string      name;
         VariablePtr variable;
         int         argumentIndex = -1;
@@ -418,6 +421,7 @@ namespace yzg
                 bool        argument : 1;
                 bool        r2v  : 1;       // built-in ref2value   (read-only)
                 bool        r2cr : 1;       // built-in ref2contref (read-only, but stay ref)
+                bool        write : 1;
             };
             uint32_t varFlags = 0;
         };
@@ -439,6 +443,7 @@ namespace yzg
             struct {
                 bool        r2v : 1;
                 bool        r2cr : 1;
+                bool        write : 1;
             };
             uint32_t fieldFlags = 0;
         };
@@ -451,6 +456,8 @@ namespace yzg
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+         virtual bool rtti_isField() const override { return false; }
+         virtual bool rtti_isSafeField() const override { return true; }
         bool skipQQ = false;
     };
     

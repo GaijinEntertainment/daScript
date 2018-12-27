@@ -38,6 +38,12 @@ namespace yzg {
                 op3->right = Expression::autoDereference(op3->right);
                 op3->type->ref = false;
                 return expr->subexpr;
+            } else if ( expr->subexpr->rtti_isNullCoalescing() ) {
+                anyFolding = true;
+                auto nc = static_pointer_cast<ExprNullCoalescing>(expr->subexpr);
+                nc->defaultValue = Expression::autoDereference(nc->defaultValue);
+                nc->type->ref = false;
+                return nc;
             } else {
                 return Visitor::visit(expr);
             }
@@ -87,9 +93,14 @@ namespace yzg {
     // program
     
     bool Program::optimizationRefFolding() {
-        RefFolding context;
-        visit(context);
-        return context.didAnything();
+        bool any = false, anything = false;
+        do {
+            RefFolding context;
+            visit(context);
+            any = context.didAnything();
+            anything |= any;
+        } while ( any );
+        return anything;
     }
     
     bool Program::optimizationBlockFolding() {
