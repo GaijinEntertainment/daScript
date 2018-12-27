@@ -132,7 +132,7 @@ namespace yzg
         if ( char * prv = cast<char *>::to(rv) ) {
             return cast<char *>::from( prv + offset );
         } else {
-            context.throw_error("dereferencing nil pointer");
+            context.throw_error("dereferencing null pointer");
             return _mm_setzero_ps();
         }
     }

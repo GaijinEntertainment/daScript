@@ -93,7 +93,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
                     return _mm_setzero_ps();
                 }
             } else {
-                context.throw_error("dereferencing nil pointer");
+                context.throw_error("dereferencing null pointer");
                 return _mm_setzero_ps();
             }
         }
