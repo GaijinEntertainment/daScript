@@ -190,6 +190,7 @@ namespace yzg
         string          name;
         TypeDeclPtr     type;
         ExpressionPtr   init;
+        ExpressionPtr   source;     // if its interator variable, this is where the source is
         LineInfo        at;
         int             index = -1;
         uint32_t        stackTop = 0;
@@ -318,6 +319,7 @@ namespace yzg
         virtual bool rtti_isAt() const { return false; }
         virtual bool rtti_isOp3() const { return false; }
         virtual bool rtti_isNullCoalescing() const { return false; }
+        virtual bool rtti_isValues() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
@@ -615,6 +617,11 @@ namespace yzg
         ExprConstInt4(const LineInfo & a, int4 i)  : ExprConstT(a,i,Type::tInt4) {}
     };
     
+    struct ExprConstUInt64 : ExprConstT<uint64_t,ExprConstUInt64> {
+        ExprConstUInt64(uint64_t i = 0) : ExprConstT(i,Type::tUInt64) {}
+        ExprConstUInt64(const LineInfo & a, uint64_t i = 0) : ExprConstT(a,i,Type::tUInt64) {}
+    };
+    
     struct ExprConstUInt : ExprConstT<uint32_t,ExprConstUInt> {
         ExprConstUInt(uint32_t i = 0) : ExprConstT(i,Type::tUInt) {}
         ExprConstUInt(const LineInfo & a, uint32_t i = 0) : ExprConstT(a,i,Type::tUInt) {}
@@ -808,6 +815,7 @@ namespace yzg
         ExprValues() = default;
         ExprValues ( const LineInfo & a, const string & n )
             : ExprTableKeysOrValues<ExprValues,SimNode_TableIterator<TableValuesIterator>,false>(a, n) {}
+        virtual bool rtti_isValues() const override { return true; }
     };
     
     template <typename It, typename SimNodeT>
@@ -1168,6 +1176,7 @@ namespace yzg
         VISIT_EXPR(ExprConstInt2)
         VISIT_EXPR(ExprConstInt3)
         VISIT_EXPR(ExprConstInt4)
+        VISIT_EXPR(ExprConstUInt64)
         VISIT_EXPR(ExprConstUInt)
         VISIT_EXPR(ExprConstUInt2)
         VISIT_EXPR(ExprConstUInt3)

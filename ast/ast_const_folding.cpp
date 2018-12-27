@@ -200,6 +200,14 @@ namespace yzg {
             }
             return Visitor::visit(expr);
         }
+    // hash
+        virtual ExpressionPtr visit ( ExprHash * expr ) override {
+            if ( expr->arguments[0]->constexpression ) {
+                return evalAndFold(expr);
+            }
+            return Visitor::visit(expr);
+        }
+
     };
     
     //  turn static-assert into nop

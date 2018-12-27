@@ -746,6 +746,8 @@ namespace yzg {
                     error("unsupported iteration type for " + pVar->name, expr->at);
                     return;
                 }
+                pVar->type->constant |= src->type->isConst();
+                pVar->source = src;
                 local.push_back(pVar);
                 expr->iteratorVariables.push_back(pVar);
                 ++ idx;

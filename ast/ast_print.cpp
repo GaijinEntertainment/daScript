@@ -52,27 +52,7 @@ namespace yzg {
             expr->bottomLevel = true;
         }
         // const
-        virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
-            c->bottomLevel = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstInt * c ) override {
-            c->bottomLevel = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstUInt * c ) override {
-            c->bottomLevel = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstBool * c ) override {
-            c->bottomLevel = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            c->bottomLevel = true;
-            return Visitor::visit(c);
-        }
-        virtual ExpressionPtr visit ( ExprConstString * c ) override {
+        virtual ExpressionPtr visit ( ExprConst * c ) override {
             c->bottomLevel = true;
             return Visitor::visit(c);
         }
@@ -282,6 +262,10 @@ namespace yzg {
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {
             ss << c->getValue();
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt64 * c ) override {
+            ss << "0x" << hex << c->getValue() << dec;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt * c ) override {

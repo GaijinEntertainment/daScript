@@ -261,6 +261,7 @@ namespace yzg
             case Type::tInt2:
             case Type::tInt3:
             case Type::tInt4:
+            case Type::tUInt64:
             case Type::tUInt:
             case Type::tUInt2:
             case Type::tUInt3:
@@ -438,6 +439,8 @@ namespace yzg
         pVar->type = make_shared<TypeDecl>(*type);
         if ( init )
             pVar->init = init->clone();
+        if ( source )
+            pVar->source = source->clone();
         pVar->at = at;
         return pVar;
     }
@@ -1891,6 +1894,7 @@ namespace yzg
             case Type::tInt2:       return make_shared<ExprConstInt2>(at, cast<int2>::to(value));
             case Type::tInt3:       return make_shared<ExprConstInt3>(at, cast<int3>::to(value));
             case Type::tInt4:       return make_shared<ExprConstInt4>(at, cast<int4>::to(value));
+            case Type::tUInt64:     return make_shared<ExprConstUInt64>(at, cast<uint64_t>::to(value));
             case Type::tUInt:       return make_shared<ExprConstUInt>(at, cast<uint32_t>::to(value));
             case Type::tUInt2:      return make_shared<ExprConstUInt2>(at, cast<uint2>::to(value));
             case Type::tUInt3:      return make_shared<ExprConstUInt3>(at, cast<uint3>::to(value));

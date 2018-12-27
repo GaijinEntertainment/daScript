@@ -17,11 +17,16 @@ namespace yzg {
     //  a@[b]   ->  $a@[b]
     //  a.b.@c  ->  $a.$b.@c
     //  a = 5   ->  #a = 5
+    //  a.b = 5 ->  #a#.b=5
+    //  a[b]=3  ->  #a#[b]=3
     class TrackFieldAndAtFlags : public Visitor {
         void propagateRead ( Expression * expr ) {
             if ( expr->rtti_isVar() ) {
                 auto var = (ExprVar *) expr;
                 var->r2cr = true;
+                if ( var->variable->source ) {
+                    propagateRead(var->variable->source.get());
+                }
             } else if ( expr->rtti_isField() || expr->rtti_isSafeField() ) {
                 auto field = (ExprField *) expr;
                 field->r2cr = true;
@@ -38,12 +43,21 @@ namespace yzg {
                 auto nc = (ExprNullCoalescing *) expr;
                 propagateRead(nc->subexpr.get());
                 propagateRead(nc->defaultValue.get());
+            } else if ( expr->rtti_isValues() ) {
+                auto vs = (ExprValues *) expr;
+                propagateRead(vs->arguments[0].get());
             }
+            // TODO:
+            //  propagate read to call or expr-like-call???
+            //  do we need to?
         }
         void propagateWrite ( Expression * expr ) {
             if ( expr->rtti_isVar() ) {
                 auto var = (ExprVar *) expr;
                 var->write = true;
+                if ( var->variable->source ) {
+                    propagateWrite(var->variable->source.get());
+                }
             } else if ( expr->rtti_isField() || expr->rtti_isSafeField() ) {
                 auto field = (ExprField *) expr;
                 field->write = true;
@@ -60,7 +74,13 @@ namespace yzg {
                 auto nc = (ExprNullCoalescing *) expr;
                 propagateWrite(nc->subexpr.get());
                 propagateWrite(nc->defaultValue.get());
+            } else if ( expr->rtti_isValues() ) {
+                auto vs = (ExprValues *) expr;
+                propagateWrite(vs->arguments[0].get());
             }
+            // TODO:
+            //  propagate write to call or expr-like-call???
+            //  do we need to?
         }
     protected:
     // ExprField
