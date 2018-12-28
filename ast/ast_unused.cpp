@@ -269,6 +269,24 @@ namespace yzg {
             }
             if ( !expr->iteratorVariables.size() ) return nullptr;
             */
+            // loop has no effect if
+            //  no subexpression
+            //  no filter, or filter has no sideEffects
+            //  sources have no sideEffects
+            if ( expr->subexpr->rtti_isBlock()) {
+                auto block = static_pointer_cast<ExprBlock>(expr->subexpr);
+                if ( !block->list.size() ) {
+                    if ( !expr->filter || expr->filter->noSideEffects ) {
+                        bool noSideEffects = true;
+                        for ( auto & src : expr->sources ) {
+                            noSideEffects &= src->noSideEffects;
+                        }
+                        if ( noSideEffects ) {
+                            return nullptr;
+                        }
+                    }
+                }
+            }
             return Visitor::visit(expr);
         }
     };
