@@ -1,6 +1,12 @@
 #pragma once
 
 #ifdef _MSC_VER
+#pragma warning(disable:4005)	// macro redifinition (in flex file)
+#pragma warning(disable:4146)	// unsigned unary minus
+#pragma warning(disable:4996)	// swap ranges
+#endif
+
+#ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
@@ -41,10 +47,5 @@ __forceinline uint32_t __builtin_clz(uint32_t x) {
 }
 #endif
 
-#ifdef _MSC_VER
-#pragma warning(disable:4005)	// macro redifinition (in flex file)
-#pragma warning(disable:4146)	// unsigned unary minus
-#pragma warning(disable:4996)	// swap ranges
-#endif
 
 

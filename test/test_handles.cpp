@@ -209,8 +209,8 @@ struct EsComponent {
     bool        boxed = false;
 
 	EsComponent() = default;
-	EsComponent(const string & n, void * d, uint32_t sz, uint32_t st, bool bx) :
-		name(n), data(d), size(sz), stride(st), boxed(bx) {}
+	EsComponent(const string & n, void * d, size_t sz, size_t st, bool bx) :
+		name(n), data(d), size(uint32_t(sz)), stride(uint32_t(st)), boxed(bx) {}
 };
 
 vector<EsAttributeTable>    g_esPassTable;
