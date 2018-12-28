@@ -1071,7 +1071,10 @@ namespace yzg
         cexpr->name = name;
         cexpr->variable = variable; // todo: lookup again?
         cexpr->local = local;
+        cexpr->block = block;
+        cexpr->pBlock = pBlock;
         cexpr->argument = argument;
+        cexpr->argumentIndex = argumentIndex;
         return cexpr;
     }
     
