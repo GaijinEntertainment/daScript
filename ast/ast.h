@@ -200,6 +200,7 @@ namespace yzg
         Module *        module = nullptr;
         union {
             struct {
+                bool    access_extern : 1;
                 bool    access_get : 1;
                 bool    access_ref : 1;
                 bool    access_init : 1;

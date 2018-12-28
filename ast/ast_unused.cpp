@@ -133,31 +133,15 @@ namespace yzg {
                 }
             }
         }
-    // Invoke
-        virtual void preVisit ( ExprInvoke * expr ) override {
+    // LooksLikeCall
+        virtual void preVisit ( ExprLooksLikeCall * expr ) override {
             Visitor::preVisit(expr);
-            propagateWrite(expr->arguments[0].get());
-            // TODO: propagate block write arguments?
-        }
-    // ArrayPush
-        virtual void preVisit ( ExprArrayPush * expr ) override {
-            Visitor::preVisit(expr);
-            propagateWrite(expr->arguments[0].get());
-        }
-    // ArrayResize
-        virtual void preVisit ( ExprArrayResize * expr ) override {
-            Visitor::preVisit(expr);
-            propagateWrite(expr->arguments[0].get());
-        }
-    // ArrayReserve
-        virtual void preVisit ( ExprArrayReserve * expr ) override {
-            Visitor::preVisit(expr);
-            propagateWrite(expr->arguments[0].get());
-        }
-    // Erase
-        virtual void preVisit ( ExprErase * expr ) override {
-            Visitor::preVisit(expr);
-            propagateWrite(expr->arguments[0].get());
+            for ( int ai=0; ai != expr->arguments.size(); ++ai ) {
+                const auto & argT = expr->arguments[ai]->type;
+                if ( argT->isRef() && !argT->isConst() ) {  // should we propagate const?
+                    propagateWrite(expr->arguments[ai].get());
+                }
+            }
         }
     };
     
@@ -166,6 +150,7 @@ namespace yzg {
     // global let
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
+            var->access_extern = false;
             var->access_init = false;
             var->access_get = false;
             var->access_ref = false;
@@ -177,6 +162,7 @@ namespace yzg {
     // let
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
+            var->access_extern = false;
             var->access_init = false;
             var->access_get = false;
             var->access_ref = false;
@@ -188,7 +174,8 @@ namespace yzg {
     // function arguments
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
-            var->access_init = true;
+            var->access_extern = true;
+            var->access_init = false;
             var->access_get = false;
             var->access_ref = false;
         }
@@ -199,7 +186,8 @@ namespace yzg {
     // block
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
-            var->access_init = true;
+            var->access_extern = true;
+            var->access_init = false;
             var->access_get = false;
             var->access_ref = false;
         }
@@ -246,7 +234,7 @@ namespace yzg {
         }
     // ExprVar
         virtual ExpressionPtr visit ( ExprVar * expr ) override {
-            if ( !expr->variable->access_ref ) {
+            if ( !expr->variable->access_ref && !expr->variable->access_extern ) {
                 if ( expr->variable->init ) {
                     if ( expr->variable->init->constexpression ) {
                         anyFolding = true;

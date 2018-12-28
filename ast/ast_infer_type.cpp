@@ -250,6 +250,7 @@ namespace yzg {
                 return Visitor::visit(expr);
             }
             // infer
+            expr->arguments[0]->type->constant = true;
             expr->type = make_shared<TypeDecl>(Type::tUInt64);
             return Visitor::visit(expr);
         }
@@ -271,6 +272,7 @@ namespace yzg {
                 error("can't push value of different type", expr->at, CompilationError::invalid_argument_type);
             if ( expr->arguments.size()==3 && !expr->arguments[2]->type->isIndex() )
                 error("push at must be an index", expr->at, CompilationError::invalid_argument_type);
+            valueType->constant = true;
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
@@ -296,6 +298,7 @@ namespace yzg {
             } else {
                 error("first argument must be fully qualified array or table", expr->at, CompilationError::invalid_argument_type);
             }
+            valueType->constant = true;
             return Visitor::visit(expr);
         }
     // ExprFind
@@ -320,6 +323,8 @@ namespace yzg {
             } else {
                 error("first argument must be fully qualified array or table", expr->at, CompilationError::invalid_argument_type);
             }
+            containerType->constant = true;
+            valueType->constant = true;
             return Visitor::visit(expr);
         }
     // ExprSizeOf
@@ -909,6 +914,7 @@ namespace yzg {
                 return Visitor::visit(expr);
             }
             auto iterType = tableType->firstType;
+            expr->arguments[0]->type->constant = true;
             expr->type = make_shared<TypeDecl>(Type::tIterator);
             expr->type->firstType = make_shared<TypeDecl>(*iterType);
             expr->type->firstType->ref = true;
@@ -928,6 +934,7 @@ namespace yzg {
                 return Visitor::visit(expr);
             }
             auto iterType = tableType->secondType;
+            expr->arguments[0]->type->constant = true;
             expr->type = make_shared<TypeDecl>(Type::tIterator);
             expr->type->firstType = make_shared<TypeDecl>(*iterType);
             expr->type->firstType->ref = true;
@@ -950,6 +957,7 @@ namespace yzg {
             if ( !valueType->isIndex() )
                 error("size must be int or uint", expr->at);
             expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
+            valueType->constant = true;
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
@@ -969,6 +977,7 @@ namespace yzg {
             if ( !valueType->isIndex() )
                 error("size must be int or uint", expr->at);
             expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
+            valueType->constant = true;
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
