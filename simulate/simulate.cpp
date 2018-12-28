@@ -320,12 +320,18 @@ namespace yzg
         invokeStackTop = stackTop;
         stackTop = stack + block.stackOffset;
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
+        __m128 ** pArgs;
+        __m128 * saveArgs;
         if ( args ) {
-            __m128 ** pArgs = (__m128 **)(stack + block.argumentsOffset);
+            pArgs = (__m128 **)(stack + block.argumentsOffset);
+            saveArgs = *pArgs;
             *pArgs = args;
         }
         // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
         __m128 result = block.body->eval(*this);
+        if ( args ) {
+            *pArgs = saveArgs;
+        }
         invokeStackTop = saveISp;
         stackTop = saveSp;
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
