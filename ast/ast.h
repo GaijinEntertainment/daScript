@@ -716,11 +716,6 @@ namespace yzg
         vector<ExpressionPtr>   sources;
         ExpressionPtr           subexpr;
         ExpressionPtr           filter;
-        uint32_t                fixedSize = 0;
-        bool                    dynamicArrays = false;
-        bool                    fixedArrays = false;
-        bool                    nativeIterators = false;
-        bool                    rangeBase = false;
     };
     
     struct ExprLooksLikeCall : Expression {

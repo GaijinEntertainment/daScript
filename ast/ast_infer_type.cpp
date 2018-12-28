@@ -95,7 +95,7 @@ namespace yzg {
             if ( !expr->subexpr->type->isRef() ) {
                 error("can only dereference ref", expr->at);
             } else if ( !expr->subexpr->type->isSimpleType() ) {
-                error("can only dereference a simple type", expr->at);
+                error("can only dereference a simple type, " + expr->subexpr->type->describe(), expr->at);
             } if ( !expr->subexpr->type->canCopy() ) {
                 error("can't dereference non-copyable type", expr->at);
             } else {
@@ -753,27 +753,7 @@ namespace yzg {
                 error("too many sources for now", expr->at);
                 return;
             }
-            // determine iteration types
-            expr->nativeIterators = false;
-            expr->fixedArrays = false;
-            expr->dynamicArrays = false;
-            expr->rangeBase = false;
-            expr->fixedSize = UINT16_MAX;
-            for ( auto & src : expr->sources ) {
-                if ( !src->type ) continue;
-                if ( src->type->isArray() ) {
-                    expr->fixedSize = min(expr->fixedSize, src->type->dim.back());
-                    expr->fixedArrays = true;
-                } else if ( src->type->isGoodArrayType() ) {
-                    expr->dynamicArrays = true;
-                } else if ( src->type->isGoodIteratorType() ) {
-                    expr->nativeIterators = true;
-                } else if ( src->type->isHandle() ) {
-                    expr->nativeIterators = true;
-                } else if ( src->type->isRange() ) {
-                    expr->rangeBase = true;
-                }
-            }
+            // iterator variables
             int idx = 0;
             for ( auto & src : expr->sources ) {
                 if ( !src->type ) continue;

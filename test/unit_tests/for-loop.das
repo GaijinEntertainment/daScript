@@ -59,7 +59,7 @@ def test:bool
         assert(i==10)
     // 2 variable, range hybrid
     let(b:int[10];i:int=0)
-        for l,r in range(0,10),b
+        for l,r in range(0,10),b    // note, this one is optimized out
             r = i++*2-5
         assert(i==10)
         i = 0

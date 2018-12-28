@@ -1449,6 +1449,28 @@ namespace yzg
     }
     
     SimNode * ExprFor::simulate (Context & context) const {
+        // determine iteration types
+        bool nativeIterators = false;
+        bool fixedArrays = false;
+        bool dynamicArrays = false;
+        bool rangeBase = false;
+        uint32_t fixedSize = UINT16_MAX;
+        for ( auto & src : sources ) {
+            if ( !src->type ) continue;
+            if ( src->type->isArray() ) {
+                fixedSize = min(fixedSize, src->type->dim.back());
+                fixedArrays = true;
+            } else if ( src->type->isGoodArrayType() ) {
+                dynamicArrays = true;
+            } else if ( src->type->isGoodIteratorType() ) {
+                nativeIterators = true;
+            } else if ( src->type->isHandle() ) {
+                nativeIterators = true;
+            } else if ( src->type->isRange() ) {
+                rangeBase = true;
+            }
+        }
+        // create loops based on
         int  total = int(sources.size());
         int  sourceTypes = int(dynamicArrays) + int(fixedArrays) + int(rangeBase);
         bool hybridRange = rangeBase && (total>1);

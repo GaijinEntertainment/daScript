@@ -249,6 +249,27 @@ namespace yzg {
             }
             return Visitor::visit(expr);
         }
+    // ExprFor
+        virtual ExpressionPtr visit ( ExprFor * expr ) override {
+            // TODO: how do we determine, if iteration count is not used?
+            /*
+            auto itV = expr->iteratorVariables.begin();
+            auto itS = expr->sources.begin();
+            while ( itV != expr->iteratorVariables.end() ) {
+                auto & var = *itV;
+                if ( !var->access_ref && !var->access_get ) {
+                    itV = expr->iteratorVariables.erase(itV);
+                    itS = expr->sources.erase(itS);
+                    anyFolding = true;
+                } else {
+                    itV ++;
+                    itS ++;
+                }
+            }
+            if ( !expr->iteratorVariables.size() ) return nullptr;
+            */
+            return Visitor::visit(expr);
+        }
     };
     
     // program
