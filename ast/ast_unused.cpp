@@ -252,6 +252,7 @@ namespace yzg {
     // ExprFor
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             // TODO: how do we determine, if iteration count is not used?
+            //  also, how do we determine, if native iterator has side-effect?
             /*
             auto itV = expr->iteratorVariables.begin();
             auto itS = expr->sources.begin();

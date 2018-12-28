@@ -115,6 +115,7 @@ namespace yzg {
         }
         ExpressionPtr evalAndFold ( Expression * expr ) {
             auto sim = Program::makeConst(expr->at, expr->type, eval(expr));
+            sim->type = make_shared<TypeDecl>(*expr->type);
             sim->constexpression = true;
             return sim;
         }
@@ -212,7 +213,6 @@ namespace yzg {
             }
             return Visitor::visit(expr);
         }
-
     };
     
     //  turn static-assert into nop
