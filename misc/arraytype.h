@@ -5,7 +5,8 @@ namespace yzg
     struct SimNode;
     
     struct Block {
-        char *      stackTop;
+        uint32_t    stackOffset;
+        uint32_t    argumentsOffset;
         SimNode *   body;
     };
     

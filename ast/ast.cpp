@@ -50,11 +50,24 @@ namespace yzg
                 stream << "iterator";
             }
         } else if ( decl.baseType==Type::tBlock ) {
-            if ( decl.firstType ) {
-                stream << "block<" << *decl.firstType << ">";
-            } else {
-                stream << "block";
+            stream << "block<";
+            if ( decl.argTypes.size() ) {
+                stream << "(";
+                for ( const auto & arg : decl.argTypes ) {
+                    stream << *arg;
+                    if ( arg != decl.argTypes.back() ) {
+                        stream << ";";
+                    }
+                }
+                stream << ")";
             }
+            if ( decl.firstType ) {
+                if ( decl.argTypes.size() ) {
+                    stream << ":";
+                }
+                stream << *decl.firstType;
+            }
+            stream << ">";
         } else {
             stream << to_string(decl.baseType);
         }
@@ -81,6 +94,9 @@ namespace yzg
             firstType = make_shared<TypeDecl>(*decl.firstType);
         if ( decl.secondType )
             secondType = make_shared<TypeDecl>(*decl.secondType);
+        for ( const auto & arg : decl.argTypes ) {
+            argTypes.push_back(make_shared<TypeDecl>(*arg) );
+        }
     }
     
     bool TypeDecl::canMove() const {
@@ -143,8 +159,11 @@ namespace yzg
             }
         } else if ( baseType==Type::tBlock ) {
             ss << "#block";
+            for ( auto & arg : argTypes ) {
+                ss << "#" << arg->getMangledName();
+            }
             if ( firstType ) {
-                ss << "#" << firstType->getMangledName();
+                ss << "#:" << firstType->getMangledName();
             }
         } else if ( baseType==Type::tStructure ) {
             if ( structType ) {
@@ -201,6 +220,16 @@ namespace yzg
             }
         }
         if ( baseType==Type::tBlock ) {
+            if ( argTypes.size() != decl.argTypes.size() ) {
+                return false;
+            }
+            for ( size_t i=0; i != argTypes.size(); ++i ) {
+                const auto & arg = argTypes[i];
+                const auto & declArg = decl.argTypes[i];
+                if ( !arg->isSameType(*declArg) ) {
+                    return false;
+                }
+            }
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
@@ -683,7 +712,8 @@ namespace yzg
     }
     
     SimNode * ExprMakeBlock::simulate (Context & context) const {
-        return context.makeNode<SimNode_MakeBlock>(at,block->simulate(context));
+        uint32_t argSp = static_pointer_cast<ExprBlock>(block)->stackTop;
+        return context.makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp);
     }
     
     ExpressionPtr ExprMakeBlock::clone( const ExpressionPtr & expr ) const {
@@ -701,7 +731,20 @@ namespace yzg
     }
     
     SimNode * ExprInvoke::simulate (Context & context) const {
-        return context.makeNode<SimNode_Invoke>(at,arguments[0]->simulate(context));
+        
+        SimNode_Invoke * pInvoke = context.makeNode<SimNode_Invoke>(at);
+        pInvoke->debug = at;
+        if ( int nArg = (int) arguments.size() ) {
+            pInvoke->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
+            pInvoke->nArguments = nArg;
+            for ( int a=0; a!=nArg; ++a ) {
+                pInvoke->arguments[a] = arguments[a]->simulate(context);
+            }
+        } else {
+            pInvoke->arguments = nullptr;
+            pInvoke->nArguments = 0;
+        }
+        return pInvoke;
     }
     
     // ExprHash
@@ -883,6 +926,12 @@ namespace yzg
     
     ExpressionPtr ExprBlock::visit(Visitor & vis) {
         vis.preVisit(this);
+        for ( auto it = arguments.begin(); it != arguments.end(); ) {
+            auto & arg = *it;
+            vis.preVisitBlockArgument(this, arg, arg==arguments.back());
+            arg = vis.visitBlockArgument(this, arg, arg==arguments.back());
+            if ( arg ) ++it; else it = arguments.erase(it);
+        }
         for ( auto it = list.begin(); it!=list.end(); ) {
             auto & subexpr = *it;
             vis.preVisitBlockExpression(this, subexpr.get());
@@ -899,6 +948,12 @@ namespace yzg
         Expression::clone(cexpr);
         for ( auto & subexpr : list ) {
             cexpr->list.push_back(subexpr->clone());
+        }
+        cexpr->isClosure = isClosure;
+        if ( returnType )
+            cexpr->returnType = make_shared<TypeDecl>(*returnType);
+        for ( auto & arg : arguments ) {
+            cexpr->arguments.push_back(arg->clone());
         }
         return cexpr;
     }
@@ -919,8 +974,8 @@ namespace yzg
             }
         }
         // TODO: what if list size is 0?
-        if ( simlist.size()!=1 || returnsValue ) {
-            auto block = returnsValue ? context.makeNode<SimNode_ClosureBlock>(at, type!=nullptr)
+        if ( simlist.size()!=1 || isClosure ) {
+            auto block = isClosure ? context.makeNode<SimNode_ClosureBlock>(at, type!=nullptr)
                 : context.makeNode<SimNode_Block>(at);
             block->total = int(simlist.size());
             block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
@@ -930,6 +985,15 @@ namespace yzg
         } else {
             return simlist[0];
         }
+    }
+    
+    VariablePtr ExprBlock::findArgument(const string & name) {
+        for ( auto & arg : arguments ) {
+            if ( arg->name==name ) {
+                return arg;
+            }
+        }
+        return nullptr;
     }
     
     // ExprField
@@ -1013,7 +1077,10 @@ namespace yzg
     
     SimNode * ExprVar::simulate (Context & context) const {
         SimNode * result;
-        if ( local ) {
+        if ( block ) {
+            auto blk = pBlock.lock();
+            result = context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+        } else if ( local ) {
             if ( variable->type->ref ) {
                 result = context.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
             } else {

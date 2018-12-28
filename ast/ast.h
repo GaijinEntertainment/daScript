@@ -87,6 +87,7 @@ namespace yzg
         TypeAnnotationPtr   annotation;
         TypeDeclPtr         firstType;      // map.first or array, or pointer
         TypeDeclPtr         secondType;     // map.second
+        vector<TypeDeclPtr> argTypes;        // block arguments
         vector<uint32_t>    dim;
         bool                ref = false;
         bool                constant = false;
@@ -405,8 +406,12 @@ namespace yzg
         virtual uint32_t getEvalFlags() const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isBlock() const override { return true; }
+        VariablePtr findArgument(const string & name);
         vector<ExpressionPtr>   list;
-        bool                    returnsValue = false;
+        bool                    isClosure = false;
+        TypeDeclPtr             returnType;
+        vector<VariablePtr>     arguments;
+        uint32_t                stackTop = 0;
     };
     
     struct ExprVar : Expression {
@@ -416,13 +421,15 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isVar() const override { return true; }
-        string      name;
-        VariablePtr variable;
-        int         argumentIndex = -1;
+        string              name;
+        VariablePtr         variable;
+        weak_ptr<ExprBlock> pBlock;
+        int                 argumentIndex = -1;
         union {
             struct {
                 bool        local : 1;
                 bool        argument : 1;
+                bool        block : 1;
                 bool        r2v  : 1;       // built-in ref2value   (read-only)
                 bool        r2cr : 1;       // built-in ref2contref (read-only, but stay ref)
                 bool        write : 1;
@@ -740,7 +747,7 @@ namespace yzg
     struct ExprMakeBlock : Expression {
         ExprMakeBlock () = default;
         ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b )
-            : Expression(a), block(b) { b->at = a; static_pointer_cast<ExprBlock>(b)->returnsValue = true; }
+            : Expression(a), block(b) { b->at = a; static_pointer_cast<ExprBlock>(b)->isClosure = true; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1091,6 +1098,8 @@ namespace yzg
         virtual void preVisitExpression ( Expression * expr ) {}
         virtual ExpressionPtr visitExpression ( Expression * expr ) { return expr->shared_from_this(); }
         // BLOCK
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) {}
+        virtual VariablePtr visitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) { return var; }
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) {}
         virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
         // LET

@@ -177,7 +177,7 @@ namespace yzg
         
         __m128 call ( int fnIndex, __m128 * args, int line );
         __m128 callEx ( int fnIndex, __m128 * args, int line, function<void (SimNode *)> && when );
-        __m128 invoke ( const Block & block );
+        __m128 invoke ( const Block & block, __m128 * args );
         
         __forceinline const char * getException() const {
             return stopFlags & EvalFlags::stopForThrow ? exception : nullptr;
@@ -213,18 +213,13 @@ namespace yzg
     #define YZG_ITERATOR_EXCEPTION_POINT
 #endif
     
-    // Invoke
-    struct SimNode_Invoke : SimNode {
-        SimNode_Invoke ( const LineInfo & at, SimNode * s) : SimNode(at), subexpr(s) {}
-        virtual __m128 eval ( Context & context ) override;
-        SimNode *       subexpr;
-    };
-    
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
-        SimNode_MakeBlock ( const LineInfo & at, SimNode * s) : SimNode(at), subexpr(s) {}
+        SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a )
+            : SimNode(at), subexpr(s), argStackTop(a) {}
         virtual __m128 eval ( Context & context ) override;
         SimNode *       subexpr;
+        uint32_t        argStackTop;
     };
     
     // ASSERT
@@ -288,6 +283,12 @@ namespace yzg
         SimNode ** arguments;
         int32_t  fnIndex;
         int32_t  nArguments;
+    };
+    
+    // Invoke
+    struct SimNode_Invoke : SimNode_Call {
+        SimNode_Invoke ( const LineInfo & at ) : SimNode_Call(at) {}
+        virtual __m128 eval ( Context & context ) override;
     };
     
     // CAST
@@ -378,6 +379,18 @@ namespace yzg
             return context.abiArguments()[index];
         }
         int32_t index;
+    };
+    
+    // BLOCK VARIABLE "GET"
+    struct SimNode_GetBlockArgument : SimNode {
+        SimNode_GetBlockArgument ( const LineInfo & at, int32_t i, uint32_t sp )
+            : SimNode(at), index(i), stackTop(sp) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 * args = *((__m128 **)(context.stackTop + stackTop));
+            return args[index];
+        }
+        int32_t     index;
+        uint32_t    stackTop;
     };
     
     // GLOBAL VARIABLE "GET"

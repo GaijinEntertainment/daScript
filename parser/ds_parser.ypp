@@ -303,6 +303,7 @@ optional_annotation_list
 
 optional_function_argument_list
     :                                           { $$ = nullptr; }
+    |   '(' ')'                                 { $$ = nullptr; }
     |   '(' function_argument_list[list] ')'    { $$ = $list; }
     ;
 
@@ -364,8 +365,9 @@ function_declaration
                             if ( pVar->type->ref && pVar->type->isRefType() ) {
                                 yyerror("can't pass boxed type by reference",pVar->at,CompilationError::invalid_argument_type);
                             }
-                            if ( pDecl->pInit )
+                            if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
+                            }
                             pFunction->arguments.push_back(pVar);
                         } else {
                             yyerror("function argument is already declared " + name,pDecl->at,CompilationError::argument_already_declared);
@@ -489,8 +491,9 @@ expression_let
                         pVar->name = name;
                         pVar->at = pDecl->at;
                         pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        if ( pDecl->pInit )
+                        if ( pDecl->pInit ) {
                             pVar->init = pDecl->pInit->clone();
+                        }
                         pLet->variables.push_back(pVar);
                     } else {
                         yyerror("local variable is already declared " + name,tokAt(@list),CompilationError::local_variable_already_declared);
@@ -541,6 +544,37 @@ expr_list
 
 expr_block
     :   expression_block[block]             { $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block)); }
+    |   '$' optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
+        $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
+        ExprBlock * closure = (ExprBlock *) $block;
+        closure->returnType = TypeDeclPtr($result);
+        if ( $list ) {
+            for ( auto pDecl : *$list ) {
+                if ( pDecl->pTypeDecl ) {
+                    for ( const auto & name : *pDecl->pNameList ) {
+                        if ( !closure->findArgument(name) ) {
+                            VariablePtr pVar = make_shared<Variable>();
+                            pVar->name = name;
+                            pVar->at = pDecl->at;
+                            pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            if ( pVar->type->ref && pVar->type->isRefType() ) {
+                                yyerror("can't pass boxed type by reference",pVar->at,
+                                    CompilationError::invalid_argument_type);
+                            }
+                            if ( pDecl->pInit ) {
+                                pVar->init = ExpressionPtr(pDecl->pInit->clone());
+                            }
+                            closure->arguments.push_back(pVar);
+                        } else {
+                            yyerror("block argument is already declared " + name,
+                                pDecl->at,CompilationError::argument_already_declared);
+                        }
+                    }
+                }
+            }
+            deleteVariableDeclarationList($list);
+        }
+    }
     ;
 
 expr
@@ -651,8 +685,9 @@ global_let
                     pVar->name = name;
                     pVar->at = pDecl->at;
                     pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                    if ( pDecl->pInit )
+                    if ( pDecl->pInit ) {
                         pVar->init = pDecl->pInit->clone();
+                    }
                     if ( !g_Program->addVariable(pVar) )
                         yyerror("global variable is already declared " + name,pDecl->at,CompilationError::global_variable_already_declared);
                 }
@@ -818,6 +853,30 @@ type_declaration
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
+    }
+    |   _BLOCK[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+        $$ = new TypeDecl(Type::tBlock);
+        $$->at = tokAt(@loc);
+        $$->firstType = TypeDeclPtr($result);
+        if ( $list ) {
+            for ( auto pDecl : *$list ) {
+                if ( pDecl->pTypeDecl ) {
+                    for ( size_t ai=0; ai!= pDecl->pNameList->size(); ++ai ) {
+                        auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                        if ( pVarType->ref && pVarType->isRefType() ) {
+                            yyerror("can't pass boxed type by reference",
+                                pDecl->at,CompilationError::invalid_argument_type);
+                        }
+                        if ( pDecl->pInit ) {
+                            yyerror("can't have default values in block type declaration",
+                                pDecl->at,CompilationError::cant_initialize);
+                        }
+                        $$->argTypes.push_back(pVarType);
+                    }
+                }
+            }
+            deleteVariableDeclarationList($list);
+        }
     }
     ;
 

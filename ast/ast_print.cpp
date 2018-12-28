@@ -139,18 +139,34 @@ namespace yzg {
     // block
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockExpression(block, expr);
-            if ( !block->returnsValue ) ss << string(tab,'\t');
+            if ( !block->isClosure ) ss << string(tab,'\t');
         }
         virtual ExpressionPtr visitBlockExpression ( ExprBlock * block, Expression * that ) override {
-            if ( block->returnsValue ) ss << ";"; else newLine();
+            if ( block->isClosure ) ss << ";"; else newLine();
             return Visitor::visitBlockExpression(block, that);
         }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
-            if ( block->returnsValue ) ss << "{"; else tab ++;
+            if ( block->isClosure ) {
+                if ( block->returnType || block->arguments.size() ) {
+                    ss << "$(";
+                    for ( auto & arg : block->arguments ) {
+                        ss << arg->name << ":" << arg->type->describe();
+                        if ( arg != block->arguments.back() )
+                            ss << "; ";
+                    }
+                    ss << ")";
+                    if ( block->returnType ) {
+                        ss << ":" << block->returnType->describe();
+                    }
+                }
+                ss << "{";
+            } else {
+                tab ++;
+            }
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
-            if ( block->returnsValue ) ss << "}"; else tab --;
+            if ( block->isClosure ) ss << "}"; else tab --;
             return Visitor::visit(block);
         }
     // let

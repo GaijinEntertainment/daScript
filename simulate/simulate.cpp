@@ -9,17 +9,10 @@ namespace yzg
     
     __m128 SimNode_MakeBlock::eval ( Context & context )  {
         Block block;
-        block.stackTop = context.stackTop;
+        block.stackOffset = context.stackTop - context.stack;
+        block.argumentsOffset = context.stackTop + argStackTop - context.stack;
         block.body = subexpr;
         return cast<Block>::from(block);
-    }
-    
-    // SimNode_Invoke
-    
-    __m128 SimNode_Invoke::eval ( Context & context )  {
-        Block block = cast<Block>::to(subexpr->eval(context));
-        YZG_EXCEPTION_POINT;
-        return context.invoke(block);
     }
     
     // SimNode_At
@@ -50,6 +43,20 @@ namespace yzg
         evalArgs(context, argValues);
         YZG_EXCEPTION_POINT;
         return context.call(fnIndex, argValues, debug.line);
+    }
+    
+    // SimNode_Invoke
+    
+    __m128 SimNode_Invoke::eval ( Context & context )  {
+        __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
+        evalArgs(context, argValues);
+        YZG_EXCEPTION_POINT;
+        Block block = cast<Block>::to(argValues[0]);
+        if ( nArguments>1 ) {
+            return context.invoke(block, argValues + 1);
+        } else {
+            return context.invoke(block, nullptr);
+        }
     }
     
     // SimNode_Debug
@@ -307,12 +314,16 @@ namespace yzg
             return nullptr;
         }
     }
-    __m128 Context::invoke(const Block &block) {
+    __m128 Context::invoke(const Block &block, __m128 * args ) {
         char * saveSp = stackTop;
         char * saveISp = invokeStackTop;
         invokeStackTop = stackTop;
-        stackTop = block.stackTop;
+        stackTop = stack + block.stackOffset;
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
+        if ( args ) {
+            __m128 ** pArgs = (__m128 **)(stack + block.argumentsOffset);
+            *pArgs = args;
+        }
         // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
         __m128 result = block.body->eval(*this);
         invokeStackTop = saveISp;

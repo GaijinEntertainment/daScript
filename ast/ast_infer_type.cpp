@@ -73,6 +73,8 @@ namespace yzg {
             return Visitor::visitArgumentInit(f, arg, that);
         }
         virtual FunctionPtr visit ( Function * that ) override {
+            assert(local.size()==0);
+            assert(blocks.size()==0);
             func.reset();
             return Visitor::visit(that);
         }
@@ -189,17 +191,21 @@ namespace yzg {
     // ExprMakeBlock
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
             // infer
+            auto block = static_pointer_cast<ExprBlock>(expr->block);
             expr->type = make_shared<TypeDecl>(Type::tBlock);
-            if ( expr->block->type ) {
-                expr->type->firstType = make_shared<TypeDecl>(*expr->block->type);
+            if ( block->type ) {
+                expr->type->firstType = make_shared<TypeDecl>(*block->type);
+            }
+            for ( auto & arg : block->arguments ) {
+                expr->type->argTypes.push_back(make_shared<TypeDecl>(*arg->type));
             }
             return Visitor::visit(expr);
         }
     // ExprInvoke
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
-            if ( expr->arguments.size()!=1 ) {
-                error("invoke(block)", expr->at, CompilationError::invalid_argument_count);
+            if ( expr->arguments.size()<1 ) {
+                error("invoke(block) or invoke(block,...)", expr->at, CompilationError::invalid_argument_count);
                 return Visitor::visit(expr);
             }
             // infer
@@ -207,6 +213,27 @@ namespace yzg {
             auto blockT = expr->arguments[0]->type;
             if ( !blockT->isGoodBlockType() ) {
                 error("expecting block", expr->at, CompilationError::invalid_argument_type);
+            }
+            if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {
+                error("invalid number of arguments", expr->at, CompilationError::invalid_argument_count);
+            }
+            for ( size_t i=0; i != blockT->argTypes.size(); ++i ) {
+                auto & passType = expr->arguments[i+1]->type;
+                auto & argType = blockT->argTypes[i];
+                // same type only
+                if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false)) ) {
+                    error("incomaptible argument", expr->at, CompilationError::invalid_argument_type);
+                }
+                // ref types can only add constness
+                if ( argType->isRef() && !argType->constant && passType->constant ) {
+                    error("incomaptible argument, const matters", expr->at, CompilationError::invalid_argument_type);
+                }
+                // pointer types can only add constant
+                if ( argType->isPointer() && !argType->constant && passType->constant ) {
+                    error("incomaptible argument, pointer const matters", expr->at, CompilationError::invalid_argument_type);
+                }
+                if ( !argType->isRef() )
+                    expr->arguments[i+1] = Expression::autoDereference(expr->arguments[i+1]);
             }
             if ( blockT->firstType ) {
                 expr->type = make_shared<TypeDecl>(*blockT->firstType);
@@ -364,15 +391,18 @@ namespace yzg {
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
-            if ( block->returnsValue )
+            if ( block->isClosure )
                 blocks.push_back(block);
             pushVarStack();
+            if ( block->returnType ) {
+                block->type = make_shared<TypeDecl>(*block->returnType);
+            }
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             popVarStack();
-            if ( block->returnsValue )
+            if ( block->isClosure )
                 blocks.pop_back();
-            if ( block->returnsValue && block->list.size() ) {
+            if ( block->isClosure && block->list.size() ) {
                 uint32_t flags = block->getEvalFlags();
                 if ( flags & EvalFlags::stopForBreak ) {
                     error("captured block can't break outside of the block", block->at, CompilationError::invalid_block);
@@ -466,6 +496,23 @@ namespace yzg {
                     expr->type = make_shared<TypeDecl>(*var->type);
                     expr->type->ref = true;
                     return Visitor::visit(expr);
+                }
+            }
+            // block arguments
+            for ( auto it = blocks.rbegin(); it!=blocks.rend(); ++it ) {
+                auto block = *it;
+                int argumentIndex = 0;
+                for ( auto & arg : block->arguments ) {
+                    if ( arg->name==expr->name ) {
+                        expr->variable = arg;
+                        expr->argumentIndex = argumentIndex;
+                        expr->block = true;
+                        expr->type = make_shared<TypeDecl>(*arg->type);
+                        expr->type->ref = arg->type->ref;
+                        expr->pBlock = static_pointer_cast<ExprBlock>(block->shared_from_this());
+                        return Visitor::visit(expr);
+                    }
+                    argumentIndex ++;
                 }
             }
             // function argument

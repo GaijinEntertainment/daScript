@@ -155,6 +155,7 @@ L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yy
 <normal>"\|\>"                              return RPIPE;
 <normal>\<\|[ \t\r]*\/\/.*\n                need_oxford_comma = false; unput('\n'); return LBPIPE;
 <normal>\<\|[ \t\r]*\n                      need_oxford_comma = false; unput('\n'); return LBPIPE;
+<normal>\<\|[ \t]\$                         need_oxford_comma = false; unput('$'); return LBPIPE;
 <normal>"\<\|"                              return LPIPE;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\."                              return QDOT;

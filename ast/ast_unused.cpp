@@ -137,6 +137,7 @@ namespace yzg {
         virtual void preVisit ( ExprInvoke * expr ) override {
             Visitor::preVisit(expr);
             propagateWrite(expr->arguments[0].get());
+            // TODO: propagate block write arguments?
         }
     // ArrayPush
         virtual void preVisit ( ExprArrayPush * expr ) override {
@@ -194,6 +195,13 @@ namespace yzg {
         virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & var, Expression * init ) override {
             Visitor::preVisitArgumentInit(fn, var, init);
             var->access_init = true;
+        }
+    // block
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitBlockArgument(block, var, lastArg);
+            var->access_init = true;
+            var->access_get = false;
+            var->access_ref = false;
         }
     // for loop sources
         virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override {

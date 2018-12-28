@@ -44,7 +44,7 @@ namespace yzg
         uint64_t minT = -1;
         for ( int32_t i = 0; i != count; ++i ) {
             uint64_t t0 = mach_absolute_time();
-            context->invoke(block);
+            context->invoke(block, nullptr);
             uint64_t t1 = mach_absolute_time();
             minT = min(t1-t0, minT);
         }

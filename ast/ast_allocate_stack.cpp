@@ -17,9 +17,6 @@ namespace yzg {
         vector<uint32_t>        stackTopStack;
         int                     totalFunctions = 0;
     protected:
-        void pushStack()    { stackTopStack.push_back(stackTop); }
-        void popStack()     { stackTop = stackTopStack.back(); stackTopStack.pop_back(); }
-    protected:
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -33,17 +30,19 @@ namespace yzg {
         }
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
-            pushStack();
             Visitor::preVisit(block);
+            if ( block->arguments.size() ) {
+                block->stackTop = stackTop;
+                stackTop += (sizeof(__m128 *) + 0xf) & ~0xf;
+            }
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
-            popStack();
+
             return Visitor::visit(block);
         }
     // ExprFor
         virtual void preVisit ( ExprFor * expr ) override {
             Visitor::preVisit(expr);
-            pushStack();
         }
         virtual void preVisitForStack ( ExprFor * expr ) override {
             Visitor::preVisitForStack(expr);
@@ -54,13 +53,11 @@ namespace yzg {
         }
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             func->totalStackSize = max(func->totalStackSize, stackTop);
-            popStack();
             return Visitor::visit(expr);
         }
     // ExprLet
         virtual void preVisit ( ExprLet * expr ) override {
             Visitor::preVisit(expr);
-            pushStack();
         }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             var->stackTop = stackTop;
@@ -69,9 +66,6 @@ namespace yzg {
         }
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
             func->totalStackSize = max(func->totalStackSize, stackTop);
-            if ( expr->scoped ) {
-                popStack();
-            }
             return Visitor::visit(expr);
         }
     };
