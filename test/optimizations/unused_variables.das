@@ -8,6 +8,6 @@ def test:bool
             v1 = 1              // only this loop and a1 stays
     let(a1,a2:int[20])
         for v1,v2 in a1,a2
-            assert(true)        // nothing
+            assert(false)        // nothing
     return true
 

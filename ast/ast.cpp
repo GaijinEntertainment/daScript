@@ -2045,6 +2045,7 @@ namespace yzg
             if ( log ) cout << "REMOVE UNUSED:\n" << *this;
             any |= once && staticAsserts();     if ( failed() ) break;
             once = false;
+            if ( log ) cout.flush();
         } while ( any );
     }
 

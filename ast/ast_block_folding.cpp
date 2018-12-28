@@ -9,11 +9,7 @@ namespace yzg {
     //  r2v(expr.field)     = expr.@field
     //  r2v(expr[index])    = expr@[index]
     //  r2v(a ? b : c)      = a ? r2v(b) : r2v(c)
-    class RefFolding : public Visitor {
-    public:
-        bool didAnything () const { return anyFolding; }
-    protected:
-        bool        anyFolding = false;
+    class RefFolding : public OptVisitor {
     protected:
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
             if ( expr->subexpr->rtti_isVar() ) {
@@ -37,14 +33,14 @@ namespace yzg {
                 eat->type->ref = false;
                 return eat;
             } else if ( expr->subexpr->rtti_isOp3() ) {
-                anyFolding = true;
+                reportFolding();
                 auto op3 = static_pointer_cast<ExprOp3>(expr->subexpr);
                 op3->left = Expression::autoDereference(op3->left);
                 op3->right = Expression::autoDereference(op3->right);
                 op3->type->ref = false;
                 return expr->subexpr;
             } else if ( expr->subexpr->rtti_isNullCoalescing() ) {
-                anyFolding = true;
+                reportFolding();
                 auto nc = static_pointer_cast<ExprNullCoalescing>(expr->subexpr);
                 nc->defaultValue = Expression::autoDereference(nc->defaultValue);
                 nc->type->ref = false;
@@ -55,11 +51,7 @@ namespace yzg {
         }
     };
     
-    class BlockFolding : public Visitor {
-    public:
-        bool didAnything () const { return anyFolding; }
-    protected:
-        bool        anyFolding = false;
+    class BlockFolding : public OptVisitor {
     protected:
         void collect ( vector<ExpressionPtr> & list, ExprBlock * block ) {
             for ( auto & expr : block->list ) {
@@ -81,14 +73,14 @@ namespace yzg {
             collect(list, block);
             if ( list!=block->list ) {
                 swap ( block->list, list );
-                anyFolding = true;
+                reportFolding();
             }
             return Visitor::visit(block);
         }
     // ExprLet
         virtual ExpressionPtr visit ( ExprLet * let ) {
             if ( let->variables.size()==0 ) {
-                anyFolding = true;
+                reportFolding();
                 return let->subexpr;
             }
             return Visitor::visit(let);

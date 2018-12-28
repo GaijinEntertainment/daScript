@@ -206,28 +206,25 @@ namespace yzg {
         }
     };
     
-    class RemoveUnusedLocalVariables : public Visitor {
-    public:
-        bool didAnything () const { return anyFolding; }
-    protected:
-        bool        anyFolding = false;
+    class RemoveUnusedLocalVariables : public OptVisitor {
     protected:
     // ExprLet
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             if ( !var->access_get && !var->access_ref && !var->access_init ) {
-                anyFolding = true;
+                reportFolding();
                 return nullptr;
             }
             if ( !var->access_ref && var->init && var->init->constexpression ) {
-                anyFolding = true;
+                reportFolding();
                 return nullptr;
             }
-            if ( !var->access_ref && !var->init && var->type->isFoldable() ) {  // uninitialized read-only foldable var is const 0
-                anyFolding = true;
+            if ( !var->access_ref && !var->init && var->type->isFoldable() ) {
+                // uninitialized read-only foldable var is const 0
+                reportFolding();
                 return nullptr;
             }
             if ( !var->access_ref && !var->access_get && var->init->noSideEffects ) {
-                anyFolding = true;
+                reportFolding();
                 return nullptr;
             }
             return Visitor::visitLet(let,var,last);
@@ -237,12 +234,12 @@ namespace yzg {
             if ( !expr->variable->access_ref && !expr->variable->access_extern ) {
                 if ( expr->variable->init ) {
                     if ( expr->variable->init->constexpression ) {
-                        anyFolding = true;
+                        reportFolding();
                         return expr->variable->init->clone();
                     }
                 } else {
                     if ( expr->type->isFoldable() && !expr->variable->access_init ) {
-                        anyFolding = true;
+                        reportFolding();
                         return Program::makeConst(expr->at, expr->type, _mm_setzero_ps());
                     }
                 }
@@ -267,26 +264,7 @@ namespace yzg {
                     itS ++;
                 }
             }
-            if ( !expr->iteratorVariables.size() ) return nullptr;
             */
-            // loop has no effect if
-            //  no subexpression
-            //  no filter, or filter has no sideEffects
-            //  sources have no sideEffects
-            if ( expr->subexpr->rtti_isBlock()) {
-                auto block = static_pointer_cast<ExprBlock>(expr->subexpr);
-                if ( !block->list.size() ) {
-                    if ( !expr->filter || expr->filter->noSideEffects ) {
-                        bool noSideEffects = true;
-                        for ( auto & src : expr->sources ) {
-                            noSideEffects &= src->noSideEffects;
-                        }
-                        if ( noSideEffects ) {
-                            return nullptr;
-                        }
-                    }
-                }
-            }
             return Visitor::visit(expr);
         }
     };

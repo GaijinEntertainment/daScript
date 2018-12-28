@@ -312,6 +312,7 @@ namespace yzg
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
         virtual SimNode * simulate (Context & context) const = 0;
         virtual bool rtti_isSequence() const { return false; }
+        virtual bool rtti_isConstant() const { return false; }
         virtual bool rtti_isStringConstant() const { return false; }
         virtual bool rtti_isCall() const { return false; }
         virtual bool rtti_isReturn() const { return false; }
@@ -584,6 +585,7 @@ namespace yzg
         ExprConst ( Type t ) : baseType(t) {}
         ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) {}
         virtual SimNode * simulate (Context & context) const override;
+        virtual bool rtti_isConstant() const override { return true; }
         __m128  value;
         Type    baseType;
     };
@@ -1203,6 +1205,15 @@ namespace yzg
         VISIT_EXPR(ExprIfThenElse)
         VISIT_EXPR(ExprWhile)
 #undef VISIT_EXPR
+    };
+    
+    class OptVisitor : public Visitor {
+    public:
+        bool didAnything () const { return anyFolding; }
+    protected:
+        void reportFolding() { anyFolding = true; }
+    private:
+        bool anyFolding = false;
     };
 
     template <typename TT>

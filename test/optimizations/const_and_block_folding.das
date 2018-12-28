@@ -25,6 +25,12 @@ def test_dead_code(X:int):int
         else
             static_assert(false,"fail to eliminate dead code in the if")
 
+def test_empty_if(cond:bool)
+    if cond
+        assert(false)
+    else
+        assert(false)
+
 def test:bool
     if (3 + ( 2>3 ? 0 : 1 ))!=4
         3 + ( 2>3 ? 0 : 1 )

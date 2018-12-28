@@ -88,16 +88,14 @@ namespace yzg {
         }
     };
     
-    class FoldingVisitor : public Visitor {
+    class FoldingVisitor : public OptVisitor {
     public:
         FoldingVisitor( const ProgramPtr & prog ) : ctx(nullptr) {
             program = prog;
         }
-        bool didAnything () const { return anyFolding; }
     protected:
         Context     ctx;
         ProgramPtr  program;
-        bool        anyFolding = false;
     protected:
         __m128 eval ( Expression * expr ) {
             ctx.simEnd();
@@ -110,13 +108,14 @@ namespace yzg {
                 program->error("internal error, failed to fold constant", expr->at );
                 return _mm_setzero_ps();
             }
-            anyFolding = true;
             return result;
         }
         ExpressionPtr evalAndFold ( Expression * expr ) {
+            if ( expr->rtti_isConstant() ) return expr->shared_from_this();
             auto sim = Program::makeConst(expr->at, expr->type, eval(expr));
             sim->type = make_shared<TypeDecl>(*expr->type);
             sim->constexpression = true;
+            reportFolding();
             return sim;
         }
         bool isSameFoldValue ( const TypeDeclPtr & t, __m128 a, __m128 b ) const {
@@ -159,12 +158,12 @@ namespace yzg {
                 __m128 left = eval(expr->left.get());
                 __m128 right = eval(expr->right.get());
                 if ( isSameFoldValue(expr->type, left, right) ) {
-                    anyFolding = true;
+                    reportFolding();
                     return expr->left->clone();
                 }
             } else if ( expr->subexpr->constexpression ) {
                 bool res = cast<bool>::to(eval(expr->subexpr.get()));
-                anyFolding = true;
+                reportFolding();
                 return res ? expr->left : expr->right;
             }
             return Visitor::visit(expr);
@@ -173,22 +172,54 @@ namespace yzg {
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             if ( expr->cond->constexpression ) {
                 bool res = cast<bool>::to(eval(expr->cond.get()));
-                anyFolding = true;
+                reportFolding();
                 return res ? expr->if_true : expr->if_false;
+            }
+            if ( expr->cond->noSideEffects ) {
+                if ( expr->if_false ) {
+                    auto ifeb = static_pointer_cast<ExprBlock>(expr->if_false);
+                    if ( !ifeb->list.size() ) {
+                        expr->if_false = nullptr;
+                        reportFolding();
+                    }
+                    auto ifb = static_pointer_cast<ExprBlock>(expr->if_true);
+                    if ( !ifb->list.size() && !ifeb->list.size() ) {
+                        reportFolding();
+                        return nullptr;
+                    }
+                }
             }
             return Visitor::visit(expr);
         }
     // block
         virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) override {
             if ( expr->constexpression ) {  // top level constant expresson like 4;
-                anyFolding = true;
+                reportFolding();
                 return nullptr;
             }
             if ( expr->noSideEffects ) {    // top level expressions like a + 5;
-                anyFolding = true;
+                reportFolding();
                 return nullptr;
             }
             return Visitor::visitBlockExpression(block, expr);
+        }
+        virtual ExpressionPtr visit ( ExprFor * expr ) override {
+            if ( expr->subexpr->rtti_isBlock()) {
+                auto block = static_pointer_cast<ExprBlock>(expr->subexpr);
+                if ( !block->list.size() ) {
+                    if ( !expr->filter || expr->filter->noSideEffects ) {
+                        bool noSideEffects = true;
+                        for ( auto & src : expr->sources ) {
+                            noSideEffects &= src->noSideEffects;
+                        }
+                        if ( noSideEffects ) {
+                            reportFolding();
+                            return nullptr;
+                        }
+                    }
+                }
+            }
+            return Visitor::visit(expr);
         }
     // const
         virtual ExpressionPtr visit ( ExprConst * c ) override {
@@ -199,8 +230,8 @@ namespace yzg {
         virtual ExpressionPtr visit ( ExprAssert * expr ) override {
             if ( expr->arguments[0]->constexpression ) {
                 bool res = cast<bool>::to(eval(expr->arguments[0].get()));
-                if ( res ) {
-                    anyFolding = true;
+                if ( !res ) {
+                    reportFolding();
                     return nullptr;
                 }
             }
