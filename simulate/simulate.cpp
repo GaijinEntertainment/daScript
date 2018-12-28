@@ -10,7 +10,7 @@ namespace yzg
     __m128 SimNode_MakeBlock::eval ( Context & context )  {
         Block block;
         block.stackOffset = context.stackTop - context.stack;
-        block.argumentsOffset = context.stackTop + argStackTop - context.stack;
+        block.argumentsOffset = argStackTop ? context.stackTop + argStackTop - context.stack : 0;
         block.body = subexpr;
         return cast<Block>::from(block);
     }
@@ -322,14 +322,17 @@ namespace yzg
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
         __m128 ** pArgs;
         __m128 * saveArgs;
-        if ( args ) {
+        if ( block.argumentsOffset ) {
+            assert(args && "expecting arguments");
             pArgs = (__m128 **)(stack + block.argumentsOffset);
             saveArgs = *pArgs;
             *pArgs = args;
+        } else {
+            assert(!args && "not expecting arguments");
         }
         // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
         __m128 result = block.body->eval(*this);
-        if ( args ) {
+        if ( args && block.argumentsOffset ) {
             *pArgs = saveArgs;
         }
         invokeStackTop = saveISp;
