@@ -162,6 +162,48 @@ namespace yzg
     
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
     
+        //      [annotation (value,value,...,value)]
+    //  or  [annotation (key=value,key,value,...,key=value)]
+    struct AnnotationArgument {
+        Type    type;       // only tInt, tFloat, tBool, and tString are allowed
+        string  name;
+        string  sValue;
+        union {
+            bool    bValue;
+            int     iValue;
+            float   fValue;
+        };
+        AnnotationArgument () : type(Type::tVoid) {}
+        AnnotationArgument ( const string & n, const string & s ) : type(Type::tString), name(n), sValue(s) {}
+        AnnotationArgument ( const string & n, bool  b ) : type(Type::tString), name(n), bValue(b) {}
+        AnnotationArgument ( const string & n, int   i ) : type(Type::tString), name(n), iValue(i) {}
+        AnnotationArgument ( const string & n, float f ) : type(Type::tString), name(n), fValue(f) {}
+    };
+    
+    struct AnnotationArgumentList {
+        const AnnotationArgument * find ( const string & name, Type type ) const;
+        vector<AnnotationArgument>  arguments;
+    };
+    
+    struct Annotation : enable_shared_from_this<Annotation> {
+        Annotation ( const string & n ) : name(n) {}
+        virtual ~Annotation() {}
+        virtual bool rtti_isHandledTypeAnnotation() const { return false; }
+        virtual bool rtti_isStructureAnnotation() const { return false; }
+        virtual bool rtti_isFunctionAnnotation() const { return false; }
+        string describe() const { return name; }
+        string      name;
+        Module *    module = nullptr;
+    };
+    
+    struct AnnotationDeclaration : enable_shared_from_this<AnnotationDeclaration> {
+        AnnotationPtr           annotation;
+        AnnotationArgumentList  arguments;
+    };
+    typedef shared_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
+    
+    typedef vector<AnnotationDeclarationPtr> AnnotationList;
+    
     class Structure : public enable_shared_from_this<Structure> {
     public:
 		struct FieldDeclaration {
@@ -209,47 +251,14 @@ namespace yzg
         };
     };
     
-    //      [annotation (value,value,...,value)]
-    //  or  [annotation (key=value,key,value,...,key=value)]
-    struct AnnotationArgument {
-        Type    type;       // only tInt, tFloat, tBool, and tString are allowed
-        string  name;
-        string  sValue;
-        union {
-            bool    bValue;
-            int     iValue;
-            float   fValue;
-        };
-        AnnotationArgument () : type(Type::tVoid) {}
-        AnnotationArgument ( const string & n, const string & s ) : type(Type::tString), name(n), sValue(s) {}
-        AnnotationArgument ( const string & n, bool  b ) : type(Type::tString), name(n), bValue(b) {}
-        AnnotationArgument ( const string & n, int   i ) : type(Type::tString), name(n), iValue(i) {}
-        AnnotationArgument ( const string & n, float f ) : type(Type::tString), name(n), fValue(f) {}
-    };
-    
-    struct AnnotationArgumentList {
-        const AnnotationArgument * find ( const string & name, Type type ) const;
-        vector<AnnotationArgument>  arguments;
-    };
-    
-    struct Annotation {
-        Annotation ( const string & n ) : name(n) {}
-        virtual ~Annotation() {}
-        virtual bool isHandledTypeAnnotation() const { return false; }
-        virtual bool isStructureAnnotation() const { return false; }
-        virtual bool isFunctionAnnotation() const { return false; }
-        string describe() const { return name; }
-        string      name;
-        Module *    module = nullptr;
-    };
-    
-    struct FunctionAnnotation : Annotation, enable_shared_from_this<FunctionAnnotation> {
+    struct FunctionAnnotation : Annotation {
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
-        virtual bool isFunctionAnnotation() const override { return true; }
+        virtual bool rtti_isFunctionAnnotation() const override { return true; }
         virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) = 0;
+        virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) = 0;
     };
     
-    struct TypeAnnotation : Annotation, enable_shared_from_this<TypeAnnotation> {
+    struct TypeAnnotation : Annotation {
         TypeAnnotation ( const string & n ) : Annotation(n) {}
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const {
             assert(p && "can only clone real type");
@@ -285,8 +294,8 @@ namespace yzg
     //      create,clone, simulateGetField, SafeGetField, and SafeGetFieldPtr
     struct StructureTypeAnnotation : TypeAnnotation {
         StructureTypeAnnotation ( const string & n ) : TypeAnnotation(n) {}
-        virtual bool isStructureAnnotation() const override { return true; }
-        virtual bool isHandledTypeAnnotation() const override { return true; }
+        virtual bool rtti_isStructureAnnotation() const override { return true; }
+        virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool canCopy() const override { return false; }
         virtual bool isPod() const override { return false; }
         virtual bool isRefType() const override { return false; }
@@ -919,6 +928,8 @@ namespace yzg
         virtual FunctionPtr visit(Visitor & vis);
         FunctionPtr sideEffects ( bool hasSideEffects ) { noSideEffects = !hasSideEffects; return shared_from_this(); }
     public:
+        AnnotationList      annotations;
+        void *              annotationData = nullptr;   // to be filled with annotation
         string              name;
         vector<VariablePtr> arguments;
         TypeDeclPtr         result;
@@ -1027,6 +1038,7 @@ namespace yzg
         bool addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg );
         bool addFunction ( const FunctionPtr & fn );
         void addModule ( Module * pm );
+        void finalizeAnnotations();
         void inferTypes();
         bool optimizationRefFolding();
         bool optimizationConstFolding();

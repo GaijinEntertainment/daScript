@@ -17,13 +17,6 @@
         Expression      *pInit;
     };
     
-    struct AnnotationDeclaration {
-        Annotation * annotation = nullptr;
-        AnnotationArgumentList * arguments = nullptr;
-    };
-    
-    typedef vector<AnnotationDeclaration *> AnnotationList;
-    
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
@@ -31,7 +24,6 @@
     LineInfo tokAt ( const struct YYLTYPE & li );
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
-    void deleteAnnotationList ( AnnotationList * pList );
 }
 
 %{
@@ -280,20 +272,31 @@ annotation_argument_list
 annotation_declaration
     :   name_in_namespace[name] {
         $$ = new AnnotationDeclaration();
-        $$->annotation = findAnnotation(*$name,tokAt(@name));
+        if ( auto ann = findAnnotation(*$name,tokAt(@name)) ) {
+            $$->annotation = ann->shared_from_this();
+        }
         delete $name;
     }
     |   name_in_namespace[name] '(' annotation_argument_list[argL] ')' {
         $$ = new AnnotationDeclaration();
-        $$->annotation = findAnnotation(*$name,tokAt(@name));
-        $$->arguments = $argL;
+        if ( auto ann = findAnnotation(*$name,tokAt(@name)) ) {
+            $$->annotation = ann->shared_from_this();
+        }
+        swap ( $$->arguments, *$argL );
+        delete $argL;
         delete $name;
     }
     ;
 
 annotation_list
-    :   annotation_declaration[ann]                             { $$ = new AnnotationList(); $$->push_back($ann); }
-    |   annotation_list[annL] ',' annotation_declaration[ann]   { $$ = $annL; $$->push_back($ann); }
+    :   annotation_declaration[ann] {
+            $$ = new AnnotationList();
+            $$->push_back(AnnotationDeclarationPtr($ann));
+    }
+    |   annotation_list[annL] ',' annotation_declaration[ann] {
+        $$ = $annL;
+        $$->push_back(AnnotationDeclarationPtr($ann));
+    }
     ;
 
 optional_annotation_list
@@ -380,10 +383,10 @@ function_declaration
         if ( $annL ) {
             for ( auto pA : *$annL ) {
                 if ( pA->annotation ) {
-                    if ( pA->annotation->isFunctionAnnotation() ) {
-                        auto ann = (FunctionAnnotation *) pA->annotation;
+                    if ( pA->annotation->rtti_isFunctionAnnotation() ) {
+                        auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                         string err;
-                        if ( !ann->apply(pFunction, pA->arguments ? *pA->arguments : AnnotationArgumentList(), err) ) {
+                        if ( !ann->apply(pFunction, pA->arguments, err) ) {
                             yyerror("can't apply annotation\n" + err, tokAt(@loc), CompilationError::invalid_annotation);
                         }
                     } else {
@@ -391,7 +394,8 @@ function_declaration
                     }
                 }
             }
-            deleteAnnotationList($annL);
+            swap ( pFunction->annotations, *$annL );
+            delete $annL;
         }
         if ( !g_Program->addFunction(pFunction) ) {
             yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::function_already_declared);
@@ -723,16 +727,16 @@ structure_declaration
             if ( $annL->size()!=1 ) {
                 yyerror("structures only allowed one annotation", tokAt(@loc),CompilationError::invalid_annotation);
             } else {
-                auto annotation = $annL->back()->annotation;
-                auto args = $annL->back()->arguments;
-                if ( !annotation->isStructureAnnotation() ) {
+                auto & annotation = $annL->back()->annotation;
+                auto & args = $annL->back()->arguments;
+                if ( !annotation->rtti_isStructureAnnotation() ) {
                     yyerror("structures only allowed structure annotation", tokAt(@loc),CompilationError::invalid_annotation);
-                } else if ( !g_Program->addStructureHandle(pStruct, ((StructureTypeAnnotation *)annotation)->shared_from_this(),
-                    args ? *args : AnnotationArgumentList()) ) {
+                } else if ( !g_Program->addStructureHandle(pStruct,
+                        static_pointer_cast<StructureTypeAnnotation>(annotation), args) ) {
                     yyerror("handled structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
                 }
             }
-            deleteAnnotationList($annL);
+            delete $annL;
         } else {
             if ( !g_Program->addStructure(pStruct) )
                 yyerror("structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
@@ -939,9 +943,4 @@ Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
     }
 }
 
-void deleteAnnotationList ( AnnotationList * list ) {
-    for ( auto pD : *list )
-        delete pD;
-    delete list;
-}
 

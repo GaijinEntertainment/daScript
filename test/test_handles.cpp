@@ -191,6 +191,7 @@ void testFields ( Context * ctx ) {
 struct EsAttribute {
     string      name;
     uint32_t    size = 0;
+    bool        ref;
     __m128      def = _mm_setzero_ps();
 };
 
@@ -218,6 +219,10 @@ vector<EsAttributeTable>    g_esPassTable;
 struct EsFunctionAnnotation : FunctionAnnotation {
     EsFunctionAnnotation() : FunctionAnnotation("es") { }
     virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
+        if ( func->annotationData ) {
+            err = "annotation already specified";
+            return false;
+        }
         bool fail = false;
         EsAttributeTable tab;
         if ( auto pp = args.find("pass", Type::tString) ) {
@@ -228,23 +233,42 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         }
         tab.functionName = func->name;
         for ( const auto & arg : func->arguments ) {
-            if ( !arg->type->isRef() ) {
-                err  += "argument " + arg->name + " is not a reference\n";
-                fail = true;
-            } else {
-                EsAttribute attr;
-                attr.name = arg->name;
-                attr.size = arg->type->getSizeOf();
-                tab.attributes.push_back(attr);
-            }
+            EsAttribute attr;
+            attr.name = arg->name;
+            attr.size = arg->type->getSizeOf();
+            attr.ref  = arg->type->isRef();
+            tab.attributes.push_back(attr);
         }
         if ( !fail ) {
+            func->annotationData = (void *)(g_esPassTable.size());
             g_esPassTable.push_back(tab);
             return true;
         } else {
             return false;
         }
     };
+    virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
+        // note: we are using annotationData thing here for example purposes
+        //  in reality apply should only have validation, and finalize have all the functionality
+        auto index = intptr_t(func->annotationData);
+        if ( index<0 || index>=g_esPassTable.size() || g_esPassTable[index].functionName!=func->name ) {
+            err = "invalid function";
+            return false;
+        }
+        bool failed = false;
+        uint32_t attrIndex = 0;
+        for ( const auto & arg : func->arguments ) {
+            if ( arg->init && arg->init->rtti_isConstant() && !arg->init->rtti_isStringConstant() ) {
+                auto pConst = static_pointer_cast<ExprConst>(arg->init);
+                g_esPassTable[index].attributes[attrIndex].def = pConst->value;
+            } else {
+                err += "default for " + arg->name + " is not a constant\n";
+                failed = true;
+            }
+            attrIndex ++;
+        }
+        return !failed;
+    }
 };
 
 bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
@@ -259,9 +283,10 @@ bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsCom
         uint32_t nAttr = (uint32_t) table.attributes.size();
         __m128 * args = _args;
 		char **		data	= (char **) alloca(nAttr * sizeof(char *));
-		uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(char));
-		bool *		boxed	= (bool *) alloca(nAttr * sizeof(char));
-		__m128 *	def		= (__m128 *) alloca(nAttr * sizeof(char));
+		uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(uint32_t));
+        uint32_t *  size    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
+		bool *		boxed	= (bool *) alloca(nAttr * sizeof(bool));
+        bool *      ref     = (bool *) alloca(nAttr * sizeof(bool));
         for ( uint32_t a=0; a!=nAttr; ++a ) {
             auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
                 return esc.name == table.attributes[a].name;
@@ -272,16 +297,21 @@ bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsCom
                 boxed[a]  = it->boxed;
             } else {
                 data[a] = nullptr;
-                def[a] = table.attributes[a].def;
+                args[a] = table.attributes[a].def;
             }
+            size[a] = table.attributes[a].size;
+            ref[a] = table.attributes[a].ref;
         }
         for ( uint32_t i=0; i != totalComponents; ++i ) {
             for ( uint32_t a=0; a!=nAttr; ++a ) {
                 if ( data[a] ) {
-                    *((void **)&args[a]) = boxed[a] ? *((char **)data[a]) : data[a];
+                    char * src =  boxed[a] ? *((char **)data[a]) : data[a];
+                    if ( !ref[a] ) {
+                        memcpy ( &args[a], src, size[a] );
+                    } else {
+                        *((void **)&args[a]) = src;
+                    }
                     data[a] += stride[a];
-                } else {
-                    args[a] = def[a];
                 }
             }
             code->eval(context);

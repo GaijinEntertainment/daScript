@@ -73,7 +73,7 @@ namespace yzg {
             return Visitor::visitArgumentInit(f, arg, that);
         }
         virtual FunctionPtr visit ( Function * that ) override {
-            assert(local.size()==0);
+            // assert(local.size()==0);
             assert(blocks.size()==0);
             func.reset();
             return Visitor::visit(that);

@@ -191,7 +191,7 @@ namespace yzg
         auto t = make_shared<TypeDecl>(Type::tHandle);
         auto handles = findAnnotation(name);
         if ( handles.size()==1 ) {
-            if ( handles.back()->isHandledTypeAnnotation() ) {
+            if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
                 t->annotation = static_pointer_cast<TypeAnnotation>(handles.back());
             } else {
                 assert(0 && "can't make hanlde type");

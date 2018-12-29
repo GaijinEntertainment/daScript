@@ -1896,7 +1896,7 @@ namespace yzg
     }
     
     bool Program::addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg ) {
-        if ( ann->isStructureAnnotation() ) {
+        if ( ann->rtti_isStructureAnnotation() ) {
             auto annotation = static_pointer_cast<StructureTypeAnnotation>(ann->clone());
             annotation->name = st->name;
             string err;
@@ -1940,7 +1940,7 @@ namespace yzg
             }
         } else if ( handles.size() ) {
             if ( handles.size()==1 ) {
-                if ( handles.back()->isHandledTypeAnnotation() ) {
+                if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
                     auto pTD = new TypeDecl(Type::tHandle);
                     pTD->annotation = static_pointer_cast<TypeAnnotation>(handles.back());
                     pTD->at = at;
@@ -1997,6 +1997,18 @@ namespace yzg
             case Type::tFloat3:     return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
             case Type::tFloat4:     return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
             default:                return nullptr;
+        }
+    }
+    
+    void Program::finalizeAnnotations() {
+        for ( const auto & fn : thisModule->functions ) {
+            for ( const auto & an : fn.second->annotations ) {
+                auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
+                string err = "";
+                if ( !fna->finalize(fn.second, an->arguments, err) ) {
+                    error("can't finalize annotation\n" + err, fn.second->at, CompilationError::invalid_annotation);
+                }
+            }
         }
     }
     
@@ -2068,6 +2080,9 @@ namespace yzg
             if ( !program->failed() ) {
                 program->optimize();
                 program->allocateStack();
+                if ( !program->failed() ) {
+                    program->finalizeAnnotations();
+                }
             }
             sort(program->errors.begin(),program->errors.end());
             return program;
