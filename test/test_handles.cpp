@@ -258,12 +258,14 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         bool failed = false;
         uint32_t attrIndex = 0;
         for ( const auto & arg : func->arguments ) {
-            if ( arg->init && arg->init->rtti_isConstant() && !arg->init->rtti_isStringConstant() ) {
-                auto pConst = static_pointer_cast<ExprConst>(arg->init);
-                g_esPassTable[index].attributes[attrIndex].def = pConst->value;
-            } else {
-                err += "default for " + arg->name + " is not a constant\n";
-                failed = true;
+            if ( arg->init ) {
+                if ( arg->init->rtti_isConstant() && !arg->init->rtti_isStringConstant() ) {
+                    auto pConst = static_pointer_cast<ExprConst>(arg->init);
+                    g_esPassTable[index].attributes[attrIndex].def = pConst->value;
+                } else {
+                    err += "default for " + arg->name + " is not a constant\n";
+                    failed = true;
+                }
             }
             attrIndex ++;
         }

@@ -27,6 +27,6 @@ def test:bool
     //      UnitTest::testEsUpdate("ks")
     //  profile(1000,"es-update-ref") <|
     //      UnitTest::testEsUpdate("ks2")
-    //  profile(1000,"es-update-ref") <|
+    //  profile(1000,"es-update-ref-const") <|
     //      UnitTest::testEsUpdate("ks3")
     return true
