@@ -11,7 +11,7 @@ def update2(pos:float3&;vel:float3 const)   // deref
 
 [es (pass="ks3")]
 def update3(pos:float3&;vel:float3 const &;dt:float = 1.0f)
-    pos += vel * float3(dt,dt,dt)   // TODO: vector * scalar
+    pos += vel * dt
 
 def test:bool
     UnitTest::initEsComponents()

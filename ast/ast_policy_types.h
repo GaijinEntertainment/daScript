@@ -159,6 +159,19 @@ namespace  yzg {
         }
     }
     
+    // vector-scalar combinations
+    template <typename TT, typename TTS, typename SimPolicy_TT>
+    void addFunctionVecNumeric(Module & mod, const ModuleLibrary & lib, bool hasMod = true) {
+        addFunctionGroupByAdd<TT,SimPolicy_TT>(mod,lib);
+        //                                     policy                           ret   arg1 arg2    name
+        mod.addFunction( make_shared<BuiltInFn<Sim_MulScalVec<SimPolicy_TT>,    TT,   TTS, TT>  >("*",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_DivScalVec<SimPolicy_TT>,    TT,   TTS, TT>  >("/",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_MulVecScal<SimPolicy_TT>,    TT,   TT,  TTS> >("*",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_DivVecScal<SimPolicy_TT>,    TT,   TT,  TTS> >("/",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<SimPolicy_TT>,    TT&,  TT&, TT>  >("*=",   lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<SimPolicy_TT>,    TT&,  TT&, TT>  >("/=",   lib)->sideEffects(true) );
+    }
+    
     // inc-dec
     template <typename TT, typename SimPolicy_TT>
     void addFunctionIncDec(Module & mod, const ModuleLibrary & lib) {

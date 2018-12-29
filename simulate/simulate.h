@@ -710,6 +710,10 @@ namespace yzg
     DEFINE_OP2_POLICY(Sub);
     DEFINE_OP2_POLICY(Div);
     DEFINE_OP2_POLICY(Mul);
+    DEFINE_OP2_POLICY(DivVecScal);
+    DEFINE_OP2_POLICY(MulVecScal);
+    DEFINE_OP2_POLICY(DivScalVec);
+    DEFINE_OP2_POLICY(MulScalVec);
     DEFINE_OP2_POLICY(Mod);
     DEFINE_OP2_POLICY(BoolXor);
     DEFINE_OP2_POLICY(BinAnd);
@@ -726,6 +730,8 @@ namespace yzg
     DEFINE_OP2_POLICY(SetSub);
     DEFINE_OP2_POLICY(SetDiv);
     DEFINE_OP2_POLICY(SetMul);
+    DEFINE_OP2_POLICY(SetDivScal);
+    DEFINE_OP2_POLICY(SetMulScal);
     
     struct Sim_BoolAnd : SimNode_Op2 {
         Sim_BoolAnd ( const LineInfo & at ) : SimNode_Op2(at) {}
