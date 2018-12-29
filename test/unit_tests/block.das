@@ -1,3 +1,5 @@
+// options plot=true,plotFile="../../test.dot",plotReadWrite=true
+
 def twice(b:block)
     invoke(b)
     invoke(b)

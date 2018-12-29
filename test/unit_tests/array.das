@@ -1,3 +1,5 @@
+// options plot=true,plotFile="../../test.dot"
+
 def make_test_array(a:array<int>;extra:int=0)
     let i:int=0
     resize(a,10)

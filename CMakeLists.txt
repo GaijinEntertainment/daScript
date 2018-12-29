@@ -37,6 +37,7 @@ ast/compilation_errors.h
 ast/ast.cpp
 ast/ast_module.cpp
 ast/ast_print.cpp
+ast/ast_plot.cpp
 ast/ast_infer_type.cpp
 ast/ast_allocate_stack.cpp
 ast/ast_const_folding.cpp
