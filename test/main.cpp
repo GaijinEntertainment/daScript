@@ -179,7 +179,7 @@ int main(int argc, const char * argv[]) {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "test/unit_tests/annotation.das");
+    unit_test(TEST_PATH "test/unit_tests/try-catch.das");
     Module::Shutdown();
     return 0;
 #endif
