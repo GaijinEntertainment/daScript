@@ -250,7 +250,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
     virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
         // note: we are using annotationData thing here for example purposes
         //  in reality apply should only have validation, and finalize have all the functionality
-        auto index = intptr_t(func->annotationData);
+        size_t index = intptr_t(func->annotationData);
         if ( index<0 || index>=g_esPassTable.size() || g_esPassTable[index].functionName!=func->name ) {
             err = "invalid function";
             return false;

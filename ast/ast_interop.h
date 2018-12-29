@@ -25,7 +25,7 @@ namespace yzg
                 arg->name = "arg" + std::to_string(argi);
                 arg->type = args[argi];
                 if ( arg->type->baseType==Type::fakeContext ) {
-                    arg->init = make_shared<ExprConstPtr>(at);
+                    arg->init = make_shared<ExprFakeContext>(at);
                 }
                 this->arguments.push_back(arg);
             }

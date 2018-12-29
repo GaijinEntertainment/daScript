@@ -268,6 +268,10 @@ namespace yzg {
             return Visitor::visit(c);
         }
     // const
+		virtual ExpressionPtr visit(ExprFakeContext * c) override {
+			ss << "__context__";
+			return Visitor::visit(c);
+		}
         virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
             if ( c->getValue() ) {
                 ss << "*0x" << hex << intptr_t(c->getValue()) << dec;

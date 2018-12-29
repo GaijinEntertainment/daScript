@@ -613,6 +613,11 @@ namespace yzg
         TT getValue() const { return cast<TT>::to(value); }
     };
     
+	struct ExprFakeContext : ExprConstT<void *, ExprFakeContext> {
+		ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) {}
+		ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) {}
+	};
+
     struct ExprConstPtr : ExprConstT<void *,ExprConstPtr> {
         ExprConstPtr(void * ptr = nullptr) : ExprConstT(ptr,Type::tPointer) {}
         ExprConstPtr(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a,ptr,Type::tPointer) {}
@@ -1192,6 +1197,7 @@ namespace yzg
         VISIT_EXPR(ExprReturn)
         VISIT_EXPR(ExprBreak)
         VISIT_EXPR(ExprConst)
+		VISIT_EXPR(ExprFakeContext)
         VISIT_EXPR(ExprConstPtr)
         VISIT_EXPR(ExprConstInt)
         VISIT_EXPR(ExprConstInt2)
