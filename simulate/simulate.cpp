@@ -9,8 +9,8 @@ namespace yzg
     
     __m128 SimNode_MakeBlock::eval ( Context & context )  {
         Block block;
-        block.stackOffset = context.stackTop - context.stack;
-        block.argumentsOffset = argStackTop ? context.stackTop + argStackTop - context.stack : 0;
+        block.stackOffset = uint32_t(context.stackTop - context.stack);
+        block.argumentsOffset = argStackTop ? uint32_t(context.stackTop + argStackTop - context.stack) : 0;
         block.body = subexpr;
         return cast<Block>::from(block);
     }

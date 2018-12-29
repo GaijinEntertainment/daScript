@@ -15,7 +15,7 @@ namespace yzg
 		for (int32_t i = 0; i != count; ++i) {
 			LARGE_INTEGER  t0;
 			QueryPerformanceCounter(&t0);
-			context->invoke(block);
+			context->invoke(block, nullptr);
 			LARGE_INTEGER  t1; 
 			QueryPerformanceCounter(&t1);
 			minT = min(uint64_t(t1.QuadPart-t0.QuadPart), minT);
