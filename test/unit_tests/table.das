@@ -33,6 +33,8 @@ def test : bool
                 j += find(tab,string(i)) ?? 0
                 if i%7!=0
                     k +=i
+                else
+                    assert(i%7==0)    
                 i ++
             assert(j==k)
         let(j,k,zero:int=0)

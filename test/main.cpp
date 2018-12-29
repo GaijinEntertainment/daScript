@@ -90,7 +90,14 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            cout << "\n" << *program << "\n";
+            // cout << "\n" << *program << "\n";
+#if 0
+			ofstream fdot(fn + ".dot");
+			if (fdot.is_open()) {
+				fdot << program->dotGraph();
+				fdot.close();
+			}
+#endif
             Context ctx(&str);
             program->simulate(ctx);
             int fnTest = ctx.findFunction("test");

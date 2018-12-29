@@ -1052,6 +1052,7 @@ namespace yzg
         bool staticAsserts();
         void optimize();
         void allocateStack();
+		string dotGraph();
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
         bool simulate ( Context & context );
