@@ -175,13 +175,14 @@ namespace yzg
         };
         AnnotationArgument () : type(Type::tVoid) {}
         AnnotationArgument ( const string & n, const string & s ) : type(Type::tString), name(n), sValue(s) {}
-        AnnotationArgument ( const string & n, bool  b ) : type(Type::tString), name(n), bValue(b) {}
-        AnnotationArgument ( const string & n, int   i ) : type(Type::tString), name(n), iValue(i) {}
-        AnnotationArgument ( const string & n, float f ) : type(Type::tString), name(n), fValue(f) {}
+        AnnotationArgument ( const string & n, bool  b ) : type(Type::tBool), name(n), bValue(b) {}
+        AnnotationArgument ( const string & n, int   i ) : type(Type::tInt), name(n), iValue(i) {}
+        AnnotationArgument ( const string & n, float f ) : type(Type::tFloat), name(n), fValue(f) {}
     };
     
     struct AnnotationArgumentList {
         const AnnotationArgument * find ( const string & name, Type type ) const;
+		bool getOption(const string & name, bool def = false) const;
         vector<AnnotationArgument>  arguments;
     };
     
@@ -1091,6 +1092,8 @@ namespace yzg
         bool                        failToCompile = false;
     public:
         map<CompilationError,int>   expectErrors;
+	public:
+		AnnotationArgumentList		options;
     };
          
     ProgramPtr parseDaScript ( const char * script );

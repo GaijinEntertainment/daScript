@@ -102,6 +102,7 @@
 <normal>"struct"                                        need_oxford_comma = false; return _STRUCT;
 <normal>"try"                                           need_oxford_comma = false; return _TRY;
 <normal>"catch"                                         need_oxford_comma = false; return _CATCH;
+<normal>"options"                                       return _OPTIONS;
 <normal>"operator"                                      return _OPERATOR;
 <normal>"require"                                       return _REQUIRE;
 <normal>"block"                                         return _BLOCK;

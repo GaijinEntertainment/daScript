@@ -2041,9 +2041,10 @@ namespace yzg
     }
     
     void Program::optimize() {
-        const bool log = false;
+        const bool log = options.getOption("logOptimizationPasses",false);
         bool any, once;
         once = true;
+		if (log) cout << *this << "\n";
         do {
             if ( log ) cout << "OPTIMIZE:\n" << *this;
             any = false;
@@ -2078,13 +2079,34 @@ namespace yzg
         } else {
             program->inferTypes();
             if ( !program->failed() ) {
-                program->optimize();
-                program->allocateStack();
+				if (program->options.getOption("optimize", true)) {
+					program->optimize();
+				}
+				if (!program->failed()) {
+					program->staticAsserts();
+				}
+				program->allocateStack();
                 if ( !program->failed() ) {
                     program->finalizeAnnotations();
                 }
             }
-            sort(program->errors.begin(),program->errors.end());
+			if (!program->failed()) {
+				if (program->options.getOption("log")) {
+					cout << *program;
+				}
+				if (program->options.getOption("plot")) {
+					if (auto pf = program->options.find("plotFile", Type::tString)) {
+						ofstream of(pf->sValue);
+						if (of.is_open()) {
+							of << program->dotGraph() << "\n";
+							of.close();
+						}
+					} else {
+						cout << "\n" << program->dotGraph() << "\n";
+					}
+				}
+			}
+			sort(program->errors.begin(), program->errors.end());
             return program;
         }
     }

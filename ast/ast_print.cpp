@@ -668,7 +668,7 @@ namespace yzg {
 		// try-catch
 		virtual void preVisit(ExprTryCatch * tc) override {
 			Visitor::preVisit(tc);
-			subgraph(tc, "try-catch", trycatch_subgraph_color);
+			subgraph(tc, "trycatch", trycatch_subgraph_color);
 			label(tc, "try-catch", "shape=Msquare");
 			connect_block(tc, tc->try_block.get());
 			connect_block(tc, tc->catch_block.get());

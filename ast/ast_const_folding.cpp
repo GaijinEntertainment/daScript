@@ -230,7 +230,7 @@ namespace yzg {
         virtual ExpressionPtr visit ( ExprAssert * expr ) override {
             if ( expr->arguments[0]->constexpression ) {
                 bool res = cast<bool>::to(eval(expr->arguments[0].get()));
-                if ( !res ) {
+                if ( res ) {
                     reportFolding();
                     return nullptr;
                 }
@@ -252,13 +252,19 @@ namespace yzg {
     public:
         StaticAssertFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
     protected:
-        virtual ExpressionPtr visit ( ExprStaticAssert * expr ) override {
-            auto cond = expr->arguments[0];
-            if ( !cond->constexpression  ) {
-                program->error("static assert condition is not constexpr", expr->at);
-                return nullptr;
-            }
-            if ( !cast<bool>::to(eval(cond.get())) ) {
+		virtual ExpressionPtr visit(ExprStaticAssert * expr) override {
+			auto cond = expr->arguments[0];
+			if (!cond->constexpression && !cond->rtti_isConstant()) {
+				program->error("static assert condition is not constexpr or const", expr->at);
+				return nullptr;
+			}
+			bool result = false;
+			if (cond->constexpression) {
+				result = cast<bool>::to(eval(cond.get()));
+			} else {
+				result = ((ExprConstBool *)cond.get())->getValue();
+			}
+            if ( !result ) {
                 string message;
                 if ( expr->arguments.size()==2 ) {
                     message = cast<char *>::to(eval(expr->arguments[1].get()));
@@ -267,7 +273,7 @@ namespace yzg {
                 }
                 program->error(message, expr->at);
             }
-            return nullptr;
+            return cond->constexpression ? nullptr : Visitor::visit(expr);
         }
     };
     

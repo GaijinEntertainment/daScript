@@ -79,7 +79,7 @@
 %token  _TYPE       _IN         _ELIF       _ARRAY
 %token  _RETURN     _NULL       _BREAK      _TRY
 %token  _WHERE      _TABLE      _EXPECT     _CONST
-%token  _REQUIRE    _OPERATOR
+%token  _REQUIRE    _OPERATOR	_OPTIONS
 
 /* basic types */
 %token  _BOOL   _VOID   _STRING
@@ -165,7 +165,19 @@ program
     |   program function_declaration
     |   program expect_declaration
     |   program require_declaration
+	|	program options_declaration
     ;
+
+options_declaration
+	:	_OPTIONS	annotation_argument_list[list] {
+		if ( g_Program->options.arguments.size() ) {
+			g_Program->options.arguments.insert ( g_Program->options.arguments.begin(), $list->arguments.begin(), $list->arguments.end() );
+		} else {
+			swap ( g_Program->options, *$list );
+		}
+		delete $list;
+	}
+	;
 
 require_declaration
     :   _REQUIRE require_list

@@ -90,14 +90,6 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            // cout << "\n" << *program << "\n";
-#if 0
-			ofstream fdot(fn + ".dot");
-			if (fdot.is_open()) {
-				fdot << program->dotGraph();
-				fdot.close();
-			}
-#endif
             Context ctx(&str);
             program->simulate(ctx);
             int fnTest = ctx.findFunction("test");
@@ -179,7 +171,7 @@ int main(int argc, const char * argv[]) {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "test/unit_tests/try-catch.das");
+    unit_test(TEST_PATH "test/optimizations/unused_variables.das");
     Module::Shutdown();
     return 0;
 #endif
