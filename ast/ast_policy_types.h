@@ -87,8 +87,12 @@ namespace  yzg {
     };
     
     struct SimPolicy_Int : SimPolicy_Bin<int32_t> {
-        static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return _mm_add_epi32(a,b); }
-        static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return _mm_sub_epi32(a,b); }
+        static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) {
+            return _mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(a), _mm_castps_si128(b)));
+        }
+        static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) {
+            return _mm_castsi128_ps(_mm_sub_epi32(_mm_castps_si128(a), _mm_castps_si128(b)));
+        }
     };
     struct SimPolicy_UInt : SimPolicy_Bin<uint32_t> {};
     struct SimPolicy_Int64 : SimPolicy_Bin<int64_t> {};
