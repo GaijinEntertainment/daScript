@@ -8,9 +8,9 @@ before r2v
 	primes loop took: 3.574839
 after r2v
 	../../profile/fib.das
-	fibbonacci loop took: 0.467924
-	fibbonacci recursive took: 0.581535
+	fibbonacci loop took: 0.450230
+	fibbonacci recursive took: 0.597284
 	../../profile/native.das
-	native loop took: 1.492012
+	native loop took: 1.463391
 	../../profile/primes.das
-	primes loop took: 1.849958
+	primes loop took: 1.840420
