@@ -158,7 +158,7 @@ ADD_PRECOMPILED_HEADER(daScriptTest precomp.h precomp.h)
 # Profile
 
 file(GLOB PROFILE_SRC
-"profile/*.das"
+"profile/tests/*.das"
 )
 list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)
