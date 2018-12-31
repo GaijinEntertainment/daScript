@@ -325,6 +325,7 @@ namespace yzg
         virtual bool rtti_isConstant() const { return false; }
         virtual bool rtti_isStringConstant() const { return false; }
         virtual bool rtti_isCall() const { return false; }
+		virtual bool rtti_isLet() const { return false; }
         virtual bool rtti_isReturn() const { return false; }
         virtual bool rtti_isBreak() const { return false; }
         virtual bool rtti_isBlock() const { return false; }
@@ -713,7 +714,9 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode * simulateInit(Context & context, const VariablePtr & var, bool local);
+		static vector<SimNode *> simulateInit(Context & context, const ExprLet * pLet);
         virtual uint32_t getEvalFlags() const override;
+		virtual bool rtti_isLet() const override { return true; }
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
         bool                    scoped = true;

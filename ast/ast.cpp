@@ -969,6 +969,14 @@ namespace yzg
     SimNode * ExprBlock::simulate (Context & context) const {
         vector<SimNode *> simlist;
         for ( auto & node : list ) {
+			if ( node->rtti_isLet()) {
+				shared_ptr<ExprLet> pLet = static_pointer_cast<ExprLet>(node);
+				if (!pLet->subexpr) {
+					auto letInit = ExprLet::simulateInit(context, pLet.get());
+					simlist.insert(simlist.end(), letInit.begin(), letInit.end());
+					continue;
+				}
+			}
             if ( auto simE = node->simulate(context) ) {
                 simlist.push_back(simE);
             }
@@ -1601,6 +1609,22 @@ namespace yzg
         return subexpr ? subexpr->getEvalFlags() : 0;
     }
     
+	vector<SimNode *> ExprLet::simulateInit(Context & context, const ExprLet * pLet) {
+		vector<SimNode *> simlist;
+		simlist.reserve(pLet->variables.size());
+		for (auto & var : pLet->variables) {
+			SimNode * init;
+			if (var->init) {
+				init = ExprLet::simulateInit(context, var, true);
+			} else {
+				init = context.makeNode<SimNode_InitLocal>(pLet->at, var->stackTop, var->type->getSizeOf());
+			}
+			if (init)
+				simlist.push_back(init);
+		}
+		return simlist;
+	}
+
     SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local) {
         SimNode * init = var->init->simulate(context);
         SimNode * get;
@@ -1622,14 +1646,8 @@ namespace yzg
         auto let = context.makeNode<SimNode_Let>(at);
         let->total = (uint32_t) variables.size();
         let->list = (SimNode **) context.allocate(let->total * sizeof(SimNode*));
-        int vi = 0;
-        for ( auto & var : variables ) {
-            if ( var->init ) {
-                let->list[vi++] = simulateInit(context, var, true);
-            } else {
-                let->list[vi++] = context.makeNode<SimNode_InitLocal>(at, var->stackTop, var->type->getSizeOf());
-            }
-        }
+		auto simList = ExprLet::simulateInit(context, this);
+		std::copy(simList.data(), simList.data() + simList.size(), let->list);
         let->subexpr = subexpr ? subexpr->simulate(context) : nullptr;
         return let;
     }
