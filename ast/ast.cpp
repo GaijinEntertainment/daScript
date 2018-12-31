@@ -1228,7 +1228,11 @@ namespace yzg
     SimNode * makeCopy(const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
         assert ( rightType.canCopy() && "should check above" );
         if ( rightType.isRef() ) {
-            return context.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+            if ( rightType.isWorkhorseType() ) {
+                return context.makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
+            } else {
+                return context.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+            }
         } else if ( rightType.isHandle() ) {
             return rightType.annotation->simulateCopy(context, at, left, right);
         } else {

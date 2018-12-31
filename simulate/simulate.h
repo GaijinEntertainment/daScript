@@ -562,6 +562,23 @@ namespace yzg
         uint32_t size;
     };
     
+    template <typename TT>
+    struct SimNode_CopyRefValueT : SimNode {
+        SimNode_CopyRefValueT(const LineInfo & at, SimNode * ll, SimNode * rr)
+        : SimNode(at), l(ll), r(rr) {};
+        __m128 eval ( Context & context ) {
+            __m128 ll = l->eval(context);
+            YZG_EXCEPTION_POINT;
+            __m128 rr = r->eval(context);
+            YZG_EXCEPTION_POINT;
+            TT * pl = cast<TT *>::to(ll);
+            TT * pr = cast<TT *>::to(rr);
+            *pl = *pr;
+            return ll;
+        }
+        SimNode * l, * r;
+    };
+    
     // MOVE REFERENCE VALUE
     struct SimNode_MoveRefValue : SimNode {
         SimNode_MoveRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)

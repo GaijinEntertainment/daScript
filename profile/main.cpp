@@ -94,16 +94,19 @@ bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
 }
 
 int main(int argc, const char * argv[]) {
-
 #ifdef _MSC_VER
 	#define	TEST_PATH "../"
 #else
 	#define TEST_PATH "../../"
 #endif
-
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_TestProfile);
+#if 0
+    unit_test("../../profile/fib.das");
+    Module::Shutdown();
+    return 0;
+#endif
     // run tests
     run_tests(TEST_PATH "profile", unit_test);
     for ( int i=1; i!=argc; ++i ) {

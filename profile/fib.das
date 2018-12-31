@@ -1,3 +1,5 @@
+// options log=true
+
 def fibR(n:int):int
     if (n < 2)
         return n
