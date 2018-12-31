@@ -399,12 +399,19 @@ namespace yzg
         }
         int32_t index;
     };
+
+	struct SimNode_GetArgumentRef : SimNode_GetArgument {
+		SimNode_GetArgumentRef(const LineInfo & at, int32_t i) : SimNode_GetArgument(at,i) {}
+		virtual __m128 eval(Context & context) override {
+			return cast<void *>::from (&context.abiArguments()[index]);
+		}
+	};
     
     template <typename TT>
     struct SimNode_GetArgumentR2V : SimNode_GetArgument {
         SimNode_GetArgumentR2V ( const LineInfo & at, int32_t i ) : SimNode_GetArgument(at,i) {}
         virtual __m128 eval ( Context & context ) override {
-            TT * pR = (TT *) cast<char *>::to ( context.abiArguments()[index] );
+            TT * pR = cast<TT *>::to(context.abiArguments()[index]);
             return cast<TT>::from(*pR);
         }
     };

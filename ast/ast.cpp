@@ -1109,10 +1109,19 @@ namespace yzg
                 }
             }
         } else if ( argument) {
-            if ( r2v ) {
-                return context.makeValueNode<SimNode_GetArgumentR2V>(type->baseType, at, argumentIndex);
-            } else {
-                return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
+			if (variable->type->isRef()) {
+				if (r2v) {
+					return context.makeValueNode<SimNode_GetArgumentR2V>(type->baseType, at, argumentIndex);
+				} else {
+					return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
+				}
+			} else {
+				if (r2v) {
+					return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
+				}
+				else {
+					return context.makeNode<SimNode_GetArgumentRef>(at, argumentIndex);
+				}
             }
         } else {
             if ( r2v ) {

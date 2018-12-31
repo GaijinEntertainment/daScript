@@ -1,4 +1,11 @@
+def charg(t:int):int
+	t++
+	return t
+
 def test:bool
+	let(x:int=1;y:int)
+		y=charg(x)
+		assert(x==1 & y==2)
     // cond
     let(a,b,c:int)
         true ? a : b = 1            // true returns left

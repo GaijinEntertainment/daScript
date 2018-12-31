@@ -528,7 +528,8 @@ namespace yzg {
                     expr->argumentIndex = argumentIndex;
                     expr->argument = true;
                     expr->type = make_shared<TypeDecl>(*arg->type);
-                    expr->type->ref = arg->type->ref;
+					if (!expr->type->isRefType())
+						expr->type->ref = true;
                     return Visitor::visit(expr);
                 }
                 argumentIndex ++;
