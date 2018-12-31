@@ -15,7 +15,7 @@ def primes(n:int):int
 
 
 def test():bool
-    profile(2,"native loop") <|
+    profile(2,"primes loop") <|
         primes(50000)
     return true
 

@@ -1,10 +1,16 @@
-basic version took: 0.000337
-c++ version took: 0.000017
-interop version took: 0.000163
-interop 10000 version took: 0.000282
-interop 10000-ks version took: 0.000126
-ratio sim/c++: 19.769917
-ratio interop/c++: 9.551928
-ratio interop-10000/c++: 16.559032
-ratio interop-10000-ks/c++: 7.400457
-try-catch took: 0.000117
+before r2v
+	../../profile/fib.das
+	fibbonacci loop took: 0.734948
+	fibbonacci recursive took: 0.608842
+	../../profile/native.das
+	native loop took: 2.343531
+	../../profile/primes.das
+	primes loop took: 3.574839
+after r2v
+	../../profile/fib.das
+	fibbonacci loop took: 0.528812
+	fibbonacci recursive took: 0.581535
+	../../profile/native.das
+	native loop took: 1.492012
+	../../profile/primes.das
+	primes loop took: 1.849958

@@ -61,6 +61,7 @@ namespace yzg
     };
     
     class Context {
+        template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
         friend class Program;
     public:
@@ -354,11 +355,29 @@ namespace yzg
         uint32_t stackTop;
     };
     
+    template <typename TT>
+    struct SimNode_GetLocalR2V : SimNode_GetLocal {
+        SimNode_GetLocalR2V(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp)  {}
+        virtual __m128 eval ( Context & context ) override {
+            TT * pR = (TT *)(context.stackTop + stackTop);
+            return cast<TT>::from(*pR);
+        }
+    };
+    
     // WHEN LOCAL VARIABLE STORES REFERENCE
     struct SimNode_GetLocalRef : SimNode_GetLocal {
         SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp) {}
         virtual __m128 eval ( Context & context ) override {
             return *(__m128 *)(context.stackTop + stackTop);
+        }
+    };
+    
+    template <typename TT>
+    struct SimNode_GetLocalRefR2V : SimNode_GetLocalRef {
+        SimNode_GetLocalRefR2V(const LineInfo & at, uint32_t sp) : SimNode_GetLocalRef(at,sp) {}
+        virtual __m128 eval ( Context & context ) override {
+            TT * pR = *(TT **)(context.stackTop + stackTop);
+            return cast<TT>::from(*pR);
         }
     };
     
@@ -381,6 +400,15 @@ namespace yzg
         int32_t index;
     };
     
+    template <typename TT>
+    struct SimNode_GetArgumentR2V : SimNode_GetArgument {
+        SimNode_GetArgumentR2V ( const LineInfo & at, int32_t i ) : SimNode_GetArgument(at,i) {}
+        virtual __m128 eval ( Context & context ) override {
+            TT * pR = (TT *) cast<char *>::to ( context.abiArguments()[index] );
+            return cast<TT>::from(*pR);
+        }
+    };
+    
     // BLOCK VARIABLE "GET"
     struct SimNode_GetBlockArgument : SimNode {
         SimNode_GetBlockArgument ( const LineInfo & at, int32_t i, uint32_t sp )
@@ -393,6 +421,17 @@ namespace yzg
         uint32_t    stackTop;
     };
     
+    template <typename TT>
+    struct SimNode_GetBlockArgumentR2V : SimNode_GetBlockArgument {
+        SimNode_GetBlockArgumentR2V ( const LineInfo & at, int32_t i, uint32_t sp )
+            : SimNode_GetBlockArgument(at,i,sp) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 * args = *((__m128 **)(context.stackTop + stackTop));
+            TT * pR = (TT *) cast<char *>::to (args[index] );
+            return cast<TT>::from(*pR);
+        }
+    };
+    
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode {
         SimNode_GetGlobal ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
@@ -400,6 +439,15 @@ namespace yzg
             return context.globalVariables[index].value;
         }
         int32_t index;
+    };
+    
+    template <typename TT>
+    struct SimNode_GetGlobalR2V : SimNode_GetGlobal {
+        SimNode_GetGlobalR2V ( const LineInfo & at, int32_t i ) : SimNode_GetGlobal(at,i) {}
+        virtual __m128 eval ( Context & context ) override {
+            TT * pR = (TT *) cast<char *>::to ( context.globalVariables[index].value );
+            return cast<TT>::from(*pR);
+        }
     };
     
     // TRY-CATCH

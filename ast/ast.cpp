@@ -1079,25 +1079,39 @@ namespace yzg
     }
     
     SimNode * ExprVar::simulate (Context & context) const {
-        SimNode * result;
         if ( block ) {
             auto blk = pBlock.lock();
-            result = context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+            if ( r2v ) {
+                return context.makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
+            } else {
+                return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+            }
         } else if ( local ) {
             if ( variable->type->ref ) {
-                result = context.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
+                if ( r2v ) {
+                    return context.makeValueNode<SimNode_GetLocalRefR2V>(type->baseType, at, variable->stackTop);
+                } else {
+                    return context.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
+                }
             } else {
-                result = context.makeNode<SimNode_GetLocal>(at, variable->stackTop);
+                if ( r2v ) {
+                    return context.makeValueNode<SimNode_GetLocalR2V>(type->baseType, at, variable->stackTop);
+                } else {
+                    return context.makeNode<SimNode_GetLocal>(at, variable->stackTop);
+                }
             }
         } else if ( argument) {
-            result = context.makeNode<SimNode_GetArgument>(at, argumentIndex);
+            if ( r2v ) {
+                return context.makeValueNode<SimNode_GetArgumentR2V>(type->baseType, at, argumentIndex);
+            } else {
+                return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
+            }
         } else {
-            result = context.makeNode<SimNode_GetGlobal>(at, variable->index);
-        }
-        if ( r2v ) {
-            return ExprRef2Value::GetR2V(context, at, type, result);
-        } else {
-            return result;
+            if ( r2v ) {
+                return context.makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->index);
+            } else {
+                return context.makeNode<SimNode_GetGlobal>(at, variable->index);
+            }
         }
     }
 
