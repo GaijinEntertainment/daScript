@@ -1,12 +1,13 @@
 def test:bool
-    profile(100,"try-catch") <|
-        let ( i,fail:int = 0; arr:int[1000] )
-            while i < 2000
-                try
-                    arr[i] = i
-                catch
-                    fail ++
-                i++
-            assert(fail==1000,"can only fail so match")
+    profile(10,"try-catch") <|
+        let ( i,fail,cnt:int = 0; arr:int[1000] )
+            for j in range (0, 1000)
+                fail = 0
+                for i in range (0, 2000)
+                    try
+                        cnt += arr[i]
+                    catch
+                        fail ++
+                assert(fail == 1000)
     return true
 
