@@ -33,7 +33,7 @@ bool unit_test ( const string & fn ) {
             return false;
         } else {
             // cout << *program << "\n";
-            Context ctx(&str);
+            Context ctx(&str, 64<<20);
             program->simulate(ctx);
             // vector of 10000 objects
             vector<Object> objects;
@@ -108,7 +108,8 @@ int main(int argc, const char * argv[]) {
     return 0;
 #endif
     // run tests
-    run_tests(TEST_PATH "profile", unit_test);
+    if (argc == 1)
+        run_tests(TEST_PATH "profile/tests", unit_test);
     for ( int i=1; i!=argc; ++i ) {
         string path=argv[i];
         unit_test(path);
