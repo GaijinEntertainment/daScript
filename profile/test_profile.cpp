@@ -61,6 +61,10 @@ struct typeFactory<ObjectArray> {
     }
 };
 
+int AddOne(int a) {
+    return a+1;
+}
+
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
@@ -71,6 +75,7 @@ public:
         addAnnotation(make_shared<ObjectStructureTypeAnnotation>());
         addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
         // register functions
+        addExtern<decltype(AddOne),AddOne>(*this,lib,"AddOne");
         addExtern<decltype(updateObject),updateObject>(*this,lib,"interopUpdate");
         addExtern<decltype(updateTest),updateTest>(*this,lib,"interopUpdateTest");
         addExtern<decltype(update10000), update10000>(*this,lib,"update10000");

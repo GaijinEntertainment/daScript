@@ -117,7 +117,6 @@ bool unit_test ( const string & fn ) {
 }
 
 bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
-
 #ifdef _MSC_VER
 	bool ok = true;
 	_finddata_t c_file;
@@ -155,13 +154,11 @@ bool run_compilation_fail_tests( const string & path ) {
 }
 
 int main(int argc, const char * argv[]) {
-
 #ifdef _MSC_VER
 	#define	TEST_PATH "../"
 #else
 	#define TEST_PATH "../../"
 #endif
-
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);

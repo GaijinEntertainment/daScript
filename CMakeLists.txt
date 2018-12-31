@@ -157,10 +157,10 @@ ADD_PRECOMPILED_HEADER(daScriptTest precomp.h precomp.h)
 
 # Profile
 
-SET(PROFILE_SRC
-profile/profile_array_of_structures_vec.das
-profile/profile_try_catch.das
+file(GLOB PROFILE_SRC
+"profile/*.das"
 )
+list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC

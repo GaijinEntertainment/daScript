@@ -30,12 +30,12 @@ def testInterop(objects:ObjectArray)
 def initObj(index:int;a:Object)
     let ( oi:float=float(index); ii:float=oi*2.0 )
         a.position=float3(oi+0.1,oi+0.2,oi+0.3)
-        a.velocity=float3(ii+1.0,ii+2.0,ii+3.0)
+        a.velocity=float3(1.0,2.0,3.0)
 
 def initObj(index:int;a:NObject)
     let ( oi:float=float(index); ii:float=oi*2.0 )
         a.position=float3(oi+0.1,oi+0.2,oi+0.3)
-        a.velocity=float3(ii+1.0,ii+2.0,ii+3.0)
+        a.velocity=float3(1.0,2.0,3.0)
 
 def init(objects:ObjectArray)
     let index:int = 0
@@ -57,7 +57,7 @@ def verify(total:int;objects:ObjectArray)
     for obj in objects
         let ( oi:float=float(index); ii:float=oi*2.0 )
             let apos:float3=float3(oi+0.1,oi+0.2,oi+0.3)
-            let avel:float3=float3(ii+1.0,ii+2.0,ii+3.0)
+            let avel:float3=float3(1.0,2.0,3.0)
             let npos:float3 = apos + avel*tt
             // debug(npos,"npos=")
             // debug(obj.position,"obj.position=")
@@ -72,7 +72,7 @@ def verify(total:int;objects:NObject[10000])
     for obj in objects
         let ( oi:float=float(index); ii:float=oi*2.0 )
             let apos:float3=float3(oi+0.1,oi+0.2,oi+0.3)
-            let avel:float3=float3(ii+1.0,ii+2.0,ii+3.0)
+            let avel:float3=float3(1.0,2.0,3.0)
             let npos:float3 = apos + avel*tt
             // debug(npos,"npos=")
             // debug(obj.position,"obj.position=")
@@ -80,7 +80,7 @@ def verify(total:int;objects:NObject[10000])
             index ++
 
 def test(objects:ObjectArray):bool
-    let(total:int=100;simTN,simT,cT,intT,manyT,manyKsT:float)
+    let(total:int=200;simTN,simT,cT,intT,manyT,manyKsT:float)
         init(nobjects)
         simTN = profile(total,"native basic version") <|
             testSim(nobjects)

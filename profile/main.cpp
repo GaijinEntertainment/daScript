@@ -3,15 +3,21 @@
 #include "ast.h"
 #include "test_profile.h"
 
+#ifdef _MSC_VER
+#include <io.h>
+#else
+#include <dirent.h>
+#endif
+
 using namespace std;
 using namespace yzg;
 
 bool unit_test ( const string & fn ) {
-    // cout << fn << " ";
+    cout << fn << "\n";
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
-        cout << "not found\n";
+        cout << "not found "<<fn<<"\n";
         return false;
     }
     t.seekg(0, ios::end);
@@ -58,6 +64,34 @@ bool unit_test ( const string & fn ) {
     }
 }
 
+bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
+#ifdef _MSC_VER
+    bool ok = true;
+    _finddata_t c_file;
+    intptr_t hFile;
+    string findPath = path + "/*.das";
+    if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
+        do {
+            ok = test_fn(path + "/" + c_file.name) && ok;
+        } while (_findnext(hFile, &c_file) == 0);
+    }
+    _findclose(hFile);
+    return ok;
+#else
+    bool ok = true;
+    DIR *dir;
+    struct dirent *ent;
+    if ((dir = opendir (path.c_str())) != NULL) {
+        while ((ent = readdir (dir)) != NULL) {
+            if ( strstr(ent->d_name,".das") ) {
+                ok = test_fn(path + "/" + ent->d_name) && ok;
+            }
+        }
+        closedir (dir);
+    }
+    return ok;
+#endif
+}
 
 int main(int argc, const char * argv[]) {
 
@@ -71,8 +105,11 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_TestProfile);
     // run tests
-    unit_test(TEST_PATH "profile/profile_array_of_structures_vec.das");
-    unit_test(TEST_PATH "profile/profile_try_catch.das");
+    run_tests(TEST_PATH "profile", unit_test);
+    for ( int i=1; i!=argc; ++i ) {
+        string path=argv[i];
+        unit_test(path);
+    }
     // and done
     Module::Shutdown();
     return 0;
