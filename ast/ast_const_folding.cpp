@@ -4,13 +4,16 @@
 
 namespace yzg {
     
-    class SideEffectVisitor : public Visitor {
-    protected:
-    // any expression
+    class SetSideEffectVisitor : public Visitor {
+        // any expression
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
             expr->noSideEffects = false;
         }
+    };
+    
+    class NoSideEffectVisitor : public Visitor {
+    protected:
     // const
         virtual void preVisit ( ExprConst * expr ) override {
             Visitor::preVisit(expr);
@@ -244,6 +247,24 @@ namespace yzg {
             }
             return Visitor::visit(expr);
         }
+    // ExprLooksLikeCall
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            if ( expr->func->result->isFoldable() && expr->func->noSideEffects ) {
+                auto allConst = true;
+                for ( auto & arg : expr->arguments ) {
+                    allConst &= arg->constexpression;
+                }
+                if ( allConst ) {
+                    if ( expr->func->builtIn ) {
+                        return evalAndFold(expr);
+                    } else {
+                        // HERE we'll need to compile and run entire program to fold
+                        //  should we consider?
+                    }
+                }
+            }
+            return Visitor::visit(expr);
+        }
     };
     
     //  turn static-assert into nop
@@ -280,8 +301,10 @@ namespace yzg {
     // program
     
     bool Program::optimizationConstFolding() {
-        SideEffectVisitor se;
-        visit(se);
+        SetSideEffectVisitor sse;
+        visit(sse);
+        NoSideEffectVisitor nse;
+        visit(nse);
         ConstFolding context(shared_from_this());
         visit(context);
         return context.didAnything();

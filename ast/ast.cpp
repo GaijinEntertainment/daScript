@@ -931,6 +931,9 @@ namespace yzg
         for ( auto it = arguments.begin(); it != arguments.end(); ) {
             auto & arg = *it;
             vis.preVisitBlockArgument(this, arg, arg==arguments.back());
+            if ( arg->init ) {
+                arg->init = arg->init->visit(vis);
+            }
             arg = vis.visitBlockArgument(this, arg, arg==arguments.back());
             if ( arg ) ++it; else it = arguments.erase(it);
         }

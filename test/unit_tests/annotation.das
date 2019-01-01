@@ -4,9 +4,9 @@ require UnitTest
 def update(pos:float3&;vel:float3 const&)   // all by ref
     pos += vel
 
-
+// note, when optimization off won't compile, since float3(...) is not a const, but a function
 [es (pass="ks2")]
-def update2(pos:float3&;vel:float3 const)   // deref
+def update2(pos:float3&;vel:float3 const = float3(1.0f,2.0f,3.0f))   // deref .
     pos += vel
 
 [es (pass="ks3")]
