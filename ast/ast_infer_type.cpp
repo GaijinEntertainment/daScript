@@ -817,7 +817,7 @@ namespace yzg {
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
             if ( !var->init->type ) return Visitor::visitLetInit(expr, var, init);
-            if ( !var->type->isSameType(*var->init->type,false) ) {
+            if ( !var->type->isSameType(*var->init->type,false,false) ) {
                 error("variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at );
             } else if ( var->type->baseType==Type::tStructure ) {

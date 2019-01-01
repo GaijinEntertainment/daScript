@@ -43,6 +43,7 @@ ast/ast_allocate_stack.cpp
 ast/ast_const_folding.cpp
 ast/ast_block_folding.cpp
 ast/ast_unused.cpp
+ast/ast_annotations.cpp
 ast/ast.h
 ast/ast_interop.h
 ast/ast_handle.h

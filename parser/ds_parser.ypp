@@ -560,7 +560,7 @@ expr_list
 
 expr_block
     :   expression_block[block]             { $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block)); }
-    |   '$' optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
+    |   '$' optional_annotation_list[annL] optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
         ExprBlock * closure = (ExprBlock *) $block;
         closure->returnType = TypeDeclPtr($result);
@@ -589,6 +589,23 @@ expr_block
                 }
             }
             deleteVariableDeclarationList($list);
+            if ( $annL ) {
+                for ( auto pA : *$annL ) {
+                    if ( pA->annotation ) {
+                        if ( pA->annotation->rtti_isFunctionAnnotation() ) {
+                            auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
+                            string err;
+                            if ( !ann->apply(closure, pA->arguments, err) ) {
+                                yyerror("can't apply annotation\n" + err, tokAt(@annL), CompilationError::invalid_annotation);
+                            }
+                        } else {
+                            yyerror("block can only have function annotations", tokAt(@annL), CompilationError::invalid_annotation);
+                        }
+                    }
+                }
+                swap ( closure->annotations, *$annL );
+                delete $annL;
+            }
         }
     }
     ;

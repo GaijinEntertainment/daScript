@@ -220,18 +220,20 @@ namespace yzg
             }
         }
         if ( baseType==Type::tBlock ) {
-            if ( argTypes.size() != decl.argTypes.size() ) {
-                return false;
-            }
-            for ( size_t i=0; i != argTypes.size(); ++i ) {
-                const auto & arg = argTypes[i];
-                const auto & declArg = decl.argTypes[i];
-                if ( !arg->isSameType(*declArg) ) {
-                    return false;
-                }
-            }
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
+            }
+            if ( firstType && argTypes.size()==0 ) {    // if not any block
+                if ( argTypes.size() != decl.argTypes.size() ) {
+                    return false;
+                }
+                for ( size_t i=0; i != argTypes.size(); ++i ) {
+                    const auto & arg = argTypes[i];
+                    const auto & declArg = decl.argTypes[i];
+                    if ( !arg->isSameType(*declArg) ) {
+                        return false;
+                    }
+                }
             }
         }
         if ( dim!=decl.dim )
@@ -983,7 +985,7 @@ namespace yzg
         }
         // TODO: what if list size is 0?
         if ( simlist.size()!=1 || isClosure ) {
-            auto block = isClosure ? context.makeNode<SimNode_ClosureBlock>(at, type!=nullptr)
+            auto block = isClosure ? context.makeNode<SimNode_ClosureBlock>(at, type!=nullptr && type->baseType!=Type::tVoid, annotationData)
                 : context.makeNode<SimNode_Block>(at);
             block->total = int(simlist.size());
             block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
@@ -2042,18 +2044,6 @@ namespace yzg
             case Type::tFloat3:     return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
             case Type::tFloat4:     return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
             default:                return nullptr;
-        }
-    }
-    
-    void Program::finalizeAnnotations() {
-        for ( const auto & fn : thisModule->functions ) {
-            for ( const auto & an : fn.second->annotations ) {
-                auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
-                string err = "";
-                if ( !fna->finalize(fn.second, an->arguments, err) ) {
-                    error("can't finalize annotation\n" + err, fn.second->at, CompilationError::invalid_annotation);
-                }
-            }
         }
     }
     

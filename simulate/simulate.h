@@ -604,9 +604,11 @@ namespace yzg
     };
     
     struct SimNode_ClosureBlock : SimNode_Block {
-        SimNode_ClosureBlock ( const LineInfo & at, bool nr ) : SimNode_Block(at), needResult(nr) {}
+        SimNode_ClosureBlock ( const LineInfo & at, bool nr, void * ad )
+            : SimNode_Block(at), needResult(nr), annotationData(ad) {}
         virtual __m128 eval ( Context & context ) override;
         bool needResult = false;
+        void * annotationData = nullptr;
     };
     
     // LET

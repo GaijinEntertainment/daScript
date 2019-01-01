@@ -252,11 +252,15 @@ namespace yzg
         };
     };
     
+    struct ExprBlock;
+    
     struct FunctionAnnotation : Annotation {
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isFunctionAnnotation() const override { return true; }
         virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) = 0;
         virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) = 0;
+        virtual bool apply ( ExprBlock * block, const AnnotationArgumentList & args, string & err ) = 0;
+        virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList & args, string & err ) = 0;
     };
     
     struct TypeAnnotation : Annotation {
@@ -425,6 +429,8 @@ namespace yzg
         TypeDeclPtr             returnType;
         vector<VariablePtr>     arguments;
         uint32_t                stackTop = 0;
+        AnnotationList          annotations;
+        void *                  annotationData = nullptr;   // to be filled with annotation
     };
     
     struct ExprVar : Expression {

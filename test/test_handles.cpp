@@ -189,6 +189,9 @@ void testFields ( Context * ctx ) {
 }
 
 struct EsAttribute {
+    EsAttribute() = default;
+    EsAttribute ( const string & n, uint32_t sz, bool rf, __m128 d )
+        : name(n), size(sz), ref(rf), def(d) {}
     string      name;
     uint32_t    size = 0;
     bool        ref;
@@ -196,10 +199,13 @@ struct EsAttribute {
 };
 
 struct EsAttributeTable {
+    vector<EsAttribute> attributes;
+};
+
+struct EsPassAttributeTable  : EsAttributeTable {
     string  pass;
     string  functionName;
     int32_t functionIndex = -2;
-    vector<EsAttribute> attributes;
 };
 
 struct EsComponent {
@@ -214,66 +220,82 @@ struct EsComponent {
 		name(n), data(d), size(uint32_t(sz)), stride(uint32_t(st)), boxed(bx) {}
 };
 
-vector<EsAttributeTable>    g_esPassTable;
+vector<EsPassAttributeTable>    g_esPassTable;
+vector<EsAttributeTable>        g_esBlockTable;
 
 struct EsFunctionAnnotation : FunctionAnnotation {
     EsFunctionAnnotation() : FunctionAnnotation("es") { }
+    void buildAttributeTable ( EsAttributeTable & tab, const vector<VariablePtr> & arguments, string & err  ) {
+        for ( const auto & arg : arguments ) {
+            __m128 def = _mm_setzero_ps();
+            if ( arg->init ) {
+                if ( arg->init->rtti_isConstant() && !arg->init->rtti_isStringConstant() ) {
+                    auto pConst = static_pointer_cast<ExprConst>(arg->init);
+                    def = pConst->value;
+                } else {
+                    err += "default for " + arg->name + " is not a constant\n";
+                }
+            }
+            tab.attributes.emplace_back(arg->name, arg->type->getSizeOf(), arg->type->isRef(), def);
+        }
+    }
+    virtual bool apply ( ExprBlock * block, const AnnotationArgumentList & args, string & err ) override {
+        assert(block->isClosure);
+        if ( block->annotationData ) {
+            err = "annotation already specified";
+            return false;
+        }
+        if ( block->arguments.empty() ) {
+            err = "block needs arguments";
+            return false;
+        }
+        block->annotationData = (void *)(g_esBlockTable.size() | 0xbad00000);
+        g_esBlockTable.resize(g_esBlockTable.size() + 1);
+        return true;
+    }
+    virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList & args, string & err ) override {
+        size_t index = intptr_t(block->annotationData);
+        if ( (index & 0xfff00000) != 0xbad00000 ) {
+            err = "invalid block";
+            return false;
+        }
+        index &= 0x000fffff;
+        if ( index<0 || index>=g_esBlockTable.size() ) {
+            err = "invalid block";
+            return false;
+        }
+        buildAttributeTable(g_esBlockTable[index], block->arguments, err);
+        return err.empty();
+    }
     virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
         if ( func->annotationData ) {
             err = "annotation already specified";
             return false;
         }
-        bool fail = false;
-        EsAttributeTable tab;
+        EsPassAttributeTable tab;
         if ( auto pp = args.find("pass", Type::tString) ) {
             tab.pass = pp->sValue;
         } else {
-            err += "pass is not specified\n";
-            fail = true;
-        }
-        tab.functionName = func->name;
-        for ( const auto & arg : func->arguments ) {
-            EsAttribute attr;
-            attr.name = arg->name;
-            attr.size = arg->type->getSizeOf();
-            attr.ref  = arg->type->isRef();
-            tab.attributes.push_back(attr);
-        }
-        if ( !fail ) {
-            func->annotationData = (void *)(g_esPassTable.size());
-            g_esPassTable.push_back(tab);
-            return true;
-        } else {
+            err = "pass is not specified";
             return false;
         }
+        tab.functionName = func->name;
+        func->annotationData = (void *)(g_esPassTable.size());
+        g_esPassTable.push_back(tab);
+        return true;
     };
     virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
-        // note: we are using annotationData thing here for example purposes
-        //  in reality apply should only have validation, and finalize have all the functionality
         size_t index = intptr_t(func->annotationData);
         if ( index<0 || index>=g_esPassTable.size() || g_esPassTable[index].functionName!=func->name ) {
             err = "invalid function";
             return false;
         }
-        bool failed = false;
-        uint32_t attrIndex = 0;
-        for ( const auto & arg : func->arguments ) {
-            if ( arg->init ) {
-                if ( arg->init->rtti_isConstant() && !arg->init->rtti_isStringConstant() ) {
-                    auto pConst = static_pointer_cast<ExprConst>(arg->init);
-                    g_esPassTable[index].attributes[attrIndex].def = pConst->value;
-                } else {
-                    err += "default for " + arg->name + " is not a constant\n";
-                    failed = true;
-                }
-            }
-            attrIndex ++;
-        }
-        return !failed;
+        buildAttributeTable(g_esPassTable[index], func->arguments, err);
+        return err.empty();
     }
 };
 
-bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
+bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
     if ( table.functionIndex==-2 )
         table.functionIndex = context.findFunction(table.functionName.c_str());
     if ( table.functionIndex==-1 )
@@ -309,7 +331,7 @@ bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsCom
                 if ( data[a] ) {
                     char * src =  boxed[a] ? *((char **)data[a]) : data[a];
                     if ( !ref[a] ) {
-                        memcpy ( &args[a], src, size[a] );
+                        args[a] = _mm_loadu_ps((float *)src);
                     } else {
                         *((void **)&args[a]) = src;
                     }
@@ -326,6 +348,65 @@ bool EsRunPass ( Context & context, EsAttributeTable & table, const vector<EsCom
     });
     return true;
 }
+
+bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & components, uint32_t totalComponents ) {
+    auto * closure = (SimNode_ClosureBlock *) block.body;
+    size_t index = intptr_t(closure->annotationData);
+    if ( (index & 0xfff00000) != 0xbad00000 ) {
+        context.throw_error("invalid block");
+        return false;
+    }
+    index &= 0x000fffff;
+    if ( index<0 || index>=g_esBlockTable.size() ) {
+        context.throw_error("invalid block");
+        return false;
+    }
+    EsAttributeTable & table = g_esBlockTable[index];
+    context.restart();
+    uint32_t nAttr = (uint32_t) table.attributes.size();
+    __m128 * args = (__m128 *)(alloca(table.attributes.size() * sizeof(__m128)));
+    char **		data	= (char **) alloca(nAttr * sizeof(char *));
+    uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(uint32_t));
+    uint32_t *  size    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
+    bool *		boxed	= (bool *) alloca(nAttr * sizeof(bool));
+    bool *      ref     = (bool *) alloca(nAttr * sizeof(bool));
+    for ( uint32_t a=0; a!=nAttr; ++a ) {
+        auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
+            return esc.name == table.attributes[a].name;
+        });
+        if ( it != components.end() ) {
+            data[a]   = (char *) it->data;
+            stride[a] = it->stride;
+            boxed[a]  = it->boxed;
+        } else {
+            data[a] = nullptr;
+            args[a] = table.attributes[a].def;
+        }
+        size[a] = table.attributes[a].size;
+        ref[a] = table.attributes[a].ref;
+    }
+    for ( uint32_t i=0; i != totalComponents; ++i ) {
+        for ( uint32_t a=0; a!=nAttr; ++a ) {
+            if ( data[a] ) {
+                char * src =  boxed[a] ? *((char **)data[a]) : data[a];
+                if ( !ref[a] ) {
+                    args[a] = _mm_loadu_ps((float *)src);
+                } else {
+                    *((void **)&args[a]) = src;
+                }
+                data[a] += stride[a];
+            }
+        }
+        context.invoke(block, args);
+        context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+        if ( context.stopFlags & EvalFlags::stopForThrow ) {
+            // TODO: report exception here??
+            return false;
+        }
+    }
+    return true;
+}
+
 
 constexpr int g_total = 10000;
 vector<float3>   g_pos ( g_total );
@@ -367,6 +448,10 @@ void testEsUpdate ( char * pass, Context * ctx ) {
     }
 }
 
+void queryEs (Block block, Context * context) {
+    EsRunBlock(*context, block, g_components, g_total);
+}
+
 class Module_UnitTest : public Module {
 public:
     Module_UnitTest() : Module("UnitTest") {
@@ -381,6 +466,7 @@ public:
         addAnnotation(make_shared<TestObjectFooAnnotation>());
         addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
         // register function
+        addExtern<decltype(queryEs), queryEs>(*this, lib, "queryEs");
         addExtern<decltype(testFoo), testFoo>(*this, lib, "testFoo");
         addExtern<decltype(testAdd), testAdd>(*this, lib, "testAdd");
         addExtern<decltype(testFields), testFields>(*this, lib, "testFields");

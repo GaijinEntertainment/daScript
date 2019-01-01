@@ -12,6 +12,10 @@ namespace yzg
 {
     // core functions
     
+    void builtin_throw ( char * text, Context * context ) {
+        context->throw_error(text);
+    }
+    
     void builtin_print ( char * text, Context * context ) {
         context->to_out(text);
     }
@@ -49,6 +53,7 @@ namespace yzg
     
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // functions
+        addExtern<decltype(builtin_throw),builtin_throw>         (*this, lib, "throw");
         addExtern<decltype(builtin_print),builtin_print>         (*this, lib, "print");
         addExtern<decltype(builtin_terminate),builtin_terminate> (*this, lib, "terminate");
         addExtern<decltype(builtin_stackwalk),builtin_stackwalk> (*this, lib, "stackwalk");
