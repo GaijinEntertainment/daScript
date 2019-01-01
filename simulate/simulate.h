@@ -179,6 +179,7 @@ namespace yzg
         __m128 call ( int fnIndex, __m128 * args, int line );
         __m128 callEx ( int fnIndex, __m128 * args, int line, function<void (SimNode *)> && when );
         __m128 invoke ( const Block & block, __m128 * args );
+        __m128 invokeEx ( const Block &block, __m128 * args, function<void (SimNode *)> && when );
         
         __forceinline const char * getException() const {
             return stopFlags & EvalFlags::stopForThrow ? exception : nullptr;

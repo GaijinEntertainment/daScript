@@ -340,6 +340,34 @@ namespace yzg
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
         return result;
     }
+    
+    __m128 Context::invokeEx(const Block &block, __m128 * args, function<void (SimNode *)> && when) {
+        char * saveSp = stackTop;
+        char * saveISp = invokeStackTop;
+        invokeStackTop = stackTop;
+        stackTop = stack + block.stackOffset;
+        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
+        __m128 ** pArgs;
+        __m128 * saveArgs;
+        if ( block.argumentsOffset ) {
+            assert(args && "expecting arguments");
+            pArgs = (__m128 **)(stack + block.argumentsOffset);
+            saveArgs = *pArgs;
+            *pArgs = args;
+        } else {
+            assert(!args && "not expecting arguments");
+        }
+        // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
+        when(block.body);
+        __m128 result = abiResult();
+        if ( args && block.argumentsOffset ) {
+            *pArgs = saveArgs;
+        }
+        invokeStackTop = saveISp;
+        stackTop = saveSp;
+        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
+        return result;
+    }
 
     __m128 Context::call ( int fnIndex, __m128 * args, int line ) {
         assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");

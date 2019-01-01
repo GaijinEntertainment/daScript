@@ -364,46 +364,49 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
     EsAttributeTable & table = g_esBlockTable[index];
     context.restart();
     uint32_t nAttr = (uint32_t) table.attributes.size();
-    __m128 * args = (__m128 *)(alloca(table.attributes.size() * sizeof(__m128)));
-    char **		data	= (char **) alloca(nAttr * sizeof(char *));
-    uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(uint32_t));
-    uint32_t *  size    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
-    bool *		boxed	= (bool *) alloca(nAttr * sizeof(bool));
-    bool *      ref     = (bool *) alloca(nAttr * sizeof(bool));
-    for ( uint32_t a=0; a!=nAttr; ++a ) {
-        auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
-            return esc.name == table.attributes[a].name;
-        });
-        if ( it != components.end() ) {
-            data[a]   = (char *) it->data;
-            stride[a] = it->stride;
-            boxed[a]  = it->boxed;
-        } else {
-            data[a] = nullptr;
-            args[a] = table.attributes[a].def;
-        }
-        size[a] = table.attributes[a].size;
-        ref[a] = table.attributes[a].ref;
-    }
-    for ( uint32_t i=0; i != totalComponents; ++i ) {
+    __m128 * _args = (__m128 *)(alloca(table.attributes.size() * sizeof(__m128)));
+    context.invokeEx(block, _args,[&](SimNode * code){
+        __m128 * args = _args;
+        char **		data	= (char **) alloca(nAttr * sizeof(char *));
+        uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(uint32_t));
+        uint32_t *  size    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
+        bool *		boxed	= (bool *) alloca(nAttr * sizeof(bool));
+        bool *      ref     = (bool *) alloca(nAttr * sizeof(bool));
         for ( uint32_t a=0; a!=nAttr; ++a ) {
-            if ( data[a] ) {
-                char * src =  boxed[a] ? *((char **)data[a]) : data[a];
-                if ( !ref[a] ) {
-                    args[a] = _mm_loadu_ps((float *)src);
-                } else {
-                    *((void **)&args[a]) = src;
+            auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
+                return esc.name == table.attributes[a].name;
+            });
+            if ( it != components.end() ) {
+                data[a]   = (char *) it->data;
+                stride[a] = it->stride;
+                boxed[a]  = it->boxed;
+            } else {
+                data[a] = nullptr;
+                args[a] = table.attributes[a].def;
+            }
+            size[a] = table.attributes[a].size;
+            ref[a] = table.attributes[a].ref;
+        }
+        for ( uint32_t i=0; i != totalComponents; ++i ) {
+            for ( uint32_t a=0; a!=nAttr; ++a ) {
+                if ( data[a] ) {
+                    char * src =  boxed[a] ? *((char **)data[a]) : data[a];
+                    if ( !ref[a] ) {
+                        args[a] = _mm_loadu_ps((float *)src);
+                    } else {
+                        *((void **)&args[a]) = src;
+                    }
+                    data[a] += stride[a];
                 }
-                data[a] += stride[a];
+            }
+            code->eval(context);
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            if ( context.stopFlags & EvalFlags::stopForThrow ) {
+                // TODO: report exception here??
+                return;
             }
         }
-        context.invoke(block, args);
-        context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
-        if ( context.stopFlags & EvalFlags::stopForThrow ) {
-            // TODO: report exception here??
-            return false;
-        }
-    }
+    });
     return true;
 }
 
