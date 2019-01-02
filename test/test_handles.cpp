@@ -78,21 +78,22 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     
     // FIELD .
     struct SimNode_IntFieldDeref : SimNode {
+        YZG_PTR_NODE;
         SimNode_IntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode(at), value(rv), name(n) {}
-        virtual __m128 eval ( Context & context ) override {
+        char * compute ( Context & context ) {
             __m128 rv = value->eval(context);
-            YZG_EXCEPTION_POINT;
+            YZG_PTR_EXCEPTION_POINT;
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
                 auto it = prv->fields.find(name);
                 if ( it != prv->fields.end() ) {
-                    return cast<int32_t *>::from(&it->second);
+                    return (char *) (&it->second);
                 } else {
                     context.throw_error("field not found");
-                    return _mm_setzero_ps();
+                    return nullptr;
                 }
             } else {
                 context.throw_error("dereferencing null pointer");
-                return _mm_setzero_ps();
+                return nullptr;
             }
         }
         SimNode *   value;
@@ -101,19 +102,20 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     
     // FIELD ?.
     struct SimNode_SafeIntFieldDeref : SimNode_IntFieldDeref {
+        YZG_PTR_NODE;
         SimNode_SafeIntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode_IntFieldDeref(at,rv,n) {}
-        virtual __m128 eval ( Context & context ) override {
+        __forceinline char * compute ( Context & context ) {
             __m128 rv = value->eval(context);
-            YZG_EXCEPTION_POINT;
+            YZG_PTR_EXCEPTION_POINT;
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
                 auto it = prv->fields.find(name);
                 if ( it != prv->fields.end() ) {
-                    return cast<int32_t *>::from(&it->second);
+                    return (char *) &it->second;
                 } else {
-                    return _mm_setzero_ps();
+                    return nullptr;
                 }
             } else {
-                return _mm_setzero_ps();
+                return nullptr;
             }
         }
     };
@@ -173,18 +175,23 @@ void testFields ( Context * ctx ) {
     __m128 args[1] = { cast<IntFields *>::from(&x) };
     x.fields["a"] = 1;
     t = cast<int32_t>::to ( ctx->eval(fx, args) );
+    assert(!ctx->getException());
     assert(t==1);
     x.fields["b"] = 2;
     t = cast<int32_t>::to ( ctx->eval(fx, args) );
+    assert(!ctx->getException());
     assert(t==3);
     x.fields["c"] = 3;
     t = cast<int32_t>::to ( ctx->eval(fx, args) );
+    assert(!ctx->getException());
     assert(t==6);
     x.fields["d"] = 4;
     t = cast<int32_t>::to ( ctx->eval(fx, args) );
+    assert(!ctx->getException());
     assert(t==10);
     x.fields.erase("b");
     t = cast<int32_t>::to ( ctx->eval(fx, args) );
+    assert(!ctx->getException());
     assert(t==8);
 }
 

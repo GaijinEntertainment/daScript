@@ -209,12 +209,23 @@ namespace yzg
 #if YZG_ENABLE_EXCEPTIONS
     #define YZG_EXCEPTION_POINT \
         { if ( context.stopFlags ) return _mm_setzero_ps(); }
+    #define YZG_PTR_EXCEPTION_POINT \
+        { if ( context.stopFlags ) return nullptr; }
     #define YZG_ITERATOR_EXCEPTION_POINT \
-    { if ( context.stopFlags ) return false; }
+        { if ( context.stopFlags ) return false; }
 #else
     #define YZG_EXCEPTION_POINT
+    #define YZG_PTR_EXCEPTION_POINT
     #define YZG_ITERATOR_EXCEPTION_POINT
 #endif
+    
+#define YZG_PTR_NODE    \
+    virtual __m128 eval ( Context & context ) override {    \
+        return cast<char *>::from(compute(context));    \
+    }   \
+    virtual char * evalPtr ( Context & context ) override { \
+        return compute(context);    \
+    }
     
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
