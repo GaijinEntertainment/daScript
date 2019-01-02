@@ -11,7 +11,6 @@ def testFields(x:Fields?):int
         t += x?.b ?? 0
         t += x?.c ?? 0
         t += x?.d ?? 0
-        debug(t,"\nt=")
         return t
 
 def test:bool

@@ -361,11 +361,9 @@ namespace yzg
     
     // LOCAL VARIABLE "GET"
     struct SimNode_GetLocal : SimNode {
+        YZG_PTR_NODE;
         SimNode_GetLocal(const LineInfo & at, uint32_t sp) : SimNode(at), stackTop(sp) {}
-        virtual __m128 eval ( Context & context ) override {
-            return cast<char *>::from(context.stackTop + stackTop);
-        }
-        virtual char * evalPtr ( Context & context ) override {
+        __forceinline char * compute ( Context & context ) {
             return context.stackTop + stackTop;
         }
         uint32_t stackTop;
@@ -385,11 +383,9 @@ namespace yzg
     
     // WHEN LOCAL VARIABLE STORES REFERENCE
     struct SimNode_GetLocalRef : SimNode_GetLocal {
+        YZG_PTR_NODE;
         SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp) {}
-        virtual __m128 eval ( Context & context ) override {
-            return *(__m128 *)(context.stackTop + stackTop);
-        }
-        virtual char * evalPtr ( Context & context ) override {
+        __forceinline char * compute ( Context & context ) {
             return *(char **)(context.stackTop + stackTop);
         }
     };
