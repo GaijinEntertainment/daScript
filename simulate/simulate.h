@@ -42,10 +42,7 @@ namespace yzg
     struct SimNode {
         SimNode ( const LineInfo & at ) : debug(at) {}
         virtual __m128 eval ( Context & ) = 0;
-        virtual char * evalPtr ( Context & context ) {
-            // TODO: assert(0 && "we should never be here")
-            return cast<char *>::to(eval(context));
-        }
+        virtual char * evalPtr ( Context & context );
         LineInfo debug;
     };
     
@@ -357,6 +354,9 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             return cast<char *>::from(context.stackTop + stackTop);
         }
+        virtual char * evalPtr ( Context & context ) override {
+            return context.stackTop + stackTop;
+        }
         uint32_t stackTop;
     };
     
@@ -367,6 +367,9 @@ namespace yzg
             TT * pR = (TT *)(context.stackTop + stackTop);
             return cast<TT>::from(*pR);
         }
+        virtual char * evalPtr ( Context & context ) override {
+            return *(char **)(context.stackTop + stackTop);
+        }
     };
     
     // WHEN LOCAL VARIABLE STORES REFERENCE
@@ -374,6 +377,9 @@ namespace yzg
         SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp) {}
         virtual __m128 eval ( Context & context ) override {
             return *(__m128 *)(context.stackTop + stackTop);
+        }
+        virtual char * evalPtr ( Context & context ) override {
+            return *(char **)(context.stackTop + stackTop);
         }
     };
     
