@@ -8,6 +8,10 @@ namespace yzg
         uint32_t    stackOffset;
         uint32_t    argumentsOffset;
         SimNode *   body;
+        
+        __forceinline bool operator == ( const Block & b ) const {
+            return b.stackOffset==stackOffset && b.argumentsOffset==argumentsOffset && b.body==body;
+        }
     };
     
     struct Array {

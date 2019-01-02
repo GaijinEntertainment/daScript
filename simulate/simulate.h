@@ -100,6 +100,7 @@ namespace yzg
                 case Type::tURange:     return makeNode<NodeType<urange>>   (args...);
                 case Type::tString:     return makeNode<NodeType<char *>>   (args...);
                 case Type::tPointer:    return makeNode<NodeType<void *>>   (args...);
+                case Type::tBlock:      return makeNode<NodeType<Block>>    (args...);
                 default:
                     assert(0 && "we should not even be here");
                     return nullptr;

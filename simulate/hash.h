@@ -18,6 +18,11 @@ namespace yzg
     }
     
     template <>
+    __forceinline uint64_t hash_function ( Block b ) {
+        return hash_function(&b, sizeof(b));
+    }
+    
+    template <>
     __forceinline uint64_t hash_function ( char * x ) {
 		return hash_function(x, strlen(x));
     }
