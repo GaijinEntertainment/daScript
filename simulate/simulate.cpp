@@ -18,7 +18,7 @@ namespace yzg
     // SimNode_At
     
     __m128 SimNode_At::eval ( Context & context )  {
-        char * pValue = cast<char *>::to(value->eval(context));
+        auto pValue = value->evalPtr(context);
         YZG_EXCEPTION_POINT;
         uint32_t idx = cast<uint32_t>::to(index->eval(context));
         YZG_EXCEPTION_POINT;
@@ -109,34 +109,29 @@ namespace yzg
     // SimNode_Ptr2Ref
     
     __m128 SimNode_Ptr2Ref::eval ( Context & context ) {
-        __m128 ptr = subexpr->eval(context);
+        auto ptr = subexpr->evalPtr(context);
         YZG_EXCEPTION_POINT;
-        void * p = cast<void *>::to(ptr);
-        if ( p == nullptr ) {
+        if ( ptr == nullptr ) {
             context.throw_error("dereferencing null pointer");
             return _mm_setzero_ps();
         }
-        return ptr;
+        return cast<char *>::from(ptr);
     }
     
     // SimNode_Ptr2Ref
     
     __m128 SimNode_NullCoalescingRef::eval ( Context & context ) {
-        __m128 ptr = subexpr->eval(context);
+        auto ptr = subexpr->evalPtr(context);
         YZG_EXCEPTION_POINT;
-        if ( cast<void *>::to(ptr) ) {
-            return ptr;
-        } else {
-            return value->eval(context);
-        }
+        return ptr ? cast<char *>::from(ptr) : value->eval(context);
     }
     
     // FIELD
     
     __m128 SimNode_FieldDeref::eval ( Context & context ) {
-        __m128 rv = value->eval(context);
+        auto prv = value->evalPtr(context);
         YZG_EXCEPTION_POINT;
-        if ( char * prv = cast<char *>::to(rv) ) {
+        if ( prv ) {
             return cast<char *>::from( prv + offset );
         } else {
             context.throw_error("dereferencing null pointer");
@@ -147,9 +142,9 @@ namespace yzg
     // FIELD ?.
     
     __m128 SimNode_SafeFieldDeref::eval ( Context & context ) {
-        __m128 rv = value->eval(context);
+        auto prv = value->evalPtr(context);
         YZG_EXCEPTION_POINT;
-        if ( char * prv = cast<char *>::to(rv) ) {
+        if ( prv ) {
             return cast<char *>::from( prv + offset );
         } else {
             return _mm_setzero_ps();
@@ -159,9 +154,9 @@ namespace yzg
     // FIELD ?. ->
     
     __m128 SimNode_SafeFieldDerefPtr::eval ( Context & context ) {
-        __m128 rv = value->eval(context);
+        char ** prv = (char **) value->evalPtr(context);
         YZG_EXCEPTION_POINT;
-        if ( char ** prv = cast<char **>::to(rv) ) {
+        if ( prv ) {
             return cast<char *>::from( *(prv + offset) );
         } else {
             return _mm_setzero_ps();
@@ -183,28 +178,24 @@ namespace yzg
     // SimNode_CopyRefValue
     
     __m128 SimNode_CopyRefValue::eval ( Context & context ) {
-        __m128 ll = l->eval(context);
+        auto pl = l->evalPtr(context);
         YZG_EXCEPTION_POINT;
-        __m128 rr = r->eval(context);
+        auto pr = r->evalPtr(context);
         YZG_EXCEPTION_POINT;
-        auto pl = cast<void *>::to(ll);
-        auto pr = cast<void *>::to(rr);
         memcpy ( pl, pr, size );
-        return ll;
+        return cast<char *>::from(pl);
     }
     
     // SimNode_MoveRefValue
     
     __m128 SimNode_MoveRefValue::eval ( Context & context ) {
-        __m128 ll = l->eval(context);
+        auto pl = l->evalPtr(context);
         YZG_EXCEPTION_POINT;
-        __m128 rr = r->eval(context);
+        auto pr = r->evalPtr(context);
         YZG_EXCEPTION_POINT;
-        auto pl = cast<void *>::to(ll);
-        auto pr = cast<void *>::to(rr);
         memcpy ( pl, pr, size );
         memset ( pr, 0, size );
-        return ll;
+        return cast<char *>::from(pl);
     }
     
     // SimNode_Block

@@ -42,6 +42,10 @@ namespace yzg
     struct SimNode {
         SimNode ( const LineInfo & at ) : debug(at) {}
         virtual __m128 eval ( Context & ) = 0;
+        virtual char * evalPtr ( Context & context ) {
+            // TODO: assert(0 && "we should never be here")
+            return cast<char *>::to(eval(context));
+        }
         LineInfo debug;
     };
     
@@ -244,9 +248,9 @@ namespace yzg
     struct SimNode_FieldDerefR2V : SimNode_FieldDeref {
         SimNode_FieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
         virtual __m128 eval ( Context & context ) override {
-            __m128 rv = value->eval(context);
+            auto prv = value->evalPtr(context);
             YZG_EXCEPTION_POINT;
-            if ( char * prv = cast<char *>::to(rv) ) {
+            if ( prv ) {
                 TT * pR = (TT *)( prv + offset );
                 return cast<TT>::from(*pR);
             } else {
@@ -435,7 +439,7 @@ namespace yzg
             : SimNode_GetBlockArgument(at,i,sp) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 * args = *((__m128 **)(context.stackTop + stackTop));
-            TT * pR = (TT *) cast<char *>::to (args[index] );
+            TT * pR = (TT *) cast<char *>::to(args[index]);
             return cast<TT>::from(*pR);
         }
     };
@@ -490,9 +494,8 @@ namespace yzg
     struct SimNode_Ref2Value : SimNode {      // &value -> value
         SimNode_Ref2Value ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
-            __m128 ptr = subexpr->eval(context);
+            TT * pR = (TT *) subexpr->evalPtr(context);
             YZG_EXCEPTION_POINT;
-            TT * pR = cast<TT *>::to(ptr);  // never null
             return cast<TT>::from(*pR);
         }
         SimNode * subexpr;
@@ -510,13 +513,9 @@ namespace yzg
     struct SimNode_NullCoalescing : SimNode_Ptr2Ref {
         SimNode_NullCoalescing ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
         virtual __m128 eval ( Context & context ) override {
-            __m128 ptr = subexpr->eval(context);
+            TT * pR = (TT *) subexpr->evalPtr(context);
             YZG_EXCEPTION_POINT;
-            if ( TT * pR = cast<TT *>::to(ptr) ) {
-                return cast<TT>::from(*pR);
-            } else {
-                return value->eval(context);
-            }
+            return pR ? cast<TT>::from(*pR) : value->eval(context);
         }
         SimNode * value;
     };
@@ -549,14 +548,13 @@ namespace yzg
     struct SimNode_CopyValue : SimNode {
         SimNode_CopyValue(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
         virtual __m128 eval ( Context & context ) override {
-            __m128 ll = l->eval(context);
+            TT * pl = (TT *) l->evalPtr(context);
             YZG_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
             YZG_EXCEPTION_POINT;
-            TT * pl = cast<TT *>::to(ll);
             TT * pr = (TT *) &rr;
             *pl = *pr;
-            return ll;
+            return cast<TT *>::from(pl);
         }
         SimNode * l, * r;
     };
@@ -575,14 +573,12 @@ namespace yzg
         SimNode_CopyRefValueT(const LineInfo & at, SimNode * ll, SimNode * rr)
         : SimNode(at), l(ll), r(rr) {};
         __m128 eval ( Context & context ) {
-            __m128 ll = l->eval(context);
+            TT * pl = (TT *) l->evalPtr(context);
             YZG_EXCEPTION_POINT;
-            __m128 rr = r->eval(context);
+            TT * pr = (TT *) r->evalPtr(context);
             YZG_EXCEPTION_POINT;
-            TT * pl = cast<TT *>::to(ll);
-            TT * pr = cast<TT *>::to(rr);
             *pl = *pr;
-            return ll;
+            return cast<TT *>::from(pl);
         }
         SimNode * l, * r;
     };
