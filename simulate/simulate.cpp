@@ -9,6 +9,16 @@ namespace yzg
         // TODO: assert(0 && "we should never be here")
         return cast<char *>::to(eval(context));
     }
+
+	char * SimNode_Op1::evalPtr(Context & context) {
+		// TODO: assert(0 && "we should never be here")
+		return cast<char *>::to(eval(context));
+	}
+
+	char * SimNode_Op2::evalPtr(Context & context) {
+		// TODO: assert(0 && "we should never be here")
+		return cast<char *>::to(eval(context));
+	}
     
     // SimNode_MakeBlock
     

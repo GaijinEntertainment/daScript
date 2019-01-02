@@ -565,6 +565,9 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             return cast<TT>::from(*pR);
         }
+		virtual char * evalPtr (Context & context) override {
+			return *(char **)subexpr->evalPtr(context);
+		}
         SimNode * subexpr;
     };
     
@@ -810,6 +813,7 @@ namespace yzg
     
     struct SimNode_Op1 : SimNode {
         SimNode_Op1 ( const LineInfo & at ) : SimNode(at) {}
+		virtual char * evalPtr(Context & context);
         SimNode * x = nullptr;
     };
     
@@ -837,6 +841,7 @@ namespace yzg
     
     struct SimNode_Op2 : SimNode {
         SimNode_Op2 ( const LineInfo & at ) : SimNode(at) {}
+		virtual char * evalPtr(Context & context);
         SimNode * l = nullptr;
         SimNode * r = nullptr;
     };
