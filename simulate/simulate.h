@@ -255,14 +255,7 @@ namespace yzg
         YZG_PTR_NODE;
         SimNode_FieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode(at), value(rv), offset(of) {}
         __forceinline char * compute ( Context & context ) {
-            auto prv = value->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
-            if ( prv ) {
-                return prv + offset;
-            } else {
-                context.throw_error("dereferencing null pointer");
-                return nullptr;
-            }
+            return value->evalPtr(context) + offset;
         }
         SimNode *   value;
         uint32_t    offset;
@@ -274,25 +267,63 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             auto prv = value->evalPtr(context);
             YZG_EXCEPTION_POINT;
-            if ( prv ) {
-                TT * pR = (TT *)( prv + offset );
-                return cast<TT>::from(*pR);
-            } else {
-                context.throw_error("dereferencing null pointer");
-                return _mm_setzero_ps();
-            }
+            TT * pR = (TT *)( prv + offset );
+            return cast<TT>::from(*pR);
+
         }
         virtual char * evalPtr ( Context & context ) override {
             auto prv = value->evalPtr(context);
             YZG_PTR_EXCEPTION_POINT;
-            if ( prv ) {
-                return * (char **)( prv + offset );
-            } else {
-                context.throw_error("dereferencing null pointer");
-                return nullptr;
-            }
+			return * (char **)( prv + offset );
         }
     };
+
+	// PTR FIELD .
+	struct SimNode_PtrFieldDeref : SimNode {
+		YZG_PTR_NODE;
+		SimNode_PtrFieldDeref(const LineInfo & at, SimNode * rv, uint32_t of) : SimNode(at), value(rv), offset(of) {}
+		__forceinline char * compute(Context & context) {
+			auto prv = value->evalPtr(context);
+			YZG_PTR_EXCEPTION_POINT;
+			if (prv) {
+				return prv + offset;
+			}
+			else {
+				context.throw_error("dereferencing null pointer");
+				return nullptr;
+			}
+		}
+		SimNode *   value;
+		uint32_t    offset;
+	};
+
+	template <typename TT>
+	struct SimNode_PtrFieldDerefR2V : SimNode_PtrFieldDeref {
+		SimNode_PtrFieldDerefR2V(const LineInfo & at, SimNode * rv, uint32_t of) : SimNode_PtrFieldDeref(at, rv, of) {}
+		virtual __m128 eval(Context & context) override {
+			auto prv = value->evalPtr(context);
+			YZG_EXCEPTION_POINT;
+			if (prv) {
+				TT * pR = (TT *)(prv + offset);
+				return cast<TT>::from(*pR);
+			}
+			else {
+				context.throw_error("dereferencing null pointer");
+				return _mm_setzero_ps();
+			}
+		}
+		virtual char * evalPtr(Context & context) override {
+			auto prv = value->evalPtr(context);
+			YZG_PTR_EXCEPTION_POINT;
+			if (prv) {
+				return *(char **)(prv + offset);
+			}
+			else {
+				context.throw_error("dereferencing null pointer");
+				return nullptr;
+			}
+		}
+	};
     
     // FIELD ?.
     struct SimNode_SafeFieldDeref : SimNode_FieldDeref {
@@ -301,11 +332,7 @@ namespace yzg
         __forceinline char * compute ( Context & context ) {
             auto prv = value->evalPtr(context);
             YZG_PTR_EXCEPTION_POINT;
-            if ( prv ) {
-                return prv + offset;
-            } else {
-                return nullptr;
-            }
+			return prv ? prv + offset : nullptr;
         }
     };
     
@@ -316,11 +343,7 @@ namespace yzg
         __forceinline char * compute ( Context & context ) {
             char ** prv = (char **) value->evalPtr(context);
             YZG_PTR_EXCEPTION_POINT;
-            if ( prv ) {
-                return *(prv + offset);
-            } else {
-                return nullptr;
-            }
+			return prv ? *(prv + offset) : nullptr;
         }
     };
     

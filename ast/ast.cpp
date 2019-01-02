@@ -1034,10 +1034,17 @@ namespace yzg
             }
             return result;
         } else {
-            if ( r2v )
-                return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,value->simulate(context),field->offset);
-            else
-                return context.makeNode<SimNode_FieldDeref>(at,value->simulate(context),field->offset);
+			if (type->isPointer()) {
+				if (r2v)
+					return context.makeValueNode<SimNode_PtrFieldDerefR2V>(type->baseType, at, value->simulate(context), field->offset);
+				else
+					return context.makeNode<SimNode_PtrFieldDeref>(at, value->simulate(context), field->offset);
+			} else {
+				if (r2v)
+					return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType, at, value->simulate(context), field->offset);
+				else
+					return context.makeNode<SimNode_FieldDeref>(at, value->simulate(context), field->offset);
+			}
         }
     }
     
