@@ -21,11 +21,10 @@ namespace yzg
     // SimNode_Table
     
     __m128 SimNode_Table::eval ( Context & context ) {
-        __m128 xtab = tabExpr->eval(context);
+		Table * tab = (Table *)tabExpr->evalPtr(context);
         YZG_EXCEPTION_POINT;
         __m128 xkey = keyExpr->eval(context);
         YZG_EXCEPTION_POINT;
-        Table * tab = cast<Table *>::to(xtab);
         return tabEval ( context, tab, xkey );
     }
 

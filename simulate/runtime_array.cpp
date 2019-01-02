@@ -46,11 +46,10 @@ namespace yzg
     // SimNode_Array
     
     __m128 SimNode_Array::eval ( Context & context ) {
-        __m128 ll = l->eval(context);
+		Array * pA = (Array *) l->evalPtr(context);
         YZG_EXCEPTION_POINT;
         __m128 rr = r->eval(context);
         YZG_EXCEPTION_POINT;
-        Array * pA = cast<Array *>::to(ll);
         uint32_t idx = cast<uint32_t>::to(rr);
         return apply(context, pA, idx);
     }
