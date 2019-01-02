@@ -825,11 +825,11 @@ namespace yzg {
             } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
                 error("this variable can't be initialized at all", var->at);
             }
-            if ( var->type->isWorkhorseType() ) {
-                return Expression::autoDereference(init->shared_from_this());
-            } else {
+            //if ( var->type->isWorkhorseType() ) {
+            //    return Expression::autoDereference(init->shared_from_this());
+            //} else {
                 return Visitor::visitLetInit(expr, var, init);
-            }
+            //}
         }
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
             if ( expr->scoped ) {
