@@ -21,8 +21,25 @@ namespace yzg
     
     // AT (INDEX)
     struct SimNode_ArrayAt : SimNode_Array {
+        YZG_PTR_NODE;
         SimNode_ArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
-        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
+        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override {
+            assert(0 && "we should not even be here");
+            return _mm_setzero_ps();
+        }
+        __forceinline char * compute ( Context & context ) {
+            Array * pA = (Array *) l->evalPtr(context);
+            YZG_PTR_EXCEPTION_POINT;
+            __m128 rr = r->eval(context);
+            YZG_PTR_EXCEPTION_POINT;
+            uint32_t idx = cast<uint32_t>::to(rr);
+            if ( idx >= pA->size ) {
+                context.throw_error("index out of range");
+                return nullptr;
+            } else {
+                return pA->data + idx*stride;
+            }
+        }
     };
     
     // ERASE(INDEX)

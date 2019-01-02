@@ -85,17 +85,6 @@ namespace yzg
         return _mm_setzero_ps();
     }
     
-    // AT (INDEX)
-    
-    __m128 SimNode_ArrayAt::apply ( Context & context, Array * pA, uint32_t index ) {
-        if ( index >= pA->size ) {
-            context.throw_error("index out of range");
-            return _mm_setzero_ps();
-        } else {
-            return cast<char *>::from(pA->data + index*stride);
-        }
-    }
-    
     // ERASE
 
     __m128 SimNode_ArrayErase::apply ( Context & context, Array * pA, uint32_t index ) {
