@@ -65,6 +65,20 @@ namespace yzg
         return context.call(fnIndex, argValues, debug.line);
     }
     
+    int32_t SimNode_Call::evalInt ( Context & context ) {
+        __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
+        evalArgs(context, argValues);
+        YZG_INT_EXCEPTION_POINT;
+        return cast<int>::to(context.call(fnIndex, argValues, debug.line));
+    }
+    
+    bool SimNode_Call::evalBool ( Context & context ) {
+        __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
+        evalArgs(context, argValues);
+        YZG_BOOL_EXCEPTION_POINT;
+        return cast<bool>::to(context.call(fnIndex, argValues, debug.line));
+    }
+    
     // SimNode_Invoke
     
     __m128 SimNode_Invoke::eval ( Context & context )  {

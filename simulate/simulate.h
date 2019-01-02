@@ -227,6 +227,8 @@ namespace yzg
         { if ( context.stopFlags ) return false; }
     #define YZG_BOOL_EXCEPTION_POINT \
         { if ( context.stopFlags ) return false; }
+    #define YZG_INT_EXCEPTION_POINT \
+        { if ( context.stopFlags ) return 0; }
     #define YZG_NODE_EXCEPTION_POINT(CTYPE) \
         { if ( context.stopFlags ) return CTYPE(); }
 #else
@@ -234,6 +236,7 @@ namespace yzg
     #define YZG_PTR_EXCEPTION_POINT
     #define YZG_ITERATOR_EXCEPTION_POINT
     #define YZG_BOOL_EXCEPTION_POINT
+    #define YZG_INT_EXCEPTION_POINT
     #define YZG_NODE_EXCEPTION_POINT(CTYPE)
 #endif
     
@@ -388,6 +391,8 @@ namespace yzg
         SimNode_Call ( const LineInfo & at ) : SimNode(at) {}
         void evalArgs ( Context & context, __m128 * argValues );
         virtual __m128 eval ( Context & context ) override;
+        virtual int32_t evalInt ( Context & context ) override;
+        virtual bool evalBool ( Context & context ) override;
         SimNode ** arguments;
         int32_t  fnIndex;
         int32_t  nArguments;
