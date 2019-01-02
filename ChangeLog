@@ -4,12 +4,14 @@ NOTE: uriparser is looking for help with a few things:
 
 201x-xx-xx -- x.x.x
 
+>>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   * Fixed:
       Out-of-bounds read in uriParse*Ex* for incomplete URIs with IPv6
       addresses with embedded IPv4 address, e.g. "//[::44.1";
       mitigated if passed parameter <afterLast> points to readable memory
       containing a '\0' byte.
       Thanks to Joergen Ibsen for the report!
+>>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   * Fixed: When parsing a malformed URI with an IPvFuture address
       (e.g. "http://[vA.123456" missing "]"), errorPos would point to the first
       character after "v" than the actual position of the error (here: the end
