@@ -91,6 +91,7 @@ simulate/runtime_profile.cpp
 simulate/runtime_profile.h
 simulate/simulate.cpp
 simulate/simulate.h
+simulate/sim_policy.h
 )
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 

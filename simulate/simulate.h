@@ -5,6 +5,7 @@
 #include "cast.h"
 #include "runtime_string.h"
 #include "debug_info.h"
+#include "sim_policy.h"
 
 namespace yzg
 {
@@ -929,11 +930,9 @@ namespace yzg
         }
     };
     
-#define DEFINE_OP1_POLICY(CALL) template <typename SimPolicy> struct Sim_##CALL;
-    
-#define DEFINE_OP2_POLICY(CALL) template <typename SimPolicy> struct Sim_##CALL;
+#define DEFINE_POLICY(CALL) template <typename SimPolicy> struct Sim_##CALL;
 
-#define IMPLEMENT_OP1_POLICY(CALL,TYPE,CTYPE,OP,OP2)                    \
+#define IMPLEMENT_OP1_POLICY(CALL,TYPE,CTYPE)                           \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
         YZG_NODE(TYPE,CTYPE);                                           \
@@ -941,11 +940,11 @@ namespace yzg
         __forceinline CTYPE compute ( Context & context ) {             \
             auto val = x->eval##TYPE(context);                          \
             YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
-            return OP val OP2;                                          \
+            return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
     };
     
-#define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE,OP,OP2)                \
+#define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
         YZG_NODE(TYPE,CTYPE);                                           \
@@ -953,31 +952,31 @@ namespace yzg
         __forceinline CTYPE compute ( Context & context ) {             \
             auto val = (CTYPE *) x->evalPtr(context);                   \
             YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
-            return OP *val OP2;                                         \
+            return SimPolicy<CTYPE>::CALL(*val,context);                \
         }                                                               \
     };
     
-#define DEFINE_OP1_NUMERIC_INTEGER(CALL,OP,OP2)         \
-    DEFINE_OP1_POLICY(CALL);                            \
-    IMPLEMENT_OP1_POLICY(CALL,Int,int32_t,OP,OP2);      \
-    IMPLEMENT_OP1_POLICY(CALL,UInt,uint32_t,OP,OP2);    \
-    IMPLEMENT_OP1_POLICY(CALL,Int64,int64_t,OP,OP2);    \
-    IMPLEMENT_OP1_POLICY(CALL,UInt64,uint64_t,OP,OP2);  \
+#define DEFINE_OP1_NUMERIC_INTEGER(CALL)                \
+    DEFINE_POLICY(CALL);                                \
+    IMPLEMENT_OP1_POLICY(CALL,Int,int32_t);             \
+    IMPLEMENT_OP1_POLICY(CALL,UInt,uint32_t);           \
+    IMPLEMENT_OP1_POLICY(CALL,Int64,int64_t);           \
+    IMPLEMENT_OP1_POLICY(CALL,UInt64,uint64_t);         \
 
-#define DEFINE_OP1_NUMERIC(CALL,OP,OP2);                \
-    DEFINE_OP1_NUMERIC_INTEGER(CALL,OP,OP2);            \
-    IMPLEMENT_OP1_POLICY(CALL,Float,float,OP,OP2);
+#define DEFINE_OP1_NUMERIC(CALL);                       \
+    DEFINE_OP1_NUMERIC_INTEGER(CALL);                   \
+    IMPLEMENT_OP1_POLICY(CALL,Float,float);
     
-#define DEFINE_OP1_SET_NUMERIC_INTEGER(CALL,OP,OP2)         \
-    DEFINE_OP1_POLICY(CALL);                                \
-    IMPLEMENT_OP1_SET_POLICY(CALL,Int,int32_t,OP,OP2);      \
-    IMPLEMENT_OP1_SET_POLICY(CALL,UInt,uint32_t,OP,OP2);    \
-    IMPLEMENT_OP1_SET_POLICY(CALL,Int64,int64_t,OP,OP2);    \
-    IMPLEMENT_OP1_SET_POLICY(CALL,UInt64,uint64_t,OP,OP2);  \
+#define DEFINE_OP1_SET_NUMERIC_INTEGER(CALL)            \
+    DEFINE_POLICY(CALL);                                \
+    IMPLEMENT_OP1_SET_POLICY(CALL,Int,int32_t);         \
+    IMPLEMENT_OP1_SET_POLICY(CALL,UInt,uint32_t);       \
+    IMPLEMENT_OP1_SET_POLICY(CALL,Int64,int64_t);       \
+    IMPLEMENT_OP1_SET_POLICY(CALL,UInt64,uint64_t);     \
 
-#define DEFINE_OP1_SET_NUMERIC(CALL,OP,OP2);                \
-    DEFINE_OP1_SET_NUMERIC_INTEGER(CALL,OP,OP2);            \
-    IMPLEMENT_OP1_SET_POLICY(CALL,Float,float,OP,OP2);
+#define DEFINE_OP1_SET_NUMERIC(CALL);                   \
+    DEFINE_OP1_SET_NUMERIC_INTEGER(CALL);               \
+    IMPLEMENT_OP1_SET_POLICY(CALL,Float,float);
     
 #define IMPLEMENT_OP2_POLICY(CALL,TYPE,CTYPE,OP)                        \
     template <>                                                         \
@@ -989,7 +988,7 @@ namespace yzg
             YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
             auto rv = r->eval##TYPE(context);                           \
             YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
-            return lv OP rv;                                            \
+            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
     
@@ -1003,7 +1002,7 @@ namespace yzg
             YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
             auto rv = r->eval##TYPE(context);                           \
             YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
-            return *lv OP rv;                                           \
+            return SimPolicy<CTYPE>::CALL(*lv,rv,context);              \
         }                                                               \
     };
     
@@ -1017,12 +1016,12 @@ namespace yzg
             YZG_BOOL_EXCEPTION_POINT;                                   \
             auto rv = r->eval##TYPE(context);                           \
             YZG_BOOL_EXCEPTION_POINT;                                   \
-            return lv OP rv;                                            \
+            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
     
 #define DEFINE_OP2_NUMERIC_INTEGER(CALL,OP)             \
-    DEFINE_OP2_POLICY(CALL);                            \
+    DEFINE_POLICY(CALL);                                \
     IMPLEMENT_OP2_POLICY(CALL,Int,int32_t,OP);          \
     IMPLEMENT_OP2_POLICY(CALL,UInt,uint32_t,OP);        \
     IMPLEMENT_OP2_POLICY(CALL,Int64,int64_t,OP);        \
@@ -1033,7 +1032,7 @@ namespace yzg
     IMPLEMENT_OP2_POLICY(CALL,Float,float,OP);
     
 #define DEFINE_OP2_BOOL_NUMERIC_INTEGER(CALL,OP)        \
-    DEFINE_OP2_POLICY(CALL);                            \
+    DEFINE_POLICY(CALL);                                \
     IMPLEMENT_OP2_BOOL_POLICY(CALL,Int,int32_t,OP);     \
     IMPLEMENT_OP2_BOOL_POLICY(CALL,UInt,uint32_t,OP);   \
     IMPLEMENT_OP2_BOOL_POLICY(CALL,Int64,int64_t,OP);   \
@@ -1044,7 +1043,7 @@ namespace yzg
     IMPLEMENT_OP2_BOOL_POLICY(CALL,Float,float,OP);
     
 #define DEFINE_OP2_SET_NUMERIC_INTEGER(CALL,OP)         \
-    DEFINE_OP2_POLICY(CALL);                            \
+    DEFINE_POLICY(CALL);                            \
     IMPLEMENT_OP2_SET_POLICY(CALL,Int,int32_t,OP);      \
     IMPLEMENT_OP2_SET_POLICY(CALL,UInt,uint32_t,OP);    \
     IMPLEMENT_OP2_SET_POLICY(CALL,Int64,int64_t,OP);    \
@@ -1059,15 +1058,15 @@ namespace yzg
     IMPLEMENT_OP2_BOOL_POLICY(NotEqu, TYPE, CTYPE, !=);
     
 // unary
-    DEFINE_OP1_NUMERIC(Unp, +,);
-    DEFINE_OP1_NUMERIC(Unm, -,);
-    DEFINE_OP1_SET_NUMERIC(Inc, ++,);
-    DEFINE_OP1_SET_NUMERIC(Dec, ++,);
-    DEFINE_OP1_SET_NUMERIC(IncPost,,++);
-    DEFINE_OP1_SET_NUMERIC(DecPost,,--);
-    DEFINE_OP1_NUMERIC_INTEGER(BinNot, ~, );
-    DEFINE_OP1_POLICY(BoolNot);
-    IMPLEMENT_OP1_POLICY(BoolNot, Bool, bool, !, );
+    DEFINE_OP1_NUMERIC(Unp);
+    DEFINE_OP1_NUMERIC(Unm);
+    DEFINE_OP1_SET_NUMERIC(Inc);
+    DEFINE_OP1_SET_NUMERIC(Dec);
+    DEFINE_OP1_NUMERIC(IncPost);
+    DEFINE_OP1_NUMERIC(DecPost);
+    DEFINE_OP1_NUMERIC_INTEGER(BinNot);
+    DEFINE_POLICY(BoolNot);
+    IMPLEMENT_OP1_POLICY(BoolNot, Bool, bool);
 // binary
     // +,-,*,/,%
     DEFINE_OP2_NUMERIC(Add, +);
@@ -1079,7 +1078,7 @@ namespace yzg
     DEFINE_OP2_SET_NUMERIC(SetSub, -);
     DEFINE_OP2_SET_NUMERIC(SetMul, *);
     DEFINE_OP2_SET_NUMERIC(SetDiv, *);
-    DEFINE_OP2_SET_NUMERIC_INTEGER(SetMod, %);
+    DEFINE_OP2_SET_NUMERIC(SetMod, %);
     // comparisons
     DEFINE_OP2_BOOL_NUMERIC(Equ, ==);
     DEFINE_OP2_BOOL_NUMERIC(NotEqu, !=);
@@ -1097,12 +1096,12 @@ namespace yzg
     DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinOr, |=);
     DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinXor, ^=);
     // boolean and, or, xor
-    DEFINE_OP2_POLICY(SetBoolAnd);
+    DEFINE_POLICY(SetBoolAnd);
     IMPLEMENT_OP2_SET_POLICY(SetBoolAnd, Bool, bool, &=);
-    DEFINE_OP2_POLICY(SetBoolOr);
+    DEFINE_POLICY(SetBoolOr);
     IMPLEMENT_OP2_SET_POLICY(SetBoolOr, Bool, bool, |=);
-    DEFINE_OP2_POLICY(SetBoolXor);
+    DEFINE_POLICY(SetBoolXor);
     IMPLEMENT_OP2_SET_POLICY(SetBoolXor, Bool, bool, ^=);
-    DEFINE_OP2_POLICY(BoolXor);
+    DEFINE_POLICY(BoolXor);
     IMPLEMENT_OP2_POLICY(BoolXor, Bool, bool, ^);
 }
