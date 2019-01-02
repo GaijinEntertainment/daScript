@@ -13,11 +13,10 @@ using namespace std;
 using namespace yzg;
 
 bool unit_test ( const string & fn ) {
-    cout << fn << "\n";
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
-        cout << "not found "<<fn<<"\n";
+        cout << fn << " not found "<<fn<<"\n";
         return false;
     }
     t.seekg(0, ios::end);
@@ -26,7 +25,7 @@ bool unit_test ( const string & fn ) {
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
     if ( auto program = parseDaScript(str.c_str()) ) {
         if ( program->failed() ) {
-            cout << "failed to compile\n";
+            cout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {
                 cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
             }
@@ -45,17 +44,17 @@ bool unit_test ( const string & fn ) {
                 __m128 args[1] = { cast<vector<Object> *>::from(&objects) };
                 bool result = cast<bool>::to(ctx.eval(fnTest, args));
                 if ( auto ex = ctx.getException() ) {
-                    cout << "exception: " << ex << "\n";
+                    cout << fn << ", exception: " << ex << "\n";
                     return false;
                 }
                 if ( !result ) {
-                    cout << "failed\n";
+                    cout << fn << ", failed\n";
                     return false;
                 }
                 // cout << "ok\n";
                 return true;
             } else {
-                cout << "function 'test' not found\n";
+                cout << fn << ", function 'test' not found\n";
                 return false;
             }
         }
@@ -65,32 +64,35 @@ bool unit_test ( const string & fn ) {
 }
 
 bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
+    vector<string> files;
 #ifdef _MSC_VER
-    bool ok = true;
     _finddata_t c_file;
     intptr_t hFile;
     string findPath = path + "/*.das";
     if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
         do {
-            ok = test_fn(path + "/" + c_file.name) && ok;
+            files.push_back(path + "/" + c_file.name);
         } while (_findnext(hFile, &c_file) == 0);
     }
     _findclose(hFile);
-    return ok;
 #else
-    bool ok = true;
     DIR *dir;
     struct dirent *ent;
     if ((dir = opendir (path.c_str())) != NULL) {
         while ((ent = readdir (dir)) != NULL) {
             if ( strstr(ent->d_name,".das") ) {
-                ok = test_fn(path + "/" + ent->d_name) && ok;
+                files.push_back(path + "/" + ent->d_name);
             }
         }
         closedir (dir);
     }
-    return ok;
 #endif
+    sort(files.begin(),files.end());
+    bool ok = true;
+    for ( auto & fn : files ) {
+        ok = test_fn(fn) && ok;
+    }
+    return ok;
 }
 
 int main(int argc, const char * argv[]) {

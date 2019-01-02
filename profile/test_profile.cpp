@@ -290,7 +290,7 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
 }
 
 
-constexpr int g_total = 10000;
+constexpr int g_total = 100000;
 vector<float3>   g_pos ( g_total );
 vector<float3>   g_vel ( g_total );
 vector<float3 *> g_velBoxed ( g_total );

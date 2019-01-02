@@ -23,12 +23,16 @@ def queryTwo(dt:float=0.5f)
 
 def queryThree()
     let count : int = 0
-    testProfile::queryEs() <| $ [es] (pos:float3& const)
-        let position : float3 = pos
+    try
         testProfile::queryEs() <| $ [es] (pos:float3& const)
-            if position==pos
-                count ++
-    assert(count==10000)
+            let position : float3 = pos
+            testProfile::queryEs() <| $ [es] (pos:float3& const)
+                if position==pos
+                    count ++
+                    if count==100
+                        throw("enough")
+    catch
+        assert(count==100)
 
 def test:bool
     testProfile::initEsComponents()
@@ -57,6 +61,6 @@ def test:bool
         queryOne()
     profile(1000,"query-2") <|
         queryTwo()
-    profile(1,"query-3") <|
+    profile(20,"query-3") <|
         queryThree()
     return true
