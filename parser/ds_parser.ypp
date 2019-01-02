@@ -240,14 +240,6 @@ expression_for_loop
         pFor->subexpr = ExpressionPtr($block);
         $$ = pFor;
     }
-    |   _FOR[loc] variable_name_list[iters] _IN expr_list[srcs] expression_block[block] {
-        auto pFor = new ExprFor(tokAt(@loc));
-        pFor->iterators = *$iters;
-        delete $iters;
-        pFor->sources = sequenceToList($srcs);
-        pFor->subexpr = ExpressionPtr($block);
-        $$ = pFor;
-    }
     ;
 
 expression_while_loop

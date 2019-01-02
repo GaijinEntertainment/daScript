@@ -50,7 +50,7 @@ namespace yzg
         if ( category ) {
             cout << "\"" << category << "\", " << fixed << tSec << ", " << count << "\n";
         }
-        return tSec;
+        return (float) tSec;
     }
 }
 
