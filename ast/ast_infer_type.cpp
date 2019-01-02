@@ -789,12 +789,6 @@ namespace yzg {
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             popVarStack();
             loop.pop_back();
-            if ( expr->filter ) {
-                if ( !expr->filter->type ) return Visitor::visit(expr);
-                if ( !expr->filter->type->isSimpleType(Type::tBool) ) {
-                    error("where clause must be boolean", expr->at);
-                }
-            }
             return Visitor::visit(expr);
         }
     // ExprLet

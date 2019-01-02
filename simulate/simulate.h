@@ -802,7 +802,6 @@ namespace yzg
         uint32_t    strides [MAX_FOR_ITERATORS];
         uint32_t    stackTop[MAX_FOR_ITERATORS];
         SimNode *   body;
-        SimNode *   filter;
         uint32_t    size;
     };
     
@@ -810,7 +809,6 @@ namespace yzg
         SimNode_ForWithIteratorBase ( const LineInfo & at ) : SimNode(at) {}
         SimNode *   source_iterators[MAX_FOR_ITERATORS];
         SimNode *   body;
-        SimNode *   filter;
         uint32_t    stackTop[MAX_FOR_ITERATORS];
     };
     
@@ -839,12 +837,7 @@ namespace yzg
                 for ( int t=0; t!=total; ++t ){
                     *pi[t] = ph[t].value;
                 }
-                if ( !filter || cast<bool>::to(filter->eval(context)) ) {
-                    if ( !context.stopFlags ) {
-                        body->eval(context);
-                        if ( context.stopFlags ) goto loopend;
-                    }
-                }
+                body->eval(context);
                 for ( int t=0; t!=total; ++t ){
                     if ( !sources[t]->next(context, ph[t]) ) goto loopend;
                     if ( context.stopFlags ) goto loopend;

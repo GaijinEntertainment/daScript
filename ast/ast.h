@@ -741,7 +741,6 @@ namespace yzg
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
         ExpressionPtr           subexpr;
-        ExpressionPtr           filter;
     };
     
     struct ExprLooksLikeCall : Expression {
@@ -1171,7 +1170,6 @@ namespace yzg
         virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) {}
         virtual VariablePtr visitFor ( ExprFor * expr, const VariablePtr & var, bool last ) { return var; }
         virtual void preVisitForStack ( ExprFor * ) {}
-        virtual void preVisitForFilter ( ExprFor *, Expression * ) {}
         virtual void preVisitForBody ( ExprFor *, Expression * ) {}
         virtual void preVisitForSource ( ExprFor *, Expression *, bool ) {}
         virtual ExpressionPtr visitForSource ( ExprFor *, Expression * that , bool ) { return that->shared_from_this(); }

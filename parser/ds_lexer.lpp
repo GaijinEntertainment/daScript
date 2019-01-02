@@ -111,7 +111,6 @@
 <normal>"table"                                         return _TABLE;
 <normal>"array"                                         return _ARRAY;
 <normal>"in"                                            return _IN;
-<normal>"where"                                         return _WHERE;
 <normal>"null"                                          return _NULL;
 <normal>"return"                                        return _RETURN;
 <normal>"break"                                         return _BREAK;

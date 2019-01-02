@@ -42,9 +42,10 @@ def test:bool
             assert(r==i*2-5)
             i++
         i = 0
-        for l,r in a,b where l>r
-            assert(l>r)
-            i++
+        for l,r in a,b
+            if l>r
+                assert(l>r)
+                i++
         assert(i==5)
     let(a:array<int>[10]; i:int=0)
         for b in a

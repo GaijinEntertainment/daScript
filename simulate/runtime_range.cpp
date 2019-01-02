@@ -31,20 +31,10 @@ namespace yzg
         YZG_EXCEPTION_POINT;
         range r = cast<range>::to(ll);
         int32_t * pi = (int32_t *)(context.stackTop + stackTop[0]);
-		if (filter) {
-			for (int32_t i = r.from; i != r.to && !context.stopFlags; ++i) {
-				*pi = i;
-				if (!filter || cast<bool>::to(filter->eval(context)))
-					if (!context.stopFlags)
-						body->eval(context);
-			}
-		}
-		else {
-			for (int32_t i = r.from; i != r.to && !context.stopFlags; ++i) {
-				*pi = i;
-				body->eval(context);
-			}
-		}
+        for (int32_t i = r.from; i != r.to && !context.stopFlags; ++i) {
+            *pi = i;
+            body->eval(context);
+        }
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return _mm_setzero_ps();
     }

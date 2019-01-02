@@ -210,15 +210,13 @@ namespace yzg {
             if ( expr->subexpr->rtti_isBlock()) {
                 auto block = static_pointer_cast<ExprBlock>(expr->subexpr);
                 if ( !block->list.size() ) {
-                    if ( !expr->filter || expr->filter->noSideEffects ) {
-                        bool noSideEffects = true;
-                        for ( auto & src : expr->sources ) {
-                            noSideEffects &= src->noSideEffects;
-                        }
-                        if ( noSideEffects ) {
-                            reportFolding();
-                            return nullptr;
-                        }
+                    bool noSideEffects = true;
+                    for ( auto & src : expr->sources ) {
+                        noSideEffects &= src->noSideEffects;
+                    }
+                    if ( noSideEffects ) {
+                        reportFolding();
+                        return nullptr;
                     }
                 }
             }

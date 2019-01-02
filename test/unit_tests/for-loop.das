@@ -30,9 +30,10 @@ def test:bool
             assert(r==i*2-5)
             assert(l==i++)
         i = 0
-        for l,r in a,b where l>r
-            assert(l>r)
-            i++
+        for l,r in a,b
+            if l>r
+                assert(l>r)
+                i++
         assert(i==5)
     // 2 variable, hybrid
     let(a:array<int>;b:int[10];i:int=0)
@@ -48,9 +49,10 @@ def test:bool
             assert(l==i++)
         assert(i==4)
         i = 0
-        for l,r in a,b where l>r
-            assert(l>r)
-            i++
+        for l,r in a,b
+            if l>r
+                assert(l>r)
+                i++
         assert(i==4)
     // 1 variable, range
     let(i:int=0)
@@ -67,9 +69,10 @@ def test:bool
             assert(r==i*2-5)
             assert(l==i++)
         i = 0
-        for l,r in range(0,10),b where l>r
-            assert(l>r)
-            i++
+        for l,r in range(0,10),b
+            if l>r
+                assert(l>r)
+                i++
         assert(i==5)
     return true
 

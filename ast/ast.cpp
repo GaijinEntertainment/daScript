@@ -1459,10 +1459,6 @@ namespace yzg
             src = vis.visitForSource(this, src.get(), src==sources.back());
         }
         vis.preVisitForStack(this);
-        if ( filter ) {
-            vis.preVisitForFilter(this, filter.get());
-            filter = filter->visit(vis);
-        }
         vis.preVisitForBody(this, subexpr.get());
         subexpr = subexpr->visit(vis);
         return vis.visit(this);
@@ -1477,8 +1473,6 @@ namespace yzg
         for ( auto & var : iteratorVariables )
             cexpr->iteratorVariables.push_back(var->clone());
         cexpr->subexpr = subexpr->clone();
-        if ( filter )
-            cexpr->filter = filter->clone();
         return cexpr;
     }
     
@@ -1555,7 +1549,6 @@ namespace yzg
                 result->stackTop[t] = iteratorVariables[t]->stackTop;
             }
             result->body = subexpr->simulate(context);
-            result->filter = filter ? filter->simulate(context) : nullptr;
             return result;
         } else {
             SimNode_ForBase * result;
@@ -1581,7 +1574,6 @@ namespace yzg
             }
             result->size = fixedSize;
             result->body = subexpr->simulate(context);
-            result->filter = filter ? filter->simulate(context) : nullptr;
             return result;
         }
     }

@@ -138,27 +138,14 @@ namespace yzg
             for ( int t=0; t!=total; ++t ) {
                 pi[t] = (char **)(context.stackTop + stackTop[t]);
             }
-			if (filter) {
-				for (int i = 0; !context.stopFlags; ++i) {
-					for (int t = 0; t != total; ++t) {
-						if (i >= int(pha[t]->size)) goto loopOver;
-						*pi[t] = ph[t];
-						ph[t] += strides[t];
-					}
-					if (!filter || cast<bool>::to(filter->eval(context)))
-						if (!context.stopFlags)
-							body->eval(context);
-				}
-			} else {
-				for (int i = 0; !context.stopFlags; ++i) {
-					for (int t = 0; t != total; ++t) {
-						if (i >= int(pha[t]->size)) goto loopOver;
-						*pi[t] = ph[t];
-						ph[t] += strides[t];
-					}
-					body->eval(context);
-				}
-			}
+            for (int i = 0; !context.stopFlags; ++i) {
+                for (int t = 0; t != total; ++t) {
+                    if (i >= int(pha[t]->size)) goto loopOver;
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                body->eval(context);
+            }
         loopOver:
             for ( int t=0; t!=total; ++t ) {
                 array_unlock(context, *pha[t]);
@@ -183,25 +170,13 @@ namespace yzg
             for ( int t=0; t!=total; ++t ) {
                 pi[t] = (char **)(context.stackTop + stackTop[t]);
             }
-			if (filter) {
-				for (int i = 0; i != size && !context.stopFlags; ++i) {
-					for (int t = 0; t != total; ++t) {
-						*pi[t] = ph[t];
-						ph[t] += strides[t];
-					}
-					if (!filter || cast<bool>::to(filter->eval(context)))
-						if (!context.stopFlags)
-							body->eval(context);
-				}
-			} else {
-				for (int i = 0; i != size && !context.stopFlags; ++i) {
-					for (int t = 0; t != total; ++t) {
-						*pi[t] = ph[t];
-						ph[t] += strides[t];
-					}
-					body->eval(context);
-				}
-			}
+            for (int i = 0; i != size && !context.stopFlags; ++i) {
+                for (int t = 0; t != total; ++t) {
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                body->eval(context);
+            }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return _mm_setzero_ps();
         }

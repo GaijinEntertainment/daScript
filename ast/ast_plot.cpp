@@ -229,10 +229,6 @@ namespace yzg {
 				connect(source, var);
 			}
 		}
-		virtual void preVisitForFilter(ExprFor * ffor, Expression * filter) override {
-			Visitor::preVisitForFilter(ffor, filter);
-			connect(filter, ffor);
-		}
 		virtual void preVisitForBody(ExprFor * ffor, Expression * body) override {
 			Visitor::preVisitForBody(ffor, body);
 			connect_block(ffor, body);

@@ -30,11 +30,6 @@ namespace yzg {
             Visitor::preVisit(expr);
             expr->cond->argLevel = true;
         }
-    // ExprFor
-        virtual void preVisit ( ExprFor * expr ) override {
-            Visitor::preVisit(expr);
-            if ( expr->filter ) expr->filter->argLevel = true;
-        }
     // ExprReturn
         virtual void preVisit ( ExprReturn * expr ) override {
             Visitor::preVisit(expr);
@@ -219,10 +214,6 @@ namespace yzg {
             Visitor::preVisitFor(ffor,var,last);
             ss << var->name;
             if ( !last ) ss << ","; else ss << " in ";
-        }
-        virtual void preVisitForFilter ( ExprFor * ffor, Expression * filter ) override {
-            Visitor::preVisitForFilter(ffor,filter);
-            ss << " where ";
         }
         virtual void preVisitForBody ( ExprFor * ffor, Expression * body ) override {
             Visitor::preVisitForBody(ffor, body);
