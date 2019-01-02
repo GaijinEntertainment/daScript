@@ -16,8 +16,8 @@ namespace yzg
         return from_rts(sAB);
     }
   
-    __m128 SimPolicy_String::SetAdd ( __m128 a, __m128 b, Context & context ) {
-        char ** pA = cast<char **>::to(a);
+    char * SimPolicy_String::SetAdd ( char * a, __m128 b, Context & context ) {
+		char ** pA = (char **)a;
         const char *  sA = *pA ? *pA : rts_null; auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
         *pA = (char * ) context.allocate(uint32_t(la + lb + 1));

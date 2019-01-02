@@ -47,23 +47,23 @@ namespace yzg
         static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) {
             return _mm_mul_ps(a,b);
         }
-        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetAdd  ( char * a, __m128 b, Context & ) {
+            TT * pa = (TT *) a;
             *pa = cast<TT>::to ( _mm_add_ps(cast<TT>::from(*pa), b));
             return a;
         }
-        static __forceinline __m128 SetSub  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetSub  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to ( _mm_sub_ps(cast<TT>::from(*pa), b));
             return a;
         }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetDiv  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to ( _mm_div_ps(cast<TT>::from(*pa), b));
             return a;
         }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetMul  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to ( _mm_mul_ps(cast<TT>::from(*pa), b));
             return a;
         }
@@ -80,13 +80,13 @@ namespace yzg
         static __forceinline __m128 MulScalVec ( __m128 a, __m128 b, Context & ) {
             return _mm_mul_ps(_mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0)),b);
         }
-        static __forceinline __m128 SetDivScal  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetDivScal  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to ( _mm_div_ps(cast<TT>::from(*pa), _mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))));
             return a;
         }
-        static __forceinline __m128 SetMulScal  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetMulScal  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to ( _mm_mul_ps(cast<TT>::from(*pa), _mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))));
             return a;
         }
@@ -150,23 +150,23 @@ namespace yzg
         static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) {
             return _mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(a),_mm_castps_si128(b)));
         }
-        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetAdd  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
             return a;
         }
-        static __forceinline __m128 SetSub  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetSub  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_sub_epi32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
             return a;
         }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetDiv  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_div_epi32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
             return a;
         }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetMul  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
             return a;
         }
@@ -183,14 +183,14 @@ namespace yzg
         static __forceinline __m128 MulScalVec ( __m128 a, __m128 b, Context & ) {
             return _mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(_mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0))),_mm_castps_si128(b)));
         }
-        static __forceinline __m128 SetDivScal  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetDivScal ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_div_epi32(_mm_castps_si128(cast<TT>::from(*pa)),
                                                                _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))))));
             return a;
         }
-        static __forceinline __m128 SetMulScal  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetMulScal ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(cast<TT>::from(*pa)),
                                                                _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))))));
             return a;
@@ -215,13 +215,13 @@ namespace yzg
         static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) {
             return _mm_castsi128_ps(_mm_mul_epu32(_mm_castps_si128(a), _mm_castps_si128(b)));
         }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetDiv  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_div_epu32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
             return a;
         }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetMul  ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_mul_epu32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
             return a;
         }
@@ -238,14 +238,14 @@ namespace yzg
         static __forceinline __m128 MulScalVec ( __m128 a, __m128 b, Context & ) {
             return _mm_castsi128_ps(_mm_mul_epu32(_mm_castps_si128(_mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0))), _mm_castps_si128(b)));
         }
-        static __forceinline __m128 SetDivScal  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetDivScal ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_div_epu32(_mm_castps_si128(cast<TT>::from(*pa)),
                                                                _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))))));
             return a;
         }
-        static __forceinline __m128 SetMulScal  ( __m128 a, __m128 b, Context & ) {
-            TT * pa = cast<TT *>::to(a);
+        static __forceinline char * SetMulScal ( char * a, __m128 b, Context & ) {
+			TT * pa = (TT *)a;
             *pa = cast<TT>::to (_mm_castsi128_ps(_mm_mul_epu32(_mm_castps_si128(cast<TT>::from(*pa)),
                                                                _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))))));
             return a;

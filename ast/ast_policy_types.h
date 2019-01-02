@@ -35,8 +35,8 @@ namespace  yzg {
         static __forceinline __m128 Unm ( __m128 x, Context & ) { return cast<TT>::from( -cast<TT>::to(x)); }
         static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)+cast<TT>::to(b)); }
         static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)-cast<TT>::to(b)); }
-        static __forceinline __m128 SetAdd  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) += cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetSub  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) -= cast<TT>::to(b); return a; }
+        static __forceinline char * SetAdd  ( char * a, __m128 b, Context & ) { *((TT *)a) += cast<TT>::to(b); return a; }
+        static __forceinline char * SetSub  ( char * a, __m128 b, Context & ) { *((TT *)a) -= cast<TT>::to(b); return a; }
     };
     
     template <typename TT>
@@ -57,8 +57,8 @@ namespace  yzg {
         static __forceinline __m128 DecPost ( __m128 x, Context & ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X--); }
         static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)/cast<TT>::to(b)); }
         static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)*cast<TT>::to(b)); }
-        static __forceinline __m128 SetDiv  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) *= cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetMul  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) /= cast<TT>::to(b); return a; }
+        static __forceinline char * SetDiv  ( char * a, __m128 b, Context & ) { *((TT *)a) *= cast<TT>::to(b); return a; }
+        static __forceinline char * SetMul  ( char * a, __m128 b, Context & ) { *((TT *)a) /= cast<TT>::to(b); return a; }
     };
     
     struct SimPolicy_Bool : SimPolicy_CoreType<bool> {
@@ -66,12 +66,12 @@ namespace  yzg {
         static __forceinline __m128 BoolAnd ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) && cast<bool>::to(b)); }
         static __forceinline __m128 BoolOr  ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) || cast<bool>::to(b)); }
         static __forceinline __m128 BoolXor ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) != cast<bool>::to(b)); }
-        static __forceinline __m128 SetBoolAnd  ( __m128 a, __m128 b, Context & )
-        { auto pa = cast<bool *>::to(a); *pa = *pa && cast<bool>::to(b); return a; }
-        static __forceinline __m128 SetBoolOr   ( __m128 a, __m128 b, Context & )
-        { auto pa = cast<bool *>::to(a); *pa = *pa || cast<bool>::to(b); return a; }
-        static __forceinline __m128 SetBoolXor  ( __m128 a, __m128 b, Context & )
-        { auto pa = cast<bool *>::to(a); *pa = *pa != cast<bool>::to(b); return a; }
+        static __forceinline char * SetBoolAnd  ( char * a, __m128 b, Context & )
+        { auto pa = (bool *) a; *pa = *pa && cast<bool>::to(b); return a; }
+        static __forceinline char * SetBoolOr   ( char * a, __m128 b, Context & )
+        { auto pa = (bool *) a; *pa = *pa || cast<bool>::to(b); return a; }
+        static __forceinline char * SetBoolXor  ( char * a, __m128 b, Context & )
+        { auto pa = (bool *) a; *pa = *pa != cast<bool>::to(b); return a; }
     };
     
     template <typename TT>
@@ -81,9 +81,9 @@ namespace  yzg {
         static __forceinline __m128 BinAnd ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) & cast<TT>::to(b)); }
         static __forceinline __m128 BinOr  ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) | cast<TT>::to(b)); }
         static __forceinline __m128 BinXor ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) ^ cast<TT>::to(b)); }
-        static __forceinline __m128 SetBinAnd ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) &= cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetBinOr  ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) |= cast<TT>::to(b); return a; }
-        static __forceinline __m128 SetBinXor ( __m128 a, __m128 b, Context & ) { *cast<TT *>::to(a) ^= cast<TT>::to(b); return a; }
+        static __forceinline char * SetBinAnd ( char * a, __m128 b, Context & ) { *((TT *)a) &= cast<TT>::to(b); return a; }
+        static __forceinline char * SetBinOr  ( char * a, __m128 b, Context & ) { *((TT *)a) |= cast<TT>::to(b); return a; }
+        static __forceinline char * SetBinXor ( char * a, __m128 b, Context & ) { *((TT *)a) ^= cast<TT>::to(b); return a; }
     };
     
     struct SimPolicy_Int : SimPolicy_Bin<int32_t> {

@@ -901,6 +901,26 @@ namespace yzg
             return SimPolicy::CALL ( lv, rv, context );                     \
         }                                                                   \
     };
+
+#define DEFINE_OP2_SET_POLICY(CALL)                                         \
+    template <typename SimPolicy>                                           \
+    struct Sim_##CALL : SimNode_Op2 {                                       \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}             \
+        virtual char * evalPtr ( Context & context ) override {             \
+            char * lv = l->evalPtr(context);                                \
+            YZG_PTR_EXCEPTION_POINT;                                        \
+            __m128 rv = r->eval(context);                                   \
+            YZG_PTR_EXCEPTION_POINT;                                        \
+            return SimPolicy::CALL ( lv, rv, context );                     \
+        }                                                                   \
+        virtual __m128 eval ( Context & context ) override {                \
+            char * lv = l->evalPtr(context);                                \
+            YZG_EXCEPTION_POINT;                                            \
+            __m128 rv = r->eval(context);                                   \
+            YZG_EXCEPTION_POINT;                                            \
+            return cast<char *>::from(SimPolicy::CALL ( lv, rv, context )); \
+        }                                                                   \
+    };
     
     DEFINE_OP2_POLICY(Equ);
     DEFINE_OP2_POLICY(NotEqu);
@@ -908,7 +928,7 @@ namespace yzg
     DEFINE_OP2_POLICY(GtEqu);
     DEFINE_OP2_POLICY(Less);
     DEFINE_OP2_POLICY(Gt);
-    DEFINE_OP2_POLICY(SetEqu);
+    DEFINE_OP2_SET_POLICY(SetEqu);
     DEFINE_OP2_POLICY(Add);
     DEFINE_OP2_POLICY(Sub);
     DEFINE_OP2_POLICY(Div);
@@ -922,19 +942,20 @@ namespace yzg
     DEFINE_OP2_POLICY(BinAnd);
     DEFINE_OP2_POLICY(BinOr);
     DEFINE_OP2_POLICY(BinXor);
-    DEFINE_OP2_POLICY(Set);
-    DEFINE_OP2_POLICY(SetBoolAnd);
-    DEFINE_OP2_POLICY(SetBoolOr);
-    DEFINE_OP2_POLICY(SetBoolXor);
-    DEFINE_OP2_POLICY(SetBinAnd);
-    DEFINE_OP2_POLICY(SetBinOr);
-    DEFINE_OP2_POLICY(SetBinXor);
-    DEFINE_OP2_POLICY(SetAdd);
-    DEFINE_OP2_POLICY(SetSub);
-    DEFINE_OP2_POLICY(SetDiv);
-    DEFINE_OP2_POLICY(SetMul);
-    DEFINE_OP2_POLICY(SetDivScal);
-    DEFINE_OP2_POLICY(SetMulScal);
+    DEFINE_OP2_SET_POLICY(Set);
+    DEFINE_OP2_SET_POLICY(SetBoolAnd);
+    DEFINE_OP2_SET_POLICY(SetBoolOr);
+    DEFINE_OP2_SET_POLICY(SetBoolXor);
+    DEFINE_OP2_SET_POLICY(SetBinAnd);
+    DEFINE_OP2_SET_POLICY(SetBinOr);
+    DEFINE_OP2_SET_POLICY(SetBinXor);
+    DEFINE_OP2_SET_POLICY(SetAdd);
+    DEFINE_OP2_SET_POLICY(SetSub);
+    DEFINE_OP2_SET_POLICY(SetMul);
+	DEFINE_OP2_SET_POLICY(SetDiv);
+    DEFINE_OP2_SET_POLICY(SetDivScal);
+    DEFINE_OP2_SET_POLICY(SetMulScal);
+
     
     struct Sim_BoolAnd : SimNode_Op2 {
         Sim_BoolAnd ( const LineInfo & at ) : SimNode_Op2(at) {}

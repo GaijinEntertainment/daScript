@@ -40,7 +40,7 @@ namespace yzg
             { return cast<bool>::from(strcmp(to_rts(a), to_rts(b))>0); }
         
         static __m128 Add     ( __m128 a, __m128 b, Context & context );
-        static __m128 SetAdd  ( __m128 a, __m128 b, Context & context );
+        static char * SetAdd  ( char * a, __m128 b, Context & context );
     };
     
     string unescapeString ( const string & input );
