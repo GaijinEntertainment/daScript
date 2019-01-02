@@ -444,7 +444,7 @@ namespace yzg
             if ( pv.init ) {
                 pv.init->eval(*this);
             } else {
-                memset ( cast<void *>::to(pv.value), 0, pv.size );
+                memset ( pv.value.dataPtr, 0, pv.size );
             }
         }
     }

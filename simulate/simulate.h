@@ -25,11 +25,11 @@ namespace yzg
     struct Block;
     
     struct GlobalVariable {
-        char *      name;
-        __m128      value;
-        uint32_t    size;
-        VarInfo *   debug;
-        SimNode *   init;
+        char *          name;
+        ValueVariant    value;
+        uint32_t        size;
+        VarInfo *       debug;
+        SimNode *       init;
     };
     
     struct SimFunction {
@@ -132,7 +132,7 @@ namespace yzg
         
         __forceinline __m128 getVariable ( int index ) const {
             assert(index>=0 && index<totalVariables && "variable index out of range");
-            return globalVariables[index].value;
+            return globalVariables[index].value.dataVec;
         }
         
         __forceinline void simEnd() {
@@ -444,7 +444,7 @@ namespace yzg
     struct SimNode_GetGlobal : SimNode {
         SimNode_GetGlobal ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
         virtual __m128 eval ( Context & context ) override {
-            return context.globalVariables[index].value;
+            return context.globalVariables[index].value.dataVec;
         }
         int32_t index;
     };
@@ -453,7 +453,7 @@ namespace yzg
     struct SimNode_GetGlobalR2V : SimNode_GetGlobal {
         SimNode_GetGlobalR2V ( const LineInfo & at, int32_t i ) : SimNode_GetGlobal(at,i) {}
         virtual __m128 eval ( Context & context ) override {
-            TT * pR = (TT *) cast<char *>::to ( context.globalVariables[index].value );
+            TT * pR = (TT *) context.globalVariables[index].value.dataPtr;
             return cast<TT>::from(*pR);
         }
     };
@@ -537,11 +537,11 @@ namespace yzg
     
     // CONST-VALUE
     struct SimNode_ConstValue : SimNode {
-        SimNode_ConstValue(const LineInfo & at, __m128 c) : SimNode(at), value(c) {}
+        SimNode_ConstValue(const LineInfo & at, __m128 c) : SimNode(at) { value.dataVec = c; }
         virtual __m128 eval ( Context & context ) override {
-            return value;
+            return value.dataVec;
         }
-        __m128 value;
+        ValueVariant value;
     };
     
     // COPY VALUE

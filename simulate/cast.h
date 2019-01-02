@@ -8,6 +8,16 @@ namespace yzg
 {
     using namespace std;
     
+    union ValueVariant {
+        __m128      dataVec;
+        bool        dataBool;
+        int32_t     dataInt;
+        uint32_t    dataUInt;
+        int64_t     dataInt64;
+        uint64_t    dataUInt64;
+        char *      dataPtr;
+    };
+    
     template <typename TT>
     struct cast;
     
@@ -33,8 +43,8 @@ namespace yzg
     
     template <>
     struct cast <bool> {
-        static __forceinline bool to ( __m128 x )               { return *((int *)&x) != 0; }
-        static __forceinline __m128 from ( bool x )             { return _mm_castsi128_ps(_mm_set1_epi32(x)); }
+        static __forceinline bool to ( __m128 x )               { return *((int32_t *)&x) != 0; }
+        static __forceinline __m128 from ( bool x )             { __m128 a; *((int32_t *)&a) = x; return a; }
     };
     
     template <>
@@ -64,7 +74,7 @@ namespace yzg
     template <>
     struct cast <float> {
         static __forceinline float to ( __m128 x )              { return *((float *)&x); }
-        static __forceinline __m128 from ( float x )            { return _mm_set_ss(x); }
+        static __forceinline __m128 from ( float x )            { __m128 a; *((float *)&a) = x; return a; }
     };
     
     template <>
