@@ -173,6 +173,11 @@ namespace yzg
             return ((Prologue *)stackTop)->arguments;
         }
         
+        __forceinline ValueVariant * abiArgumentsVariant() {
+            return (ValueVariant*)(((Prologue *)stackTop)->arguments);
+        }
+
+        
         __forceinline __m128 & abiResult() {
             return ((Prologue *)stackTop)->result;
         }
@@ -453,6 +458,9 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             return context.abiArguments()[index];
         }
+        virtual char * evalPtr ( Context & context ) override {
+            return (context.abiArgumentsVariant()[index]).dataPtr;
+        }
         int32_t index;
     };
 
@@ -461,6 +469,9 @@ namespace yzg
 		virtual __m128 eval(Context & context) override {
 			return cast<void *>::from (&context.abiArguments()[index]);
 		}
+        virtual char * evalPtr ( Context & context ) override {
+            return (char *) &context.abiArguments()[index];
+        }
 	};
     
     template <typename TT>
@@ -469,6 +480,10 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             TT * pR = cast<TT *>::to(context.abiArguments()[index]);
             return cast<TT>::from(*pR);
+        }
+        virtual char * evalPtr ( Context & context ) override {
+            assert(0 && "we should not even be here?");
+            return *(char **)(context.abiArgumentsVariant()[index]).dataPtr;
         }
     };
     
