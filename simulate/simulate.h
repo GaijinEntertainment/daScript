@@ -516,8 +516,16 @@ namespace yzg
     
     // POINTER TO REFERENCE (CAST)
     struct SimNode_Ptr2Ref : SimNode {      // ptr -> &value
+        YZG_PTR_NODE;
         SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
-        virtual __m128 eval ( Context & context ) override;
+        __forceinline char * compute ( Context & context ) {
+            auto ptr = subexpr->evalPtr(context);
+            YZG_PTR_EXCEPTION_POINT;
+            if ( !ptr ) {
+                context.throw_error("dereferencing null pointer");
+            }
+            return ptr;
+        }
         SimNode * subexpr;
     };
     
@@ -530,13 +538,22 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             return pR ? cast<TT>::from(*pR) : value->eval(context);
         }
+        virtual char * evalPtr ( Context & context ) override {
+            assert(0 && "we should not even be here!");
+            return nullptr;
+        }
         SimNode * value;
     };
     
     // let(a:int?) x = a && default_a
     struct SimNode_NullCoalescingRef : SimNode_Ptr2Ref {
+        YZG_PTR_NODE;
         SimNode_NullCoalescingRef ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
-        virtual __m128 eval ( Context & context ) override;
+        __forceinline char * compute ( Context & context ) {
+            auto ptr = subexpr->evalPtr(context);
+            YZG_PTR_EXCEPTION_POINT;
+            return ptr ? ptr : value->evalPtr(context);
+        }
         SimNode * value;
     };
     
