@@ -639,15 +639,16 @@ namespace yzg
     // COPY VALUE
     template <typename TT>
     struct SimNode_CopyValue : SimNode {
+		YZG_PTR_NODE;
         SimNode_CopyValue(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
-        virtual __m128 eval ( Context & context ) override {
+        __forceinline char * compute ( Context & context ) {
             TT * pl = (TT *) l->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            YZG_PTR_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
-            YZG_EXCEPTION_POINT;
+            YZG_PTR_EXCEPTION_POINT;
             TT * pr = (TT *) &rr;
             *pl = *pr;
-            return cast<TT *>::from(pl);
+            return (char *) pl;
         }
         SimNode * l, * r;
     };
@@ -663,15 +664,16 @@ namespace yzg
     
     template <typename TT>
     struct SimNode_CopyRefValueT : SimNode {
+		YZG_PTR_NODE;
         SimNode_CopyRefValueT(const LineInfo & at, SimNode * ll, SimNode * rr)
-        : SimNode(at), l(ll), r(rr) {};
-        __m128 eval ( Context & context ) {
+			: SimNode(at), l(ll), r(rr) {};
+        __forceinline char * compute ( Context & context ) {
             TT * pl = (TT *) l->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            YZG_PTR_EXCEPTION_POINT;
             TT * pr = (TT *) r->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            YZG_PTR_EXCEPTION_POINT;
             *pl = *pr;
-            return cast<TT *>::from(pl);
+            return (char *) pl;
         }
         SimNode * l, * r;
     };

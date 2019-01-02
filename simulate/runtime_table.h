@@ -237,12 +237,21 @@ namespace yzg
     
     template <typename KeyType>
     struct SimNode_TableFind : SimNode_Table {
+		YZG_PTR_NODE;
         SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-        virtual __m128 tabEval ( Context & context, Table * tab, __m128 xkey ) override {
-            KeyType key = cast<KeyType>::to(xkey);
-            auto at = RobinHoodHash<KeyType>(&context,valueTypeSize).find(*tab, key);
-            return at.second ? cast<void *>::from ( tab->data + at.first * valueTypeSize ) : _mm_setzero_ps();
-        }
+		virtual __m128 tabEval(Context & context, Table * tab, __m128 xkey) override {
+			assert(0 && "we should not even be here");
+			return _mm_setzero_ps();
+		}
+		__forceinline char * compute(Context & context) {
+			Table * tab = (Table *)tabExpr->evalPtr(context);
+			YZG_PTR_EXCEPTION_POINT;
+			__m128 xkey = keyExpr->eval(context);
+			YZG_PTR_EXCEPTION_POINT;
+			KeyType key = cast<KeyType>::to(xkey);
+			auto at = RobinHoodHash<KeyType>(&context, valueTypeSize).find(*tab, key);
+			return at.second ? tab->data + at.first * valueTypeSize : nullptr;
+		}
     };
     
     struct TableIterator : Iterator {
