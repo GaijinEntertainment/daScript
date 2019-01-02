@@ -2,7 +2,6 @@
 
 #include "module_builtin.h"
 #include "ast_interop.h"
-#include "ast_policy_types.h"
 #include "ast_handle.h"
 
 #include <ctime>
@@ -24,6 +23,7 @@ namespace yzg {
     };
 #endif
     
+    /*
     struct ClockTypeAnnotation : ManagedValueAnnotation<time_t> {
         ClockTypeAnnotation() : ManagedValueAnnotation<time_t>("clock") {}
         virtual void debug ( stringstream & ss, void * data ) const override {
@@ -38,6 +38,7 @@ namespace yzg {
             return cast<float>::from( float(difftime(A, B)) );
         }
     };
+    */
     
     time_t builtin_clock() {
         return time(nullptr);
@@ -50,6 +51,7 @@ namespace yzg {
     }
     
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
+        /*
         addAnnotation(make_shared<ClockTypeAnnotation>());
         addExtern<decltype(builtin_clock),builtin_clock>(*this, lib, "getClock");
         addExtern<decltype(builtin_clockToString),builtin_clockToString>(*this, lib, "string", false);
@@ -57,5 +59,6 @@ namespace yzg {
         addFunctionBasic<time_t,SimPolicy_time_t>(*this,lib);
         addFunctionOrdered<time_t, SimPolicy_time_t>(*this,lib);
         addFunction( make_shared<BuiltInFn<Sim_Sub<SimPolicy_time_t>, float, time_t, time_t>  >("-", lib) );
+        */
     }
 }

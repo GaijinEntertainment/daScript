@@ -7,6 +7,7 @@
 
 namespace yzg
 {
+/*
     template <typename TT, int mask>
     struct SimPolicy_Vec {
         // this is missing in SSE2 (but exists in SSE4?)
@@ -238,8 +239,10 @@ namespace yzg
     
     struct SimPolicy_Range : SimPolicy_iVec<range,3> {};
     struct SimPolicy_URange : SimPolicy_uVec<urange,3> {};
+ */
     
     void Module_BuiltIn::addVectorTypes(ModuleLibrary & lib) {
+        /*
         // float2
         addFunctionBasic<float2, SimPolicy_Vec<float2,3>>(*this,lib);
         addFunctionNumeric<float2, SimPolicy_Vec<float2,3>>(*this,lib);
@@ -285,11 +288,12 @@ namespace yzg
         addFunctionNumeric<uint4, SimPolicy_uVec<uint4,3>>(*this,lib);
         addFunctionVecNumeric<uint4, uint32_t, SimPolicy_uVec<uint4,3>>(*this,lib);
         addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<4>,uint4,uint32_t,uint32_t,uint32_t,uint32_t>>("uint4",lib) );
+        */
         // range
-        addFunctionBasic<range,SimPolicy_Range>(*this,lib);
+        //addFunctionBasic<range,SimPolicy_Range>(*this,lib);
         addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<2>,range,int32_t,int32_t>>("range",lib) );
         // urange
-        addFunctionBasic<urange,SimPolicy_URange>(*this,lib);
+        //addFunctionBasic<urange,SimPolicy_URange>(*this,lib);
         addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<2>,urange,uint32_t,uint32_t>>("urange",lib) );
     }
 }

@@ -5,20 +5,40 @@
 
 namespace yzg
 {
-    char * SimNode::evalPtr ( Context & context ) {
+    bool SimNode::evalBool ( Context & context ) {
         // TODO: assert(0 && "we should never be here")
+        return cast<bool>::to(eval(context));
+    }
+    
+    float SimNode::evalFloat ( Context & context ) {
+        // TODO: assert(0 && "we should never be here")
+        return cast<float>::to(eval(context));
+    }
+    
+    int32_t SimNode::evalInt ( Context & context ) {
+        // TODO: assert(0 && "we should never be here")
+        return cast<int32_t>::to(eval(context));
+    }
+    
+    uint32_t SimNode::evalUInt ( Context & context ) {
+        // TODO: assert(0 && "we should never be here")
+        return cast<uint32_t>::to(eval(context));
+    }
+    
+    int64_t SimNode::evalInt64 ( Context & context ) {
+        // TODO: assert(0 && "we should never be here")
+        return cast<int64_t>::to(eval(context));
+    }
+    
+    uint64_t SimNode::evalUInt64 ( Context & context ) {
+        // TODO: assert(0 && "we should never be here")
+        return cast<uint64_t>::to(eval(context));
+    }
+    
+    char * SimNode::evalPtr ( Context & context ) {
+        assert(0 && "we should never be here");
         return cast<char *>::to(eval(context));
     }
-
-	char * SimNode_Op1::evalPtr(Context & context) {
-		// TODO: assert(0 && "we should never be here")
-		return cast<char *>::to(eval(context));
-	}
-
-	char * SimNode_Op2::evalPtr(Context & context) {
-		// TODO: assert(0 && "we should never be here")
-		return cast<char *>::to(eval(context));
-	}
     
     // SimNode_MakeBlock
     
@@ -74,7 +94,7 @@ namespace yzg
     // SimNode_Assert
     
     __m128 SimNode_Assert::eval ( Context & context ) {
-        if ( !cast<bool>::to(subexpr->eval(context)) ) {
+        if ( !subexpr->evalBool(context) ) {
             YZG_EXCEPTION_POINT;
             string error_message = "assert failed";
             if ( message )
@@ -173,7 +193,7 @@ namespace yzg
     // SimNode_IfThenElse
     
     __m128 SimNode_IfThenElse::eval ( Context & context ) {
-        bool cmp = cast<bool>::to(cond->eval(context));
+        bool cmp = cond->evalBool(context);
         YZG_EXCEPTION_POINT;
         if ( cmp ) {
             return if_true->eval(context);
@@ -187,7 +207,7 @@ namespace yzg
     // SimNode_While
     
     __m128 SimNode_While::eval ( Context & context ) {
-        while ( cast<bool>::to(cond->eval(context)) && !context.stopFlags ) {
+        while ( cond->evalBool(context) && !context.stopFlags ) {
             body->eval(context);
         }
         context.stopFlags &= ~EvalFlags::stopForBreak;

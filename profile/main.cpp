@@ -104,8 +104,8 @@ int main(int argc, const char * argv[]) {
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_TestProfile);
-#if 0
-    unit_test(TEST_PATH "profile/tests/profile_array_of_structures_vec.das");
+#if 1
+    unit_test(TEST_PATH "profile/tests/primes.das");
     Module::Shutdown();
     return 0;
 #endif
