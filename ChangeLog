@@ -2,7 +2,7 @@ NOTE: uriparser is looking for help with a few things:
       https://github.com/uriparser/uriparser/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
-201x-xx-xx -- x.x.x
+2019-01-02 -- 0.9.1
 
 >>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   * Fixed:
@@ -22,7 +22,7 @@ NOTE: uriparser is looking for help with a few things:
       Thanks to Sandro Mani for the patch!
   * Fixed: Drop use of asprintf from the test suite for MinGW (GitHub #40)
   * Improved: For parse errors, waterproof errorPos <= afterLast
-  * Soname: TODO
+  * Soname: 1:24:0
 
 2018-10-27 -- 0.9.0
 
