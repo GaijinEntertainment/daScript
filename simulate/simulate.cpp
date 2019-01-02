@@ -30,21 +30,6 @@ namespace yzg
         return cast<Block>::from(block);
     }
     
-    // SimNode_At
-    
-    __m128 SimNode_At::eval ( Context & context )  {
-        auto pValue = value->evalPtr(context);
-        YZG_EXCEPTION_POINT;
-        uint32_t idx = cast<uint32_t>::to(index->eval(context));
-        YZG_EXCEPTION_POINT;
-        if ( idx >= range ) {
-            context.throw_error("index out of range");
-            return _mm_setzero_ps();
-        } else {
-            return cast<char *>::from(pValue + idx*stride);
-        }
-    }
-    
     // SimNode_Call
     
     void SimNode_Call::evalArgs ( Context & context, __m128 * argValues ) {

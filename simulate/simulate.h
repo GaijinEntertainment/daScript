@@ -326,9 +326,21 @@ namespace yzg
     
     // AT (INDEX)
     struct SimNode_At : SimNode {
+		YZG_PTR_NODE;
         SimNode_At ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t rng )
             : SimNode(at), value(rv), index(idx), stride(strd), range(rng) {}
-        virtual __m128 eval ( Context & context ) override;
+		__forceinline char * compute (Context & context) {
+			auto pValue = value->evalPtr(context);
+			YZG_PTR_EXCEPTION_POINT;
+			uint32_t idx = cast<uint32_t>::to(index->eval(context));
+			YZG_PTR_EXCEPTION_POINT;
+			if (idx >= range) {
+				context.throw_error("index out of range");
+				return nullptr;
+			} else {
+				return pValue + idx*stride;
+			}
+		}
         SimNode * value, * index;
         uint32_t  stride, range;
     };
