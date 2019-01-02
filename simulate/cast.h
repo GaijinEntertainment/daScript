@@ -24,7 +24,7 @@ namespace yzg
     template <typename TT>
     struct cast <TT *> {
         static __forceinline TT * to ( __m128 a )               { return ((TT **)&a)[0]; }
-        static __forceinline __m128 from ( TT * p )             { __m128 x; ((TT **)&x)[0] = p; return x; }
+        static __forceinline __m128 from ( TT * p )             { return _mm_loadu_ps((float *) &p); }
     };
     
     template <typename TT>

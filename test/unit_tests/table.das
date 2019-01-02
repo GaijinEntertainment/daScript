@@ -11,7 +11,8 @@ def test : bool
             assert(tab[string(i)]==i++)
         assert(length(tab)==total)
         // debug(tab)
-        i = del = 0
+        i = 0
+        del = 0
         while i < total
             assert(erase(tab,string(i)))
             assert(!erase(tab,string(i)))

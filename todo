@@ -14,6 +14,14 @@ after r2v
 	native loop took: 1.463391
 	../../profile/primes.das
 	primes loop took: 1.840420
+after ptr goo
+	../../profile/tests/fib.das
+	fibbonacci loop took: 0.197751
+	fibbonacci recursive took: 0.442276
+	../../profile/tests/native.das
+	native loop took: 1.329884
+	../../profile/tests/primes.das
+	primes loop took: 1.681099
 
 before invokeEx
 	es-update took: 0.000116
@@ -29,3 +37,10 @@ after invokeEx
 	query-1 took: 0.000168
 	query-2 took: 0.000193
 	query-3 took: 1.507901
+after ptr goo
+	es-update took: 0.000086
+	es-update-ref took: 0.000085
+	es-update-ref-const took: 0.000113
+	query-1 took: 0.000167
+	query-2 took: 0.000194
+	query-3 took: 1.468511

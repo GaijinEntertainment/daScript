@@ -634,7 +634,7 @@ namespace yzg {
             } else if ( expr->left->type->canCopy() ) {
                 error("this type can be copied, use = instead", expr->at, CompilationError::cant_move);
             }
-            expr->type = make_shared<TypeDecl>(*expr->left->type);  // we return left
+            expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
         }
     // ExprCopy
@@ -652,7 +652,7 @@ namespace yzg {
             if ( !expr->left->type->canCopy() ) {
                 error("this type can't be copied, use <- instead", expr->at, CompilationError::cant_copy);
             }
-            expr->type = make_shared<TypeDecl>(*expr->left->type);  // we return left
+            expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
         }
     // ExprTryCatch

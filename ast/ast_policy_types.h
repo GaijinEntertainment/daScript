@@ -35,8 +35,8 @@ namespace  yzg {
         static __forceinline __m128 Unm ( __m128 x, Context & ) { return cast<TT>::from( -cast<TT>::to(x)); }
         static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)+cast<TT>::to(b)); }
         static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)-cast<TT>::to(b)); }
-        static __forceinline char * SetAdd  ( char * a, __m128 b, Context & ) { *((TT *)a) += cast<TT>::to(b); return a; }
-        static __forceinline char * SetSub  ( char * a, __m128 b, Context & ) { *((TT *)a) -= cast<TT>::to(b); return a; }
+        static __forceinline void SetAdd  ( char * a, __m128 b, Context & ) { *((TT *)a) += cast<TT>::to(b); }
+        static __forceinline void SetSub  ( char * a, __m128 b, Context & ) { *((TT *)a) -= cast<TT>::to(b); }
     };
     
     template <typename TT>
@@ -57,8 +57,8 @@ namespace  yzg {
         static __forceinline __m128 DecPost ( __m128 x, Context & ) { TT & X = *cast<TT*>::to(x); return cast<TT>::from(X--); }
         static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)/cast<TT>::to(b)); }
         static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a)*cast<TT>::to(b)); }
-        static __forceinline char * SetDiv  ( char * a, __m128 b, Context & ) { *((TT *)a) *= cast<TT>::to(b); return a; }
-        static __forceinline char * SetMul  ( char * a, __m128 b, Context & ) { *((TT *)a) /= cast<TT>::to(b); return a; }
+        static __forceinline void SetDiv  ( char * a, __m128 b, Context & ) { *((TT *)a) *= cast<TT>::to(b); }
+        static __forceinline void SetMul  ( char * a, __m128 b, Context & ) { *((TT *)a) /= cast<TT>::to(b); }
     };
     
     struct SimPolicy_Bool : SimPolicy_CoreType<bool> {
@@ -66,12 +66,12 @@ namespace  yzg {
         static __forceinline __m128 BoolAnd ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) && cast<bool>::to(b)); }
         static __forceinline __m128 BoolOr  ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) || cast<bool>::to(b)); }
         static __forceinline __m128 BoolXor ( __m128 a, __m128 b, Context & ) { return cast<bool>::from(cast<bool>::to(a) != cast<bool>::to(b)); }
-        static __forceinline char * SetBoolAnd  ( char * a, __m128 b, Context & )
-        { auto pa = (bool *) a; *pa = *pa && cast<bool>::to(b); return a; }
-        static __forceinline char * SetBoolOr   ( char * a, __m128 b, Context & )
-        { auto pa = (bool *) a; *pa = *pa || cast<bool>::to(b); return a; }
-        static __forceinline char * SetBoolXor  ( char * a, __m128 b, Context & )
-        { auto pa = (bool *) a; *pa = *pa != cast<bool>::to(b); return a; }
+        static __forceinline void SetBoolAnd  ( char * a, __m128 b, Context & )
+        { auto pa = (bool *) a; *pa = *pa && cast<bool>::to(b); }
+        static __forceinline void SetBoolOr   ( char * a, __m128 b, Context & )
+        { auto pa = (bool *) a; *pa = *pa || cast<bool>::to(b);  }
+        static __forceinline void SetBoolXor  ( char * a, __m128 b, Context & )
+        { auto pa = (bool *) a; *pa = *pa != cast<bool>::to(b); }
     };
     
     template <typename TT>
@@ -81,9 +81,9 @@ namespace  yzg {
         static __forceinline __m128 BinAnd ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) & cast<TT>::to(b)); }
         static __forceinline __m128 BinOr  ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) | cast<TT>::to(b)); }
         static __forceinline __m128 BinXor ( __m128 a, __m128 b, Context & ) { return cast<TT>::from(cast<TT>::to(a) ^ cast<TT>::to(b)); }
-        static __forceinline char * SetBinAnd ( char * a, __m128 b, Context & ) { *((TT *)a) &= cast<TT>::to(b); return a; }
-        static __forceinline char * SetBinOr  ( char * a, __m128 b, Context & ) { *((TT *)a) |= cast<TT>::to(b); return a; }
-        static __forceinline char * SetBinXor ( char * a, __m128 b, Context & ) { *((TT *)a) ^= cast<TT>::to(b); return a; }
+        static __forceinline void SetBinAnd ( char * a, __m128 b, Context & ) { *((TT *)a) &= cast<TT>::to(b); }
+        static __forceinline void SetBinOr  ( char * a, __m128 b, Context & ) { *((TT *)a) |= cast<TT>::to(b); }
+        static __forceinline void SetBinXor ( char * a, __m128 b, Context & ) { *((TT *)a) ^= cast<TT>::to(b); }
     };
     
     struct SimPolicy_Int : SimPolicy_Bin<int32_t> {
@@ -133,7 +133,7 @@ namespace  yzg {
     void addFunctionConcat(Module & mod, const ModuleLibrary & lib) {
         //                                    policy                        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Add<SimPolicy_TT>,        TT,   TT,  TT>  >("+",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetAdd<SimPolicy_TT>,     TT&,  TT&, TT>  >("+=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetAdd<SimPolicy_TT>,     void, TT&, TT>  >("+=",     lib)->sideEffects(true) );
     }
     
     // group by add
@@ -144,7 +144,7 @@ namespace  yzg {
         mod.addFunction( make_shared<BuiltInFn<Sim_Unp<SimPolicy_TT>,        TT,   TT>       >("+",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Unm<SimPolicy_TT>,        TT,   TT>       >("-",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Sub<SimPolicy_TT>,        TT,   TT,  TT>  >("-",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     TT&,  TT&, TT>  >("-=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     void, TT&, TT>  >("-=",     lib)->sideEffects(true) );
     }
     
     // numeric types
@@ -157,9 +157,9 @@ namespace  yzg {
         mod.addFunction( make_shared<BuiltInFn<Sim_Sub<SimPolicy_TT>,        TT,   TT,  TT>  >("-",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Mul<SimPolicy_TT>,        TT,   TT,  TT>  >("*",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Div<SimPolicy_TT>,        TT,   TT,  TT>  >("/",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     TT&,  TT&, TT>  >("-=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetMul<SimPolicy_TT>,     TT&,  TT&, TT>  >("*=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetDiv<SimPolicy_TT>,     TT&,  TT&, TT>  >("/=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<SimPolicy_TT>,     void, TT&, TT>  >("-=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetMul<SimPolicy_TT>,     void, TT&, TT>  >("*=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetDiv<SimPolicy_TT>,     void, TT&, TT>  >("/=",     lib)->sideEffects(true) );
         // optional
         if ( hasMod ) {
             mod.addFunction( make_shared<BuiltInFn<Sim_Mod<SimPolicy_TT>,        TT,   TT,  TT>  >("%",      lib) );
@@ -175,8 +175,8 @@ namespace  yzg {
         mod.addFunction( make_shared<BuiltInFn<Sim_DivScalVec<SimPolicy_TT>,    TT,   TTS, TT>  >("/",    lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_MulVecScal<SimPolicy_TT>,    TT,   TT,  TTS> >("*",    lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_DivVecScal<SimPolicy_TT>,    TT,   TT,  TTS> >("/",    lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<SimPolicy_TT>,    TT&,  TT&, TT>  >("*=",   lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<SimPolicy_TT>,    TT&,  TT&, TT>  >("/=",   lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<SimPolicy_TT>,    void, TT&, TT>  >("*=",   lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<SimPolicy_TT>,    void, TT&, TT>  >("/=",   lib)->sideEffects(true) );
     }
     
     // inc-dec
@@ -197,9 +197,9 @@ namespace  yzg {
         mod.addFunction( make_shared<BuiltInFn<Sim_BinAnd<SimPolicy_TT>,     TT,   TT,  TT>  >("&",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BinOr<SimPolicy_TT>,      TT,   TT,  TT>  >("|",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BinXor<SimPolicy_TT>,     TT,   TT,  TT>  >("^",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinAnd<SimPolicy_TT>,  TT&,  TT,  TT&> >("&=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinOr<SimPolicy_TT>,   TT&,  TT,  TT&> >("|=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinXor<SimPolicy_TT>,  TT&,  TT,  TT&> >("^=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinAnd<SimPolicy_TT>,  void, TT,  TT&> >("&=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinOr<SimPolicy_TT>,   void, TT,  TT&> >("|=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinXor<SimPolicy_TT>,  void, TT,  TT&> >("^=",     lib)->sideEffects(true) );
     }
     
     // built-in boolean types
@@ -210,8 +210,8 @@ namespace  yzg {
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolAnd,                  TT,   TT,  TT>  >("&",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolOr,                   TT,   TT,  TT>  >("|",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolXor<SimPolicy_Bool>,  TT,   TT,  TT>  >("^",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolAnd<SimPolicy_Bool>,TT&, TT&, TT>  >("&=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolOr<SimPolicy_Bool>, TT&, TT&, TT>  >("|=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolXor<SimPolicy_Bool>,TT&, TT&, TT>  >("^=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolAnd<SimPolicy_Bool>,void,TT&, TT>  >("&=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolOr<SimPolicy_Bool>, void,TT&, TT>  >("|=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolXor<SimPolicy_Bool>,void,TT&, TT>  >("^=",     lib)->sideEffects(true) );
     }
 }

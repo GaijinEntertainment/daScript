@@ -81,6 +81,9 @@ def verify(total:int;objects:NObject[10000])
 
 def test(objects:ObjectArray):bool
     let(total:int=200;simTN,simT,cT,intT,manyT,manyKsT:float)
+        // manyKsT = profile(total,"interop 10000-ks version") <|
+        //     update10000ks(objects)
+        // return true
         init(nobjects)
         simTN = profile(total,"native basic version") <|
             testSim(nobjects)

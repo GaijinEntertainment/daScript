@@ -674,16 +674,24 @@ namespace yzg
     // COPY VALUE
     template <typename TT>
     struct SimNode_CopyValue : SimNode {
-		YZG_PTR_NODE;
         SimNode_CopyValue(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
-        __forceinline char * compute ( Context & context ) {
+        virtual __m128 eval ( Context & context ) override {
+            TT * pl = (TT *) l->evalPtr(context);
+            YZG_EXCEPTION_POINT;
+            __m128 rr = r->eval(context);
+            YZG_EXCEPTION_POINT;
+            TT * pr = (TT *) &rr;
+            *pl = *pr;
+            return _mm_setzero_ps();
+        }
+        virtual char * evalPtr ( Context & context ) override {
             TT * pl = (TT *) l->evalPtr(context);
             YZG_PTR_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
             YZG_PTR_EXCEPTION_POINT;
             TT * pr = (TT *) &rr;
             *pl = *pr;
-            return (char *) pl;
+            return nullptr;
         }
         SimNode * l, * r;
     };
@@ -699,16 +707,15 @@ namespace yzg
     
     template <typename TT>
     struct SimNode_CopyRefValueT : SimNode {
-		YZG_PTR_NODE;
         SimNode_CopyRefValueT(const LineInfo & at, SimNode * ll, SimNode * rr)
 			: SimNode(at), l(ll), r(rr) {};
-        __forceinline char * compute ( Context & context ) {
+        virtual __m128 eval ( Context & context ) override {
             TT * pl = (TT *) l->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
+            YZG_EXCEPTION_POINT;
             TT * pr = (TT *) r->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
+            YZG_EXCEPTION_POINT;
             *pl = *pr;
-            return (char *) pl;
+            return _mm_setzero_ps();
         }
         SimNode * l, * r;
     };
@@ -897,7 +904,6 @@ namespace yzg
             __m128 lv = l->eval(context);                                   \
             YZG_EXCEPTION_POINT;                                            \
             __m128 rv = r->eval(context);                                   \
-            YZG_EXCEPTION_POINT;                                            \
             return SimPolicy::CALL ( lv, rv, context );                     \
         }                                                                   \
     };
@@ -911,14 +917,16 @@ namespace yzg
             YZG_PTR_EXCEPTION_POINT;                                        \
             __m128 rv = r->eval(context);                                   \
             YZG_PTR_EXCEPTION_POINT;                                        \
-            return SimPolicy::CALL ( lv, rv, context );                     \
+            SimPolicy::CALL ( lv, rv, context );                            \
+            return nullptr;                                                 \
         }                                                                   \
         virtual __m128 eval ( Context & context ) override {                \
             char * lv = l->evalPtr(context);                                \
             YZG_EXCEPTION_POINT;                                            \
             __m128 rv = r->eval(context);                                   \
             YZG_EXCEPTION_POINT;                                            \
-            return cast<char *>::from(SimPolicy::CALL ( lv, rv, context )); \
+            SimPolicy::CALL ( lv, rv, context );                            \
+            return _mm_setzero_ps();                                        \
         }                                                                   \
     };
     

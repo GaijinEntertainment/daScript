@@ -126,7 +126,7 @@ namespace yzg
         auto pr = r->evalPtr(context);
         YZG_EXCEPTION_POINT;
         memcpy ( pl, pr, size );
-        return cast<char *>::from(pl);
+        return _mm_setzero_ps();
     }
     
     // SimNode_MoveRefValue
@@ -138,7 +138,7 @@ namespace yzg
         YZG_EXCEPTION_POINT;
         memcpy ( pl, pr, size );
         memset ( pr, 0, size );
-        return cast<char *>::from(pl);
+        return _mm_setzero_ps();
     }
     
     // SimNode_Block
