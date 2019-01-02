@@ -110,43 +110,6 @@ namespace yzg
         #endif
         return _mm_setzero_ps();
     }
-
-    // FIELD
-    
-    __m128 SimNode_FieldDeref::eval ( Context & context ) {
-        auto prv = value->evalPtr(context);
-        YZG_EXCEPTION_POINT;
-        if ( prv ) {
-            return cast<char *>::from( prv + offset );
-        } else {
-            context.throw_error("dereferencing null pointer");
-            return _mm_setzero_ps();
-        }
-    }
-    
-    // FIELD ?.
-    
-    __m128 SimNode_SafeFieldDeref::eval ( Context & context ) {
-        auto prv = value->evalPtr(context);
-        YZG_EXCEPTION_POINT;
-        if ( prv ) {
-            return cast<char *>::from( prv + offset );
-        } else {
-            return _mm_setzero_ps();
-        }
-    }
-    
-    // FIELD ?. ->
-    
-    __m128 SimNode_SafeFieldDerefPtr::eval ( Context & context ) {
-        char ** prv = (char **) value->evalPtr(context);
-        YZG_EXCEPTION_POINT;
-        if ( prv ) {
-            return cast<char *>::from( *(prv + offset) );
-        } else {
-            return _mm_setzero_ps();
-        }
-    }
     
     // SimNode_New
     

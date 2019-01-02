@@ -246,8 +246,18 @@ namespace yzg
     
     // FIELD .
     struct SimNode_FieldDeref : SimNode {
+        YZG_PTR_NODE;
         SimNode_FieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode(at), value(rv), offset(of) {}
-        virtual __m128 eval ( Context & context ) override;
+        __forceinline char * compute ( Context & context ) {
+            auto prv = value->evalPtr(context);
+            YZG_PTR_EXCEPTION_POINT;
+            if ( prv ) {
+                return prv + offset;
+            } else {
+                context.throw_error("dereferencing null pointer");
+                return nullptr;
+            }
+        }
         SimNode *   value;
         uint32_t    offset;
     };
@@ -266,18 +276,46 @@ namespace yzg
                 return _mm_setzero_ps();
             }
         }
+        virtual char * evalPtr ( Context & context ) override {
+            auto prv = value->evalPtr(context);
+            YZG_PTR_EXCEPTION_POINT;
+            if ( prv ) {
+                return * (char **)( prv + offset );
+            } else {
+                context.throw_error("dereferencing null pointer");
+                return nullptr;
+            }
+        }
     };
     
     // FIELD ?.
     struct SimNode_SafeFieldDeref : SimNode_FieldDeref {
+        YZG_PTR_NODE;
         SimNode_SafeFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
-        virtual __m128 eval ( Context & context ) override;
+        __forceinline char * compute ( Context & context ) {
+            auto prv = value->evalPtr(context);
+            YZG_PTR_EXCEPTION_POINT;
+            if ( prv ) {
+                return prv + offset;
+            } else {
+                return nullptr;
+            }
+        }
     };
     
     // FIELD ?.->
     struct SimNode_SafeFieldDerefPtr : SimNode_FieldDeref {
+        YZG_PTR_NODE;
         SimNode_SafeFieldDerefPtr ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
-        virtual __m128 eval ( Context & context ) override;
+        __forceinline char * compute ( Context & context ) {
+            char ** prv = (char **) value->evalPtr(context);
+            YZG_PTR_EXCEPTION_POINT;
+            if ( prv ) {
+                return *(prv + offset);
+            } else {
+                return nullptr;
+            }
+        }
     };
     
     // AT (INDEX)
