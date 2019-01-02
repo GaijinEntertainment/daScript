@@ -517,6 +517,9 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             return context.globalVariables[index].value.dataVec;
         }
+		virtual char * evalPtr(Context & context) override {
+			return context.globalVariables[index].value.dataPtr;
+		}
         int32_t index;
     };
     
@@ -527,6 +530,9 @@ namespace yzg
             TT * pR = (TT *) context.globalVariables[index].value.dataPtr;
             return cast<TT>::from(*pR);
         }
+		virtual char * evalPtr(Context & context) override {
+			return *(char **)context.globalVariables[index].value.dataPtr;
+		}
     };
     
     // TRY-CATCH
