@@ -7,20 +7,57 @@
 
 namespace yzg
 {
-
-    
-    
-/*
-    DEFINE_OP2_POLICY(DivVecScal);
-    DEFINE_OP2_POLICY(MulVecScal);
-    DEFINE_OP2_POLICY(DivScalVec);
-    DEFINE_OP2_POLICY(MulScalVec);
-    DEFINE_OP2_SET_POLICY(SetBoolAnd);
-    DEFINE_OP2_SET_POLICY(SetBoolOr);
-    DEFINE_OP2_SET_POLICY(SetBoolXor);
-    DEFINE_OP2_SET_POLICY(SetDivScal);
-    DEFINE_OP2_SET_POLICY(SetMulScal);
-*/
+    // unary
+    DEFINE_OP1_NUMERIC(Unp);
+    DEFINE_OP1_NUMERIC(Unm);
+    DEFINE_OP1_SET_NUMERIC(Inc);
+    DEFINE_OP1_SET_NUMERIC(Dec);
+    DEFINE_OP1_POSTSET_NUMERIC(IncPost);
+    DEFINE_OP1_POSTSET_NUMERIC(DecPost);
+    DEFINE_OP1_NUMERIC_INTEGER(BinNot);
+    DEFINE_POLICY(BoolNot);
+    IMPLEMENT_OP1_POLICY(BoolNot, Bool, bool);
+    // binary
+    // +,-,*,/,%
+    DEFINE_OP2_NUMERIC(Add);
+    DEFINE_OP2_NUMERIC(Sub);
+    DEFINE_OP2_NUMERIC(Mul);
+    DEFINE_OP2_NUMERIC(Div);
+    DEFINE_OP2_NUMERIC(Mod);
+    DEFINE_OP2_SET_NUMERIC(SetAdd);
+    DEFINE_OP2_SET_NUMERIC(SetSub);
+    DEFINE_OP2_SET_NUMERIC(SetMul);
+    DEFINE_OP2_SET_NUMERIC(SetDiv);
+    DEFINE_OP2_SET_NUMERIC(SetMod);
+    // comparisons
+    DEFINE_OP2_BOOL_NUMERIC(Equ);
+    DEFINE_OP2_BOOL_NUMERIC(NotEqu);
+    DEFINE_OP2_BOOL_NUMERIC(LessEqu);
+    DEFINE_OP2_BOOL_NUMERIC(GtEqu);
+    DEFINE_OP2_BOOL_NUMERIC(Less);
+    DEFINE_OP2_BOOL_NUMERIC(Gt);
+    DEFINE_OP2_BASIC_POLICY(Bool,bool);
+    DEFINE_OP2_BASIC_POLICY(Ptr,void *);
+    // binary and, or, xor
+    DEFINE_OP2_NUMERIC_INTEGER(BinAnd);
+    DEFINE_OP2_NUMERIC_INTEGER(BinOr);
+    DEFINE_OP2_NUMERIC_INTEGER(BinXor);
+    DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinAnd);
+    DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinOr);
+    DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinXor);
+    // boolean and, or, xor
+    DEFINE_POLICY(SetBoolAnd);
+    IMPLEMENT_OP2_SET_POLICY(SetBoolAnd, Bool, bool);
+    DEFINE_POLICY(SetBoolOr);
+    IMPLEMENT_OP2_SET_POLICY(SetBoolOr, Bool, bool);
+    DEFINE_POLICY(SetBoolXor);
+    IMPLEMENT_OP2_SET_POLICY(SetBoolXor, Bool, bool);
+    DEFINE_POLICY(BoolXor);
+    IMPLEMENT_OP2_POLICY(BoolXor, Bool, bool);
+    // string
+    DEFINE_OP2_EVAL_BASIC_POLICY(char *);
+    DEFINE_OP2_EVAL_ORDERED_POLICY(char *);
+    DEFINE_OP2_EVAL_GROUPBYADD_POLICY(char *);
     
     Module_BuiltIn::Module_BuiltIn() : Module("$") {
         ModuleLibrary lib;
@@ -71,15 +108,12 @@ namespace yzg
         addFunction ( make_shared<BuiltInFn<SimNode_Cast<float,int32_t>,float,int32_t>>("float",lib) );
         addFunction ( make_shared<BuiltInFn<SimNode_Cast<float,uint32_t>,float,uint32_t>>("float",lib) );
         // string
-/*
-        addFunctionBasic<char *,SimPolicy_String>(*this,lib);
-        addFunctionOrdered<char *, SimPolicy_String>(*this,lib);
-        addFunctionConcat<char *, SimPolicy_String>(*this,lib);
+        addFunctionBasic<char *>(*this,lib);
+        addFunctionOrdered<char *>(*this,lib);
+        addFunctionConcat<char *>(*this,lib);
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t>>    ("string",lib) );
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t>>   ("string",lib) );
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float>>      ("string",lib) );
-*/
- 
         // VECTOR TYPES
         addVectorTypes(lib);
         // RUNTIME

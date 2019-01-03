@@ -6,32 +6,32 @@
 namespace yzg
 {
     bool SimNode::evalBool ( Context & context ) {
-        // TODO: assert(0 && "we should never be here")
+        assert(0 && "we should never be here");
         return cast<bool>::to(eval(context));
     }
     
     float SimNode::evalFloat ( Context & context ) {
-        // TODO: assert(0 && "we should never be here")
+        assert(0 && "we should never be here");
         return cast<float>::to(eval(context));
     }
     
     int32_t SimNode::evalInt ( Context & context ) {
-        // TODO: assert(0 && "we should never be here")
+        assert(0 && "we should never be here");
         return cast<int32_t>::to(eval(context));
     }
     
     uint32_t SimNode::evalUInt ( Context & context ) {
-        // TODO: assert(0 && "we should never be here")
+        assert(0 && "we should never be here");
         return cast<uint32_t>::to(eval(context));
     }
     
     int64_t SimNode::evalInt64 ( Context & context ) {
-        // TODO: assert(0 && "we should never be here")
+        assert(0 && "we should never be here");
         return cast<int64_t>::to(eval(context));
     }
     
     uint64_t SimNode::evalUInt64 ( Context & context ) {
-        // TODO: assert(0 && "we should never be here")
+        assert(0 && "we should never be here");
         return cast<uint64_t>::to(eval(context));
     }
     
@@ -63,20 +63,6 @@ namespace yzg
         evalArgs(context, argValues);
         YZG_EXCEPTION_POINT;
         return context.call(fnIndex, argValues, debug.line);
-    }
-    
-    int32_t SimNode_Call::evalInt ( Context & context ) {
-        __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
-        evalArgs(context, argValues);
-        YZG_INT_EXCEPTION_POINT;
-        return cast<int>::to(context.call(fnIndex, argValues, debug.line));
-    }
-    
-    bool SimNode_Call::evalBool ( Context & context ) {
-        __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
-        evalArgs(context, argValues);
-        YZG_BOOL_EXCEPTION_POINT;
-        return cast<bool>::to(context.call(fnIndex, argValues, debug.line));
     }
     
     // SimNode_Invoke

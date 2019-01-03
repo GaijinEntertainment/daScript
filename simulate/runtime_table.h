@@ -195,6 +195,12 @@ namespace yzg
             : SimNode(at), tabExpr(t), keyExpr(k), valueTypeSize(vts) {}
         virtual __m128 tabEval ( Context & context, Table * tab, __m128 xkey ) = 0;
         virtual __m128 eval ( Context & context ) override;
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return cast<CTYPE>::to(eval(context));                  \
+        }
+        YZG_EVAL_NODE;
+#undef  EVAL_NODE
         SimNode * tabExpr;
         SimNode * keyExpr;
         uint32_t valueTypeSize;

@@ -70,28 +70,30 @@ namespace yzg
     struct ManagedVectorAnnotation : TypeAnnotation {
         typedef vector<OT> VectorType;
         struct SimNode_VectorLength : SimNode {
+            YZG_INT_NODE;
             SimNode_VectorLength ( const LineInfo & at, SimNode * rv )
                 : SimNode(at), value(rv) {}
-            virtual __m128 eval ( Context & context ) override {
-                VectorType * pValue = cast<VectorType *>::to(value->eval(context));
-                YZG_EXCEPTION_POINT;
-                return cast<int32_t>::from(int32_t(pValue->size()));
+            __forceinline int32_t compute ( Context & context ) {
+                auto pValue = (VectorType *) value->evalPtr(context);
+                YZG_INT_EXCEPTION_POINT;
+                return int32_t(pValue->size());
             }
             SimNode * value;
         };
         struct SimNode_AtVector : SimNode_At {
+            YZG_PTR_NODE;
             SimNode_AtVector ( const LineInfo & at, SimNode * rv, SimNode * idx )
-            : SimNode_At(at, rv, idx, 0, 0) {}
-            virtual __m128 eval ( Context & context ) override {
-                VectorType * pValue = cast<VectorType *>::to(value->eval(context));
-                YZG_EXCEPTION_POINT;
+                : SimNode_At(at, rv, idx, 0, 0) {}
+            __forceinline char * compute ( Context & context ) {
+                auto pValue = (VectorType *) value->evalPtr(context);
+                YZG_PTR_EXCEPTION_POINT;
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
-                YZG_EXCEPTION_POINT;
+                YZG_PTR_EXCEPTION_POINT;
                 if ( idx >= pValue->size() ) {
                     context.throw_error("index out of range");
-                    return _mm_setzero_ps();
+                    return nullptr;
                 } else {
-                    return cast<char *>::from((char *)(pValue->data() + idx));
+                    return (char *)(pValue->data() + idx);
                 }
             }
         };

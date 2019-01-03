@@ -231,7 +231,7 @@ namespace yzg
     #define YZG_INT_EXCEPTION_POINT \
         { if ( context.stopFlags ) return 0; }
     #define YZG_NODE_EXCEPTION_POINT(CTYPE) \
-        { if ( context.stopFlags ) return CTYPE(); }
+        { if ( context.stopFlags ) return (CTYPE) 0; }
 #else
     #define YZG_EXCEPTION_POINT
     #define YZG_PTR_EXCEPTION_POINT
@@ -240,6 +240,15 @@ namespace yzg
     #define YZG_INT_EXCEPTION_POINT
     #define YZG_NODE_EXCEPTION_POINT(CTYPE)
 #endif
+    
+#define YZG_EVAL_NODE               \
+    EVAL_NODE(Ptr,char *);          \
+    EVAL_NODE(Int,int32_t);         \
+    EVAL_NODE(UInt,uint32_t);       \
+    EVAL_NODE(Int64,int64_t);       \
+    EVAL_NODE(UInt64,uint64_t);     \
+    EVAL_NODE(Float,float);         \
+    EVAL_NODE(Bool,bool);
     
 #define YZG_NODE(TYPE,CTYPE)                                    \
     virtual __m128 eval ( Context & context ) override {        \
@@ -251,6 +260,7 @@ namespace yzg
     
 #define YZG_PTR_NODE    YZG_NODE(Ptr,char *)
 #define YZG_BOOL_NODE   YZG_NODE(Bool,bool)
+#define YZG_INT_NODE    YZG_NODE(Int,int32_t)
     
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
@@ -290,11 +300,14 @@ namespace yzg
             return cast<TT>::from(*pR);
 
         }
-        virtual char * evalPtr ( Context & context ) override {
-            auto prv = value->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
-			return * (char **)( prv + offset );
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            auto prv = value->evalPtr(context);                     \
+            YZG_NODE_EXCEPTION_POINT(CTYPE);                        \
+            return * (CTYPE *)( prv + offset );                     \
         }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
     };
 
 	// PTR FIELD .
@@ -392,8 +405,12 @@ namespace yzg
         SimNode_Call ( const LineInfo & at ) : SimNode(at) {}
         void evalArgs ( Context & context, __m128 * argValues );
         virtual __m128 eval ( Context & context ) override;
-        virtual int32_t evalInt ( Context & context ) override;
-        virtual bool evalBool ( Context & context ) override;
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return cast<CTYPE>::to(eval(context));                  \
+        }
+        YZG_EVAL_NODE;
+#undef  EVAL_NODE
         SimNode ** arguments;
         int32_t  fnIndex;
         int32_t  nArguments;
@@ -480,12 +497,12 @@ namespace yzg
             TT * pR = (TT *)(context.stackTop + stackTop);
             return cast<TT>::from(*pR);
         }
-        virtual char * evalPtr ( Context & context ) override {
-            return *(char **)(context.stackTop + stackTop);
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)(context.stackTop + stackTop);         \
         }
-        virtual int32_t evalInt ( Context & context ) override {
-            return *(int32_t *)(context.stackTop + stackTop);
-        }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
     };
     
     // WHEN LOCAL VARIABLE STORES REFERENCE
@@ -494,6 +511,10 @@ namespace yzg
         SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp) {}
         __forceinline char * compute ( Context & context ) {
             return *(char **)(context.stackTop + stackTop);
+        }
+        virtual int32_t evalInt ( Context & context ) override {
+            assert(0 && "like that?");
+            return **(int32_t **)(context.stackTop + stackTop);
         }
     };
     
@@ -504,10 +525,12 @@ namespace yzg
             TT * pR = *(TT **)(context.stackTop + stackTop);
             return cast<TT>::from(*pR);
         }
-        virtual int32_t evalInt ( Context & context ) override {
-            assert(0 && "like that?");
-            return **(int32_t **)(context.stackTop + stackTop);
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return **(CTYPE **)(context.stackTop + stackTop);       \
         }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
     };
     
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
@@ -526,23 +549,21 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
             return context.abiArguments()[index];
         }
-        virtual char * evalPtr ( Context & context ) override {
-            return (context.abiArgumentsVariant()[index]).dataPtr;
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return cast<CTYPE>::to(context.abiArguments()[index]);  \
         }
-        virtual int32_t evalInt ( Context & context ) override {
-            return (context.abiArgumentsVariant()[index]).dataInt;
-        }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
         int32_t index;
     };
 
 	struct SimNode_GetArgumentRef : SimNode_GetArgument {
+        YZG_PTR_NODE;
 		SimNode_GetArgumentRef(const LineInfo & at, int32_t i) : SimNode_GetArgument(at,i) {}
-		virtual __m128 eval(Context & context) override {
-			return cast<void *>::from (&context.abiArguments()[index]);
+		__forceinline char * compute(Context & context) {
+			return (char *)(&context.abiArguments()[index]);
 		}
-        virtual char * evalPtr ( Context & context ) override {
-            return (char *) &context.abiArguments()[index];
-        }
 	};
     
     template <typename TT>
@@ -552,10 +573,12 @@ namespace yzg
             TT * pR = cast<TT *>::to(context.abiArguments()[index]);
             return cast<TT>::from(*pR);
         }
-        virtual char * evalPtr ( Context & context ) override {
-            assert(0 && "we should not even be here?");
-            return *(char **)(context.abiArgumentsVariant()[index]).dataPtr;
+#define EVAL_NODE(TYPE,CTYPE)                                               \
+        virtual CTYPE eval##TYPE ( Context & context ) override {           \
+            return * cast<CTYPE *>::to(context.abiArguments()[index]);      \
         }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
     };
     
     // BLOCK VARIABLE "GET"
@@ -566,6 +589,13 @@ namespace yzg
             __m128 * args = *((__m128 **)(context.stackTop + stackTop));
             return args[index];
         }
+#define EVAL_NODE(TYPE,CTYPE)                                               \
+        virtual CTYPE eval##TYPE ( Context & context ) override {           \
+            __m128 * args = *((__m128 **)(context.stackTop + stackTop));    \
+            return cast<CTYPE>::to(args[index]);                            \
+        }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
         int32_t     index;
         uint32_t    stackTop;
     };
@@ -579,6 +609,13 @@ namespace yzg
             TT * pR = (TT *) cast<char *>::to(args[index]);
             return cast<TT>::from(*pR);
         }
+#define EVAL_NODE(TYPE,CTYPE)                                               \
+        virtual CTYPE eval##TYPE ( Context & context ) override {           \
+            __m128 * args = *((__m128 **)(context.stackTop + stackTop));    \
+            return * cast<CTYPE *>::to(args[index]);                        \
+        }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
     };
     
     // GLOBAL VARIABLE "GET"
@@ -641,9 +678,14 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             return cast<TT>::from(*pR);
         }
-		virtual char * evalPtr (Context & context) override {
-			return *(char **)subexpr->evalPtr(context);
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE (Context & context) override {     \
+			auto pR = (CTYPE *)subexpr->evalPtr(context);           \
+            YZG_NODE_EXCEPTION_POINT(CTYPE);                        \
+            return *pR;                                             \
 		}
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
         SimNode * subexpr;
     };
     
@@ -659,6 +701,10 @@ namespace yzg
             }
             return ptr;
         }
+        virtual int32_t evalInt ( Context & context ) override {
+            assert(0 && "we should not even be here!");
+            return 0;
+        }
         SimNode * subexpr;
     };
     
@@ -671,10 +717,15 @@ namespace yzg
             YZG_EXCEPTION_POINT;
             return pR ? cast<TT>::from(*pR) : value->eval(context);
         }
-        virtual char * evalPtr ( Context & context ) override {
-            assert(0 && "we should not even be here!");
-            return nullptr;
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            auto pR = (CTYPE *) subexpr->evalPtr(context);          \
+            YZG_NODE_EXCEPTION_POINT(CTYPE);                        \
+            return pR ? *pR : value->eval##TYPE(context);           \
         }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
+
         SimNode * value;
     };
     
@@ -686,6 +737,10 @@ namespace yzg
             auto ptr = subexpr->evalPtr(context);
             YZG_PTR_EXCEPTION_POINT;
             return ptr ? ptr : value->evalPtr(context);
+        }
+        virtual int32_t evalInt ( Context & context ) override {
+            assert(0 && "we should not even be here!");
+            return 0;
         }
         SimNode * value;
     };
@@ -699,17 +754,17 @@ namespace yzg
     
     // CONST-VALUE
     struct SimNode_ConstValue : SimNode {
-        SimNode_ConstValue(const LineInfo & at, __m128 c) : SimNode(at) { value.dataVec = c; }
+        SimNode_ConstValue(const LineInfo & at, __m128 c) : SimNode(at), value(c) { }
         virtual __m128 eval ( Context & context ) override {
-            return value.dataVec;
+            return value;
         }
-        virtual char * evalPtr ( Context & context ) override {
-            return value.dataPtr;
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return cast<CTYPE>::to(value);                          \
         }
-        virtual int32_t evalInt ( Context & context ) override {
-            return value.dataInt;
-        }
-        ValueVariant value;
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
+        __m128 value;
     };
     
     // COPY VALUE
@@ -947,6 +1002,19 @@ namespace yzg
 #define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
+        YZG_PTR_NODE;                                                   \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
+        __forceinline char * compute ( Context & context ) {            \
+            auto val = (CTYPE *) x->evalPtr(context);                   \
+            YZG_PTR_EXCEPTION_POINT;                                    \
+            SimPolicy<CTYPE>::CALL(*val,context);                       \
+            return (char *) val;                                        \
+        }                                                               \
+    };
+    
+#define IMPLEMENT_OP1_POSTSET_POLICY(CALL,TYPE,CTYPE)                   \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
         YZG_NODE(TYPE,CTYPE);                                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
@@ -956,8 +1024,18 @@ namespace yzg
         }                                                               \
     };
     
+#define IMPLEMENT_OP1_EVAL_POLICY(CALL,CTYPE)                           \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
+        virtual __m128 eval ( Context & context ) override {            \
+            auto val = x->eval(context);                                \
+            YZG_EXCEPTION_POINT;                                        \
+            return SimPolicy<CTYPE>::CALL(val,context);                 \
+        }                                                               \
+    };
+    
 #define DEFINE_OP1_NUMERIC_INTEGER(CALL)                \
-    DEFINE_POLICY(CALL);                                \
     IMPLEMENT_OP1_POLICY(CALL,Int,int32_t);             \
     IMPLEMENT_OP1_POLICY(CALL,UInt,uint32_t);           \
     IMPLEMENT_OP1_POLICY(CALL,Int64,int64_t);           \
@@ -968,7 +1046,6 @@ namespace yzg
     IMPLEMENT_OP1_POLICY(CALL,Float,float);
     
 #define DEFINE_OP1_SET_NUMERIC_INTEGER(CALL)            \
-    DEFINE_POLICY(CALL);                                \
     IMPLEMENT_OP1_SET_POLICY(CALL,Int,int32_t);         \
     IMPLEMENT_OP1_SET_POLICY(CALL,UInt,uint32_t);       \
     IMPLEMENT_OP1_SET_POLICY(CALL,Int64,int64_t);       \
@@ -978,7 +1055,17 @@ namespace yzg
     DEFINE_OP1_SET_NUMERIC_INTEGER(CALL);               \
     IMPLEMENT_OP1_SET_POLICY(CALL,Float,float);
     
-#define IMPLEMENT_OP2_POLICY(CALL,TYPE,CTYPE,OP)                        \
+#define DEFINE_OP1_POSTSET_NUMERIC_INTEGER(CALL)        \
+    IMPLEMENT_OP1_POSTSET_POLICY(CALL,Int,int32_t);     \
+    IMPLEMENT_OP1_POSTSET_POLICY(CALL,UInt,uint32_t);   \
+    IMPLEMENT_OP1_POSTSET_POLICY(CALL,Int64,int64_t);   \
+    IMPLEMENT_OP1_POSTSET_POLICY(CALL,UInt64,uint64_t); \
+
+#define DEFINE_OP1_POSTSET_NUMERIC(CALL);               \
+    DEFINE_OP1_POSTSET_NUMERIC_INTEGER(CALL);           \
+    IMPLEMENT_OP1_POSTSET_POLICY(CALL,Float,float);
+    
+#define IMPLEMENT_OP2_POLICY(CALL,TYPE,CTYPE)                           \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         YZG_NODE(TYPE,CTYPE);                                           \
@@ -992,7 +1079,7 @@ namespace yzg
         }                                                               \
     };
     
-#define IMPLEMENT_OP2_SET_POLICY(CALL,TYPE,CTYPE,OP)                    \
+#define IMPLEMENT_OP2_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         YZG_NODE(TYPE,CTYPE);                                           \
@@ -1002,11 +1089,12 @@ namespace yzg
             YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
             auto rv = r->eval##TYPE(context);                           \
             YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
-            return SimPolicy<CTYPE>::CALL(*lv,rv,context);              \
+            SimPolicy<CTYPE>::CALL(*lv,rv,context);                     \
+            return CTYPE();                                             \
         }                                                               \
     };
     
-#define IMPLEMENT_OP2_BOOL_POLICY(CALL,TYPE,CTYPE,OP)                   \
+#define IMPLEMENT_OP2_BOOL_POLICY(CALL,TYPE,CTYPE)                      \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         YZG_BOOL_NODE;                                                  \
@@ -1020,88 +1108,169 @@ namespace yzg
         }                                                               \
     };
     
-#define DEFINE_OP2_NUMERIC_INTEGER(CALL,OP)             \
-    DEFINE_POLICY(CALL);                                \
-    IMPLEMENT_OP2_POLICY(CALL,Int,int32_t,OP);          \
-    IMPLEMENT_OP2_POLICY(CALL,UInt,uint32_t,OP);        \
-    IMPLEMENT_OP2_POLICY(CALL,Int64,int64_t,OP);        \
-    IMPLEMENT_OP2_POLICY(CALL,UInt64,uint64_t,OP);      \
-
-#define DEFINE_OP2_NUMERIC(CALL,OP);                    \
-    DEFINE_OP2_NUMERIC_INTEGER(CALL,OP);                \
-    IMPLEMENT_OP2_POLICY(CALL,Float,float,OP);
+#define IMPLEMENT_OP2_EVAL_POLICY(CALL,CTYPE)                           \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
+        virtual __m128 eval ( Context & context ) override {            \
+            auto lv = l->eval(context);                                 \
+            YZG_EXCEPTION_POINT;                                        \
+            auto rv = r->eval(context);                                 \
+            YZG_EXCEPTION_POINT;                                        \
+            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+        }                                                               \
+    };
     
-#define DEFINE_OP2_BOOL_NUMERIC_INTEGER(CALL,OP)        \
-    DEFINE_POLICY(CALL);                                \
-    IMPLEMENT_OP2_BOOL_POLICY(CALL,Int,int32_t,OP);     \
-    IMPLEMENT_OP2_BOOL_POLICY(CALL,UInt,uint32_t,OP);   \
-    IMPLEMENT_OP2_BOOL_POLICY(CALL,Int64,int64_t,OP);   \
-    IMPLEMENT_OP2_BOOL_POLICY(CALL,UInt64,uint64_t,OP); \
-
-#define DEFINE_OP2_BOOL_NUMERIC(CALL,OP);               \
-    DEFINE_OP2_BOOL_NUMERIC_INTEGER(CALL,OP);           \
-    IMPLEMENT_OP2_BOOL_POLICY(CALL,Float,float,OP);
+#define IMPLEMENT_OP2_EVAL_SET_POLICY(CALL,CTYPE)                       \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
+        virtual __m128 eval ( Context & context ) override {            \
+            auto lv = l->evalPtr(context);                              \
+            YZG_EXCEPTION_POINT;                                        \
+            auto rv = r->eval(context);                                 \
+            YZG_EXCEPTION_POINT;                                        \
+            SimPolicy<CTYPE>::CALL(lv,rv,context);                      \
+            return _mm_setzero_ps();                                    \
+        }                                                               \
+    };
     
-#define DEFINE_OP2_SET_NUMERIC_INTEGER(CALL,OP)         \
-    DEFINE_POLICY(CALL);                            \
-    IMPLEMENT_OP2_SET_POLICY(CALL,Int,int32_t,OP);      \
-    IMPLEMENT_OP2_SET_POLICY(CALL,UInt,uint32_t,OP);    \
-    IMPLEMENT_OP2_SET_POLICY(CALL,Int64,int64_t,OP);    \
-    IMPLEMENT_OP2_SET_POLICY(CALL,UInt64,uint64_t,OP);  \
+#define IMPLEMENT_OP2_EVAL_BOOL_POLICY(CALL,CTYPE)                      \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
+        YZG_BOOL_NODE;                                                  \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
+        __forceinline bool compute ( Context & context ) {              \
+            auto lv = l->eval(context);                                 \
+            YZG_BOOL_EXCEPTION_POINT;                                   \
+            auto rv = r->eval(context);                                 \
+            YZG_BOOL_EXCEPTION_POINT;                                   \
+            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+        }                                                               \
+    };
+    
+#define DEFINE_OP2_NUMERIC_INTEGER(CALL)                \
+    IMPLEMENT_OP2_POLICY(CALL,Int,int32_t);             \
+    IMPLEMENT_OP2_POLICY(CALL,UInt,uint32_t);           \
+    IMPLEMENT_OP2_POLICY(CALL,Int64,int64_t);           \
+    IMPLEMENT_OP2_POLICY(CALL,UInt64,uint64_t);         \
 
-#define DEFINE_OP2_SET_NUMERIC(CALL,OP);                \
-    DEFINE_OP2_SET_NUMERIC_INTEGER(CALL,OP);            \
-    IMPLEMENT_OP2_SET_POLICY(CALL,Float,float,OP);
+#define DEFINE_OP2_NUMERIC(CALL);                       \
+    DEFINE_OP2_NUMERIC_INTEGER(CALL);                   \
+    IMPLEMENT_OP2_POLICY(CALL,Float,float);
+    
+#define DEFINE_OP2_BOOL_NUMERIC_INTEGER(CALL)           \
+    IMPLEMENT_OP2_BOOL_POLICY(CALL,Int,int32_t);        \
+    IMPLEMENT_OP2_BOOL_POLICY(CALL,UInt,uint32_t);      \
+    IMPLEMENT_OP2_BOOL_POLICY(CALL,Int64,int64_t);      \
+    IMPLEMENT_OP2_BOOL_POLICY(CALL,UInt64,uint64_t);    \
+
+#define DEFINE_OP2_BOOL_NUMERIC(CALL);                  \
+    DEFINE_OP2_BOOL_NUMERIC_INTEGER(CALL);              \
+    IMPLEMENT_OP2_BOOL_POLICY(CALL,Float,float);
+    
+#define DEFINE_OP2_SET_NUMERIC_INTEGER(CALL)            \
+    IMPLEMENT_OP2_SET_POLICY(CALL,Int,int32_t);         \
+    IMPLEMENT_OP2_SET_POLICY(CALL,UInt,uint32_t);       \
+    IMPLEMENT_OP2_SET_POLICY(CALL,Int64,int64_t);       \
+    IMPLEMENT_OP2_SET_POLICY(CALL,UInt64,uint64_t);     \
+
+#define DEFINE_OP2_SET_NUMERIC(CALL);                   \
+    DEFINE_OP2_SET_NUMERIC_INTEGER(CALL);               \
+    IMPLEMENT_OP2_SET_POLICY(CALL,Float,float);
     
 #define DEFINE_OP2_BASIC_POLICY(TYPE,CTYPE)             \
-    IMPLEMENT_OP2_BOOL_POLICY(Equ, TYPE, CTYPE, ==);    \
-    IMPLEMENT_OP2_BOOL_POLICY(NotEqu, TYPE, CTYPE, !=);
+    IMPLEMENT_OP2_BOOL_POLICY(Equ, TYPE, CTYPE);        \
+    IMPLEMENT_OP2_BOOL_POLICY(NotEqu, TYPE, CTYPE);
     
-// unary
-    DEFINE_OP1_NUMERIC(Unp);
-    DEFINE_OP1_NUMERIC(Unm);
-    DEFINE_OP1_SET_NUMERIC(Inc);
-    DEFINE_OP1_SET_NUMERIC(Dec);
-    DEFINE_OP1_NUMERIC(IncPost);
-    DEFINE_OP1_NUMERIC(DecPost);
-    DEFINE_OP1_NUMERIC_INTEGER(BinNot);
+#define DEFINE_OP2_EVAL_BASIC_POLICY(CTYPE)             \
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ, CTYPE);         \
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu, CTYPE);
+    
+#define DEFINE_OP2_EVAL_ORDERED_POLICY(CTYPE)           \
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(LessEqu,CTYPE);      \
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(GtEqu,CTYPE);        \
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Less,CTYPE);         \
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Gt,CTYPE);
+    
+#define DEFINE_OP2_EVAL_GROUPBYADD_POLICY(CTYPE)        \
+    IMPLEMENT_OP2_EVAL_POLICY(Add, CTYPE);              \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetAdd, CTYPE);
+    
+#define DEFINE_OP2_EVAL_NUMERIC_POLICY(CTYPE)           \
+    DEFINE_OP2_EVAL_GROUPBYADD_POLICY(CTYPE);           \
+    IMPLEMENT_OP1_EVAL_POLICY(Unp, CTYPE);              \
+    IMPLEMENT_OP1_EVAL_POLICY(Unm, CTYPE);              \
+    IMPLEMENT_OP2_EVAL_POLICY(Sub, CTYPE);              \
+    IMPLEMENT_OP2_EVAL_POLICY(Div, CTYPE);              \
+    IMPLEMENT_OP2_EVAL_POLICY(Mul, CTYPE);              \
+    IMPLEMENT_OP2_EVAL_POLICY(Mod, CTYPE);              \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetSub, CTYPE);       \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetDiv, CTYPE);       \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetMul, CTYPE);       \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetMod, CTYPE);
+    
+#define DEFINE_OP2_EVAL_VECNUMERIC_POLICY(CTYPE)        \
+    IMPLEMENT_OP2_EVAL_POLICY(DivVecScal, CTYPE);       \
+    IMPLEMENT_OP2_EVAL_POLICY(MulVecScal, CTYPE);       \
+    IMPLEMENT_OP2_EVAL_POLICY(DivScalVec, CTYPE);       \
+    IMPLEMENT_OP2_EVAL_POLICY(MulScalVec, CTYPE);       \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetDivScal, CTYPE);   \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetMulScal, CTYPE);
+    
+#define DEFINE_VECTOR_POLICY(CTYPE)             \
+    DEFINE_OP2_EVAL_BASIC_POLICY(CTYPE);        \
+    DEFINE_OP2_EVAL_NUMERIC_POLICY(CTYPE);      \
+    DEFINE_OP2_EVAL_VECNUMERIC_POLICY(CTYPE);
+
+    // unary
+    DEFINE_POLICY(Unp);
+    DEFINE_POLICY(Unm);
+    DEFINE_POLICY(Inc);
+    DEFINE_POLICY(Dec);
+    DEFINE_POLICY(IncPost);
+    DEFINE_POLICY(DecPost);
+    DEFINE_POLICY(BinNot);
     DEFINE_POLICY(BoolNot);
-    IMPLEMENT_OP1_POLICY(BoolNot, Bool, bool);
-// binary
+    // binary
     // +,-,*,/,%
-    DEFINE_OP2_NUMERIC(Add, +);
-    DEFINE_OP2_NUMERIC(Sub, -);
-    DEFINE_OP2_NUMERIC(Mul, *);
-    DEFINE_OP2_NUMERIC(Div, *);
-    DEFINE_OP2_NUMERIC_INTEGER(Mod, %);
-    DEFINE_OP2_SET_NUMERIC(SetAdd, +);
-    DEFINE_OP2_SET_NUMERIC(SetSub, -);
-    DEFINE_OP2_SET_NUMERIC(SetMul, *);
-    DEFINE_OP2_SET_NUMERIC(SetDiv, *);
-    DEFINE_OP2_SET_NUMERIC(SetMod, %);
+    DEFINE_POLICY(Add);
+    DEFINE_POLICY(Sub);
+    DEFINE_POLICY(Mul);
+    DEFINE_POLICY(Div);
+    DEFINE_POLICY(Mod);
+    DEFINE_POLICY(SetAdd);
+    DEFINE_POLICY(SetSub);
+    DEFINE_POLICY(SetMul);
+    DEFINE_POLICY(SetDiv);
+    DEFINE_POLICY(SetMod);
     // comparisons
-    DEFINE_OP2_BOOL_NUMERIC(Equ, ==);
-    DEFINE_OP2_BOOL_NUMERIC(NotEqu, !=);
-    DEFINE_OP2_BOOL_NUMERIC(LessEqu, <=);
-    DEFINE_OP2_BOOL_NUMERIC(GtEqu, >=);
-    DEFINE_OP2_BOOL_NUMERIC(Less, <);
-    DEFINE_OP2_BOOL_NUMERIC(Gt, >);
-    DEFINE_OP2_BASIC_POLICY(Bool, bool);
-    DEFINE_OP2_BASIC_POLICY(Ptr, void *);
+    DEFINE_POLICY(Equ);
+    DEFINE_POLICY(NotEqu);
+    DEFINE_POLICY(LessEqu);
+    DEFINE_POLICY(GtEqu);
+    DEFINE_POLICY(Less);
+    DEFINE_POLICY(Gt);
     // binary and, or, xor
-    DEFINE_OP2_NUMERIC_INTEGER(BinAnd, &);
-    DEFINE_OP2_NUMERIC_INTEGER(BinOr, |);
-    DEFINE_OP2_NUMERIC_INTEGER(BinXor, ^);
-    DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinAnd, &=);
-    DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinOr, |=);
-    DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinXor, ^=);
+    DEFINE_POLICY(BinAnd);
+    DEFINE_POLICY(BinOr);
+    DEFINE_POLICY(BinXor);
+    DEFINE_POLICY(SetBinAnd);
+    DEFINE_POLICY(SetBinOr);
+    DEFINE_POLICY(SetBinXor);
     // boolean and, or, xor
     DEFINE_POLICY(SetBoolAnd);
-    IMPLEMENT_OP2_SET_POLICY(SetBoolAnd, Bool, bool, &=);
     DEFINE_POLICY(SetBoolOr);
-    IMPLEMENT_OP2_SET_POLICY(SetBoolOr, Bool, bool, |=);
     DEFINE_POLICY(SetBoolXor);
-    IMPLEMENT_OP2_SET_POLICY(SetBoolXor, Bool, bool, ^=);
     DEFINE_POLICY(BoolXor);
-    IMPLEMENT_OP2_POLICY(BoolXor, Bool, bool, ^);
+    // vector*scalar, scalar*vector
+    DEFINE_POLICY(DivVecScal);
+    DEFINE_POLICY(MulVecScal);
+    DEFINE_POLICY(DivScalVec);
+    DEFINE_POLICY(MulScalVec);
+    DEFINE_POLICY(SetBoolAnd);
+    DEFINE_POLICY(SetBoolOr);
+    DEFINE_POLICY(SetBoolXor);
+    DEFINE_POLICY(SetDivScal);
+    DEFINE_POLICY(SetMulScal);
 }

@@ -2,6 +2,7 @@
 
 #include "cast.h"
 #include "compilation_errors.h"
+#include "sim_policy.h"
 
 namespace yzg
 {
@@ -25,23 +26,24 @@ namespace yzg
     
     struct SimPolicy_String {
         // basic
-        static __forceinline __m128 Equ     ( __m128 a, __m128 b, Context & )
-            { return cast<bool>::from(strcmp(to_rts(a), to_rts(b))==0); }
-        static __forceinline __m128 NotEqu  ( __m128 a, __m128 b, Context & )
-            { return cast<bool>::from(strcmp(to_rts(a), to_rts(b))!=0); }
+        static __forceinline bool Equ     ( __m128 a, __m128 b, Context & )
+            { return strcmp(to_rts(a), to_rts(b))==0; }
+        static __forceinline bool NotEqu  ( __m128 a, __m128 b, Context & )
+            { return strcmp(to_rts(a), to_rts(b))!=0; }
         // ordered
-        static __forceinline __m128 LessEqu ( __m128 a, __m128 b, Context & )
-            { return cast<bool>::from(strcmp(to_rts(a), to_rts(b))<=0); }
-        static __forceinline __m128 GtEqu   ( __m128 a, __m128 b, Context & )
-            { return cast<bool>::from(strcmp(to_rts(a), to_rts(b))>=0); }
-        static __forceinline __m128 Less    ( __m128 a, __m128 b, Context & )
-            { return cast<bool>::from(strcmp(to_rts(a), to_rts(b))<0); }
-        static __forceinline __m128 Gt      ( __m128 a, __m128 b, Context & )
-            { return cast<bool>::from(strcmp(to_rts(a), to_rts(b))>0); }
-        
-        static __m128 Add     ( __m128 a, __m128 b, Context & context );
-        static char * SetAdd  ( char * a, __m128 b, Context & context );
+        static __forceinline bool LessEqu ( __m128 a, __m128 b, Context & )
+            { return strcmp(to_rts(a), to_rts(b))<=0; }
+        static __forceinline bool GtEqu   ( __m128 a, __m128 b, Context & )
+            { return strcmp(to_rts(a), to_rts(b))>=0; }
+        static __forceinline bool Less    ( __m128 a, __m128 b, Context & )
+            { return strcmp(to_rts(a), to_rts(b))<0; }
+        static __forceinline bool Gt      ( __m128 a, __m128 b, Context & )
+            { return strcmp(to_rts(a), to_rts(b))>0; }
+        static __m128 Add  ( __m128 a, __m128 b, Context & context );
+        static void SetAdd ( char * a, __m128 b, Context & context );
     };
+    
+    template <> struct SimPolicy<char *> : SimPolicy_String {};
     
     string unescapeString ( const string & input );
     string escapeString ( const string & input );

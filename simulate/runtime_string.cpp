@@ -16,14 +16,13 @@ namespace yzg
         return from_rts(sAB);
     }
   
-    char * SimPolicy_String::SetAdd ( char * a, __m128 b, Context & context ) {
+    void SimPolicy_String::SetAdd ( char * a, __m128 b, Context & context ) {
 		char ** pA = (char **)a;
         const char *  sA = *pA ? *pA : rts_null; auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
         *pA = (char * ) context.allocate(uint32_t(la + lb + 1));
         memcpy ( *pA , sA, la );
         memcpy ( *pA +la, sB, lb+1 );
-        return a;
     }
     
     // helper functions

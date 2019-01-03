@@ -1,4 +1,5 @@
 // options plot=true,plotFile="../../test.dot"
+// options log=true
 
 def make_test_array(a:array<int>;extra:int=0)
     let i:int=0

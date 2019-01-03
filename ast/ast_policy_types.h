@@ -91,25 +91,21 @@ namespace  yzg {
     template <typename TT>
     void addFunctionNumericWithMod(Module & mod, const ModuleLibrary & lib) {
         addFunctionNumeric<TT>(mod, lib);
-        addFunctionGroupByAdd<TT>(mod,lib);
         //                                    policy        ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Mod<TT>, TT,   TT,  TT>  >("%",      lib) );
     }
     
-/*
     // vector-scalar combinations
-    template <typename TT, typename TTS, typename SimPolicy_TT>
+    template <typename TT, typename TTS>
     void addFunctionVecNumeric(Module & mod, const ModuleLibrary & lib, bool hasMod = true) {
-        addFunctionGroupByAdd<TT,SimPolicy_TT>(mod,lib);
-        //                                     policy                           ret   arg1 arg2    name
-        mod.addFunction( make_shared<BuiltInFn<Sim_MulScalVec<SimPolicy_TT>,    TT,   TTS, TT>  >("*",    lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_DivScalVec<SimPolicy_TT>,    TT,   TTS, TT>  >("/",    lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_MulVecScal<SimPolicy_TT>,    TT,   TT,  TTS> >("*",    lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_DivVecScal<SimPolicy_TT>,    TT,   TT,  TTS> >("/",    lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<SimPolicy_TT>,    void, TT&, TT>  >("*=",   lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<SimPolicy_TT>,    void, TT&, TT>  >("/=",   lib)->sideEffects(true) );
+        //                                     policy               ret   arg1 arg2    name
+        mod.addFunction( make_shared<BuiltInFn<Sim_MulScalVec<TT>,  TT,   TTS, TT>  >("*",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_DivScalVec<TT>,  TT,   TTS, TT>  >("/",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_MulVecScal<TT>,  TT,   TT,  TTS> >("*",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_DivVecScal<TT>,  TT,   TT,  TTS> >("/",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<TT>,  void, TT&, TT>  >("*=",   lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<TT>,  void, TT&, TT>  >("/=",   lib)->sideEffects(true) );
     }
-*/
     
     // inc-dec
     template <typename TT>
