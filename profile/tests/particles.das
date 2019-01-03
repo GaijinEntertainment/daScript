@@ -14,6 +14,14 @@ def testSim2(objects:array<NObject>; count:int)
     for i in range(0,count)
         testSim(objects)
 
+def testSimI(objects:array<NObject>)
+    for obj in objects
+        obj.position += obj.velocity
+
+def testSim2I(objects:array<NObject>; count:int)
+    for i in range(0,count)
+        testSimI(objects)
+
 def init(objects:array<NObject>)
     resize(objects, 1000000)
     let index:int = 0
@@ -29,4 +37,6 @@ def test():bool
     let(total:int=2)
         profile(total,"array of nobjects") <|
             testSim2(objects,100)
+        profile(total,"array of nobjects, inlined") <|
+            testSim2I(objects,100)
     return true
