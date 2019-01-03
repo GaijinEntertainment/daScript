@@ -27,7 +27,7 @@ namespace yzg
     
     struct GlobalVariable {
         char *          name;
-        ValueVariant    value;
+        __m128			value;
         uint32_t        size;
         VarInfo *       debug;
         SimNode *       init;
@@ -141,7 +141,7 @@ namespace yzg
         
         __forceinline __m128 getVariable ( int index ) const {
             assert(index>=0 && index<totalVariables && "variable index out of range");
-            return globalVariables[index].value.dataVec;
+            return globalVariables[index].value;
         }
         
         __forceinline void simEnd() {
@@ -180,13 +180,8 @@ namespace yzg
         __forceinline __m128 * abiArguments() {
             return ((Prologue *)stackTop)->arguments;
         }
-        
-        __forceinline ValueVariant * abiArgumentsVariant() {
-            return (ValueVariant*)(((Prologue *)stackTop)->arguments);
-        }
 
-        
-        __forceinline __m128 & abiResult() {
+		__forceinline __m128 & abiResult() {
             return ((Prologue *)stackTop)->result;
         }
         
@@ -622,10 +617,10 @@ namespace yzg
     struct SimNode_GetGlobal : SimNode {
         SimNode_GetGlobal ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
         virtual __m128 eval ( Context & context ) override {
-            return context.globalVariables[index].value.dataVec;
+            return context.globalVariables[index].value;
         }
 		virtual char * evalPtr(Context & context) override {
-			return context.globalVariables[index].value.dataPtr;
+			return cast<char *>::to(context.globalVariables[index].value);
 		}
         int32_t index;
     };
@@ -634,11 +629,11 @@ namespace yzg
     struct SimNode_GetGlobalR2V : SimNode_GetGlobal {
         SimNode_GetGlobalR2V ( const LineInfo & at, int32_t i ) : SimNode_GetGlobal(at,i) {}
         virtual __m128 eval ( Context & context ) override {
-            TT * pR = (TT *) context.globalVariables[index].value.dataPtr;
+            TT * pR = cast<TT *>::to(context.globalVariables[index].value);
             return cast<TT>::from(*pR);
         }
 		virtual char * evalPtr(Context & context) override {
-			return *(char **)context.globalVariables[index].value.dataPtr;
+			return *cast<char **>::to(context.globalVariables[index].value);
 		}
     };
     

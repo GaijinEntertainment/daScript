@@ -398,7 +398,7 @@ namespace yzg
             if ( pv.init ) {
                 pv.init->eval(*this);
             } else {
-                memset ( pv.value.dataPtr, 0, pv.size );
+                memset ( cast<char *>::to(pv.value), 0, pv.size );
             }
         }
     }

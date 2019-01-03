@@ -8,16 +8,6 @@ namespace yzg
 {
     using namespace std;
     
-    union ValueVariant {
-        __m128      dataVec;
-        bool        dataBool;
-        int32_t     dataInt;
-        uint32_t    dataUInt;
-        int64_t     dataInt64;
-        uint64_t    dataUInt64;
-        char *      dataPtr;
-    };
-    
     template <typename TT>
     struct cast;
     

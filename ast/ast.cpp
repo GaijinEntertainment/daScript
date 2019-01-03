@@ -1898,7 +1898,7 @@ namespace yzg
             gvar.name = context.allocateName(pvar->name);
             gvar.size = pvar->type->getSizeOf();
             gvar.debug = makeVariableDebugInfo(context, *it.second);
-            gvar.value.dataPtr = (char *) context.allocate(gvar.size);
+            gvar.value = cast<char *>::from((char *)context.allocate(gvar.size));
             gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
         }
         context.totalVariables = (int) thisModule->globals.size();
