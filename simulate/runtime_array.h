@@ -125,8 +125,8 @@ namespace yzg
     struct SimNode_ForGoodArray : public SimNode_ForBase {
         SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
         virtual __m128 eval ( Context & context ) override {
-            Array * pha[total];
-            char * ph[total];
+            Array * __restrict pha[total];
+            char * __restrict ph[total];
             for ( int t=0; t!=total; ++t ) {
                 pha[t] = cast<Array *>::to(sources[t]->eval(context));
                 YZG_EXCEPTION_POINT;
@@ -134,19 +134,19 @@ namespace yzg
                 YZG_EXCEPTION_POINT;
                 ph[t]  = pha[t]->data;
             }
-            char ** pi[total];
+            char ** __restrict pi[total];
+            int size = INT_MAX;
             for ( int t=0; t!=total; ++t ) {
                 pi[t] = (char **)(context.stackTop + stackTop[t]);
+                size = min(size, int(pha[t]->size));
             }
-            for (int i = 0; !context.stopFlags; ++i) {
+            for (int i = 0; i!=size && !context.stopFlags; ++i) {
                 for (int t = 0; t != total; ++t) {
-                    if (i >= int(pha[t]->size)) goto loopOver;
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
                 body->eval(context);
             }
-        loopOver:
             for ( int t=0; t!=total; ++t ) {
                 array_unlock(context, *pha[t]);
                 YZG_EXCEPTION_POINT;
@@ -161,12 +161,12 @@ namespace yzg
     struct SimNode_ForFixedArray : SimNode_ForBase {
         SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
         virtual __m128 eval ( Context & context ) override {
-            char * ph[total];
+            char * __restrict ph[total];
             for ( int t=0; t!=total; ++t ) {
                 ph[t] = cast<char *>::to(sources[t]->eval(context));
                 YZG_EXCEPTION_POINT;
             }
-            char ** pi[total];
+            char ** __restrict pi[total];
             for ( int t=0; t!=total; ++t ) {
                 pi[t] = (char **)(context.stackTop + stackTop[t]);
             }
