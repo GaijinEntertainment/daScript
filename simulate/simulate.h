@@ -627,6 +627,16 @@ namespace yzg
 #undef EVAL_NODE
     };
     
+    struct SimNode_GetBlockArgumentRef : SimNode_GetBlockArgument {
+        YZG_PTR_NODE;
+        SimNode_GetBlockArgumentRef(const LineInfo & at, int32_t i, uint32_t sp)
+            : SimNode_GetBlockArgument(at,i,sp) {}
+        __forceinline char * compute(Context & context) {
+            __m128 * args = *((__m128 **)(context.stackTop + stackTop));
+            return (char *)(&args[index]);
+        }
+    };
+    
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode {
         SimNode_GetGlobal ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
@@ -646,9 +656,12 @@ namespace yzg
             TT * pR = cast<TT *>::to(context.globalVariables[index].value);
             return cast<TT>::from(*pR);
         }
-		virtual char * evalPtr(Context & context) override {
-			return *cast<char **>::to(context.globalVariables[index].value);
-		}
+#define EVAL_NODE(TYPE,CTYPE)                                                   \
+        virtual CTYPE eval##TYPE ( Context & context ) override {               \
+            return *cast<CTYPE *>::to(context.globalVariables[index].value);    \
+        }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
     };
     
     // TRY-CATCH

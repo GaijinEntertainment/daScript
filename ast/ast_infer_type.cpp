@@ -513,7 +513,8 @@ namespace yzg {
                         expr->argumentIndex = argumentIndex;
                         expr->block = true;
                         expr->type = make_shared<TypeDecl>(*arg->type);
-                        expr->type->ref = arg->type->ref;
+                        if (!expr->type->isRefType())
+                            expr->type->ref = true;
                         expr->pBlock = static_pointer_cast<ExprBlock>(block->shared_from_this());
                         return Visitor::visit(expr);
                     }

@@ -650,6 +650,7 @@ namespace yzg
         auto cexpr = clonePtr<ExprConstString>(expr);
         Expression::clone(cexpr);
         cexpr->value = value;
+        cexpr->text = text;
         return cexpr;
     }
     
@@ -1101,11 +1102,26 @@ namespace yzg
     SimNode * ExprVar::simulate (Context & context) const {
         if ( block ) {
             auto blk = pBlock.lock();
-            if ( r2v ) {
-                return context.makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
+            
+            if (variable->type->isRef()) {
+                if (r2v) {
+                    return context.makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
+                } else {
+                    return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+                }
             } else {
-                return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+                if (r2v) {
+                    return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+                }
+                else {
+                    return context.makeNode<SimNode_GetBlockArgumentRef>(at, argumentIndex, blk->stackTop);
+                }
             }
+            // if ( r2v ) {
+            //     return context.makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
+            // } else {
+            //     return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+            // }
         } else if ( local ) {
             if ( variable->type->ref ) {
                 if ( r2v ) {
