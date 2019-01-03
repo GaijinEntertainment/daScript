@@ -52,7 +52,7 @@ namespace yzg
     
     // SimNode_Call
     
-    void SimNode_Call::evalArgs ( Context & context, __m128 * argValues ) {
+    void SimNode_CallBase::evalArgs ( Context & context, __m128 * argValues ) {
         for ( int i=0; i!=nArguments && !context.stopFlags; ++i ) {
             argValues[i] = arguments[i]->eval(context);
         }

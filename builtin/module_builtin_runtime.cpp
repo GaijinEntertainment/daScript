@@ -20,7 +20,7 @@ namespace yzg
         context->to_out(text);
     }
     
-    __m128 builtin_breakpoint ( Context & context, SimNode_Call * call, __m128 * ) {
+    __m128 builtin_breakpoint ( Context & context, SimNode_CallBase * call, __m128 * ) {
         context.breakPoint(call->debug.column, call->debug.line);
         return _mm_setzero_ps();
     }

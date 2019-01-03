@@ -396,10 +396,9 @@ namespace yzg
     };
     
     // FUNCTION CALL
-    struct SimNode_Call : SimNode {
-        SimNode_Call ( const LineInfo & at ) : SimNode(at) {}
+    struct SimNode_CallBase : SimNode {
+        SimNode_CallBase ( const LineInfo & at ) : SimNode(at) {}
         void evalArgs ( Context & context, __m128 * argValues );
-        virtual __m128 eval ( Context & context ) override;
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(eval(context));                  \
@@ -411,16 +410,31 @@ namespace yzg
         int32_t  nArguments;
     };
     
+    // FUNCTION CALL
+    struct SimNode_Call : SimNode_CallBase {
+        SimNode_Call ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        virtual __m128 eval ( Context & context ) override;
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override {                       \
+            __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));       \
+                evalArgs(context, argValues);                                           \
+                YZG_NODE_EXCEPTION_POINT(CTYPE);                                        \
+                return cast<CTYPE>::to(context.call(fnIndex, argValues, debug.line));   \
+        }
+        YZG_EVAL_NODE;
+#undef  EVAL_NODE
+    };
+    
     // Invoke
-    struct SimNode_Invoke : SimNode_Call {
-        SimNode_Invoke ( const LineInfo & at ) : SimNode_Call(at) {}
+    struct SimNode_Invoke : SimNode_CallBase {
+        SimNode_Invoke ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual __m128 eval ( Context & context ) override;
     };
     
     // CAST
     template <typename CastTo, typename CastFrom>
-    struct SimNode_Cast : SimNode_Call {
-        SimNode_Cast ( const LineInfo & at ) : SimNode_Call(at) {}
+    struct SimNode_Cast : SimNode_CallBase {
+        SimNode_Cast ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 res = arguments[0]->eval(context);
             CastTo value = (CastTo) cast<CastFrom>::to(res);
@@ -430,8 +444,8 @@ namespace yzg
     
     // LEXICAL CAST
     template <typename CastFrom>
-    struct SimNode_LexicalCast : SimNode_Call {
-        SimNode_LexicalCast ( const LineInfo & at ) : SimNode_Call(at) {}
+    struct SimNode_LexicalCast : SimNode_CallBase {
+        SimNode_LexicalCast ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 res = arguments[0]->eval(context);
             auto str = std::to_string ( cast<CastFrom>::to(res) );
@@ -442,8 +456,8 @@ namespace yzg
     
     // VECTOR C-TOR
     template <int vecS>
-    struct SimNode_VecCtor : SimNode_Call {
-        SimNode_VecCtor ( const LineInfo & at ) : SimNode_Call(at) {}
+    struct SimNode_VecCtor : SimNode_CallBase {
+        SimNode_VecCtor ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 argValues[vecS];
             evalArgs(context, argValues);

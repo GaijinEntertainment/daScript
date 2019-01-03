@@ -37,8 +37,8 @@ namespace yzg
     };
     
     template <typename FuncT, FuncT fn >
-    struct SimNode_ExtFuncCall : SimNode_Call {
-        SimNode_ExtFuncCall ( const LineInfo & at ) : SimNode_Call(at) {}
+    struct SimNode_ExtFuncCall : SimNode_CallBase {
+        SimNode_ExtFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual __m128 eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;
             using Result = typename FunctionTrait::return_type;
@@ -81,11 +81,11 @@ namespace yzg
         FuncInfo * info = nullptr;
     };
     
-    typedef __m128 ( InteropFunction ) ( Context & context, SimNode_Call * node, __m128 * args );
+    typedef __m128 ( InteropFunction ) ( Context & context, SimNode_CallBase * node, __m128 * args );
     
     template <InteropFunction fn>
-    struct SimNode_InteropFuncCall : SimNode_Call {
-        SimNode_InteropFuncCall ( const LineInfo & at ) : SimNode_Call(at) {}
+    struct SimNode_InteropFuncCall : SimNode_CallBase {
+        SimNode_InteropFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual __m128 eval ( Context & context ) override {
 			__m128 * args = (__m128 *)(alloca(nArguments * sizeof(__m128)));
             evalArgs(context, args);
