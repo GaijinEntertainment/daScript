@@ -492,10 +492,6 @@ namespace yzg
         __forceinline char * compute ( Context & context ) {
             return context.stackTop + stackTop;
         }
-        virtual int32_t evalInt ( Context & context ) override {
-            assert(0 && "we should not even be here");
-            return 0;
-        }
         uint32_t stackTop;
     };
     
@@ -520,10 +516,6 @@ namespace yzg
         SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp) {}
         __forceinline char * compute ( Context & context ) {
             return *(char **)(context.stackTop + stackTop);
-        }
-        virtual int32_t evalInt ( Context & context ) override {
-            assert(0 && "like that?");
-            return **(int32_t **)(context.stackTop + stackTop);
         }
     };
     
@@ -723,10 +715,6 @@ namespace yzg
             }
             return ptr;
         }
-        virtual int32_t evalInt ( Context & context ) override {
-            assert(0 && "we should not even be here!");
-            return 0;
-        }
         SimNode * subexpr;
     };
     
@@ -759,10 +747,6 @@ namespace yzg
             auto ptr = subexpr->evalPtr(context);
             YZG_PTR_EXCEPTION_POINT;
             return ptr ? ptr : value->evalPtr(context);
-        }
-        virtual int32_t evalInt ( Context & context ) override {
-            assert(0 && "we should not even be here!");
-            return 0;
         }
         SimNode * value;
     };
@@ -801,15 +785,6 @@ namespace yzg
             TT * pr = (TT *) &rr;
             *pl = *pr;
             return _mm_setzero_ps();
-        }
-        virtual char * evalPtr ( Context & context ) override {
-            TT * pl = (TT *) l->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
-            __m128 rr = r->eval(context);
-            YZG_PTR_EXCEPTION_POINT;
-            TT * pr = (TT *) &rr;
-            *pl = *pr;
-            return nullptr;
         }
         SimNode * l, * r;
     };
