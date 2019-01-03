@@ -268,32 +268,6 @@ namespace yzg
             return nullptr;
         }
     }
-    __m128 Context::invoke(const Block &block, __m128 * args ) {
-        char * saveSp = stackTop;
-        char * saveISp = invokeStackTop;
-        invokeStackTop = stackTop;
-        stackTop = stack + block.stackOffset;
-        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
-        __m128 ** pArgs;
-        __m128 * saveArgs;
-        if ( block.argumentsOffset ) {
-            assert(args && "expecting arguments");
-            pArgs = (__m128 **)(stack + block.argumentsOffset);
-            saveArgs = *pArgs;
-            *pArgs = args;
-        } else {
-            assert(!args && "not expecting arguments");
-        }
-        // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
-        __m128 result = block.body->eval(*this);
-        if ( args && block.argumentsOffset ) {
-            *pArgs = saveArgs;
-        }
-        invokeStackTop = saveISp;
-        stackTop = saveSp;
-        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
-        return result;
-    }
     
     __m128 Context::invokeEx(const Block &block, __m128 * args, function<void (SimNode *)> && when) {
         char * saveSp = stackTop;
@@ -319,40 +293,6 @@ namespace yzg
         }
         invokeStackTop = saveISp;
         stackTop = saveSp;
-        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
-        return result;
-    }
-
-    __m128 Context::call ( int fnIndex, __m128 * args, int line ) {
-        assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
-        auto & fn = functions[fnIndex];
-        // PUSH
-        char * top = invokeStackTop ? invokeStackTop : stackTop;
-        if ( stack - ( top - fn.stackSize ) > stackSize ) {
-            throw_error("stack overflow");
-            return _mm_setzero_ps();
-        }
-        char * pushStack = stackTop;
-        char * pushInvokeStack = invokeStackTop;
-        stackTop = top - fn.stackSize;
-        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
-        invokeStackTop = nullptr;
-        // cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
-        // fill prologue
-        Prologue * pp = (Prologue *) stackTop;
-        pp->result =        _mm_setzero_ps();
-        pp->arguments =     args;
-#if YZG_ENABLE_STACK_WALK
-        pp->info =          fn.debug;
-        pp->line =          line;
-#endif
-        // CALL
-        fn.code->eval(*this);
-        __m128 result = abiResult();
-        stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
-        // POP
-        invokeStackTop = pushInvokeStack;
-        stackTop = pushStack;
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
         return result;
     }
