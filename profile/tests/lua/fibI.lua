@@ -19,11 +19,7 @@ function fibI(n)
     end
     return cur
 end
+loadfile("profile.lua")()
 
-
-
-local start = os.clock()
---N = 34 --Should return 433494437
-fibI(11111134)
---print("fib: " .. fibR(N) .. " = " .. fibI(N))
-io.write(string.format("elapsed: %.8f\n", os.clock() - start))
+io.write(string.format("fibonacci loop: %.8f\n", profile_it(20, function () fibI(6511134) end)))
+io.write(string.format("fibonacci recursive: %.8f\n", profile_it(20, function () fibR(31) end)))
