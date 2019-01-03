@@ -1,9 +1,11 @@
-const iterations = 1000000000;
+function testAdds()
+{
+    local count = 0;
+    for (local i = 0; i < 10000000; ++i)
+        count = ::AddOne(count);
+    return count
+}
 
+loadfile("profile.nut")()
 
-local count = 0;
-for (local i = 0; i < iterations; ++i)
-    count = ::AddOne(count);
-
-
-print("Count: " + count + "\n");
+print("native loop: " + profile_it(20, function() {testAdds()}) + "\n");

@@ -19,6 +19,7 @@ function primes(n)
     return count
 end
 
+loadfile("profile.lua")()
 
-N = 50000
-print("primes: " .. primes(N))
+io.write(string.format("primes loop: %.8f\n", profile_it(20, function () primes(14000) end)))
+

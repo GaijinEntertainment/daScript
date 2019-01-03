@@ -19,6 +19,7 @@ function fibI(n)
     }
     return cur;
 }
+loadfile("profile.nut")()
 
-print("fib: " + fibI(11111134) + "\n");
-//print("fib: " + fibR(N) + " = " + fibI(N) + "\n");
+print("fibonacci loop: " + profile_it(20, function() {fibI(6511134)}) + "\n");
+print("fibonacci recursive: " + profile_it(20, function() {fibR(31)}) + "\n");

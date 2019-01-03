@@ -23,7 +23,7 @@ def testSim2I(objects:array<NObject>; count:int)
         testSimI(objects)
 
 def init(objects:array<NObject>)
-    resize(objects, 1000000)
+    resize(objects, 50000)
     let index:int = 0
     for obj in objects
         let ( oi:float=float(index++); ii:float=oi*2.0 )
@@ -34,9 +34,9 @@ def init(objects:array<NObject>)
 def test():bool
     let objects:array<NObject>
     init(objects)
-    let(total:int=2)
-        profile(total,"array of nobjects") <|
+    let(total:int=20)
+        profile(total,"particles kinematics") <|
             testSim2(objects,100)
-        profile(total,"array of nobjects, inlined") <|
+        profile(total,"particles kinematics, inlined") <|
             testSim2I(objects,100)
     return true

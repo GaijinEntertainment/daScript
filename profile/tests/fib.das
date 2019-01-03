@@ -16,9 +16,9 @@ def fibI(n:int):int
     return cur
 
 def test():bool
-    profile(8,"fibbonacci loop") <|
-        fibI(11111134)
-    profile(4,"fibbonacci recursive") <|
-        fibR(34)
+    profile(20,"fibbonacci loop") <|
+        fibI(6511134)
+    profile(20,"fibbonacci recursive") <|
+        fibR(31)
     return true
 
