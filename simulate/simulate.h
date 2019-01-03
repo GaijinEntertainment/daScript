@@ -597,6 +597,51 @@ namespace yzg
 #undef EVAL_NODE
     };
     
+    template <typename TT>
+    struct SimNode_CopyLocal2LocalT : SimNode {
+        SimNode_CopyLocal2LocalT(const LineInfo & at, uint32_t spL, uint32_t spR)
+            : SimNode(at), stackTopLeft(spL), stackTopRight(spR) {}
+        virtual __m128 eval ( Context & context ) override {
+            TT * pl = (TT *) ( context.stackTop + stackTopLeft );
+            TT * pr = (TT *) ( context.stackTop + stackTopRight );
+            *pl = *pr;
+            return _mm_setzero_ps();
+        }
+        SimNode * r;
+        uint32_t stackTopLeft, stackTopRight;
+    };
+    
+    template <typename TT>
+    struct SimNode_SetLocalRefT : SimNode {
+        SimNode_SetLocalRefT(const LineInfo & at, SimNode * rv, uint32_t sp)
+            : SimNode(at), r(rv), stackTop(sp) {}
+        virtual __m128 eval ( Context & context ) override {
+            auto pr = (TT *) r->evalPtr(context);
+            YZG_EXCEPTION_POINT;
+            TT * pl = (TT *) ( context.stackTop + stackTop );
+            *pl = *pr;
+            return _mm_setzero_ps();
+        }
+        SimNode * r;
+        uint32_t stackTop;
+    };
+    
+    template <typename TT>
+    struct SimNode_SetLocalValueT : SimNode {
+        SimNode_SetLocalValueT(const LineInfo & at, SimNode * rv, uint32_t sp)
+        : SimNode(at), r(rv), stackTop(sp) {}
+        virtual __m128 eval ( Context & context ) override {
+            __m128 rres = r->eval(context);
+            YZG_EXCEPTION_POINT;
+            TT * pl = (TT *) ( context.stackTop + stackTop );
+            *pl = cast<TT>::to(rres);
+            return _mm_setzero_ps();
+        }
+        SimNode * r;
+        uint32_t stackTop;
+    };
+
+    
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
     struct SimNode_InitLocal : SimNode {
         SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz) : SimNode(at), stackTop(sp), size(sz) {}

@@ -1117,11 +1117,6 @@ namespace yzg
                     return context.makeNode<SimNode_GetBlockArgumentRef>(at, argumentIndex, blk->stackTop);
                 }
             }
-            // if ( r2v ) {
-            //     return context.makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
-            // } else {
-            //     return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
-            // }
         } else if ( local ) {
             if ( variable->type->ref ) {
                 if ( r2v ) {
@@ -1270,8 +1265,39 @@ namespace yzg
     
     // common for move and copy
     
-    SimNode * makeCopy(const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
+    SimNode * makeCopy(const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
+        const auto & rightType = *rE->type;
         assert ( rightType.canCopy() && "should check above" );
+        // TODO:
+        //  expand to (while managing combinatorics explosion, policy?)
+        //      1. local ref variables (iterator results etc)
+        //      2. global variables
+        //      3. arguments
+        //      4. blocks
+        //      5. common cross-copy scenarios
+        if ( rightType.isWorkhorseType() && lE->rtti_isVar() ) {
+            auto var = static_pointer_cast<ExprVar>(lE);
+            if ( var->local && !var->variable->type->ref ) {
+                if ( rE->rtti_isVar() ) {
+                    auto rvar = static_pointer_cast<ExprVar>(rE);
+                    if ( rvar->local && !rvar->variable->type->ref ) {
+                        return context.makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
+                                at, var->variable->stackTop, rvar->variable->stackTop);
+                    }
+                }
+                auto right = rE->simulate(context);
+                if ( rightType.ref ) {
+                    return context.makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
+                                at, right, var->variable->stackTop);
+                } else {
+                    return context.makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
+                                at, right, var->variable->stackTop);
+                }
+            }
+        }
+        // now, to the regular copy
+        auto left = lE->simulate(context);
+        auto right = rE->simulate(context);
         if ( rightType.isRef() ) {
             if ( rightType.isWorkhorseType() ) {
                 return context.makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
@@ -1338,7 +1364,7 @@ namespace yzg
     }
     
     SimNode * ExprCopy::simulate (Context & context) const {
-        return makeCopy(at, context, *right->type, left->simulate(context), right->simulate(context));
+        return makeCopy(at, context, left, right);
     }
     
     // ExprTryCatch
@@ -1661,8 +1687,13 @@ namespace yzg
             get = context.makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
         else
             get = context.makeNode<SimNode_GetGlobal>(var->init->at, var->index);
-        if ( var->type->canCopy() )
-            return makeCopy(var->init->at, context, *var->init->type, get, init);
+        if ( var->type->canCopy() ) {
+            auto varExpr = make_shared<ExprVar>(var->at, var->name);
+            varExpr->variable = var;
+            varExpr->local = local;
+            varExpr->type = make_shared<TypeDecl>(*var->type);
+            return makeCopy(var->init->at, context, varExpr, var->init);
+        }
         else if ( var->type->canMove() )
             return makeMove(var->init->at, context, *var->init->type, get, init);
         else {
