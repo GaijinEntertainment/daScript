@@ -29,9 +29,10 @@ namespace yzg
     __m128 SimNode_ForRange::eval ( Context & context ) {
         __m128 ll = sources[0]->eval(context);
         YZG_EXCEPTION_POINT;
-        range __restrict r = cast<range>::to(ll);
+        range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stackTop + stackTop[0]);
-        for (int32_t i = r.from; i != r.to && !context.stopFlags; ++i) {
+		int32_t r_to = r.to;
+        for (int32_t i = r.from; i != r_to && !context.stopFlags; ++i) {
             *pi = i;
             body->eval(context);
         }
