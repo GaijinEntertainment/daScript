@@ -848,6 +848,20 @@ namespace yzg
         SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         virtual __m128 eval ( Context & context ) override;
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+                bool cmp = cond->evalBool(context);                 \
+                YZG_NODE_EXCEPTION_POINT(CTYPE);                    \
+                if ( cmp ) {                                        \
+                    return if_true->eval##TYPE(context);            \
+                } else if ( if_false ) {                            \
+                    return if_false->eval##TYPE(context);           \
+                } else {                                            \
+                    return (CTYPE) 0;                               \
+                }                                                   \
+            }
+        YZG_EVAL_NODE;
+#undef EVAL_NODE
         SimNode * cond, * if_true, * if_false;
     };
     
