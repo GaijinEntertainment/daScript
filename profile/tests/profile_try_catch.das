@@ -8,5 +8,6 @@ def test:bool
                         cnt += arr[i]
                     catch
                         fail ++
+        assert(fail==1000)
     return true
 

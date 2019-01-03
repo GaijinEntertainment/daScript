@@ -100,6 +100,7 @@ namespace yzg
             if ( message )
                 error_message = error_message + ", " + message;
             string error = reportError(context.debugInput, debug.line, debug.column, error_message );
+            error = context.getStackWalk(false) + error;
             context.to_err(error.c_str());
             context.throw_error("assert failed");
         }
@@ -362,6 +363,11 @@ namespace yzg
     }
     
     void Context::stackWalk() {
+        auto str = getStackWalk();
+        to_out(str.c_str());
+    }
+    
+    string Context::getStackWalk( bool args ) {
         stringstream ssw;
     #if YZG_ENABLE_STACK_WALK
         ssw << "\nCALL STACK (sp=" << (stack + stackSize - stackTop) << "):\n";
@@ -374,10 +380,12 @@ namespace yzg
             } else {
                 ssw << pp->info->name << "(sp=" << isp << ")\n";
             }
-            for ( uint32_t i = 0; i != pp->info->argsSize; ++i ) {
-                ssw << "\t" << pp->info->args[i]->name
-                    << " : " << debug_type(pp->info->args[i])
-                    << " = \t" << debug_value(pp->arguments[i], pp->info->args[i]) << "\n";
+            if ( args ) {
+                for ( uint32_t i = 0; i != pp->info->argsSize; ++i ) {
+                    ssw << "\t" << pp->info->args[i]->name
+                        << " : " << debug_type(pp->info->args[i])
+                        << " = \t" << debug_value(pp->arguments[i], pp->info->args[i]) << "\n";
+                }
             }
             sp += pp->info->stackSize;
         }
@@ -385,7 +393,7 @@ namespace yzg
     #else
         ssw << "\nCALL STACK TRACKING DISABLED:\n\n";
     #endif
-       to_out(ssw.str().c_str());
+        return ssw.str();
     }
     
     void Context::breakPoint(int column, int line) const {

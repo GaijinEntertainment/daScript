@@ -173,6 +173,7 @@ namespace yzg
         int findFunction ( const char * name ) const;
         int findVariable ( const char * name ) const;
         void stackWalk();
+        string getStackWalk( bool args = true );
         void runInitScript ( void );
         
         virtual void to_out ( const char * message );           // output to stdout or equivalent

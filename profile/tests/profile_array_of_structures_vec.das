@@ -80,37 +80,48 @@ def verify(total:int;objects:NObject[10000])
             index ++
 
 def test(objects:ObjectArray):bool
-    let(total:int=200;simTN,simT,cT,intT,manyT,manyKsT:float)
-        // manyKsT = profile(total,"interop 10000-ks version") <|
-        //     update10000ks(objects)
-        // return true
+    let(simTN,simT,cT,intT,manyT,manyKsT:float)
+        // verify
         init(nobjects)
-        simTN = profile(total,"native basic version") <|
-            testSim(nobjects)
-        verify(total,nobjects)
+        testSim(nobjects)
+        verify(1,nobjects)
         init(objects)
-        simT = profile(total,"basic version") <|
-            testSim(objects)
-        verify(total,objects)
+        testSim(objects)
+        verify(1,objects)
         init(objects)
-        cT = profile(total,"c++ version") <|
-            interopUpdateTest(objects)
-        verify(total,objects)
+        interopUpdateTest(objects)
+        verify(1,objects)
         init(objects)
-        intT = profile(total,"interop version") <|
-            testInterop(objects)
-        verify(total,objects)
+        testInterop(objects)
+        verify(1,objects)
         init(objects)
-        manyT = profile(total,"interop 10000 version") <|
-            update10000(objects)
-        verify(total,objects)
+        update10000(objects)
+        verify(1,objects)
         init(objects)
-        manyKsT = profile(total,"interop 10000-ks version") <|
-            update10000ks(objects)
-        verify(total,objects)
-        // print("ratio nsim/c++ "+string(simTN/cT)+"\n")
-        // print("ratio sim/c++: "+string(simT/cT)+"\n")
-        // print("ratio interop/c++: "+string(intT/cT)+"\n")
-        // print("ratio interop-10000/c++: "+string(manyT/cT)+"\n");
-        // print("ratio interop-10000-ks/c++: "+string(manyKsT/cT)+"\n")
+        update10000ks(objects)
+        verify(1,objects)
+        // profile
+        simTN = profile(20,"native basic version") <|
+            for i in range(0,1000)
+                testSim(nobjects)
+        simT = profile(20,"basic version") <|
+            for i in range(0,1000)
+                testSim(objects)
+        cT = profile(20,"c++ version") <|
+            for i in range(0,1000)
+                interopUpdateTest(objects)
+        intT = profile(20,"interop version") <|
+            for i in range(0,1000)
+                testInterop(objects)
+        manyT = profile(20,"interop 10000 version") <|
+            for i in range(0,1000)
+                update10000(objects)
+        manyKsT = profile(20,"interop 10000-ks version") <|
+            for i in range(0,1000)
+                update10000ks(objects)
+        print("ratio nsim/c++ "+string(simTN/cT)+"\n")
+        print("ratio sim/c++: "+string(simT/cT)+"\n")
+        print("ratio interop/c++: "+string(intT/cT)+"\n")
+        print("ratio interop-10000/c++: "+string(manyT/cT)+"\n");
+        print("ratio interop-10000-ks/c++: "+string(manyKsT/cT)+"\n")
     return true
