@@ -56,8 +56,10 @@ namespace yzg
     struct Prologue {
         __m128      result;
         __m128 *    arguments;
+#if YZG_ENABLE_STACK_WALK
         FuncInfo *  info;
         int32_t     line;
+#endif
     };
     static_assert((sizeof(Prologue) & 0xf)==0, "it has to be 16 byte aligned");
     
