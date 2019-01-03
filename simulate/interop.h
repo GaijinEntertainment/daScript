@@ -48,7 +48,6 @@ namespace yzg
 			__m128 * args = (__m128 *)(alloca(nArguments*sizeof(__m128)));
 			evalArgs(context, args);
             YZG_EXCEPTION_POINT;
-        #if YZG_ENABLE_STACK_WALK
             // PUSH
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
             if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
@@ -57,9 +56,10 @@ namespace yzg
             }
             char * pushStack = context.stackTop;
             char * pushInvokeStack = context.invokeStackTop;
+			context.invokeStackTop = nullptr;
+		#if YZG_ENABLE_STACK_WALK
             context.stackTop = top - sizeof(Prologue);
             assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
-            context.invokeStackTop = nullptr;
             // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
@@ -71,11 +71,9 @@ namespace yzg
             // calc
             auto res = ImplCallStaticFunction<Result>::template call<FuncT,Arguments>(*fn, context, args, Indices());
             // POP
-        #if YZG_ENABLE_STACK_WALK
             context.invokeStackTop = pushInvokeStack;
             context.stackTop = pushStack;
             assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
-        #endif
             return res;
         }
         FuncInfo * info = nullptr;
@@ -90,7 +88,6 @@ namespace yzg
 			__m128 * args = (__m128 *)(alloca(nArguments * sizeof(__m128)));
             evalArgs(context, args);
             YZG_EXCEPTION_POINT;
-#if YZG_ENABLE_STACK_WALK
             // PUSH
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
             if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
@@ -99,9 +96,10 @@ namespace yzg
             }
             char * pushStack = context.stackTop;
             char * pushInvokeStack = context.invokeStackTop;
+			context.invokeStackTop = nullptr;
+#if YZG_ENABLE_STACK_WALK
             context.stackTop = top - sizeof(Prologue);
             assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
-            context.invokeStackTop = nullptr;
             // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
@@ -113,11 +111,9 @@ namespace yzg
             // calc
             auto res = fn(context,this,args);
             // POP
-#if YZG_ENABLE_STACK_WALK
             context.invokeStackTop = pushInvokeStack;
             context.stackTop = pushStack;
             assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
-#endif
             return res;
         }
         FuncInfo * info = nullptr;
