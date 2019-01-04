@@ -86,7 +86,8 @@ namespace yzg
         YZG_EXCEPTION_POINT;
         stringstream ssw;
         if ( message ) ssw << message << " ";
-        ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo) << " at " << debug.describe() << "\n";
+        ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger)
+            << " at " << debug.describe() << "\n";
         context.to_out(ssw.str().c_str());
         return res;
     }
@@ -384,7 +385,7 @@ namespace yzg
                 for ( uint32_t i = 0; i != pp->info->argsSize; ++i ) {
                     ssw << "\t" << pp->info->args[i]->name
                         << " : " << debug_type(pp->info->args[i])
-                        << " = \t" << debug_value(pp->arguments[i], pp->info->args[i]) << "\n";
+                        << " = \t" << debug_value(pp->arguments[i], pp->info->args[i], PrintFlags::stackwalker) << "\n";
                 }
             }
             sp += pp->info->stackSize;

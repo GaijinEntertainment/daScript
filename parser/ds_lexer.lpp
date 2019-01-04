@@ -15,6 +15,7 @@
     int tab_size = 4;   // only 2,4 or 8
     int nested_parentheses = 0;
     int nested_curly_braces = 0;
+    int nested_sb = 0;
     int yycolumn = 1;
     bool need_oxford_comma = true;
     
@@ -34,10 +35,37 @@
 /* %option debug */
 
 %x indent
+%x strb
 %s normal
 
 %%
 
+<strb>\"                {
+    // assert(nested_sb==0);
+    BEGIN(normal);
+    return END_STRING;
+}
+<strb>\{                {
+    assert(nested_sb==0);
+    nested_sb ++;
+    BEGIN(normal);
+}
+<strb>[\t\r]            {
+    yyerror("string constant exceeds line", CompilationError::string_constant_exceeds_file);
+    return LEXER_ERROR;
+}
+<strb>EOF               {
+    yyerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
+    return LEXER_ERROR;
+}
+<strb>\\[\{\"]          {
+    yylval.ch = yytext[1];
+    return STRING_CHARACTER;
+}
+<strb>.                 {
+    yylval.ch = *yytext;
+    return STRING_CHARACTER;
+}
 <indent>" "             { 
 	current_line_indent++; 
 	#ifdef FLEX_DEBUG
@@ -58,7 +86,7 @@
 		cout << "new line\n";
 	#endif
 }
-<indent>.        {
+<indent>.               {
     unput(*yytext);
     if (current_line_indent > indent_level*tab_size ) {
         indent_level++;
@@ -77,7 +105,7 @@
         BEGIN(normal);
     }
 }
-<indent><<EOF>> {
+<indent><<EOF>>         {
     if ( indent_level ) {
         indent_level--;
         unput('\r');
@@ -89,7 +117,6 @@
         return 0;
     }
 }
-
 <normal>"for"                                           need_oxford_comma = false; return _FOR;
 <normal>"while"                                         need_oxford_comma = false; return _WHILE;
 <normal>"if"                                            need_oxford_comma = false; return _IF;
@@ -135,7 +162,10 @@
 <normal>"float3"                                        return _FLOAT3;
 <normal>"float4"                                        return _FLOAT4;
 <normal>[_[:alpha:]][_[:alnum:]]*                       yylval.s = new string(yytext);  return NAME;    // TODO: track allocations
-L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yytext+1,yytext+strlen(yytext)-1);  return STRING;  
+<normal>\"                                  {
+        BEGIN(strb);
+        return BEGIN_STRING;
+    }
 <normal>0[xX][0-9a-fA-F]+                               return sscanf(yytext, "%u", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
@@ -157,15 +187,28 @@ L?\"(\\.|[^\\"])*\"                                     yylval.s = new string(yy
     return '(';
 }
 <normal>\}                                  {
-    if ( !nested_curly_braces ) {
-        yyerror("mismatching curly braces", CompilationError::mismatching_curly_bracers);
-        return LEXER_ERROR;
+    if ( nested_sb ) {
+        nested_sb --;
+        if ( !nested_sb ) {
+            BEGIN(strb);
+        } else {
+            return '}';
+        }
+    } else {
+        if ( !nested_curly_braces ) {
+            yyerror("mismatching curly braces", CompilationError::mismatching_curly_bracers);
+            return LEXER_ERROR;
+        }
+        nested_curly_braces --;
+        return '}';
     }
-    nested_curly_braces --;
-    return '}';
 }
 <normal>\{                                  {
-    nested_curly_braces ++;
+    if ( nested_sb ) {
+        nested_sb ++;
+    } else {
+        nested_curly_braces ++;
+    }
     return '{';
 }
 <normal>"\:\:"                              return COLCOL;
@@ -226,6 +269,7 @@ void yybegin(const char * str)
     indent_level = 0;
     nested_parentheses = 0;
     nested_curly_braces = 0;
+    nested_sb = 0;
     need_oxford_comma = true;
     
     BEGIN(normal);

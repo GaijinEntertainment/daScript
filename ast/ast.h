@@ -714,6 +714,15 @@ namespace yzg
         string text;
     };
     
+    struct ExprStringBuilder : Expression {
+        ExprStringBuilder() = default;
+        ExprStringBuilder(const LineInfo & a) : Expression(a) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        vector<ExpressionPtr>   elements;
+    };
+    
     struct ExprLet : Expression {
         Variable * find ( const string & name ) const;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1140,6 +1149,11 @@ namespace yzg
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) { return var; }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * ) {}
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
+        // STRING BUILDER
+        virtual void preVisit ( ExprStringBuilder * expr ) {}
+        virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) {}
+        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) { return expr->shared_from_this(); }
+        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) { return expr->shared_from_this(); }
         // CALL
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) {}
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) { return arg->shared_from_this(); }
@@ -1240,7 +1254,7 @@ namespace yzg
     public:
         bool didAnything () const { return anyFolding; }
     protected:
-        void reportFolding() { anyFolding = true; }
+        void reportFolding();
     private:
         bool anyFolding = false;
     };

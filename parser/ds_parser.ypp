@@ -42,6 +42,7 @@
 %debug
 
 %union {
+    char                            ch;
     bool                            b;
     int                             i;
     uint32_t                        ui;
@@ -101,6 +102,10 @@
 %token<s>   STRING
 %token<s>   NAME
 
+%token      BEGIN_STRING
+%token<ch>  STRING_CHARACTER
+%token      END_STRING
+
 %type <pNameList>       variable_name_list
 %type <type>            basic_type_declaration
 %type <pTypeDecl>       type_declaration
@@ -138,6 +143,12 @@
 %type <pExpression>     expression_any
 %type <pExpression>     optional_initializer
 
+%type <pExpression>     string_builder_body
+%type <pExpression>     string_builder
+
+%type <s>               character_sequence
+%type <s>               string_constant
+
 /* operation precedence*/
 %left       ','
 %right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU SHREQU SHLEQU ANDEQU OREQU XOREQU LARROW
@@ -166,6 +177,36 @@ program
     |   program expect_declaration
     |   program require_declaration
 	|	program options_declaration
+    ;
+
+character_sequence
+    :                                                       { $$ = new string(); }
+    |   character_sequence[elem]  STRING_CHARACTER[char]    { $$ = $elem; *$elem += $char; }
+    ;
+
+string_constant
+    :   BEGIN_STRING character_sequence[seq] END_STRING    { $$ = $seq; }
+    ;
+
+string_builder_body
+    :   {
+        $$ = new ExprStringBuilder();
+    }
+    |   string_builder_body[sb] character_sequence[sconst] {
+        auto sc = make_shared<ExprConstString>(tokAt(@sconst),*$sconst);
+        delete $sconst;
+        static_cast<ExprStringBuilder *>($sb)->elements.push_back(sc);
+        $$ = $sb;
+    }
+    |   string_builder_body[sb] expr[subexpr] {
+        auto se = ExpressionPtr($subexpr);
+        static_cast<ExprStringBuilder *>($sb)->elements.push_back(se);
+        $$ = $sb;
+    }
+    ;
+
+string_builder
+    :   BEGIN_STRING string_builder_body[sb] END_STRING    { $$ = $sb; }
     ;
 
 options_declaration
@@ -252,11 +293,11 @@ expression_while_loop
     ;
 
 annotation_argument
-    :   NAME[name] '=' STRING[value]    { $$ = new AnnotationArgument(*$name,*$value); delete $value; }
-    |   NAME[name] '=' INTEGER[value]   { $$ = new AnnotationArgument(*$name,$value);  }
-    |   NAME[name] '=' DOUBLE[value]    { $$ = new AnnotationArgument(*$name,float($value));  }
-    |   NAME[name] '=' _TRUE            { $$ = new AnnotationArgument(*$name,true);  }
-    |   NAME[name] '=' _FALSE           { $$ = new AnnotationArgument(*$name,false);  }
+    :   NAME[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value); delete $value; }
+    |   NAME[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value);  }
+    |   NAME[name] '=' DOUBLE[value]            { $$ = new AnnotationArgument(*$name,float($value));  }
+    |   NAME[name] '=' _TRUE                    { $$ = new AnnotationArgument(*$name,true);  }
+    |   NAME[name] '=' _FALSE                   { $$ = new AnnotationArgument(*$name,false);  }
     ;
 
 annotation_argument_list
@@ -607,7 +648,7 @@ expr
     |   INTEGER[const]                        { $$ = new ExprConstInt(tokAt(@const),(int32_t)$const); }
     |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(@const),(uint32_t)$const); }
     |   DOUBLE[const]                         { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }
-    |   STRING[const]                         { $$ = new ExprConstString(tokAt(@const),*$const); delete $const; }
+    |   string_builder[sb]                    { $$ = $sb; }
     |   _TRUE[loc]                            { $$ = new ExprConstBool(tokAt(@loc),true); }
     |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }
     |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),"!",ExpressionPtr($subexpr)); }

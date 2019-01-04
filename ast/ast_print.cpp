@@ -164,6 +164,19 @@ namespace yzg {
             if ( block->isClosure ) ss << "}"; else tab --;
             return Visitor::visit(block);
         }
+    // string builder
+        virtual void preVisit ( ExprStringBuilder * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "string_builder(";
+        }
+        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
+            if ( !last ) ss << ", ";
+            return Visitor::visitStringBuilderElement(sb, expr, last);
+        }
+        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
+            ss << ")";
+            return Visitor::visit(expr);
+        }
     // let
         virtual void preVisit ( ExprLet * let ) override {
             Visitor::preVisit(let);

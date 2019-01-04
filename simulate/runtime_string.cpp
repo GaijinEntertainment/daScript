@@ -114,4 +114,16 @@ namespace yzg
         return ssw.str();
     }
 
+    __m128 SimNode_StringBuilder::eval ( Context & context ) {
+        __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
+        evalArgs(context, argValues);
+        YZG_EXCEPTION_POINT;
+        stringstream ssw;
+        for ( int32_t i = 0; i!=nArguments; ++i ) {
+            // TODO: different output for strings?
+            ssw << debug_value(argValues[i], types[i], PrintFlags::string_builder);
+        }
+        auto pStr = context.allocateName(ssw.str());
+        return cast<char *>::from(pStr);
+    }
 }

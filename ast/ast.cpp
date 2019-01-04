@@ -531,7 +531,7 @@ namespace yzg
     
     // type annotation
     
-    void debugType ( TypeAnnotation * ta, stringstream & ss , void * data ) {
+    void debugType ( TypeAnnotation * ta, stringstream & ss , void * data, PrintFlags flags ) {
         ta->debug(ss, data);
     }
     
@@ -1077,6 +1077,49 @@ namespace yzg
                 return context.makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),field->offset);
             }
         }
+    }
+    
+    // ExprStringBuilder
+    
+    ExpressionPtr ExprStringBuilder::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto it = elements.begin(); it!=elements.end(); ) {
+            auto & elem = *it;
+            vis.preVisitStringBuilderElement(this, elem.get(), elem==elements.back());
+            elem = elem->visit(vis);
+            if ( elem ) elem = vis.visitStringBuilderElement(this, elem.get(), elem==elements.back());
+            if ( elem ) ++ it; else it = elements.erase(it);
+        }
+        return vis.visit(this);
+    }
+    
+    ExpressionPtr ExprStringBuilder::clone( const ExpressionPtr & expr  ) const {
+        auto cexpr = clonePtr<ExprStringBuilder>(expr);
+        Expression::clone(cexpr);
+        cexpr->elements.reserve(elements.size());
+        for ( auto & elem : elements ) {
+            cexpr->elements.push_back(elem->clone());
+        }
+        return cexpr;
+    }
+    
+    SimNode * ExprStringBuilder::simulate (Context & context) const {
+        SimNode_StringBuilder * pSB = context.makeNode<SimNode_StringBuilder>(at);
+        if ( int nArg = (int) elements.size() ) {
+            pSB->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
+            pSB->types = (TypeInfo **) context.allocate(nArg * sizeof(TypeInfo *));
+            pSB->nArguments = nArg;
+            for ( int a=0; a!=nArg; ++a ) {
+                pSB->arguments[a] = elements[a]->simulate(context);
+                pSB->types[a] = context.makeNode<TypeInfo>();
+                context.thisProgram->makeTypeInfo(pSB->types[a], context, elements[a]->type);
+            }
+        } else {
+            pSB->arguments = nullptr;
+            pSB->types = nullptr;
+            pSB->nArguments = 0;
+        }
+        return pSB;
     }
     
     // ExprVar
@@ -2092,7 +2135,7 @@ namespace yzg
             case Type::tFloat2:     return make_shared<ExprConstFloat2>(at, cast<float2>::to(value));
             case Type::tFloat3:     return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
             case Type::tFloat4:     return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
-            default:                return nullptr;
+            default:                assert(0 && "we should not even be here"); return nullptr;
         }
     }
     
@@ -2126,21 +2169,21 @@ namespace yzg
     
     void Program::optimize() {
         const bool log = options.getOption("logOptimizationPasses",false);
-        bool any, once;
+        bool any, once, last;
         once = true;
 		if (log) cout << *this << "\n";
         do {
             if ( log ) cout << "OPTIMIZE:\n" << *this;
             any = false;
-            any |= optimizationRefFolding();    if ( failed() ) break;
-            if ( log ) cout << "REF FOLDING:\n" << *this;
-            any |= optimizationConstFolding();  if ( failed() ) break;
-            if ( log ) cout << "CONST FOLDING:\n" << *this;
-            any |= optimizationBlockFolding();  if ( failed() ) break;
-            if ( log ) cout << "BLOCK FOLDING:\n" << *this;
-            any |= optimizationUnused();        if ( failed() ) break;
-            if ( log ) cout << "REMOVE UNUSED:\n" << *this;
-            any |= once && staticAsserts();     if ( failed() ) break;
+            last = optimizationRefFolding();    if ( failed() ) break;  any |= last;
+            if ( log ) cout << "REF FOLDING: " << (last ? "optimized" : "nothing") << "\n" << *this;
+            last = optimizationConstFolding();  if ( failed() ) break;  any |= last;
+            if ( log ) cout << "CONST FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
+            last = optimizationBlockFolding();  if ( failed() ) break;  any |= last;
+            if ( log ) cout << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
+            last = optimizationUnused();        if ( failed() ) break;  any |= last;
+            if ( log ) cout << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
+            last = once && staticAsserts();     if ( failed() ) break;  any |= last;
             once = false;
             if ( log ) cout.flush();
         } while ( any );
@@ -2166,10 +2209,10 @@ namespace yzg
 				if (program->options.getOption("optimize", true)) {
 					program->optimize();
 				}
-				if (!program->failed()) {
+				if (!program->failed())
 					program->staticAsserts();
-				}
-				program->allocateStack();
+                if (!program->failed())
+                    program->allocateStack();
                 if ( !program->failed() ) {
                     program->finalizeAnnotations();
                 }

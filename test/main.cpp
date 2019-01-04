@@ -163,12 +163,12 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/const_ref.das");
+    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/invalid_assert_argument.das");
     Module::Shutdown();
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "test/unit_tests/types.das");
+    unit_test(TEST_PATH "test/optimizations/const_and_block_folding.das");
     Module::Shutdown();
     return 0;
 #endif

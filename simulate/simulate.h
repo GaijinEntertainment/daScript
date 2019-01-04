@@ -494,6 +494,13 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override;
     };
     
+    // StringBuilder
+    struct SimNode_StringBuilder : SimNode_CallBase {
+        SimNode_StringBuilder ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        virtual __m128 eval ( Context & context ) override;
+        TypeInfo ** types;
+    };
+    
     // CAST
     template <typename CastTo, typename CastFrom>
     struct SimNode_Cast : SimNode_CallBase {

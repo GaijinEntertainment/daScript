@@ -119,9 +119,9 @@ def test(objects:ObjectArray):bool
         manyKsT = profile(20,"interop 10000-ks version") <|
             for i in range(0,1000)
                 update10000ks(objects)
-        print("ratio nsim/c++ "+string(simTN/cT)+"\n")
-        print("ratio sim/c++: "+string(simT/cT)+"\n")
-        print("ratio interop/c++: "+string(intT/cT)+"\n")
-        print("ratio interop-10000/c++: "+string(manyT/cT)+"\n");
-        print("ratio interop-10000-ks/c++: "+string(manyKsT/cT)+"\n")
+        print("ratio nsim/c++ {simTN/cT}\n")
+        print("ratio sim/c++: {simT/cT}\n")
+        print("ratio interop/c++: {intT/cT}\n")
+        print("ratio interop-10000/c++: {manyT/cT}\n");
+        print("ratio interop-10000-ks/c++: {manyKsT/cT}\n")
     return true

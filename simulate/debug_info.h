@@ -86,8 +86,17 @@ namespace yzg
     int getDimSize ( TypeInfo * info );
     int getTypeSize ( TypeInfo * info );
     
-    string debug_value ( void * pX, TypeInfo * info );
-    string debug_value ( __m128 value, TypeInfo * info );
+    enum class PrintFlags : uint32_t {
+        none         = 0
+    ,   escapeString =  (1<<0)
+        
+    ,   string_builder  =   PrintFlags::none
+    ,   debugger        =   PrintFlags::escapeString
+    ,   stackwalker     =   PrintFlags::escapeString
+    };
+    
+    string debug_value ( void * pX, TypeInfo * info, PrintFlags flags );
+    string debug_value ( __m128 value, TypeInfo * info, PrintFlags flags );
     string debug_type ( TypeInfo * info );
 }
 

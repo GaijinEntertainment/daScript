@@ -154,8 +154,6 @@ namespace yzg {
             expr->autoDereference();
             if ( !expr->arguments[0]->type->isSimpleType(Type::tBool) )
                 error("static assert condition must be boolean", expr->at, CompilationError::invalid_argument_type);
-            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() )
-                error("static assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
@@ -170,8 +168,6 @@ namespace yzg {
             expr->autoDereference();
             if ( !expr->arguments[0]->type->isSimpleType(Type::tBool) )
                 error("assert condition must be boolean", expr->at, CompilationError::invalid_argument_type);
-            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() )
-                error("assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
@@ -961,7 +957,14 @@ namespace yzg {
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
-        
+        // StringBuilder
+        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
+            return Expression::autoDereference(expr->shared_from_this());
+        }
+        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
+            expr->type = make_shared<TypeDecl>(Type::tString);
+            return Visitor::visit(expr);
+        }
     };
      
     // program

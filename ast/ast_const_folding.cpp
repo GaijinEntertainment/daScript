@@ -4,6 +4,10 @@
 
 namespace yzg {
     
+    void OptVisitor::reportFolding() {
+        anyFolding = true;
+    }
+    
     class SetSideEffectVisitor : public Visitor {
         // any expression
         virtual void preVisitExpression ( Expression * expr ) override {
@@ -121,6 +125,18 @@ namespace yzg {
             reportFolding();
             return sim;
         }
+        ExpressionPtr evalAndFoldString ( Expression * expr ) {
+            if ( expr->rtti_isStringConstant() ) return expr->shared_from_this();
+            __m128 value = eval(expr);
+            TypeInfo * pTypeInfo = ctx.makeNode<TypeInfo>();
+            program->makeTypeInfo(pTypeInfo, ctx, expr->type);
+            auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
+            auto sim = make_shared<ExprConstString>(expr->at, res);
+            sim->type = make_shared<TypeDecl>(Type::tString);
+            sim->constexpression = true;
+            reportFolding();
+            return sim;
+        }
         bool isSameFoldValue ( const TypeDeclPtr & t, __m128 a, __m128 b ) const {
             return memcmp(&a,&b,t->getSizeOf()) == 0;
         }
@@ -148,8 +164,12 @@ namespace yzg {
         }
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
-            if ( expr->type->isFoldable() && expr->left->constexpression && expr->right->constexpression ) {
-                return evalAndFold(expr);
+            if ( expr->left->constexpression && expr->right->constexpression ) {
+                if ( expr->type->isFoldable() ) {
+                    return evalAndFold(expr);
+                } else if ( expr->type->isSimpleType(Type::tString) ) {
+                    return evalAndFoldString(expr);
+                }
             }
             return Visitor::visit(expr);
         }
@@ -263,6 +283,47 @@ namespace yzg {
             }
             return Visitor::visit(expr);
         }
+    // ExprStringBuilder
+        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
+            if ( expr->constexpression ) {
+                return evalAndFoldString(expr);
+            }
+            return Visitor::visitStringBuilderElement(sb, expr, last);
+        }
+        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
+            // concatinate all constant strings, which are close together
+            shared_ptr<ExprConstString> str;
+            for ( auto it = expr->elements.begin(); it != expr->elements.end(); ) {
+                const auto & elem = *it;
+                if ( elem->rtti_isStringConstant() ) {
+                    auto selem = static_pointer_cast<ExprConstString>(elem);
+                    if ( str ) {
+                        str->text += selem->text;
+                        it = expr->elements.erase(it);
+                        reportFolding();
+                    } else {
+                        str = selem;
+                        ++ it;
+                    }
+                } else {
+                    str.reset();
+                    ++ it;
+                }
+            }
+            // check if we are no longer a builder
+            if ( expr->elements.size()==0 ) {
+                // empty string builder is "" string
+                auto estr = make_shared<ExprConstString>(expr->at,"");
+                estr->type = make_shared<TypeDecl>(Type::tString);
+                estr->constexpression = true;
+                return estr;
+            } else if ( expr->elements.size()==1 && expr->elements[0]->rtti_isStringConstant() ) {
+                // string builder with one string constant is that constant
+                return expr->elements[0];
+            } else {
+                return Visitor::visit(expr);
+            }
+        }
     };
     
     //  turn static-assert into nop
@@ -271,12 +332,23 @@ namespace yzg {
     public:
         StaticAssertFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
     protected:
+        virtual ExpressionPtr visit(ExprAssert * expr) override {
+            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() ) {
+                program->error("assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
+                return nullptr;
+            }
+            return Visitor::visit(expr);
+        }
 		virtual ExpressionPtr visit(ExprStaticAssert * expr) override {
 			auto cond = expr->arguments[0];
 			if (!cond->constexpression && !cond->rtti_isConstant()) {
 				program->error("static assert condition is not constexpr or const", expr->at);
 				return nullptr;
 			}
+            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() ) {
+                program->error("static assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
+                return nullptr;
+            }
 			bool result = false;
 			if (cond->constexpression) {
 				result = cast<bool>::to(eval(cond.get()));

@@ -1,4 +1,4 @@
-expect 30103:13   // invalid_argument_type
+expect 30103:12   // invalid_argument_type
 
 def test
     // assert(bool,comment)

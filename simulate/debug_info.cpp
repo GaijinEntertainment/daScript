@@ -35,8 +35,6 @@ namespace yzg
         {   Type::tURange,      "urange"}
     };
     
-    void debugType ( TypeAnnotation *, stringstream & , void * );
-    
     string to_string ( Type t ) {
         return g_typeTable.find(t);
     }
@@ -105,44 +103,45 @@ namespace yzg
         return getDimSize(info) * getTypeBaseSize(info);
     }
     
-    void debug_structure ( stringstream & ss, char * ps, StructInfo * info );
-    void debug_value ( stringstream & ss, void * pX, TypeInfo * info );
+    void debugType ( TypeAnnotation *, stringstream & , void *, PrintFlags flags );
+    void debug_structure ( stringstream & ss, char * ps, StructInfo * info, PrintFlags flags );
+    void debug_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags );
     
-    void debug_structure ( stringstream & ss, char * ps, StructInfo * info ) {
+    void debug_structure ( stringstream & ss, char * ps, StructInfo * info, PrintFlags flags ) {
         char * pf = ps;
         ss << "(";
         for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
             VarInfo * vi = info->fields[i];
             if ( i ) ss << " ";
             ss << "(" << vi->name << " ";
-            debug_value(ss, pf, vi);
+            debug_value(ss, pf, vi, flags);
             ss << ")";
             pf += getTypeSize(vi);
         }
         ss << ")";
     }
     
-    void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info ) {
+    void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info, PrintFlags flags ) {
         char * pA = (char *) pX;
         ss << "([size=" << count << ",stride=" << stride << "] ";
         for ( int i=0; i!=count; ++i ) {
             if ( i ) ss << " ";
-            debug_value(ss, pA, info);
+            debug_value(ss, pA, info, flags);
             pA += stride;
         }
         ss << ")";
     }
     
-    void debug_dim_value ( stringstream & ss, void * pX, TypeInfo * info ) {
+    void debug_dim_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags ) {
         TypeInfo copyInfo = *info;
         assert(copyInfo.dimSize);
         copyInfo.dimSize --;
         int stride = getTypeBaseSize(info);
         int count = getDimSize(info);
-        debug_array_value(ss, pX, stride, count, &copyInfo);
+        debug_array_value(ss, pX, stride, count, &copyInfo, flags);
     }
     
-    void debug_value ( stringstream & ss, void * pX, TypeInfo * info ) {
+    void debug_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags ) {
         if ( pX == nullptr ) {
             ss << "null";
             return;
@@ -150,18 +149,24 @@ namespace yzg
         if ( info->ref ) {
             TypeInfo ti = *info;
             ti.ref = false;
-            debug_value(ss, *(void **)pX, &ti);
+            debug_value(ss, *(void **)pX, &ti, flags);
         } else if ( info->dimSize ) {
-            debug_dim_value(ss, pX, info);
+            debug_dim_value(ss, pX, info, flags);
         } else if ( info->type==Type::tArray ) {
             auto arr = (Array *) pX;
-            debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType);
+            debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType, flags);
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << *((bool *)pX); break;
                 case Type::tInt64:      ss << *((int64_t *)pX); break;
                 case Type::tUInt64:     ss << "0x" << hex << *((uint64_t *)pX) << dec; break;
-                case Type::tString:     ss << "\"" << escapeString(safe_str(pX)) << "\""; break;
+                case Type::tString:
+                    if ( int(flags) & int(PrintFlags::escapeString) ) {
+                        ss << "\"" << escapeString(safe_str(pX)) << "\"";
+                    } else {
+                        ss << safe_str(pX);
+                    }
+                    break;
                 case Type::tInt:        ss << *((int32_t *)pX); break;
                 case Type::tInt2:       ss << *((int2 *)pX); break;
                 case Type::tInt3:       ss << *((int3 *)pX); break;
@@ -180,19 +185,19 @@ namespace yzg
                 case Type::tPointer:    ss << "*" << hex << intptr_t(pX) << dec;
                                         if ( info->firstType ) {
                                             ss << " -> (";
-                                            debug_value(ss, *(void**)pX, info->firstType );
+                                            debug_value(ss, *(void**)pX, info->firstType, flags);
                                             ss << ")";
                                         }
                                         break;
-                case Type::tStructure:  debug_structure(ss, (char *)pX, info->structType); break;
+                case Type::tStructure:  debug_structure(ss, (char *)pX, info->structType, flags); break;
                 case Type::tBlock:      ss << "block " << hex << intptr_t(((Block *)pX)->body) << dec;
-                case Type::tHandle:     debugType(info->annotation, ss, pX); break;
+                case Type::tHandle:     debugType(info->annotation, ss, pX, flags); break;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }
     }
     
-    void debug_table_value (  stringstream & ss, Table & tab, TypeInfo * info ) {
+    void debug_table_value (  stringstream & ss, Table & tab, TypeInfo * info, PrintFlags flags ) {
         ss << "([" << tab.size << " of " << tab.capacity << "] ";
         bool first = true;
         int keySize = getTypeSize(info->firstType);
@@ -201,34 +206,40 @@ namespace yzg
             if ( tab.distance[i]>=0 ) {
                 if ( !first ) ss << " "; first = false;
                 ss << "("; // ss << "(@ " << i << " ";
-                debug_value ( ss, tab.keys + i*keySize, info->firstType );
+                debug_value ( ss, tab.keys + i*keySize, info->firstType, flags );
                 ss << " -> ";
-                debug_value ( ss, tab.data + i*valueSize, info->secondType);
+                debug_value ( ss, tab.data + i*valueSize, info->secondType, flags );
                 ss << ")";
             }
         }
         ss << ")";
     }
     
-    void debug_value ( stringstream & ss, __m128 x, TypeInfo * info ) {
+    void debug_value ( stringstream & ss, __m128 x, TypeInfo * info, PrintFlags flags ) {
         if ( info->ref ) {
             TypeInfo ti = *info;
             ti.ref = false;
-            debug_value(ss, cast<void *>::to(x), &ti);
+            debug_value(ss, cast<void *>::to(x), &ti, flags);
         } else if ( info->dimSize ) {
-            debug_dim_value(ss, cast<void *>::to(x), info);
+            debug_dim_value(ss, cast<void *>::to(x), info, flags);
         } else if ( info->type==Type::tArray ) {
             auto arr = cast<Array *>::to(x);
-            debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType);
+            debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType, flags);
         } else if ( info->type==Type::tTable ) {
             auto tab = cast<Table *>::to(x);
-            debug_table_value(ss, *tab, info);
+            debug_table_value(ss, *tab, info, flags);
         } else {
             switch ( info->type ) {
                 case Type::tBool:       ss << cast<bool>::to(x); break;
                 case Type::tInt64:      ss << cast<int64_t>::to(x); break;
                 case Type::tUInt64:     ss << "0x" << hex << cast<uint64_t>::to(x) << dec; break;
-                case Type::tString:     ss << "\"" << escapeString(to_rts(x)) << "\""; break;
+                case Type::tString:
+                    if ( int(flags) & int(PrintFlags::escapeString) ) {
+                        ss << "\"" << escapeString(to_rts(x)) << "\"";
+                    } else {
+                        ss << to_rts(x);
+                    }
+                    break;
                 case Type::tInt:        ss << cast<int32_t>::to(x); break;
                 case Type::tInt2:       ss << cast<int2>::to(x); break;
                 case Type::tInt3:       ss << cast<int3>::to(x); break;
@@ -247,28 +258,28 @@ namespace yzg
                 case Type::tPointer:    ss << "*" << hex << intptr_t(cast<void *>::to(x)) << dec << " ";
                                         if ( info->firstType ) {
                                             ss << " -> (";
-                                            debug_value(ss, cast<void *>::to(x), info->firstType );
+                                            debug_value(ss, cast<void *>::to(x), info->firstType, flags);
                                             ss << ")";
                                         }
                                         break;
-                case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType); break;
+                case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType, flags); break;
                 case Type::tVoid:       ss << "void"; break;
                 case Type::tBlock:      ss << "block"; break;
-                case Type::tHandle:     debugType(info->annotation, ss, cast<void*>::to(x)); break;
+                case Type::tHandle:     debugType(info->annotation, ss, cast<void*>::to(x), flags); break;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }
     }
     
-    string debug_value ( __m128 x, TypeInfo * info ) {
+    string debug_value ( __m128 x, TypeInfo * info, PrintFlags flags ) {
         stringstream ss;
-        debug_value(ss, x, info);
+        debug_value(ss, x, info, flags);
         return ss.str();
     }
     
-    string debug_value ( void * pX, TypeInfo * info ) {
+    string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {
         stringstream ss;
-        debug_value(ss, pX, info);
+        debug_value(ss, pX, info, flags);
         return ss.str();
     }
     
