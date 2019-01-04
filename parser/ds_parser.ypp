@@ -105,6 +105,8 @@
 %token      BEGIN_STRING
 %token<ch>  STRING_CHARACTER
 %token      END_STRING
+%token		BEGIN_STRING_EXPR
+%token		END_STRING_EXPR
 
 %type <pNameList>       variable_name_list
 %type <type>            basic_type_declaration
@@ -198,7 +200,7 @@ string_builder_body
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(sc);
         $$ = $sb;
     }
-    |   string_builder_body[sb] expr[subexpr] {
+    |   string_builder_body[sb] BEGIN_STRING_EXPR expr[subexpr] END_STRING_EXPR {
         auto se = ExpressionPtr($subexpr);
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(se);
         $$ = $sb;
