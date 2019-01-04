@@ -1,10 +1,12 @@
-expect 30103:12   // invalid_argument_type
+options optimize=false
+
+expect 30103:13   // invalid_argument_type
 
 def test
     // assert(bool,comment)
     assert(1,"sure")            // can only assert on boolean expressions
     assert(true,"blah")         // this one fine
-    assert(true,12)             // not a string constant
+    assert(true,1)              // even this is not a string constant
     let(a:string="comment")
         assert(true,a)          // even this is not a string constant
         debug(0,a)              // not for debug either

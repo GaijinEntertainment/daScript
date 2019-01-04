@@ -208,7 +208,19 @@ string_builder_body
     ;
 
 string_builder
-    :   BEGIN_STRING string_builder_body[sb] END_STRING    { $$ = $sb; }
+    :   BEGIN_STRING string_builder_body[sb] END_STRING {
+        auto strb = static_cast<ExprStringBuilder *>($sb);
+        if ( strb->elements.size()==0 ) {
+            $$ = new ExprConstString(strb->at,"");
+            delete $sb;
+        } else if ( strb->elements.size()==1 && strb->elements[0]->rtti_isStringConstant() ) {
+            auto sconst = static_pointer_cast<ExprConstString>(strb->elements[0]);
+            $$ = new ExprConstString(strb->at,sconst->text);
+            delete $sb;
+        } else {
+            $$ = $sb;
+        }
+    }
     ;
 
 options_declaration

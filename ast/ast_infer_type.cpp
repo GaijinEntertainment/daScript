@@ -154,6 +154,10 @@ namespace yzg {
             expr->autoDereference();
             if ( !expr->arguments[0]->type->isSimpleType(Type::tBool) )
                 error("static assert condition must be boolean", expr->at, CompilationError::invalid_argument_type);
+            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() ) {
+                error("static assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
+                return nullptr;
+            }
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
@@ -168,6 +172,10 @@ namespace yzg {
             expr->autoDereference();
             if ( !expr->arguments[0]->type->isSimpleType(Type::tBool) )
                 error("assert condition must be boolean", expr->at, CompilationError::invalid_argument_type);
+            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() ) {
+                error("assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
+                return nullptr;
+            }
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }

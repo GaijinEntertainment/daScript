@@ -332,23 +332,12 @@ namespace yzg {
     public:
         StaticAssertFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
     protected:
-        virtual ExpressionPtr visit(ExprAssert * expr) override {
-            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() ) {
-                program->error("assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
-                return nullptr;
-            }
-            return Visitor::visit(expr);
-        }
 		virtual ExpressionPtr visit(ExprStaticAssert * expr) override {
 			auto cond = expr->arguments[0];
 			if (!cond->constexpression && !cond->rtti_isConstant()) {
 				program->error("static assert condition is not constexpr or const", expr->at);
 				return nullptr;
 			}
-            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() ) {
-                program->error("static assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
-                return nullptr;
-            }
 			bool result = false;
 			if (cond->constexpression) {
 				result = cast<bool>::to(eval(cond.get()));
