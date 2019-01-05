@@ -948,7 +948,7 @@ type_declaration
         if ( $keyTypeDecl->isVoid() || $valueTypeDecl->isVoid() ) {
             yyerror("can't have void Table",tokAt(@loc),CompilationError::invalid_array_type);
         }
-        if ( !$keyTypeDecl->isWorkhorseType() ) {
+        if ( !$keyTypeDecl->isWorkhorseType() && !$keyTypeDecl->isAuto() ) {
             yyerror("key has to be basic 'hashable' type",tokAt(@keyTypeDecl),CompilationError::invalid_table_type);
         }
         $$ = new TypeDecl(Type::tTable);

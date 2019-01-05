@@ -285,7 +285,30 @@ namespace yzg
     
     bool TypeDecl::isAuto() const {
         // auto is auto.... or auto....?
-        return (baseType==Type::autoinfer) || (baseType==Type::tPointer && firstType && firstType->isAuto());
+        if ( baseType==Type::autoinfer ) {
+            return true;
+        } else  if ( baseType==Type::tPointer ) {
+            if ( firstType )
+                return firstType->isAuto();
+        } else if ( baseType==Type::tArray ) {
+            if ( firstType )
+                return firstType->isAuto();
+        } else if ( baseType==Type::tTable ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAuto();
+            if ( secondType )
+                any |= secondType->isAuto();
+            return any;
+        } else if ( baseType==Type::tBlock ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAuto();
+            for ( auto & arg : argTypes )
+                any |= arg->isAuto();
+            return any;
+        }
+        return false;
     }
     
     bool TypeDecl::isFoldable() const {
