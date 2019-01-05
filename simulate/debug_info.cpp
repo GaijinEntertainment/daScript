@@ -10,6 +10,7 @@
 namespace yzg
 {
     Enum<Type> g_typeTable = {
+        {   Type::autoinfer,    "auto"  },
         {   Type::tVoid,        "void"  },
         {   Type::tBool,        "bool"  },
         {   Type::tInt64,       "int64"  },

@@ -66,6 +66,10 @@ namespace yzg
     ,   module_not_found                        =   30901       //  require wtf
         
     ,   cant_new_handle                         =   31001       //  new Handle
+        
+    ,   cant_infer_generic                      =   31100       // TEMPORARY, REMOVE ONCE GENERICS ARE SUPPORTED
+    ,   cant_infer_missing_initializer          =   31101       //  let x = 5
+    ,   cant_infer_mismatching_restrictions     =   31102       //  let x : auto [5] = int[4][3]
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };

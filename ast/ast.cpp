@@ -283,6 +283,11 @@ namespace yzg
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
     
+    bool TypeDecl::isAuto() const {
+        // auto is auto.... or auto....?
+        return (baseType==Type::autoinfer) || (baseType==Type::tPointer && firstType && firstType->isAuto());
+    }
+    
     bool TypeDecl::isFoldable() const {
         if ( dim.size() || ref )
             return false;
@@ -512,7 +517,9 @@ namespace yzg
             if ( arg->init ) {
                 vis.preVisitArgumentInit(this, arg, arg->init.get());
                 arg->init = arg->init->visit(vis);
-                arg->init = vis.visitArgumentInit(this, arg, arg->init.get());
+                if ( arg->init ) {
+                    arg->init = vis.visitArgumentInit(this, arg, arg->init.get());
+                }
             }
             arg = vis.visitArgument(this, arg, arg==arguments.back() );
         }
@@ -933,7 +940,11 @@ namespace yzg
             auto & arg = *it;
             vis.preVisitBlockArgument(this, arg, arg==arguments.back());
             if ( arg->init ) {
+                vis.preVisitBlockArgumentInit(this, arg, arg->init.get());
                 arg->init = arg->init->visit(vis);
+                if ( arg->init ) {
+                    arg->init = vis.visitBlockArgumentInit(this, arg, arg->init.get());
+                }
             }
             arg = vis.visitBlockArgument(this, arg, arg==arguments.back());
             if ( arg ) ++it; else it = arguments.erase(it);
@@ -1442,7 +1453,9 @@ namespace yzg
     
     ExpressionPtr ExprReturn::visit(Visitor & vis) {
         vis.preVisit(this);
-        subexpr = subexpr->visit(vis);
+        if ( subexpr ) {
+            subexpr = subexpr->visit(vis);
+        }
         return vis.visit(this);
     }
     

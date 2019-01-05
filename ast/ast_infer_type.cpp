@@ -3,6 +3,35 @@
 #include "ast.h"
 
 namespace yzg {
+    
+    // auto or generic type conversion
+    
+    void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
+        TT->ref |= autoT->ref;
+        TT->constant |= autoT->constant;
+        if ( autoT->isPointer() )
+            applyAutoContracts(TT->firstType, autoT->firstType);
+    }
+    
+    TypeDeclPtr inferAutoType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
+        // can't infer from the type, which is already 'auto'
+        if ( initT->isAuto() ) return nullptr;
+        // auto & can't be infered from non-ref
+        if ( autoT->ref && !initT->ref ) return nullptr;
+        // auto[][][] can't be infered from non-array
+        if ( autoT->dim.size() && autoT->dim!=initT->dim ) return nullptr;
+        // auto? can't be infered from non-pointer
+        if ( autoT->isPointer() && (!initT->isPointer() || !initT->firstType) ) return nullptr;
+        auto TT = make_shared<TypeDecl>(*initT);
+        if ( autoT->isPointer() ) {
+            // if it's a pointer, infer pointer-to separately
+            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+            if ( !TT->firstType ) return nullptr;
+        }
+        return TT;
+    }
+    
+    // type inference
 
     class InferTypes : public Visitor {
     public:
@@ -39,10 +68,25 @@ namespace yzg {
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
             var->index = globalVarIndex ++;
+            if ( var->type->isAuto() && !var->init) {
+                error("global variable type can't be infered, need initializer",
+                      var->at, CompilationError::cant_infer_missing_initializer );
+            }
         }
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
             if ( !var->init->type ) return Visitor::visitGlobalLetInit(var, init);
-            if ( !var->type->isSameType(*var->init->type,false) ) {
+            if ( var->type->isAuto() ) {
+                auto varT = inferAutoType(var->type, var->init->type);
+                if ( !varT ) {
+                    error("global variable initialization type can't be infered, "
+                          + var->type->describe() + " = " + var->init->type->describe(),
+                          var->at, CompilationError::cant_infer_mismatching_restrictions );
+                } else {
+                    varT->ref = false;
+                    applyAutoContracts(varT, var->type);
+                    var->type = varT;
+                }
+            } else if ( !var->type->isSameType(*var->init->type,false) ) {
                 error("global variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at );
             } else if ( var->type->baseType==Type::tStructure ) {
@@ -65,6 +109,15 @@ namespace yzg {
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
             func = f->shared_from_this();
+            if ( func->result->isAuto() ) {
+                error("generics are not supported yet", func->result->at, CompilationError::cant_infer_generic );
+            }
+        }
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitArgument(fn, var, lastArg);
+            if ( var->type->isAuto() ) {
+                error("generics are not supported yet", var->at, CompilationError::cant_infer_generic );
+            }
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
             if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, true, false) ) {
@@ -220,6 +273,7 @@ namespace yzg {
             }
             if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {
                 error("invalid number of arguments", expr->at, CompilationError::invalid_argument_count);
+                return Visitor::visit(expr);
             }
             for ( size_t i=0; i != blockT->argTypes.size(); ++i ) {
                 auto & passType = expr->arguments[i+1]->type;
@@ -407,6 +461,31 @@ namespace yzg {
                 block->type = make_shared<TypeDecl>(*block->returnType);
             }
         }
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitBlockArgument(block, var, lastArg);
+            if ( var->type->isAuto() && !var->init) {
+                error("block argument type can't be infered, need initializer",
+                      var->at, CompilationError::cant_infer_missing_initializer );
+            }
+        }
+        virtual ExpressionPtr visitBlockArgumentInit (ExprBlock * block, const VariablePtr & arg, Expression * that ) override {
+            if ( arg->type->isAuto() ) {
+                auto argT = inferAutoType(arg->type, arg->init->type);
+                if ( !argT ) {
+                    error("block argument initialization type can't be infered, "
+                          + arg->type->describe() + " = " + arg->init->type->describe(),
+                          arg->at, CompilationError::cant_infer_mismatching_restrictions );
+                } else {
+                    applyAutoContracts(argT, arg->type);
+                    arg->type = argT;
+                }
+            }
+            if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, true, false) ) {
+                error("block argument default value type mismatch", arg->init->at,
+                  CompilationError::invalid_argument_type);
+            }
+            return Visitor::visitBlockArgumentInit(block, arg, that);
+        }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             popVarStack();
             if ( block->isClosure )
@@ -526,18 +605,20 @@ namespace yzg {
                 }
             }
             // function argument
-            int argumentIndex = 0;
-            for ( auto & arg : func->arguments ) {
-                if ( arg->name==expr->name ) {
-                    expr->variable = arg;
-                    expr->argumentIndex = argumentIndex;
-                    expr->argument = true;
-                    expr->type = make_shared<TypeDecl>(*arg->type);
-					if (!expr->type->isRefType())
-						expr->type->ref = true;
-                    return Visitor::visit(expr);
+            if ( func ) {
+                int argumentIndex = 0;
+                for ( auto & arg : func->arguments ) {
+                    if ( arg->name==expr->name ) {
+                        expr->variable = arg;
+                        expr->argumentIndex = argumentIndex;
+                        expr->argument = true;
+                        expr->type = make_shared<TypeDecl>(*arg->type);
+                        if (!expr->type->isRefType())
+                            expr->type->ref = true;
+                        return Visitor::visit(expr);
+                    }
+                    argumentIndex ++;
                 }
-                argumentIndex ++;
             }
             // global
             auto var = program->findVariable(expr->name);
@@ -671,7 +752,19 @@ namespace yzg {
             if ( blocks.size() ) {
                 ExprBlock * block = blocks.back();
                 if ( block->type ) {
-                    const auto & resType = block->type;
+                    auto & resType = block->type;
+                    if ( resType->isAuto() ) {
+                        auto resT = inferAutoType(resType, expr->subexpr->type);
+                        if ( !resT ) {
+                            error("block type can't be infered, "
+                                  + resType->describe() + ", returns " + expr->subexpr->type->describe(),
+                                      expr->at, CompilationError::cant_infer_mismatching_restrictions );
+                        } else {
+                            resT->ref = false;
+                            applyAutoContracts(resT, resType);
+                            resType = resT;
+                        }
+                    }
                     if ( !resType->isSameType(*expr->subexpr->type,true,false) ) {
                         error("incompatible return type, expecting "
                               + resType->describe() + " vs " + expr->subexpr->type->describe(),
@@ -803,20 +896,35 @@ namespace yzg {
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
+            if ( var->type->isAuto() && !var->init) {
+                error("local variable type can't be infered, need initializer",
+                      var->at, CompilationError::cant_infer_missing_initializer );
+            }
+            local.push_back(var);
+        }
+        virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             if ( var->type->ref )
                 error("local variable can't be reference", var->at, CompilationError::invalid_variable_type);
             if ( var->type->isVoid() )
                 error("local variable can't be void", var->at, CompilationError::invalid_variable_type);
             if ( var->type->isHandle() && !var->type->annotation->isLocal() )
                 error("handled type " + var->type->annotation->name + " can't be local", var->at, CompilationError::invalid_variable_type);
-            local.push_back(var);
-        }
-        virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             return Visitor::visitLet(expr,var,last);
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
             if ( !var->init->type ) return Visitor::visitLetInit(expr, var, init);
-            if ( !var->type->isSameType(*var->init->type,false,false) ) {
+            if ( var->type->isAuto() ) {
+                auto varT = inferAutoType(var->type, var->init->type);
+                if ( !varT ) {
+                    error("local variable initialization type can't be infered, "
+                          + var->type->describe() + " = " + var->init->type->describe(),
+                          var->at, CompilationError::cant_infer_mismatching_restrictions );
+                } else {
+                    varT->ref = false;
+                    applyAutoContracts(varT, var->type);
+                    var->type = varT;
+                }
+            } else if ( !var->type->isSameType(*var->init->type,false,false) ) {
                 error("variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at );
             } else if ( var->type->baseType==Type::tStructure ) {

@@ -81,6 +81,7 @@ namespace yzg
         bool isRange() const;
         bool isConst() const;
         bool isFoldable() const;
+        bool isAuto() const;
         Type getRangeBaseType() const;
         Type                baseType = Type::tVoid;
         StructurePtr        structType;
@@ -1136,6 +1137,8 @@ namespace yzg
         // BLOCK
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) {}
         virtual VariablePtr visitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) { return var; }
+        virtual void preVisitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) {}
+        virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * block, const VariablePtr &, Expression * that ) { return that->shared_from_this(); }
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) {}
         virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
         // LET

@@ -147,6 +147,7 @@
 <normal>"sizeof"                                        return _SIZEOF;
 <normal>"true"                                          return _TRUE;
 <normal>"false"                                         return _FALSE;
+<normal>"auto"                                          return _AUTO;
 <normal>"bool"                                          return _BOOL;
 <normal>"void"                                          return _VOID;
 <normal>"string"                                        return _STRING;

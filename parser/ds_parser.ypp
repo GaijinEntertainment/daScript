@@ -83,7 +83,7 @@
 %token  _REQUIRE    _OPERATOR	_OPTIONS
 
 /* basic types */
-%token  _BOOL   _VOID   _STRING
+%token  _BOOL   _VOID   _STRING _AUTO
 %token  _INT    _INT2   _INT3   _INT4
 %token  _UINT   _UINT2  _UINT3  _UINT4
 %token  _FLOAT  _FLOAT2 _FLOAT3 _FLOAT4
@@ -118,6 +118,7 @@
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
+%type <pVarDecl>        let_variable_declaration
 %type <s>               name_in_namespace
 %type <s>               function_name
 %type <aa>              annotation_argument
@@ -566,7 +567,7 @@ expression_let
         deleteVariableDeclarationList($list);
         $$ = pLet;
     }
-    |   _LET[loc] variable_declaration[decl] ';' {
+    |   _LET[loc] let_variable_declaration[decl] {
         auto pLet = new ExprLet();
         pLet->scoped = false;
         if ( $decl->pTypeDecl ) {
@@ -745,13 +746,41 @@ function_argument_list
     ;
 
 optional_initializer
-    :                       { $$ = nullptr; }
-    |  '=' expr[subexpr]    { $$ = $subexpr; }
+    :                           { $$ = nullptr; }
+    |  '=' expr[subexpr]        { $$ = $subexpr; }
     ;
 
 variable_declaration
     :   variable_name_list[list] ':' type_declaration[typeDecl] optional_initializer[init] {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
+    }
+    |   variable_name_list[list] '=' expr[init] {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+    }
+    |   variable_name_list[list] '=' expr_pipe[init] {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+    }
+    ;
+
+let_variable_declaration
+    :   variable_name_list[list] ':' type_declaration[typeDecl] ';' {
+        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,nullptr);
+    }
+    |   variable_name_list[list] ':' type_declaration[typeDecl] '=' expr[init] ';' {
+        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
+    }
+    |   variable_name_list[list] ':' type_declaration[typeDecl] '=' expr_pipe[init] {
+        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
+    }
+    |   variable_name_list[list] '=' expr[init] ';' {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+    }
+    |   variable_name_list[list] '=' expr_pipe[init] {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
     }
     ;
 
@@ -781,7 +810,9 @@ structure_declaration
         auto pStruct = make_shared<Structure>(*$name);
         pStruct->at = tokAt(@loc);
         for ( auto pDecl : *$list ) {
-            if ( pDecl->pTypeDecl->isVoid() ) {
+            if ( pDecl->pTypeDecl->isAuto() ) {
+                yyerror("structure type can't be auto",tokAt(@loc),CompilationError::invalid_structure_field_type);
+            } else if ( pDecl->pTypeDecl->isVoid() ) {
                 yyerror("structure type can't be void",tokAt(@loc),CompilationError::invalid_structure_field_type);
             } else if ( pDecl->pTypeDecl->ref ) {
                 yyerror("structure type can't be reference or array of references",tokAt(@loc),CompilationError::invalid_structure_field_type);
@@ -836,7 +867,8 @@ variable_name_list
     ;
 
 basic_type_declaration
-    :   _BOOL       { $$ = Type::tBool; }
+    :   _AUTO       { $$ = Type::autoinfer; }
+    |   _BOOL       { $$ = Type::tBool; }
     |   _STRING     { $$ = Type::tString; }
     |   _INT        { $$ = Type::tInt; }
     |   _INT2       { $$ = Type::tInt2; }
