@@ -53,12 +53,11 @@ def verify(total:int;objects:ObjectArray)
     // print("\n")
     let index = 0
     let t = float(total)
-    let tt = float3(t,t,t)
     for obj in objects
         let ( oi=float(index); ii=oi*2.0 )
             let apos = float3(oi+0.1,oi+0.2,oi+0.3)
             let avel = float3(1.0,2.0,3.0)
-            let npos = apos + avel*tt
+            let npos = apos + avel*t
             // debug(npos,"npos=")
             // debug(obj.position,"obj.position=")
             assert(obj.position==npos)
@@ -68,12 +67,11 @@ def verify(total:int;objects:NObject[10000])
     // print("\n")
     let index = 0
     let t = float(total)
-    let tt = float3(t,t,t)
     for obj in objects
         let ( oi=float(index); ii=oi*2.0 )
             let apos = float3(oi+0.1,oi+0.2,oi+0.3)
             let avel = float3(1.0,2.0,3.0)
-            let npos = apos + avel*tt
+            let npos = apos + avel*t
             // debug(npos,"npos=")
             // debug(obj.position,"obj.position=")
             assert(obj.position==npos)
