@@ -70,6 +70,9 @@ namespace yzg
     ,   cant_infer_generic                      =   31100       // TEMPORARY, REMOVE ONCE GENERICS ARE SUPPORTED
     ,   cant_infer_missing_initializer          =   31101       //  let x = 5
     ,   cant_infer_mismatching_restrictions     =   31102       //  let x : auto [5] = int[4][3]
+        
+    ,   expecting_return_value                  =   32101       // def blah:int without return
+    ,   not_expecting_return_value              =   32102       // def blah:void ... return 12
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     };

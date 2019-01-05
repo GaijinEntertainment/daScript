@@ -8,10 +8,10 @@ let
     floatnum = 5.5
     stringval = "hello, world"
 
-def foo(b:block<(a:int):int>) : int
+def foo(b:block<(a:int):int>)
     return invoke(b, 3)
 
-def test:bool
+def test
     // regular array
     let a:int[10]
     let b = a
@@ -42,11 +42,11 @@ def test:bool
     assert(fn1()==3)
     return true
 
-def fn3:auto
+def fn3
     return 3
 
-def fn2:auto
+def fn2
     return fn3()
 
-def fn1:auto
+def fn1
     return fn2()

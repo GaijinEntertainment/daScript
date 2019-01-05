@@ -34,7 +34,7 @@ def queryThree()
     catch
         assert(count==100)
 
-def test:bool
+def test
     testProfile::initEsComponents()
     testProfile::testEsUpdate("ks")
     testProfile::verifyEsComponents()

@@ -1,4 +1,4 @@
-expect 30801  // invalid_block
+expect 30801, 30304:2, 32102, 32101, 30102  // invalid_block
 
 def take_any(b:block)
     invoke(b)
@@ -11,11 +11,18 @@ def test:bool
         take_any({ a++; })
         while true
             take_any() <|
-                break       // captured block can't break outside the block
+                break               // 30801, captured block can't break outside the block
         while true
             take_any() <|
                 while true
-                    break   // this one ok
-        take_int({ a++; })
-        take_int({ b++; })  // no matching function ( block<float> )
+                    break           // this one ok
+        take_int({ a++; })          // 30304: no matching function (take_int block<void>)
+        take_int({ return a++; })   // this is ok
+        take_int({ b++; })          // 30304: no matching function ( block<float> )
+    take_any() <| $ : void          // 32102: not expecting return value
+        return 13
+    take_any() <| $ : int           // 32101: expecting return value
+        return
+    take_any() <| $ : int           // 30102: incompatible return type, expecting int vs float
+        return 13.0
     return true

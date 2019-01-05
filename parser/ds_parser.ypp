@@ -370,7 +370,7 @@ optional_function_argument_list
     ;
 
 optional_function_type
-    :                                   { $$ = new TypeDecl(Type::tVoid); }
+    :                                   { $$ = new TypeDecl(Type::autoinfer); }
     |   ':' type_declaration[typeDecl]  { $$ = $typeDecl; $$->at = tokAt(@typeDecl); }
     ;
 
@@ -606,7 +606,11 @@ expr_list
     ;
 
 expr_block
-    :   expression_block[block]             { $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block)); }
+    :   expression_block[block]             {
+        ExprBlock * closure = (ExprBlock *) $block;
+        $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
+        closure->returnType = make_shared<TypeDecl>(Type::autoinfer);
+    }
     |   '$' optional_annotation_list[annL] optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
         ExprBlock * closure = (ExprBlock *) $block;

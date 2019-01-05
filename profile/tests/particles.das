@@ -32,7 +32,7 @@ def init(objects:array<NObject>)
         obj.velocity=float3(1.0,2.0,3.0)
     assert(index==length(objects))
 
-def test():bool
+def test()
     let objects:array<NObject>
     init(objects)
     let(total=20)

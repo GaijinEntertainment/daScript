@@ -14,3 +14,4 @@ def test_container:array<int>   // can't return containers
 
 def test_array:int[10]          // can't return array
     assert(false)
+

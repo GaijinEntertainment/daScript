@@ -77,7 +77,7 @@ def verify(total:int;objects:NObject[10000])
             assert(obj.position==npos)
             index ++
 
-def test(objects:ObjectArray):bool
+def test(objects:ObjectArray)
     let(simTN,simT,cT,intT,manyT,manyKsT:float)
         // verify
         init(nobjects)

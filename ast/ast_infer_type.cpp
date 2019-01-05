@@ -172,6 +172,7 @@ namespace yzg {
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
             func = f->shared_from_this();
+            func->hasReturn = false;
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
@@ -186,7 +187,15 @@ namespace yzg {
             return Visitor::visitArgumentInit(f, arg, that);
         }
         virtual FunctionPtr visit ( Function * that ) override {
-            // assert(local.size()==0);
+            // if function got no 'result', function is a void function
+            if ( !func->hasReturn ) {
+                if ( func->result->isAuto() ) {
+                    func->result = make_shared<TypeDecl>(Type::tVoid);
+                    reportGenericInfer();
+                } else if ( !func->result->isVoid() ){
+                    error("function does not return value", func->at, CompilationError::expecting_return_value);
+                }
+            }
             assert(blocks.size()==0);
             func.reset();
             return Visitor::visit(that);
@@ -311,7 +320,9 @@ namespace yzg {
                 expr->type->firstType = make_shared<TypeDecl>(*block->type);
             }
             for ( auto & arg : block->arguments ) {
-                expr->type->argTypes.push_back(make_shared<TypeDecl>(*arg->type));
+                if ( arg->type ) {
+                    expr->type->argTypes.push_back(make_shared<TypeDecl>(*arg->type));
+                }
             }
             return Visitor::visit(expr);
         }
@@ -511,12 +522,13 @@ namespace yzg {
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
-            if ( block->isClosure )
+            block->hasReturn = false;
+            if ( block->isClosure ) {
                 blocks.push_back(block);
-            pushVarStack();
-            if ( block->returnType ) {
                 block->type = make_shared<TypeDecl>(*block->returnType);
             }
+            pushVarStack();
+            
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
@@ -547,11 +559,18 @@ namespace yzg {
             popVarStack();
             if ( block->isClosure )
                 blocks.pop_back();
-            if ( block->isClosure && block->list.size() ) {
-                uint32_t flags = block->getEvalFlags();
-                if ( flags & EvalFlags::stopForBreak ) {
-                    error("captured block can't break outside of the block", block->at, CompilationError::invalid_block);
-                } 
+            if ( block->isClosure ) {
+                if ( block->list.size() ) {
+                    uint32_t flags = block->getEvalFlags();
+                    if ( flags & EvalFlags::stopForBreak ) {
+                        error("captured block can't break outside of the block", block->at, CompilationError::invalid_block);
+                    }
+                }
+                if ( !block->hasReturn && block->type->isAuto() ) {
+                    block->returnType = make_shared<TypeDecl>(Type::tVoid);
+                    block->type = make_shared<TypeDecl>(Type::tVoid);
+                    reportGenericInfer();
+                }
             }
             return Visitor::visit(block);
         }
@@ -801,27 +820,35 @@ namespace yzg {
     // ExprTryCatch
         // do nothing
     // ExprReturn
-        virtual ExpressionPtr visit ( ExprReturn * expr ) override {
-            if ( expr->subexpr ) {
-                if ( !expr->subexpr->type ) return Visitor::visit(expr);
-                expr->subexpr = Expression::autoDereference(expr->subexpr);
-            }
-            if ( blocks.size() ) {
-                ExprBlock * block = blocks.back();
-                if ( block->type ) {
-                    auto & resType = block->type;
-                    if ( resType->isAuto() ) {
-                        auto resT = inferAutoType(resType, expr->subexpr->type);
-                        if ( !resT ) {
-                            error("block type can't be infered, "
-                                  + resType->describe() + ", returns " + expr->subexpr->type->describe(),
-                                      expr->at, CompilationError::cant_infer_mismatching_restrictions );
-                        } else {
-                            resT->ref = false;
-                            applyAutoContracts(resT, resType);
-                            resType = resT;
-                        }
+        bool inferReturnType ( TypeDeclPtr & resType, ExprReturn * expr ) {
+            if ( resType->isAuto() ) {
+                if ( expr->subexpr ) {
+                    auto resT = inferAutoType(resType, expr->subexpr->type);
+                    if ( !resT ) {
+                        error("type can't be infered, "
+                              + resType->describe() + ", returns " + expr->subexpr->type->describe(),
+                              expr->at, CompilationError::cant_infer_mismatching_restrictions );
+                    } else {
+                        resT->ref = false;
+                        applyAutoContracts(resT, resType);
+                        resType = resT;
+                        reportGenericInfer();
+                        return true;
                     }
+                } else {
+                    resType = make_shared<TypeDecl>(Type::tVoid);
+                    reportGenericInfer();
+                    return true;
+                }
+            }
+            if ( resType->isVoid() ) {
+                if ( expr->subexpr ) {
+                    error("not expecting return value", expr->at, CompilationError::not_expecting_return_value);
+                }
+            } else {
+                if ( !expr->subexpr ) {
+                    error("expecting return value", expr->at, CompilationError::expecting_return_value);
+                } else {
                     if ( !resType->isSameType(*expr->subexpr->type,true,false) ) {
                         error("incompatible return type, expecting "
                               + resType->describe() + " vs " + expr->subexpr->type->describe(),
@@ -832,45 +859,25 @@ namespace yzg {
                               + resType->describe() + " vs " + expr->subexpr->type->describe(),
                               expr->at, CompilationError::invalid_return_type);
                     }
-                } else {
-                    block->type = make_shared<TypeDecl>(*expr->subexpr->type);
+                }
+            }
+            return false;
+        }
+        virtual ExpressionPtr visit ( ExprReturn * expr ) override {
+            if ( expr->subexpr ) {
+                if ( !expr->subexpr->type ) return Visitor::visit(expr);
+                expr->subexpr = Expression::autoDereference(expr->subexpr);
+            }
+            if ( blocks.size() ) {
+                ExprBlock * block = blocks.back();
+                block->hasReturn = true;
+                if ( inferReturnType(block->type, expr) ) {
+                    block->returnType = make_shared<TypeDecl>(*block->type);
                 }
             } else {
                 // infer
-                auto & resType = func->result;
-                if ( resType->isAuto() ) {
-                    auto resT = inferAutoType(resType, expr->subexpr->type);
-                    if ( !resT ) {
-                        error("function type can't be infered, "
-                              + resType->describe() + ", returns " + expr->subexpr->type->describe(),
-                              expr->at, CompilationError::cant_infer_mismatching_restrictions );
-                    } else {
-                        resT->ref = false;
-                        applyAutoContracts(resT, resType);
-                        resType = resT;
-                        reportGenericInfer();
-                    }
-                }
-                if ( resType->isVoid() ) {
-                    if ( expr->subexpr ) {
-                        error("void function has no return", expr->at);
-                    }
-                } else {
-                    if ( !expr->subexpr ) {
-                        error("must return value", expr->at);
-                    } else {
-                        if ( !resType->isSameType(*expr->subexpr->type,true,false) ) {
-                            error("incompatible return type, expecting "
-                                  + resType->describe() + " vs " + expr->subexpr->type->describe(),
-                                  expr->at, CompilationError::invalid_return_type);
-                        }
-                        if ( resType->isPointer() && !resType->isConst() && expr->subexpr->type->isConst() ) {
-                            error("incompatible return type, constant matters. expecting "
-                                  + resType->describe() + " vs " + expr->subexpr->type->describe(),
-                                  expr->at, CompilationError::invalid_return_type);
-                        }
-                    }
-                }
+                func->hasReturn = true;
+                inferReturnType(func->result, expr);
             }
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);

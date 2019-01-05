@@ -349,11 +349,16 @@ namespace yzg
             struct {
                 bool    constexpression : 1;
                 bool    noSideEffects : 1;
+            };
+            uint32_t    flags = 0;
+        };
+        union {
+            struct {
                 bool    topLevel :  1;
                 bool    argLevel : 1;
                 bool    bottomLevel : 1;
             };
-            uint32_t    flags = 0;
+            uint32_t    printFlags = 0;
         };
     };
     
@@ -426,12 +431,18 @@ namespace yzg
         virtual bool rtti_isBlock() const override { return true; }
         VariablePtr findArgument(const string & name);
         vector<ExpressionPtr>   list;
-        bool                    isClosure = false;
         TypeDeclPtr             returnType;
         vector<VariablePtr>     arguments;
         uint32_t                stackTop = 0;
         AnnotationList          annotations;
         void *                  annotationData = nullptr;   // to be filled with annotation
+        union {
+            struct {
+                bool            isClosure : 1;
+                bool            hasReturn : 1;
+            };
+            uint32_t            blockFlags = 0;
+        };
     };
     
     struct ExprVar : Expression {
@@ -966,6 +977,7 @@ namespace yzg
             struct {
                 bool    builtIn : 1;
                 bool    noSideEffects : 1;
+                bool    hasReturn: 1;
             };
             uint32_t flags = 0;
         };

@@ -1,4 +1,4 @@
-def test:bool
+def test
     let ( i,fail,cnt = 0; arr:int[1000] )
         profile(20,"try-catch") <|
             for j in range (0, 100)

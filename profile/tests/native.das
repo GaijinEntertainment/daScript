@@ -1,12 +1,12 @@
 require testProfile
 
-def testAdds():int
+def testAdds()
     let count = 0
     for i in range(0, 10000000)
         count = AddOne(count)
     return count
 
-def test():bool
+def test()
     profile(20,"native loop") <|
         testAdds()
     return true

@@ -1,6 +1,7 @@
 options log=true,optimize=false
 
-def test:bool
-    let (x,y=2)
-        assert(x+y==4)
-    return true
+def test_mix(arg:bool)
+    if arg
+        return 13
+    else
+        return 13.0
