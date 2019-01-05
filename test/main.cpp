@@ -163,12 +163,12 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/auto_infer.das");
+    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/invalid_argument_type_mix.das");
     Module::Shutdown();
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "test/unit_tests/auto_infer.das");
+    unit_test(TEST_PATH "test/unit_tests/block.das");
     Module::Shutdown();
     return 0;
 #endif

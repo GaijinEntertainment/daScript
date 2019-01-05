@@ -1,5 +1,6 @@
 options log=true,optimize=false
 
-def test
-    let(a:string="comment")
-        assert(true,a)          // even this is not a string constant
+def test:bool
+    let (x,y=2)
+        assert(x+y==4)
+    return true

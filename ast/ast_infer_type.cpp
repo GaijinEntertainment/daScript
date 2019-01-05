@@ -147,10 +147,8 @@ namespace yzg {
             // infer
             if ( !expr->subexpr->type->isRef() ) {
                 error("can only dereference ref", expr->at);
-            } else if ( !expr->subexpr->type->isSimpleType() ) {
+            } else if ( !expr->subexpr->type->isSimpleType() && !expr->subexpr->type->isPointer() ) {
                 error("can only dereference a simple type, " + expr->subexpr->type->describe(), expr->at);
-            } if ( !expr->subexpr->type->canCopy() ) {
-                error("can't dereference non-copyable type", expr->at);
             } else {
                 expr->type = make_shared<TypeDecl>(*expr->subexpr->type);
                 expr->type->ref = false;
@@ -227,7 +225,6 @@ namespace yzg {
                 error("assert condition must be boolean", expr->at, CompilationError::invalid_argument_type);
             if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() ) {
                 error("assert comment must be string constant", expr->at, CompilationError::invalid_argument_type);
-                return nullptr;
             }
             expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
@@ -854,6 +851,7 @@ namespace yzg {
             }
             // iterator variables
             int idx = 0;
+            expr->iteratorVariables.clear();
             for ( auto & src : expr->sources ) {
                 if ( !src->type ) continue;
                 auto pVar = make_shared<Variable>();
@@ -1086,6 +1084,7 @@ namespace yzg {
     // program
     
     void Program::inferTypes() {
+        // errors.clear();
         InferTypes context(shared_from_this());
         visit(context);
     }
