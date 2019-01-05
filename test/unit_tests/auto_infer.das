@@ -23,7 +23,7 @@ def test:bool
     let f1 = foo() <| $(arg:int):auto
         return arg+1
     assert(f1==4)
-    let f2 = foo() <| $(arg:auto=5):auto
+    let f2 = foo() <| $(arg=5):auto
         return arg+2
     assert(f2==5)
     assert(fn1()==3)
