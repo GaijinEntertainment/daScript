@@ -1,7 +1,7 @@
 require testProfile
 
 def testAdds():int
-    let count:int = 0
+    let count = 0
     for i in range(0, 10000000)
         count = AddOne(count)
     return count

@@ -7,10 +7,10 @@ def fibR(n:int):int
         return fibR(n - 1) + fibR(n - 2)
 
 def fibI(n:int):int
-    let last:int = 0
-    let cur:int = 1
+    let last = 0
+    let cur = 1
     for i in range(0, n-1)
-        let tmp:int = cur
+        let tmp = cur
         cur += last
         last = tmp
     return cur

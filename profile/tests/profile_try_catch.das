@@ -1,5 +1,5 @@
 def test:bool
-    let ( i,fail,cnt:int = 0; arr:int[1000] )
+    let ( i,fail,cnt = 0; arr:int[1000] )
         profile(20,"try-catch") <|
             for j in range (0, 100)
                 fail = 0

@@ -22,10 +22,10 @@ def queryTwo(dt:float=0.5f)
         pos += vel * (defT + dt)
 
 def queryThree()
-    let count : int = 0
+    let count = 0
     try
         testProfile::queryEs() <| $ [es] (pos:float3& const)
-            let position : float3 = pos
+            let position = pos
             testProfile::queryEs() <| $ [es] (pos:float3& const)
                 if position==pos
                     count ++

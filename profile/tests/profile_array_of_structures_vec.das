@@ -28,37 +28,37 @@ def testInterop(objects:ObjectArray)
         interopUpdate(obj)
 
 def initObj(index:int;a:Object)
-    let ( oi:float=float(index); ii:float=oi*2.0 )
+    let ( oi = float(index); ii=oi*2.0 )
         a.position=float3(oi+0.1,oi+0.2,oi+0.3)
         a.velocity=float3(1.0,2.0,3.0)
 
 def initObj(index:int;a:NObject)
-    let ( oi:float=float(index); ii:float=oi*2.0 )
+    let ( oi=float(index); ii=oi*2.0 )
         a.position=float3(oi+0.1,oi+0.2,oi+0.3)
         a.velocity=float3(1.0,2.0,3.0)
 
 def init(objects:ObjectArray)
-    let index:int = 0
+    let index = 0
     for obj in objects
         initObj(index++,obj)
     assert(index==objects.length)
 
 def init(objects:NObject[10000])
-    let index:int = 0
+    let index = 0
     for obj in objects
         initObj(index++,obj)
     assert(index==10000)
 
 def verify(total:int;objects:ObjectArray)
     // print("\n")
-    let index:int = 0
-    let t:float=float(total)
-    let tt:float3 = float3(t,t,t)
+    let index = 0
+    let t = float(total)
+    let tt = float3(t,t,t)
     for obj in objects
-        let ( oi:float=float(index); ii:float=oi*2.0 )
-            let apos:float3=float3(oi+0.1,oi+0.2,oi+0.3)
-            let avel:float3=float3(1.0,2.0,3.0)
-            let npos:float3 = apos + avel*tt
+        let ( oi=float(index); ii=oi*2.0 )
+            let apos = float3(oi+0.1,oi+0.2,oi+0.3)
+            let avel = float3(1.0,2.0,3.0)
+            let npos = apos + avel*tt
             // debug(npos,"npos=")
             // debug(obj.position,"obj.position=")
             assert(obj.position==npos)
@@ -66,14 +66,14 @@ def verify(total:int;objects:ObjectArray)
 
 def verify(total:int;objects:NObject[10000])
     // print("\n")
-    let index:int = 0
-    let t:float=float(total)
-    let tt:float3 = float3(t,t,t)
+    let index = 0
+    let t = float(total)
+    let tt = float3(t,t,t)
     for obj in objects
-        let ( oi:float=float(index); ii:float=oi*2.0 )
-            let apos:float3=float3(oi+0.1,oi+0.2,oi+0.3)
-            let avel:float3=float3(1.0,2.0,3.0)
-            let npos:float3 = apos + avel*tt
+        let ( oi=float(index); ii=oi*2.0 )
+            let apos = float3(oi+0.1,oi+0.2,oi+0.3)
+            let avel = float3(1.0,2.0,3.0)
+            let npos = apos + avel*tt
             // debug(npos,"npos=")
             // debug(obj.position,"obj.position=")
             assert(obj.position==npos)
