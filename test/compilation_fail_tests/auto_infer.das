@@ -1,13 +1,10 @@
-expect 31101:2, 31102:8, 31100:2, 30102:4, 30108:2, 30103, 30304:1
+expect 31101:2, 31102:8, 31100:1, 30102:3, 30108:2, 30103, 30304:1
 
 let
     a:auto                      // 31101, can't infer, need initializer
 
 let
     b = a                       // 31102, can't infer, auto to auto
-
-def test:auto                   // 31100, generics are not supported yet
-    return true                 // 30102, incompatible return type
 
 def test2(a:auto)               // 31100, genertics are not supported yet
     assert(false)

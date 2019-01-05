@@ -26,4 +26,14 @@ def test:bool
     let f2 = foo() <| $(arg:auto=5):auto
         return arg+2
     assert(f2==5)
+    assert(fn1()==3)
     return true
+
+def fn3:auto
+    return 3
+
+def fn2:auto
+    return fn3()
+
+def fn1:auto
+    return fn2()

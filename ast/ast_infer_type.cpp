@@ -38,6 +38,7 @@ namespace yzg {
         InferTypes( const ProgramPtr & prog ) {
             program = prog;
         }
+        bool finished() const { return !needRestart; }
     protected:
         ProgramPtr              program;
         FunctionPtr             func;
@@ -47,11 +48,15 @@ namespace yzg {
         vector<size_t>          varStack;
         int                     fieldOffset = 0;
         int                     globalVarIndex = 0;
+        bool                    needRestart = false;
     protected:
         void pushVarStack() { varStack.push_back(local.size()); }
         void popVarStack()  { local.resize(varStack.back()); varStack.pop_back(); }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) {
             program->error(err,at,cerr);
+        }
+        void reportGenericInfer() {
+            needRestart = true;
         }
     protected:
     // strcuture
@@ -109,9 +114,6 @@ namespace yzg {
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
             func = f->shared_from_this();
-            if ( func->result->isAuto() ) {
-                error("generics are not supported yet", func->result->at, CompilationError::cant_infer_generic );
-            }
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
@@ -777,7 +779,20 @@ namespace yzg {
                 }
             } else {
                 // infer
-                auto resType = func->result;
+                auto & resType = func->result;
+                if ( resType->isAuto() ) {
+                    auto resT = inferAutoType(resType, expr->subexpr->type);
+                    if ( !resT ) {
+                        error("function type can't be infered, "
+                              + resType->describe() + ", returns " + expr->subexpr->type->describe(),
+                              expr->at, CompilationError::cant_infer_mismatching_restrictions );
+                    } else {
+                        resT->ref = false;
+                        applyAutoContracts(resT, resType);
+                        resType = resT;
+                        reportGenericInfer();
+                    }
+                }
                 if ( resType->isVoid() ) {
                     if ( expr->subexpr ) {
                         error("void function has no return", expr->at);
@@ -1084,9 +1099,14 @@ namespace yzg {
     // program
     
     void Program::inferTypes() {
-        // errors.clear();
-        InferTypes context(shared_from_this());
-        visit(context);
+        for ( ; ; ) {
+            failToCompile = false;
+            errors.clear();
+            InferTypes context(shared_from_this());
+            visit(context);
+            if ( context.finished() )
+                break;
+        }
     }
 }
 
