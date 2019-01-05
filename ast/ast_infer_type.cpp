@@ -28,12 +28,17 @@ namespace yzg {
     }
     
     TypeDeclPtr inferAutoType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
-        // if its not an auto type, return as is
-        if ( !autoT->isAuto() )
-            return make_shared<TypeDecl>(*autoT);
         // can't infer from the type, which is already 'auto'
         if ( initT->isAuto() )
             return nullptr;
+        // if its not an auto type, return as is
+        if ( !autoT->isAuto() ) {
+            if ( autoT->isSameType(*initT) ) {
+                return make_shared<TypeDecl>(*autoT);
+            } else {
+                return nullptr;
+            }
+        }
         // auto & can't be infered from non-ref
         if ( autoT->ref && !initT->ref )
             return nullptr;
