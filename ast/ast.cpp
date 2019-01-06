@@ -524,6 +524,20 @@ namespace yzg
         return cfun;
     }
     
+    string Function::describe() const {
+        stringstream ss;
+        if ( !isalpha(name[0]) && name[0]!='_' ) {
+            ss << "operator ";
+        }
+        ss << name << " ( ";
+        for ( auto & arg : arguments ) {
+            ss << arg->name << " : " << *arg->type;
+            if ( arg != arguments.back() ) ss << "; ";
+        }
+        ss << " ) : " << result->describe();
+        return ss.str();
+    }
+    
     string Function::getMangledName() const {
         stringstream ss;
         ss << name;
@@ -1269,6 +1283,7 @@ namespace yzg
         auto cexpr = static_pointer_cast<ExprOp>(expr);
         cexpr->op = op;
         cexpr->func = func;
+        cexpr->at = at;
         return cexpr;
     }
     

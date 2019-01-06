@@ -961,7 +961,7 @@ namespace yzg
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context ) { return context.makeNode<SimNode_Call>(at); }
-        string describe() const { return getMangledName(); }
+        string describe() const;
         virtual FunctionPtr visit(Visitor & vis);
         FunctionPtr sideEffects ( bool hasSideEffects ) { noSideEffects = !hasSideEffects; return shared_from_this(); }
         bool isGeneric() const;
@@ -1112,7 +1112,7 @@ namespace yzg
             if ( needHeader ) ss << "candidates are:";
             for ( auto & fn : result ) {
                 ss << "\n\t";
-                if ( fn->module && !fn->module->name.empty() )
+                if ( fn->module && !fn->module->name.empty() && !(fn->module->name=="$") )
                     ss << fn->module->name << "::";
                 ss << fn->describe();
             }

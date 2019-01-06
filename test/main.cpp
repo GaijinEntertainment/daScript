@@ -163,7 +163,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/auto_infer.das");
+    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/cant_find_matching_function.das");
     Module::Shutdown();
     return 0;
 #endif

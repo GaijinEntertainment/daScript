@@ -116,7 +116,12 @@ namespace yzg {
         void pushVarStack() { varStack.push_back(local.size()); }
         void popVarStack()  { local.resize(varStack.back()); varStack.pop_back(); }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) {
-            program->error(err,at,cerr);
+            if ( func ) {
+                string extra = "\nwhile compiling " + func->describe();
+                program->error(err + extra,at,cerr);
+            } else {
+                program->error(err,at,cerr);
+            }
         }
         void reportGenericInfer() {
             needRestart = true;
