@@ -100,6 +100,18 @@ namespace yzg
         }
     }
     
+    bool Module::addGeneric ( const FunctionPtr & fn ) {
+        auto mangledName = fn->getMangledName();
+        if ( generics.insert(make_pair(mangledName, fn)).second ) {
+            genericsByName[fn->name].push_back(fn);
+            fn->module = this;
+            return true;
+        } else {
+            // assert(0 && "can't add function");
+            return false;
+        }
+    }
+    
     VariablePtr Module::findVariable ( const string & name ) const {
         auto it = globals.find(name);
         return it != globals.end() ? it->second : VariablePtr();

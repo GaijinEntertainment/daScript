@@ -964,6 +964,8 @@ namespace yzg
         string describe() const { return getMangledName(); }
         virtual FunctionPtr visit(Visitor & vis);
         FunctionPtr sideEffects ( bool hasSideEffects ) { noSideEffects = !hasSideEffects; return shared_from_this(); }
+        bool isGeneric() const;
+        FunctionPtr clone() const;
     public:
         AnnotationList      annotations;
         void *              annotationData = nullptr;   // to be filled with annotation
@@ -1005,6 +1007,7 @@ namespace yzg
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addFunction ( const FunctionPtr & fn );
+        bool addGeneric ( const FunctionPtr & fn );
         bool addAnnotation ( const AnnotationPtr & ptr );
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
@@ -1024,6 +1027,8 @@ namespace yzg
         map<string, VariablePtr>                globals;
         map<string, FunctionPtr>                functions;          // mangled name 2 function name
         map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
+        map<string, FunctionPtr>                generics;           // mangled name 2 generic name
+        map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
         mutable map<string, ExprCallFactory>    callThis;
         string name;
     public:
@@ -1075,6 +1080,7 @@ namespace yzg
         bool addStructure ( const StructurePtr & st );
         bool addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg );
         bool addFunction ( const FunctionPtr & fn );
+        bool addGeneric ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void finalizeAnnotations();
         void inferTypes();
@@ -1092,7 +1098,7 @@ namespace yzg
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, __m128 value );
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
-        void visit(Visitor & vis);
+        void visit(Visitor & vis, bool visitGenerics = false);
     public:
         void makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type );
         VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );

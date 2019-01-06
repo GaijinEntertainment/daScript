@@ -1,13 +1,10 @@
-expect 31101, 31102:9, 31100, 30108:2, 30304:2, 30102:2, 30103
+expect 31101, 31102:9, 30108:2, 30304:2, 30102:2, 30103
 
 let
     a:auto                      // 31101, can't infer, need initializer
 
 let
     b = a                       // 31102, can't infer, auto to auto
-
-def test2(a:auto)               // 31100, genertics are not supported yet
-    assert(false)
 
 def blk(b:block<(a:int):int>) : int
     return invoke(b,3)

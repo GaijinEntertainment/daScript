@@ -1,12 +1,12 @@
-// options log=true
+// options log=true,logInferPasses=true
 
-def fibR(n:int)
+def fibR(n)
     if (n < 2)
         return n
     else
         return fibR(n - 1) + fibR(n - 2)
 
-def fibI(n:int)
+def fibI(n)
     let last = 0
     let cur = 1
     for i in range(0, n-1)

@@ -506,6 +506,24 @@ namespace yzg
     
     // function
     
+    FunctionPtr Function::clone() const {
+        auto cfun = make_shared<Function>();
+        // TODO:
+        //  what do we do with annotations?
+        cfun->name = name;
+        for ( const auto & arg : arguments ) {
+            cfun->arguments.push_back(arg->clone());
+        }
+        cfun->result = make_shared<TypeDecl>(*result);
+        cfun->body = body->clone();
+        cfun->index = -1;
+        cfun->totalStackSize = 0;
+        cfun->at = at;
+        cfun->module = nullptr;
+        cfun->flags = 0;
+        return cfun;
+    }
+    
     string Function::getMangledName() const {
         stringstream ss;
         ss << name;
@@ -550,6 +568,15 @@ namespace yzg
         body = body->visit(vis);
         body = vis.visitFunctionBody(this, body.get());
         return vis.visit(this);
+    }
+    
+    bool Function::isGeneric() const {
+        for ( auto & arg : arguments ) {
+            if ( arg->type->isAuto() ) {
+                return true;
+            }
+        }
+        return false;
     }
     
     // built-in function
@@ -1727,6 +1754,7 @@ namespace yzg
             cexpr->variables.push_back(var->clone());
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
+        cexpr->scoped = scoped;
         return cexpr;
     }
 
@@ -2009,6 +2037,10 @@ namespace yzg
         return thisModule->addFunction(fn);
     }
     
+    bool Program::addGeneric ( const FunctionPtr & fn ) {
+        return thisModule->addGeneric(fn);
+    }
+    
     bool Program::addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg ) {
         if ( ann->rtti_isStructureAnnotation() ) {
             auto annotation = static_pointer_cast<StructureTypeAnnotation>(ann->clone());
@@ -2114,7 +2146,7 @@ namespace yzg
         }
     }
     
-    void Program::visit(Visitor & vis) {
+    void Program::visit(Visitor & vis, bool visitGenerics ) {
         // structures
         for ( auto & ist : thisModule->structures ) {
             vis.preVisit(ist.second.get());
@@ -2133,6 +2165,14 @@ namespace yzg
                 var->init = vis.visitGlobalLetInit(var, var->init.get());
             }
             var = vis.visitGlobalLet(var);
+        }
+        // generics
+        if ( visitGenerics ) {
+            for ( auto & fn : thisModule->generics ) {
+                if ( !fn.second->builtIn ) {
+                    fn.second = fn.second->visit(vis);
+                }
+            }
         }
         // functions
         for ( auto & fn : thisModule->functions ) {

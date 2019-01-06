@@ -137,6 +137,76 @@ namespace yzg {
             return result;
         }
         
+        vector<FunctionPtr> findGenericCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                auto itFnList = mod->genericsByName.find(funcName);
+                if ( itFnList != mod->genericsByName.end() ) {
+                    auto & goodFunctions = itFnList->second;
+                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+        
+        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool infer ) const {
+            if ( pFn->arguments.size() < types.size() ) {
+                return false;
+            }
+            bool typesCompatible = true;
+            for ( auto ai = 0; ai != types.size(); ++ai ) {
+                auto & argType = pFn->arguments[ai]->type;
+                auto & passType = types[ai];
+                if ( passType && infer ) {
+                    // match auto argument
+                    if ( argType->isAuto() ) {
+                        auto argT = inferAutoType(argType, passType);
+                        if ( !argT ) {
+                            typesCompatible = false;
+                            break;
+                        } else {
+                            continue;
+                        }
+                    }
+                    // match inferable block
+                    if ( passType->isAuto() && passType->isGoodBlockType() ) {
+                        auto infT = inferAutoType(passType, argType);
+                        if ( !infT ) {
+                            typesCompatible = false;
+                            break;
+                        } else {
+                            continue;
+                        }
+                    }
+                }
+                // compare types which don't need inference
+                if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false)) ) {
+                    typesCompatible = false;
+                    break;
+                }
+                // ref types can only add constness
+                if ( argType->isRef() && !argType->constant && passType->constant ) {
+                    typesCompatible = false;
+                    break;
+                }
+                // pointer types can only add constant
+                if ( argType->isPointer() && !argType->constant && passType->constant ) {
+                    typesCompatible = false;
+                    break;
+                }
+            }
+            bool tailCompatible = true;
+            for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
+                if ( !pFn->arguments[ti]->init ) {
+                    tailCompatible = false;
+                }
+            }
+            return typesCompatible && tailCompatible;
+        }
+        
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool infer = false ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -146,48 +216,27 @@ namespace yzg {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( pFn->arguments.size() >= types.size() ) {
-                            bool typesCompatible = true;
-                            for ( auto ai = 0; ai != types.size(); ++ai ) {
-                                auto & argType = pFn->arguments[ai]->type;
-                                auto & passType = types[ai];
-                                // match inferable block
-                                if ( infer && passType ) {
-                                    if ( passType->isAuto() && passType->isGoodBlockType() ) {
-                                        auto infT = inferAutoType(passType, argType);
-                                        if ( !infT ) {
-                                            typesCompatible = false;
-                                            break;
-                                        } else {
-                                            continue;
-                                        }
-                                    }
-                                }
-                                // compare types which don't need inference
-                                if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false)) ) {
-                                    typesCompatible = false;
-                                    break;
-                                }
-                                // ref types can only add constness
-                                if ( argType->isRef() && !argType->constant && passType->constant ) {
-                                    typesCompatible = false;
-                                    break;
-                                }
-                                // pointer types can only add constant
-                                if ( argType->isPointer() && !argType->constant && passType->constant ) {
-                                    typesCompatible = false;
-                                    break;
-                                }
-                            }
-                            bool tailCompatible = true;
-                            for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
-                                if ( !pFn->arguments[ti]->init ) {
-                                    tailCompatible = false;
-                                }
-                            }
-                            if ( typesCompatible && tailCompatible ) {
-                                result.push_back(pFn);
-                            }
+                        if ( isFunctionCompatible(pFn, types, infer) ) {
+                            result.push_back(pFn);
+                        }
+                    }
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+        
+        vector<FunctionPtr> findMatchingGenerics ( const string & name, const vector<TypeDeclPtr> & types ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                auto itFnList = mod->genericsByName.find(funcName);
+                if ( itFnList != mod->genericsByName.end() ) {
+                    auto & goodFunctions = itFnList->second;
+                    for ( auto & pFn : goodFunctions ) {
+                        if ( isFunctionCompatible(pFn, types, true) ) {
+                            result.push_back(pFn);
                         }
                     }
                 }
@@ -729,7 +778,6 @@ namespace yzg {
         }
     // ExprVar
         virtual ExpressionPtr visit ( ExprVar * expr ) override {
-            // infer
             // local (that on the stack)
             for ( auto it = local.rbegin(); it!=local.rend(); ++it ) {
                 auto var = *it;
@@ -1132,8 +1180,32 @@ namespace yzg {
             }
             auto functions = findMatchingFunctions(expr->name, types, true);
             if ( functions.size()==0 ) {
-                string candidates = program->describeCandidates(findCandidates(expr->name,types));
-                error("no matching function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
+                // ok, time to find us a good generic
+                auto generics = findMatchingGenerics(expr->name, types);
+                if ( generics.size()==1 ) {
+                    auto generic = generics[0];
+                    auto clone = generic->clone();
+                    for ( size_t sz = 0; sz != types.size(); ++sz ) {
+                        auto & argT = clone->arguments[sz]->type;
+                        if ( argT->isAuto() ) {
+                            auto & passT = types[sz];
+                            auto resT = inferAutoType(argT, passT);
+                            assert(resT && "how? we had this working at findMatchingGenerics");
+                            argT = resT;
+                        }
+                    }
+                    if ( program->addFunction(clone) ) {
+                        reportGenericInfer();
+                    } else {
+                        error("function already exits" + clone->describe(), clone->at );
+                    }
+                } else if ( generics.size()>0 ) {
+                    string candidates = program->describeCandidates(findGenericCandidates(expr->name,types));
+                    error("no matching generic function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
+                } else {
+                    string candidates = program->describeCandidates(findCandidates(expr->name,types));
+                    error("no matching function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
+                }
             } else if ( functions.size()>1 ) {
                 string candidates = program->describeCandidates(functions);
                 error("too many matching functions " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);

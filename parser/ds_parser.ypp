@@ -456,9 +456,16 @@ function_declaration
             swap ( pFunction->annotations, *$annL );
             delete $annL;
         }
-        if ( !g_Program->addFunction(pFunction) ) {
-            yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::function_already_declared);
-            pFunction.reset();
+        if ( pFunction->isGeneric() ) {
+            if ( !g_Program->addGeneric(pFunction) ) {
+                yyerror("generic function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::function_already_declared);
+                pFunction.reset();
+            }
+        } else {
+            if ( !g_Program->addFunction(pFunction) ) {
+                yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::function_already_declared);
+                pFunction.reset();
+            }
         }
         delete $name;
     }

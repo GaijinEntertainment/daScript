@@ -301,7 +301,7 @@ namespace yzg {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            ss << c->getValue();
+            ss << c->getValue() << "f";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
@@ -340,17 +340,17 @@ namespace yzg {
         }
         virtual ExpressionPtr visit ( ExprConstFloat2 * c ) override {
             auto val = c->getValue();
-            ss << "float2(" << val.x << "," << val.y << ")";
+            ss << "float2(" << val.x << "f," << val.y << "f)";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat3 * c ) override {
             auto val = c->getValue();
-            ss << "float3(" << val.x << "," << val.y << "," << val.z << ")";
+            ss << "float3(" << val.x << "f," << val.y << "f," << val.z << "f)";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat4 * c ) override {
             auto val = c->getValue();
-            ss << "float4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
+            ss << "float4(" << val.x << "f," << val.y << "f," << val.z << "f," << val.w << "f)";
             return Visitor::visit(c);
         }
     // var
@@ -494,7 +494,12 @@ namespace yzg {
     }
     
     ostream& operator<< (ostream& stream, const Program & program) {
-        return print(stream,program);
+        SetPrinterFlags flags;
+        const_cast<Program&>(program).visit(flags, true);
+        Printer log;
+        const_cast<Program&>(program).visit(log, true);
+        stream << log.str();
+        return stream;
     }
     
     ostream& operator<< (ostream& stream, const Expression & expr) {

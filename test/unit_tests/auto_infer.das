@@ -14,6 +14,9 @@ def foo(b:block<(a:int):int>)
 def foobar(b:block<(a:int;b:float):string>)
     return invoke(b,1,2.0) + "bar"
 
+def madd(a,b,c)
+    return a*b+c
+
 def test
     // regular array
     let a:int[10]
@@ -53,6 +56,11 @@ def test
     assert(blah=="foobar")
     // function return type
     assert(fn1()==3)
+    // full-blown generic
+    let x = madd(1,2,3)
+    assert(x==5)
+    let y = madd(1.0,2.0,3.0)
+    assert(y==5.0)
     return true
 
 def fn3

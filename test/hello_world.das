@@ -1,11 +1,12 @@
 // options log=true,logInferPasses=true,optimize=false
+options log=true
 
-def take_int(b:block<(arg:int):int>)
-    return invoke(b,3)
+def madd(a,b,c)
+    return a*b+c
 
 def test
-    let x = take_int() <| $(a)
-        return a + 1
-    assert(x==4)
-
-
+    let x = madd(1,2,3)
+    assert(x==5)
+    let y = madd(1.0,2.0,3.0)
+    assert(y==5.0)
+    return true
