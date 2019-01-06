@@ -111,6 +111,7 @@
 %type <pNameList>       variable_name_list
 %type <type>            basic_type_declaration
 %type <pTypeDecl>       type_declaration
+%type <pTypeDecl>       auto_type_declaration
 %type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
 %type <pVarDeclList>    variable_declaration_list
@@ -912,8 +913,22 @@ structure_type_declaration
     }
     ;
 
+auto_type_declaration
+    :   _AUTO[loc] {
+        $$ = new TypeDecl(Type::autoinfer);
+        $$->at = tokAt(@loc);
+    }
+    |   _AUTO[loc] '(' NAME[alias] ')'  {
+        $$ = new TypeDecl(Type::autoinfer);
+        $$->at = tokAt(@loc);
+        $$->alias = *$alias;
+        delete $alias;
+    }
+    ;
+
 type_declaration
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(@basicType); }
+    |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   type_declaration[typeDecl] _CONST {
         $typeDecl->constant = true;

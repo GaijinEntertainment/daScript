@@ -78,11 +78,14 @@ namespace yzg
         bool canMove() const;
         bool isPod() const;
         bool isWorkhorseType() const; // we can return this, or pass this
+        bool isCtorType() const; 
         bool isRange() const;
         bool isConst() const;
         bool isFoldable() const;
+        bool isAlias() const;
         bool isAuto() const;
         Type getRangeBaseType() const;
+        const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
         Type                baseType = Type::tVoid;
         StructurePtr        structType;
         TypeAnnotationPtr   annotation;
@@ -90,8 +93,14 @@ namespace yzg
         TypeDeclPtr         secondType;     // map.second
         vector<TypeDeclPtr> argTypes;        // block arguments
         vector<uint32_t>    dim;
-        bool                ref = false;
-        bool                constant = false;
+        union {
+            struct {
+                bool    ref : 1 ;
+                bool    constant : 1;
+            };
+            uint32_t flags = 0;
+        };
+        string              alias;
         LineInfo            at;
     };
     

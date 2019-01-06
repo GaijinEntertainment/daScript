@@ -65,6 +65,8 @@ namespace yzg {
         }
         // now, lets make the type
         auto TT = make_shared<TypeDecl>(*initT);
+        TT->at = autoT->at;
+        TT->alias = autoT->alias;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
             TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
@@ -127,6 +129,101 @@ namespace yzg {
             needRestart = true;
         }
     protected:
+        
+        // find type alias name, and resolve it to type
+        // without one generic function
+        const TypeDecl * findFuncAlias ( const FunctionPtr & fptr, const string & name ) const {
+            for ( auto & arg : fptr->arguments ) {
+                if ( auto aT = arg->type->findAlias(name,true) ) {
+                    return aT;
+                }
+            }
+            for ( auto & gvKV : program->thisModule->globals ) {
+                auto & gvar = gvKV.second;
+                if ( auto vT = gvar->type->findAlias(name,false) ) {
+                    return vT;
+                }
+            }
+            return nullptr;
+        }
+        
+        // find type alias name, and resolve it to type
+        // within current context
+        const TypeDecl * findAlias ( const string & name ) const {
+            if ( func ) {
+                for ( auto it = local.rbegin(); it!=local.rend(); ++it ) {
+                    auto & var = *it;
+                    if ( auto vT = var->type->findAlias(name) ) {
+                        return vT;
+                    }
+                }
+                for ( auto & arg : func->arguments ) {
+                    if ( auto aT = arg->type->findAlias(name) ) {
+                        return aT;
+                    }
+                }
+            }
+            for ( auto & gvKV : program->thisModule->globals ) {
+                auto & gvar = gvKV.second;
+                if ( auto vT = gvar->type->findAlias(name) ) {
+                    return vT;
+                }
+            }
+            return nullptr;
+        }
+        
+        // infer alias type
+        TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr ) const {
+            if ( decl->baseType==Type::autoinfer ) {    // until alias is fully resolved, can't infer
+                return nullptr;
+            }
+            if ( decl->baseType==Type::alias ) {
+                if ( auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias) ) {
+                    auto resT = make_shared<TypeDecl>(*aT);
+                    resT->ref |= decl->ref;
+                    resT->constant |= decl->constant;
+                    resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
+                    resT->alias = decl->alias;
+                    return resT;
+                } else {
+                    return nullptr;
+                }
+            }
+            auto resT = make_shared<TypeDecl>(*decl);
+            if ( decl->baseType==Type::tPointer ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferAlias(decl->firstType,fptr);
+                    if ( !resT->firstType ) return nullptr;
+                }
+            } else if ( decl->baseType==Type::tArray ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferAlias(decl->firstType,fptr);
+                    if ( !resT->firstType ) return nullptr;
+                }
+            } else if ( decl->baseType==Type::tTable ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferAlias(decl->firstType,fptr);
+                    if ( !resT->firstType ) return nullptr;
+                }
+                if ( decl->secondType ) {
+                    resT->secondType = inferAlias(decl->secondType,fptr);
+                    if ( !resT->secondType ) return nullptr;
+                }
+            } else if ( decl->baseType==Type::tBlock ) {
+                for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
+                    auto & declAT = decl->argTypes[iA];
+                    if ( auto infAT = inferAlias(declAT,fptr) ) {
+                        resT->argTypes[iA] = infAT;
+                    } else {
+                        return nullptr;
+                    }
+                }
+                resT->firstType = inferAlias(decl->firstType,fptr);
+                if ( !resT->firstType ) return nullptr;
+            }
+            return resT;
+        }
+        
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -157,15 +254,24 @@ namespace yzg {
             return result;
         }
         
-        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool infer ) const {
+        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock ) const {
             if ( pFn->arguments.size() < types.size() ) {
                 return false;
             }
             bool typesCompatible = true;
             for ( auto ai = 0; ai != types.size(); ++ai ) {
-                auto & argType = pFn->arguments[ai]->type;
+                auto argType = pFn->arguments[ai]->type;
                 auto & passType = types[ai];
-                if ( passType && infer ) {
+                if ( passType && inferAuto ) {
+                    // if it's an alias, we de'alias it, and see if it matches at all
+                    if ( argType->isAlias() ) {
+                        if ( auto argA = inferAlias(argType, pFn) ) {
+                            argType = argA;
+                        } else {
+                            typesCompatible = false;
+                            break;
+                        }
+                    }
                     // match auto argument
                     if ( argType->isAuto() ) {
                         auto argT = inferAutoType(argType, passType);
@@ -176,6 +282,8 @@ namespace yzg {
                             continue;
                         }
                     }
+                }
+                if (  passType && inferBlock ) {
                     // match inferable block
                     if ( passType->isAuto() && passType->isGoodBlockType() ) {
                         auto infT = inferAutoType(passType, argType);
@@ -212,7 +320,7 @@ namespace yzg {
             return typesCompatible && tailCompatible;
         }
         
-        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool infer = false ) const {
+        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
@@ -221,7 +329,7 @@ namespace yzg {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isFunctionCompatible(pFn, types, infer) ) {
+                        if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                             result.push_back(pFn);
                         }
                     }
@@ -240,7 +348,7 @@ namespace yzg {
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isFunctionCompatible(pFn, types, true) ) {
+                        if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
                             result.push_back(pFn);
                         }
                     }
@@ -309,6 +417,14 @@ namespace yzg {
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
+            if ( var->type->isAlias() ) {
+                if ( auto aT = inferAlias(var->type) ) {
+                    var->type = aT;
+                    reportGenericInfer();
+                } else {
+                    error("undefined type " + var->type->describe(), var->at, CompilationError::type_not_found );
+                }
+            }
             if ( var->type->isAuto() ) {
                 error("generics are not supported yet", var->at, CompilationError::cant_infer_generic );
             }
@@ -597,15 +713,26 @@ namespace yzg {
     // ExprNew
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
             // infer
+            if ( expr->typeexpr->isAlias() ) {
+                if ( auto aT = findAlias(expr->typeexpr->alias) ) {
+                    expr->typeexpr = make_shared<TypeDecl>(*aT);
+                    expr->typeexpr->ref = false;      // drop a ref
+                    expr->typeexpr->constant = false; // drop a const
+                    reportGenericInfer();
+                } else {
+                    error("undefined type " + expr->typeexpr->describe(), expr->at, CompilationError::type_not_found);
+                    return Visitor::visit(expr);
+                }
+            }
             if ( expr->typeexpr->ref ) {
-                error("can't new a ref", expr->typeexpr->at, CompilationError::invalid_new_type);
+                error("can't new a ref", expr->at, CompilationError::invalid_new_type);
             } else if ( expr->typeexpr->dim.size() ) {
-                error("can only new single object", expr->typeexpr->at, CompilationError::invalid_new_type);
+                error("can only new single object", expr->at, CompilationError::invalid_new_type);
             } else if ( expr->typeexpr->baseType==Type::tStructure || expr->typeexpr->isHandle() ) {
                 expr->type = make_shared<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
             } else {
-                error("can only new structures or handles", expr->typeexpr->at, CompilationError::invalid_new_type);
+                error("can only new structures or handles", expr->at, CompilationError::invalid_new_type);
             }
             return Visitor::visit(expr);
         }
@@ -1110,6 +1237,15 @@ namespace yzg {
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
+            if ( var->type->isAlias() ) {
+                auto aT = inferAlias(var->type);
+                if ( aT ) {
+                    var->type = aT;
+                    reportGenericInfer();
+                } else {
+                    error("udefined type " + var->type->describe(), var->at, CompilationError::type_not_found);
+                }
+            }
             if ( var->type->isAuto() && !var->init) {
                 error("local variable type can't be infered, need initializer",
                       var->at, CompilationError::cant_infer_missing_initializer );
@@ -1208,8 +1344,15 @@ namespace yzg {
                     string candidates = program->describeCandidates(findGenericCandidates(expr->name,types));
                     error("no matching generic function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
                 } else {
-                    string candidates = program->describeCandidates(findCandidates(expr->name,types));
-                    error("no matching function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
+                    if ( auto aliasT = findAlias(expr->name) ) {
+                        if ( aliasT->isCtorType() ) {
+                            expr->name = to_string(aliasT->baseType);
+                            reportGenericInfer();
+                        }
+                    } else {
+                        string candidates = program->describeCandidates(findCandidates(expr->name,types));
+                        error("no matching function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
+                    }
                 }
             } else if ( functions.size()>1 ) {
                 string candidates = program->describeCandidates(functions);

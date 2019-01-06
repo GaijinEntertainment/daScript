@@ -63,6 +63,13 @@ namespace yzg
         ModuleLibrary lib;
         lib.addModule(this);
         
+#define ADD_NUMERIC_CASTS(TYPE,CTYPE)                                                                   \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,float>,CTYPE,float>>(#TYPE,lib) );           \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int32_t>,CTYPE,int32_t>>(#TYPE,lib) );       \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib) );     \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int64_t>,CTYPE,int64_t>>(#TYPE,lib) );       \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint64_t>,CTYPE,uint64_t>>(#TYPE,lib) );
+        
         // boolean
         addFunctionBasic<bool>(*this,lib);
         addFunctionBoolean<bool>(*this,lib);
@@ -74,45 +81,42 @@ namespace yzg
         addFunctionIncDec<int32_t>(*this,lib);
         addFunctionOrdered<int32_t>(*this,lib);
         addFunctionBit<int32_t>(*this,lib);
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<int32_t,float>,int32_t,float>>("int",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<int32_t,uint32_t>,int32_t,uint32_t>>("int",lib) );
+        ADD_NUMERIC_CASTS(int, int32_t);
         // uint32
         addFunctionBasic<uint32_t>(*this,lib);
         addFunctionNumericWithMod<uint32_t>(*this,lib);
         addFunctionIncDec<uint32_t>(*this,lib);
         addFunctionOrdered<uint32_t>(*this,lib);
         addFunctionBit<uint32_t>(*this,lib);
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,float>,uint32_t,float>>("uint",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint32_t,int32_t>,uint32_t,int32_t>>("uint",lib) );
+        ADD_NUMERIC_CASTS(uint, int32_t);
         // int64
         addFunctionBasic<int64_t>(*this,lib);
         addFunctionNumericWithMod<int64_t>(*this,lib);
         addFunctionIncDec<int64_t>(*this,lib);
         addFunctionOrdered<int64_t>(*this,lib);
         addFunctionBit<int64_t>(*this,lib);
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<int64_t,float>,int64_t,float>>("int64",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<int64_t,uint64_t>,int64_t,uint64_t>>("int64",lib) );
+        ADD_NUMERIC_CASTS(int64, int64_t);
         // uint64
         addFunctionBasic<uint64_t>(*this,lib);
         addFunctionNumericWithMod<uint64_t>(*this,lib);
         addFunctionIncDec<uint64_t>(*this,lib);
         addFunctionOrdered<uint64_t>(*this,lib);
         addFunctionBit<uint64_t>(*this,lib);
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint64_t,float>,uint64_t,float>>("uint64",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<uint64_t,int64_t>,uint64_t,int64_t>>("uint64",lib) );
+        ADD_NUMERIC_CASTS(uint64, uint64_t);
         // float
         addFunctionBasic<float>(*this,lib);
         addFunctionNumeric<float>(*this,lib);
         addFunctionIncDec<float>(*this,lib);
         addFunctionOrdered<float>(*this,lib);
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<float,int32_t>,float,int32_t>>("float",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_Cast<float,uint32_t>,float,uint32_t>>("float",lib) );
+        ADD_NUMERIC_CASTS(float, float)
         // string
         addFunctionBasic<char *>(*this,lib);
         addFunctionOrdered<char *>(*this,lib);
         addFunctionConcat<char *>(*this,lib);
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t>>    ("string",lib) );
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t>>   ("string",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int64_t>,   char *,int64_t>>    ("string",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint64_t>,  char *,uint64_t>>   ("string",lib) );
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float>>      ("string",lib) );
         // VECTOR TYPES
         addVectorTypes(lib);

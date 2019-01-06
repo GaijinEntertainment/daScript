@@ -17,7 +17,14 @@ namespace yzg
     // TypeDecl
     
     ostream& operator<< (ostream& stream, const TypeDecl & decl) {
-        if ( decl.baseType==Type::tHandle ) {
+        if ( decl.baseType==Type::alias ) {
+            stream << decl.alias;
+        } else if ( decl.baseType==Type::autoinfer ) {
+            stream << "auto";
+            if ( !decl.alias.empty() ) {
+                stream << "(" << decl.alias << ")";
+            }
+        } else if ( decl.baseType==Type::tHandle ) {
             stream << decl.annotation->name;
         } else if ( decl.baseType==Type::tArray ) {
             if ( decl.firstType ) {
@@ -71,6 +78,9 @@ namespace yzg
         } else {
             stream << to_string(decl.baseType);
         }
+        if ( decl.baseType!=Type::autoinfer && decl.baseType!=Type::alias && !decl.alias.empty() ) {
+            stream << " aka " << decl.alias;
+        }
         if ( decl.constant ) {
             stream << " const";
         }
@@ -87,8 +97,8 @@ namespace yzg
         structType = decl.structType;
         annotation = decl.annotation;
         dim = decl.dim;
-        ref = decl.ref;
-        constant = decl.constant;
+        flags = decl.flags;
+        alias = decl.alias;
         at = decl.at;
         if ( decl.firstType )
             firstType = make_shared<TypeDecl>(*decl.firstType);
@@ -96,6 +106,34 @@ namespace yzg
             secondType = make_shared<TypeDecl>(*decl.secondType);
         for ( const auto & arg : decl.argTypes ) {
             argTypes.push_back(make_shared<TypeDecl>(*arg) );
+        }
+    }
+    
+    const TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) const {
+        if ( baseType==Type::tPointer ) {
+            return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
+        } else if ( baseType==Type::tArray ) {
+            return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
+        } else if ( baseType==Type::tTable ) {
+            if ( firstType ) {
+                if ( auto k = firstType->findAlias(name,allowAuto) ) {
+                    return k;
+                }
+            }
+            return secondType ? secondType->findAlias(name,allowAuto) : nullptr;
+        } else if ( baseType==Type::tBlock ) {
+            for ( auto & arg : argTypes ) {
+                if ( auto at = arg->findAlias(name,allowAuto) ) {
+                    return at;
+                }
+            }
+            return firstType->findAlias(name,allowAuto);
+        } else if ( baseType==Type::alias ) {
+            return nullptr; // if it is another alias, can't find it
+        } else if ( baseType==Type::autoinfer && !allowAuto) {
+            return nullptr; // if it has not been infered yet, can't find it
+        } else {
+            return alias==name ? this : nullptr;
         }
     }
     
@@ -282,6 +320,34 @@ namespace yzg
     bool TypeDecl::isPointer() const {
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
+
+    bool TypeDecl::isAlias() const {
+        // auto is auto.... or auto....?
+        if ( baseType==Type::alias ) {
+            return true;
+        } else  if ( baseType==Type::tPointer ) {
+            if ( firstType )
+                return firstType->isAlias();
+        } else if ( baseType==Type::tArray ) {
+            if ( firstType )
+                return firstType->isAlias();
+        } else if ( baseType==Type::tTable ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAlias();
+            if ( secondType )
+                any |= secondType->isAlias();
+            return any;
+        } else if ( baseType==Type::tBlock ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAlias();
+            for ( auto & arg : argTypes )
+                any |= arg->isAlias();
+            return any;
+        }
+        return false;
+    }
     
     bool TypeDecl::isAuto() const {
         // auto is auto.... or auto....?
@@ -343,11 +409,40 @@ namespace yzg
         if (    baseType==Type::none
             ||  baseType==Type::tVoid
             ||  baseType==Type::tStructure
-            ||  baseType==Type::tPointer )
+            ||  baseType==Type::tPointer)
             return false;
         if ( dim.size() )
             return false;
         return true;
+    }
+    
+    bool TypeDecl::isCtorType() const {
+        if ( dim.size() )
+            return false;
+        switch ( baseType ) {
+            // case Type::tBool:
+            case Type::tInt64:
+            case Type::tUInt64:
+            case Type::tInt:
+            case Type::tInt2:
+            case Type::tInt3:
+            case Type::tInt4:
+            case Type::tUInt:
+            case Type::tUInt2:
+            case Type::tUInt3:
+            case Type::tUInt4:
+            case Type::tFloat:
+            case Type::tFloat2:
+            case Type::tFloat3:
+            case Type::tFloat4:
+            case Type::tRange:
+            case Type::tURange:
+            case Type::tString:
+            // case Type::tPointer:
+                return true;
+            default:
+                return false;
+        }
     }
     
     bool TypeDecl::isWorkhorseType() const {
@@ -529,12 +624,16 @@ namespace yzg
         if ( !isalpha(name[0]) && name[0]!='_' ) {
             ss << "operator ";
         }
-        ss << name << " ( ";
-        for ( auto & arg : arguments ) {
-            ss << arg->name << " : " << *arg->type;
-            if ( arg != arguments.back() ) ss << "; ";
+        ss << name;
+        if ( arguments.size() ) {
+            ss << " ( ";
+            for ( auto & arg : arguments ) {
+                ss << arg->name << " : " << *arg->type;
+                if ( arg != arguments.back() ) ss << "; ";
+            }
+            ss << " )";
         }
-        ss << " ) : " << result->describe();
+        ss << " : " << result->describe();
         return ss.str();
     }
     
@@ -2116,8 +2215,9 @@ namespace yzg
                 return nullptr;
             }
         } else {
-            error("undefined type " + name,at,CompilationError::type_not_found);
-            return nullptr;
+            auto tt = new TypeDecl(Type::alias);
+            tt->alias = name;
+            return tt;
         }
     }
     

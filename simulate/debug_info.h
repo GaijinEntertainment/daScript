@@ -7,6 +7,7 @@ namespace yzg
     enum Type : uint8_t {
         none,
         autoinfer,
+        alias,
         fakeContext,
         tVoid,
         tBool,
