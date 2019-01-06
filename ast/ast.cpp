@@ -1882,67 +1882,6 @@ namespace yzg
         return thisModule->findVariable(name);
     }
     
-    vector<FunctionPtr> Program::findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
-        string moduleName, funcName;
-        splitTypeName(name, moduleName, funcName);
-        vector<FunctionPtr> result;
-        library.foreach([&](Module * mod) -> bool {
-            auto itFnList = mod->functionsByName.find(funcName);
-            if ( itFnList != mod->functionsByName.end() ) {
-                auto & goodFunctions = itFnList->second;
-                result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
-            }
-            return true;
-        },moduleName);
-        return result;
-    }
-        
-    vector<FunctionPtr> Program::findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const {
-        string moduleName, funcName;
-        splitTypeName(name, moduleName, funcName);
-        vector<FunctionPtr> result;
-        library.foreach([&](Module * mod) -> bool {
-            auto itFnList = mod->functionsByName.find(funcName);
-            if ( itFnList != mod->functionsByName.end() ) {
-                auto & goodFunctions = itFnList->second;
-                for ( auto & pFn : goodFunctions ) {
-                    if ( pFn->arguments.size() >= types.size() ) {
-                        bool typesCompatible = true;
-                        for ( auto ai = 0; ai != types.size(); ++ai ) {
-                            auto & argType = pFn->arguments[ai]->type;
-                            auto & passType = types[ai];
-                            if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false)) ) {
-                                typesCompatible = false;
-                                break;
-                            }
-                            // ref types can only add constness
-                            if ( argType->isRef() && !argType->constant && passType->constant ) {
-                                typesCompatible = false;
-                                break;
-                            }
-                            // pointer types can only add constant
-                            if ( argType->isPointer() && !argType->constant && passType->constant ) {
-                                typesCompatible = false;
-                                break;
-                            }
-                        }
-                        bool tailCompatible = true;
-                        for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
-                            if ( !pFn->arguments[ti]->init ) {
-                                tailCompatible = false;
-                            }
-                        }
-                        if ( typesCompatible && tailCompatible ) {
-                            result.push_back(pFn);
-                        }
-                    }
-                }
-            }
-            return true;
-        },moduleName);
-        return result;
-    }
-    
     FuncInfo * Program::makeFunctionDebugInfo ( Context & context, const Function & fn ) {
         FuncInfo * fni = context.makeNode<FuncInfo>();
         fni->name = context.allocateName(fn.name);

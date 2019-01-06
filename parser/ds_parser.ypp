@@ -755,7 +755,11 @@ optional_initializer
     ;
 
 variable_declaration
-    :   variable_name_list[list] ':' type_declaration[typeDecl] optional_initializer[init] {
+    :   variable_name_list[list] {
+        auto autoT = new TypeDecl(Type::autoinfer);
+        $$ = new VariableDeclaration(tokAt(@list),$list,autoT,nullptr);
+    }
+    |   variable_name_list[list] ':' type_declaration[typeDecl] optional_initializer[init] {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
     }
     |   variable_name_list[list] '=' expr[init] {

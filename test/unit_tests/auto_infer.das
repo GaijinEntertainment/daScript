@@ -11,6 +11,9 @@ let
 def foo(b:block<(a:int):int>)
     return invoke(b, 3)
 
+def foobar(b:block<(a:int;b:float):string>)
+    return invoke(b,1,2.0) + "bar"
+
 def test
     // regular array
     let a:int[10]
@@ -31,13 +34,23 @@ def test
     let TT_ikT : table<auto,int> = TT_T
     let TT_ivT : table<string,auto> = TT_T
     // block return type
-    let f1 = foo() <| $(arg:int):auto
+    let f1 = foo() <| $(arg:int)
         return arg+1
     assert(f1==4)
     // block argument
-    let f2 = foo() <| $(arg=5):auto
+    let f2 = foo() <| $(arg=5)
         return arg+2
     assert(f2==5)
+    // forward infer entire block type and argument types
+    let f3 = foo() <| $(arg)
+        return arg + 3
+    assert(f3==6)
+    // two arguments
+    let blah = foobar() <| $(ia,fb)
+        assert(ia==1)
+        assert(fb==2.0)
+        return "foo"
+    assert(blah=="foobar")
     // function return type
     assert(fn1()==3)
     return true

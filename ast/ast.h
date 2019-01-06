@@ -341,6 +341,7 @@ namespace yzg
         virtual bool rtti_isOp3() const { return false; }
         virtual bool rtti_isNullCoalescing() const { return false; }
         virtual bool rtti_isValues() const { return false; }
+        virtual bool rtti_isMakeBlock() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
@@ -793,6 +794,7 @@ namespace yzg
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual bool rtti_isMakeBlock() const override { return true; }
         ExpressionPtr block;
     };
     
@@ -1084,8 +1086,6 @@ namespace yzg
         void optimize();
         void allocateStack();
 		string dotGraph();
-        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types ) const;
-        vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const;
         bool simulate ( Context & context );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }

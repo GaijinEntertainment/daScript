@@ -122,6 +122,80 @@ namespace yzg {
             needRestart = true;
         }
     protected:
+        vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                auto itFnList = mod->functionsByName.find(funcName);
+                if ( itFnList != mod->functionsByName.end() ) {
+                    auto & goodFunctions = itFnList->second;
+                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+        
+        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool infer = false ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                auto itFnList = mod->functionsByName.find(funcName);
+                if ( itFnList != mod->functionsByName.end() ) {
+                    auto & goodFunctions = itFnList->second;
+                    for ( auto & pFn : goodFunctions ) {
+                        if ( pFn->arguments.size() >= types.size() ) {
+                            bool typesCompatible = true;
+                            for ( auto ai = 0; ai != types.size(); ++ai ) {
+                                auto & argType = pFn->arguments[ai]->type;
+                                auto & passType = types[ai];
+                                // match inferable block
+                                if ( infer && passType ) {
+                                    if ( passType->isAuto() && passType->isGoodBlockType() ) {
+                                        auto infT = inferAutoType(passType, argType);
+                                        if ( !infT ) {
+                                            typesCompatible = false;
+                                            break;
+                                        } else {
+                                            continue;
+                                        }
+                                    }
+                                }
+                                // compare types which don't need inference
+                                if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false)) ) {
+                                    typesCompatible = false;
+                                    break;
+                                }
+                                // ref types can only add constness
+                                if ( argType->isRef() && !argType->constant && passType->constant ) {
+                                    typesCompatible = false;
+                                    break;
+                                }
+                                // pointer types can only add constant
+                                if ( argType->isPointer() && !argType->constant && passType->constant ) {
+                                    typesCompatible = false;
+                                    break;
+                                }
+                            }
+                            bool tailCompatible = true;
+                            for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
+                                if ( !pFn->arguments[ti]->init ) {
+                                    tailCompatible = false;
+                                }
+                            }
+                            if ( typesCompatible && tailCompatible ) {
+                                result.push_back(pFn);
+                            }
+                        }
+                    }
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+    protected:
     // strcuture
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
@@ -717,9 +791,9 @@ namespace yzg {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             // infer
             vector<TypeDeclPtr> types = { expr->subexpr->type };
-            auto functions = program->findMatchingFunctions(expr->op, types);
+            auto functions = findMatchingFunctions(expr->op, types);
             if ( functions.size()==0 ) {
-                string candidates = program->describeCandidates(program->findCandidates(expr->op,types));
+                string candidates = program->describeCandidates(findCandidates(expr->op,types));
                 error("no matching operator '" + expr->op
                       + "' with argument (" + expr->subexpr->type->describe() + ")", expr->at, CompilationError::operator_not_found);
             } else if ( functions.size()>1 ) {
@@ -742,9 +816,9 @@ namespace yzg {
                 if ( !expr->left->type->isSameType(*expr->right->type,false) )
                     error("operations on incompatible pointers are prohibited", expr->at);
             vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
-            auto functions = program->findMatchingFunctions(expr->op, types);
+            auto functions = findMatchingFunctions(expr->op, types);
             if ( functions.size()==0 ) {
-                string candidates = program->describeCandidates(program->findCandidates(expr->op,types));
+                string candidates = program->describeCandidates(findCandidates(expr->op,types));
                 error("no matching operator '" + expr->op
                       + "' with arguments (" + expr->left->type->describe() + ", " + expr->right->type->describe()
                       + ")\n" + candidates, expr->at, CompilationError::operator_not_found);
@@ -869,19 +943,23 @@ namespace yzg {
             return false;
         }
         virtual ExpressionPtr visit ( ExprReturn * expr ) override {
-            if ( expr->subexpr ) {
-                if ( !expr->subexpr->type ) return Visitor::visit(expr);
-                expr->subexpr = Expression::autoDereference(expr->subexpr);
-            }
             if ( blocks.size() ) {
                 ExprBlock * block = blocks.back();
                 block->hasReturn = true;
+                if ( expr->subexpr ) {
+                    if ( !expr->subexpr->type ) return Visitor::visit(expr);
+                    expr->subexpr = Expression::autoDereference(expr->subexpr);
+                }
                 if ( inferReturnType(block->type, expr) ) {
                     block->returnType = make_shared<TypeDecl>(*block->type);
                 }
             } else {
                 // infer
                 func->hasReturn = true;
+                if ( expr->subexpr ) {
+                    if ( !expr->subexpr->type ) return Visitor::visit(expr);
+                    expr->subexpr = Expression::autoDereference(expr->subexpr);
+                }
                 inferReturnType(func->result, expr);
             }
             expr->type = make_shared<TypeDecl>();
@@ -1052,9 +1130,9 @@ namespace yzg {
             for ( auto & ar : expr->arguments ) {
                 types.push_back(ar->type);
             }
-            auto functions = program->findMatchingFunctions(expr->name, types);
+            auto functions = findMatchingFunctions(expr->name, types, true);
             if ( functions.size()==0 ) {
-                string candidates = program->describeCandidates(program->findCandidates(expr->name,types));
+                string candidates = program->describeCandidates(findCandidates(expr->name,types));
                 error("no matching function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
             } else if ( functions.size()>1 ) {
                 string candidates = program->describeCandidates(functions);
@@ -1062,6 +1140,23 @@ namespace yzg {
             } else {
                 expr->func = functions[0];
                 expr->type = make_shared<TypeDecl>(*expr->func->result);
+                // infer FORWARD types
+                for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
+                    auto & arg = expr->arguments[iF];
+                    if ( arg->type->isAuto() && arg->type->isGoodBlockType() ) {
+                        assert ( arg->rtti_isMakeBlock() && "always MakeBlock" );
+                        auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
+                        auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
+                        auto retT = inferAutoType(mkBlock->type, expr->func->arguments[iF]->type);
+                        assert ( retT && "how? it matched during findMatchingFunctions the same way");
+                        block->returnType = make_shared<TypeDecl>(*retT->firstType);
+                        for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
+                            block->arguments[ba]->type = make_shared<TypeDecl>(*retT->argTypes[ba]);
+                        }
+                        reportGenericInfer();
+                    }
+                }
+                // append default arguments
                 for ( size_t iT = expr->arguments.size(); iT != expr->func->arguments.size(); ++iT ) {
                     auto newArg = expr->func->arguments[iT]->init->clone();
                     if ( !newArg->type ) {
@@ -1070,6 +1165,7 @@ namespace yzg {
                     }
                     expr->arguments.push_back(newArg);
                 }
+                // dereference what needs dereferences
                 for ( size_t iA = 0; iA != expr->arguments.size(); ++iA )
                     if ( !expr->func->arguments[iA]->type->isRef() )
                         expr->arguments[iA] = Expression::autoDereference(expr->arguments[iA]);
@@ -1169,11 +1265,16 @@ namespace yzg {
     // program
     
     void Program::inferTypes() {
-        for ( ; ; ) {
+        const bool log = options.getOption("logInferPasses",false);
+        for ( int pass = 0; ; ++pass ) {
             failToCompile = false;
             errors.clear();
             InferTypes context(shared_from_this());
             visit(context);
+            if ( log ) {
+                cout << "PASS " << pass << ":\n" << *this;
+                cout.flush();
+            }
             if ( context.finished() )
                 break;
         }

@@ -1,7 +1,11 @@
-options log=true,optimize=false
+// options log=true,logInferPasses=true,optimize=false
 
-def test_mix(arg:bool)
-    if arg
-        return 13
-    else
-        return 13.0
+def take_int(b:block<(arg:int):int>)
+    return invoke(b,3)
+
+def test
+    let x = take_int() <| $(a)
+        return a + 1
+    assert(x==4)
+
+
