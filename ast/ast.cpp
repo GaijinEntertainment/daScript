@@ -2299,9 +2299,11 @@ namespace yzg
     
     void Program::optimize() {
         const bool log = options.getOption("logOptimizationPasses",false);
-        bool any, once, last;
-        once = true;
-		if (log) cout << *this << "\n";
+        bool any, last;
+        if (log) {
+            cout << *this << "\n";
+            cout.flush();
+        }
         do {
             if ( log ) cout << "OPTIMIZE:\n" << *this;
             any = false;
@@ -2313,8 +2315,6 @@ namespace yzg
             if ( log ) cout << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationUnused();        if ( failed() ) break;  any |= last;
             if ( log ) cout << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
-            last = once && staticAsserts();     if ( failed() ) break;  any |= last;
-            once = false;
             if ( log ) cout.flush();
         } while ( any );
     }
@@ -2339,7 +2339,7 @@ namespace yzg
 				if (program->options.getOption("optimize", true)) {
 					program->optimize();
 				}
-				if (!program->failed())
+                if (!program->failed())
 					program->staticAsserts();
                 if (!program->failed())
                     program->allocateStack();

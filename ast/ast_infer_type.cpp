@@ -704,9 +704,29 @@ namespace yzg {
         }
     // ExprSizeOf
         virtual ExpressionPtr visit ( ExprSizeOf * expr ) override {
-            if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            // check subexpression
+            if ( expr->subexpr && expr->subexpr->type ) {
+                expr->typeexpr = make_shared<TypeDecl>(*expr->subexpr->type);
+            }
+            // verify
+            if ( !expr->typeexpr ) {
+                error("sizeof(...) can't be infered", expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
+            if ( expr->typeexpr->isAlias() ) {
+                if ( auto eT = inferAlias(expr->typeexpr) ) {
+                    expr->typeexpr = eT;
+                    reportGenericInfer();
+                } else {
+                    error("udefined type " + expr->typeexpr->describe(), expr->at, CompilationError::type_not_found);
+                }
+            }
+            if ( expr->typeexpr->ref ) {
+                error("szieof(ref) is prohibited", expr->at,CompilationError::sizeof_reference);
+            } else if ( expr->typeexpr->isAuto() ) {
+                error("sizeof(auto) is undefined", expr->at, CompilationError::sizeof_auto);
+            }
             // infer
-            expr->typeexpr = make_shared<TypeDecl>(*expr->subexpr->type);
             expr->type = make_shared<TypeDecl>(Type::tInt);
             return Visitor::visit(expr);
         }
@@ -1317,6 +1337,9 @@ namespace yzg {
             vector<TypeDeclPtr> types;
             types.reserve(expr->arguments.size());
             for ( auto & ar : expr->arguments ) {
+                if ( !ar->type ) {
+                    return Visitor::visit(expr);
+                }
                 types.push_back(ar->type);
             }
             auto functions = findMatchingFunctions(expr->name, types, true);

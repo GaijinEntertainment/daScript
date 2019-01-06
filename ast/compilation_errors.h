@@ -75,5 +75,6 @@ namespace yzg
     ,   not_expecting_return_value              =   32102       // def blah:void ... return 12
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
+    ,   sizeof_auto                             =   39902       //  sizeof(int&)
     };
 }

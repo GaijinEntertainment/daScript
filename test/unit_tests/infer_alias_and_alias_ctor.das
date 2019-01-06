@@ -1,4 +1,4 @@
-// options log=true,logInferPasses=true,optimize=false
+// options log=true,logInferPasses=true,optimize=true
 
 def join(a:array<auto(numt)>)
     let t : numt = numt(0)

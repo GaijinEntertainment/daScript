@@ -265,6 +265,11 @@ namespace yzg {
             }
             return Visitor::visit(expr);
         }
+        // sizeof
+        virtual ExpressionPtr visit ( ExprSizeOf * expr ) override {
+            reportFolding();
+            return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
+        }
     // ExprLooksLikeCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if ( expr->func->result->isFoldable() && expr->func->noSideEffects ) {

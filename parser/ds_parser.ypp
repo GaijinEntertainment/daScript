@@ -87,7 +87,8 @@
 %token  _INT    _INT2   _INT3   _INT4
 %token  _UINT   _UINT2  _UINT3  _UINT4
 %token  _FLOAT  _FLOAT2 _FLOAT3 _FLOAT4
-%token  _RANGE  _URANGE _BLOCK
+%token  _RANGE  _URANGE _BLOCK  _INT64
+%token  _UINT64
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -599,12 +600,11 @@ expression_let
     ;
 
 expr_sizeof
-    :   _SIZEOF[loc] '(' expr[subexpr] ')'          { $$ = new ExprSizeOf(tokAt(@loc),ExpressionPtr($subexpr)); }
+    :   _SIZEOF[loc] '(' expr[subexpr] ')' {
+            $$ = new ExprSizeOf(tokAt(@loc),ExpressionPtr($subexpr));
+    }
     |   _SIZEOF[loc] '(' _TYPE type_declaration[decl] ')' {
-        if ( $decl->ref )
-            yyerror("sizeof(type " + $decl->getMangledName() + "), sizing reference is prohibited",tokAt(@loc),CompilationError::sizeof_reference);
-        $$ = new ExprConstInt(tokAt(@loc),$decl->getSizeOf());
-        delete $decl;
+            $$ = new ExprSizeOf(tokAt(@loc),TypeDeclPtr($decl));
     }
     ;
 
@@ -887,10 +887,12 @@ basic_type_declaration
     |   _BOOL       { $$ = Type::tBool; }
     |   _STRING     { $$ = Type::tString; }
     |   _INT        { $$ = Type::tInt; }
+    |   _INT64      { $$ = Type::tInt64; }
     |   _INT2       { $$ = Type::tInt2; }
     |   _INT3       { $$ = Type::tInt3; }
     |   _INT4       { $$ = Type::tInt4; }
     |   _UINT       { $$ = Type::tUInt; }
+    |   _UINT64       { $$ = Type::tUInt64; }
     |   _UINT2      { $$ = Type::tUInt2; }
     |   _UINT3      { $$ = Type::tUInt3; }
     |   _UINT4      { $$ = Type::tUInt4; }

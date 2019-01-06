@@ -469,13 +469,16 @@ namespace yzg {
             ss << "break";
         }
     // sizeof
-        virtual void preVisit ( ExprSizeOf * that ) override {
-            Visitor::preVisit(that);
+        virtual void preVisit ( ExprSizeOf * expr ) override {
+            Visitor::preVisit(expr);
             ss << "sizeof(";
+            if ( !expr->subexpr ) {
+                ss << "type " << *expr->typeexpr;
+            }
         }
-        virtual ExpressionPtr visit ( ExprSizeOf * that ) override {
+        virtual ExpressionPtr visit ( ExprSizeOf * expr ) override {
             ss << ")";
-            return Visitor::visit(that);
+            return Visitor::visit(expr);
         }
     protected:
         stringstream        ss;

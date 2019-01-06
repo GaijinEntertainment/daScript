@@ -152,10 +152,12 @@
 <normal>"void"                                          return _VOID;
 <normal>"string"                                        return _STRING;
 <normal>"int"                                           return _INT;
+<normal>"int64"                                         return _INT64;
 <normal>"int2"                                          return _INT2;
 <normal>"int3"                                          return _INT3;
 <normal>"int4"                                          return _INT4;
 <normal>"uint"                                          return _UINT;
+<normal>"uint64"                                        return _UINT64;
 <normal>"uint2"                                         return _UINT2;
 <normal>"uint3"                                         return _UINT3;
 <normal>"uint4"                                         return _UINT4;

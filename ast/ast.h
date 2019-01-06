@@ -927,6 +927,8 @@ namespace yzg
         ExprSizeOf () = default;
         ExprSizeOf ( const LineInfo & a, const ExpressionPtr & s )
             : Expression(a), subexpr(s) {}
+        ExprSizeOf ( const LineInfo & a, const TypeDeclPtr & d )
+            : Expression(a), typeexpr(d) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
