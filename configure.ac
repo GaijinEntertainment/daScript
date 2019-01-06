@@ -26,6 +26,8 @@ AM_CONDITIONAL([WIN32], test "$WIN32" = "yes")
 AC_CHECK_FUNCS([wprintf])
 AC_CHECK_FUNCS([reallocarray])  # needs AC_USE_SYSTEM_EXTENSIONS (#define _GNU_SOURCE)
 
+## Haiku check for -lsocket -lnetwork inet_ntop
+AC_SEARCH_LIBS([inet_ntop],[socket network])
 
 ## Option --disable-test
 AC_ARG_ENABLE(test, [
