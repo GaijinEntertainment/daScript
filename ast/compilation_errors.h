@@ -76,5 +76,9 @@ namespace yzg
     
     ,   sizeof_reference                        =   39901       //  sizeof(int&)
     ,   sizeof_auto                             =   39902       //  sizeof(int&)
+        
+// logic errors
+        
+    ,   static_assert_failed                    =   40100       // static_assert(false)
     };
 }

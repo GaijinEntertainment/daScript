@@ -616,7 +616,20 @@ namespace yzg
         cfun->at = at;
         cfun->module = nullptr;
         cfun->flags = 0;
+        cfun->inferStack = inferStack;
         return cfun;
+    }
+    
+    string Function::getLocationExtra() const {
+        if ( !inferStack.size() ) {
+            return "";
+        }
+        stringstream ss;
+        ss << "\nwhile compiling " << describe() << "\n";
+        for ( const auto & ih : inferStack ) {
+            ss << "instanced from " << ih.func->describe() << " at " << ih.at.describe() << "\n";
+        }
+        return ss.str();
     }
     
     string Function::describe() const {

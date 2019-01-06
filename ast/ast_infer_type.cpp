@@ -119,7 +119,7 @@ namespace yzg {
         void popVarStack()  { local.resize(varStack.back()); varStack.pop_back(); }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) {
             if ( func ) {
-                string extra = "\nwhile compiling " + func->describe();
+                string extra = func->getLocationExtra();
                 program->error(err + extra,at,cerr);
             } else {
                 program->error(err,at,cerr);
@@ -1349,6 +1349,8 @@ namespace yzg {
                 if ( generics.size()==1 ) {
                     auto generic = generics[0];
                     auto clone = generic->clone();
+                    clone->inferStack.emplace_back(expr->at, func);
+                    clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());
                     for ( size_t sz = 0; sz != types.size(); ++sz ) {
                         auto & argT = clone->arguments[sz]->type;
                         if ( argT->isAuto() ) {

@@ -1,4 +1,6 @@
-options log=true // ,logInferPasses=false,logOptimizationPasses=true,optimize=true
+// options log=true,logInferPasses=false,logOptimizationPasses=true,optimize=true
+
+expect 40100
 
 def fold(a:array<auto(numt)>;from:numt)
     for x in a
@@ -18,3 +20,4 @@ def test(msg)
 def test:bool
     print(test("this"))
     return true
+

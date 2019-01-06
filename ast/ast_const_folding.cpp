@@ -337,6 +337,16 @@ namespace yzg {
     public:
         StaticAssertFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
     protected:
+        FunctionPtr             func;
+    protected:
+        virtual void preVisit ( Function * f ) override {
+            Visitor::preVisit(f);
+            func = f->shared_from_this();
+        }
+        virtual FunctionPtr visit ( Function * that ) override {
+            func.reset();
+            return Visitor::visit(that);
+        }
 		virtual ExpressionPtr visit(ExprStaticAssert * expr) override {
 			auto cond = expr->arguments[0];
 			if (!cond->constexpression && !cond->rtti_isConstant()) {
@@ -356,7 +366,10 @@ namespace yzg {
                 } else {
                     message = "static assert failed";
                 }
-                program->error(message, expr->at);
+                if ( func ) {
+                    message += func->getLocationExtra();
+                }
+                program->error(message, expr->at, CompilationError::static_assert_failed);
             }
             return cond->constexpression ? nullptr : Visitor::visit(expr);
         }

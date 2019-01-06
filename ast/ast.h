@@ -977,6 +977,7 @@ namespace yzg
         FunctionPtr sideEffects ( bool hasSideEffects ) { noSideEffects = !hasSideEffects; return shared_from_this(); }
         bool isGeneric() const;
         FunctionPtr clone() const;
+        string getLocationExtra() const;
     public:
         AnnotationList      annotations;
         void *              annotationData = nullptr;   // to be filled with annotation
@@ -996,6 +997,13 @@ namespace yzg
             };
             uint32_t flags = 0;
         };
+        struct InferHistory {
+            LineInfo    at;
+            FunctionPtr func;
+            InferHistory() = default;
+            InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p) {}
+        };
+        vector<InferHistory> inferStack;
     };
     
     class BuiltInFunction : public Function {
