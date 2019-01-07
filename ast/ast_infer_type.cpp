@@ -2,7 +2,7 @@
 
 #include "ast.h"
 
-namespace yzg {
+namespace das {
     
     // auto or generic type conversion
     
@@ -314,7 +314,7 @@ namespace yzg {
 				auto & arg = pFn->arguments[ai];
 				auto & passType = types[ai];
 				if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
-					ss << "\ninvalid argument " << arg->name << " : " << arg->type->describe() << ", can't pass " << passType->describe();
+					ss << "\ninvalid argument " << arg->name << ", expecting (" << arg->type->describe() << ") passing (" << passType->describe() << ")";
 				}
 			}
 			return ss.str();
@@ -357,6 +357,21 @@ namespace yzg {
             },moduleName);
             return result;
         }
+
+		void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions, 
+			const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks ) {
+			if (candidateFunctions.size() == 1) {
+				auto missFn = candidateFunctions.back();
+				auto problems = describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
+				error(extra + "\ncandidate function:\n\t"
+					+ missFn->describe() + problems, at, CompilationError::function_not_found);
+			}
+			else {
+				string candidates = program->describeCandidates(candidateFunctions);
+				error(extra + "\n" + candidates, at, CompilationError::function_not_found);
+			}
+		}
+
     protected:
     // strcuture
         virtual void preVisit ( Structure * that ) override {
@@ -1389,11 +1404,12 @@ namespace yzg {
                     if ( program->addFunction(clone) ) {
                         reportGenericInfer();
                     } else {
-                        error("function already exits" + clone->describe(), clone->at );
+						auto realFn = program->findFunction(clone->getMangledName());
+						vector<FunctionPtr> candidates = { realFn };
+						reportFunctionNotFound("no matching generic function " + expr->describe(), expr->at, candidates, types, true, true);
                     }
                 } else if ( generics.size()>0 ) {
-                    string candidates = program->describeCandidates(findGenericCandidates(expr->name,types));
-                    error("no matching generic function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
+					reportFunctionNotFound("no matching generic function " + expr->describe(), expr->at, findGenericCandidates(expr->name, types), types, true, true);
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
@@ -1401,15 +1417,7 @@ namespace yzg {
                             reportGenericInfer();
                         }
                     } else {
-						auto candidateFunctions = findCandidates(expr->name, types);
-						if (candidateFunctions.size() == 1) {
-							auto missFn = candidateFunctions.back();
-							auto problems = describeMismatchingFunction(missFn, types, false, true);
-							error("no matching function " + expr->describe() + "\n" + "" + problems, expr->at, CompilationError::function_not_found);
-						} else {
-							string candidates = program->describeCandidates(candidateFunctions);
-							error("no matching function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
-						}
+						reportFunctionNotFound("no matching function " + expr->describe(), expr->at, findCandidates(expr->name, types), types, false, true);
                     }
                 }
             } else if ( functions.size()>1 ) {
@@ -1551,6 +1559,10 @@ namespace yzg {
             visit(context);
             if ( log ) {
                 cout << "PASS " << pass << ":\n" << *this;
+				sort(errors.begin(), errors.end());
+				for (auto & err : errors) {
+					cout << reportError(nullptr, err.at.line, err.at.column, err.what, err.cerr);
+				}
                 cout.flush();
             }
             if ( context.finished() )

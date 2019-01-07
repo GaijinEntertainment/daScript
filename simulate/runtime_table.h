@@ -4,7 +4,7 @@
 #include "arraytype.h"
 #include "hash.h"
 
-namespace yzg
+namespace das
 {
     // TODO:
     //  -   return correct insert index of original value? is this at all possible?
@@ -199,7 +199,7 @@ namespace yzg
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(eval(context));                  \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef  EVAL_NODE
         SimNode * tabExpr;
         SimNode * keyExpr;
@@ -208,7 +208,7 @@ namespace yzg
     
     template <typename KeyType>
     struct SimNode_TableIndex : SimNode_Table {
-		YZG_PTR_NODE;
+		DAS_PTR_NODE;
         SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
 		virtual __m128 tabEval(Context & context, Table * tab, __m128 xkey) override {
 			assert(0 && "we should not even be here");
@@ -216,9 +216,9 @@ namespace yzg
 		}
 		__forceinline char * compute ( Context & context ) {
 			Table * tab = (Table *) tabExpr->evalPtr(context);
-			YZG_PTR_EXCEPTION_POINT;
+			DAS_PTR_EXCEPTION_POINT;
 			__m128 xkey = keyExpr->eval(context);
-			YZG_PTR_EXCEPTION_POINT;
+			DAS_PTR_EXCEPTION_POINT;
             KeyType key = cast<KeyType>::to(xkey);
             RobinHoodHash<KeyType> rhh(&context,valueTypeSize);
             auto at = rhh.reserve(*tab, key);
@@ -243,7 +243,7 @@ namespace yzg
     
     template <typename KeyType>
     struct SimNode_TableFind : SimNode_Table {
-		YZG_PTR_NODE;
+		DAS_PTR_NODE;
         SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
 		virtual __m128 tabEval(Context & context, Table * tab, __m128 xkey) override {
 			assert(0 && "we should not even be here");
@@ -251,9 +251,9 @@ namespace yzg
 		}
 		__forceinline char * compute(Context & context) {
 			Table * tab = (Table *)tabExpr->evalPtr(context);
-			YZG_PTR_EXCEPTION_POINT;
+			DAS_PTR_EXCEPTION_POINT;
 			__m128 xkey = keyExpr->eval(context);
-			YZG_PTR_EXCEPTION_POINT;
+			DAS_PTR_EXCEPTION_POINT;
 			KeyType key = cast<KeyType>::to(xkey);
 			auto at = RobinHoodHash<KeyType>(&context, valueTypeSize).find(*tab, key);
 			return at.second ? tab->data + at.first * valueTypeSize : nullptr;

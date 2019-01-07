@@ -35,7 +35,7 @@ double profileGetTimeSec ( uint64_t minT ) {
 
 #endif
 
-namespace yzg
+namespace das
 {
     float builtin_profile ( int32_t count, char * category, Block block, Context * context ) {
         count = max(count,1);

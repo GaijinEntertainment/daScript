@@ -2,7 +2,7 @@
 
 #include "runtime_array.h"
 
-namespace yzg
+namespace das
 {
     void array_lock ( Context & context, Array & arr ) {
         arr.lock ++;
@@ -47,9 +47,9 @@ namespace yzg
     
     __m128 SimNode_Array::eval ( Context & context ) {
 		Array * pA = (Array *) l->evalPtr(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         __m128 rr = r->eval(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         uint32_t idx = cast<uint32_t>::to(rr);
         return apply(context, pA, idx);
     }
@@ -62,16 +62,16 @@ namespace yzg
     
     __m128 SimNode_ArrayPush::eval ( Context & context ) {
         __m128 arr = l->eval(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         __m128 val = r->eval(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         auto * pA = cast<Array *>::to(arr);
         uint32_t idx = pA->size;
         array_resize(context, *pA, idx + 1, stride, false);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         if ( index ) {
             __m128 ati = index->eval(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             uint32_t i = cast<uint32_t>::to(ati);
             if ( i >= pA->size ) {
                 context.throw_error("insert index out of range");
@@ -114,10 +114,10 @@ namespace yzg
     
     bool GoodArrayIterator::first ( Context & context, IteratorContext & itc )  {
         __m128 ll = source->eval(context);
-        YZG_ITERATOR_EXCEPTION_POINT;
+        DAS_ITERATOR_EXCEPTION_POINT;
         auto pArray = cast<Array *>::to(ll);
         array_lock(context, *pArray);
-        YZG_ITERATOR_EXCEPTION_POINT;
+        DAS_ITERATOR_EXCEPTION_POINT;
         char * data    = pArray->data;
         itc.value      = cast<char *>::from(data);
         itc.array_end  = data + pArray->size * stride;
@@ -145,7 +145,7 @@ namespace yzg
     
     bool FixedArrayIterator::first ( Context & context, IteratorContext & itc )  {
         __m128 ll = source->eval(context);
-        YZG_ITERATOR_EXCEPTION_POINT;
+        DAS_ITERATOR_EXCEPTION_POINT;
         char * data = cast<char *>::to(ll);
         itc.value = cast<char *>::from(data);
         itc.fixed_array_end = data + size*stride;

@@ -2,7 +2,7 @@
 
 #include "simulate.h"
 
-namespace yzg
+namespace das
 {
     using namespace std;
 
@@ -64,7 +64,7 @@ namespace yzg
         SimNode_HashOfRef ( const LineInfo & at, SimNode * s, uint32_t sz ) : SimNode(at), subexpr(s), size(sz) {}
         virtual __m128 eval ( Context & context ) override {
             char * data = cast<char *>::to(subexpr->eval(context));
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             return cast<uint64_t>::from ( hash_function(data,size) );
         }
         SimNode *   subexpr;
@@ -75,7 +75,7 @@ namespace yzg
         SimNode_HashOfMixedType ( const LineInfo & at, SimNode * s, TypeInfo *t ) : SimNode(at), subexpr(s), typeInfo(t) {}
         virtual __m128 eval ( Context & context ) override {
             char * data = cast<char *>::to(subexpr->eval(context));
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             return cast<uint64_t>::from ( hash_function(data,typeInfo) );
         }
         SimNode *   subexpr;

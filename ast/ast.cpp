@@ -12,7 +12,7 @@ void yybegin(const char * str);
 int yyparse();
 int yylex_destroy();
 
-namespace yzg
+namespace das
 {
     // TypeDecl
     
@@ -2196,6 +2196,10 @@ namespace yzg
     bool Program::addStructure ( const StructurePtr & st ) {
         return thisModule->addStructure(st);
     }
+
+	FunctionPtr Program::findFunction(const string & mangledName) const {
+		return thisModule->findFunction(mangledName);
+	}
     
     bool Program::addFunction ( const FunctionPtr & fn ) {
         return thisModule->addFunction(fn);

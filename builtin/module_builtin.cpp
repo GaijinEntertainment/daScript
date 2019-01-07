@@ -5,7 +5,7 @@
 #include "ast_interop.h"
 #include "ast_policy_types.h"
 
-namespace yzg
+namespace das
 {
     // unary
     DEFINE_OP1_NUMERIC(Unp);
@@ -127,5 +127,5 @@ namespace yzg
     }
 }
 
-REGISTER_MODULE_IN_NAMESPACE(Module_BuiltIn,yzg);
+REGISTER_MODULE_IN_NAMESPACE(Module_BuiltIn,das);
 

@@ -2,7 +2,7 @@
 
 #include "simulate.h"
 
-namespace yzg
+namespace das
 {
     struct RangeIterator : Iterator {
         virtual bool first ( Context & context, IteratorContext & itc ) override;

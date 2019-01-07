@@ -3,7 +3,7 @@
 #include "runtime_string.h"
 #include "simulate.h"
 
-namespace yzg
+namespace das
 {
     // string operations
     
@@ -117,7 +117,7 @@ namespace yzg
     __m128 SimNode_StringBuilder::eval ( Context & context ) {
         __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
         evalArgs(context, argValues);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         stringstream ssw;
         for ( int32_t i = 0; i!=nArguments; ++i ) {
             // TODO: different output for strings?

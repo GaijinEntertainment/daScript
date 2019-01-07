@@ -2,7 +2,7 @@
 
 #include "ast.h"
 
-namespace yzg
+namespace das
 {
     using namespace std;
     

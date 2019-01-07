@@ -2,7 +2,7 @@
 
 #include "ast.h"
 
-namespace yzg
+namespace das
 {
     using namespace std;
     
@@ -70,25 +70,25 @@ namespace yzg
     struct ManagedVectorAnnotation : TypeAnnotation {
         typedef vector<OT> VectorType;
         struct SimNode_VectorLength : SimNode {
-            YZG_INT_NODE;
+            DAS_INT_NODE;
             SimNode_VectorLength ( const LineInfo & at, SimNode * rv )
                 : SimNode(at), value(rv) {}
             __forceinline int32_t compute ( Context & context ) {
                 auto pValue = (VectorType *) value->evalPtr(context);
-                YZG_INT_EXCEPTION_POINT;
+                DAS_INT_EXCEPTION_POINT;
                 return int32_t(pValue->size());
             }
             SimNode * value;
         };
         struct SimNode_AtVector : SimNode_At {
-            YZG_PTR_NODE;
+            DAS_PTR_NODE;
             SimNode_AtVector ( const LineInfo & at, SimNode * rv, SimNode * idx )
                 : SimNode_At(at, rv, idx, 0, 0) {}
             __forceinline char * compute ( Context & context ) {
                 auto pValue = (VectorType *) value->evalPtr(context);
-                YZG_PTR_EXCEPTION_POINT;
+                DAS_PTR_EXCEPTION_POINT;
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
-                YZG_PTR_EXCEPTION_POINT;
+                DAS_PTR_EXCEPTION_POINT;
                 if ( idx >= pValue->size() ) {
                     context.throw_error("index out of range");
                     return nullptr;
@@ -100,9 +100,9 @@ namespace yzg
         struct VectorIterator : Iterator {
             virtual bool first ( Context & context, IteratorContext & itc ) override {
                 __m128 ll = source->eval(context);
-                YZG_ITERATOR_EXCEPTION_POINT;
+                DAS_ITERATOR_EXCEPTION_POINT;
                 VectorType * pArray = cast<VectorType *>::to(ll);
-                YZG_ITERATOR_EXCEPTION_POINT;
+                DAS_ITERATOR_EXCEPTION_POINT;
                 char * data    = (char *) pArray->data();
                 uint32_t size = (uint32_t) pArray->size();
                 itc.value      = cast<char *>::from(data);

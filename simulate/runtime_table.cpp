@@ -2,7 +2,7 @@
 
 #include "runtime_table.h"
 
-namespace yzg
+namespace das
 {
     void table_lock ( Context & context, Array & arr ) {
         arr.lock ++;
@@ -22,9 +22,9 @@ namespace yzg
     
     __m128 SimNode_Table::eval ( Context & context ) {
 		Table * tab = (Table *)tabExpr->evalPtr(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         __m128 xkey = keyExpr->eval(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         return tabEval ( context, tab, xkey );
     }
 
@@ -39,10 +39,10 @@ namespace yzg
     
     bool TableIterator::first ( Context & context, IteratorContext & itc ) {
         __m128 ll = source->eval(context);
-        YZG_ITERATOR_EXCEPTION_POINT;
+        DAS_ITERATOR_EXCEPTION_POINT;
         auto pTable = cast<Table *>::to(ll);
         table_lock(context, *pTable);
-        YZG_ITERATOR_EXCEPTION_POINT;
+        DAS_ITERATOR_EXCEPTION_POINT;
         size_t index = nextValid(pTable, 0);
         char * data    = getData(pTable);
         itc.value      = cast<char *>::from(data + index * stride);

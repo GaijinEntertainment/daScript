@@ -2,7 +2,7 @@
 
 #include "ast.h"
 
-namespace yzg {
+namespace das {
     
     void OptVisitor::reportFolding() {
         anyFolding = true;

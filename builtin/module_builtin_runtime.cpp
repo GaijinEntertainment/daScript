@@ -8,7 +8,7 @@
 #include "runtime_table.h"
 #include "runtime_profile.h"
 
-namespace yzg
+namespace das
 {
     // core functions
     

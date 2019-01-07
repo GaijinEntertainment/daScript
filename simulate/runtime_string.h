@@ -4,7 +4,7 @@
 #include "compilation_errors.h"
 #include "sim_policy.h"
 
-namespace yzg
+namespace das
 {
     extern const char * rts_null;
     

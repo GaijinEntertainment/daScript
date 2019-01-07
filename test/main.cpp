@@ -9,7 +9,7 @@
 #endif
 
 using namespace std;
-using namespace yzg;
+using namespace das;
 
 bool g_reportCompilationFailErrors = false;
 
@@ -167,7 +167,7 @@ int main(int argc, const char * argv[]) {
     Module::Shutdown();
     return 0;
 #endif
-#if 1 // Debug this one test
+#if 0 // Debug this one test
     unit_test(TEST_PATH "test/hello_world.das");
     Module::Shutdown();
     return 0;
