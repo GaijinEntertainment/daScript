@@ -13,3 +13,4 @@ def test
 	args(1,2.0,"3")
 	madd(1,2,3)
 	return true
+

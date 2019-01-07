@@ -1409,7 +1409,7 @@ namespace das {
 						reportFunctionNotFound("no matching generic function " + expr->describe(), expr->at, candidates, types, true, true);
                     }
                 } else if ( generics.size()>0 ) {
-					reportFunctionNotFound("no matching generic function " + expr->describe(), expr->at, findGenericCandidates(expr->name, types), types, true, true);
+					reportFunctionNotFound("too many matching generic functions " + expr->describe(), expr->at, findGenericCandidates(expr->name, types), types, true, true);
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
