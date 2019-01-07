@@ -7,14 +7,14 @@
 #include "debug_info.h"
 #include "sim_policy.h"
 
-namespace yzg
+namespace das
 {
-    #ifndef YZG_ENABLE_STACK_WALK
-    #define YZG_ENABLE_STACK_WALK   1
+    #ifndef DAS_ENABLE_STACK_WALK
+    #define DAS_ENABLE_STACK_WALK   1
     #endif
     
-    #ifndef YZG_ENABLE_EXCEPTIONS
-    #define YZG_ENABLE_EXCEPTIONS   1
+    #ifndef DAS_ENABLE_EXCEPTIONS
+    #define DAS_ENABLE_EXCEPTIONS   1
     #endif
     
     #define MAX_FOR_ITERATORS   16
@@ -56,7 +56,7 @@ namespace yzg
     struct Prologue {
         __m128      result;
         __m128 *    arguments;
-#if YZG_ENABLE_STACK_WALK
+#if DAS_ENABLE_STACK_WALK
         FuncInfo *  info;
         int32_t     line;
 #endif
@@ -165,7 +165,7 @@ namespace yzg
         __forceinline void throw_error ( const char * message ) {
             exception = message;
             stopFlags |= EvalFlags::stopForThrow;
-            #if !YZG_ENABLE_EXCEPTIONS
+            #if !DAS_ENABLE_EXCEPTIONS
                 throw runtime_error(message ? message : "");
             #endif
         }
@@ -207,7 +207,7 @@ namespace yzg
 			Prologue * pp = (Prologue *)stackTop;
 			pp->result = _mm_setzero_ps();
 			pp->arguments = args;
-#if YZG_ENABLE_STACK_WALK
+#if DAS_ENABLE_STACK_WALK
 			pp->info = fn.debug;
 			pp->line = line;
 #endif
@@ -277,29 +277,29 @@ namespace yzg
         uint32_t stopFlags = 0;
     };
     
-#if YZG_ENABLE_EXCEPTIONS
-    #define YZG_EXCEPTION_POINT \
+#if DAS_ENABLE_EXCEPTIONS
+    #define DAS_EXCEPTION_POINT \
         { if ( context.stopFlags ) return _mm_setzero_ps(); }
-    #define YZG_PTR_EXCEPTION_POINT \
+    #define DAS_PTR_EXCEPTION_POINT \
         { if ( context.stopFlags ) return nullptr; }
-    #define YZG_ITERATOR_EXCEPTION_POINT \
+    #define DAS_ITERATOR_EXCEPTION_POINT \
         { if ( context.stopFlags ) return false; }
-    #define YZG_BOOL_EXCEPTION_POINT \
+    #define DAS_BOOL_EXCEPTION_POINT \
         { if ( context.stopFlags ) return false; }
-    #define YZG_INT_EXCEPTION_POINT \
+    #define DAS_INT_EXCEPTION_POINT \
         { if ( context.stopFlags ) return 0; }
-    #define YZG_NODE_EXCEPTION_POINT(CTYPE) \
+    #define DAS_NODE_EXCEPTION_POINT(CTYPE) \
         { if ( context.stopFlags ) return (CTYPE) 0; }
 #else
-    #define YZG_EXCEPTION_POINT
-    #define YZG_PTR_EXCEPTION_POINT
-    #define YZG_ITERATOR_EXCEPTION_POINT
-    #define YZG_BOOL_EXCEPTION_POINT
-    #define YZG_INT_EXCEPTION_POINT
-    #define YZG_NODE_EXCEPTION_POINT(CTYPE)
+    #define DAS_EXCEPTION_POINT
+    #define DAS_PTR_EXCEPTION_POINT
+    #define DAS_ITERATOR_EXCEPTION_POINT
+    #define DAS_BOOL_EXCEPTION_POINT
+    #define DAS_INT_EXCEPTION_POINT
+    #define DAS_NODE_EXCEPTION_POINT(CTYPE)
 #endif
     
-#define YZG_EVAL_NODE               \
+#define DAS_EVAL_NODE               \
     EVAL_NODE(Ptr,char *);          \
     EVAL_NODE(Int,int32_t);         \
     EVAL_NODE(UInt,uint32_t);       \
@@ -308,7 +308,7 @@ namespace yzg
     EVAL_NODE(Float,float);         \
     EVAL_NODE(Bool,bool);
     
-#define YZG_NODE(TYPE,CTYPE)                                    \
+#define DAS_NODE(TYPE,CTYPE)                                    \
     virtual __m128 eval ( Context & context ) override {        \
         return cast<CTYPE>::from(compute(context));             \
     }                                                           \
@@ -316,9 +316,9 @@ namespace yzg
         return compute(context);                                \
     }
     
-#define YZG_PTR_NODE    YZG_NODE(Ptr,char *)
-#define YZG_BOOL_NODE   YZG_NODE(Bool,bool)
-#define YZG_INT_NODE    YZG_NODE(Int,int32_t)
+#define DAS_PTR_NODE    DAS_NODE(Ptr,char *)
+#define DAS_BOOL_NODE   DAS_NODE(Bool,bool)
+#define DAS_INT_NODE    DAS_NODE(Int,int32_t)
     
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
@@ -339,7 +339,7 @@ namespace yzg
     
     // FIELD .
     struct SimNode_FieldDeref : SimNode {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_FieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode(at), value(rv), offset(of) {}
         __forceinline char * compute ( Context & context ) {
             return value->evalPtr(context) + offset;
@@ -353,7 +353,7 @@ namespace yzg
         SimNode_FieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
         virtual __m128 eval ( Context & context ) override {
             auto prv = value->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             TT * pR = (TT *)( prv + offset );
             return cast<TT>::from(*pR);
 
@@ -361,20 +361,20 @@ namespace yzg
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             auto prv = value->evalPtr(context);                     \
-            YZG_NODE_EXCEPTION_POINT(CTYPE);                        \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                        \
             return * (CTYPE *)( prv + offset );                     \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
     };
 
 	// PTR FIELD .
 	struct SimNode_PtrFieldDeref : SimNode {
-		YZG_PTR_NODE;
+		DAS_PTR_NODE;
 		SimNode_PtrFieldDeref(const LineInfo & at, SimNode * rv, uint32_t of) : SimNode(at), value(rv), offset(of) {}
 		__forceinline char * compute(Context & context) {
 			auto prv = value->evalPtr(context);
-			YZG_PTR_EXCEPTION_POINT;
+			DAS_PTR_EXCEPTION_POINT;
 			if (prv) {
 				return prv + offset;
 			}
@@ -392,7 +392,7 @@ namespace yzg
 		SimNode_PtrFieldDerefR2V(const LineInfo & at, SimNode * rv, uint32_t of) : SimNode_PtrFieldDeref(at, rv, of) {}
 		virtual __m128 eval(Context & context) override {
 			auto prv = value->evalPtr(context);
-			YZG_EXCEPTION_POINT;
+			DAS_EXCEPTION_POINT;
 			if (prv) {
 				TT * pR = (TT *)(prv + offset);
 				return cast<TT>::from(*pR);
@@ -404,7 +404,7 @@ namespace yzg
 		}
 		virtual char * evalPtr(Context & context) override {
 			auto prv = value->evalPtr(context);
-			YZG_PTR_EXCEPTION_POINT;
+			DAS_PTR_EXCEPTION_POINT;
 			if (prv) {
 				return *(char **)(prv + offset);
 			}
@@ -417,36 +417,36 @@ namespace yzg
     
     // FIELD ?.
     struct SimNode_SafeFieldDeref : SimNode_FieldDeref {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_SafeFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
         __forceinline char * compute ( Context & context ) {
             auto prv = value->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
+            DAS_PTR_EXCEPTION_POINT;
 			return prv ? prv + offset : nullptr;
         }
     };
     
     // FIELD ?.->
     struct SimNode_SafeFieldDerefPtr : SimNode_FieldDeref {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_SafeFieldDerefPtr ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
         __forceinline char * compute ( Context & context ) {
             char ** prv = (char **) value->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
+            DAS_PTR_EXCEPTION_POINT;
 			return prv ? *(prv + offset) : nullptr;
         }
     };
     
     // AT (INDEX)
     struct SimNode_At : SimNode {
-		YZG_PTR_NODE;
+		DAS_PTR_NODE;
         SimNode_At ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t rng )
             : SimNode(at), value(rv), index(idx), stride(strd), range(rng) {}
 		__forceinline char * compute (Context & context) {
 			auto pValue = value->evalPtr(context);
-			YZG_PTR_EXCEPTION_POINT;
+			DAS_PTR_EXCEPTION_POINT;
 			uint32_t idx = cast<uint32_t>::to(index->eval(context));
-			YZG_PTR_EXCEPTION_POINT;
+			DAS_PTR_EXCEPTION_POINT;
 			if (idx >= range) {
 				context.throw_error("index out of range");
 				return nullptr;
@@ -466,7 +466,7 @@ namespace yzg
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(eval(context));                  \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef  EVAL_NODE
         SimNode ** arguments;
         int32_t  fnIndex;
@@ -481,10 +481,10 @@ namespace yzg
         virtual CTYPE eval##TYPE ( Context & context ) override {                       \
             __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));       \
                 evalArgs(context, argValues);                                           \
-                YZG_NODE_EXCEPTION_POINT(CTYPE);                                        \
+                DAS_NODE_EXCEPTION_POINT(CTYPE);                                        \
                 return cast<CTYPE>::to(context.call(fnIndex, argValues, debug.line));   \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef  EVAL_NODE
     };
     
@@ -557,7 +557,7 @@ namespace yzg
     
     // LOCAL VARIABLE "GET"
     struct SimNode_GetLocal : SimNode {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_GetLocal(const LineInfo & at, uint32_t sp) : SimNode(at), stackTop(sp) {}
         __forceinline char * compute ( Context & context ) {
             return context.stackTop + stackTop;
@@ -576,13 +576,13 @@ namespace yzg
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return *(CTYPE *)(context.stackTop + stackTop);         \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
     };
     
     // WHEN LOCAL VARIABLE STORES REFERENCE
     struct SimNode_GetLocalRef : SimNode_GetLocal {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp) {}
         __forceinline char * compute ( Context & context ) {
             return *(char **)(context.stackTop + stackTop);
@@ -600,7 +600,7 @@ namespace yzg
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return **(CTYPE **)(context.stackTop + stackTop);       \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
     };
     
@@ -624,7 +624,7 @@ namespace yzg
             : SimNode(at), r(rv), stackTop(sp) {}
         virtual __m128 eval ( Context & context ) override {
             auto pr = (TT *) r->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             TT * pl = (TT *) ( context.stackTop + stackTop );
             *pl = *pr;
             return _mm_setzero_ps();
@@ -639,7 +639,7 @@ namespace yzg
         : SimNode(at), r(rv), stackTop(sp) {}
         virtual __m128 eval ( Context & context ) override {
             __m128 rres = r->eval(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             TT * pl = (TT *) ( context.stackTop + stackTop );
             *pl = cast<TT>::to(rres);
             return _mm_setzero_ps();
@@ -669,13 +669,13 @@ namespace yzg
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(context.abiArguments()[index]);  \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
         int32_t index;
     };
 
 	struct SimNode_GetArgumentRef : SimNode_GetArgument {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
 		SimNode_GetArgumentRef(const LineInfo & at, int32_t i) : SimNode_GetArgument(at,i) {}
 		__forceinline char * compute(Context & context) {
 			return (char *)(&context.abiArguments()[index]);
@@ -693,7 +693,7 @@ namespace yzg
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
             return * cast<CTYPE *>::to(context.abiArguments()[index]);      \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
     };
     
@@ -710,7 +710,7 @@ namespace yzg
             __m128 * args = *((__m128 **)(context.stackTop + stackTop));    \
             return cast<CTYPE>::to(args[index]);                            \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
         int32_t     index;
         uint32_t    stackTop;
@@ -730,12 +730,12 @@ namespace yzg
             __m128 * args = *((__m128 **)(context.stackTop + stackTop));    \
             return * cast<CTYPE *>::to(args[index]);                        \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
     };
     
     struct SimNode_GetBlockArgumentRef : SimNode_GetBlockArgument {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_GetBlockArgumentRef(const LineInfo & at, int32_t i, uint32_t sp)
             : SimNode_GetBlockArgument(at,i,sp) {}
         __forceinline char * compute(Context & context) {
@@ -767,7 +767,7 @@ namespace yzg
         virtual CTYPE eval##TYPE ( Context & context ) override {               \
             return *cast<CTYPE *>::to(context.globalVariables[index].value);    \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
     };
     
@@ -804,27 +804,27 @@ namespace yzg
         SimNode_Ref2Value ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual __m128 eval ( Context & context ) override {
             TT * pR = (TT *) subexpr->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE (Context & context) override {     \
 			auto pR = (CTYPE *)subexpr->evalPtr(context);           \
-            YZG_NODE_EXCEPTION_POINT(CTYPE);                        \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                        \
             return *pR;                                             \
 		}
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
         SimNode * subexpr;
     };
     
     // POINTER TO REFERENCE (CAST)
     struct SimNode_Ptr2Ref : SimNode {      // ptr -> &value
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         __forceinline char * compute ( Context & context ) {
             auto ptr = subexpr->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
+            DAS_PTR_EXCEPTION_POINT;
             if ( !ptr ) {
                 context.throw_error("dereferencing null pointer");
             }
@@ -839,16 +839,16 @@ namespace yzg
         SimNode_NullCoalescing ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
         virtual __m128 eval ( Context & context ) override {
             TT * pR = (TT *) subexpr->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             return pR ? cast<TT>::from(*pR) : value->eval(context);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             auto pR = (CTYPE *) subexpr->evalPtr(context);          \
-            YZG_NODE_EXCEPTION_POINT(CTYPE);                        \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                        \
             return pR ? *pR : value->eval##TYPE(context);           \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
 
         SimNode * value;
@@ -856,11 +856,11 @@ namespace yzg
     
     // let(a:int?) x = a && default_a
     struct SimNode_NullCoalescingRef : SimNode_Ptr2Ref {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_NullCoalescingRef ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
         __forceinline char * compute ( Context & context ) {
             auto ptr = subexpr->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
+            DAS_PTR_EXCEPTION_POINT;
             return ptr ? ptr : value->evalPtr(context);
         }
         SimNode * value;
@@ -883,7 +883,7 @@ namespace yzg
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(value);                          \
         }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
         __m128 value;
     };
@@ -894,9 +894,9 @@ namespace yzg
         SimNode_CopyValue(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
         virtual __m128 eval ( Context & context ) override {
             TT * pl = (TT *) l->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             TT * pr = (TT *) &rr;
             *pl = *pr;
             return _mm_setzero_ps();
@@ -919,9 +919,9 @@ namespace yzg
 			: SimNode(at), l(ll), r(rr) {};
         virtual __m128 eval ( Context & context ) override {
             TT * pl = (TT *) l->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             TT * pr = (TT *) r->evalPtr(context);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             *pl = *pr;
             return _mm_setzero_ps();
         }
@@ -968,7 +968,7 @@ namespace yzg
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
                 bool cmp = cond->evalBool(context);                 \
-                YZG_NODE_EXCEPTION_POINT(CTYPE);                    \
+                DAS_NODE_EXCEPTION_POINT(CTYPE);                    \
                 if ( cmp ) {                                        \
                     return if_true->eval##TYPE(context);            \
                 } else if ( if_false ) {                            \
@@ -977,7 +977,7 @@ namespace yzg
                     return (CTYPE) 0;                               \
                 }                                                   \
             }
-        YZG_EVAL_NODE;
+        DAS_EVAL_NODE;
 #undef EVAL_NODE
         SimNode * cond, * if_true, * if_false;
     };
@@ -1045,7 +1045,7 @@ namespace yzg
             Iterator * sources[total] = {};
             for ( int t=0; t!=total; ++t ) {
                 __m128 ll = source_iterators[t]->eval(context);
-                YZG_EXCEPTION_POINT;
+                DAS_EXCEPTION_POINT;
                 sources[t] = cast<Iterator *>::to(ll);
             }
             IteratorContext ph[total];
@@ -1086,26 +1086,26 @@ namespace yzg
     };
     
     struct Sim_BoolAnd : SimNode_Op2 {
-        YZG_BOOL_NODE;
+        DAS_BOOL_NODE;
         Sim_BoolAnd ( const LineInfo & at ) : SimNode_Op2(at) {}
         __forceinline bool compute ( Context & context ) {
             if ( !l->evalBool(context) ) {      // if not left, then false
                 return false;
             } else {
-                YZG_BOOL_EXCEPTION_POINT;
+                DAS_BOOL_EXCEPTION_POINT;
                 return r->evalBool(context);    // if left, then right
             }
         }
     };
     
     struct Sim_BoolOr : SimNode_Op2 {
-        YZG_BOOL_NODE;
+        DAS_BOOL_NODE;
         Sim_BoolOr ( const LineInfo & at ) : SimNode_Op2(at) {}
         __forceinline bool compute ( Context & context )  {
             if ( l->evalBool(context) ) {       // if left, then true
                 return true;
             } else {
-                YZG_BOOL_EXCEPTION_POINT;
+                DAS_BOOL_EXCEPTION_POINT;
                 return r->evalBool(context);    // if not left, then right
             }
         }
@@ -1116,11 +1116,11 @@ namespace yzg
 #define IMPLEMENT_OP1_POLICY(CALL,TYPE,CTYPE)                           \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
-        YZG_NODE(TYPE,CTYPE);                                           \
+        DAS_NODE(TYPE,CTYPE);                                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto val = x->eval##TYPE(context);                          \
-            YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
     };
@@ -1128,11 +1128,11 @@ namespace yzg
 #define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
-        YZG_PTR_NODE;                                                   \
+        DAS_PTR_NODE;                                                   \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         __forceinline char * compute ( Context & context ) {            \
             auto val = (CTYPE *) x->evalPtr(context);                   \
-            YZG_PTR_EXCEPTION_POINT;                                    \
+            DAS_PTR_EXCEPTION_POINT;                                    \
             SimPolicy<CTYPE>::CALL(*val,context);                       \
             return (char *) val;                                        \
         }                                                               \
@@ -1141,11 +1141,11 @@ namespace yzg
 #define IMPLEMENT_OP1_POSTSET_POLICY(CALL,TYPE,CTYPE)                   \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
-        YZG_NODE(TYPE,CTYPE);                                           \
+        DAS_NODE(TYPE,CTYPE);                                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto val = (CTYPE *) x->evalPtr(context);                   \
-            YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             return SimPolicy<CTYPE>::CALL(*val,context);                \
         }                                                               \
     };
@@ -1156,7 +1156,7 @@ namespace yzg
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         virtual __m128 eval ( Context & context ) override {            \
             auto val = x->eval(context);                                \
-            YZG_EXCEPTION_POINT;                                        \
+            DAS_EXCEPTION_POINT;                                        \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
     };
@@ -1194,13 +1194,13 @@ namespace yzg
 #define IMPLEMENT_OP2_POLICY(CALL,TYPE,CTYPE)                           \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
-        YZG_NODE(TYPE,CTYPE);                                           \
+        DAS_NODE(TYPE,CTYPE);                                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto lv = l->eval##TYPE(context);                           \
-            YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             auto rv = r->eval##TYPE(context);                           \
-            YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
@@ -1208,13 +1208,13 @@ namespace yzg
 #define IMPLEMENT_OP2_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
-        YZG_NODE(TYPE,CTYPE);                                           \
+        DAS_NODE(TYPE,CTYPE);                                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto lv = (CTYPE *) l->evalPtr(context);                    \
-            YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             auto rv = r->eval##TYPE(context);                           \
-            YZG_NODE_EXCEPTION_POINT(CTYPE);                            \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             SimPolicy<CTYPE>::CALL(*lv,rv,context);                     \
             return CTYPE();                                             \
         }                                                               \
@@ -1223,13 +1223,13 @@ namespace yzg
 #define IMPLEMENT_OP2_BOOL_POLICY(CALL,TYPE,CTYPE)                      \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
-        YZG_BOOL_NODE;                                                  \
+        DAS_BOOL_NODE;                                                  \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         __forceinline bool compute ( Context & context ) {              \
             auto lv = l->eval##TYPE(context);                           \
-            YZG_BOOL_EXCEPTION_POINT;                                   \
+            DAS_BOOL_EXCEPTION_POINT;                                   \
             auto rv = r->eval##TYPE(context);                           \
-            YZG_BOOL_EXCEPTION_POINT;                                   \
+            DAS_BOOL_EXCEPTION_POINT;                                   \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
@@ -1240,9 +1240,9 @@ namespace yzg
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         virtual __m128 eval ( Context & context ) override {            \
             auto lv = l->eval(context);                                 \
-            YZG_EXCEPTION_POINT;                                        \
+            DAS_EXCEPTION_POINT;                                        \
             auto rv = r->eval(context);                                 \
-            YZG_EXCEPTION_POINT;                                        \
+            DAS_EXCEPTION_POINT;                                        \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
@@ -1253,9 +1253,9 @@ namespace yzg
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         virtual __m128 eval ( Context & context ) override {            \
             auto lv = l->evalPtr(context);                              \
-            YZG_EXCEPTION_POINT;                                        \
+            DAS_EXCEPTION_POINT;                                        \
             auto rv = r->eval(context);                                 \
-            YZG_EXCEPTION_POINT;                                        \
+            DAS_EXCEPTION_POINT;                                        \
             SimPolicy<CTYPE>::CALL(lv,rv,context);                      \
             return _mm_setzero_ps();                                    \
         }                                                               \
@@ -1264,13 +1264,13 @@ namespace yzg
 #define IMPLEMENT_OP2_EVAL_BOOL_POLICY(CALL,CTYPE)                      \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
-        YZG_BOOL_NODE;                                                  \
+        DAS_BOOL_NODE;                                                  \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         __forceinline bool compute ( Context & context ) {              \
             auto lv = l->eval(context);                                 \
-            YZG_BOOL_EXCEPTION_POINT;                                   \
+            DAS_BOOL_EXCEPTION_POINT;                                   \
             auto rv = r->eval(context);                                 \
-            YZG_BOOL_EXCEPTION_POINT;                                   \
+            DAS_BOOL_EXCEPTION_POINT;                                   \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };

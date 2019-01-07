@@ -5,7 +5,7 @@
 #include "ast_interop.h"
 #include "ast_policy_types.h"
 
-namespace yzg
+namespace das
 {
     template <typename TT, int mask>
     struct SimPolicy_Vec {

@@ -2,7 +2,7 @@
 
 #include "ast.h"
 
-namespace yzg {
+namespace das {
     
     class AllocateStack : public Visitor {
     public:

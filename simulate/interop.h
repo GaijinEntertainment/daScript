@@ -3,7 +3,7 @@
 #include "simulate.h"
 #include "function_traits.h"
 
-namespace yzg
+namespace das
 {
     template <typename TT>
     struct cast_arg {
@@ -47,7 +47,7 @@ namespace yzg
             using Indices = make_index_sequence<nargs>;
 			__m128 * args = (__m128 *)(alloca(nArguments*sizeof(__m128)));
 			evalArgs(context, args);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             // PUSH
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
             if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
@@ -57,7 +57,7 @@ namespace yzg
             char * pushStack = context.stackTop;
             char * pushInvokeStack = context.invokeStackTop;
 			context.invokeStackTop = nullptr;
-		#if YZG_ENABLE_STACK_WALK
+		#if DAS_ENABLE_STACK_WALK
             context.stackTop = top - sizeof(Prologue);
             assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
             // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
@@ -87,7 +87,7 @@ namespace yzg
         virtual __m128 eval ( Context & context ) override {
 			__m128 * args = (__m128 *)(alloca(nArguments * sizeof(__m128)));
             evalArgs(context, args);
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             // PUSH
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
             if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
@@ -97,7 +97,7 @@ namespace yzg
             char * pushStack = context.stackTop;
             char * pushInvokeStack = context.invokeStackTop;
 			context.invokeStackTop = nullptr;
-#if YZG_ENABLE_STACK_WALK
+#if DAS_ENABLE_STACK_WALK
             context.stackTop = top - sizeof(Prologue);
             assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
             // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;

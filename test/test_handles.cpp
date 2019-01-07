@@ -6,7 +6,7 @@
 #include "interop.h"
 
 using namespace std;
-using namespace yzg;
+using namespace das;
 
 struct TestObjectFoo {
     int fooData;
@@ -78,11 +78,11 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     
     // FIELD .
     struct SimNode_IntFieldDeref : SimNode {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_IntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode(at), value(rv), name(n) {}
         char * compute ( Context & context ) {
             __m128 rv = value->eval(context);
-            YZG_PTR_EXCEPTION_POINT;
+            DAS_PTR_EXCEPTION_POINT;
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
                 auto it = prv->fields.find(name);
                 if ( it != prv->fields.end() ) {
@@ -102,11 +102,11 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     
     // FIELD ?.
     struct SimNode_SafeIntFieldDeref : SimNode_IntFieldDeref {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_SafeIntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode_IntFieldDeref(at,rv,n) {}
         __forceinline char * compute ( Context & context ) {
             __m128 rv = value->eval(context);
-            YZG_PTR_EXCEPTION_POINT;
+            DAS_PTR_EXCEPTION_POINT;
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
                 auto it = prv->fields.find(name);
                 if ( it != prv->fields.end() ) {

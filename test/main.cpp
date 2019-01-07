@@ -9,7 +9,7 @@
 #endif
 
 using namespace std;
-using namespace yzg;
+using namespace das;
 
 bool g_reportCompilationFailErrors = false;
 

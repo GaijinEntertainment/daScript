@@ -2,7 +2,7 @@
 
 #include "ast.h"
 
-namespace yzg {
+namespace das {
     
     // auto or generic type conversion
     

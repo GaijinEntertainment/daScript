@@ -7,7 +7,7 @@
 #include "ast_handle.h"
 
 using namespace std;
-using namespace yzg;
+using namespace das;
 
 #ifndef _MSC_VER
 __attribute__((noinline)) 

@@ -2,7 +2,7 @@
 
 #include "ast.h"
 
-namespace yzg {
+namespace das {
     class Module_BuiltIn : public Module {
     public:
         Module_BuiltIn();

@@ -6,7 +6,7 @@
 
 #include <ctime>
 
-namespace yzg {
+namespace das {
     
     int64_t builtin_clock() {
         return time(nullptr);

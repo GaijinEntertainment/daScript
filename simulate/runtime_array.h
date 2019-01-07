@@ -3,7 +3,7 @@
 #include "simulate.h"
 #include "arraytype.h"
 
-namespace yzg
+namespace das
 {
     void array_lock ( Context & context, Array & arr );
     void array_unlock ( Context & context, Array & arr );
@@ -21,7 +21,7 @@ namespace yzg
     
     // AT (INDEX)
     struct SimNode_ArrayAt : SimNode_Array {
-        YZG_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_ArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
         virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override {
             assert(0 && "we should not even be here");
@@ -29,9 +29,9 @@ namespace yzg
         }
         __forceinline char * compute ( Context & context ) {
             Array * pA = (Array *) l->evalPtr(context);
-            YZG_PTR_EXCEPTION_POINT;
+            DAS_PTR_EXCEPTION_POINT;
             __m128 rr = r->eval(context);
-            YZG_PTR_EXCEPTION_POINT;
+            DAS_PTR_EXCEPTION_POINT;
             uint32_t idx = cast<uint32_t>::to(rr);
             if ( idx >= pA->size ) {
                 context.throw_error("index out of range");
@@ -129,9 +129,9 @@ namespace yzg
             char * __restrict ph[total];
             for ( int t=0; t!=total; ++t ) {
                 pha[t] = cast<Array *>::to(sources[t]->eval(context));
-                YZG_EXCEPTION_POINT;
+                DAS_EXCEPTION_POINT;
                 array_lock(context, *pha[t]);
-                YZG_EXCEPTION_POINT;
+                DAS_EXCEPTION_POINT;
                 ph[t]  = pha[t]->data;
             }
             char ** __restrict pi[total];
@@ -149,7 +149,7 @@ namespace yzg
             }
             for ( int t=0; t!=total; ++t ) {
                 array_unlock(context, *pha[t]);
-                YZG_EXCEPTION_POINT;
+                DAS_EXCEPTION_POINT;
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return _mm_setzero_ps();
@@ -164,7 +164,7 @@ namespace yzg
             char * __restrict ph[total];
             for ( int t=0; t!=total; ++t ) {
                 ph[t] = cast<char *>::to(sources[t]->eval(context));
-                YZG_EXCEPTION_POINT;
+                DAS_EXCEPTION_POINT;
             }
             char ** __restrict pi[total];
             for ( int t=0; t!=total; ++t ) {

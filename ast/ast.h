@@ -11,7 +11,7 @@
 #include "runtime_table.h"
 #include "runtime_array.h"
 
-namespace yzg
+namespace das
 {
     using namespace std;
     
@@ -1071,19 +1071,19 @@ namespace yzg
     };
     
     #define REGISTER_MODULE(ClassName) \
-        yzg::Module * register_##ClassName () { \
+        das::Module * register_##ClassName () { \
             static ClassName * module_##ClassName = new ClassName(); \
             return module_##ClassName; \
         }
     
     #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
-        yzg::Module * register_##ClassName () { \
+        das::Module * register_##ClassName () { \
             static Namespace::ClassName * module_##ClassName = new Namespace::ClassName(); \
             return module_##ClassName; \
         }
     
     #define NEED_MODULE(ClassName) \
-        extern yzg::Module * register_##ClassName (); \
+        extern das::Module * register_##ClassName (); \
         Module::Karma += intptr_t(register_##ClassName());
     
     class ModuleLibrary {

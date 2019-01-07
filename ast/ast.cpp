@@ -12,7 +12,7 @@ void yybegin(const char * str);
 int yyparse();
 int yylex_destroy();
 
-namespace yzg
+namespace das
 {
     // TypeDecl
     

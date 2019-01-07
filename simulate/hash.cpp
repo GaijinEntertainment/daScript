@@ -3,7 +3,7 @@
 #include "hash.h"
 #include "runtime_string.h"
 
-namespace yzg
+namespace das
 {
 	// ideas from http://isthe.com/chongo/tech/comp/fnv/
 	uint64_t hash_block(uint8_t * block, size_t size) {

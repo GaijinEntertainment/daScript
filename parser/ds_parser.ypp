@@ -2,10 +2,10 @@
     #include "platform.h"
     #include "ast.h"
     
-    using namespace yzg;
+    using namespace das;
     using namespace std;
     
-    namespace yzg { extern ProgramPtr g_Program; }
+    namespace das { extern ProgramPtr g_Program; }
     
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
@@ -31,8 +31,8 @@
     #include "debug_info.h"
     #include "compilation_errors.h"
     
-    void yyerror (const std::string & error, yzg::CompilationError cerr = yzg::CompilationError::syntax_error);
-    void yyerror (const std::string & error, const yzg::LineInfo & at, yzg::CompilationError cerr = yzg::CompilationError::unspecified);
+    void yyerror (const std::string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
+    void yyerror (const std::string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
     int yylex();
     void yybegin(const char * str);
 %}

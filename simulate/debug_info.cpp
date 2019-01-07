@@ -7,7 +7,7 @@
 #include "runtime_string.h"
 #include "arraytype.h"
 
-namespace yzg
+namespace das
 {
     Enum<Type> g_typeTable = {
         {   Type::autoinfer,    "auto"  },

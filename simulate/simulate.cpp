@@ -3,7 +3,7 @@
 #include "simulate.h"
 #include "runtime_string.h"
 
-namespace yzg
+namespace das
 {
     bool SimNode::evalBool ( Context & context ) {
         assert(0 && "we should never be here");
@@ -61,7 +61,7 @@ namespace yzg
     __m128 SimNode_Call::eval ( Context & context ) {
 		__m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
         evalArgs(context, argValues);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         return context.call(fnIndex, argValues, debug.line);
     }
     
@@ -70,7 +70,7 @@ namespace yzg
     __m128 SimNode_Invoke::eval ( Context & context )  {
         __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
         evalArgs(context, argValues);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         Block block = cast<Block>::to(argValues[0]);
         if ( nArguments>1 ) {
             return context.invoke(block, argValues + 1);
@@ -83,7 +83,7 @@ namespace yzg
     
     __m128 SimNode_Debug::eval ( Context & context ) {
         __m128 res = subexpr->eval(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         stringstream ssw;
         if ( message ) ssw << message << " ";
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger)
@@ -96,7 +96,7 @@ namespace yzg
     
     __m128 SimNode_Assert::eval ( Context & context ) {
         if ( !subexpr->evalBool(context) ) {
-            YZG_EXCEPTION_POINT;
+            DAS_EXCEPTION_POINT;
             string error_message = "assert failed";
             if ( message )
                 error_message = error_message + ", " + message;
@@ -111,7 +111,7 @@ namespace yzg
     // SimNode_TryCatch
     
     __m128 SimNode_TryCatch::eval ( Context & context ) {
-        #if YZG_ENABLE_EXCEPTIONS
+        #if DAS_ENABLE_EXCEPTIONS
             try_block->eval(context);
             if ( context.stopFlags & EvalFlags::stopForThrow ) {
                 context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
@@ -144,9 +144,9 @@ namespace yzg
     
     __m128 SimNode_CopyRefValue::eval ( Context & context ) {
         auto pl = l->evalPtr(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         auto pr = r->evalPtr(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         memcpy ( pl, pr, size );
         return _mm_setzero_ps();
     }
@@ -155,9 +155,9 @@ namespace yzg
     
     __m128 SimNode_MoveRefValue::eval ( Context & context ) {
         auto pl = l->evalPtr(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         auto pr = r->evalPtr(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         memcpy ( pl, pr, size );
         memset ( pr, 0, size );
         return _mm_setzero_ps();
@@ -188,7 +188,7 @@ namespace yzg
     __m128 SimNode_Let::eval ( Context & context ) {
         for ( int i = 0; i!=total && !context.stopFlags; ++i )
             list[i]->eval(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         return subexpr ? subexpr->eval(context) : _mm_setzero_ps();
     }
     
@@ -196,7 +196,7 @@ namespace yzg
     
     __m128 SimNode_IfThenElse::eval ( Context & context ) {
         bool cmp = cond->evalBool(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         if ( cmp ) {
             return if_true->eval(context);
         } else if ( if_false ) {
@@ -318,7 +318,7 @@ namespace yzg
         Prologue * pp = (Prologue *) stackTop;
         pp->result =        _mm_setzero_ps();
         pp->arguments =     args;
-#if YZG_ENABLE_STACK_WALK
+#if DAS_ENABLE_STACK_WALK
         pp->info =          fn.debug;
         pp->line =          line;
 #endif
@@ -370,7 +370,7 @@ namespace yzg
     
     string Context::getStackWalk( bool args ) {
         stringstream ssw;
-    #if YZG_ENABLE_STACK_WALK
+    #if DAS_ENABLE_STACK_WALK
         ssw << "\nCALL STACK (sp=" << (stack + stackSize - stackTop) << "):\n";
         char * sp = stackTop;
         while ( sp>=stackTop && sp <(stack+stackSize) ) {

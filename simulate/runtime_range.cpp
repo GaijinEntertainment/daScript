@@ -2,11 +2,11 @@
 
 #include "runtime_range.h"
 
-namespace yzg
+namespace das
 {
     bool RangeIterator::first ( Context & context, IteratorContext & itc ) {
         __m128 ll = subexpr->eval(context);
-        YZG_ITERATOR_EXCEPTION_POINT;
+        DAS_ITERATOR_EXCEPTION_POINT;
         range r = cast<range>::to(ll);  // does not matter if its range or urange, hence only one type
         itc.value    = cast<int32_t>::from(r.from);
         itc.range_to = r.to;
@@ -28,7 +28,7 @@ namespace yzg
     
     __m128 SimNode_ForRange::eval ( Context & context ) {
         __m128 ll = sources[0]->eval(context);
-        YZG_EXCEPTION_POINT;
+        DAS_EXCEPTION_POINT;
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stackTop + stackTop[0]);
 		int32_t r_to = r.to;
