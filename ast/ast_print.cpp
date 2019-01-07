@@ -523,10 +523,11 @@ namespace das {
     }
     
     ostream& operator<< (ostream& stream, const Program & program) {
+        bool logGenerics = program.options.getOption("logGenerics");
         SetPrinterFlags flags;
-		const_cast<Program&>(program).visit(flags, false);
+		const_cast<Program&>(program).visit(flags, logGenerics);
         Printer log;
-        const_cast<Program&>(program).visit(log, false);
+        const_cast<Program&>(program).visit(log, logGenerics);
         stream << log.str();
         return stream;
     }

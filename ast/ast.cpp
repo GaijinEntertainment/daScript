@@ -84,12 +84,17 @@ namespace das
         }
         if ( constant ) {
             stream << " const";
+        } else if ( removeConstant ) {
+            stream << " !const";
         }
         for ( auto d : dim ) {
             stream << "[" << d << "]";
         }
-        if ( ref )
+        if ( ref ) {
             stream << "&";
+        } else if ( removeRef ) {
+            stream << "!&";
+        }
         return stream.str();
     }
 

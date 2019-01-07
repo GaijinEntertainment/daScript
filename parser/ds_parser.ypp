@@ -957,16 +957,28 @@ type_declaration
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(@basicType); }
     |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
-    |   type_declaration[typeDecl] _CONST {
-        $typeDecl->constant = true;
-        $$ = $typeDecl;
-    }
     |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' {
         $typeDecl->dim.push_back($dimSize);
         $$ = $typeDecl;
     }
+    |   type_declaration[typeDecl] _CONST {
+        $typeDecl->constant = true;
+        $typeDecl->removeConstant = false;
+        $$ = $typeDecl;
+    }
+    |   type_declaration[typeDecl] '!' _CONST {
+        $typeDecl->constant = false;
+        $typeDecl->removeConstant = true;
+        $$ = $typeDecl;
+    }
     |   type_declaration[typeDecl] '&' {
         $typeDecl->ref = true;
+        $typeDecl->removeRef = false;
+        $$ = $typeDecl;
+    }
+    |   type_declaration[typeDecl] '!' '&' {
+        $typeDecl->ref = false;
+        $typeDecl->removeRef = true;
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] '?' {

@@ -98,6 +98,8 @@ namespace das
             struct {
                 bool    ref : 1 ;
                 bool    constant : 1;
+                bool    removeRef : 1;
+                bool    removeConstant : 1;
             };
             uint32_t flags = 0;
         };

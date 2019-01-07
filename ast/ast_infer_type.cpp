@@ -8,8 +8,8 @@ namespace das {
     
     void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
         if ( !autoT->isAuto() ) return;
-        TT->ref |= autoT->ref;
-        TT->constant |= autoT->constant;
+        TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef;
+        TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant;
         if ( autoT->isPointer() ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
         } else if ( autoT->baseType==Type::tArray ) {
@@ -244,8 +244,8 @@ namespace das {
                 if ( auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias) ) {
                     auto resT = make_shared<TypeDecl>(*aT);
                     resT->at = decl->at;
-                    resT->ref |= decl->ref;
-                    resT->constant |= decl->constant;
+                    resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
+                    resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
                     resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
                     resT->alias = decl->alias;
                     return resT;
@@ -1519,7 +1519,7 @@ namespace das {
                             auto & passT = types[sz];
                             auto resT = inferAutoType(argT, passT);
                             assert(resT && "how? we had this working at findMatchingGenerics");
-                            applyAutoContracts(argT, passT);
+                            applyAutoContracts(resT, argT);
                             if ( resT->isRefType() ) {   // we don't pass boxed type by reference ever
                                 resT->ref = false;
                             }
