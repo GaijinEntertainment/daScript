@@ -1552,7 +1552,11 @@ namespace das {
     
     void Program::inferTypes() {
         const bool log = options.getOption("logInferPasses",false);
-        for ( int pass = 0; ; ++pass ) {
+		int pass = 0, maxPasses = 50;
+		if (auto maxP = options.find("maxInferPasses", Type::tInt)) {
+			maxPasses = maxP->iValue;
+		}
+        for ( pass = 0; pass < maxPasses; ++pass ) {
             failToCompile = false;
             errors.clear();
             InferTypes context(shared_from_this());
@@ -1568,6 +1572,10 @@ namespace das {
             if ( context.finished() )
                 break;
         }
+		if (pass == maxPasses) {
+			error("type inference exceeded maximum allowed number of passes ("+std::to_string(maxPasses)+")\n"
+					"this is likely due to a loop in the type system", LineInfo(), CompilationError::too_many_infer_passes);
+		}
     }
 }
 

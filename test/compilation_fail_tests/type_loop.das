@@ -1,4 +1,4 @@
-// options log=true,logInferPasses=true
+expect 41000
 
 def infinite(a:auto(ptrt)?)
 	let t : ptrt ? ?
@@ -10,3 +10,4 @@ struct Foo
 def test
 	infinite(new Foo)
 	return true
+

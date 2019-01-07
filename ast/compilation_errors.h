@@ -81,5 +81,7 @@ namespace das
 // logic errors
         
     ,   static_assert_failed                    =   40100       // static_assert(false)
+
+	,	too_many_infer_passes					=	41000
     };
 }

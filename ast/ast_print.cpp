@@ -524,9 +524,9 @@ namespace das {
     
     ostream& operator<< (ostream& stream, const Program & program) {
         SetPrinterFlags flags;
-        const_cast<Program&>(program).visit(flags, true);
+		const_cast<Program&>(program).visit(flags, false);
         Printer log;
-        const_cast<Program&>(program).visit(log, true);
+        const_cast<Program&>(program).visit(log, false);
         stream << log.str();
         return stream;
     }
