@@ -117,7 +117,7 @@ namespace das {
     protected:
         void pushVarStack() { varStack.push_back(local.size()); }
         void popVarStack()  { local.resize(varStack.back()); varStack.pop_back(); }
-        void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) {
+        void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
             if ( func ) {
                 string extra = func->getLocationExtra();
                 program->error(err + extra,at,cerr);
@@ -129,6 +129,69 @@ namespace das {
             needRestart = true;
         }
     protected:
+        
+        void verifyType ( const TypeDeclPtr & decl ) const {
+            if ( decl->dim.size() && decl->ref ) {
+                error("can't be array of references",decl->at,CompilationError::invalid_type);
+            }
+            if ( decl->baseType==Type::autoinfer || decl->baseType==Type::alias ) {
+                return; // alias or auto types always ok, until infered
+            }
+            if ( decl->baseType==Type::tVoid ) {
+                if ( decl->dim.size() ) {
+                    error("can't be array of void",decl->at,CompilationError::invalid_type);
+                }
+                if ( decl->ref ) {
+                    error("can't be void reference",decl->at,CompilationError::invalid_type);
+                }
+            } else if ( decl->baseType==Type::tPointer ) {
+                if ( auto ptrType = decl->firstType ) {
+                    if ( ptrType->ref ) {
+                        error("can't be pointer to reference",ptrType->at,CompilationError::invalid_type);
+                    }
+                    verifyType(ptrType);
+                }
+            } else if ( decl->baseType==Type::tArray ) {
+                if ( auto arrayType = decl->firstType ) {
+                    if ( arrayType->ref ) {
+                        error("can't be Array of reference",arrayType->at,CompilationError::invalid_array_type);
+                    }
+                    if ( arrayType->baseType==Type::tVoid) {
+                        error("can't have void Array",arrayType->at,CompilationError::invalid_array_type);
+                    }
+                    verifyType(arrayType);
+                }
+            } else if ( decl->baseType==Type::tTable ) {
+                if ( auto keyType = decl->firstType ) {
+                    if ( keyType->ref ) {
+                        error("Table key can't be reference",keyType->at,CompilationError::invalid_table_type);
+                    }
+                    if ( !keyType->isWorkhorseType() ) {
+                        error("Table key has to be basic 'hashable' type",keyType->at,CompilationError::invalid_table_type);
+                    }
+                    verifyType(keyType);
+                }
+                if ( auto valueType = decl->secondType ) {
+                    if ( valueType->ref ) {
+                        error("Table value can't be reference",valueType->at,CompilationError::invalid_table_type);
+                    }
+                    verifyType(valueType);
+                }
+            } else if ( decl->baseType==Type::tBlock ) {
+                if ( auto resultType = decl->firstType ) {
+                    if ( !resultType->isReturnType() ) {
+                        error("not a valid block return type",resultType->at,CompilationError::invalid_return_type);
+                    }
+                    verifyType(resultType);
+                }
+                for ( auto & argType : decl->argTypes ) {
+                    if ( argType->ref && argType->isRefType() ) {
+                        error("can't pass boxed type by reference", argType->at,CompilationError::invalid_argument_type);
+                    }
+                    verifyType(argType);
+                }
+            }
+        }
         
         // find type alias name, and resolve it to type
         // without one generic function
@@ -180,6 +243,7 @@ namespace das {
             if ( decl->baseType==Type::alias ) {
                 if ( auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias) ) {
                     auto resT = make_shared<TypeDecl>(*aT);
+                    resT->at = decl->at;
                     resT->ref |= decl->ref;
                     resT->constant |= decl->constant;
                     resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
@@ -422,6 +486,7 @@ namespace das {
                 error("global variable can't be void", var->at, CompilationError::invalid_variable_type);
             if ( var->type->isHandle() && !var->type->annotation->isLocal() )
                 error("handled type " + var->type->annotation->name + "can't be global", var->at, CompilationError::invalid_variable_type);
+            verifyType(var->type);
             return Visitor::visitGlobalLet(var);
         }
     // function
@@ -450,6 +515,13 @@ namespace das {
             }
             return Visitor::visitArgumentInit(f, arg, that);
         }
+        virtual VariablePtr visitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            if ( var->type->ref && var->type->isRefType() ) {
+                error("can't pass boxed type by reference",var->at,CompilationError::invalid_argument_type);
+            }
+            verifyType(var->type);
+            return Visitor::visitArgument(fn, var, lastArg);
+        }
         virtual FunctionPtr visit ( Function * that ) override {
             // if function got no 'result', function is a void function
             if ( !func->hasReturn ) {
@@ -459,6 +531,10 @@ namespace das {
                 } else if ( !func->result->isVoid() ){
                     error("function does not return value", func->at, CompilationError::expecting_return_value);
                 }
+            }
+            verifyType(func->result);
+            if ( !func->result->isReturnType() ) {
+                error("not a valid function return type",func->result->at,CompilationError::invalid_return_type);
             }
             assert(blocks.size()==0);
             func.reset();
@@ -857,6 +933,10 @@ namespace das {
                 error("block argument type can't be infered, need initializer",
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
+            if ( var->type->ref && var->type->isRefType() ) {
+                error("can't pass boxed type by reference",var->at,CompilationError::invalid_argument_type);
+            }
+            verifyType(var->type);
         }
         virtual ExpressionPtr visitBlockArgumentInit (ExprBlock * block, const VariablePtr & arg, Expression * that ) override {
             if ( arg->type->isAuto() ) {
@@ -891,6 +971,9 @@ namespace das {
                     block->returnType = make_shared<TypeDecl>(Type::tVoid);
                     block->type = make_shared<TypeDecl>(Type::tVoid);
                     reportGenericInfer();
+                }
+                if ( block->returnType ) {
+                    verifyType(block->returnType);
                 }
             }
             return Visitor::visit(block);
@@ -1398,6 +1481,10 @@ namespace das {
                             auto & passT = types[sz];
                             auto resT = inferAutoType(argT, passT);
                             assert(resT && "how? we had this working at findMatchingGenerics");
+                            applyAutoContracts(argT, passT);
+                            if ( resT->isRefType() ) {   // we don't pass boxed type by reference ever
+                                resT->ref = false;
+                            }
                             argT = resT;
                         }
                     }
@@ -1435,6 +1522,7 @@ namespace das {
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
                         auto retT = inferAutoType(mkBlock->type, expr->func->arguments[iF]->type);
                         assert ( retT && "how? it matched during findMatchingFunctions the same way");
+                        applyAutoContracts(mkBlock->type, expr->func->arguments[iF]->type);
                         block->returnType = make_shared<TypeDecl>(*retT->firstType);
                         for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
                             block->arguments[ba]->type = make_shared<TypeDecl>(*retT->argTypes[ba]);

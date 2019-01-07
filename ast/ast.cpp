@@ -487,6 +487,11 @@ namespace das
         }
     }
     
+    bool TypeDecl::isReturnType() const {
+        if ( isVoid() ) return true;
+        return isWorkhorseType() && !isRef();
+    }
+    
     Type TypeDecl::getRangeBaseType() const
     {
         switch ( baseType ) {

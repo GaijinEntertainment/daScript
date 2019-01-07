@@ -78,6 +78,7 @@ namespace das
         bool canMove() const;
         bool isPod() const;
         bool isWorkhorseType() const; // we can return this, or pass this
+        bool isReturnType() const;
         bool isCtorType() const; 
         bool isRange() const;
         bool isConst() const;

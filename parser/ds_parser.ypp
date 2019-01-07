@@ -373,7 +373,7 @@ optional_function_argument_list
     ;
 
 optional_function_type
-    :                                   { $$ = new TypeDecl(Type::autoinfer); }
+    :                                   { $$ = new TypeDecl(Type::autoinfer); $$->at = LineInfo(yylloc.first_column,yylloc.first_line); }
     |   ':' type_declaration[typeDecl]  { $$ = $typeDecl; $$->at = tokAt(@typeDecl); }
     ;
 
@@ -410,14 +410,10 @@ function_declaration
     :   optional_annotation_list[annL] _DEF[loc] function_name[name]
             optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         auto pFunction = make_shared<Function>();
+        pFunction->at = tokAt(@loc);
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
-        if ( pFunction->result->dim.size() ) {
-            yyerror("function " + *$name + " can't return array",tokAt(@loc),CompilationError::invalid_return_type);
-        } else if ( pFunction->result->isRef()) {
-            yyerror("function " + *$name + " can't return reference or boxed type",tokAt(@loc),CompilationError::invalid_return_type);
-        }
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -427,9 +423,6 @@ function_declaration
                             pVar->name = name;
                             pVar->at = pDecl->at;
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                            if ( pVar->type->ref && pVar->type->isRefType() ) {
-                                yyerror("can't pass boxed type by reference",pVar->at,CompilationError::invalid_argument_type);
-                            }
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
                             }
@@ -642,10 +635,6 @@ expr_block
                             pVar->name = name;
                             pVar->at = pDecl->at;
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                            if ( pVar->type->ref && pVar->type->isRefType() ) {
-                                yyerror("can't pass boxed type by reference",pVar->at,
-                                    CompilationError::invalid_argument_type);
-                            }
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
                             }
@@ -902,7 +891,7 @@ basic_type_declaration
     |   _INT3       { $$ = Type::tInt3; }
     |   _INT4       { $$ = Type::tInt4; }
     |   _UINT       { $$ = Type::tUInt; }
-    |   _UINT64       { $$ = Type::tUInt64; }
+    |   _UINT64     { $$ = Type::tUInt64; }
     |   _UINT2      { $$ = Type::tUInt2; }
     |   _UINT3      { $$ = Type::tUInt3; }
     |   _UINT4      { $$ = Type::tUInt4; }
@@ -1016,10 +1005,6 @@ type_declaration
                 if ( pDecl->pTypeDecl ) {
                     for ( size_t ai=0; ai!= pDecl->pNameList->size(); ++ai ) {
                         auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        if ( pVarType->ref && pVarType->isRefType() ) {
-                            yyerror("can't pass boxed type by reference",
-                                pDecl->at,CompilationError::invalid_argument_type);
-                        }
                         if ( pDecl->pInit ) {
                             yyerror("can't have default values in block type declaration",
                                 pDecl->at,CompilationError::cant_initialize);
