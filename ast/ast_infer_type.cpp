@@ -253,72 +253,72 @@ namespace yzg {
             },moduleName);
             return result;
         }
+
+		bool isMatchingArgument(const FunctionPtr & pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock) const {
+			if (!passType) {
+				return false;
+			}
+			if (inferAuto) {
+				// if it's an alias, we de'alias it, and see if it matches at all
+				if (argType->isAlias()) {
+					argType = inferAlias(argType, pFn);
+					if ( !argType ) {
+						return false;
+					}
+				}
+				// match auto argument
+				if (argType->isAuto()) {
+					return inferAutoType(argType, passType) != nullptr;
+				}
+			}
+			// match inferable block
+			if (inferBlock && passType->isAuto() && passType->isGoodBlockType()) {
+				return inferAutoType(passType, argType) != nullptr;
+			}
+			// compare types which don't need inference
+			if (passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false))) {
+				return false;
+			}
+			// ref types can only add constness
+			if (argType->isRef() && !argType->constant && passType->constant) {
+				return false;
+			}
+			// pointer types can only add constant
+			if (argType->isPointer() && !argType->constant && passType->constant) {
+				return false;
+			}
+			// all good
+			return true;
+		}
         
         bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock ) const {
             if ( pFn->arguments.size() < types.size() ) {
                 return false;
             }
-            bool typesCompatible = true;
             for ( auto ai = 0; ai != types.size(); ++ai ) {
-                auto argType = pFn->arguments[ai]->type;
-                auto & passType = types[ai];
-                if ( passType && inferAuto ) {
-                    // if it's an alias, we de'alias it, and see if it matches at all
-                    if ( argType->isAlias() ) {
-                        if ( auto argA = inferAlias(argType, pFn) ) {
-                            argType = argA;
-                        } else {
-                            typesCompatible = false;
-                            break;
-                        }
-                    }
-                    // match auto argument
-                    if ( argType->isAuto() ) {
-                        auto argT = inferAutoType(argType, passType);
-                        if ( !argT ) {
-                            typesCompatible = false;
-                            break;
-                        } else {
-                            continue;
-                        }
-                    }
-                }
-                if (  passType && inferBlock ) {
-                    // match inferable block
-                    if ( passType->isAuto() && passType->isGoodBlockType() ) {
-                        auto infT = inferAutoType(passType, argType);
-                        if ( !infT ) {
-                            typesCompatible = false;
-                            break;
-                        } else {
-                            continue;
-                        }
-                    }
-                }
-                // compare types which don't need inference
-                if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false)) ) {
-                    typesCompatible = false;
-                    break;
-                }
-                // ref types can only add constness
-                if ( argType->isRef() && !argType->constant && passType->constant ) {
-                    typesCompatible = false;
-                    break;
-                }
-                // pointer types can only add constant
-                if ( argType->isPointer() && !argType->constant && passType->constant ) {
-                    typesCompatible = false;
-                    break;
-                }
+				if (!isMatchingArgument(pFn, pFn->arguments[ai]->type, types[ai],inferAuto,inferBlock)) {
+					return false;
+				}
             }
-            bool tailCompatible = true;
             for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
                 if ( !pFn->arguments[ti]->init ) {
-                    tailCompatible = false;
+					return false;
                 }
             }
-            return typesCompatible && tailCompatible;
+			return true;
         }
+
+		string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
+			stringstream ss;
+			for (auto ai = 0; ai != types.size(); ++ai) {
+				auto & arg = pFn->arguments[ai];
+				auto & passType = types[ai];
+				if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
+					ss << "\ninvalid argument " << arg->name << " : " << arg->type->describe() << ", can't pass " << passType->describe();
+				}
+			}
+			return ss.str();
+		}
         
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false ) const {
             string moduleName, funcName;
@@ -1401,8 +1401,15 @@ namespace yzg {
                             reportGenericInfer();
                         }
                     } else {
-                        string candidates = program->describeCandidates(findCandidates(expr->name,types));
-                        error("no matching function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
+						auto candidateFunctions = findCandidates(expr->name, types);
+						if (candidateFunctions.size() == 1) {
+							auto missFn = candidateFunctions.back();
+							auto problems = describeMismatchingFunction(missFn, types, false, true);
+							error("no matching function " + expr->describe() + "\n" + "" + problems, expr->at, CompilationError::function_not_found);
+						} else {
+							string candidates = program->describeCandidates(candidateFunctions);
+							error("no matching function " + expr->describe() + "\n" + candidates, expr->at, CompilationError::function_not_found);
+						}
                     }
                 }
             } else if ( functions.size()>1 ) {

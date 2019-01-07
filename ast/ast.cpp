@@ -2004,14 +2004,17 @@ namespace yzg
     
     string ExprLooksLikeCall::describe() const {
         stringstream stream;
-        stream << "(" << name;
+        stream << name << " ( ";
         for ( auto & arg : arguments ) {
             if ( arg->type )
-                stream << " " << *arg->type;
+                stream << *arg->type;
             else
-                stream << " ???";
+                stream << "???";
+			if (arg != arguments.back()) {
+				stream << ", ";
+			}
         }
-        stream << ")";
+        stream << " )";
         return stream.str();
     }
     
