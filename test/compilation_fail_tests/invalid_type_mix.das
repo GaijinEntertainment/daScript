@@ -1,11 +1,13 @@
-expect 30101:5    // invalid_type
+expect 30101:4, 30108:3    // invalid_type
 
-def test(a:void&)       // can't have void &
-    let(a:int[10] &)    // can't have ref of array
+def test(a:void&)       // 30101: can't be void reference
+    let(a:int[10] &)    // 30108: local variable can't be reference
+                        // 30101: can't be array of references
         debug(a)
-    let(a:int & &)      // can't have ref of ref
+    let(a:int & &)      // 30108: local variable can't be reference
         debug(a)
-    let(a:int & ?)      // can't have pointer to ref
+    let(a:int & ?)      // 30101: can't be pointer to reference
+                        // 30108: local variable can't be reference
         debug(a)
-    let(a:int & [10])   // can't have array of ref
+    let(a:int & [10])   // 30101: can't be array of references
         debug(a)

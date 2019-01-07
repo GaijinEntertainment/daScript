@@ -936,52 +936,23 @@ type_declaration
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' {
-        if ( $typeDecl->ref ) {
-            yyerror("can't be array of references",tokAt(@dimSize),CompilationError::invalid_type);
-        }
         $typeDecl->dim.push_back($dimSize);
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] '&' {
-        if ( $typeDecl->dim.size() ) {
-            yyerror("can't be reference of array",tokAt(@typeDecl),CompilationError::invalid_type);
-        }
-        if ( $typeDecl->ref ) {
-            yyerror("can't be reference of reference",tokAt(@typeDecl),CompilationError::invalid_type);
-        }
-        if ( $typeDecl->isVoid() ) {
-            yyerror("can't be void reference",tokAt(@typeDecl),CompilationError::invalid_type);
-        }
         $typeDecl->ref = true;
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] '?' {
-        if ( $typeDecl->ref ) {
-            yyerror("can't be pointer to reference",tokAt(@typeDecl),CompilationError::invalid_type);
-        }
         $$ = new TypeDecl(Type::tPointer);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
     |   _ARRAY[loc] '<' type_declaration[typeDecl] '>' {
-        if ( $typeDecl->ref ) {
-            yyerror("can't have reference in the Array",tokAt(@typeDecl),CompilationError::invalid_array_type);
-        } else if ( $typeDecl->isVoid() ) {
-            yyerror("can't have void Array",tokAt(@typeDecl),CompilationError::invalid_array_type);
-        }
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
     |   _TABLE[loc] '<' type_declaration[keyTypeDecl] ',' type_declaration[valueTypeDecl] '>' {
-        if ( $keyTypeDecl->ref || $valueTypeDecl->ref ) {
-            yyerror("can't have reference in the Table",tokAt(@loc),CompilationError::invalid_table_type);
-        }
-        if ( $keyTypeDecl->isVoid() || $valueTypeDecl->isVoid() ) {
-            yyerror("can't have void Table",tokAt(@loc),CompilationError::invalid_array_type);
-        }
-        if ( !$keyTypeDecl->isWorkhorseType() && !$keyTypeDecl->isAuto() ) {
-            yyerror("key has to be basic 'hashable' type",tokAt(@keyTypeDecl),CompilationError::invalid_table_type);
-        }
         $$ = new TypeDecl(Type::tTable);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($keyTypeDecl);

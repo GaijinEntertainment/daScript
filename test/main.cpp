@@ -163,7 +163,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/new_type_infer.das");
+    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/invalid_type_mix.das");
     Module::Shutdown();
     return 0;
 #endif

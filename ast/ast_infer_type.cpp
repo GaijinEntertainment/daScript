@@ -1403,6 +1403,7 @@ namespace das {
                 error("local variable can't be void", var->at, CompilationError::invalid_variable_type);
             if ( var->type->isHandle() && !var->type->annotation->isLocal() )
                 error("handled type " + var->type->annotation->name + " can't be local", var->at, CompilationError::invalid_variable_type);
+            verifyType(var->type);
             return Visitor::visitLet(expr,var,last);
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
@@ -1426,11 +1427,7 @@ namespace das {
             } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
                 error("this variable can't be initialized at all", var->at);
             }
-            //if ( var->type->isWorkhorseType() ) {
-            //    return Expression::autoDereference(init->shared_from_this());
-            //} else {
-                return Visitor::visitLetInit(expr, var, init);
-            //}
+            return Visitor::visitLetInit(expr, var, init);
         }
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
             if ( expr->scoped ) {
