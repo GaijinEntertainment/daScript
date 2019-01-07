@@ -230,7 +230,8 @@ string_builder
 options_declaration
 	:	_OPTIONS	annotation_argument_list[list] {
 		if ( g_Program->options.arguments.size() ) {
-			g_Program->options.arguments.insert ( g_Program->options.arguments.begin(), $list->arguments.begin(), $list->arguments.end() );
+			g_Program->options.arguments.insert ( g_Program->options.arguments.begin(),
+                $list->arguments.begin(), $list->arguments.end() );
 		} else {
 			swap ( g_Program->options, *$list );
 		}
@@ -252,7 +253,8 @@ require_module
         if ( auto mod = Module::require(*$name) ) {
             g_Program->addModule(mod);
         } else {
-            yyerror("required module not found " + *$name,tokAt(@name),CompilationError::module_not_found);
+            yyerror("required module not found " + *$name,tokAt(@name),
+                CompilationError::module_not_found);
         }
         delete $name;
     }
@@ -280,13 +282,15 @@ expression_else
     :                                                   { $$ = nullptr; }
     |   _ELSE expression_block[block]                   { $$ = $block; }
     |   _ELIF[loc] expr[cond] expression_block[block] expression_else[then] {
-        $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),ExpressionPtr($block),ExpressionPtr($then));
+        $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),
+            ExpressionPtr($block),ExpressionPtr($then));
     }
     ;
 
 expression_if_then_else
     :   _IF[loc] expr[cond] expression_block[block] expression_else[then] {
-        $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),ExpressionPtr($block),ExpressionPtr($then));
+        $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),
+            ExpressionPtr($block),ExpressionPtr($then));
     }
     ;
 
@@ -373,8 +377,14 @@ optional_function_argument_list
     ;
 
 optional_function_type
-    :                                   { $$ = new TypeDecl(Type::autoinfer); $$->at = LineInfo(yylloc.first_column,yylloc.first_line); }
-    |   ':' type_declaration[typeDecl]  { $$ = $typeDecl; $$->at = tokAt(@typeDecl); }
+    :   {
+        $$ = new TypeDecl(Type::autoinfer);
+        $$->at = LineInfo(yylloc.first_column,yylloc.first_line);
+    }
+    |   ':' type_declaration[typeDecl]  {
+        $$ = $typeDecl;
+        $$->at = tokAt(@typeDecl);
+    }
     ;
 
 function_name
@@ -428,7 +438,8 @@ function_declaration
                             }
                             pFunction->arguments.push_back(pVar);
                         } else {
-                            yyerror("function argument is already declared " + name,pDecl->at,CompilationError::argument_already_declared);
+                            yyerror("function argument is already declared " + name,pDecl->at,
+                                CompilationError::argument_already_declared);
                         }
                     }
                 }
@@ -442,10 +453,12 @@ function_declaration
                         auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                         string err;
                         if ( !ann->apply(pFunction, pA->arguments, err) ) {
-                            yyerror("can't apply annotation\n" + err, tokAt(@loc), CompilationError::invalid_annotation);
+                            yyerror("can't apply annotation\n" + err,
+                                tokAt(@loc), CompilationError::invalid_annotation);
                         }
                     } else {
-                        yyerror("function can only have function annotations", tokAt(@loc), CompilationError::invalid_annotation);
+                        yyerror("functions are only allowed function annotations",
+                            tokAt(@loc), CompilationError::invalid_annotation);
                     }
                 }
             }
@@ -454,12 +467,16 @@ function_declaration
         }
         if ( pFunction->isGeneric() ) {
             if ( !g_Program->addGeneric(pFunction) ) {
-                yyerror("generic function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::function_already_declared);
+                yyerror("generic function is already defined " +
+                    pFunction->getMangledName(),tokAt(@loc),
+                        CompilationError::function_already_declared);
                 pFunction.reset();
             }
         } else {
             if ( !g_Program->addFunction(pFunction) ) {
-                yyerror("function already defined " + pFunction->getMangledName(),tokAt(@loc),CompilationError::function_already_declared);
+                yyerror("function is already defined " +
+                    pFunction->getMangledName(),tokAt(@loc),
+                        CompilationError::function_already_declared);
                 pFunction.reset();
             }
         }
@@ -562,7 +579,8 @@ expression_let
                         }
                         pLet->variables.push_back(pVar);
                     } else {
-                        yyerror("local variable is already declared " + name,tokAt(@list),CompilationError::local_variable_already_declared);
+                        yyerror("local variable is already declared " + name,tokAt(@list),
+                            CompilationError::local_variable_already_declared);
                     }
                 }
             }
@@ -584,7 +602,8 @@ expression_let
                     pVar->init = $decl->pInit->clone();
                     pLet->variables.push_back(pVar);
                 } else {
-                    yyerror("local variable is already declared " + name,tokAt(@loc),CompilationError::local_variable_already_declared);
+                    yyerror("local variable is already declared " + name,tokAt(@loc),
+                        CompilationError::local_variable_already_declared);
                 }
             }
         }
@@ -612,8 +631,12 @@ expr_typename
     ;
 
 expr_list
-    :   expr[subexpr]                       { $$ = $subexpr; }
-    |   expr_list[left] ',' expr[right]     { $$ = new ExprSequence(tokAt(@left),ExpressionPtr($left),ExpressionPtr($right)); }
+    :   expr[subexpr] {
+        $$ = $subexpr;
+    }
+    |   expr_list[left] ',' expr[right]     {
+            $$ = new ExprSequence(tokAt(@left),ExpressionPtr($left),ExpressionPtr($right));
+    }
     ;
 
 expr_block
@@ -622,7 +645,8 @@ expr_block
         $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
         closure->returnType = make_shared<TypeDecl>(Type::autoinfer);
     }
-    |   '$' optional_annotation_list[annL] optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
+    |   '$' optional_annotation_list[annL] optional_function_argument_list[list]
+                                optional_function_type[result] expression_block[block] {
         $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
         ExprBlock * closure = (ExprBlock *) $block;
         closure->returnType = TypeDeclPtr($result);
@@ -654,10 +678,12 @@ expr_block
                             auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                             string err;
                             if ( !ann->apply(closure, pA->arguments, err) ) {
-                                yyerror("can't apply annotation\n" + err, tokAt(@annL), CompilationError::invalid_annotation);
+                                yyerror("can't apply annotation\n" + err, tokAt(@annL),
+                                    CompilationError::invalid_annotation);
                             }
                         } else {
-                            yyerror("block can only have function annotations", tokAt(@annL), CompilationError::invalid_annotation);
+                            yyerror("blocks are only allowed function annotations", tokAt(@annL),
+                                CompilationError::invalid_annotation);
                         }
                     }
                 }
@@ -736,7 +762,7 @@ expr
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
         } else {
-            yyerror("can only pipe into function call",tokAt(@loc),CompilationError::cant_pipe);
+            yyerror("can only pipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
             $$ = $fncall;
         }
     }
@@ -813,7 +839,8 @@ global_let
                         pVar->init = pDecl->pInit->clone();
                     }
                     if ( !g_Program->addVariable(pVar) )
-                        yyerror("global variable is already declared " + name,pDecl->at,CompilationError::global_variable_already_declared);
+                        yyerror("global variable is already declared " + name,pDecl->at,
+                            CompilationError::global_variable_already_declared);
                 }
             }
         }
@@ -826,13 +853,7 @@ structure_declaration
         auto pStruct = make_shared<Structure>(*$name);
         pStruct->at = tokAt(@loc);
         for ( auto pDecl : *$list ) {
-            if ( pDecl->pTypeDecl->isAuto() ) {
-                yyerror("structure type can't be auto",tokAt(@loc),CompilationError::invalid_structure_field_type);
-            } else if ( pDecl->pTypeDecl->isVoid() ) {
-                yyerror("structure type can't be void",tokAt(@loc),CompilationError::invalid_structure_field_type);
-            } else if ( pDecl->pTypeDecl->ref ) {
-                yyerror("structure type can't be reference or array of references",tokAt(@loc),CompilationError::invalid_structure_field_type);
-            } else if ( pDecl->pInit ) {
+            if ( pDecl->pInit ) {
                 yyerror("structure field can't have initialization",tokAt(@loc),CompilationError::cant_initialize);
             } else {
                 for ( const auto & name : *pDecl->pNameList ) {
@@ -840,28 +861,33 @@ structure_declaration
                         auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                         pStruct->fields.emplace_back(name, td, pDecl->at);
                     } else {
-                        yyerror("structure field is already declared "+name,pDecl->at,CompilationError::structure_field_already_declared);
+                        yyerror("structure field is already declared "+name,pDecl->at,
+                            CompilationError::structure_field_already_declared);
                     }
                 }
             }
         }
         if ( $annL ) {
             if ( $annL->size()!=1 ) {
-                yyerror("structures only allowed one annotation", tokAt(@loc),CompilationError::invalid_annotation);
+                yyerror("structures are only allowed one annotation", tokAt(@loc),
+                    CompilationError::invalid_annotation);
             } else {
                 auto & annotation = $annL->back()->annotation;
                 auto & args = $annL->back()->arguments;
                 if ( !annotation->rtti_isStructureAnnotation() ) {
-                    yyerror("structures only allowed structure annotation", tokAt(@loc),CompilationError::invalid_annotation);
+                    yyerror("structures are only allowed structure annotation", tokAt(@loc),
+                        CompilationError::invalid_annotation);
                 } else if ( !g_Program->addStructureHandle(pStruct,
                         static_pointer_cast<StructureTypeAnnotation>(annotation), args) ) {
-                    yyerror("handled structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
+                    yyerror("handled structure is alredy defined "+*$name,tokAt(@loc),
+                        CompilationError::structure_already_declared);
                 }
             }
             delete $annL;
         } else {
             if ( !g_Program->addStructure(pStruct) )
-                yyerror("structure is alredy defined "+*$name,tokAt(@loc),CompilationError::structure_already_declared);
+                yyerror("structure is alredy defined "+*$name,tokAt(@loc),
+                    CompilationError::structure_already_declared);
         }
         deleteVariableDeclarationList($list);
         delete($name);
