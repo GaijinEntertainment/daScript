@@ -83,12 +83,12 @@
 %token  _REQUIRE    _OPERATOR	_OPTIONS
 
 /* basic types */
-%token  _BOOL   _VOID   _STRING _AUTO
-%token  _INT    _INT2   _INT3   _INT4
-%token  _UINT   _UINT2  _UINT3  _UINT4
-%token  _FLOAT  _FLOAT2 _FLOAT3 _FLOAT4
-%token  _RANGE  _URANGE _BLOCK  _INT64
-%token  _UINT64
+%token  _BOOL       _VOID       _STRING     _AUTO
+%token  _INT        _INT2       _INT3       _INT4
+%token  _UINT       _UINT2      _UINT3      _UINT4
+%token  _FLOAT      _FLOAT2     _FLOAT3     _FLOAT4
+%token  _RANGE      _URANGE     _BLOCK      _INT64
+%token  _UINT64     _TYPENAME
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -144,6 +144,7 @@
 %type <pExpression>     expr_new
 %type <pExpression>     expr_pipe
 %type <pExpression>     expr_sizeof
+%type <pExpression>     expr_typename
 %type <pExpression>     expr_block
 %type <pExpression>     expression_any
 %type <pExpression>     optional_initializer
@@ -608,6 +609,15 @@ expr_sizeof
     }
     ;
 
+expr_typename
+    :   _TYPENAME[loc] '(' expr[subexpr] ')' {
+        $$ = new ExprTypeName(tokAt(@loc),ExpressionPtr($subexpr));
+    }
+    |   _TYPENAME[loc] '(' _TYPE type_declaration[decl] ')' {
+        $$ = new ExprTypeName(tokAt(@loc),TypeDeclPtr($decl));
+    }
+    ;
+
 expr_list
     :   expr[subexpr]                       { $$ = $subexpr; }
     |   expr_list[left] ',' expr[right]     { $$ = new ExprSequence(tokAt(@left),ExpressionPtr($left),ExpressionPtr($right)); }
@@ -728,6 +738,7 @@ expr
             $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
         }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
+    |   expr_typename[subexpr]                  { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   expr_block[subexpr]                     { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg] {
@@ -883,8 +894,7 @@ variable_name_list
     ;
 
 basic_type_declaration
-    :   _AUTO       { $$ = Type::autoinfer; }
-    |   _BOOL       { $$ = Type::tBool; }
+    :   _BOOL       { $$ = Type::tBool; }
     |   _STRING     { $$ = Type::tString; }
     |   _INT        { $$ = Type::tInt; }
     |   _INT64      { $$ = Type::tInt64; }

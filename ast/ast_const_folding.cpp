@@ -28,6 +28,11 @@ namespace yzg {
             Visitor::preVisit(expr);
             expr->noSideEffects = true;
         }
+    // typename
+        virtual void preVisit ( ExprTypeName * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+        }
     // find
         virtual void preVisit ( ExprFind * expr ) override {
             Visitor::preVisit(expr);
@@ -265,10 +270,15 @@ namespace yzg {
             }
             return Visitor::visit(expr);
         }
-        // sizeof
+    // sizeof
         virtual ExpressionPtr visit ( ExprSizeOf * expr ) override {
             reportFolding();
             return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
+        }
+    // typename
+        virtual ExpressionPtr visit ( ExprTypeName * expr ) override {
+            reportFolding();
+            return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false));
         }
     // ExprLooksLikeCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {

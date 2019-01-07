@@ -74,8 +74,9 @@ namespace yzg
     ,   expecting_return_value                  =   32101       // def blah:int without return
     ,   not_expecting_return_value              =   32102       // def blah:void ... return 12
     
-    ,   sizeof_reference                        =   39901       //  sizeof(int&)
-    ,   sizeof_auto                             =   39902       //  sizeof(int&)
+    ,   sizeof_reference                        =   39901       //  sizeof(type int&)
+    ,   sizeof_auto                             =   39902       //  sizeof(type auto)
+    ,   typename_auto                           =   39903       //  typename(type auto)
         
 // logic errors
         

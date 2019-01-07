@@ -502,6 +502,11 @@ namespace yzg {
 			Visitor::preVisit(that);
 			label(that, "sizeof " + that->typeexpr->describe());
 		}
+        // typename
+        virtual void preVisit(ExprTypeName * that) override {
+            Visitor::preVisit(that);
+            label(that, "typename " + that->typeexpr->describe());
+        }
 		// make block
 		virtual void preVisit(ExprMakeBlock * that) override {
 			Visitor::preVisit(that);

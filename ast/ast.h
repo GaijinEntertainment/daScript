@@ -73,7 +73,7 @@ namespace yzg
         int getSizeOf() const;
         int getBaseSizeOf() const;
         int getStride() const;
-        string describe() const { stringstream ss; ss << *this; return ss.str(); }
+        string describe ( bool extra = true ) const;
         bool canCopy() const;
         bool canMove() const;
         bool isPod() const;
@@ -935,6 +935,19 @@ namespace yzg
         ExpressionPtr   subexpr;
         TypeDeclPtr     typeexpr;
     };
+    
+    struct ExprTypeName : Expression {
+        ExprTypeName () = default;
+        ExprTypeName ( const LineInfo & a, const ExpressionPtr & s )
+            : Expression(a), subexpr(s) {}
+        ExprTypeName ( const LineInfo & a, const TypeDeclPtr & d )
+            : Expression(a), typeexpr(d) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        ExpressionPtr   subexpr;
+        TypeDeclPtr     typeexpr;
+    };
 
     struct ExprCall : ExprLooksLikeCall {
         ExprCall () = default;
@@ -1284,6 +1297,7 @@ namespace yzg
         VISIT_EXPR(ExprLooksLikeCall)
         VISIT_EXPR(ExprMakeBlock)
         VISIT_EXPR(ExprSizeOf)
+        VISIT_EXPR(ExprTypeName)
         VISIT_EXPR(ExprCall)
         VISIT_EXPR(ExprIfThenElse)
         VISIT_EXPR(ExprWhile)

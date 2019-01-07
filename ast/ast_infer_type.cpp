@@ -730,6 +730,32 @@ namespace yzg {
             expr->type = make_shared<TypeDecl>(Type::tInt);
             return Visitor::visit(expr);
         }
+    // ExprTypeName
+        virtual ExpressionPtr visit ( ExprTypeName * expr ) override {
+            // check subexpression
+            if ( expr->subexpr && expr->subexpr->type ) {
+                expr->typeexpr = make_shared<TypeDecl>(*expr->subexpr->type);
+            }
+            // verify
+            if ( !expr->typeexpr ) {
+                error("typename(...) can't be infered", expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
+            if ( expr->typeexpr->isAlias() ) {
+                if ( auto eT = inferAlias(expr->typeexpr) ) {
+                    expr->typeexpr = eT;
+                    reportGenericInfer();
+                } else {
+                    error("udefined type " + expr->typeexpr->describe(), expr->at, CompilationError::type_not_found);
+                }
+            }
+            if ( expr->typeexpr->isAuto() ) {
+                error("typename(auto) is undefined", expr->at, CompilationError::typename_auto);
+            }
+            // infer
+            expr->type = make_shared<TypeDecl>(Type::tString);
+            return Visitor::visit(expr);
+        }
     // ExprNew
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
             // infer

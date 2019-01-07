@@ -46,7 +46,21 @@ namespace yzg {
             Visitor::preVisit(expr);
             expr->bottomLevel = true;
         }
-        // const
+    // ExprSizeOf
+        virtual void preVisit ( ExprSizeOf * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->subexpr ) {
+                expr->subexpr->argLevel = true;
+            }
+        }
+    // ExprTypeName
+        virtual void preVisit ( ExprTypeName * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->subexpr ) {
+                expr->subexpr->argLevel = true;
+            }
+        }
+    // const
         virtual ExpressionPtr visit ( ExprConst * c ) override {
             c->bottomLevel = true;
             return Visitor::visit(c);
@@ -477,6 +491,18 @@ namespace yzg {
             }
         }
         virtual ExpressionPtr visit ( ExprSizeOf * expr ) override {
+            ss << ")";
+            return Visitor::visit(expr);
+        }
+    // typename
+        virtual void preVisit ( ExprTypeName * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "typename(";
+            if ( !expr->subexpr ) {
+                ss << "type " << *expr->typeexpr;
+            }
+        }
+        virtual ExpressionPtr visit ( ExprTypeName * expr ) override {
             ss << ")";
             return Visitor::visit(expr);
         }

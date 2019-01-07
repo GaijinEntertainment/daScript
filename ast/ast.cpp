@@ -16,79 +16,85 @@ namespace yzg
 {
     // TypeDecl
     
-    ostream& operator<< (ostream& stream, const TypeDecl & decl) {
-        if ( decl.baseType==Type::alias ) {
-            stream << decl.alias;
-        } else if ( decl.baseType==Type::autoinfer ) {
+    string TypeDecl::describe ( bool extra ) const {
+        stringstream stream;
+        if ( baseType==Type::alias ) {
+            stream << alias;
+        } else if ( baseType==Type::autoinfer ) {
             stream << "auto";
-            if ( !decl.alias.empty() ) {
-                stream << "(" << decl.alias << ")";
+            if ( !alias.empty() ) {
+                stream << "(" << alias << ")";
             }
-        } else if ( decl.baseType==Type::tHandle ) {
-            stream << decl.annotation->name;
-        } else if ( decl.baseType==Type::tArray ) {
-            if ( decl.firstType ) {
-                stream << "array<" << *decl.firstType << ">";
+        } else if ( baseType==Type::tHandle ) {
+            stream << annotation->name;
+        } else if ( baseType==Type::tArray ) {
+            if ( firstType ) {
+                stream << "array<" << firstType->describe(extra) << ">";
             } else {
                 stream << "array";
             }
-        } else if ( decl.baseType==Type::tTable ) {
-            if ( decl.firstType && decl.secondType ) {
-                stream << "table<" << *decl.firstType << "," << *decl.secondType << ">";
+        } else if ( baseType==Type::tTable ) {
+            if ( firstType && secondType ) {
+                stream << "table<" << firstType->describe(extra) << "," << secondType->describe(extra) << ">";
             } else {
                 stream << "table";
             }
-        } else if ( decl.baseType==Type::tStructure ) {
-            if ( decl.structType ) {
-                stream << decl.structType->name;
+        } else if ( baseType==Type::tStructure ) {
+            if ( structType ) {
+                stream << structType->name;
             } else {
                 stream << "unspecified";
             }
-        } else if ( decl.baseType==Type::tPointer ) {
-            if ( decl.firstType ) {
-                stream << *decl.firstType << "?";
+        } else if ( baseType==Type::tPointer ) {
+            if ( firstType ) {
+                stream << firstType->describe(extra) << "?";
             } else {
                 stream << "void ?";
             }
-        } else if ( decl.baseType==Type::tIterator ) {
-            if ( decl.firstType ) {
-                stream << "iterator<" << *decl.firstType << ">";
+        } else if ( baseType==Type::tIterator ) {
+            if ( firstType ) {
+                stream << "iterator<" << firstType->describe(extra) << ">";
             } else {
                 stream << "iterator";
             }
-        } else if ( decl.baseType==Type::tBlock ) {
+        } else if ( baseType==Type::tBlock ) {
             stream << "block<";
-            if ( decl.argTypes.size() ) {
+            if ( argTypes.size() ) {
                 stream << "(";
-                for ( const auto & arg : decl.argTypes ) {
-                    stream << *arg;
-                    if ( arg != decl.argTypes.back() ) {
+                for ( const auto & arg : argTypes ) {
+                    stream << arg->describe(extra);
+                    if ( arg != argTypes.back() ) {
                         stream << ";";
                     }
                 }
                 stream << ")";
             }
-            if ( decl.firstType ) {
-                if ( decl.argTypes.size() ) {
+            if ( firstType ) {
+                if ( argTypes.size() ) {
                     stream << ":";
                 }
-                stream << *decl.firstType;
+                stream << firstType->describe(extra);
             }
             stream << ">";
         } else {
-            stream << to_string(decl.baseType);
+            stream << to_string(baseType);
         }
-        if ( decl.baseType!=Type::autoinfer && decl.baseType!=Type::alias && !decl.alias.empty() ) {
-            stream << " aka " << decl.alias;
+        if ( extra && baseType!=Type::autoinfer && baseType!=Type::alias && !alias.empty() ) {
+            stream << " aka " << alias;
         }
-        if ( decl.constant ) {
+        if ( constant ) {
             stream << " const";
         }
-        for ( auto d : decl.dim ) {
+        for ( auto d : dim ) {
             stream << "[" << d << "]";
         }
-        if ( decl.ref )
+        if ( ref )
             stream << "&";
+        return stream.str();
+    }
+
+    ostream& operator<< (ostream& stream, const TypeDecl & decl) {
+        stream << decl.describe();
         return stream;
     }
     
@@ -1025,6 +1031,9 @@ namespace yzg
     
     ExpressionPtr ExprSizeOf::visit(Visitor & vis) {
         vis.preVisit(this);
+        if ( subexpr ) {
+            subexpr = subexpr->visit(vis);
+        }
         return vis.visit(this);
     }
     
@@ -1041,6 +1050,31 @@ namespace yzg
     SimNode * ExprSizeOf::simulate (Context & context) const {
         uint32_t size = typeexpr->getSizeOf();
         return context.makeNode<SimNode_ConstValue>(at,cast<uint32_t>::from(size));
+    }
+    
+    // ExprTypeName
+    
+    ExpressionPtr ExprTypeName::visit(Visitor & vis) {
+        vis.preVisit(this);
+        if ( subexpr ) {
+            subexpr = subexpr->visit(vis);
+        }
+        return vis.visit(this);
+    }
+    
+    ExpressionPtr ExprTypeName::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprTypeName>(expr);
+        Expression::clone(cexpr);
+        if ( subexpr )
+            cexpr->subexpr = subexpr->clone();
+        if ( typeexpr )
+            cexpr->typeexpr = typeexpr;
+        return cexpr;
+    }
+    
+    SimNode * ExprTypeName::simulate (Context & context) const {
+        auto pName = context.allocateName(typeexpr->describe(false));
+        return context.makeNode<SimNode_ConstValue>(at,cast<char *>::from(pName));
     }
     
     // ExprNew
