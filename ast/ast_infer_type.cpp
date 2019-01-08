@@ -1234,9 +1234,7 @@ namespace das {
                 error("can't move to a constant value", expr->at, CompilationError::cant_move_to_const);
             } else if ( !expr->left->type->canMove() ) {
                 error("this type can't be moved", expr->at, CompilationError::cant_move);
-            } else if ( expr->left->type->canCopy() ) {
-                error("this type can be copied, use copy (=) instead", expr->at, CompilationError::cant_move);
-            }
+            } 
             expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
         }

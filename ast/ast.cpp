@@ -1598,7 +1598,6 @@ namespace das
     }
     
     SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
-        assert ( !rightType.canCopy() && "should check above" );
         if ( rightType.ref ) {
             return context.makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else if ( rightType.isGoodArrayType() ) {

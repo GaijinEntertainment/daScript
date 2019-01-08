@@ -6,7 +6,6 @@ expect 30304:2    // function_not_found
 expect 30504:6    // cant_write_to_const
 expect 30505:2    // cant_move_to_const
 expect 30507      // cant_copy
-expect 30508      // cant_move
 
 def const_iter(a:table<string,int>)
     for k,v in keys(a),values(a)
@@ -66,7 +65,7 @@ def test
         c <- a          // can't move to constant           (30505)
         c <- d          // can only move same type          (30303)
     let(a,b:int)
-        a <- b          // this type can't be moved         (30508)
+        a <- b          
         a = b
     let(a: ::TestObjectFoo;b:UnitTest::TestObjectFoo)
         a = b           // not the same type

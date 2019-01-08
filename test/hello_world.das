@@ -13,4 +13,8 @@ def test
     assert(length(c)==3 & length(d)==3)
     let e <- c
     assert(length(e)==3 & length(c)==0 & length(d)==0)
+    let x = 1
+    let y = 2
+    y <- x
+    assert(x==0 & y==1)
     return true
