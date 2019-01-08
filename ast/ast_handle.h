@@ -99,7 +99,7 @@ namespace das
         };
         struct VectorIterator : Iterator {
             virtual bool first ( Context & context, IteratorContext & itc ) override {
-                __m128 ll = source->eval(context);
+                vec4f ll = source->eval(context);
                 DAS_ITERATOR_EXCEPTION_POINT;
                 VectorType * pArray = cast<VectorType *>::to(ll);
                 DAS_ITERATOR_EXCEPTION_POINT;
@@ -122,7 +122,7 @@ namespace das
         struct SimNode_VectorIterator : SimNode, VectorIterator {
             SimNode_VectorIterator ( const LineInfo & at, SimNode * s )
             : SimNode(at) { VectorIterator::source = s;}
-            virtual __m128 eval ( Context & context ) override {
+            virtual vec4f eval ( Context & context ) override {
                 return cast<Iterator *>::from(static_cast<VectorIterator *>(this));
             }
         };
@@ -156,7 +156,7 @@ namespace das
     
     template <typename OT>
     struct ManagedValueAnnotation : TypeAnnotation {
-        static_assert(sizeof(OT)<=sizeof(__m128), "value types have to fit in ABI");
+        static_assert(sizeof(OT)<=sizeof(vec4f), "value types have to fit in ABI");
         ManagedValueAnnotation(const string & n) : TypeAnnotation(n) {}
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool isLocal() const override { return true; }

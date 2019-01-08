@@ -20,9 +20,9 @@ namespace das
         context->to_out(text);
     }
     
-    __m128 builtin_breakpoint ( Context & context, SimNode_CallBase * call, __m128 * ) {
+    vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * ) {
         context.breakPoint(call->debug.column, call->debug.line);
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     void builtin_stackwalk ( Context * context) {

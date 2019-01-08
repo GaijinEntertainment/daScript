@@ -2314,7 +2314,7 @@ namespace das
         }
     }
     
-    ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, __m128 value ) {
+    ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value ) {
         if ( type->dim.size() || type->ref ) return nullptr;
         switch ( type->baseType ) {
             case Type::tBool:       return make_shared<ExprConstBool>(at, cast<bool>::to(value));

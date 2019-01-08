@@ -52,7 +52,7 @@ namespace das
     template <typename TT>
     struct SimNode_HashOfValue : SimNode {
         SimNode_HashOfValue ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             // note, exception point not nessaray. wrong value is still ok to cast
             TT res = cast<TT>::to(subexpr->eval(context));
             return cast<uint64_t>::from ( hash_function(res) );
@@ -62,7 +62,7 @@ namespace das
     
     struct SimNode_HashOfRef : SimNode {
         SimNode_HashOfRef ( const LineInfo & at, SimNode * s, uint32_t sz ) : SimNode(at), subexpr(s), size(sz) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             char * data = cast<char *>::to(subexpr->eval(context));
             DAS_EXCEPTION_POINT;
             return cast<uint64_t>::from ( hash_function(data,size) );
@@ -73,7 +73,7 @@ namespace das
     
     struct SimNode_HashOfMixedType : SimNode {
         SimNode_HashOfMixedType ( const LineInfo & at, SimNode * s, TypeInfo *t ) : SimNode(at), subexpr(s), typeInfo(t) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             char * data = cast<char *>::to(subexpr->eval(context));
             DAS_EXCEPTION_POINT;
             return cast<uint64_t>::from ( hash_function(data,typeInfo) );

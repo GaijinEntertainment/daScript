@@ -9,238 +9,200 @@ namespace das
 {
     template <typename TT, int mask>
     struct SimPolicy_Vec {
-        // this is missing in SSE2 (but exists in SSE4?)
-        static __forceinline __m128 _mm_mod_ps(__m128  a, __m128 aDiv) {
-            __m128 c = _mm_div_ps(a,aDiv);
-            __m128i i = _mm_cvttps_epi32(c);
-            __m128 cTrunc = _mm_cvtepi32_ps(i);
-            __m128 base = _mm_mul_ps(cTrunc, aDiv);
-            __m128 r = _mm_sub_ps(a, base);
-            return r;
-        }
         // basic
-        static __forceinline bool Equ     ( __m128 a, __m128 b, Context & ) {
-            return (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)==mask;
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
+            return vec_equ_ps(a,b,mask);
         }
-        static __forceinline bool NotEqu  ( __m128 a, __m128 b, Context & ) {
-            return (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)!=mask;
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) {
+            return vec_nequ_ps(a,b,mask);
         }
         // numeric
-        static __forceinline __m128 Unp ( __m128 x, Context & ) {
+        static __forceinline vec4f Unp ( vec4f x, Context & ) {
             return x;
         }
-        static __forceinline __m128 Unm ( __m128 x, Context & ) {   // todo: optimize?
-            return _mm_sub_ps(_mm_setzero_ps(), x);
+        static __forceinline vec4f Unm ( vec4f x, Context & ) {
+            return vec_neg_ps(x);
         }
-        static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) {
-            return _mm_add_ps(a,b);
+        static __forceinline vec4f Add ( vec4f a, vec4f b, Context & ) {
+            return vec_add_ps(a,b);
         }
-        static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) {
-            return _mm_sub_ps(a,b);
+        static __forceinline vec4f Sub ( vec4f a, vec4f b, Context & ) {
+            return vec_sub_ps(a,b);
         }
-        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) {
-            return _mm_div_ps(a,b);
+        static __forceinline vec4f Div ( vec4f a, vec4f b, Context & ) {
+            return vec_div_ps(a,b);
         }
-        static __forceinline __m128 Mod ( __m128 a, __m128 b, Context & ) {
-            return _mm_mod_ps(a,b);
+        static __forceinline vec4f Mod ( vec4f a, vec4f b, Context & ) {
+            return vec_mod_ps(a,b);
         }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) {
-            return _mm_mul_ps(a,b);
+        static __forceinline vec4f Mul ( vec4f a, vec4f b, Context & ) {
+            return vec_mul_ps(a,b);
         }
-        static __forceinline void SetAdd  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetAdd  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *) a;
-            *pa = cast<TT>::to ( _mm_add_ps(cast<TT>::from(*pa), b));
+            *pa = cast<TT>::to ( vec_add_ps(cast<TT>::from(*pa), b));
         }
-        static __forceinline void SetSub  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetSub  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to ( _mm_sub_ps(cast<TT>::from(*pa), b));
+            *pa = cast<TT>::to ( vec_sub_ps(cast<TT>::from(*pa), b));
         }
-        static __forceinline void SetDiv  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetDiv  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to ( _mm_div_ps(cast<TT>::from(*pa), b));
+            *pa = cast<TT>::to ( vec_div_ps(cast<TT>::from(*pa), b));
         }
-        static __forceinline void SetMul  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetMul  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to ( _mm_mul_ps(cast<TT>::from(*pa), b));
+            *pa = cast<TT>::to ( vec_mul_ps(cast<TT>::from(*pa), b));
         }
-        static __forceinline void SetMod  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetMod  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
-            *pa = cast<TT>::to ( _mm_mod_ps(cast<TT>::from(*pa), b));
+            *pa = cast<TT>::to ( vec_mod_ps(cast<TT>::from(*pa), b));
         }
         // vector-scalar
-        static __forceinline __m128 DivVecScal ( __m128 a, __m128 b, Context & ) {
-            return _mm_div_ps(a,_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0)));
+        static __forceinline vec4f DivVecScal ( vec4f a, vec4f b, Context & ) {
+            return vec_div_ps(a,vec_shuffle_ps_xxxx(b));
         }
-        static __forceinline __m128 MulVecScal ( __m128 a, __m128 b, Context & ) {
-            return _mm_mul_ps(a,_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0)));
+        static __forceinline vec4f MulVecScal ( vec4f a, vec4f b, Context & ) {
+            return vec_mul_ps(a,vec_shuffle_ps_xxxx(b));
         }
-        static __forceinline __m128 DivScalVec ( __m128 a, __m128 b, Context & ) {
-            return _mm_div_ps(_mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0)),b);
+        static __forceinline vec4f DivScalVec ( vec4f a, vec4f b, Context & ) {
+            return vec_div_ps(vec_shuffle_ps_xxxx(a),b);
         }
-        static __forceinline __m128 MulScalVec ( __m128 a, __m128 b, Context & ) {
-            return _mm_mul_ps(_mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0)),b);
+        static __forceinline vec4f MulScalVec ( vec4f a, vec4f b, Context & ) {
+            return vec_mul_ps(vec_shuffle_ps_xxxx(a),b);
         }
-        static __forceinline void SetDivScal  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetDivScal  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to ( _mm_div_ps(cast<TT>::from(*pa), _mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))));
+            *pa = cast<TT>::to ( vec_div_ps(cast<TT>::from(*pa), vec_shuffle_ps_xxxx(b)));
         }
-        static __forceinline void SetMulScal  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetMulScal  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to ( _mm_mul_ps(cast<TT>::from(*pa), _mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))));
+            *pa = cast<TT>::to ( vec_mul_ps(cast<TT>::from(*pa), vec_shuffle_ps_xxxx(b)));
         }
     };
     
     template <typename TT, int mask>
     struct SimPolicy_iVec {
-        // this is missing in SSE2 (but exists in SSE4?)
-        static __forceinline __m128i _mm_mul_epi32 ( __m128i a, __m128i b ) {
-            __m128i c;
-			uint32_t * A = (uint32_t *)&a;
-			uint32_t * B = (uint32_t *)&b;
-			uint32_t * C = (uint32_t *)&c;
-            C[0] = A[0]*B[0];   C[1] = A[1]*B[1];   C[2] = A[2]*B[2];   C[3] = A[3]*B[3];
-            return c;
-        }
-        static __forceinline __m128i _mm_div_epi32 ( __m128i a, __m128i b ) {
-			__m128i c;
-			uint32_t * A = (uint32_t *)&a;
-			uint32_t * B = (uint32_t *)&b;
-			uint32_t * C = (uint32_t *)&c;
-            C[0] = A[0]/B[0];   C[1] = A[1]/B[1];   C[2] = A[2]/B[2];   C[3] = A[3]/B[3];
-            return c;
-        }
-        static __forceinline __m128i _mm_mod_epi32 ( __m128i a, __m128i b ) {
-			__m128i c;
-			uint32_t * A = (uint32_t *)&a;
-			uint32_t * B = (uint32_t *)&b;
-			uint32_t * C = (uint32_t *)&c;
-            C[0] = A[0]%B[0];   C[1] = A[1]%B[1];   C[2] = A[2]%B[2];   C[3] = A[3]%B[3];
-            return c;
-        }
         // basic
-        static __forceinline bool Equ     ( __m128 a, __m128 b, Context & ) { // todo: verify
-            return (_mm_movemask_ps(_mm_castsi128_ps(
-                    _mm_cmpeq_epi32(_mm_castps_si128(a), _mm_castps_si128(b)))) & mask)==mask;
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
+            return vec_equ_epi(vec_cast_ps_esi(a),vec_cast_ps_esi(b),mask);
         }
-        static __forceinline bool NotEqu  ( __m128 a, __m128 b, Context & ) { // todo: verify
-            return (_mm_movemask_ps(_mm_castsi128_ps(
-                    _mm_cmpeq_epi32(_mm_castps_si128(a), _mm_castps_si128(b)))) & mask)!=mask;
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) {
+            return vec_nequ_epi(vec_cast_ps_esi(a),vec_cast_ps_esi(b),mask);
         }
         // numeric
-        static __forceinline __m128 Unp ( __m128 x, Context & ) {
+        static __forceinline vec4f Unp ( vec4f x, Context & ) {
             return x;
         }
-        static __forceinline __m128 Unm ( __m128 x, Context & ) {   // todo: optimize?
-            return _mm_castsi128_ps(_mm_sub_epi32(_mm_setzero_si128(), _mm_castps_si128(x)));
+        static __forceinline vec4f Unm ( vec4f x, Context & ) {
+            return vec_cast_esi_ps(vec_neg_epi(vec_cast_ps_esi(x)));
         }
-        static __forceinline __m128 Add ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(a),_mm_castps_si128(b)));
+        static __forceinline vec4f Add ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_add_epi(vec_cast_ps_esi(a),vec_cast_ps_esi(b)));
         }
-        static __forceinline __m128 Sub ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_sub_epi32(_mm_castps_si128(a),_mm_castps_si128(b)));
+        static __forceinline vec4f Sub ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_sub_epi(vec_cast_ps_esi(a),vec_cast_ps_esi(b)));
         }
-        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_div_epi32(_mm_castps_si128(a),_mm_castps_si128(b)));
+        static __forceinline vec4f Div ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_div_epi(vec_cast_ps_esi(a),vec_cast_ps_esi(b)));
         }
-        static __forceinline __m128 Mod ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_mod_epi32(_mm_castps_si128(a),_mm_castps_si128(b)));
+        static __forceinline vec4f Mod ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_mod_epi(vec_cast_ps_esi(a),vec_cast_ps_esi(b)));
         }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(a),_mm_castps_si128(b)));
+        static __forceinline vec4f Mul ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_mul_epi(vec_cast_ps_esi(a),vec_cast_ps_esi(b)));
         }
-        static __forceinline void SetAdd  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetAdd  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_add_epi(vec_cast_ps_esi(cast<TT>::from(*pa)), vec_cast_ps_esi(b))));
         }
-        static __forceinline void SetSub  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetSub  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_sub_epi32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_sub_epi(vec_cast_ps_esi(cast<TT>::from(*pa)), vec_cast_ps_esi(b))));
         }
-        static __forceinline void SetDiv  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetDiv  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_div_epi32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_div_epi(vec_cast_ps_esi(cast<TT>::from(*pa)), vec_cast_ps_esi(b))));
         }
-        static __forceinline void SetMul  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetMul  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_mul_epi(vec_cast_ps_esi(cast<TT>::from(*pa)), vec_cast_ps_esi(b))));
         }
-        static __forceinline void SetMod  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetMod  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_mod_epi32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_mod_epi(vec_cast_ps_esi(cast<TT>::from(*pa)), vec_cast_ps_esi(b))));
         }
         // vector-scalar
-        static __forceinline __m128 DivVecScal ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_div_epi32(_mm_castps_si128(a),_mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0)))));
+        static __forceinline vec4f DivVecScal ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_div_epi(vec_cast_ps_esi(a),vec_shuffle_epi_xxxx(vec_cast_ps_esi(b))));
         }
-        static __forceinline __m128 MulVecScal ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(a),_mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0)))));
+        static __forceinline vec4f MulVecScal ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_mul_epi(vec_cast_ps_esi(a),vec_shuffle_epi_xxxx(vec_cast_ps_esi(b))));
         }
-        static __forceinline __m128 DivScalVec ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_div_epi32(_mm_castps_si128(_mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0))),_mm_castps_si128(b)));
+        static __forceinline vec4f DivScalVec ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_div_epi(vec_shuffle_epi_xxxx(vec_cast_ps_esi(a)),vec_cast_ps_esi(b)));
         }
-        static __forceinline __m128 MulScalVec ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(_mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0))),_mm_castps_si128(b)));
+        static __forceinline vec4f MulScalVec ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_mul_epi(vec_shuffle_epi_xxxx(vec_cast_ps_esi(a)),vec_cast_ps_esi(b)));
         }
-        static __forceinline void SetDivScal ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetDivScal ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_div_epi32(_mm_castps_si128(cast<TT>::from(*pa)),
-                                                               _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_div_epi(vec_cast_ps_esi(cast<TT>::from(*pa)),
+                                                            vec_shuffle_epi_xxxx(vec_cast_ps_esi(b)))));
         }
-        static __forceinline void SetMulScal ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetMulScal ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(cast<TT>::from(*pa)),
-                                                               _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_mul_epi(vec_cast_ps_esi(cast<TT>::from(*pa)),
+                                                            vec_shuffle_epi_xxxx(vec_cast_ps_esi(b)))));
         }
     };
     
     template <typename TT, int mask>
     struct SimPolicy_uVec : SimPolicy_iVec<TT,mask> {
-        // this is missing in SSE2 (but exists in SSE4?)
-        static __forceinline __m128i _mm_div_epu32 ( __m128i a, __m128i b) {
-            __m128i c;  uint32_t * A = (uint32_t *)&a, * B = (uint32_t *)&b, * C = (uint32_t *)&c;
-            C[0] = A[0]/B[0];
-            C[1] = A[1]/B[1];
-            C[2] = A[2]/B[2];
-            C[3] = A[3]/B[3];
-            return c;
-        }
         // swapping some numeric operations
-        static __forceinline __m128 Div ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_div_epu32(_mm_castps_si128(a), _mm_castps_si128(b)));
+        static __forceinline vec4f Div ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_div_epu(vec_cast_ps_esi(a), vec_cast_ps_esi(b)));
         }
-        static __forceinline __m128 Mul ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_mul_epu32(_mm_castps_si128(a), _mm_castps_si128(b)));
+        static __forceinline vec4f Mul ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_mul_epu(vec_cast_ps_esi(a), vec_cast_ps_esi(b)));
         }
-        static __forceinline void SetDiv  ( char * a, __m128 b, Context & ) {
+        static __forceinline vec4f Mod ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_mod_epu(vec_cast_ps_esi(a),vec_cast_ps_esi(b)));
+        }
+        static __forceinline void SetDiv  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_div_epu32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_div_epu(vec_cast_ps_esi(cast<TT>::from(*pa)), vec_cast_ps_esi(b))));
         }
-        static __forceinline void SetMul  ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetMul  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_mul_epu32(_mm_castps_si128(cast<TT>::from(*pa)), _mm_castps_si128(b))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_mul_epu(vec_cast_ps_esi(cast<TT>::from(*pa)), vec_cast_ps_esi(b))));
+        }
+        static __forceinline void SetMod  ( char * a, vec4f b, Context & ) {
+            TT * pa = (TT *)a;
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_mod_epu(vec_cast_ps_esi(cast<TT>::from(*pa)), vec_cast_ps_esi(b))));
         }
         // vector-scalar
-        static __forceinline __m128 DivVecScal ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_div_epu32(_mm_castps_si128(a), _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0)))));
+        static __forceinline vec4f DivVecScal ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_div_epu(vec_cast_ps_esi(a),vec_shuffle_epi_xxxx(vec_cast_ps_esi(b))));
         }
-        static __forceinline __m128 MulVecScal ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_mul_epu32(_mm_castps_si128(a), _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0)))));
+        static __forceinline vec4f MulVecScal ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_mul_epu(vec_cast_ps_esi(a),vec_shuffle_epi_xxxx(vec_cast_ps_esi(b))));
         }
-        static __forceinline __m128 DivScalVec ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_div_epu32(_mm_castps_si128(_mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0))), _mm_castps_si128(b)));
+        static __forceinline vec4f DivScalVec ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_div_epu(vec_shuffle_epi_xxxx(vec_cast_ps_esi(a)), vec_cast_ps_esi(b)));
         }
-        static __forceinline __m128 MulScalVec ( __m128 a, __m128 b, Context & ) {
-            return _mm_castsi128_ps(_mm_mul_epu32(_mm_castps_si128(_mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0))), _mm_castps_si128(b)));
+        static __forceinline vec4f MulScalVec ( vec4f a, vec4f b, Context & ) {
+            return vec_cast_esi_ps(vec_mul_epu(vec_shuffle_epi_xxxx(vec_cast_ps_esi(a)), vec_cast_ps_esi(b)));
         }
-        static __forceinline void SetDivScal ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetDivScal ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_div_epu32(_mm_castps_si128(cast<TT>::from(*pa)),
-                                                               _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_div_epu(vec_cast_ps_esi(cast<TT>::from(*pa)),
+                                                            vec_shuffle_epi_xxxx(vec_cast_ps_esi(b)))));
         }
-        static __forceinline void SetMulScal ( char * a, __m128 b, Context & ) {
+        static __forceinline void SetMulScal ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (_mm_castsi128_ps(_mm_mul_epu32(_mm_castps_si128(cast<TT>::from(*pa)),
-                                                               _mm_castps_si128(_mm_shuffle_ps(b,b,_MM_SHUFFLE(0,0,0,0))))));
+            *pa = cast<TT>::to (vec_cast_esi_ps(vec_mul_epu(vec_cast_ps_esi(cast<TT>::from(*pa)),
+                                                            vec_shuffle_epi_xxxx(vec_cast_ps_esi(b)))));
         }
     };
     

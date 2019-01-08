@@ -33,7 +33,7 @@ namespace das {
             Visitor::preVisit(block);
             if ( block->arguments.size() ) {
                 block->stackTop = stackTop;
-                stackTop += (sizeof(__m128 *) + 0xf) & ~0xf;
+                stackTop += (sizeof(vec4f *) + 0xf) & ~0xf;
             }
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {

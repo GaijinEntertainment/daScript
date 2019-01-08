@@ -20,10 +20,10 @@ namespace das
     
     // SimNode_Table
     
-    __m128 SimNode_Table::eval ( Context & context ) {
+    vec4f SimNode_Table::eval ( Context & context ) {
 		Table * tab = (Table *)tabExpr->evalPtr(context);
         DAS_EXCEPTION_POINT;
-        __m128 xkey = keyExpr->eval(context);
+        vec4f xkey = keyExpr->eval(context);
         DAS_EXCEPTION_POINT;
         return tabEval ( context, tab, xkey );
     }
@@ -38,7 +38,7 @@ namespace das
     }
     
     bool TableIterator::first ( Context & context, IteratorContext & itc ) {
-        __m128 ll = source->eval(context);
+        vec4f ll = source->eval(context);
         DAS_ITERATOR_EXCEPTION_POINT;
         auto pTable = cast<Table *>::to(ll);
         table_lock(context, *pTable);

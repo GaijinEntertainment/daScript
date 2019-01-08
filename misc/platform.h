@@ -6,11 +6,6 @@
 #pragma warning(disable:4996)	// swap ranges
 #endif
 
-#ifdef _MSC_VER
-#include <intrin.h>
-#endif
-
-#include <xmmintrin.h>
 #include <signal.h>
 #include <assert.h>
 
@@ -46,6 +41,8 @@ __forceinline uint32_t __builtin_clz(uint32_t x) {
 	return (31 - r);
 }
 #endif
+
+#include "hal.h"
 
 
 

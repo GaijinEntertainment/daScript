@@ -98,7 +98,7 @@ namespace das
     };
     
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags );
-    string debug_value ( __m128 value, TypeInfo * info, PrintFlags flags );
+    string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags );
     string debug_type ( TypeInfo * info );
 }
 

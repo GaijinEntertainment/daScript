@@ -216,7 +216,7 @@ namespace das
         ss << ")";
     }
     
-    void debug_value ( stringstream & ss, __m128 x, TypeInfo * info, PrintFlags flags ) {
+    void debug_value ( stringstream & ss, vec4f x, TypeInfo * info, PrintFlags flags ) {
         if ( info->ref ) {
             TypeInfo ti = *info;
             ti.ref = false;
@@ -272,7 +272,7 @@ namespace das
         }
     }
     
-    string debug_value ( __m128 x, TypeInfo * info, PrintFlags flags ) {
+    string debug_value ( vec4f x, TypeInfo * info, PrintFlags flags ) {
         stringstream ss;
         debug_value(ss, x, info, flags);
         return ss.str();

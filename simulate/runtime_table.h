@@ -193,8 +193,8 @@ namespace das
     struct SimNode_Table : SimNode {
         SimNode_Table(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
             : SimNode(at), tabExpr(t), keyExpr(k), valueTypeSize(vts) {}
-        virtual __m128 tabEval ( Context & context, Table * tab, __m128 xkey ) = 0;
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f tabEval ( Context & context, Table * tab, vec4f xkey ) = 0;
+        virtual vec4f eval ( Context & context ) override;
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(eval(context));                  \
@@ -210,14 +210,14 @@ namespace das
     struct SimNode_TableIndex : SimNode_Table {
 		DAS_PTR_NODE;
         SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-		virtual __m128 tabEval(Context & context, Table * tab, __m128 xkey) override {
+		virtual vec4f tabEval(Context & context, Table * tab, vec4f xkey) override {
 			assert(0 && "we should not even be here");
-			return _mm_setzero_ps();
+			return vec_setzero_ps();
 		}
 		__forceinline char * compute ( Context & context ) {
 			Table * tab = (Table *) tabExpr->evalPtr(context);
 			DAS_PTR_EXCEPTION_POINT;
-			__m128 xkey = keyExpr->eval(context);
+			vec4f xkey = keyExpr->eval(context);
 			DAS_PTR_EXCEPTION_POINT;
             KeyType key = cast<KeyType>::to(xkey);
             RobinHoodHash<KeyType> rhh(&context,valueTypeSize);
@@ -234,7 +234,7 @@ namespace das
     template <typename KeyType>
     struct SimNode_TableErase : SimNode_Table {
         SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-        virtual __m128 tabEval ( Context & context, Table * tab, __m128 xkey ) override {
+        virtual vec4f tabEval ( Context & context, Table * tab, vec4f xkey ) override {
             KeyType key = cast<KeyType>::to(xkey);
             auto it = RobinHoodHash<KeyType>(&context,valueTypeSize).erase(*tab, key);
             return cast<bool>::from(it.second);
@@ -245,14 +245,14 @@ namespace das
     struct SimNode_TableFind : SimNode_Table {
 		DAS_PTR_NODE;
         SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-		virtual __m128 tabEval(Context & context, Table * tab, __m128 xkey) override {
+		virtual vec4f tabEval(Context & context, Table * tab, vec4f xkey) override {
 			assert(0 && "we should not even be here");
-			return _mm_setzero_ps();
+			return vec_setzero_ps();
 		}
 		__forceinline char * compute(Context & context) {
 			Table * tab = (Table *)tabExpr->evalPtr(context);
 			DAS_PTR_EXCEPTION_POINT;
-			__m128 xkey = keyExpr->eval(context);
+			vec4f xkey = keyExpr->eval(context);
 			DAS_PTR_EXCEPTION_POINT;
 			KeyType key = cast<KeyType>::to(xkey);
 			auto at = RobinHoodHash<KeyType>(&context, valueTypeSize).find(*tab, key);
@@ -282,7 +282,7 @@ namespace das
     struct SimNode_TableIterator : SimNode {
         SimNode_TableIterator(const LineInfo & at, SimNode * sk, uint32_t stride)
             : SimNode(at) { subexpr.source = sk; subexpr.stride = stride; }
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             return cast<Iterator *>::from(&subexpr);
         }
         IterType   subexpr;

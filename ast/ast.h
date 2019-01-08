@@ -628,7 +628,7 @@ namespace das
         ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) {}
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isConstant() const override { return true; }
-        __m128  value;
+        vec4f  value;
         Type    baseType;
     };
     
@@ -1131,7 +1131,7 @@ namespace das
         bool simulate ( Context & context );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
-        static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, __m128 value );
+        static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
         void visit(Visitor & vis, bool visitGenerics = false);

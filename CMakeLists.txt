@@ -63,6 +63,7 @@ SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 SET(MISC_SRC
 misc/enums.h
 misc/function_traits.h
+misc/hal.h
 misc/platform.h
 misc/vectypes.h
 misc/arraytype.h

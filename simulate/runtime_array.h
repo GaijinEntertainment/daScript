@@ -13,8 +13,8 @@ namespace das
     // BASIC ARRAY NODE
     struct SimNode_Array : SimNode {
         SimNode_Array(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t s) : SimNode(at), l(ll), r(rr), stride(s) {}
-        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) = 0;
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) = 0;
+        virtual vec4f eval ( Context & context ) override;
         SimNode * l, * r;
         uint32_t stride;
     };
@@ -23,14 +23,14 @@ namespace das
     struct SimNode_ArrayAt : SimNode_Array {
         DAS_PTR_NODE;
         SimNode_ArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
-        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override {
+        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override {
             assert(0 && "we should not even be here");
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         __forceinline char * compute ( Context & context ) {
             Array * pA = (Array *) l->evalPtr(context);
             DAS_PTR_EXCEPTION_POINT;
-            __m128 rr = r->eval(context);
+            vec4f rr = r->eval(context);
             DAS_PTR_EXCEPTION_POINT;
             uint32_t idx = cast<uint32_t>::to(rr);
             if ( idx >= pA->size ) {
@@ -45,28 +45,28 @@ namespace das
     // ERASE(INDEX)
     struct SimNode_ArrayErase : SimNode_Array {
         SimNode_ArrayErase(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
-        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
+        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override;
     };
     
     // RESIZE(SIZE)
     struct SimNode_ArrayResize : SimNode_Array {
         SimNode_ArrayResize(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
-        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
+        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override;
     };
     
     // RESERVE(CAPACITY)
     struct SimNode_ArrayReserve : SimNode_Array {
         SimNode_ArrayReserve(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {};
-        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
+        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override;
     };
     
     // PUSH VALUE
     struct SimNode_ArrayPush : SimNode_Array {
         SimNode_ArrayPush(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii, uint32_t sz)
             : SimNode_Array(at, ll, rr, sz), index(ii) {};
-        virtual void copyValue ( char * at, __m128 value ) = 0;
-        virtual __m128 eval ( Context & context ) override;
-        virtual __m128 apply ( Context & context, Array * pA, uint32_t index ) override;
+        virtual void copyValue ( char * at, vec4f value ) = 0;
+        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override;
         SimNode *index;
     };
     
@@ -75,7 +75,7 @@ namespace das
     struct SimNode_ArrayPushValue : SimNode_ArrayPush {
         SimNode_ArrayPushValue(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii)
             : SimNode_ArrayPush(at, ll, rr, ii, sizeof(TT)) {};
-        virtual void copyValue ( char * at, __m128 value ) override {
+        virtual void copyValue ( char * at, vec4f value ) override {
             TT * pl = (TT *) at;
             TT * pr = (TT *) &value;
             *pl = *pr;
@@ -86,7 +86,7 @@ namespace das
     struct SimNode_ArrayPushRefValue : SimNode_ArrayPush {
         SimNode_ArrayPushRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii, uint32_t sz)
             : SimNode_ArrayPush(at, ll, rr, ii, sz) {};
-        virtual void copyValue ( char * at, __m128 value ) override {
+        virtual void copyValue ( char * at, vec4f value ) override {
             auto pr = cast<void *>::to(value);
             memcpy ( at, pr, stride );
         }
@@ -103,7 +103,7 @@ namespace das
     struct SimNode_GoodArrayIterator : SimNode, GoodArrayIterator {
         SimNode_GoodArrayIterator ( const LineInfo & at, SimNode * s, uint32_t st )
             : SimNode(at) { source = s; stride = st; }
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
     };
     
     struct FixedArrayIterator : Iterator {
@@ -118,13 +118,13 @@ namespace das
     struct SimNode_FixedArrayIterator : SimNode, FixedArrayIterator {
         SimNode_FixedArrayIterator ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t st )
             : SimNode(at) { source = s; size = sz; stride = st; }
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
     };
     
     template <int total>
     struct SimNode_ForGoodArray : public SimNode_ForBase {
         SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             Array * __restrict pha[total];
             char * __restrict ph[total];
             for ( int t=0; t!=total; ++t ) {
@@ -152,7 +152,7 @@ namespace das
                 DAS_EXCEPTION_POINT;
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
     };
     
@@ -160,7 +160,7 @@ namespace das
     template <int total>
     struct SimNode_ForFixedArray : SimNode_ForBase {
         SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             char * __restrict ph[total];
             for ( int t=0; t!=total; ++t ) {
                 ph[t] = cast<char *>::to(sources[t]->eval(context));
@@ -178,7 +178,7 @@ namespace das
                 body->eval(context);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
     };
 

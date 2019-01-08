@@ -7,7 +7,7 @@ namespace das
 {
     // string operations
     
-    __m128 SimPolicy_String::Add ( __m128 a, __m128 b, Context & context ) {
+    vec4f SimPolicy_String::Add ( vec4f a, vec4f b, Context & context ) {
         const char *  sA = to_rts(a); auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
         char * sAB = (char * ) context.allocate(uint32_t(la + lb + 1));
@@ -16,7 +16,7 @@ namespace das
         return from_rts(sAB);
     }
   
-    void SimPolicy_String::SetAdd ( char * a, __m128 b, Context & context ) {
+    void SimPolicy_String::SetAdd ( char * a, vec4f b, Context & context ) {
 		char ** pA = (char **)a;
         const char *  sA = *pA ? *pA : rts_null; auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
@@ -114,8 +114,8 @@ namespace das
         return ssw.str();
     }
 
-    __m128 SimNode_StringBuilder::eval ( Context & context ) {
-        __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
+    vec4f SimNode_StringBuilder::eval ( Context & context ) {
+        vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
         DAS_EXCEPTION_POINT;
         stringstream ssw;

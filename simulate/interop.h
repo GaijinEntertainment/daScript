@@ -7,14 +7,14 @@ namespace das
 {
     template <typename TT>
     struct cast_arg {
-        static __forceinline TT to ( Context & ctx, __m128 x ) {
+        static __forceinline TT to ( Context & ctx, vec4f x ) {
             return cast<TT>::to(x);
         }
     };
     
     template <>
     struct cast_arg<Context *> {
-        static __forceinline Context * to ( Context & ctx, __m128 ) {
+        static __forceinline Context * to ( Context & ctx, vec4f ) {
             return &ctx;
         }
     };
@@ -22,7 +22,7 @@ namespace das
     template <typename Result>
     struct ImplCallStaticFunction {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline __m128 call(FunctionType & fn, Context & ctx, __m128 * args, index_sequence<I...> ) {
+        static __forceinline vec4f call(FunctionType & fn, Context & ctx, vec4f * args, index_sequence<I...> ) {
             return cast<Result>::from ( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ) );
         }
     };
@@ -30,29 +30,29 @@ namespace das
     template <>
     struct ImplCallStaticFunction<void> {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline __m128 call(FunctionType & fn, Context & ctx, __m128 * args, index_sequence<I...> ) {
+        static __forceinline vec4f call(FunctionType & fn, Context & ctx, vec4f * args, index_sequence<I...> ) {
             fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
     };
     
     template <typename FuncT, FuncT fn >
     struct SimNode_ExtFuncCall : SimNode_CallBase {
         SimNode_ExtFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;
             using Result = typename FunctionTrait::return_type;
             using Arguments = typename FunctionTrait::arguments;
             const int nargs = tuple_size<Arguments>::value;
             using Indices = make_index_sequence<nargs>;
-			__m128 * args = (__m128 *)(alloca(nArguments*sizeof(__m128)));
+			vec4f * args = (vec4f *)(alloca(nArguments*sizeof(vec4f)));
 			evalArgs(context, args);
             DAS_EXCEPTION_POINT;
             // PUSH
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
             if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
                 context.throw_error("stack overflow");
-                return _mm_setzero_ps();
+                return vec_setzero_ps();
             }
             char * pushStack = context.stackTop;
             char * pushInvokeStack = context.invokeStackTop;
@@ -63,7 +63,7 @@ namespace das
             // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
-            pp->result =        _mm_setzero_ps();
+            pp->result =        vec_setzero_ps();
             pp->arguments =     args;
             pp->info =          info;
             pp->line =          debug.line;
@@ -79,20 +79,20 @@ namespace das
         FuncInfo * info = nullptr;
     };
     
-    typedef __m128 ( InteropFunction ) ( Context & context, SimNode_CallBase * node, __m128 * args );
+    typedef vec4f ( InteropFunction ) ( Context & context, SimNode_CallBase * node, vec4f * args );
     
     template <InteropFunction fn>
     struct SimNode_InteropFuncCall : SimNode_CallBase {
         SimNode_InteropFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual __m128 eval ( Context & context ) override {
-			__m128 * args = (__m128 *)(alloca(nArguments * sizeof(__m128)));
+        virtual vec4f eval ( Context & context ) override {
+			vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);
             DAS_EXCEPTION_POINT;
             // PUSH
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
             if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
                 context.throw_error("stack overflow");
-                return _mm_setzero_ps();
+                return vec_setzero_ps();
             }
             char * pushStack = context.stackTop;
             char * pushInvokeStack = context.invokeStackTop;
@@ -103,7 +103,7 @@ namespace das
             // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
-            pp->result =        _mm_setzero_ps();
+            pp->result =        vec_setzero_ps();
             pp->arguments =     args;
             pp->info =          info;
             pp->line =          debug.line;

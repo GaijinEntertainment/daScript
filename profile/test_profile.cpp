@@ -27,7 +27,7 @@ void updateTest ( ObjectArray & objects ) {
 void update10000 ( ObjectArray & objects, Context * context ) {
     int updateFn = context->findFunction("update");
     for ( auto & obj : objects ) {
-        __m128 args[1] = { cast<Object &>::from(obj) };
+        vec4f args[1] = { cast<Object &>::from(obj) };
         context->eval(updateFn,  args);
     }
 }
@@ -35,7 +35,7 @@ void update10000 ( ObjectArray & objects, Context * context ) {
 void update10000ks ( ObjectArray & objects, Context * context ) {
     int ksUpdateFn = context->findFunction("ks_update");
     for ( auto & obj : objects ) {
-        __m128 args[2] = { cast<float3 &>::from(obj.pos), cast<float3>::from(obj.vel) };
+        vec4f args[2] = { cast<float3 &>::from(obj.pos), cast<float3>::from(obj.vel) };
         context->eval(ksUpdateFn,  args);
     }
 }
@@ -69,12 +69,12 @@ int AddOne(int a) {
 
 struct EsAttribute {
     EsAttribute() = default;
-    EsAttribute ( const string & n, uint32_t sz, bool rf, __m128 d )
+    EsAttribute ( const string & n, uint32_t sz, bool rf, vec4f d )
         : name(n), size(sz), ref(rf), def(d) {}
     string      name;
     uint32_t    size = 0;
     bool        ref;
-    __m128      def = _mm_setzero_ps();
+    vec4f      def = vec_setzero_ps();
 };
 
 struct EsAttributeTable {
@@ -106,7 +106,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
     EsFunctionAnnotation() : FunctionAnnotation("es") { }
     void buildAttributeTable ( EsAttributeTable & tab, const vector<VariablePtr> & arguments, string & err  ) {
         for ( const auto & arg : arguments ) {
-            __m128 def = _mm_setzero_ps();
+            vec4f def = vec_setzero_ps();
             if ( arg->init ) {
                 if ( arg->init->rtti_isConstant() && !arg->init->rtti_isStringConstant() ) {
                     auto pConst = static_pointer_cast<ExprConst>(arg->init);
@@ -181,10 +181,10 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
         return false;
     int fnIndex = table.functionIndex;
     context.restart();
-	__m128 * _args = (__m128 *)(alloca(table.attributes.size() * sizeof(__m128)));
+	vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
     context.callEx(fnIndex, _args, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
-        __m128 * args = _args;
+        vec4f * args = _args;
 		char **		data	= (char **) alloca(nAttr * sizeof(char *));
 		uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(uint32_t));
         uint32_t *  size    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
@@ -210,7 +210,7 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
                 if ( data[a] ) {
                     char * src =  boxed[a] ? *((char **)data[a]) : data[a];
                     if ( !ref[a] ) {
-                        args[a] = _mm_loadu_ps((float *)src);
+                        args[a] = vec_loadu_ps((float *)src);
                     } else {
                         *((void **)&args[a]) = src;
                     }
@@ -243,9 +243,9 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
     EsAttributeTable & table = g_esBlockTable[index];
     context.restart();
     uint32_t nAttr = (uint32_t) table.attributes.size();
-    __m128 * _args = (__m128 *)(alloca(table.attributes.size() * sizeof(__m128)));
+    vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
     context.invokeEx(block, _args,[&](SimNode * code){
-        __m128 * args = _args;
+        vec4f * args = _args;
         char **		data	= (char **) alloca(nAttr * sizeof(char *));
         uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(uint32_t));
         uint32_t *  size    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
@@ -271,7 +271,7 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
                 if ( data[a] ) {
                     char * src =  boxed[a] ? *((char **)data[a]) : data[a];
                     if ( !ref[a] ) {
-                        args[a] = _mm_loadu_ps((float *)src);
+                        args[a] = vec_loadu_ps((float *)src);
                     } else {
                         *((void **)&args[a]) = src;
                     }

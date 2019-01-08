@@ -5,7 +5,7 @@
 namespace das
 {
     bool RangeIterator::first ( Context & context, IteratorContext & itc ) {
-        __m128 ll = subexpr->eval(context);
+        vec4f ll = subexpr->eval(context);
         DAS_ITERATOR_EXCEPTION_POINT;
         range r = cast<range>::to(ll);  // does not matter if its range or urange, hence only one type
         itc.value    = cast<int32_t>::from(r.from);
@@ -22,12 +22,12 @@ namespace das
     void RangeIterator::close ( Context & context, IteratorContext & itc ) {
     }
     
-    __m128 SimNode_RangeIterator::eval ( Context & context ) {
+    vec4f SimNode_RangeIterator::eval ( Context & context ) {
         return cast<Iterator *>::from(static_cast<RangeIterator *>(this));
     }
     
-    __m128 SimNode_ForRange::eval ( Context & context ) {
-        __m128 ll = sources[0]->eval(context);
+    vec4f SimNode_ForRange::eval ( Context & context ) {
+        vec4f ll = sources[0]->eval(context);
         DAS_EXCEPTION_POINT;
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stackTop + stackTop[0]);
@@ -37,6 +37,6 @@ namespace das
             body->eval(context);
         }
         context.stopFlags &= ~EvalFlags::stopForBreak;
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
 }

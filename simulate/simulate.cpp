@@ -42,7 +42,7 @@ namespace das
     
     // SimNode_MakeBlock
     
-    __m128 SimNode_MakeBlock::eval ( Context & context )  {
+    vec4f SimNode_MakeBlock::eval ( Context & context )  {
         Block block;
         block.stackOffset = uint32_t(context.stackTop - context.stack);
         block.argumentsOffset = argStackTop ? uint32_t(context.stackTop + argStackTop - context.stack) : 0;
@@ -52,14 +52,14 @@ namespace das
     
     // SimNode_Call
     
-    void SimNode_CallBase::evalArgs ( Context & context, __m128 * argValues ) {
+    void SimNode_CallBase::evalArgs ( Context & context, vec4f * argValues ) {
         for ( int i=0; i!=nArguments && !context.stopFlags; ++i ) {
             argValues[i] = arguments[i]->eval(context);
         }
     }
     
-    __m128 SimNode_Call::eval ( Context & context ) {
-		__m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
+    vec4f SimNode_Call::eval ( Context & context ) {
+		vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
         DAS_EXCEPTION_POINT;
         return context.call(fnIndex, argValues, debug.line);
@@ -67,8 +67,8 @@ namespace das
     
     // SimNode_Invoke
     
-    __m128 SimNode_Invoke::eval ( Context & context )  {
-        __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));
+    vec4f SimNode_Invoke::eval ( Context & context )  {
+        vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
         DAS_EXCEPTION_POINT;
         Block block = cast<Block>::to(argValues[0]);
@@ -81,8 +81,8 @@ namespace das
     
     // SimNode_Debug
     
-    __m128 SimNode_Debug::eval ( Context & context ) {
-        __m128 res = subexpr->eval(context);
+    vec4f SimNode_Debug::eval ( Context & context ) {
+        vec4f res = subexpr->eval(context);
         DAS_EXCEPTION_POINT;
         stringstream ssw;
         if ( message ) ssw << message << " ";
@@ -94,7 +94,7 @@ namespace das
     
     // SimNode_Assert
     
-    __m128 SimNode_Assert::eval ( Context & context ) {
+    vec4f SimNode_Assert::eval ( Context & context ) {
         if ( !subexpr->evalBool(context) ) {
             DAS_EXCEPTION_POINT;
             string error_message = "assert failed";
@@ -105,12 +105,12 @@ namespace das
             context.to_err(error.c_str());
             context.throw_error("assert failed");
         }
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     // SimNode_TryCatch
     
-    __m128 SimNode_TryCatch::eval ( Context & context ) {
+    vec4f SimNode_TryCatch::eval ( Context & context ) {
         #if DAS_ENABLE_EXCEPTIONS
             try_block->eval(context);
             if ( context.stopFlags & EvalFlags::stopForThrow ) {
@@ -125,53 +125,53 @@ namespace das
                 catch_block->eval(context);
             }
         #endif
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     // SimNode_New
     
-    __m128 SimNode_New::eval ( Context & context ) {
+    vec4f SimNode_New::eval ( Context & context ) {
         if ( void * ptr = context.allocate(bytes) ) {
             memset ( ptr, 0, bytes );
             return cast<void *>::from(ptr);
         } else {
             context.throw_error("out of memory");
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
     }
     
     // SimNode_CopyRefValue
     
-    __m128 SimNode_CopyRefValue::eval ( Context & context ) {
+    vec4f SimNode_CopyRefValue::eval ( Context & context ) {
         auto pl = l->evalPtr(context);
         DAS_EXCEPTION_POINT;
         auto pr = r->evalPtr(context);
         DAS_EXCEPTION_POINT;
         memcpy ( pl, pr, size );
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     // SimNode_MoveRefValue
     
-    __m128 SimNode_MoveRefValue::eval ( Context & context ) {
+    vec4f SimNode_MoveRefValue::eval ( Context & context ) {
         auto pl = l->evalPtr(context);
         DAS_EXCEPTION_POINT;
         auto pr = r->evalPtr(context);
         DAS_EXCEPTION_POINT;
         memcpy ( pl, pr, size );
         memset ( pr, 0, size );
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     // SimNode_Block
     
-    __m128 SimNode_Block::eval ( Context & context ) {
+    vec4f SimNode_Block::eval ( Context & context ) {
         for ( int i = 0; i!=total && !context.stopFlags; ++i )
             list[i]->eval(context);
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
-    __m128 SimNode_ClosureBlock::eval ( Context & context ) {
+    vec4f SimNode_ClosureBlock::eval ( Context & context ) {
         for ( int i = 0; i!=total && !context.stopFlags; ++i )
             list[i]->eval(context);
         if ( context.stopFlags & EvalFlags::stopForReturn ) {
@@ -179,22 +179,22 @@ namespace das
             return context.abiResult();
         } else {
             if ( needResult ) context.throw_error("end of block without return");
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
     }
     
     // SimNode_Let
     
-    __m128 SimNode_Let::eval ( Context & context ) {
+    vec4f SimNode_Let::eval ( Context & context ) {
         for ( int i = 0; i!=total && !context.stopFlags; ++i )
             list[i]->eval(context);
         DAS_EXCEPTION_POINT;
-        return subexpr ? subexpr->eval(context) : _mm_setzero_ps();
+        return subexpr ? subexpr->eval(context) : vec_setzero_ps();
     }
     
     // SimNode_IfThenElse
     
-    __m128 SimNode_IfThenElse::eval ( Context & context ) {
+    vec4f SimNode_IfThenElse::eval ( Context & context ) {
         bool cmp = cond->evalBool(context);
         DAS_EXCEPTION_POINT;
         if ( cmp ) {
@@ -202,18 +202,18 @@ namespace das
         } else if ( if_false ) {
             return if_false->eval(context);
         } else {
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
     }
     
     // SimNode_While
     
-    __m128 SimNode_While::eval ( Context & context ) {
+    vec4f SimNode_While::eval ( Context & context ) {
         while ( cond->evalBool(context) && !context.stopFlags ) {
             body->eval(context);
         }
         context.stopFlags &= ~EvalFlags::stopForBreak;
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     // Context
@@ -271,17 +271,17 @@ namespace das
         }
     }
     
-    __m128 Context::invokeEx(const Block &block, __m128 * args, function<void (SimNode *)> && when) {
+    vec4f Context::invokeEx(const Block &block, vec4f * args, function<void (SimNode *)> && when) {
         char * saveSp = stackTop;
         char * saveISp = invokeStackTop;
         invokeStackTop = stackTop;
         stackTop = stack + block.stackOffset;
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
-        __m128 ** pArgs;
-        __m128 * saveArgs;
+        vec4f ** pArgs;
+        vec4f * saveArgs;
         if ( block.argumentsOffset ) {
             assert(args && "expecting arguments");
-            pArgs = (__m128 **)(stack + block.argumentsOffset);
+            pArgs = (vec4f **)(stack + block.argumentsOffset);
             saveArgs = *pArgs;
             *pArgs = args;
         } else {
@@ -289,7 +289,7 @@ namespace das
         }
         // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
         when(block.body);
-        __m128 result = abiResult();
+        vec4f result = abiResult();
         if ( args && block.argumentsOffset ) {
             *pArgs = saveArgs;
         }
@@ -299,14 +299,14 @@ namespace das
         return result;
     }
 
-    __m128 Context::callEx(int fnIndex, __m128 *args, int line, function<void (SimNode *)> && when) {
+    vec4f Context::callEx(int fnIndex, vec4f *args, int line, function<void (SimNode *)> && when) {
         assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
         auto & fn = functions[fnIndex];
         // PUSH
         char * top = invokeStackTop ? invokeStackTop : stackTop;
         if ( stack - ( top - fn.stackSize ) > stackSize ) {
             throw_error("stack overflow");
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         char * pushStack = stackTop;
         char * pushInvokeStack = invokeStackTop;
@@ -316,7 +316,7 @@ namespace das
         // cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
         // fill prologue
         Prologue * pp = (Prologue *) stackTop;
-        pp->result =        _mm_setzero_ps();
+        pp->result =        vec_setzero_ps();
         pp->arguments =     args;
 #if DAS_ENABLE_STACK_WALK
         pp->info =          fn.debug;
@@ -324,7 +324,7 @@ namespace das
 #endif
         // CALL
         when(fn.code);
-        __m128 result = abiResult();
+        vec4f result = abiResult();
         stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
         // POP
         invokeStackTop = pushInvokeStack;

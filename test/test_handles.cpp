@@ -81,7 +81,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         DAS_PTR_NODE;
         SimNode_IntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode(at), value(rv), name(n) {}
         char * compute ( Context & context ) {
-            __m128 rv = value->eval(context);
+            vec4f rv = value->eval(context);
             DAS_PTR_EXCEPTION_POINT;
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
                 auto it = prv->fields.find(name);
@@ -105,7 +105,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         DAS_PTR_NODE;
         SimNode_SafeIntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode_IntFieldDeref(at,rv,n) {}
         __forceinline char * compute ( Context & context ) {
-            __m128 rv = value->eval(context);
+            vec4f rv = value->eval(context);
             DAS_PTR_EXCEPTION_POINT;
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
                 auto it = prv->fields.find(name);
@@ -172,7 +172,7 @@ void testFields ( Context * ctx ) {
     int32_t t = 0;
     IntFields x;
     auto fx = ctx->findFunction("testFields");
-    __m128 args[1] = { cast<IntFields *>::from(&x) };
+    vec4f args[1] = { cast<IntFields *>::from(&x) };
     x.fields["a"] = 1;
     t = cast<int32_t>::to ( ctx->eval(fx, args) );
     assert(!ctx->getException());

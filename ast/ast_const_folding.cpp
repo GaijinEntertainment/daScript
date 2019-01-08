@@ -109,16 +109,16 @@ namespace das {
         Context     ctx;
         ProgramPtr  program;
     protected:
-        __m128 eval ( Expression * expr ) {
+        vec4f eval ( Expression * expr ) {
             ctx.simEnd();
             ctx.restart();
             auto node = expr->simulate(ctx);
             ctx.simEnd();
             ctx.restart();
-            __m128 result = node->eval(ctx);
+            vec4f result = node->eval(ctx);
             if ( ctx.getException() ) {
                 program->error("internal error, failed to fold constant", expr->at );
-                return _mm_setzero_ps();
+                return vec_setzero_ps();
             }
             return result;
         }
@@ -132,7 +132,7 @@ namespace das {
         }
         ExpressionPtr evalAndFoldString ( Expression * expr ) {
             if ( expr->rtti_isStringConstant() ) return expr->shared_from_this();
-            __m128 value = eval(expr);
+            vec4f value = eval(expr);
             TypeInfo * pTypeInfo = ctx.makeNode<TypeInfo>();
             program->makeTypeInfo(pTypeInfo, ctx, expr->type);
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
@@ -142,7 +142,7 @@ namespace das {
             reportFolding();
             return sim;
         }
-        bool isSameFoldValue ( const TypeDeclPtr & t, __m128 a, __m128 b ) const {
+        bool isSameFoldValue ( const TypeDeclPtr & t, vec4f a, vec4f b ) const {
             return memcmp(&a,&b,t->getSizeOf()) == 0;
         }
     };
@@ -207,8 +207,8 @@ namespace das {
             if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression ) {
                 return evalAndFold(expr);
             } else if ( expr->type->isFoldable() && expr->subexpr->noSideEffects && expr->left->constexpression && expr->right->constexpression ) {
-                __m128 left = eval(expr->left.get());
-                __m128 right = eval(expr->right.get());
+                vec4f left = eval(expr->left.get());
+                vec4f right = eval(expr->right.get());
                 if ( isSameFoldValue(expr->type, left, right) ) {
                     reportFolding();
                     return expr->left->clone();

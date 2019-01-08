@@ -41,7 +41,7 @@ bool unit_test ( const string & fn ) {
             int fnTest = ctx.findFunction("test");
             if ( fnTest != -1 ) {
                 ctx.restart();
-                __m128 args[1] = { cast<vector<Object> *>::from(&objects) };
+                vec4f args[1] = { cast<vector<Object> *>::from(&objects) };
                 bool result = cast<bool>::to(ctx.eval(fnTest, args));
                 if ( auto ex = ctx.getException() ) {
                     cout << fn << ", exception: " << ex << "\n";

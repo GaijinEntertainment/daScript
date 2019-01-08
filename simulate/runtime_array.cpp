@@ -45,10 +45,10 @@ namespace das
     
     // SimNode_Array
     
-    __m128 SimNode_Array::eval ( Context & context ) {
+    vec4f SimNode_Array::eval ( Context & context ) {
 		Array * pA = (Array *) l->evalPtr(context);
         DAS_EXCEPTION_POINT;
-        __m128 rr = r->eval(context);
+        vec4f rr = r->eval(context);
         DAS_EXCEPTION_POINT;
         uint32_t idx = cast<uint32_t>::to(rr);
         return apply(context, pA, idx);
@@ -56,64 +56,64 @@ namespace das
     
     // PUSH VALUE
     
-    __m128 SimNode_ArrayPush::apply ( Context & context, Array * pA, uint32_t index ) {
-        return _mm_setzero_ps();
+    vec4f SimNode_ArrayPush::apply ( Context & context, Array * pA, uint32_t index ) {
+        return vec_setzero_ps();
     }
     
-    __m128 SimNode_ArrayPush::eval ( Context & context ) {
-        __m128 arr = l->eval(context);
+    vec4f SimNode_ArrayPush::eval ( Context & context ) {
+        vec4f arr = l->eval(context);
         DAS_EXCEPTION_POINT;
-        __m128 val = r->eval(context);
+        vec4f val = r->eval(context);
         DAS_EXCEPTION_POINT;
         auto * pA = cast<Array *>::to(arr);
         uint32_t idx = pA->size;
         array_resize(context, *pA, idx + 1, stride, false);
         DAS_EXCEPTION_POINT;
         if ( index ) {
-            __m128 ati = index->eval(context);
+            vec4f ati = index->eval(context);
             DAS_EXCEPTION_POINT;
             uint32_t i = cast<uint32_t>::to(ati);
             if ( i >= pA->size ) {
                 context.throw_error("insert index out of range");
-                return _mm_setzero_ps();
+                return vec_setzero_ps();
             }
             memmove ( pA->data+(i+1)*stride, pA->data+i*stride, (idx-i)*stride );
             idx = i;
         }
         copyValue ( pA->data + idx*stride, val );
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     // ERASE
 
-    __m128 SimNode_ArrayErase::apply ( Context & context, Array * pA, uint32_t index ) {
+    vec4f SimNode_ArrayErase::apply ( Context & context, Array * pA, uint32_t index ) {
         if ( index >= pA->size ) {
             context.throw_error("erase index out of range");
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         memmove ( pA->data+index*stride, pA->data+(index+1)*stride, (pA->size-index-1)*stride );
         array_resize(context, *pA, pA->size-1, stride, false);
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     // RESIZE
 
-    __m128 SimNode_ArrayResize::apply ( Context & context, Array * pA, uint32_t newSize ) {
+    vec4f SimNode_ArrayResize::apply ( Context & context, Array * pA, uint32_t newSize ) {
         array_resize(context, *pA, newSize, stride, true);
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     // RESERVE
 
-    __m128 SimNode_ArrayReserve::apply ( Context & context, Array * pA, uint32_t newCapacity ) {
+    vec4f SimNode_ArrayReserve::apply ( Context & context, Array * pA, uint32_t newCapacity ) {
         array_reserve(context, *pA, newCapacity, stride);
-        return _mm_setzero_ps();
+        return vec_setzero_ps();
     }
     
     // GoodArrayIterator
     
     bool GoodArrayIterator::first ( Context & context, IteratorContext & itc )  {
-        __m128 ll = source->eval(context);
+        vec4f ll = source->eval(context);
         DAS_ITERATOR_EXCEPTION_POINT;
         auto pArray = cast<Array *>::to(ll);
         array_lock(context, *pArray);
@@ -137,14 +137,14 @@ namespace das
         }
     }
 
-    __m128 SimNode_GoodArrayIterator::eval ( Context & context ) {
+    vec4f SimNode_GoodArrayIterator::eval ( Context & context ) {
         return cast<Iterator *>::from(static_cast<GoodArrayIterator *>(this));
     }
     
     // FixedArrayIterator
     
     bool FixedArrayIterator::first ( Context & context, IteratorContext & itc )  {
-        __m128 ll = source->eval(context);
+        vec4f ll = source->eval(context);
         DAS_ITERATOR_EXCEPTION_POINT;
         char * data = cast<char *>::to(ll);
         itc.value = cast<char *>::from(data);
@@ -161,7 +161,7 @@ namespace das
     void FixedArrayIterator::close ( Context & context, IteratorContext & itc )  {
     }
 
-    __m128 SimNode_FixedArrayIterator::eval ( Context & context ) {
+    vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {
         return cast<Iterator *>::from(static_cast<FixedArrayIterator *>(this));
     }
 }

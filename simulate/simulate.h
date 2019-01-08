@@ -27,7 +27,7 @@ namespace das
     
     struct GlobalVariable {
         char *          name;
-        __m128			value;
+        vec4f			value;
         uint32_t        size;
         VarInfo *       debug;
         SimNode *       init;
@@ -42,7 +42,7 @@ namespace das
     
     struct SimNode {
         SimNode ( const LineInfo & at ) : debug(at) {}
-        virtual __m128 eval ( Context & ) = 0;
+        virtual vec4f eval ( Context & ) = 0;
         virtual char *      evalPtr ( Context & context );
         virtual bool        evalBool ( Context & context );
         virtual float       evalFloat ( Context & context );
@@ -54,8 +54,8 @@ namespace das
     };
     
     struct Prologue {
-        __m128      result;
-        __m128 *    arguments;
+        vec4f      result;
+        vec4f *    arguments;
 #if DAS_ENABLE_STACK_WALK
         FuncInfo *  info;
         int32_t     line;
@@ -141,7 +141,7 @@ namespace das
             }
         }
         
-        __forceinline __m128 getVariable ( int index ) const {
+        __forceinline vec4f getVariable ( int index ) const {
             assert(index>=0 && index<totalVariables && "variable index out of range");
             return globalVariables[index].value;
         }
@@ -158,7 +158,7 @@ namespace das
             stopFlags = 0;
         }
         
-        __forceinline __m128 eval ( int fnIndex, __m128 * args ) {
+        __forceinline vec4f eval ( int fnIndex, vec4f * args ) {
             return call(fnIndex, args, 0);
         }
         
@@ -180,22 +180,22 @@ namespace das
         virtual void to_err ( const char * message );           // output to stderr or equivalent
         virtual void breakPoint(int column, int line) const;    // what to do in case of breakpoint
         
-        __forceinline __m128 * abiArguments() {
+        __forceinline vec4f * abiArguments() {
             return ((Prologue *)stackTop)->arguments;
         }
 
-		__forceinline __m128 & abiResult() {
+		__forceinline vec4f & abiResult() {
             return ((Prologue *)stackTop)->result;
         }
         
-		__forceinline __m128 call(int fnIndex, __m128 * args, int line) {
+		__forceinline vec4f call(int fnIndex, vec4f * args, int line) {
 			assert(fnIndex >= 0 && fnIndex<totalFunctions && "function index out of range");
 			auto & fn = functions[fnIndex];
 			// PUSH
 			char * top = invokeStackTop ? invokeStackTop : stackTop;
 			if (stack - (top - fn.stackSize) > stackSize) {
 				throw_error("stack overflow");
-				return _mm_setzero_ps();
+				return vec_setzero_ps();
 			}
 			char * pushStack = stackTop;
 			char * pushInvokeStack = invokeStackTop;
@@ -205,7 +205,7 @@ namespace das
 			// cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
 			// fill prologue
 			Prologue * pp = (Prologue *)stackTop;
-			pp->result = _mm_setzero_ps();
+			pp->result = vec_setzero_ps();
 			pp->arguments = args;
 #if DAS_ENABLE_STACK_WALK
 			pp->info = fn.debug;
@@ -213,7 +213,7 @@ namespace das
 #endif
 			// CALL
 			fn.code->eval(*this);
-			__m128 result = abiResult();
+			vec4f result = abiResult();
 			stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
 			// POP
 			invokeStackTop = pushInvokeStack;
@@ -222,17 +222,17 @@ namespace das
 			return result;
 		}
 
-		__forceinline __m128 invoke(const Block &block, __m128 * args) {
+		__forceinline vec4f invoke(const Block &block, vec4f * args) {
 			char * saveSp = stackTop;
 			char * saveISp = invokeStackTop;
 			invokeStackTop = stackTop;
 			stackTop = stack + block.stackOffset;
 			assert(stackTop >= stack && stackTop < stackTop + stackSize);
-			__m128 ** pArgs;
-			__m128 * saveArgs;
+			vec4f ** pArgs;
+			vec4f * saveArgs;
 			if (block.argumentsOffset) {
 				assert(args && "expecting arguments");
-				pArgs = (__m128 **)(stack + block.argumentsOffset);
+				pArgs = (vec4f **)(stack + block.argumentsOffset);
 				saveArgs = *pArgs;
 				*pArgs = args;
 			}
@@ -240,7 +240,7 @@ namespace das
 				assert(!args && "not expecting arguments");
 			}
 			// cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
-			__m128 result = block.body->eval(*this);
+			vec4f result = block.body->eval(*this);
 			if (args && block.argumentsOffset) {
 				*pArgs = saveArgs;
 			}
@@ -250,8 +250,8 @@ namespace das
 			return result;
 		}
 
-        __m128 callEx ( int fnIndex, __m128 * args, int line, function<void (SimNode *)> && when );
-        __m128 invokeEx ( const Block &block, __m128 * args, function<void (SimNode *)> && when );
+        vec4f callEx ( int fnIndex, vec4f * args, int line, function<void (SimNode *)> && when );
+        vec4f invokeEx ( const Block &block, vec4f * args, function<void (SimNode *)> && when );
         
         __forceinline const char * getException() const {
             return stopFlags & EvalFlags::stopForThrow ? exception : nullptr;
@@ -279,7 +279,7 @@ namespace das
     
 #if DAS_ENABLE_EXCEPTIONS
     #define DAS_EXCEPTION_POINT \
-        { if ( context.stopFlags ) return _mm_setzero_ps(); }
+        { if ( context.stopFlags ) return vec_setzero_ps(); }
     #define DAS_PTR_EXCEPTION_POINT \
         { if ( context.stopFlags ) return nullptr; }
     #define DAS_ITERATOR_EXCEPTION_POINT \
@@ -309,7 +309,7 @@ namespace das
     EVAL_NODE(Bool,bool);
     
 #define DAS_NODE(TYPE,CTYPE)                                    \
-    virtual __m128 eval ( Context & context ) override {        \
+    virtual vec4f eval ( Context & context ) override {        \
         return cast<CTYPE>::from(compute(context));             \
     }                                                           \
     virtual CTYPE eval##TYPE ( Context & context ) override {   \
@@ -324,7 +324,7 @@ namespace das
     struct SimNode_MakeBlock : SimNode {
         SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a )
             : SimNode(at), subexpr(s), argStackTop(a) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode *       subexpr;
         uint32_t        argStackTop;
     };
@@ -332,7 +332,7 @@ namespace das
     // ASSERT
     struct SimNode_Assert : SimNode {
         SimNode_Assert ( const LineInfo & at, SimNode * s, const char * m ) : SimNode(at), subexpr(s), message(m) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode *       subexpr;
         const char *    message;
     };
@@ -351,7 +351,7 @@ namespace das
     template <typename TT>
     struct SimNode_FieldDerefR2V : SimNode_FieldDeref {
         SimNode_FieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             auto prv = value->evalPtr(context);
             DAS_EXCEPTION_POINT;
             TT * pR = (TT *)( prv + offset );
@@ -390,7 +390,7 @@ namespace das
 	template <typename TT>
 	struct SimNode_PtrFieldDerefR2V : SimNode_PtrFieldDeref {
 		SimNode_PtrFieldDerefR2V(const LineInfo & at, SimNode * rv, uint32_t of) : SimNode_PtrFieldDeref(at, rv, of) {}
-		virtual __m128 eval(Context & context) override {
+		virtual vec4f eval(Context & context) override {
 			auto prv = value->evalPtr(context);
 			DAS_EXCEPTION_POINT;
 			if (prv) {
@@ -399,7 +399,7 @@ namespace das
 			}
 			else {
 				context.throw_error("dereferencing null pointer");
-				return _mm_setzero_ps();
+				return vec_setzero_ps();
 			}
 		}
 		virtual char * evalPtr(Context & context) override {
@@ -461,7 +461,7 @@ namespace das
     // FUNCTION CALL
     struct SimNode_CallBase : SimNode {
         SimNode_CallBase ( const LineInfo & at ) : SimNode(at) {}
-        void evalArgs ( Context & context, __m128 * argValues );
+        void evalArgs ( Context & context, vec4f * argValues );
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(eval(context));                  \
@@ -476,10 +476,10 @@ namespace das
     // FUNCTION CALL
     struct SimNode_Call : SimNode_CallBase {
         SimNode_Call ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                       \
-            __m128 * argValues = (__m128 *)(alloca(nArguments * sizeof(__m128)));       \
+            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));       \
                 evalArgs(context, argValues);                                           \
                 DAS_NODE_EXCEPTION_POINT(CTYPE);                                        \
                 return cast<CTYPE>::to(context.call(fnIndex, argValues, debug.line));   \
@@ -491,13 +491,13 @@ namespace das
     // Invoke
     struct SimNode_Invoke : SimNode_CallBase {
         SimNode_Invoke ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
     };
     
     // StringBuilder
     struct SimNode_StringBuilder : SimNode_CallBase {
         SimNode_StringBuilder ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         TypeInfo ** types;
     };
     
@@ -505,8 +505,8 @@ namespace das
     template <typename CastTo, typename CastFrom>
     struct SimNode_Cast : SimNode_CallBase {
         SimNode_Cast ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 res = arguments[0]->eval(context);
+        virtual vec4f eval ( Context & context ) override {
+            vec4f res = arguments[0]->eval(context);
             CastTo value = (CastTo) cast<CastFrom>::to(res);
             return cast<CastTo>::from(value);
         }
@@ -516,8 +516,8 @@ namespace das
     template <typename CastFrom>
     struct SimNode_LexicalCast : SimNode_CallBase {
         SimNode_LexicalCast ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 res = arguments[0]->eval(context);
+        virtual vec4f eval ( Context & context ) override {
+            vec4f res = arguments[0]->eval(context);
             auto str = std::to_string ( cast<CastFrom>::to(res) );
             auto cpy = context.allocateName(str);
             return cast<char *>::from(cpy);
@@ -528,20 +528,20 @@ namespace das
     template <int vecS>
     struct SimNode_VecCtor : SimNode_CallBase {
         SimNode_VecCtor ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 argValues[vecS];
+        virtual vec4f eval ( Context & context ) override {
+            vec4f argValues[vecS];
             evalArgs(context, argValues);
             if ( vecS==2 )
-                return _mm_setr_ps(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
+                return vec_set_xyzw(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
                                    0.0f,0.0f);
             else if ( vecS==3 )
-                return _mm_setr_ps(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
+                return vec_set_xyzw(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
                                    cast<float>::to(argValues[2]),0.0f);
             else if ( vecS==4 )
-                return _mm_setr_ps(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
+                return vec_set_xyzw(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
                                    cast<float>::to(argValues[2]),cast<float>::to(argValues[3]));
             else
-                return _mm_setzero_ps();
+                return vec_setzero_ps();
         }
     };
     
@@ -549,7 +549,7 @@ namespace das
     struct SimNode_Debug : SimNode {
         SimNode_Debug ( const LineInfo & at, SimNode * s, TypeInfo * ti, char * msg )
             : SimNode(at), subexpr(s), typeInfo(ti), message(msg) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode *       subexpr;
         TypeInfo *      typeInfo;
         const char *    message;
@@ -568,7 +568,7 @@ namespace das
     template <typename TT>
     struct SimNode_GetLocalR2V : SimNode_GetLocal {
         SimNode_GetLocalR2V(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp)  {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *)(context.stackTop + stackTop);
             return cast<TT>::from(*pR);
         }
@@ -592,7 +592,7 @@ namespace das
     template <typename TT>
     struct SimNode_GetLocalRefR2V : SimNode_GetLocalRef {
         SimNode_GetLocalRefR2V(const LineInfo & at, uint32_t sp) : SimNode_GetLocalRef(at,sp) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             TT * pR = *(TT **)(context.stackTop + stackTop);
             return cast<TT>::from(*pR);
         }
@@ -608,11 +608,11 @@ namespace das
     struct SimNode_CopyLocal2LocalT : SimNode {
         SimNode_CopyLocal2LocalT(const LineInfo & at, uint32_t spL, uint32_t spR)
             : SimNode(at), stackTopLeft(spL), stackTopRight(spR) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             TT * pl = (TT *) ( context.stackTop + stackTopLeft );
             TT * pr = (TT *) ( context.stackTop + stackTopRight );
             *pl = *pr;
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         SimNode * r;
         uint32_t stackTopLeft, stackTopRight;
@@ -622,12 +622,12 @@ namespace das
     struct SimNode_SetLocalRefT : SimNode {
         SimNode_SetLocalRefT(const LineInfo & at, SimNode * rv, uint32_t sp)
             : SimNode(at), r(rv), stackTop(sp) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             auto pr = (TT *) r->evalPtr(context);
             DAS_EXCEPTION_POINT;
             TT * pl = (TT *) ( context.stackTop + stackTop );
             *pl = *pr;
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         SimNode * r;
         uint32_t stackTop;
@@ -637,12 +637,12 @@ namespace das
     struct SimNode_SetLocalValueT : SimNode {
         SimNode_SetLocalValueT(const LineInfo & at, SimNode * rv, uint32_t sp)
         : SimNode(at), r(rv), stackTop(sp) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 rres = r->eval(context);
+        virtual vec4f eval ( Context & context ) override {
+            vec4f rres = r->eval(context);
             DAS_EXCEPTION_POINT;
             TT * pl = (TT *) ( context.stackTop + stackTop );
             *pl = cast<TT>::to(rres);
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         SimNode * r;
         uint32_t stackTop;
@@ -652,9 +652,9 @@ namespace das
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
     struct SimNode_InitLocal : SimNode {
         SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz) : SimNode(at), stackTop(sp), size(sz) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             memset(context.stackTop + stackTop, 0, size);
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         uint32_t stackTop, size;
     };
@@ -662,7 +662,7 @@ namespace das
     // ARGUMENT VARIABLE "GET"
     struct SimNode_GetArgument : SimNode {
         SimNode_GetArgument ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             return context.abiArguments()[index];
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -685,7 +685,7 @@ namespace das
     template <typename TT>
     struct SimNode_GetArgumentR2V : SimNode_GetArgument {
         SimNode_GetArgumentR2V ( const LineInfo & at, int32_t i ) : SimNode_GetArgument(at,i) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             TT * pR = cast<TT *>::to(context.abiArguments()[index]);
             return cast<TT>::from(*pR);
         }
@@ -701,13 +701,13 @@ namespace das
     struct SimNode_GetBlockArgument : SimNode {
         SimNode_GetBlockArgument ( const LineInfo & at, int32_t i, uint32_t sp )
             : SimNode(at), index(i), stackTop(sp) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 * args = *((__m128 **)(context.stackTop + stackTop));
+        virtual vec4f eval ( Context & context ) override {
+            vec4f * args = *((vec4f **)(context.stackTop + stackTop));
             return args[index];
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            __m128 * args = *((__m128 **)(context.stackTop + stackTop));    \
+            vec4f * args = *((vec4f **)(context.stackTop + stackTop));    \
             return cast<CTYPE>::to(args[index]);                            \
         }
         DAS_EVAL_NODE;
@@ -720,14 +720,14 @@ namespace das
     struct SimNode_GetBlockArgumentR2V : SimNode_GetBlockArgument {
         SimNode_GetBlockArgumentR2V ( const LineInfo & at, int32_t i, uint32_t sp )
             : SimNode_GetBlockArgument(at,i,sp) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 * args = *((__m128 **)(context.stackTop + stackTop));
+        virtual vec4f eval ( Context & context ) override {
+            vec4f * args = *((vec4f **)(context.stackTop + stackTop));
             TT * pR = (TT *) cast<char *>::to(args[index]);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            __m128 * args = *((__m128 **)(context.stackTop + stackTop));    \
+            vec4f * args = *((vec4f **)(context.stackTop + stackTop));    \
             return * cast<CTYPE *>::to(args[index]);                        \
         }
         DAS_EVAL_NODE;
@@ -739,7 +739,7 @@ namespace das
         SimNode_GetBlockArgumentRef(const LineInfo & at, int32_t i, uint32_t sp)
             : SimNode_GetBlockArgument(at,i,sp) {}
         __forceinline char * compute(Context & context) {
-            __m128 * args = *((__m128 **)(context.stackTop + stackTop));
+            vec4f * args = *((vec4f **)(context.stackTop + stackTop));
             return (char *)(&args[index]);
         }
     };
@@ -747,7 +747,7 @@ namespace das
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode {
         SimNode_GetGlobal ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             return context.globalVariables[index].value;
         }
 		virtual char * evalPtr(Context & context) override {
@@ -759,7 +759,7 @@ namespace das
     template <typename TT>
     struct SimNode_GetGlobalR2V : SimNode_GetGlobal {
         SimNode_GetGlobalR2V ( const LineInfo & at, int32_t i ) : SimNode_GetGlobal(at,i) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             TT * pR = cast<TT *>::to(context.globalVariables[index].value);
             return cast<TT>::from(*pR);
         }
@@ -774,17 +774,17 @@ namespace das
     // TRY-CATCH
     struct SimNode_TryCatch : SimNode {
         SimNode_TryCatch ( const LineInfo & at, SimNode * t, SimNode * c ) : SimNode(at), try_block(t), catch_block(c) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode * try_block, * catch_block;
     };
     
     // RETURN
     struct SimNode_Return : SimNode {
         SimNode_Return ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             if ( subexpr ) context.abiResult() = subexpr->eval(context);
             context.stopFlags |= EvalFlags::stopForReturn;
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         SimNode * subexpr;
     };
@@ -792,9 +792,9 @@ namespace das
     // BREAK
     struct SimNode_Break : SimNode {
         SimNode_Break ( const LineInfo & at ) : SimNode(at) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             context.stopFlags |= EvalFlags::stopForBreak;
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
     };
     
@@ -802,7 +802,7 @@ namespace das
     template <typename TT>
     struct SimNode_Ref2Value : SimNode {      // &value -> value
         SimNode_Ref2Value ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *) subexpr->evalPtr(context);
             DAS_EXCEPTION_POINT;
             return cast<TT>::from(*pR);
@@ -837,7 +837,7 @@ namespace das
     template <typename TT>
     struct SimNode_NullCoalescing : SimNode_Ptr2Ref {
         SimNode_NullCoalescing ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *) subexpr->evalPtr(context);
             DAS_EXCEPTION_POINT;
             return pR ? cast<TT>::from(*pR) : value->eval(context);
@@ -869,14 +869,14 @@ namespace das
     // NEW
     struct SimNode_New : SimNode {
         SimNode_New ( const LineInfo & at, int32_t b ) : SimNode(at), bytes(b) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         int32_t     bytes;
     };
     
     // CONST-VALUE
     struct SimNode_ConstValue : SimNode {
-        SimNode_ConstValue(const LineInfo & at, __m128 c) : SimNode(at), value(c) { }
-        virtual __m128 eval ( Context & context ) override {
+        SimNode_ConstValue(const LineInfo & at, vec4f c) : SimNode(at), value(c) { }
+        virtual vec4f eval ( Context & context ) override {
             return value;
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -885,21 +885,21 @@ namespace das
         }
         DAS_EVAL_NODE;
 #undef EVAL_NODE
-        __m128 value;
+        vec4f value;
     };
     
     // COPY VALUE
     template <typename TT>
     struct SimNode_CopyValue : SimNode {
         SimNode_CopyValue(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             TT * pl = (TT *) l->evalPtr(context);
             DAS_EXCEPTION_POINT;
-            __m128 rr = r->eval(context);
+            vec4f rr = r->eval(context);
             DAS_EXCEPTION_POINT;
             TT * pr = (TT *) &rr;
             *pl = *pr;
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         SimNode * l, * r;
     };
@@ -908,7 +908,7 @@ namespace das
     struct SimNode_CopyRefValue : SimNode {
         SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
             : SimNode(at), l(ll), r(rr), size(sz) {};
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode * l, * r;
         uint32_t size;
     };
@@ -917,13 +917,13 @@ namespace das
     struct SimNode_CopyRefValueT : SimNode {
         SimNode_CopyRefValueT(const LineInfo & at, SimNode * ll, SimNode * rr)
 			: SimNode(at), l(ll), r(rr) {};
-        virtual __m128 eval ( Context & context ) override {
+        virtual vec4f eval ( Context & context ) override {
             TT * pl = (TT *) l->evalPtr(context);
             DAS_EXCEPTION_POINT;
             TT * pr = (TT *) r->evalPtr(context);
             DAS_EXCEPTION_POINT;
             *pl = *pr;
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
         SimNode * l, * r;
     };
@@ -932,7 +932,7 @@ namespace das
     struct SimNode_MoveRefValue : SimNode {
         SimNode_MoveRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
             : SimNode(at), l(ll), r(rr), size(sz) {};
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode * l, * r;
         uint32_t size;
     };
@@ -940,7 +940,7 @@ namespace das
     // BLOCK
     struct SimNode_Block : SimNode {
         SimNode_Block ( const LineInfo & at ) : SimNode(at) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode ** list = nullptr;
         uint32_t total = 0;
     };
@@ -948,7 +948,7 @@ namespace das
     struct SimNode_ClosureBlock : SimNode_Block {
         SimNode_ClosureBlock ( const LineInfo & at, bool nr, void * ad )
             : SimNode_Block(at), needResult(nr), annotationData(ad) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         bool needResult = false;
         void * annotationData = nullptr;
     };
@@ -956,7 +956,7 @@ namespace das
     // LET
     struct SimNode_Let : SimNode_Block {
         SimNode_Let ( const LineInfo & at ) : SimNode_Block(at) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode * subexpr = nullptr;
     };
     
@@ -964,7 +964,7 @@ namespace das
     struct SimNode_IfThenElse : SimNode {
         SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
                 bool cmp = cond->evalBool(context);                 \
@@ -985,16 +985,16 @@ namespace das
     // WHILE
     struct SimNode_While : SimNode {
         SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b ) : SimNode(at), cond(c), body(b) {}
-        virtual __m128 eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode * cond, * body;
     };
         
     // iterator
     
     struct IteratorContext {
-        __m128 value;
+        vec4f value;
         union {
-            __m128 tail;
+            vec4f tail;
             struct {
                 char *  table_end;
                 Table * table;
@@ -1037,14 +1037,14 @@ namespace das
     template <int total>
     struct SimNode_ForWithIterator : SimNode_ForWithIteratorBase {
         SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
-        virtual __m128 eval ( Context & context ) override {
-            __m128 * pi[total];
+        virtual vec4f eval ( Context & context ) override {
+            vec4f * pi[total];
             for ( int t=0; t!=total; ++t ) {
-                pi[t] = (__m128 *)(context.stackTop + stackTop[t]);
+                pi[t] = (vec4f *)(context.stackTop + stackTop[t]);
             }
             Iterator * sources[total] = {};
             for ( int t=0; t!=total; ++t ) {
-                __m128 ll = source_iterators[t]->eval(context);
+                vec4f ll = source_iterators[t]->eval(context);
                 DAS_EXCEPTION_POINT;
                 sources[t] = cast<Iterator *>::to(ll);
             }
@@ -1070,7 +1070,7 @@ namespace das
                 sources[t]->close(context, ph[t]);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
-            return _mm_setzero_ps();
+            return vec_setzero_ps();
         }
     };
     
@@ -1154,7 +1154,7 @@ namespace das
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
-        virtual __m128 eval ( Context & context ) override {            \
+        virtual vec4f eval ( Context & context ) override {            \
             auto val = x->eval(context);                                \
             DAS_EXCEPTION_POINT;                                        \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
@@ -1238,7 +1238,7 @@ namespace das
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
-        virtual __m128 eval ( Context & context ) override {            \
+        virtual vec4f eval ( Context & context ) override {            \
             auto lv = l->eval(context);                                 \
             DAS_EXCEPTION_POINT;                                        \
             auto rv = r->eval(context);                                 \
@@ -1251,13 +1251,13 @@ namespace das
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
-        virtual __m128 eval ( Context & context ) override {            \
+        virtual vec4f eval ( Context & context ) override {            \
             auto lv = l->evalPtr(context);                              \
             DAS_EXCEPTION_POINT;                                        \
             auto rv = r->eval(context);                                 \
             DAS_EXCEPTION_POINT;                                        \
             SimPolicy<CTYPE>::CALL(lv,rv,context);                      \
-            return _mm_setzero_ps();                                    \
+            return vec_setzero_ps();                                    \
         }                                                               \
     };
     
