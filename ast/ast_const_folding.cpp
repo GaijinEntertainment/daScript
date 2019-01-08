@@ -155,10 +155,34 @@ namespace das {
         if ( constexpr ) a; else b;    =   constexpr ? a : b
         constexpr; = nop
         assert(true,...) = nop
+        hash(x) = ...
+        sizeof(...) -> const
+        typename(...) -> const
+        no_side_effec_builtin(const...) -> const
+        stringbuilder(const1,const2,...) -> stringbuilder(const12,...)
+        stringbuilder(const) -> const
+        def FN return const -> const
      */
     class ConstFolding : public FoldingVisitor {
     public:
         ConstFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
+    protected:
+        // function which is 'return const'
+        ExpressionPtr getSimpleConst ( const FunctionPtr & func ) {
+            if ( func->builtIn ) return nullptr;
+            if ( func->body->rtti_isBlock() ) {
+                auto block = static_pointer_cast<ExprBlock>(func->body);
+                if ( block->list.size()==1 ) {
+                    if ( block->list.back()->rtti_isReturn() ) {
+                        auto ret = static_pointer_cast<ExprReturn>(block->list.back());
+                        if ( ret->subexpr && ret->subexpr->rtti_isConstant() ) {
+                            return ret->subexpr->clone();
+                        }
+                    }
+                }
+            }
+            return nullptr;
+        }
     protected:
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
@@ -280,8 +304,18 @@ namespace das {
             reportFolding();
             return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false));
         }
-    // ExprLooksLikeCall
+    // ExprCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            bool allNoSideEffects = true;
+            for ( auto & arg : expr->arguments ) {
+                allNoSideEffects &= arg->noSideEffects;
+            }
+            if ( allNoSideEffects ) {
+                if ( auto sc = getSimpleConst(expr->func) ) {
+                    reportFolding();
+                    return sc;
+                }
+            }
             if ( expr->func->result->isFoldable() && expr->func->noSideEffects ) {
                 auto allConst = true;
                 for ( auto & arg : expr->arguments ) {

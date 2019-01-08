@@ -1,4 +1,4 @@
-// options optimize=false, log=true
+// options optimize=true, log=true
 
 struct Foo
     bar : int
@@ -55,7 +55,7 @@ def test
         return "foo"
     assert(blah=="foobar")
     // function return type
-    assert(fn1()==3)
+    assert(fn1()==6)
     // full-blown generic
     let x = madd(1,2,3)
     assert(x==5)
@@ -67,7 +67,7 @@ def fn3
     return 3
 
 def fn2
-    return fn3()
+    return fn3() + 1
 
 def fn1
-    return fn2()
+    return fn2() + 2

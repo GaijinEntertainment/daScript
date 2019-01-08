@@ -1,10 +1,9 @@
-options log=true, logInferPasses=true, optimize=true
+options log=true, logInferPasses=false, optimize=true
+
+def twoPlusTwo
+    return 4
 
 def test
-    let a:array<int>
-    push(a,1)
-    push(a,2)
-    let b = a
-    print("\na={a} b={b}\n")
-    assert(length(a)==0 & length(b)==2)
+    let t = twoPlusTwo() + 1
+    print("t={t}\n")
     return true
