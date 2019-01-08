@@ -8,7 +8,7 @@ function isprime(n)
 end
 
 
-function primes(n)
+local function primes(n)
     local count = 0
 
     for i = 2, n do

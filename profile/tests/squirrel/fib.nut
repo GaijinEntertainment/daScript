@@ -5,7 +5,7 @@ function fibR(n)
 }
 
 
-function fibI(n)
+local function fibI(n)
 {
     local last = 0;
     local cur = 1;

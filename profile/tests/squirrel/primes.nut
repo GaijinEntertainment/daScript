@@ -1,4 +1,4 @@
-function isprime(n)
+local function isprime(n)
 {
     local i;
     for (i = 2; i < n; ++i)
@@ -9,7 +9,7 @@ function isprime(n)
 
 
 
-function primes(n)
+local function primes(n)
 {
     local count = 0;
     local i;

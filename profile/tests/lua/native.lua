@@ -3,7 +3,7 @@ ffi.cdef[[
 int addOne(int);
 ]]
 
-function testAdds()
+local function testAdds()
     local count = 0
     for i = 1, 10000000 do
         count = ffi.C.addOne(count)

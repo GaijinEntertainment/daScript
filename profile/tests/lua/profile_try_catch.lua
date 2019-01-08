@@ -3,7 +3,7 @@ for i = 1, 1000 do
 	table.insert(particles, i)
 end
 
-function try_catch_loop(fails_count)
+local function try_catch_loop(fails_count)
   fails_count = fails_count + 1000
   fails = 0
   cnt = 0
