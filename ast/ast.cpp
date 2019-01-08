@@ -619,6 +619,7 @@ namespace das
         if ( source )
             pVar->source = source->clone();
         pVar->at = at;
+        pVar->flags = flags;
         return pVar;
     }
     
@@ -1975,7 +1976,9 @@ namespace das
             get = context.makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
         else
             get = context.makeNode<SimNode_GetGlobal>(var->init->at, var->index);
-        if ( var->type->canCopy() ) {
+        if ( var->type->ref ) {
+            return context.makeNode<SimNode_CopyReference>(var->init->at, get, init);
+        } else if ( var->type->canCopy() ) {
             auto varExpr = make_shared<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;

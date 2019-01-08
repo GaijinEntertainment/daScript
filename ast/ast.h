@@ -256,12 +256,18 @@ namespace das
         Module *        module = nullptr;
         union {
             struct {
+                bool    move_to_init : 1;
+            };
+            uint32_t flags = 0;
+        };
+        union {
+            struct {
                 bool    access_extern : 1;
                 bool    access_get : 1;
                 bool    access_ref : 1;
                 bool    access_init : 1;
             };
-            uint32_t flags = 0;
+            uint32_t access_flags = 0;
         };
     };
     

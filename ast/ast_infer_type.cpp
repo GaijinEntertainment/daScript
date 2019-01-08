@@ -1435,8 +1435,8 @@ namespace das {
             local.push_back(var);
         }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
-            if ( var->type->ref )
-                error("local variable can't be declared as a reference",
+            if ( var->type->ref && !var->init )
+                error("local reference has to be initialized",
                       var->at, CompilationError::invalid_variable_type);
             if ( var->type->isVoid() )
                 error("local variable can't be declared void",
@@ -1463,10 +1463,19 @@ namespace das {
             } else if ( !var->type->isSameType(*var->init->type,false,false) ) {
                 error("local variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at );
+            } else if ( var->type->ref && !var->type->isSameType(*var->init->type,true,false) ) {
+                error("local variable initialization type mismatch. reference can't be initialized via value, "
+                      + var->type->describe() + " = " + var->init->type->describe(), var->at );
+            } else if ( var->type->isRef() &&  !var->type->isConst() && var->init->type->isConst() ) {
+                error("local variable initialization type mismatch. const matters, "
+                      + var->type->describe() + " = " + var->init->type->describe(), var->at );
             } else if ( var->type->baseType==Type::tStructure ) {
                 error("can't initialize structures", var->at );
             } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
                 error("this local variable can't be initialized at all", var->at);
+            } else if ( !var->type->ref && !var->init->type->canCopy()
+                       && var->init->type->canMove() && !var->move_to_init ) {
+                error("this local variable can only be move-initialized, use <- for that", var->at);
             }
             return Visitor::visitLetInit(expr, var, init);
         }

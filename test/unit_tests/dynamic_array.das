@@ -50,6 +50,6 @@ def test
         let a:array<int>
         push(a,1)
         push(a,2)
-        let b = a   // note, this is *move*
+        let b <- a   
         assert(length(a)==0 & length(b)==2)
     return true

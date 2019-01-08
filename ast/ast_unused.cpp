@@ -83,6 +83,13 @@ namespace das {
             //  do we need to?
         }
     protected:
+    // Variable initializatoin
+        virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) override {
+            Visitor::preVisitLetInit(let, var, init);
+            // TODO:
+            //  at some point we should do better data trackng for this type of aliasing
+            if ( var->type->ref ) propagateWrite(init);
+        }
     // ExprField
         virtual void preVisit ( ExprField * expr ) override {
             Visitor::preVisit(expr);

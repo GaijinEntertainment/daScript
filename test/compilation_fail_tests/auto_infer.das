@@ -1,4 +1,4 @@
-expect 31101, 31102:9, 30108:2, 30304:2, 30102:2, 30103, 30106
+expect 31101, 31102:9, 30304:2, 30102:2, 30103, 30106
 
 let
     a:auto                      // 31101, can't infer, need initializer
@@ -12,9 +12,8 @@ def blk(b:block<(a:int):int>) : int
 def test3
     let v1 = b                          // 31102, can't infer, auto to auto
     let v2 : auto& = 13                 // 31102, can't infer, auto& to int (needs to be ref)
-                                        // 30108, local varialbe can't be reference
     let x = 14  // x:int
-    let v3 : auto& = x                  // 30108, local varialbe can't be reference
+    let v3 : auto& = x
     let arr : int[2][3]
     let arr2 : auto[2][3] = arr
     let v4 : auto[3][2] = arr           // 31102, can't infer, array dimension mismatch

@@ -1,5 +1,3 @@
-// options log=true, logInferPasses=false, optimize=true
-
 def test
     let a : int = 1
     let b : int& = a

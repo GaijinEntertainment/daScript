@@ -15,6 +15,7 @@
         vector<string>  *pNameList;
         TypeDecl        *pTypeDecl;
         Expression      *pInit;
+        bool            move_to_init = false;
     };
     
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
@@ -128,6 +129,8 @@
 %type <fa>              annotation_declaration
 %type <faList>          annotation_list
 %type <faList>          optional_annotation_list
+
+%type <b>               copy_or_move
 
 %type <pExpression>     expr
 %type <pExpression>     expr_list
@@ -435,6 +438,7 @@ function_declaration
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
+                                pVar->move_to_init = pDecl->move_to_init;
                             }
                             pFunction->arguments.push_back(pVar);
                         } else {
@@ -576,6 +580,7 @@ expression_let
                         pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                         if ( pDecl->pInit ) {
                             pVar->init = pDecl->pInit->clone();
+                            pVar->move_to_init = pDecl->move_to_init;
                         }
                         pLet->variables.push_back(pVar);
                     } else {
@@ -598,8 +603,10 @@ expression_let
                     pVar->name = name;
                     pVar->at = $decl->at;
                     pVar->type = make_shared<TypeDecl>(*$decl->pTypeDecl);
-                    if ( $decl->pInit )
-                    pVar->init = $decl->pInit->clone();
+                    if ( $decl->pInit ) {
+                        pVar->init = $decl->pInit->clone();
+                        pVar->move_to_init = $decl->move_to_init;
+                    }
                     pLet->variables.push_back(pVar);
                 } else {
                     yyerror("local variable is already declared " + name,tokAt(@loc),
@@ -661,6 +668,7 @@ expr_block
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
+                                pVar->move_to_init = pDecl->move_to_init;
                             }
                             closure->arguments.push_back(pVar);
                         } else {
@@ -783,46 +791,56 @@ function_argument_list
     |   function_argument_list[list] ';' variable_declaration[decl]     { $$ = $list; $list->push_back($decl); }
     ;
 
-optional_initializer
-    :                           { $$ = nullptr; }
-    |  '=' expr[subexpr]        { $$ = $subexpr; }
+copy_or_move
+    :   '='         { $$ = false; }
+    |   LARROW      { $$ = true; }
     ;
 
-variable_declaration
+variable_declaration        /* this one can have uninitialized variable which has no type */
     :   variable_name_list[list] {
         auto autoT = new TypeDecl(Type::autoinfer);
         $$ = new VariableDeclaration(tokAt(@list),$list,autoT,nullptr);
     }
-    |   variable_name_list[list] ':' type_declaration[typeDecl] optional_initializer[init] {
+    |   variable_name_list[list] ':' type_declaration[typeDecl]  {
+        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,nullptr);
+    }
+    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr[init] {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
+        $$->move_to_init = $com;
     }
-    |   variable_name_list[list] '=' expr[init] {
+    |   variable_name_list[list] copy_or_move[com] expr[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+        $$->move_to_init = $com;
     }
-    |   variable_name_list[list] '=' expr_pipe[init] {
+    |   variable_name_list[list] copy_or_move[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+        $$->move_to_init = $com;
     }
     ;
 
-let_variable_declaration
+let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
     :   variable_name_list[list] ':' type_declaration[typeDecl] ';' {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,nullptr);
     }
-    |   variable_name_list[list] ':' type_declaration[typeDecl] '=' expr[init] ';' {
+    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr[init] ';' {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
+        $$->move_to_init = $com;
     }
-    |   variable_name_list[list] ':' type_declaration[typeDecl] '=' expr_pipe[init] {
+    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr_pipe[init] {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
+        $$->move_to_init = $com;
     }
-    |   variable_name_list[list] '=' expr[init] ';' {
+    |   variable_name_list[list] copy_or_move[com] expr[init] ';' {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+        $$->move_to_init = $com;
     }
-    |   variable_name_list[list] '=' expr_pipe[init] {
+    |   variable_name_list[list] copy_or_move[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+        $$->move_to_init = $com;
     }
     ;
 
@@ -837,6 +855,7 @@ global_let
                     pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                     if ( pDecl->pInit ) {
                         pVar->init = pDecl->pInit->clone();
+                        pVar->move_to_init = pDecl->move_to_init;
                     }
                     if ( !g_Program->addVariable(pVar) )
                         yyerror("global variable is already declared " + name,pDecl->at,

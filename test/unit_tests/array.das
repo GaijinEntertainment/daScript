@@ -24,7 +24,7 @@ def test:bool
         verify_test_array(a,13)
         make_test_array(a)
         verify_test_array(a)
-        let(b:array<int> = a)
+        let(b:array<int> <- a)
             assert(length(a)==0)
             verify_test_array(b)
             a <- b

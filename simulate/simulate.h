@@ -888,6 +888,20 @@ namespace das
         vec4f value;
     };
     
+    // COPY REFERENCE (int & a = b)
+    struct SimNode_CopyReference : SimNode {
+        SimNode_CopyReference(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
+        virtual vec4f eval ( Context & context ) override {
+            char  ** pl = (char **) l->evalPtr(context);
+            DAS_EXCEPTION_POINT;
+            char * pr = r->evalPtr(context);
+            DAS_EXCEPTION_POINT;
+            *pl = pr;
+            return vec_setzero_ps();
+        }
+        SimNode * l, * r;
+    };
+    
     // COPY VALUE
     template <typename TT>
     struct SimNode_CopyValue : SimNode {
