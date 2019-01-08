@@ -1,0 +1,161 @@
+# uriparser - RFC 3986 URI parsing library
+#
+# Copyright (C) 2018, Sebastian Pipping <sebastian@pipping.org>
+# All rights reserved.
+#
+# Redistribution  and use in source and binary forms, with or without
+# modification,  are permitted provided that the following conditions
+# are met:
+#
+#     * Redistributions   of  source  code  must  retain  the   above
+#       copyright  notice, this list of conditions and the  following
+#       disclaimer.
+#
+#     * Redistributions  in  binary  form must  reproduce  the  above
+#       copyright  notice, this list of conditions and the  following
+#       disclaimer   in  the  documentation  and/or  other  materials
+#       provided with the distribution.
+#
+#     * Neither  the name of the <ORGANIZATION> nor the names of  its
+#       contributors  may  be  used to endorse  or  promote  products
+#       derived  from  this software without specific  prior  written
+#       permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS  IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT  NOT
+# LIMITED  TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND  FITNESS
+# FOR  A  PARTICULAR  PURPOSE ARE DISCLAIMED. IN NO EVENT  SHALL  THE
+# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL,    SPECIAL,   EXEMPLARY,   OR   CONSEQUENTIAL   DAMAGES
+# (INCLUDING,  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES;  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+# STRICT  LIABILITY,  OR  TORT (INCLUDING  NEGLIGENCE  OR  OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+# OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+cmake_minimum_required(VERSION 3.0)
+
+project(uriparser
+    VERSION
+        0.9.1
+)
+
+option(BUILD_SHARED_LIBS "build shared libraries (rather than static ones)" true)
+
+#
+# config.h (only needed by testrunner)
+#
+set(PACKAGE_VERSION ${PROJECT_VERSION})  # for configure_file
+configure_file(src/UriConfig.h.in config.h)
+
+#
+# C library
+#
+set(API_HEADER_FILES
+    include/uriparser/UriBase.h
+    include/uriparser/UriDefsAnsi.h
+    include/uriparser/UriDefsConfig.h
+    include/uriparser/UriDefsUnicode.h
+    include/uriparser/Uri.h
+    include/uriparser/UriIp4.h
+)
+
+add_library(uriparser
+    ${API_HEADER_FILES}
+    src/UriCommon.c
+    src/UriCommon.h
+    src/UriCompare.c
+    src/UriEscape.c
+    src/UriFile.c
+    src/UriIp4Base.c
+    src/UriIp4Base.h
+    src/UriIp4.c
+    src/UriMemory.c
+    src/UriMemory.h
+    src/UriNormalizeBase.c
+    src/UriNormalizeBase.h
+    src/UriNormalize.c
+    src/UriParseBase.c
+    src/UriParseBase.h
+    src/UriParse.c
+    src/UriQuery.c
+    src/UriRecompose.c
+    src/UriResolve.c
+    src/UriShorten.c
+)
+
+set_property(
+    TARGET
+        uriparser
+    PROPERTY
+        PUBLIC_HEADER "${API_HEADER_FILES}"
+)
+
+target_include_directories(uriparser PUBLIC
+    ${PROJECT_SOURCE_DIR}/include
+)
+
+install(
+    TARGETS
+        uriparser
+    ARCHIVE
+        DESTINATION
+            lib
+    LIBRARY
+        DESTINATION
+            lib
+    PUBLIC_HEADER
+        DESTINATION
+            include/uriparser
+)
+
+#
+# C command line tool
+#
+add_executable(uriparse
+    tool/uriparse.c
+)
+
+target_link_libraries(uriparse PUBLIC uriparser)
+
+install(
+    TARGETS
+        uriparse
+    DESTINATION
+        bin
+)
+
+#
+# C++ test runner
+#
+enable_testing()
+
+find_package(GTest 1.8.1 REQUIRED)
+
+add_executable(testrunner
+    test/FourSuite.cpp
+    test/MemoryManagerSuite.cpp
+    test/test.cpp
+    test/VersionSuite.cpp
+)
+
+target_include_directories(testrunner SYSTEM PRIVATE
+    ${GTEST_INCLUDE_DIR}
+)
+
+target_include_directories(testrunner PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}  # for config.h
+)
+
+target_link_libraries(testrunner PUBLIC
+    uriparser
+    ${GTEST_BOTH_LIBRARIES}
+)
+
+add_test(
+    NAME
+        test
+    COMMAND
+        testrunner
+)
