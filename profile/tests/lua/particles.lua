@@ -1,22 +1,22 @@
-function update_particle(p)
+local function update_particle(p)
   p.pos.x=p.pos.x+p.vel.x
   p.pos.y=p.pos.y+p.vel.y
   p.pos.z=p.pos.z+p.vel.z
 end
 
-function update(particles)
+local function update(particles)
 	for i,p in ipairs(particles) do
 	  update_particle(p)
 	end
 end
 
-function update_several_times(particles, count)
+local function update_several_times(particles, count)
   for i = 0, count  do
      update(particles)
   end
 end
 
-function updateI(particles)
+local function updateI(particles)
 	for i,p in ipairs(particles) do
       p.pos.x=p.pos.x+p.vel.x
       p.pos.y=p.pos.y+p.vel.y
@@ -24,7 +24,7 @@ function updateI(particles)
 	end
 end
 
-function update_several_timesI(particles, count)
+local function update_several_timesI(particles, count)
   for i = 0, count  do
      updateI(particles)
   end

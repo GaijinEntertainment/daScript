@@ -2,7 +2,7 @@ particles <- []
 for (local i = 0; i < 1000; ++i)
   particles.push(i)
 
-function try_catch_loop(fails_count)
+local function try_catch_loop(fails_count)
 {
   fails_count = fails_count + 1000
   local fails = 0
