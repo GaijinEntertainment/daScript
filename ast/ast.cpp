@@ -1383,15 +1383,14 @@ namespace das
     SimNode * ExprVar::simulate (Context & context) const {
         if ( block ) {
             auto blk = pBlock.lock();
-            
             if (variable->type->isRef()) {
-                if (r2v) {
+                if (r2v && !type->isRefType()) {
                     return context.makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
                 } else {
                     return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
                 }
             } else {
-                if (r2v) {
+                if (r2v && !type->isRefType()) {
                     return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
                 }
                 else {
@@ -1400,13 +1399,13 @@ namespace das
             }
         } else if ( local ) {
             if ( variable->type->ref ) {
-                if ( r2v ) {
+                if ( r2v && !type->isRefType() ) {
                     return context.makeValueNode<SimNode_GetLocalRefR2V>(type->baseType, at, variable->stackTop);
                 } else {
                     return context.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
                 }
             } else {
-                if ( r2v ) {
+                if ( r2v && !type->isRefType()) {
                     return context.makeValueNode<SimNode_GetLocalR2V>(type->baseType, at, variable->stackTop);
                 } else {
                     return context.makeNode<SimNode_GetLocal>(at, variable->stackTop);
@@ -1414,13 +1413,13 @@ namespace das
             }
         } else if ( argument) {
 			if (variable->type->isRef()) {
-				if (r2v) {
+				if (r2v && !type->isRefType()) {
 					return context.makeValueNode<SimNode_GetArgumentR2V>(type->baseType, at, argumentIndex);
 				} else {
 					return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
 				}
 			} else {
-				if (r2v) {
+				if (r2v && !type->isRefType()) {
 					return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
 				}
 				else {
