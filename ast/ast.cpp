@@ -754,7 +754,7 @@ namespace das
     }
     
     ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr ) {
-        if ( expr->type && expr->type->isRef() ) {
+        if ( expr->type && expr->type->isRef() && !expr->type->isRefType() ) {
             auto ar2l = make_shared<ExprRef2Value>();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;
@@ -785,7 +785,11 @@ namespace das
         if ( type->isHandle() ) {
             return type->annotation->simulateRef2Value(context, at, expr);
         } else {
-            return context.makeValueNode<SimNode_Ref2Value>(type->baseType, at, expr);
+            if ( type->isRefType() ) {
+                return expr;
+            } else {
+                return context.makeValueNode<SimNode_Ref2Value>(type->baseType, at, expr);
+            }
         }
     }
     
