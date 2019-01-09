@@ -128,7 +128,8 @@ set_property(
 )
 
 target_include_directories(uriparser PUBLIC
-    ${PROJECT_SOURCE_DIR}/include
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_include_directories(uriparser PRIVATE
@@ -137,6 +138,8 @@ target_include_directories(uriparser PRIVATE
 
 install(
     TARGETS
+        uriparser
+    EXPORT
         uriparser
     ARCHIVE
         DESTINATION
@@ -200,6 +203,18 @@ if(URIPARSER_BUILD_TESTS)
             testrunner
     )
 endif(URIPARSER_BUILD_TESTS)
+
+#
+# CMake files for find_package(uriparser [..])
+#
+install(
+    EXPORT
+        uriparser
+    DESTINATION
+        ${CMAKE_INSTALL_LIBDIR}/cmake/uriparser
+    NAMESPACE
+        uriparser::
+)
 
 #
 # pkg-config file
