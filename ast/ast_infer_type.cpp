@@ -1308,7 +1308,12 @@ namespace das {
                 block->hasReturn = true;
                 if ( expr->subexpr ) {
                     if ( !expr->subexpr->type ) return Visitor::visit(expr);
-                    expr->subexpr = Expression::autoDereference(expr->subexpr);
+                    if ( !block->returnType->ref ) {
+                        expr->subexpr = Expression::autoDereference(expr->subexpr);
+                    } else {
+                        expr->returnReference = true;
+                    }
+                    expr->returnInBlock = true;
                 }
                 if ( inferReturnType(block->type, expr) ) {
                     block->returnType = make_shared<TypeDecl>(*block->type);

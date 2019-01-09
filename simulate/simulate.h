@@ -785,9 +785,13 @@ namespace das
         SimNode * subexpr;
     };
     
-    // RETURN REF
     struct SimNode_ReturnReference : SimNode_Return {
         SimNode_ReturnReference ( const LineInfo & at, SimNode * s ) : SimNode_Return(at,s) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+    
+    struct SimNode_ReturnReferenceFromBlock : SimNode_Return {
+        SimNode_ReturnReferenceFromBlock ( const LineInfo & at, SimNode * s ) : SimNode_Return(at,s) {}
         virtual vec4f eval ( Context & context ) override;
     };
     

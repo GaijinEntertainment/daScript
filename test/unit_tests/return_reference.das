@@ -8,6 +8,9 @@ def ret_ref : auto &
 def ret_safe_ref(a:auto&) : auto&
     return a
 
+def add2(bl:block<int&>)
+    invoke(bl) += 2
+
 def test
     let x = ret_ref()
     let xx : int& = ret_safe_ref(x)
@@ -18,4 +21,7 @@ def test
     assert(x==2 & z==3)
     xx = 4
     assert(x==4 & z==3 & xx==4)
+    add2() <| $():auto&
+        return x
+    assert(x==6)
     return true

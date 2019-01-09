@@ -223,8 +223,6 @@ namespace das
         context.stopFlags |= EvalFlags::stopForReturn;
         return vec_setzero_ps();
     }
-    
-    // ReturnReference
 
     vec4f SimNode_ReturnReference::eval ( Context & context ) {
         char * ref = subexpr->evalPtr(context);
@@ -235,6 +233,17 @@ namespace das
             return vec_setzero_ps();
         } else if ( context.stackTop<=ref && ref<top ) {
             context.throw_error("reference to current function stack frame");
+            return vec_setzero_ps();
+        }
+        context.abiResult() = cast<char *>::from(ref);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return vec_setzero_ps();
+    }
+    
+    vec4f SimNode_ReturnReferenceFromBlock::eval ( Context & context ) {
+        char * ref = subexpr->evalPtr(context);
+        if ( context.stack<=ref && ref<context.invokeStackTop ) {
+            context.throw_error("reference bellow current call chain stack frame");
             return vec_setzero_ps();
         }
         context.abiResult() = cast<char *>::from(ref);

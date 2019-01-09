@@ -1700,7 +1700,11 @@ namespace das
 
     SimNode * ExprReturn::simulate (Context & context) const {
         if ( returnReference ) {
-            return context.makeNode<SimNode_ReturnReference>(at, subexpr->simulate(context));
+            if ( returnInBlock ) {
+                return context.makeNode<SimNode_ReturnReferenceFromBlock>(at, subexpr->simulate(context));
+            } else {
+                return context.makeNode<SimNode_ReturnReference>(at, subexpr->simulate(context));
+            }
         } else {
             return context.makeNode<SimNode_Return>(at, subexpr ? subexpr->simulate(context) : nullptr);
         }
