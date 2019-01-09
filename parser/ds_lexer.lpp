@@ -3,6 +3,10 @@
     #include "ast.h"
     #include "ds_parser.hpp"
     
+    #ifdef FLEX_DEBUG
+    #include <iostream>
+    #endif
+    
     using namespace std;
     using namespace das;
     

@@ -2232,7 +2232,6 @@ namespace das
     }
     
     void Program::error ( const string & str, const LineInfo & at, CompilationError cerr ) {
-        // cout << "ERROR: " << str << ", at " << at.describe() << "\n";
         errors.emplace_back(str,at,cerr);
         failToCompile = true;
     }
@@ -2403,25 +2402,25 @@ namespace das
         }
     }
     
-    void Program::optimize() {
+    void Program::optimize(ostream & logs) {
         const bool log = options.getOption("logOptimizationPasses",false);
         bool any, last;
         if (log) {
-            cout << *this << "\n";
-            cout.flush();
+            logs << *this << "\n";
+            logs.flush();
         }
         do {
-            if ( log ) cout << "OPTIMIZE:\n" << *this;
+            if ( log ) logs << "OPTIMIZE:\n" << *this;
             any = false;
             last = optimizationRefFolding();    if ( failed() ) break;  any |= last;
-            if ( log ) cout << "REF FOLDING: " << (last ? "optimized" : "nothing") << "\n" << *this;
+            if ( log ) logs << "REF FOLDING: " << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationConstFolding();  if ( failed() ) break;  any |= last;
-            if ( log ) cout << "CONST FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
+            if ( log ) logs << "CONST FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationBlockFolding();  if ( failed() ) break;  any |= last;
-            if ( log ) cout << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
+            if ( log ) logs << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationUnused();        if ( failed() ) break;  any |= last;
-            if ( log ) cout << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
-            if ( log ) cout.flush();
+            if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
+            if ( log ) logs.flush();
         } while ( any );
     }
 
@@ -2429,7 +2428,7 @@ namespace das
     
     ProgramPtr g_Program;
     
-    ProgramPtr parseDaScript ( const char * script ) {
+    ProgramPtr parseDaScript ( const char * script, ostream & logs ) {
         int err;
         auto program = g_Program = make_shared<Program>();
         yybegin(script);
@@ -2440,33 +2439,25 @@ namespace das
             sort(program->errors.begin(),program->errors.end());
             return program;
         } else {
-            program->inferTypes();
+            program->inferTypes(logs);
             if ( !program->failed() ) {
 				if (program->options.getOption("optimize", true)) {
-					program->optimize();
+					program->optimize(logs);
 				}
                 if (!program->failed())
 					program->staticAsserts();
                 if (!program->failed())
-                    program->allocateStack();
+                    program->allocateStack(logs);
                 if ( !program->failed() ) {
                     program->finalizeAnnotations();
                 }
             }
 			if (!program->failed()) {
 				if (program->options.getOption("log")) {
-					cout << *program;
+					logs << *program;
 				}
 				if (program->options.getOption("plot")) {
-					if (auto pf = program->options.find("plotFile", Type::tString)) {
-						ofstream of(pf->sValue);
-						if (of.is_open()) {
-							of << program->dotGraph() << "\n";
-							of.close();
-						}
-					} else {
-						cout << "\n" << program->dotGraph() << "\n";
-					}
+                    logs << "\n" << program->dotGraph() << "\n";
 				}
 			}
 			sort(program->errors.begin(), program->errors.end());

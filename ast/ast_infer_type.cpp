@@ -1753,7 +1753,7 @@ namespace das {
      
     // program
     
-    void Program::inferTypes() {
+    void Program::inferTypes(ostream & logs) {
         const bool log = options.getOption("logInferPasses",false);
 		int pass = 0, maxPasses = 50;
 		if (auto maxP = options.find("maxInferPasses", Type::tInt)) {
@@ -1765,12 +1765,12 @@ namespace das {
             InferTypes context(shared_from_this());
             visit(context);
             if ( log ) {
-                cout << "PASS " << pass << ":\n" << *this;
+                logs << "PASS " << pass << ":\n" << *this;
 				sort(errors.begin(), errors.end());
 				for (auto & err : errors) {
-					cout << reportError(nullptr, err.at.line, err.at.column, err.what, err.cerr);
+					logs << reportError(nullptr, err.at.line, err.at.column, err.what, err.cerr);
 				}
-                cout.flush();
+                logs.flush();
             }
             if ( context.finished() )
                 break;

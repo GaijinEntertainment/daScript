@@ -1149,14 +1149,14 @@ namespace das
         bool addGeneric ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void finalizeAnnotations();
-        void inferTypes();
+        void inferTypes(ostream & logs);
         bool optimizationRefFolding();
         bool optimizationConstFolding();
         bool optimizationBlockFolding();
         bool optimizationUnused();
         bool staticAsserts();
-        void optimize();
-        void allocateStack();
+        void optimize(ostream & logs);
+        void allocateStack(ostream & logs);
 		string dotGraph();
         bool simulate ( Context & context );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
@@ -1198,7 +1198,7 @@ namespace das
 		AnnotationArgumentList		options;
     };
          
-    ProgramPtr parseDaScript ( const char * script );
+    ProgramPtr parseDaScript ( const char * script, ostream & logs );
     
     class Visitor {
     public:

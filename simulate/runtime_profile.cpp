@@ -48,7 +48,9 @@ namespace das
         }
         double tSec = profileGetTimeSec(minT);
         if ( category ) {
-            cout << "\"" << category << "\", " << fixed << tSec << ", " << count << "\n";
+            stringstream ss;
+            ss << "\"" << category << "\", " << fixed << tSec << ", " << count << "\n";
+            context->to_out(ss.str().c_str());
         }
         return (float) tSec;
     }

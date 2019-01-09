@@ -6,11 +6,11 @@ namespace das {
     
     class AllocateStack : public Visitor {
     public:
-        AllocateStack( const ProgramPtr & prog ) {
+        AllocateStack( const ProgramPtr & prog, ostream & ls ) : logs(ls) {
             program = prog;
             log = prog->options.getOption("logStack");
             if( log ) {
-                cout << "\nSTACK INFORMATION:\n";
+                logs << "\nSTACK INFORMATION:\n";
             }
         }
         int getFuncCount() const { return totalFunctions; }
@@ -22,6 +22,7 @@ namespace das {
         vector<ExprBlock *>     blocks;
         int                     totalFunctions = 0;
         bool                    log = false;
+        ostream &               logs;
     protected:
     // function
         virtual void preVisit ( Function * f ) override {
@@ -30,13 +31,13 @@ namespace das {
             func->totalStackSize = stackTop = sizeof(Prologue);
             func->index = totalFunctions ++;
             if ( log ) {
-                cout << func->describe() << "\n";
+                logs << func->describe() << "\n";
             }
         }
         virtual FunctionPtr visit ( Function * that ) override {
             func->totalStackSize = max(func->totalStackSize, stackTop);
             if ( log ) {
-                cout << func->totalStackSize << "\ttotal\n";
+                logs << func->totalStackSize << "\ttotal\n";
             }
             func.reset();
             return Visitor::visit(that);
@@ -47,7 +48,7 @@ namespace das {
                 auto block = blocks.back();
                 expr->stackTop = block->stackTop;
                 if ( log ) {
-                    cout << "\t\t" << expr->stackTop << "\t\treturn, line " << expr->at.line << "\n";
+                    logs << "\t\t" << expr->stackTop << "\t\treturn, line " << expr->at.line << "\n";
                 }
             } else {
                 assert(!expr->returnInBlock);
@@ -63,7 +64,7 @@ namespace das {
                 block->stackTop = stackTop;
                 stackTop += (sizeof(BlockArguments) + 0xf) & ~0xf;
                 if ( log ) {
-                    cout << "\t" << block->stackTop << "\t" << sizeof(BlockArguments)
+                    logs << "\t" << block->stackTop << "\t" << sizeof(BlockArguments)
                         << "\tblock arguments, line " << block->at.line << "\n";
                 }
             }
@@ -82,7 +83,7 @@ namespace das {
                 expr->stackTop = stackTop;
                 stackTop += (sz + 0xf) & ~0xf;
                 if ( log ) {
-                    cout << "\t" << expr->stackTop << "\t" << sz
+                    logs << "\t" << expr->stackTop << "\t" << sz
                         << "\tcall, line " << expr->at.line << "\n";
                 }
             }
@@ -95,7 +96,7 @@ namespace das {
                 expr->stackTop = stackTop;
                 stackTop += (sz + 0xf) & ~0xf;
                 if ( log ) {
-                    cout << "\t" << expr->stackTop << "\t" << sz
+                    logs << "\t" << expr->stackTop << "\t" << sz
                         << "\tinvoke, line " << expr->at.line << "\n";
                 }
             }
@@ -110,7 +111,7 @@ namespace das {
                 var->stackTop = stackTop;
                 stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
                 if ( log ) {
-                    cout << "\t" << var->stackTop << "\t" << var->type->getSizeOf()
+                    logs << "\t" << var->stackTop << "\t" << var->type->getSizeOf()
                         << "\tfor " << var->name << ", line " << var->at.line << "\n";
                 }
             }
@@ -123,7 +124,7 @@ namespace das {
             var->stackTop = stackTop;
             stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
             if ( log ) {
-                cout << "\t" << var->stackTop << "\t" << var->type->getSizeOf()
+                logs << "\t" << var->stackTop << "\t" << var->type->getSizeOf()
                     << "\tlet " << var->name << ", line " << var->at.line << "\n";
             }
             return Visitor::visitLet(expr,var,last);
@@ -132,8 +133,8 @@ namespace das {
     
     // program
     
-    void Program::allocateStack() {
-        AllocateStack context(shared_from_this());
+    void Program::allocateStack(ostream & logs) {
+        AllocateStack context(shared_from_this(), logs);
         visit(context);
         totalFunctions = context.getFuncCount();
     }

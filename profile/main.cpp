@@ -3,6 +3,9 @@
 #include "ast.h"
 #include "test_profile.h"
 
+#include <fstream>
+#include <iostream>
+
 #ifdef _MSC_VER
 #include <io.h>
 #else
@@ -23,7 +26,7 @@ bool unit_test ( const string & fn ) {
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str()) ) {
+    if ( auto program = parseDaScript(str.c_str(),cout) ) {
         if ( program->failed() ) {
             cout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {

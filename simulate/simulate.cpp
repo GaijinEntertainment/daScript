@@ -3,6 +3,9 @@
 #include "simulate.h"
 #include "runtime_string.h"
 
+// this is here for the default implementation of to_out and to_err
+#include <iostream>
+
 namespace das
 {
     bool SimNode::evalBool ( Context & context ) {
@@ -379,7 +382,6 @@ namespace das
             ba->arguments = args;
             ba->copyOrMoveResult = (char *) cmres;
         }
-        // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
         when(block.body);
         if ( ba ) {
             *ba = saveArguments;
@@ -404,7 +406,6 @@ namespace das
         stackTop = top - fn.stackSize;
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
         invokeStackTop = nullptr;
-        // cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
         // fill prologue
         Prologue * pp = (Prologue *) stackTop;
         pp->arguments =     args;

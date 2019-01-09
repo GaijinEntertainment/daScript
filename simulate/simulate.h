@@ -211,7 +211,6 @@ namespace das
             stackTop = top - fn.stackSize;
             assert(stackTop >= stack && stackTop < stackTop + stackSize);
             invokeStackTop = nullptr;
-            // cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
             // fill prologue
             Prologue * pp = (Prologue *)stackTop;
             pp->arguments = args;
@@ -244,7 +243,6 @@ namespace das
                 ba->arguments = args;
                 ba->copyOrMoveResult = (char *) cmres;
             }
-			// cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
 			vec4f block_result = block.body->eval(*this);
 			if ( ba ) {
                 *ba = saveArguments;

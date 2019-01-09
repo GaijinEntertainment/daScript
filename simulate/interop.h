@@ -60,7 +60,6 @@ namespace das
 		#if DAS_ENABLE_STACK_WALK
             context.stackTop = top - sizeof(Prologue);
             assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
-            // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
             pp->arguments =     args;
@@ -100,7 +99,6 @@ namespace das
 #if DAS_ENABLE_STACK_WALK
             context.stackTop = top - sizeof(Prologue);
             assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
-            // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
             pp->arguments =     args;
