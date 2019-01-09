@@ -54,8 +54,9 @@ namespace das
     };
     
     struct Prologue {
-        vec4f      result;
-        vec4f *    arguments;
+        vec4f       result;
+        vec4f *     arguments;
+        char *      copyOrMoveResult;
 #if DAS_ENABLE_STACK_WALK
         FuncInfo *  info;
         int32_t     line;
@@ -158,8 +159,8 @@ namespace das
             stopFlags = 0;
         }
         
-        __forceinline vec4f eval ( int fnIndex, vec4f * args ) {
-            return call(fnIndex, args, 0);
+        __forceinline vec4f eval ( int fnIndex, vec4f * args = nullptr, void * result = nullptr ) {
+            return call(fnIndex, args, result, 0);
         }
         
         __forceinline void throw_error ( const char * message ) {
@@ -188,7 +189,11 @@ namespace das
             return ((Prologue *)stackTop)->result;
         }
         
-		__forceinline vec4f call(int fnIndex, vec4f * args, int line) {
+        __forceinline char * abiCopyOrMoveResult() {
+            return ((Prologue *)stackTop)->copyOrMoveResult;
+        }
+        
+		__forceinline vec4f call(int fnIndex, vec4f * args, void * cmres, int line) {
 			assert(fnIndex >= 0 && fnIndex<totalFunctions && "function index out of range");
 			auto & fn = functions[fnIndex];
 			// PUSH
@@ -207,6 +212,7 @@ namespace das
 			Prologue * pp = (Prologue *)stackTop;
 			pp->result = vec_setzero_ps();
 			pp->arguments = args;
+            pp->copyOrMoveResult = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
 			pp->info = fn.debug;
 			pp->line = line;
@@ -250,7 +256,7 @@ namespace das
 			return result;
 		}
 
-        vec4f callEx ( int fnIndex, vec4f * args, int line, function<void (SimNode *)> && when );
+        vec4f callEx ( int fnIndex, vec4f * args, void * cmres, int line, function<void (SimNode *)> && when );
         vec4f invokeEx ( const Block &block, vec4f * args, function<void (SimNode *)> && when );
         
         __forceinline const char * getException() const {
@@ -471,6 +477,7 @@ namespace das
         SimNode ** arguments;
         int32_t  fnIndex;
         int32_t  nArguments;
+        uint32_t stackTop;
     };
     
     // FUNCTION CALL
@@ -478,11 +485,27 @@ namespace das
         SimNode_Call ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual vec4f eval ( Context & context ) override;
 #define EVAL_NODE(TYPE,CTYPE)\
-        virtual CTYPE eval##TYPE ( Context & context ) override {                       \
-            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));       \
-                evalArgs(context, argValues);                                           \
-                DAS_NODE_EXCEPTION_POINT(CTYPE);                                        \
-                return cast<CTYPE>::to(context.call(fnIndex, argValues, debug.line));   \
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));                  \
+                evalArgs(context, argValues);                                                   \
+                DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
+                return cast<CTYPE>::to(context.call(fnIndex, argValues, nullptr, debug.line));  \
+        }
+        DAS_EVAL_NODE;
+#undef  EVAL_NODE
+    };
+    
+    // FUNCTION CALL
+    struct SimNode_CallAndCopyOrMove : SimNode_CallBase {
+        SimNode_CallAndCopyOrMove ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        virtual vec4f eval ( Context & context ) override;
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));                  \
+                evalArgs(context, argValues);                                                   \
+                DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
+                auto cmres = context.stackTop + stackTop;                                       \
+                return cast<CTYPE>::to(context.call(fnIndex, argValues, cmres, debug.line));    \
         }
         DAS_EVAL_NODE;
 #undef  EVAL_NODE
@@ -783,6 +806,19 @@ namespace das
         SimNode_Return ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual vec4f eval ( Context & context ) override;
         SimNode * subexpr;
+    };
+    
+    struct SimNode_ReturnAndCopy : SimNode_Return {
+        SimNode_ReturnAndCopy ( const LineInfo & at, SimNode * s, uint32_t sz )
+            : SimNode_Return(at,s), size(sz) {}
+        virtual vec4f eval ( Context & context ) override;
+        uint32_t size;
+    };
+    
+    struct SimNode_ReturnAndMove : SimNode_ReturnAndCopy {
+        SimNode_ReturnAndMove ( const LineInfo & at, SimNode * s, uint32_t sz )
+            : SimNode_ReturnAndCopy(at,s,sz) {}
+        virtual vec4f eval ( Context & context ) override;
     };
     
     struct SimNode_ReturnReference : SimNode_Return {

@@ -556,8 +556,17 @@ expression_break
     ;
 
 expression_return
-    :   _RETURN[loc]                    { $$ = new ExprReturn(tokAt(@loc),nullptr); }
-    |   _RETURN[loc] expr[subexpr]      { $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr)); }
+    :   _RETURN[loc] {
+        $$ = new ExprReturn(tokAt(@loc),nullptr);
+    }
+    |   _RETURN[loc] expr[subexpr] {
+        $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr));
+    }
+    |   _RETURN[loc] LARROW expr[subexpr] {
+        auto pRet = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr));
+        pRet->moveSemantics = true;
+        $$ = pRet;
+    }
     ;
 
 expression_try_catch

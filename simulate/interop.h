@@ -65,6 +65,7 @@ namespace das
             Prologue * pp = (Prologue *) context.stackTop;
             pp->result =        vec_setzero_ps();
             pp->arguments =     args;
+            pp->copyOrMoveResult = nullptr;
             pp->info =          info;
             pp->line =          debug.line;
         #endif
@@ -105,6 +106,7 @@ namespace das
             Prologue * pp = (Prologue *) context.stackTop;
             pp->result =        vec_setzero_ps();
             pp->arguments =     args;
+            pp->copyOrMoveResult = nullptr;
             pp->info =          info;
             pp->line =          debug.line;
 #endif

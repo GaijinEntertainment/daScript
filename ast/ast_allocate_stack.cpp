@@ -40,6 +40,15 @@ namespace das {
 
             return Visitor::visit(block);
         }
+    // ExprCall
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
+                auto sz = expr->func->result->getSizeOf();
+                expr->stackTop = stackTop;
+                stackTop += (sz + 0xf) & ~0xf;
+            }
+        }
     // ExprFor
         virtual void preVisit ( ExprFor * expr ) override {
             Visitor::preVisit(expr);

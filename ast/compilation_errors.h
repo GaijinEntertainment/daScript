@@ -73,6 +73,7 @@ namespace das
         
     ,   expecting_return_value                  =   32101       // def blah:int without return
     ,   not_expecting_return_value              =   32102       // def blah:void ... return 12
+    ,   invalid_return_semantics                =   32103       // return <- required
     
     ,   sizeof_reference                        =   39901       //  sizeof(type int&)
     ,   sizeof_auto                             =   39902       //  sizeof(type auto)

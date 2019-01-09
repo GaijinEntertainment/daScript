@@ -62,9 +62,17 @@ namespace das
 		vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
         DAS_EXCEPTION_POINT;
-        return context.call(fnIndex, argValues, debug.line);
+        return context.call(fnIndex, argValues, nullptr, debug.line);
     }
     
+    vec4f SimNode_CallAndCopyOrMove::eval ( Context & context ) {
+        vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
+        evalArgs(context, argValues);
+        DAS_EXCEPTION_POINT;
+        auto cmres = context.stackTop + stackTop;
+        return context.call(fnIndex, argValues, cmres, debug.line);
+    }
+
     // SimNode_Invoke
     
     vec4f SimNode_Invoke::eval ( Context & context )  {
@@ -223,6 +231,27 @@ namespace das
         context.stopFlags |= EvalFlags::stopForReturn;
         return vec_setzero_ps();
     }
+    
+    vec4f SimNode_ReturnAndCopy::eval ( Context & context ) {
+        auto pr = subexpr->evalPtr(context);
+        DAS_EXCEPTION_POINT;
+        auto pl = context.abiCopyOrMoveResult();
+        memcpy ( pl, pr, size);
+        context.abiResult() = cast<char *>::from(pl);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return vec_setzero_ps();
+    }
+    
+    vec4f SimNode_ReturnAndMove::eval ( Context & context ) {
+        auto pr = subexpr->evalPtr(context);
+        DAS_EXCEPTION_POINT;
+        auto pl = context.abiCopyOrMoveResult();
+        memcpy ( pl, pr, size);
+        memset ( pr, 0, size);
+        context.abiResult() = cast<char *>::from(pl);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return vec_setzero_ps();
+    }
 
     vec4f SimNode_ReturnReference::eval ( Context & context ) {
         char * ref = subexpr->evalPtr(context);
@@ -334,7 +363,7 @@ namespace das
         return result;
     }
 
-    vec4f Context::callEx(int fnIndex, vec4f *args, int line, function<void (SimNode *)> && when) {
+    vec4f Context::callEx(int fnIndex, vec4f *args, void * cmres, int line, function<void (SimNode *)> && when) {
         assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
         auto & fn = functions[fnIndex];
         // PUSH
@@ -353,6 +382,7 @@ namespace das
         Prologue * pp = (Prologue *) stackTop;
         pp->result =        vec_setzero_ps();
         pp->arguments =     args;
+        pp->copyOrMoveResult = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
         pp->info =          fn.debug;
         pp->line =          line;

@@ -554,6 +554,20 @@ namespace das {
             if ( !func->result->isReturnType() ) {
                 error("not a valid function return type",func->result->at,CompilationError::invalid_return_type);
             }
+            if ( func->result->isRefType() ) {
+                if ( func->result->canCopy() ) {
+                    func->copyOnReturn = true;
+                    func->moveOnReturn = false;
+                } else if ( func->result->canMove() ) {
+                    func->copyOnReturn = false;
+                    func->moveOnReturn = true;
+                } else {
+                    assert(0 && "we should not be here");
+                }
+            } else {
+                func->copyOnReturn = false;
+                func->moveOnReturn = false;
+            }
             assert(blocks.size()==0);
             func.reset();
             return Visitor::visit(that);
@@ -1288,16 +1302,27 @@ namespace das {
                 if ( !expr->subexpr ) {
                     error("expecting a return value", expr->at, CompilationError::expecting_return_value);
                 } else {
-                    if ( !resType->isSameType(*expr->subexpr->type,true,false) ) {
+                    if ( !resType->isSameType(*expr->subexpr->type,false,false) ) {
                         error("incompatible return type, expecting ("
                               + resType->describe() + ") vs (" + expr->subexpr->type->describe() + ")",
                               expr->at, CompilationError::invalid_return_type);
                     }
-                    if ( resType->isPointer() && !resType->isConst() && expr->subexpr->type->isConst() ) {
+                    if ( resType->ref && !expr->subexpr->type->ref ) {
+                        error("incompatible return type, reference matters. expecting ("
+                              + resType->describe() + ") vs (" + expr->subexpr->type->describe() + ")",
+                              expr->at, CompilationError::invalid_return_type);
+                    }
+                    if ( !resType->isConst() && expr->subexpr->type->isConst() ) {
                         error("incompatible return type, constant matters. expecting "
                               + resType->describe() + ") vs (" + expr->subexpr->type->describe() + ")",
                               expr->at, CompilationError::invalid_return_type);
                     }
+                }
+            }
+            if ( resType->isRefType() ) {
+                if ( !resType->canCopy() && !resType->canMove() ) {
+                    error("this type can't be returned at all",
+                          expr->at, CompilationError::invalid_return_type);
                 }
             }
             return false;
@@ -1330,6 +1355,12 @@ namespace das {
                     }
                 }
                 inferReturnType(func->result, expr);
+                expr->copyOnReturn = func->copyOnReturn;
+                expr->moveOnReturn = func->moveOnReturn;
+                if ( expr->moveOnReturn && !expr->moveSemantics ) {
+                    error("this type can't be copied, use return <- instead",
+                          expr->at, CompilationError::invalid_return_semantics );
+                }
             }
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
@@ -1609,6 +1640,7 @@ namespace das {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()!=1 ) {
                 error("expecting Keys(table)", expr->at);
+                return Visitor::visit(expr);
             }
             // infer
             auto tableType = expr->arguments[0]->type;
@@ -1629,6 +1661,7 @@ namespace das {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()!=1 ) {
                 error("expecting Values(table)", expr->at);
+                return Visitor::visit(expr);
             }
             // infer
             auto tableType = expr->arguments[0]->type;
@@ -1649,6 +1682,7 @@ namespace das {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()!=2 ) {
                 error("expecting ArrayResize(array,size)", expr->at);
+                return Visitor::visit(expr);
             }
             // infer
             auto arrayType = expr->arguments[0]->type;
@@ -1669,6 +1703,7 @@ namespace das {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()!=2 ) {
                 error("expecting ArrayReserve(array,size)", expr->at);
+                return Visitor::visit(expr);
             }
             // infer
             auto arrayType = expr->arguments[0]->type;

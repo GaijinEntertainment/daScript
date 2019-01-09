@@ -182,7 +182,7 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
     int fnIndex = table.functionIndex;
     context.restart();
 	vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
-    context.callEx(fnIndex, _args, 0, [&](SimNode * code){
+    context.callEx(fnIndex, _args, nullptr, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
         vec4f * args = _args;
 		char **		data	= (char **) alloca(nAttr * sizeof(char *));

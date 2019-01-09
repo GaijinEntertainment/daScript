@@ -473,9 +473,10 @@ namespace das {
             ss << " <- ";
         }
     // return
-        virtual void preVisit ( ExprReturn * that ) override {
-            Visitor::preVisit(that);
+        virtual void preVisit ( ExprReturn * expr ) override {
+            Visitor::preVisit(expr);
             ss << "return ";
+            if ( expr->moveSemantics ) ss << "<- ";
         }
     // break
         virtual void preVisit ( ExprBreak * that ) override {

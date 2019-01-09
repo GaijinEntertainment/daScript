@@ -493,8 +493,10 @@ namespace das
     }
     
     bool TypeDecl::isReturnType() const {
-        if ( isVoid() ) return true;
-        return isWorkhorseType(); // && !isRef();
+        if ( isGoodBlockType() ) {
+            return false;
+        }
+        return true;
     }
     
     Type TypeDecl::getRangeBaseType() const
@@ -1598,10 +1600,8 @@ namespace das
     }
     
     SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
-        if ( rightType.ref ) {
+        if ( rightType.isRef() ) {
             return context.makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
-        } else if ( rightType.isGoodArrayType() ) {
-            return context.makeNode<SimNode_CopyValue<Array>>(at, left, right);
         } else {
             assert(0 && "we should not be here");
             return nullptr;
@@ -1695,18 +1695,24 @@ namespace das
         Expression::clone(cexpr);
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
+        cexpr->moveSemantics = moveSemantics;
         return cexpr;
     }
 
     SimNode * ExprReturn::simulate (Context & context) const {
+        SimNode * simSubE = subexpr ? subexpr->simulate(context) : nullptr;
         if ( returnReference ) {
             if ( returnInBlock ) {
-                return context.makeNode<SimNode_ReturnReferenceFromBlock>(at, subexpr->simulate(context));
+                return context.makeNode<SimNode_ReturnReferenceFromBlock>(at, simSubE);
             } else {
-                return context.makeNode<SimNode_ReturnReference>(at, subexpr->simulate(context));
+                return context.makeNode<SimNode_ReturnReference>(at, simSubE);
             }
+        } else if ( copyOnReturn ) {
+            return context.makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
+        } else if ( moveOnReturn ) {
+            return context.makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
         } else {
-            return context.makeNode<SimNode_Return>(at, subexpr ? subexpr->simulate(context) : nullptr);
+            return context.makeNode<SimNode_Return>(at, simSubE);
         }
     }
     
@@ -2077,6 +2083,7 @@ namespace das
         SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
         pCall->debug = at;
         pCall->fnIndex = func->index;
+        pCall->stackTop = stackTop;
         if ( int nArg = (int) arguments.size() ) {
             pCall->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
             pCall->nArguments = nArg;

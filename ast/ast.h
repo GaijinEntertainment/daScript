@@ -619,8 +619,11 @@ namespace das
         ExpressionPtr subexpr;
         union {
             struct {
+                bool moveSemantics   : 1;
                 bool returnReference : 1;
                 bool returnInBlock   : 1;
+                bool copyOnReturn    : 1;
+                bool moveOnReturn    : 1;
             };
             uint32_t    returnFlags = 0;
         };
@@ -902,6 +905,7 @@ namespace das
         ExprArrayCallWithSizeOrIndex ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
             auto cexpr = clonePtr<ExprArrayCallWithSizeOrIndex<It,SimNodeT>>(expr);
+            ExprLooksLikeCall::clone(cexpr);
             return cexpr;
         }
         virtual SimNode * simulate (Context & context) const override {
@@ -972,6 +976,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         FunctionPtr             func;
+        uint32_t                stackTop = 0;
     };
     
     struct ExprIfThenElse : Expression {
@@ -1000,7 +1005,13 @@ namespace das
         string getMangledName() const;
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
-        virtual SimNode * makeSimNode ( Context & context ) { return context.makeNode<SimNode_Call>(at); }
+        virtual SimNode * makeSimNode ( Context & context ) {
+            if ( copyOnReturn || moveOnReturn ) {
+                return context.makeNode<SimNode_CallAndCopyOrMove>(at);
+            } else {
+                return context.makeNode<SimNode_Call>(at);
+            }
+        }
         string describe() const;
         virtual FunctionPtr visit(Visitor & vis);
         FunctionPtr sideEffects ( bool hasSideEffects ) { noSideEffects = !hasSideEffects; return shared_from_this(); }
@@ -1023,6 +1034,8 @@ namespace das
                 bool    builtIn : 1;
                 bool    noSideEffects : 1;
                 bool    hasReturn: 1;
+                bool    copyOnReturn : 1;
+                bool    moveOnReturn : 1;
             };
             uint32_t flags = 0;
         };

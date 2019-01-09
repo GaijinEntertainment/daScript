@@ -1,21 +1,12 @@
-expect 30102:6    // invalid_return_type
+expect 30102
 
 struct Foo
     a:int
 
-def test_boxed:Foo              // 30102: not a valid function return type
-    let foo : Foo
-    return foo                  // 30102: incompatible return type, expecting (Foo) vs (Foo&)
+def func
+    return $(a:int):int { return a+1; } // 30102: not a valid function return type
 
-def test_ref:int&               // now ok
-    let i = 0
-    return i                    // this is a runtime error for now
-
-def test_container:array<int>   // 30102: not a valid function return type
-    let Ai:array<int>
-    return Ai                   // 30102: incompatible return type, expecting (array<int>) vs (array<int>&)
-
-def test_array:int[10]          // 30102: not a valid function return type
-    let ai:int[10]
-    return ai                   // 30102: incompatible return type, expecting (int[10]) vs (int[10]&)
+def test:bool
+    func()
+    return true
 

@@ -1,4 +1,13 @@
-options log=true, logInferPasses=false, optimize=true
+struct Foo
+    bar : int
+
+def newFoo
+    let t : Foo
+    t.bar = 1
+    return t
+
+def addBar(a,b:Foo)
+    return a.bar + b.bar
 
 def makeSequence(base:auto(numT)!&;max)
     let a : array<numT>
@@ -17,9 +26,12 @@ def joinSequences(l:array<auto(numT)>;r:array<numT>)
     return <- a
 
 def test
+    // copy on return
+    let t = addBar(newFoo(),newFoo())
+    assert(t==2)
+    // move on return
     let z <- joinSequences(makeSequence(0,4),makeSequence(5,9))
     assert(length(z)==10)
     for t in range(0,9)
         assert(z[t]==t)
     return true
-
