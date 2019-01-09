@@ -150,7 +150,6 @@
 %type <pExpression>     expr_typename
 %type <pExpression>     expr_block
 %type <pExpression>     expression_any
-%type <pExpression>     optional_initializer
 
 %type <pExpression>     string_builder_body
 %type <pExpression>     string_builder
