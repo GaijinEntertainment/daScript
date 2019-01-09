@@ -617,6 +617,7 @@ namespace das
         virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForReturn; }
         virtual bool rtti_isReturn() const override { return true; }
         ExpressionPtr subexpr;
+        bool returnReference = false;
     };
     
     struct ExprBreak : Expression {

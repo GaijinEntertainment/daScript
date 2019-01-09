@@ -13,6 +13,6 @@ def test:bool
     assert(s2=="S = hello,world!")
     assert(s3=="S2 = \{S = hello,world!}")
     assert(s4=="\"say\" 2 + 2 = 4")
-    // print("{s}\n{s2}\n{s3}\n{s4}\n")
-    // print("do u like that? {test_arg("string builder")} - cool,huh\n");
+    //print("{s}\n{s2}\n{s3}\n{s4}\n")
+    //print("do u like that? {test_arg("string builder")} - cool,huh\n");
     return true

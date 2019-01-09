@@ -216,6 +216,32 @@ namespace das
         return vec_setzero_ps();
     }
     
+    // Return
+    
+    vec4f SimNode_Return::eval ( Context & context ) {
+        if ( subexpr ) context.abiResult() = subexpr->eval(context);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return vec_setzero_ps();
+    }
+    
+    // ReturnReference
+
+    vec4f SimNode_ReturnReference::eval ( Context & context ) {
+        char * ref = subexpr->evalPtr(context);
+        auto pp = (Prologue *) context.stackTop;
+        auto top = context.stackTop + pp->info->stackSize;
+        if ( context.stack<=ref && ref<context.stackTop ) {
+            context.throw_error("reference bellow current function stack frame");
+            return vec_setzero_ps();
+        } else if ( context.stackTop<=ref && ref<top ) {
+            context.throw_error("reference to current function stack frame");
+            return vec_setzero_ps();
+        }
+        context.abiResult() = cast<char *>::from(ref);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return vec_setzero_ps();
+    }
+    
     // Context
     
     Context::Context(const string * lines, int las) {

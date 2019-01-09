@@ -781,12 +781,14 @@ namespace das
     // RETURN
     struct SimNode_Return : SimNode {
         SimNode_Return ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
-        virtual vec4f eval ( Context & context ) override {
-            if ( subexpr ) context.abiResult() = subexpr->eval(context);
-            context.stopFlags |= EvalFlags::stopForReturn;
-            return vec_setzero_ps();
-        }
+        virtual vec4f eval ( Context & context ) override;
         SimNode * subexpr;
+    };
+    
+    // RETURN REF
+    struct SimNode_ReturnReference : SimNode_Return {
+        SimNode_ReturnReference ( const LineInfo & at, SimNode * s ) : SimNode_Return(at,s) {}
+        virtual vec4f eval ( Context & context ) override;
     };
     
     // BREAK

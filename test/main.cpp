@@ -116,6 +116,48 @@ bool unit_test ( const string & fn ) {
     }
 }
 
+bool exception_test ( const string & fn ) {
+    cout << fn << " ";
+    string str;
+    ifstream t(fn);
+    if ( !t.is_open() ) {
+        cout << "not found\n";
+        return false;
+    }
+    t.seekg(0, ios::end);
+    str.reserve(t.tellg());
+    t.seekg(0, ios::beg);
+    str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
+    if ( auto program = parseDaScript(str.c_str()) ) {
+        if ( program->failed() ) {
+            cout << "failed to compile\n";
+            for ( auto & err : program->errors ) {
+                cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+            }
+            return false;
+        } else {
+            Context ctx(&str);
+            program->simulate(ctx);
+            int fnTest = ctx.findFunction("test");
+            if ( fnTest != -1 ) {
+                ctx.restart();
+                ctx.eval(fnTest, nullptr);
+                if ( auto ex = ctx.getException() ) {
+                    cout << "ok\n";
+                    return true;
+                }
+                cout << "failed, finished without exception\n";
+                return false;
+            } else {
+                cout << "function 'test' not found\n";
+                return false;
+            }
+        }
+    } else {
+        return false;
+    }
+}
+
 bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
 #ifdef _MSC_VER
 	bool ok = true;
@@ -153,6 +195,10 @@ bool run_compilation_fail_tests( const string & path ) {
     return run_tests(path, compilation_fail_test);
 }
 
+bool run_exception_tests( const string & path ) {
+    return run_tests(path, exception_test);
+}
+
 int main(int argc, const char * argv[]) {
 #ifdef _MSC_VER
 	#define	TEST_PATH "../"
@@ -176,6 +222,7 @@ int main(int argc, const char * argv[]) {
     ok = run_compilation_fail_tests(TEST_PATH "test/compilation_fail_tests") && ok;
     ok = run_unit_tests(TEST_PATH "test/unit_tests") && ok;
     ok = run_unit_tests(TEST_PATH "test/optimizations") && ok;
+    ok = run_exception_tests(TEST_PATH "test/runtime_errors") && ok;
     cout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown
     Module::Shutdown();

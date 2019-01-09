@@ -494,7 +494,7 @@ namespace das
     
     bool TypeDecl::isReturnType() const {
         if ( isVoid() ) return true;
-        return isWorkhorseType() && !isRef();
+        return isWorkhorseType(); // && !isRef();
     }
     
     Type TypeDecl::getRangeBaseType() const
@@ -1699,7 +1699,11 @@ namespace das
     }
 
     SimNode * ExprReturn::simulate (Context & context) const {
-        return context.makeNode<SimNode_Return>(at, subexpr ? subexpr->simulate(context) : nullptr);
+        if ( returnReference ) {
+            return context.makeNode<SimNode_ReturnReference>(at, subexpr->simulate(context));
+        } else {
+            return context.makeNode<SimNode_Return>(at, subexpr ? subexpr->simulate(context) : nullptr);
+        }
     }
     
     // ExprBreak

@@ -1234,7 +1234,7 @@ namespace das {
                 error("can't move to a constant value", expr->at, CompilationError::cant_move_to_const);
             } else if ( !expr->left->type->canMove() ) {
                 error("this type can't be moved", expr->at, CompilationError::cant_move);
-            } 
+            }
             expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
         }
@@ -1318,7 +1318,11 @@ namespace das {
                 func->hasReturn = true;
                 if ( expr->subexpr ) {
                     if ( !expr->subexpr->type ) return Visitor::visit(expr);
-                    expr->subexpr = Expression::autoDereference(expr->subexpr);
+                    if ( !func->result->ref ) {
+                        expr->subexpr = Expression::autoDereference(expr->subexpr);
+                    } else {
+                        expr->returnReference = true;
+                    }
                 }
                 inferReturnType(func->result, expr);
             }

@@ -137,6 +137,12 @@ file(GLOB OPTIMIZATION_SRC
 list(SORT OPTIMIZATION_SRC)
 SOURCE_GROUP_FILES("test/optimizations" OPTIMIZATION_SRC)
 
+file(GLOB RUNTIME_ERRORS_SRC
+"test/runtime_errors/*.das"
+)
+list(SORT RUNTIME_ERRORS_SRC)
+SOURCE_GROUP_FILES("test/runtime_errors" RUNTIME_ERRORS_SRC)
+
 file(GLOB MIX_TEST_SRC
 "test/*.das"
 )
@@ -152,7 +158,8 @@ test/test_handles.cpp
 SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)
 
 include_directories(daScriptTest PUBLIC ast lexer misc simulate test)
-add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC})
+add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}
+    ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC})
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)

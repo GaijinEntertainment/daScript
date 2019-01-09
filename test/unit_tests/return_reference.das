@@ -1,5 +1,3 @@
-options log=true, logInferPasses=false, optimize=true
-
 let
     g_t = 2
 
