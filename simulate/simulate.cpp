@@ -353,7 +353,6 @@ namespace das
         }
         // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
         when(block.body);
-        vec4f result = abiResult();
         if ( args && block.argumentsOffset ) {
             *pArgs = saveArgs;
         }
@@ -380,7 +379,6 @@ namespace das
         // cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
         // fill prologue
         Prologue * pp = (Prologue *) stackTop;
-        pp->result =        vec_setzero_ps();
         pp->arguments =     args;
         pp->copyOrMoveResult = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
@@ -389,7 +387,6 @@ namespace das
 #endif
         // CALL
         when(fn.code);
-        vec4f result = abiResult();
         stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
         // POP
         invokeStackTop = pushInvokeStack;

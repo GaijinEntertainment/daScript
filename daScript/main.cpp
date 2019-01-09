@@ -1,11 +1,9 @@
 #include "precomp.h"
 
 #include "ast.h"
-#include "interop.h"
 
 using namespace std;
 using namespace das;
-
 
 void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
     string str;

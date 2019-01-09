@@ -63,7 +63,6 @@ namespace das
             // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
-            pp->result =        vec_setzero_ps();
             pp->arguments =     args;
             pp->copyOrMoveResult = nullptr;
             pp->info =          info;
@@ -104,7 +103,6 @@ namespace das
             // cout << "ext-call " << info->name <<  ", stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
             // fill prologue
             Prologue * pp = (Prologue *) context.stackTop;
-            pp->result =        vec_setzero_ps();
             pp->arguments =     args;
             pp->copyOrMoveResult = nullptr;
             pp->info =          info;

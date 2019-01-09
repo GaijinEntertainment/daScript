@@ -54,7 +54,6 @@ namespace das
     };
     
     struct Prologue {
-        vec4f       result;
         vec4f *     arguments;
         char *      copyOrMoveResult;
 #if DAS_ENABLE_STACK_WALK
@@ -186,7 +185,7 @@ namespace das
         }
 
 		__forceinline vec4f & abiResult() {
-            return ((Prologue *)stackTop)->result;
+            return result;
         }
         
         __forceinline char * abiCopyOrMoveResult() {
@@ -210,7 +209,6 @@ namespace das
 			// cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
 			// fill prologue
 			Prologue * pp = (Prologue *)stackTop;
-			pp->result = vec_setzero_ps();
 			pp->arguments = args;
             pp->copyOrMoveResult = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
@@ -219,7 +217,6 @@ namespace das
 #endif
 			// CALL
 			fn.code->eval(*this);
-			vec4f result = abiResult();
 			stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
 			// POP
 			invokeStackTop = pushInvokeStack;
@@ -246,14 +243,14 @@ namespace das
 				assert(!args && "not expecting arguments");
 			}
 			// cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
-			vec4f result = block.body->eval(*this);
+			vec4f block_result = block.body->eval(*this);
 			if (args && block.argumentsOffset) {
 				*pArgs = saveArgs;
 			}
 			invokeStackTop = saveISp;
 			stackTop = saveSp;
 			assert(stackTop >= stack && stackTop < stackTop + stackSize);
-			return result;
+			return block_result;
 		}
 
         vec4f callEx ( int fnIndex, vec4f * args, void * cmres, int line, function<void (SimNode *)> && when );
@@ -281,6 +278,7 @@ namespace das
         char * stack = nullptr;
         int stackSize = 16*1024;
         uint32_t stopFlags = 0;
+        vec4f result;
     };
     
 #if DAS_ENABLE_EXCEPTIONS
