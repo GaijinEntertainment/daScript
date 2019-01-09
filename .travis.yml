@@ -44,6 +44,11 @@ script:
     && CXXFLAGS="${compile_flags[*]} -std=c++98"
     && cmake_args=(
         -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}
+
+        -Wdev
+        -Werror=dev
+        -Wdeprecated
+        -Werror=deprecated
     )
     && CC=clang-7
             CXX=clang++-7
