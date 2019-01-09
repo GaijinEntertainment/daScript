@@ -200,3 +200,16 @@ if(URIPARSER_BUILD_TESTS)
             testrunner
     )
 endif(URIPARSER_BUILD_TESTS)
+
+#
+# pkg-config file
+#
+if(NOT WIN32)
+    configure_file(liburiparser.pc.in liburiparser.pc @ONLY)
+    install(
+        FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/liburiparser.pc
+        DESTINATION
+            ${CMAKE_INSTALL_LIBDIR}/pkgconfig/
+    )
+endif(NOT WIN32)
