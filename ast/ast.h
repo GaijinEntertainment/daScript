@@ -459,6 +459,8 @@ namespace das
             struct {
                 bool            isClosure : 1;
                 bool            hasReturn : 1;
+                bool            copyOnReturn : 1;
+                bool            moveOnReturn : 1;
             };
             uint32_t            blockFlags = 0;
         };
@@ -627,6 +629,7 @@ namespace das
             };
             uint32_t    returnFlags = 0;
         };
+        uint32_t stackTop = 0;
     };
     
     struct ExprBreak : Expression {
@@ -831,6 +834,7 @@ namespace das
         ExprInvoke ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprInvoke>(a,name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        uint32_t    stackTop = 0;
     };
     
     struct ExprAssert : ExprLikeCall<ExprAssert> {

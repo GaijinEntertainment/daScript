@@ -947,8 +947,13 @@ namespace das
     }
     
     SimNode * ExprInvoke::simulate (Context & context) const {
-        
-        SimNode_Invoke * pInvoke = context.makeNode<SimNode_Invoke>(at);
+        auto blockT = arguments[0]->type;
+        SimNode_Invoke * pInvoke;
+        if ( blockT->firstType && blockT->firstType->isRefType() ) {
+            pInvoke = context.makeNode<SimNode_InvokeAndCopyOrMove>(at, stackTop);
+        } else {
+            pInvoke = context.makeNode<SimNode_Invoke>(at);
+        }
         pInvoke->debug = at;
         if ( int nArg = (int) arguments.size() ) {
             pInvoke->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
@@ -1708,9 +1713,19 @@ namespace das
                 return context.makeNode<SimNode_ReturnReference>(at, simSubE);
             }
         } else if ( copyOnReturn ) {
-            return context.makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
+            if ( returnInBlock ) {
+                return context.makeNode<SimNode_ReturnAndCopyFromBlock>(at,
+                            simSubE, subexpr->type->getSizeOf(), stackTop);
+            } else {
+                return context.makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
+            }
         } else if ( moveOnReturn ) {
-            return context.makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
+            if ( returnInBlock ) {
+                return context.makeNode<SimNode_ReturnAndMoveFromBlock>(at,
+                            simSubE, subexpr->type->getSizeOf(), stackTop);
+            } else {
+                return context.makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
+            }
         } else {
             return context.makeNode<SimNode_Return>(at, simSubE);
         }

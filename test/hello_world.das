@@ -1,4 +1,4 @@
-options log=true, logInferPasses=false, optimize=true
+options log=false, logStack = false
 
 def makeSequence(base:auto(numT)!&;max)
     let a : array<numT>
@@ -16,10 +16,12 @@ def joinSequences(l:array<auto(numT)>;r:array<numT>)
         push(a, t)
     return <- a
 
-def test
-    let z <- joinSequences(makeSequence(0,4),makeSequence(5,9))
-    assert(length(z)==10)
-    for t in range(0,9)
-        assert(z[t]==t)
-    return true
+def makeSequenceB(b:block< array<auto> >)
+    return <- invoke(b)
 
+def test
+    let t <- makeSequenceB({ return <- makeSequence(0,4); })
+    let q <- makeSequenceB({ return <- makeSequence(5,9); })
+    let z <- joinSequences(makeSequenceB({ return <- makeSequence(0,4); }), makeSequenceB({ return <- makeSequence(5,9); }))
+    print("z={z}\n")
+    return true

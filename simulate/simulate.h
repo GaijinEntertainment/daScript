@@ -63,6 +63,11 @@ namespace das
     };
     static_assert((sizeof(Prologue) & 0xf)==0, "it has to be 16 byte aligned");
     
+    struct BlockArguments {
+        vec4f *     arguments;
+        char *      copyOrMoveResult;
+    };
+    
     enum EvalFlags : uint32_t {
         stopForBreak        = 1 << 0
     ,   stopForReturn       = 1 << 1
@@ -192,60 +197,57 @@ namespace das
             return ((Prologue *)stackTop)->copyOrMoveResult;
         }
         
-		__forceinline vec4f call(int fnIndex, vec4f * args, void * cmres, int line) {
-			assert(fnIndex >= 0 && fnIndex<totalFunctions && "function index out of range");
-			auto & fn = functions[fnIndex];
-			// PUSH
-			char * top = invokeStackTop ? invokeStackTop : stackTop;
-			if (stack - (top - fn.stackSize) > stackSize) {
-				throw_error("stack overflow");
-				return vec_setzero_ps();
-			}
-			char * pushStack = stackTop;
-			char * pushInvokeStack = invokeStackTop;
-			stackTop = top - fn.stackSize;
-			assert(stackTop >= stack && stackTop < stackTop + stackSize);
-			invokeStackTop = nullptr;
-			// cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
-			// fill prologue
-			Prologue * pp = (Prologue *)stackTop;
-			pp->arguments = args;
+        __forceinline vec4f call(int fnIndex, vec4f * args, void * cmres, int line) {
+            assert(fnIndex >= 0 && fnIndex<totalFunctions && "function index out of range");
+            auto & fn = functions[fnIndex];
+            // PUSH
+            char * top = invokeStackTop ? invokeStackTop : stackTop;
+            if (stack - (top - fn.stackSize) > stackSize) {
+                throw_error("stack overflow");
+                return vec_setzero_ps();
+            }
+            char * pushStack = stackTop;
+            char * pushInvokeStack = invokeStackTop;
+            stackTop = top - fn.stackSize;
+            assert(stackTop >= stack && stackTop < stackTop + stackSize);
+            invokeStackTop = nullptr;
+            // cout << "call " << fn.debug->name <<  ", stack at " << (stack + stackSize - stackTop) << endl;
+            // fill prologue
+            Prologue * pp = (Prologue *)stackTop;
+            pp->arguments = args;
             pp->copyOrMoveResult = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
-			pp->info = fn.debug;
-			pp->line = line;
+            pp->info = fn.debug;
+            pp->line = line;
 #endif
-			// CALL
-			fn.code->eval(*this);
-			stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
-			// POP
-			invokeStackTop = pushInvokeStack;
-			stackTop = pushStack;
-			assert(stackTop >= stack && stackTop < stackTop + stackSize);
-			return result;
-		}
+            // CALL
+            fn.code->eval(*this);
+            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            // POP
+            invokeStackTop = pushInvokeStack;
+            stackTop = pushStack;
+            assert(stackTop >= stack && stackTop < stackTop + stackSize);
+            return result;
+        }
 
-		__forceinline vec4f invoke(const Block &block, vec4f * args) {
+		__forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
 			char * saveSp = stackTop;
 			char * saveISp = invokeStackTop;
 			invokeStackTop = stackTop;
 			stackTop = stack + block.stackOffset;
 			assert(stackTop >= stack && stackTop < stackTop + stackSize);
-			vec4f ** pArgs;
-			vec4f * saveArgs;
-			if (block.argumentsOffset) {
-				assert(args && "expecting arguments");
-				pArgs = (vec4f **)(stack + block.argumentsOffset);
-				saveArgs = *pArgs;
-				*pArgs = args;
-			}
-			else {
-				assert(!args && "not expecting arguments");
-			}
+            BlockArguments * ba = nullptr;
+            BlockArguments saveArguments;
+            if ( block.argumentsOffset ) {
+                ba = (BlockArguments *) ( stack + block.argumentsOffset );
+                saveArguments = *ba;
+                ba->arguments = args;
+                ba->copyOrMoveResult = (char *) cmres;
+            }
 			// cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
 			vec4f block_result = block.body->eval(*this);
-			if (args && block.argumentsOffset) {
-				*pArgs = saveArgs;
+			if ( ba ) {
+                *ba = saveArguments;
 			}
 			invokeStackTop = saveISp;
 			stackTop = saveSp;
@@ -254,7 +256,7 @@ namespace das
 		}
 
         vec4f callEx ( int fnIndex, vec4f * args, void * cmres, int line, function<void (SimNode *)> && when );
-        vec4f invokeEx ( const Block &block, vec4f * args, function<void (SimNode *)> && when );
+        vec4f invokeEx ( const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when );
         
         __forceinline const char * getException() const {
             return stopFlags & EvalFlags::stopForThrow ? exception : nullptr;
@@ -465,7 +467,11 @@ namespace das
     // FUNCTION CALL
     struct SimNode_CallBase : SimNode {
         SimNode_CallBase ( const LineInfo & at ) : SimNode(at) {}
-        void evalArgs ( Context & context, vec4f * argValues );
+        __forceinline void evalArgs ( Context & context, vec4f * argValues ) {
+            for ( int i=0; i!=nArguments && !context.stopFlags; ++i ) {
+                argValues[i] = arguments[i]->eval(context);
+            }
+        }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(eval(context));                  \
@@ -493,7 +499,7 @@ namespace das
 #undef  EVAL_NODE
     };
     
-    // FUNCTION CALL
+    // FUNCTION CALL with copy-or-move-on-return
     struct SimNode_CallAndCopyOrMove : SimNode_CallBase {
         SimNode_CallAndCopyOrMove ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual vec4f eval ( Context & context ) override;
@@ -512,6 +518,13 @@ namespace das
     // Invoke
     struct SimNode_Invoke : SimNode_CallBase {
         SimNode_Invoke ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+    
+    // Invoke with copy-or-move-on-return
+    struct SimNode_InvokeAndCopyOrMove : SimNode_Invoke {
+        SimNode_InvokeAndCopyOrMove ( const LineInfo & at, uint32_t sp )
+            : SimNode_Invoke(at) { stackTop = sp; }
         virtual vec4f eval ( Context & context ) override;
     };
     
@@ -821,6 +834,19 @@ namespace das
     
     struct SimNode_ReturnReference : SimNode_Return {
         SimNode_ReturnReference ( const LineInfo & at, SimNode * s ) : SimNode_Return(at,s) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+    
+    struct SimNode_ReturnAndCopyFromBlock : SimNode_ReturnAndCopy {
+        SimNode_ReturnAndCopyFromBlock ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t asp )
+            : SimNode_ReturnAndCopy(at,s,sz), argStackTop(asp) {}
+        virtual vec4f eval ( Context & context ) override;
+        uint32_t argStackTop;
+    };
+    
+    struct SimNode_ReturnAndMoveFromBlock : SimNode_ReturnAndCopyFromBlock {
+        SimNode_ReturnAndMoveFromBlock ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t asp )
+            : SimNode_ReturnAndCopyFromBlock(at,s,sz, asp) {}
         virtual vec4f eval ( Context & context ) override;
     };
     

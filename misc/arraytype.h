@@ -13,6 +13,7 @@ namespace das
             return b.stackOffset==stackOffset && b.argumentsOffset==argumentsOffset && b.body==body;
         }
     };
+    static_assert(sizeof(Block)<=16,"has to be castable");
     
     struct Array {
         char *      data;

@@ -6,6 +6,9 @@ def newFoo
     t.bar = 1
     return t
 
+def newFooB(b:block<Foo>)
+    return invoke(b)
+
 def addBar(a,b:Foo)
     return a.bar + b.bar
 
@@ -25,13 +28,25 @@ def joinSequences(l:array<auto(numT)>;r:array<numT>)
         push(a, t)
     return <- a
 
+def makeSequenceB(b:block< array<auto> >)
+    return <- invoke(b)
+
 def test
     // copy on return
     let t = addBar(newFoo(),newFoo())
     assert(t==2)
+    let tt = addBar(newFooB({ let t : Foo; t.bar = 1; return t; }),
+        newFooB({ let t : Foo; t.bar = 1; return t; }))
+    assert(tt==2)
     // move on return
     let z <- joinSequences(makeSequence(0,4),makeSequence(5,9))
     assert(length(z)==10)
     for t in range(0,9)
         assert(z[t]==t)
+    // move on return in block
+    let zz <- joinSequences(makeSequenceB({ return <- makeSequence(0,4); }),
+        makeSequenceB({ return <- makeSequence(5,9); }))
+    assert(length(zz)==10)
+    for t in range(0,9)
+        assert(zz[t]==t)
     return true

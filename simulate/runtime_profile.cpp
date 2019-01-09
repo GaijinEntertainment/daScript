@@ -42,7 +42,7 @@ namespace das
         uint64_t minT = -1;
         for ( int32_t i = 0; i != count; ++i ) {
             uint64_t t0 = profileGetTime();
-            context->invoke(block, nullptr);
+            context->invoke(block, nullptr, nullptr);
             uint64_t t1 = profileGetTime();
             minT = min(t1-t0, minT);
         }

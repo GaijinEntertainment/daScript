@@ -52,12 +52,6 @@ namespace das
     
     // SimNode_Call
     
-    void SimNode_CallBase::evalArgs ( Context & context, vec4f * argValues ) {
-        for ( int i=0; i!=nArguments && !context.stopFlags; ++i ) {
-            argValues[i] = arguments[i]->eval(context);
-        }
-    }
-    
     vec4f SimNode_Call::eval ( Context & context ) {
 		vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
@@ -81,9 +75,22 @@ namespace das
         DAS_EXCEPTION_POINT;
         Block block = cast<Block>::to(argValues[0]);
         if ( nArguments>1 ) {
-            return context.invoke(block, argValues + 1);
+            return context.invoke(block, argValues + 1, nullptr);
         } else {
-            return context.invoke(block, nullptr);
+            return context.invoke(block, nullptr, nullptr);
+        }
+    }
+    
+    vec4f SimNode_InvokeAndCopyOrMove::eval ( Context & context )  {
+        vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
+        evalArgs(context, argValues);
+        DAS_EXCEPTION_POINT;
+        Block block = cast<Block>::to(argValues[0]);
+        auto cmres = context.stackTop + stackTop;
+        if ( nArguments>1 ) {
+            return context.invoke(block, argValues + 1, cmres);
+        } else {
+            return context.invoke(block, nullptr, cmres);
         }
     }
     
@@ -269,6 +276,29 @@ namespace das
         return vec_setzero_ps();
     }
     
+    vec4f SimNode_ReturnAndCopyFromBlock::eval ( Context & context ) {
+        auto pr = subexpr->evalPtr(context);
+        DAS_EXCEPTION_POINT;
+        auto ba = (BlockArguments *) ( context.stackTop + argStackTop );
+        auto pl = ba->copyOrMoveResult;
+        memcpy ( pl, pr, size);
+        context.abiResult() = cast<char *>::from(pl);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return vec_setzero_ps();
+    }
+    
+    vec4f SimNode_ReturnAndMoveFromBlock::eval ( Context & context ) {
+        auto pr = subexpr->evalPtr(context);
+        DAS_EXCEPTION_POINT;
+        auto ba = (BlockArguments *) ( context.stackTop + argStackTop );
+        auto pl = ba->copyOrMoveResult;
+        memcpy ( pl, pr, size);
+        memset ( pr, 0, size);
+        context.abiResult() = cast<char *>::from(pl);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return vec_setzero_ps();
+    }
+    
     vec4f SimNode_ReturnReferenceFromBlock::eval ( Context & context ) {
         char * ref = subexpr->evalPtr(context);
         if ( context.stack<=ref && ref<context.invokeStackTop ) {
@@ -335,26 +365,24 @@ namespace das
         }
     }
     
-    vec4f Context::invokeEx(const Block &block, vec4f * args, function<void (SimNode *)> && when) {
+    vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when) {
         char * saveSp = stackTop;
         char * saveISp = invokeStackTop;
         invokeStackTop = stackTop;
         stackTop = stack + block.stackOffset;
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
-        vec4f ** pArgs;
-        vec4f * saveArgs;
+        BlockArguments * ba = nullptr;
+        BlockArguments saveArguments;
         if ( block.argumentsOffset ) {
-            assert(args && "expecting arguments");
-            pArgs = (vec4f **)(stack + block.argumentsOffset);
-            saveArgs = *pArgs;
-            *pArgs = args;
-        } else {
-            assert(!args && "not expecting arguments");
+            ba = (BlockArguments *) ( stack + block.argumentsOffset );
+            saveArguments = *ba;
+            ba->arguments = args;
+            ba->copyOrMoveResult = (char *) cmres;
         }
         // cout << "invoke , stack at " << (context.stack + context.stackSize - context.stackTop) << endl;
         when(block.body);
-        if ( args && block.argumentsOffset ) {
-            *pArgs = saveArgs;
+        if ( ba ) {
+            *ba = saveArguments;
         }
         invokeStackTop = saveISp;
         stackTop = saveSp;

@@ -487,8 +487,6 @@ namespace das {
             } else if ( !var->type->isSameType(*var->init->type,false) ) {
                 error("global variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at );
-            } else if ( var->type->baseType==Type::tStructure ) {
-                error("can't initialize structures", var->at );
             } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
                 error("this global variable can't be initialized at all", var->at);
             }
@@ -967,6 +965,22 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprBlock
+        void setBlockCopyMoveFlags ( ExprBlock * block ) {
+            if ( block->returnType->isRefType() ) {
+                if ( block->returnType->canCopy() ) {
+                    block->copyOnReturn = true;
+                    block->moveOnReturn = false;
+                } else if ( func->result->canMove() ) {
+                    block->copyOnReturn = false;
+                    block->moveOnReturn = true;
+                } else {
+                    assert(0 && "we should not be here");
+                }
+            } else {
+                block->copyOnReturn = false;
+                block->moveOnReturn = false;
+            }
+        }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
             block->hasReturn = false;
@@ -1008,8 +1022,9 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             popVarStack();
-            if ( block->isClosure )
+            if ( block->isClosure ) {
                 blocks.pop_back();
+            }
             if ( block->isClosure ) {
                 if ( block->list.size() ) {
                     uint32_t flags = block->getEvalFlags();
@@ -1021,6 +1036,7 @@ namespace das {
                 if ( !block->hasReturn && block->type->isAuto() ) {
                     block->returnType = make_shared<TypeDecl>(Type::tVoid);
                     block->type = make_shared<TypeDecl>(Type::tVoid);
+                    setBlockCopyMoveFlags(block);
                     reportGenericInfer();
                 }
                 if ( block->returnType ) {
@@ -1342,6 +1358,13 @@ namespace das {
                 }
                 if ( inferReturnType(block->type, expr) ) {
                     block->returnType = make_shared<TypeDecl>(*block->type);
+                    setBlockCopyMoveFlags(block);
+                }
+                expr->copyOnReturn = block->copyOnReturn;
+                expr->moveOnReturn = block->moveOnReturn;
+                if ( expr->moveOnReturn && !expr->moveSemantics ) {
+                    error("this type can't be copied, use return <- instead",
+                          expr->at, CompilationError::invalid_return_semantics );
                 }
             } else {
                 // infer
@@ -1507,8 +1530,6 @@ namespace das {
             } else if ( var->type->isRef() &&  !var->type->isConst() && var->init->type->isConst() ) {
                 error("local variable initialization type mismatch. const matters, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at );
-            } else if ( var->type->baseType==Type::tStructure ) {
-                error("can't initialize structures", var->at );
             } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
                 error("this local variable can't be initialized at all", var->at);
             } else if ( !var->type->ref && !var->init->type->canCopy()
@@ -1616,6 +1637,7 @@ namespace das {
                         for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
                             block->arguments[ba]->type = make_shared<TypeDecl>(*retT->argTypes[ba]);
                         }
+                        setBlockCopyMoveFlags(block.get());
                         reportGenericInfer();
                     }
                 }

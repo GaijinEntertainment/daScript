@@ -244,7 +244,7 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
     context.restart();
     uint32_t nAttr = (uint32_t) table.attributes.size();
     vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
-    context.invokeEx(block, _args,[&](SimNode * code){
+    context.invokeEx(block, _args, nullptr, [&](SimNode * code){
         vec4f * args = _args;
         char **		data	= (char **) alloca(nAttr * sizeof(char *));
         uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(uint32_t));

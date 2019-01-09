@@ -8,6 +8,10 @@ namespace das {
     public:
         AllocateStack( const ProgramPtr & prog ) {
             program = prog;
+            log = prog->options.getOption("logStack");
+            if( log ) {
+                cout << "\nSTACK INFORMATION:\n";
+            }
         }
         int getFuncCount() const { return totalFunctions; }
     protected:
@@ -15,7 +19,9 @@ namespace das {
         FunctionPtr             func;
         uint32_t                stackTop = 0;
         vector<uint32_t>        stackTopStack;
+        vector<ExprBlock *>     blocks;
         int                     totalFunctions = 0;
+        bool                    log = false;
     protected:
     // function
         virtual void preVisit ( Function * f ) override {
@@ -23,21 +29,49 @@ namespace das {
             func = f->shared_from_this();
             func->totalStackSize = stackTop = sizeof(Prologue);
             func->index = totalFunctions ++;
+            if ( log ) {
+                cout << func->describe() << "\n";
+            }
         }
         virtual FunctionPtr visit ( Function * that ) override {
+            func->totalStackSize = max(func->totalStackSize, stackTop);
+            if ( log ) {
+                cout << func->totalStackSize << "\ttotal\n";
+            }
             func.reset();
             return Visitor::visit(that);
+        }
+    // ExprReturn
+        virtual void preVisit ( ExprReturn * expr ) override {
+            if ( blocks.size() ) {
+                auto block = blocks.back();
+                expr->stackTop = block->stackTop;
+                if ( log ) {
+                    cout << "\t\t" << expr->stackTop << "\t\treturn, line " << expr->at.line << "\n";
+                }
+            } else {
+                assert(!expr->returnInBlock);
+            }
         }
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
-            if ( block->arguments.size() ) {
+            if ( block->isClosure ) {
+                blocks.push_back(block);
+            }
+            if ( block->arguments.size() || block->copyOnReturn || block->moveOnReturn ) {
                 block->stackTop = stackTop;
-                stackTop += (sizeof(vec4f *) + 0xf) & ~0xf;
+                stackTop += (sizeof(BlockArguments) + 0xf) & ~0xf;
+                if ( log ) {
+                    cout << "\t" << block->stackTop << "\t" << sizeof(BlockArguments)
+                        << "\tblock arguments, line " << block->at.line << "\n";
+                }
             }
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
-
+            if ( block->isClosure ) {
+                blocks.pop_back();
+            }
             return Visitor::visit(block);
         }
     // ExprCall
@@ -47,6 +81,23 @@ namespace das {
                 auto sz = expr->func->result->getSizeOf();
                 expr->stackTop = stackTop;
                 stackTop += (sz + 0xf) & ~0xf;
+                if ( log ) {
+                    cout << "\t" << expr->stackTop << "\t" << sz
+                        << "\tcall, line " << expr->at.line << "\n";
+                }
+            }
+        }
+    // ExprInvoke
+        virtual void preVisit ( ExprInvoke * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->type->isRefType() ) {
+                auto sz = expr->type->getSizeOf();
+                expr->stackTop = stackTop;
+                stackTop += (sz + 0xf) & ~0xf;
+                if ( log ) {
+                    cout << "\t" << expr->stackTop << "\t" << sz
+                        << "\tinvoke, line " << expr->at.line << "\n";
+                }
             }
         }
     // ExprFor
@@ -58,11 +109,11 @@ namespace das {
             for ( auto & var : expr->iteratorVariables ) {
                 var->stackTop = stackTop;
                 stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
+                if ( log ) {
+                    cout << "\t" << var->stackTop << "\t" << var->type->getSizeOf()
+                        << "\tfor " << var->name << ", line " << var->at.line << "\n";
+                }
             }
-        }
-        virtual ExpressionPtr visit ( ExprFor * expr ) override {
-            func->totalStackSize = max(func->totalStackSize, stackTop);
-            return Visitor::visit(expr);
         }
     // ExprLet
         virtual void preVisit ( ExprLet * expr ) override {
@@ -71,11 +122,11 @@ namespace das {
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             var->stackTop = stackTop;
             stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
+            if ( log ) {
+                cout << "\t" << var->stackTop << "\t" << var->type->getSizeOf()
+                    << "\tlet " << var->name << ", line " << var->at.line << "\n";
+            }
             return Visitor::visitLet(expr,var,last);
-        }
-        virtual ExpressionPtr visit ( ExprLet * expr ) override {
-            func->totalStackSize = max(func->totalStackSize, stackTop);
-            return Visitor::visit(expr);
         }
     };
     
