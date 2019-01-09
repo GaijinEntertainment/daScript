@@ -13,14 +13,14 @@ namespace das
     
     template <typename TT>
     struct cast <TT *> {
-        static __forceinline TT * to ( vec4f a )               { return ((TT **)&a)[0]; }
-        static __forceinline vec4f from ( TT * p )             { return vec_loadu_ps((float *) &p); }
+        static __forceinline TT * to ( vec4f a )               { return (TT *) vec_cast_esi_ptr(vec_cast_ps_esi((a))); }
+        static __forceinline vec4f from ( TT * p )             { return vec_cast_esi_ps(vec_cast_ptr_esi((void *)p)); }
     };
     
     template <typename TT>
     struct cast <TT &> {
-        static __forceinline TT & to ( vec4f a )               { return *((TT **)&a)[0]; }
-        static __forceinline vec4f from ( TT & p )             { vec4f x; ((TT **)&x)[0] = &p; return x; }
+        static __forceinline TT & to ( vec4f a )               { return *(TT *) vec_cast_esi_ptr(vec_cast_ps_esi((a))); }
+        static __forceinline vec4f from ( TT & p )             { return vec_cast_esi_ps(vec_cast_ptr_esi((void *)&p)); }
     };
     
     template <>
@@ -33,38 +33,38 @@ namespace das
     
     template <>
     struct cast <bool> {
-        static __forceinline bool to ( vec4f x )               { return *((int32_t *)&x) != 0; }
-        static __forceinline vec4f from ( bool x )             { vec4f a; *((int32_t *)&a) = x; return a; }
+        static __forceinline bool to ( vec4f x )               { return vec_cast_esi_int32(vec_cast_ps_esi(x)) != 0; }
+        static __forceinline vec4f from ( bool x )             { return vec_cast_esi_ps(vec_cast_int32_esi(x)); }
     };
     
     template <>
     struct cast <int32_t> {
-        static __forceinline int32_t to ( vec4f x )            { return *((int32_t *)&x); }
-        static __forceinline vec4f from ( int32_t x )          { vec4f a; *((int32_t *)&a) = x; return a; }
+        static __forceinline int32_t to ( vec4f x )            { return vec_cast_esi_int32(vec_cast_ps_esi(x)); }
+        static __forceinline vec4f from ( int32_t x )          { return vec_cast_esi_ps(vec_cast_int32_esi(x)); }
     };
     
     template <>
     struct cast <uint32_t> {
-        static __forceinline uint32_t to ( vec4f x )           { return *((uint32_t *)&x); }
-        static __forceinline vec4f from ( uint32_t x )         { vec4f a; *((uint32_t *)&a) = x; return a; }
+        static __forceinline uint32_t to ( vec4f x )           { return vec_cast_esi_int32(vec_cast_ps_esi(x)); }
+        static __forceinline vec4f from ( uint32_t x )         { return vec_cast_esi_ps(vec_cast_int32_esi(x)); }
     };
     
     template <>
     struct cast <int64_t> {
-        static __forceinline int64_t to ( vec4f x )            { return *((int64_t *)&x); }
-        static __forceinline vec4f from ( int64_t x )          { vec4f a; *((int64_t *)&a) = x; return a; }
+        static __forceinline int64_t to ( vec4f x )            { return vec_cast_esi_int64(vec_cast_ps_esi(x)); }
+        static __forceinline vec4f from ( int64_t x )          { return vec_cast_esi_ps(vec_cast_int64_esi(x)); }
     };
     
     template <>
     struct cast <uint64_t> {
-        static __forceinline uint64_t to ( vec4f x )           { return *((uint64_t *)&x); }
-        static __forceinline vec4f from ( uint64_t x )         { vec4f a; *((uint64_t *)&a) = x; return a; }
+        static __forceinline uint64_t to ( vec4f x )           { return vec_cast_esi_int64(vec_cast_ps_esi(x)); }
+        static __forceinline vec4f from ( uint64_t x )         { return vec_cast_esi_ps(vec_cast_int64_esi(x)); }
     };
     
     template <>
     struct cast <float> {
-        static __forceinline float to ( vec4f x )              { return *((float *)&x); }
-        static __forceinline vec4f from ( float x )            { vec4f a; *((float *)&a) = x; return a; }
+        static __forceinline float to ( vec4f x )              { return vec_cast_ps_ss(x); }
+        static __forceinline vec4f from ( float x )            { return vec_cast_ss_ps(x); }
     };
     
     template <>
