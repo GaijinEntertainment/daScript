@@ -51,7 +51,6 @@ option(URIPARSER_BUILD_TESTS "build test suite, requires GTest >=1.8.1" ON)
 #
 # config.h (only needed by testrunner)
 #
-set(PACKAGE_VERSION ${PROJECT_VERSION})  # for configure_file
 configure_file(src/UriConfig.h.in config.h)
 
 #
