@@ -41,6 +41,11 @@ project(uriparser
         0.9.1
 )
 
+# See https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
+set(URIPARSER_SO_CURRENT    1)
+set(URIPARSER_SO_REVISION  24)
+set(URIPARSER_SO_AGE        0)
+
 include(GNUInstallDirs)
 
 option(BUILD_SHARED_LIBS "build shared libraries (rather than static ones)" true)
@@ -108,6 +113,12 @@ add_library(uriparser
     src/UriResolve.c
     src/UriShorten.c
 )
+
+if(NOT WIN32)
+    math(EXPR URIPARSER_SO_CURRENT_MINUS_AGE "${URIPARSER_SO_CURRENT} - ${URIPARSER_SO_AGE}")
+    set_property(TARGET uriparser PROPERTY VERSION ${URIPARSER_SO_CURRENT_MINUS_AGE}.${URIPARSER_SO_AGE}.${URIPARSER_SO_REVISION})
+    set_property(TARGET uriparser PROPERTY SOVERSION ${URIPARSER_SO_CURRENT_MINUS_AGE})
+endif(NOT WIN32)
 
 set_property(
     TARGET
