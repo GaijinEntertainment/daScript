@@ -41,6 +41,8 @@ project(uriparser
         0.9.1
 )
 
+include(GNUInstallDirs)
+
 option(BUILD_SHARED_LIBS "build shared libraries (rather than static ones)" true)
 
 #
@@ -101,13 +103,13 @@ install(
         uriparser
     ARCHIVE
         DESTINATION
-            lib
+            ${CMAKE_INSTALL_LIBDIR}
     LIBRARY
         DESTINATION
-            lib
+            ${CMAKE_INSTALL_LIBDIR}
     PUBLIC_HEADER
         DESTINATION
-            include/uriparser
+            ${CMAKE_INSTALL_INCLUDEDIR}/uriparser
 )
 
 #
@@ -123,7 +125,7 @@ install(
     TARGETS
         uriparse
     DESTINATION
-        bin
+        ${CMAKE_INSTALL_BINDIR}
 )
 
 #
