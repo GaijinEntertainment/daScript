@@ -46,6 +46,24 @@ include(GNUInstallDirs)
 option(BUILD_SHARED_LIBS "build shared libraries (rather than static ones)" true)
 
 option(URIPARSER_BUILD_TESTS "build test suite, requires GTest >=1.8.1" ON)
+option(URIPARSER_BUILD_CHAR "build code supporting data type 'char'" ON)
+option(URIPARSER_BUILD_WCHAR_T "build code supporting data type 'wchar_t'" ON)
+
+if(NOT URIPARSER_BUILD_CHAR AND NOT URIPARSER_BUILD_WCHAR_T)
+    message(FATAL_ERROR "One or more of URIPARSER_BUILD_CHAR and URIPARSER_BUILD_WCHAR_T needs to be enabled.")
+endif(NOT URIPARSER_BUILD_CHAR AND NOT URIPARSER_BUILD_WCHAR_T)
+if(URIPARSER_BUILD_TESTS AND NOT (URIPARSER_BUILD_CHAR AND URIPARSER_BUILD_WCHAR_T))
+    message(FATAL_ERROR "URIPARSER_BUILD_TESTS=ON requires both URIPARSER_BUILD_CHAR=ON and URIPARSER_BUILD_WCHAR_T=ON.")
+endif(URIPARSER_BUILD_TESTS AND NOT (URIPARSER_BUILD_CHAR AND URIPARSER_BUILD_WCHAR_T))
+
+if(NOT URIPARSER_BUILD_CHAR)
+    # NOTE that add_compile_definitions would require CMake >=3.12
+    add_definitions(-DURI_NO_ANSI)
+endif(NOT URIPARSER_BUILD_CHAR)
+if(NOT URIPARSER_BUILD_WCHAR_T)
+    # NOTE that add_compile_definitions would require CMake >=3.12
+    add_definitions(-DURI_NO_UNICODE)
+endif(NOT URIPARSER_BUILD_WCHAR_T)
 
 
 #
