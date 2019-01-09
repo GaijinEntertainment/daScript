@@ -45,6 +45,9 @@ include(GNUInstallDirs)
 
 option(BUILD_SHARED_LIBS "build shared libraries (rather than static ones)" true)
 
+option(URIPARSER_BUILD_TESTS "build test suite, requires GTest >=1.8.1" ON)
+
+
 #
 # config.h (only needed by testrunner)
 #
@@ -131,33 +134,35 @@ install(
 #
 # C++ test runner
 #
-enable_testing()
+if(URIPARSER_BUILD_TESTS)
+    enable_testing()
 
-find_package(GTest 1.8.1 REQUIRED)
+    find_package(GTest 1.8.1 REQUIRED)
 
-add_executable(testrunner
-    test/FourSuite.cpp
-    test/MemoryManagerSuite.cpp
-    test/test.cpp
-    test/VersionSuite.cpp
-)
+    add_executable(testrunner
+        test/FourSuite.cpp
+        test/MemoryManagerSuite.cpp
+        test/test.cpp
+        test/VersionSuite.cpp
+    )
 
-target_include_directories(testrunner SYSTEM PRIVATE
-    ${GTEST_INCLUDE_DIR}
-)
+    target_include_directories(testrunner SYSTEM PRIVATE
+        ${GTEST_INCLUDE_DIR}
+    )
 
-target_include_directories(testrunner PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR}  # for config.h
-)
+    target_include_directories(testrunner PRIVATE
+        ${CMAKE_CURRENT_BINARY_DIR}  # for config.h
+    )
 
-target_link_libraries(testrunner PUBLIC
-    uriparser
-    ${GTEST_BOTH_LIBRARIES}
-)
+    target_link_libraries(testrunner PUBLIC
+        uriparser
+        ${GTEST_BOTH_LIBRARIES}
+    )
 
-add_test(
-    NAME
-        test
-    COMMAND
-        testrunner
-)
+    add_test(
+        NAME
+            test
+        COMMAND
+            testrunner
+    )
+endif(URIPARSER_BUILD_TESTS)
