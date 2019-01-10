@@ -61,19 +61,19 @@ option(URIPARSER_BUILD_WCHAR_T "Build code supporting data type 'wchar_t'" ON)
 
 if(NOT URIPARSER_BUILD_CHAR AND NOT URIPARSER_BUILD_WCHAR_T)
     message(FATAL_ERROR "One or more of URIPARSER_BUILD_CHAR and URIPARSER_BUILD_WCHAR_T needs to be enabled.")
-endif(NOT URIPARSER_BUILD_CHAR AND NOT URIPARSER_BUILD_WCHAR_T)
+endif()
 if(URIPARSER_BUILD_TESTS AND NOT (URIPARSER_BUILD_CHAR AND URIPARSER_BUILD_WCHAR_T))
     message(FATAL_ERROR "URIPARSER_BUILD_TESTS=ON requires both URIPARSER_BUILD_CHAR=ON and URIPARSER_BUILD_WCHAR_T=ON.")
-endif(URIPARSER_BUILD_TESTS AND NOT (URIPARSER_BUILD_CHAR AND URIPARSER_BUILD_WCHAR_T))
+endif()
 
 if(NOT URIPARSER_BUILD_CHAR)
     # NOTE that add_compile_definitions would require CMake >=3.12
     add_definitions(-DURI_NO_ANSI)
-endif(NOT URIPARSER_BUILD_CHAR)
+endif()
 if(NOT URIPARSER_BUILD_WCHAR_T)
     # NOTE that add_compile_definitions would require CMake >=3.12
     add_definitions(-DURI_NO_UNICODE)
-endif(NOT URIPARSER_BUILD_WCHAR_T)
+endif()
 
 #
 # config.h
@@ -124,7 +124,7 @@ if(NOT WIN32)
     math(EXPR URIPARSER_SO_CURRENT_MINUS_AGE "${URIPARSER_SO_CURRENT} - ${URIPARSER_SO_AGE}")
     set_property(TARGET uriparser PROPERTY VERSION ${URIPARSER_SO_CURRENT_MINUS_AGE}.${URIPARSER_SO_AGE}.${URIPARSER_SO_REVISION})
     set_property(TARGET uriparser PROPERTY SOVERSION ${URIPARSER_SO_CURRENT_MINUS_AGE})
-endif(NOT WIN32)
+endif()
 
 set_property(
     TARGET
@@ -172,15 +172,15 @@ if(HAIKU)
     check_library_exists(network inet_ntop "" HAVE_LIBNETWORK__INET_NTOP)
     if(HAVE_LIBSOCKET__INET_NTOP)
         target_link_libraries(uriparse PUBLIC socket)
-    endif(HAVE_LIBSOCKET__INET_NTOP)
+    endif()
     if(HAVE_LIBNETWORK__INET_NTOP)
         target_link_libraries(uriparse PUBLIC network)
-    endif(HAVE_LIBNETWORK__INET_NTOP)
-endif(HAIKU)
+    endif()
+endif()
 
 if(WIN32)
     target_link_libraries(uriparse PUBLIC ws2_32)
-endif(WIN32)
+endif()
 
 install(
     TARGETS
@@ -223,7 +223,7 @@ if(URIPARSER_BUILD_TESTS)
         COMMAND
             testrunner
     )
-endif(URIPARSER_BUILD_TESTS)
+endif()
 
 #
 # Doxygen API documentation
@@ -265,8 +265,8 @@ if(URIPARSER_BUILD_DOCS)
             DESTINATION
                 ${CMAKE_INSTALL_DOCDIR}
         )
-    endif(QHG_LOCATION)
-endif(URIPARSER_BUILD_DOCS)
+    endif()
+endif()
 
 #
 # CMake files for find_package(uriparser [..])
@@ -291,4 +291,4 @@ if(NOT WIN32)
         DESTINATION
             ${CMAKE_INSTALL_LIBDIR}/pkgconfig/
     )
-endif(NOT WIN32)
+endif()
