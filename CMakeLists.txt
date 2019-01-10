@@ -48,12 +48,14 @@ set(URIPARSER_SO_AGE        0)
 
 include(GNUInstallDirs)
 
-option(BUILD_SHARED_LIBS "build shared libraries (rather than static ones)" true)
-
-option(URIPARSER_BUILD_DOCS "build API documentation, requires Doxygen, Graphviz, and (optional) Qt's qhelpgenerator" ON)
-option(URIPARSER_BUILD_TESTS "build test suite, requires GTest >=1.8.1" ON)
-option(URIPARSER_BUILD_CHAR "build code supporting data type 'char'" ON)
-option(URIPARSER_BUILD_WCHAR_T "build code supporting data type 'wchar_t'" ON)
+#
+# Configuration
+#
+option(BUILD_SHARED_LIBS "Build shared libraries (rather than static ones)" ON)
+option(URIPARSER_BUILD_DOCS "Build API documentation (requires Doxygen, Graphviz, and (optional) Qt's qhelpgenerator)" ON)
+option(URIPARSER_BUILD_TESTS "Build test suite (requires GTest >=1.8.1)" ON)
+option(URIPARSER_BUILD_CHAR "Build code supporting data type 'char'" ON)
+option(URIPARSER_BUILD_WCHAR_T "Build code supporting data type 'wchar_t'" ON)
 
 if(NOT URIPARSER_BUILD_CHAR AND NOT URIPARSER_BUILD_WCHAR_T)
     message(FATAL_ERROR "One or more of URIPARSER_BUILD_CHAR and URIPARSER_BUILD_WCHAR_T needs to be enabled.")
@@ -70,7 +72,6 @@ if(NOT URIPARSER_BUILD_WCHAR_T)
     # NOTE that add_compile_definitions would require CMake >=3.12
     add_definitions(-DURI_NO_UNICODE)
 endif(NOT URIPARSER_BUILD_WCHAR_T)
-
 
 #
 # config.h
