@@ -13,8 +13,11 @@ addons:
     packages:
       - clang-7
       - cmake
+    # Documentation:
       - doxygen
       - graphviz
+      - qt4-dev-tools
+      - qtchooser
 
 script:
   - set -e

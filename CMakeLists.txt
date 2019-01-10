@@ -50,6 +50,7 @@ include(GNUInstallDirs)
 
 option(BUILD_SHARED_LIBS "build shared libraries (rather than static ones)" true)
 
+option(URIPARSER_BUILD_DOCS "build API documentation, requires Doxygen, Graphviz, and (optional) Qt's qhelpgenerator" ON)
 option(URIPARSER_BUILD_TESTS "build test suite, requires GTest >=1.8.1" ON)
 option(URIPARSER_BUILD_CHAR "build code supporting data type 'char'" ON)
 option(URIPARSER_BUILD_WCHAR_T "build code supporting data type 'wchar_t'" ON)
@@ -203,6 +204,48 @@ if(URIPARSER_BUILD_TESTS)
             testrunner
     )
 endif(URIPARSER_BUILD_TESTS)
+
+#
+# Doxygen API documentation
+#
+if(URIPARSER_BUILD_DOCS)
+    find_package(Doxygen REQUIRED dot doxygen)
+    find_program(QHG_LOCATION qhelpgenerator)
+
+    # Generate Doxyfile
+    set(PACKAGE ${PROJECT_NAME})
+    set(VERSION ${PROJECT_VERSION})
+    set(ac_abs_confdir ${CMAKE_CURRENT_SOURCE_DIR})
+    set(GENERATE_HTMLHELP NO)
+    configure_file(doc/Doxyfile.in doc/Doxyfile @ONLY)
+
+    add_custom_target(doc
+        COMMAND
+            ${DOXYGEN_EXECUTABLE}
+            Doxyfile
+        WORKING_DIRECTORY
+            ${CMAKE_CURRENT_BINARY_DIR}/doc
+        COMMENT
+            "Generating API documentation with Doxygen"
+        VERBATIM
+    )
+    add_dependencies(uriparser doc)
+
+    install(
+        DIRECTORY
+            ${CMAKE_CURRENT_BINARY_DIR}/doc/html
+        DESTINATION
+            ${CMAKE_INSTALL_DOCDIR}
+    )
+    if(QHG_LOCATION)
+        install(
+            FILES
+                ${CMAKE_CURRENT_BINARY_DIR}/doc/uriparser-${PROJECT_VERSION}.qch
+            DESTINATION
+                ${CMAKE_INSTALL_DOCDIR}
+        )
+    endif(QHG_LOCATION)
+endif(URIPARSER_BUILD_DOCS)
 
 #
 # CMake files for find_package(uriparser [..])
