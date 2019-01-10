@@ -27,57 +27,33 @@ namespace das {
         return _mm_cvtss_f32(a);
     }
     __forceinline vec4f vec_cast_ss_ps ( float a ) {
-#if defined(_MSC_VER)
         return _mm_set_ss(a);
-#else
-        __m128 t; t[0] = a; return t;
-#endif
     }
     __forceinline int32_t vec_cast_esi_int32 ( vec4i a ) {
-#if defined(_MSC_VER)
         return _mm_cvtsi128_si32(a);
-#else
-        return a[0];
-#endif
     }
     __forceinline vec4i vec_cast_int32_esi ( int32_t a ) {
-#if defined(_MSC_VER)
         return _mm_set1_epi32(a);
-#else
-        __m128i t; t[0] = a; return t;
-#endif
     }
     __forceinline int64_t vec_cast_esi_int64 ( vec4i a ) {
 #if defined(_MSC_VER)
 		return a.m128i_i64[0];
 #else
-        // union { vec4i v; int64_t i; } X; X.v = a; return X.i;
         int64_t t; _mm_storel_epi64((__m128i*)&t, a); return t;
 #endif
     }
     __forceinline vec4i vec_cast_int64_esi ( int64_t a ) {
-#if defined(_MSC_VER)
-		return _mm_loadl_epi64((__m128i const*)&a);
-#else
-		// union { vec4i v; int64_t i; } X; X.i = a; return X.v;
         return _mm_loadl_epi64((__m128i const*)&a);
-#endif
     }
     __forceinline void * vec_cast_esi_ptr ( vec4i a ) {
 #if defined(_MSC_VER)
 		return (void*)a.m128i_u64[0];
 #else
-        // union { vec4i v; void * p; } X; X.v = a; return X.p;
         void * t; _mm_storel_epi64((__m128i*)&t, a); return t;
 #endif
     }
     __forceinline vec4i vec_cast_ptr_esi ( void * a ) {
-#if defined(_MSC_VER)
-		return _mm_loadl_epi64((__m128i const*)&a);
-#else
-        // union { vec4i v; void * p; } X; X.p = a; return X.v;
         return _mm_loadl_epi64((__m128i const*)&a);
-#endif
     }
 // vec4
     __forceinline vec4f vec_set_xyzw ( float x, float y, float z, float w ) {
