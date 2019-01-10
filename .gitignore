@@ -15,6 +15,7 @@ Makefile.in
 *.lo
 *.la
 .libs
+/build/
 /build-aux
 /CMakeCache.txt
 /CMakeDoxyfile.in
