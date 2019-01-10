@@ -517,6 +517,20 @@ namespace das
     struct SimNode_Invoke : SimNode_CallBase {
         SimNode_Invoke ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual vec4f eval ( Context & context ) override;
+#define EVAL_NODE(TYPE,CTYPE)                                                                   \
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));                  \
+            evalArgs(context, argValues);                                                       \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
+            Block block = cast<Block>::to(argValues[0]);                                        \
+            if ( nArguments>1 ) {                                                               \
+                return cast<CTYPE>::to(context.invoke(block, argValues + 1, nullptr));          \
+            } else {                                                                            \
+                return cast<CTYPE>::to(context.invoke(block, nullptr, nullptr));                \
+            }                                                                                   \
+        }
+        DAS_EVAL_NODE;
+#undef  EVAL_NODE
     };
     
     // Invoke with copy-or-move-on-return
@@ -524,6 +538,21 @@ namespace das
         SimNode_InvokeAndCopyOrMove ( const LineInfo & at, uint32_t sp )
             : SimNode_Invoke(at) { stackTop = sp; }
         virtual vec4f eval ( Context & context ) override;
+#define EVAL_NODE(TYPE,CTYPE)                                                                   \
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));                  \
+            evalArgs(context, argValues);                                                       \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
+            Block block = cast<Block>::to(argValues[0]);                                        \
+            auto cmres = context.stackTop + stackTop;                                           \
+            if ( nArguments>1 ) {                                                               \
+                return cast<CTYPE>::to(context.invoke(block, argValues + 1, cmres));            \
+            } else {                                                                            \
+                return cast<CTYPE>::to(context.invoke(block, nullptr, cmres));                  \
+            }                                                                                   \
+        }
+        DAS_EVAL_NODE;
+#undef  EVAL_NODE
     };
     
     // StringBuilder
