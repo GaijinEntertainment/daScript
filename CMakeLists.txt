@@ -46,6 +46,8 @@ set(URIPARSER_SO_CURRENT    1)
 set(URIPARSER_SO_REVISION  24)
 set(URIPARSER_SO_AGE        0)
 
+include(CheckFunctionExists)
+include(CheckSymbolExists)
 include(GNUInstallDirs)
 
 #
@@ -78,6 +80,8 @@ endif(NOT URIPARSER_BUILD_WCHAR_T)
 #
 # NOTE that add_compile_definitions would require CMake >=3.12
 add_definitions(-DHAVE_CONFIG_H)
+check_symbol_exists(wprintf wchar.h HAVE_WPRINTF)
+check_function_exists(reallocarray HAVE_REALLOCARRAY)  # no luck with CheckSymbolExists
 configure_file(src/UriConfig.h.in config.h)
 
 #
