@@ -9,8 +9,8 @@ find_package(FLEX)
 SETUP_COMPILER()
 
 set(GEN_FILE_DIR ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR})
-BISON_TARGET(DSParser parser/ds_parser.ypp ${GEN_FILE_DIR}/ds_parser.cpp)
-FLEX_TARGET(DSScanner parser/ds_lexer.lpp  ${GEN_FILE_DIR}/ds_lexer.cpp)
+BISON_TARGET(DSParser src/parser/ds_parser.ypp ${GEN_FILE_DIR}/ds_parser.cpp)
+FLEX_TARGET(DSScanner src/parser/ds_lexer.lpp  ${GEN_FILE_DIR}/ds_lexer.cpp)
 ADD_FLEX_BISON_DEPENDENCY(DSScanner DSParser)
 
 SET(PARSER_GENERATED_SRC
@@ -68,7 +68,6 @@ include/daScript/misc/platform.h
 include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
 include/daScript/misc/rangetype.h
-precomp.cpp
 )
 SOURCE_GROUP_FILES("misc" MISC_SRC)
 
@@ -98,7 +97,6 @@ SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 include_directories(include ".")
 ADD_LIBRARY(libDaScript ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
-ADD_PRECOMPILED_HEADER(libDaScript platform.h include/daScript/misc/platform.h)
 
 add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
 add_dependencies(libDaScript daScriptGenDir)
@@ -114,7 +112,6 @@ add_executable(daScript ${DASCRIPT_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScript libDaScript)
 ADD_DEPENDENCIES(daScript libDaScript)
 SETUP_CPP11(daScript)
-ADD_PRECOMPILED_HEADER(daScript platform.h include/daScript/misc/platform.h)
 
 # Test
 
@@ -150,7 +147,6 @@ SOURCE_GROUP_FILES("test/mix" MIX_TEST_SRC)
 
 SET(TEST_MAIN_SRC
 include/daScript/misc/platform.h
-precomp.cpp
 test/main.cpp
 test/test_handles.cpp
 )
@@ -162,7 +158,6 @@ add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)
-ADD_PRECOMPILED_HEADER(daScriptTest platform.h include/daScript/misc/platform.h)
 
 # Profile
 
@@ -174,7 +169,6 @@ SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
 include/daScript/misc/platform.h
-precomp.cpp
 profile/main.cpp
 profile/test_profile.cpp
 )
@@ -185,5 +179,4 @@ add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScriptProfile libDaScript)
 ADD_DEPENDENCIES(daScriptProfile libDaScript)
 SETUP_CPP11(daScriptProfile)
-ADD_PRECOMPILED_HEADER(daScriptProfile platform.h include/daScript/misc/platform.h)
 
