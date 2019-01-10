@@ -19,8 +19,8 @@ ${FLEX_DSScanner_OUTPUTS}
 )
 
 SET(PARSER_SRC
-parser/ds_parser.ypp
-parser/ds_lexer.lpp
+src/parser/ds_parser.ypp
+src/parser/ds_lexer.lpp
 )
 SOURCE_GROUP_FILES("parser" PARSER_SRC)
 SOURCE_GROUP_FILES("parser/generated" PARSER_GENERATED_SRC)
@@ -33,17 +33,17 @@ IF(MSVC)
 ENDIF()
 
 SET(AST_SRC
+src/ast/ast.cpp
+src/ast/ast_module.cpp
+src/ast/ast_print.cpp
+src/ast/ast_plot.cpp
+src/ast/ast_infer_type.cpp
+src/ast/ast_allocate_stack.cpp
+src/ast/ast_const_folding.cpp
+src/ast/ast_block_folding.cpp
+src/ast/ast_unused.cpp
+src/ast/ast_annotations.cpp
 include/daScript/ast/compilation_errors.h
-ast/ast.cpp
-ast/ast_module.cpp
-ast/ast_print.cpp
-ast/ast_plot.cpp
-ast/ast_infer_type.cpp
-ast/ast_allocate_stack.cpp
-ast/ast_const_folding.cpp
-ast/ast_block_folding.cpp
-ast/ast_unused.cpp
-ast/ast_annotations.cpp
 include/daScript/ast/ast.h
 include/daScript/ast/ast_interop.h
 include/daScript/ast/ast_handle.h
@@ -52,11 +52,11 @@ include/daScript/ast/ast_policy_types.h
 SOURCE_GROUP_FILES("ast" AST_SRC)
 
 SET(BUILTIN_SRC
-builtin/module_builtin.h
-builtin/module_builtin.cpp
-builtin/module_builtin_runtime.cpp
-builtin/module_builtin_vector.cpp
-builtin/module_builtin_time.cpp
+src/builtin/module_builtin.h
+src/builtin/module_builtin.cpp
+src/builtin/module_builtin_runtime.cpp
+src/builtin/module_builtin_vector.cpp
+src/builtin/module_builtin_time.cpp
 )
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 
@@ -73,23 +73,23 @@ precomp.cpp
 SOURCE_GROUP_FILES("misc" MISC_SRC)
 
 SET(SIMULATE_SRC
+src/simulate/hash.cpp
+src/simulate/debug_info.cpp
+src/simulate/runtime_string.cpp
+src/simulate/runtime_array.cpp
+src/simulate/runtime_table.cpp
+src/simulate/runtime_range.cpp
+src/simulate/runtime_profile.cpp
+src/simulate/simulate.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
-simulate/hash.cpp
-simulate/debug_info.cpp
 include/daScript/simulate/debug_info.h
 include/daScript/simulate/interop.h
-simulate/runtime_string.cpp
 include/daScript/simulate/runtime_string.h
-simulate/runtime_array.cpp
 include/daScript/simulate/runtime_array.h
-simulate/runtime_table.cpp
 include/daScript/simulate/runtime_table.h
-simulate/runtime_range.cpp
 include/daScript/simulate/runtime_range.h
-simulate/runtime_profile.cpp
 include/daScript/simulate/runtime_profile.h
-simulate/simulate.cpp
 include/daScript/simulate/simulate.h
 include/daScript/simulate/sim_policy.h
 )
