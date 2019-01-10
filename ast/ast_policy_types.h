@@ -24,7 +24,7 @@ namespace  das {
     // basic operations
     template <typename TT>
     void addFunctionBasic(Module & mod, const ModuleLibrary & lib) {
-        //                                    policy                ret   arg1 arg2    name
+        //                                     policy               ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Equ<TT>,         bool, TT,  TT>  >("==",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_NotEqu<TT>,      bool, TT,  TT>  >("!=",     lib) );
     }
@@ -32,7 +32,7 @@ namespace  das {
     // built-in boolean types
     template <typename TT>
     void addFunctionBoolean(Module & mod, const ModuleLibrary & lib) {
-        //                                    policy                 ret   arg1 arg2    name
+        //                                     policy               ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolNot<TT>,     TT,   TT>       >("!",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolAnd,         TT,   TT,  TT>  >("&",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolOr,          TT,   TT,  TT>  >("|",      lib) );
@@ -45,7 +45,7 @@ namespace  das {
     // ordered types
     template <typename TT>
     void addFunctionOrdered(Module & mod, const ModuleLibrary & lib) {
-        //                                    policy               ret   arg1 arg2    name
+        //                                     policy              ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_GtEqu<TT>,      bool, TT,  TT>  >(">=",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_LessEqu<TT>,    bool, TT,  TT>  >("<=",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Gt<TT>,         bool, TT,  TT>  >(">",      lib) );
@@ -56,7 +56,7 @@ namespace  das {
     // concatination types
     template <typename TT>
     void addFunctionConcat(Module & mod, const ModuleLibrary & lib) {
-        //                                    policy               ret   arg1 arg2    name
+        //                                     policy              ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Add<TT>,        TT,   TT,  TT>  >("+",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetAdd<TT>,     void, TT&, TT>  >("+=",     lib)->sideEffects(true) );
     }
@@ -65,7 +65,7 @@ namespace  das {
     template <typename TT>
     void addFunctionGroupByAdd(Module & mod, const ModuleLibrary & lib) {
         addFunctionConcat<TT>(mod,lib);
-        //                                    policy               ret   arg1 arg2    name
+        //                                     policy              ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Unp<TT>,        TT,   TT>       >("+",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Unm<TT>,        TT,   TT>       >("-",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Sub<TT>,        TT,   TT,  TT>  >("-",      lib) );
@@ -76,7 +76,7 @@ namespace  das {
     template <typename TT>
     void addFunctionNumeric(Module & mod, const ModuleLibrary & lib) {
         addFunctionGroupByAdd<TT>(mod,lib);
-        //                                    policy            ret   arg1 arg2    name
+        //                                     policy           ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Unp<TT>,     TT,   TT>       >("+",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Unm<TT>,     TT,   TT>       >("-",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Sub<TT>,     TT,   TT,  TT>  >("-",      lib) );
@@ -91,7 +91,7 @@ namespace  das {
     template <typename TT>
     void addFunctionNumericWithMod(Module & mod, const ModuleLibrary & lib) {
         addFunctionNumeric<TT>(mod, lib);
-        //                                    policy        ret   arg1 arg2    name
+        //                                     policy       ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Mod<TT>, TT,   TT,  TT>  >("%",      lib) );
     }
     
@@ -110,9 +110,9 @@ namespace  das {
     // inc-dec
     template <typename TT>
     void addFunctionIncDec(Module & mod, const ModuleLibrary & lib) {
-        //                                    policy               ret   arg1 arg2    name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Inc<TT>,        TT&,  TT&>      >("++",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Dec<TT>,        TT&,  TT&>      >("--",     lib)->sideEffects(true) );
+        //                                     policy              ret   arg1         name
+        mod.addFunction( make_shared<BuiltInFn<Sim_Inc<TT>,        TT,   TT&>      >("++",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Dec<TT>,        TT,   TT&>      >("--",     lib)->sideEffects(true) );
         mod.addFunction( make_shared<BuiltInFn<Sim_IncPost<TT>,    TT,   TT&>      >("+++",    lib)->sideEffects(true) );
         mod.addFunction( make_shared<BuiltInFn<Sim_DecPost<TT>,    TT,   TT&>      >("---",    lib)->sideEffects(true) );
     }
@@ -120,7 +120,7 @@ namespace  das {
     // built-in numeric types
     template <typename TT>
     void addFunctionBit(Module & mod, const ModuleLibrary & lib) {
-        //                                    policy               ret   arg1 arg2    name
+        //                                     policy              ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_BinNot<TT>,     TT,   TT>       >("~",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BinAnd<TT>,     TT,   TT,  TT>  >("&",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BinOr<TT>,      TT,   TT,  TT>  >("|",      lib) );

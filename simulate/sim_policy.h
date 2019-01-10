@@ -34,8 +34,8 @@ namespace  das {
     template <typename TT>
     struct SimPolicy_Type : SimPolicy_GroupByAdd<TT>, SimPolicy_Ordered<TT> {
         // numeric
-        static __forceinline void Inc ( TT & x, Context & ) { ++x; }
-        static __forceinline void Dec ( TT & x, Context & ) { --x; }
+        static __forceinline TT Inc ( TT & x, Context & ) { return ++x; }
+        static __forceinline TT Dec ( TT & x, Context & ) { return --x; }
         static __forceinline TT IncPost ( TT & x, Context & ) { return x++; }
         static __forceinline TT DecPost ( TT & x, Context & ) { return x--; }
         static __forceinline TT Div ( TT a, TT b, Context & ) { return a / b; }

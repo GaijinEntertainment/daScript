@@ -1206,19 +1206,6 @@ namespace das
 #define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
-        DAS_PTR_NODE;                                                   \
-        Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
-        __forceinline char * compute ( Context & context ) {            \
-            auto val = (CTYPE *) x->evalPtr(context);                   \
-            DAS_PTR_EXCEPTION_POINT;                                    \
-            SimPolicy<CTYPE>::CALL(*val,context);                       \
-            return (char *) val;                                        \
-        }                                                               \
-    };
-    
-#define IMPLEMENT_OP1_POSTSET_POLICY(CALL,TYPE,CTYPE)                   \
-    template <>                                                         \
-    struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
         DAS_NODE(TYPE,CTYPE);                                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
@@ -1258,16 +1245,6 @@ namespace das
 #define DEFINE_OP1_SET_NUMERIC(CALL);                   \
     DEFINE_OP1_SET_NUMERIC_INTEGER(CALL);               \
     IMPLEMENT_OP1_SET_POLICY(CALL,Float,float);
-    
-#define DEFINE_OP1_POSTSET_NUMERIC_INTEGER(CALL)        \
-    IMPLEMENT_OP1_POSTSET_POLICY(CALL,Int,int32_t);     \
-    IMPLEMENT_OP1_POSTSET_POLICY(CALL,UInt,uint32_t);   \
-    IMPLEMENT_OP1_POSTSET_POLICY(CALL,Int64,int64_t);   \
-    IMPLEMENT_OP1_POSTSET_POLICY(CALL,UInt64,uint64_t); \
-
-#define DEFINE_OP1_POSTSET_NUMERIC(CALL);               \
-    DEFINE_OP1_POSTSET_NUMERIC_INTEGER(CALL);           \
-    IMPLEMENT_OP1_POSTSET_POLICY(CALL,Float,float);
     
 #define IMPLEMENT_OP2_POLICY(CALL,TYPE,CTYPE)                           \
     template <>                                                         \
