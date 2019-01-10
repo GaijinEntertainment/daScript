@@ -80,8 +80,8 @@
 %token  _TRUE       _FALSE      _SIZEOF     _NEW
 %token  _TYPE       _IN         _ELIF       _ARRAY
 %token  _RETURN     _NULL       _BREAK      _TRY
-%token  _WHERE      _TABLE      _EXPECT     _CONST
-%token  _REQUIRE    _OPERATOR	_OPTIONS
+%token  _OPTIONS    _TABLE      _EXPECT     _CONST
+%token  _REQUIRE    _OPERATOR
 
 /* basic types */
 %token  _BOOL       _VOID       _STRING     _AUTO
@@ -93,15 +93,14 @@
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
-%token  SHLEQU      SHREQU      ANDEQU      OREQU       XOREQU
-%token  SHL         SHR         ADDADD      SUBSUB      LEEQU
+%token  ANDEQU      OREQU       XOREQU
+%token  ADDADD      SUBSUB      LEEQU
 %token  GREQU       EQUEQU      NOTEQU      RARROW      LARROW
 %token  QQ          QDOT        LPIPE       LBPIPE      RPIPE
 
 %token<i>   INTEGER
 %token<ui>  UNSIGNED_INTEGER
 %token<d>   DOUBLE
-%token<s>   STRING
 %token<s>   NAME
 
 %token      BEGIN_STRING
@@ -159,14 +158,13 @@
 
 /* operation precedence*/
 %left       ','
-%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU SHREQU SHLEQU ANDEQU OREQU XOREQU LARROW
+%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW
 %right      '?' ':'
 %left       '|'
 %left       '^'
 %left       '&'
 %left       EQUEQU NOTEQU
 %left       '<' '>' LEEQU GREQU
-%left       SHR SHL
 %left       '-' '+'
 %left       '*' '/' '%'
 %left       QQ
@@ -398,6 +396,9 @@ function_name
     |   _OPERATOR MULEQU  { $$ = new string("*="); }
     |   _OPERATOR DIVEQU  { $$ = new string("/="); }
     |   _OPERATOR MODEQU  { $$ = new string("%="); }
+    |   _OPERATOR ANDEQU  { $$ = new string("&="); }
+    |   _OPERATOR OREQU   { $$ = new string("|="); }
+    |   _OPERATOR XOREQU  { $$ = new string("^="); }
     |   _OPERATOR '+'     { $$ = new string("+"); }
     |   _OPERATOR '-'     { $$ = new string("-"); }
     |   _OPERATOR '*'     { $$ = new string("*"); }
@@ -725,6 +726,9 @@ expr
     |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),"-",ExpressionPtr($subexpr)); }
     |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '='[loc]    expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] ANDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"&=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] OREQU[loc] expr[right]    { $$ = new ExprOp2(tokAt(@loc),"|=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] XOREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"^=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] ADDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] SUBEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"-=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] MULEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*=", ExpressionPtr($left), ExpressionPtr($right)); }

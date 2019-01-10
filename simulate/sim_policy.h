@@ -18,8 +18,8 @@ namespace  das {
         static __forceinline TT Unm ( TT x, Context & ) { return -x; }
         static __forceinline TT Add ( TT a, TT b, Context & ) { return a + b; }
         static __forceinline TT Sub ( TT a, TT b, Context & ) { return a - b; }
-        static __forceinline TT & SetAdd  ( TT & a, TT b, Context & ) { return a += b; }
-        static __forceinline TT & SetSub  ( TT & a, TT b, Context & ) { return a -= b; }
+        static __forceinline void SetAdd  ( TT & a, TT b, Context & ) { a += b; }
+        static __forceinline void SetSub  ( TT & a, TT b, Context & ) { a -= b; }
     };
     
     template <typename TT>
@@ -40,8 +40,8 @@ namespace  das {
         static __forceinline TT DecPost ( TT & x, Context & ) { return x--; }
         static __forceinline TT Div ( TT a, TT b, Context & ) { return a / b; }
         static __forceinline TT Mul ( TT a, TT b, Context & ) { return a * b; }
-        static __forceinline TT & SetDiv  ( TT & a, TT b, Context & ) { return a /= b; }
-        static __forceinline TT & SetMul  ( TT & a, TT b, Context & ) { return a *= b; }
+        static __forceinline void SetDiv  ( TT & a, TT b, Context & ) { a /= b; }
+        static __forceinline void SetMul  ( TT & a, TT b, Context & ) { a *= b; }
     };
     
     struct SimPolicy_Bool : SimPolicy_CoreType<bool> {
@@ -49,9 +49,9 @@ namespace  das {
         static __forceinline bool BoolAnd ( bool a, bool b, Context & ) { return a && b; }
         static __forceinline bool BoolOr  ( bool a, bool b, Context & ) { return a || b; }
         static __forceinline bool BoolXor ( bool a, bool b, Context & ) { return a ^ b; }
-        static __forceinline bool & SetBoolAnd  ( bool & a, bool b, Context & ) { return a &= b; }
-        static __forceinline bool & SetBoolOr   ( bool & a, bool b, Context & ) { return a |= b; }
-        static __forceinline bool & SetBoolXor  ( bool & a, bool b, Context & ) { return a ^= b; }
+        static __forceinline void SetBoolAnd  ( bool & a, bool b, Context & ) { a &= b; }
+        static __forceinline void SetBoolOr   ( bool & a, bool b, Context & ) { a |= b; }
+        static __forceinline void SetBoolXor  ( bool & a, bool b, Context & ) { a ^= b; }
     };
     
     template <typename TT>
@@ -61,10 +61,10 @@ namespace  das {
         static __forceinline TT BinAnd ( TT a, TT b, Context & ) { return a & b; }
         static __forceinline TT BinOr  ( TT a, TT b, Context & ) { return a | b; }
         static __forceinline TT BinXor ( TT a, TT b, Context & ) { return a ^ b; }
-        static __forceinline TT & SetBinAnd ( TT & a, TT b, Context & ) { return a &= b; }
-        static __forceinline TT & SetBinOr  ( TT & a, TT b, Context & ) { return a |= b; }
-        static __forceinline TT & SetBinXor ( TT & a, TT b, Context & ) { return a ^= b; }
-        static __forceinline TT & SetMod  ( TT & a, TT b, Context & ) { return a %= b; }
+        static __forceinline void SetBinAnd ( TT & a, TT b, Context & ) { a &= b; }
+        static __forceinline void SetBinOr  ( TT & a, TT b, Context & ) { a |= b; }
+        static __forceinline void SetBinXor ( TT & a, TT b, Context & ) { a ^= b; }
+        static __forceinline void SetMod    ( TT & a, TT b, Context & ) { a %= b; }
     };
     
     struct SimPolicy_Int : SimPolicy_Bin<int32_t> {};

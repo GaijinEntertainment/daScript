@@ -231,15 +231,11 @@
 <normal>"\?\."                              return QDOT;
 <normal>"\-\>"                              return RARROW;
 <normal>"\<\-"                              return LARROW;
-<normal>"\>\>"                              return SHR;
-<normal>"\<\<"                              return SHL;
 <normal>"\+\="                              return ADDEQU;
 <normal>"\-\="                              return SUBEQU;
 <normal>"\/\="                              return DIVEQU;
 <normal>"\*\="                              return MULEQU;
 <normal>"\%\="                              return MODEQU;
-<normal>"\>\>\="                            return SHREQU;
-<normal>"\<\<\="                            return SHLEQU;
 <normal>"\&\="                              return ANDEQU;
 <normal>"\|\="                              return OREQU;
 <normal>"\^\="                              return XOREQU;
