@@ -229,6 +229,10 @@ namespace das
             return result;
         }
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4701)
+#endif
 		__forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
 			char * saveSp = stackTop;
 			char * saveISp = invokeStackTop;
@@ -244,7 +248,7 @@ namespace das
                 ba->copyOrMoveResult = (char *) cmres;
             }
 			vec4f block_result = block.body->eval(*this);
-			if (block.argumentsOffset) {
+			if ( ba ) {
                 *ba = saveArguments;
 			}
 			invokeStackTop = saveISp;
@@ -252,6 +256,9 @@ namespace das
 			assert(stackTop >= stack && stackTop < stackTop + stackSize);
 			return block_result;
 		}
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
         vec4f callEx ( int fnIndex, vec4f * args, void * cmres, int line, function<void (SimNode *)> && when );
         vec4f invokeEx ( const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when );

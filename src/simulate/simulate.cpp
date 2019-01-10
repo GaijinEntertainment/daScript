@@ -371,6 +371,10 @@ namespace das
         }
     }
     
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4324)
+#endif
     vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when) {
         char * saveSp = stackTop;
         char * saveISp = invokeStackTop;
@@ -394,6 +398,9 @@ namespace das
         assert ( stackTop >= stack && stackTop < stackTop + stackSize );
         return result;
     }
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
     vec4f Context::callEx(int fnIndex, vec4f *args, void * cmres, int line, function<void (SimNode *)> && when) {
         assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
