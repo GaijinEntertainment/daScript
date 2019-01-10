@@ -46,7 +46,7 @@ namespace das
     
     int getTypeBaseSize ( Type type ) {
         switch ( type ) {
-            case tPointer:      return sizeof(void *);          static_assert(sizeof(void *)==8, "64-bit");
+            case tPointer:      return sizeof(void *);
             case tIterator:     return sizeof(void *);          // Iterator *
             case tHandle:       assert(0 && "we should not be here"); return sizeof(void *);
             case tString:       return sizeof(char *);
