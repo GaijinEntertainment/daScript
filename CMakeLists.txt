@@ -178,6 +178,10 @@ if(HAIKU)
     endif(HAVE_LIBNETWORK__INET_NTOP)
 endif(HAIKU)
 
+if(WIN32)
+    target_link_libraries(uriparse PUBLIC ws2_32)
+endif(WIN32)
+
 install(
     TARGETS
         uriparse
