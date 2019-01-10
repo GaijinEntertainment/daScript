@@ -786,6 +786,16 @@ expr
             $$ = $fncall;
         }
     }
+    |   expr[arg] RPIPE[loc] expr[fncall] {
+        if ( $fncall->rtti_isCall() ) {
+            auto pCall = (ExprLooksLikeCall *) $fncall;
+            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr($arg));
+            $$ = $fncall;
+        } else {
+            yyerror("can only pipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
+            $$ = $fncall;
+        }
+    }
     ;
 
 struct_variable_declaration_list

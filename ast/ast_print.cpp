@@ -69,9 +69,15 @@ namespace das {
 
     class Printer : public Visitor {
     public:
+        Printer ( const Program * program = nullptr ) {
+            if ( program ) {
+                printRef = program->options.getOption("printRef");
+                printVarAccess = program->options.getOption("printVarAccess");
+            }
+        }
         string str() const { return ss.str(); };
-        const bool printRef = true;
-        const bool printVarAccess = true;
+        bool printRef = true;
+        bool printVarAccess = true;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -517,7 +523,7 @@ namespace das {
     __forceinline ostream&  print ( ostream& stream, const TT & value ) {
         SetPrinterFlags flags;
         const_cast<TT&>(value).visit(flags);
-        Printer log;
+        Printer log(nullptr);
         const_cast<TT&>(value).visit(log);
         stream << log.str();
         return stream;
@@ -527,7 +533,7 @@ namespace das {
         bool logGenerics = program.options.getOption("logGenerics");
         SetPrinterFlags flags;
 		const_cast<Program&>(program).visit(flags, logGenerics);
-        Printer log;
+        Printer log(&program);
         const_cast<Program&>(program).visit(log, logGenerics);
         stream << log.str();
         return stream;
