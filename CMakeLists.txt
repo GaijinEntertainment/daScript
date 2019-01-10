@@ -133,13 +133,12 @@ set_property(
         PUBLIC_HEADER "${API_HEADER_FILES}"
 )
 
-target_include_directories(uriparser PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-
-target_include_directories(uriparser PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR}  # for config.h
+target_include_directories(uriparser
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_CURRENT_BINARY_DIR}  # for config.h
 )
 
 install(
