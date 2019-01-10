@@ -46,14 +46,23 @@ namespace das {
         return _mm_loadl_epi64((__m128i const*)&a);
     }
     __forceinline void * vec_cast_esi_ptr ( vec4i a ) {
+#if INTPTR_MAX == INT32_MAX
+		return (void*) _mm_cvtsi128_si32(a);
+#else
 #if defined(_MSC_VER)
 		return (void*)a.m128i_u64[0];
 #else
-        void * t; _mm_storel_epi64((__m128i*)&t, a); return t;
+		void * t; _mm_storel_epi64((__m128i*)&t, a); return t;
 #endif
+#endif
+
     }
     __forceinline vec4i vec_cast_ptr_esi ( void * a ) {
+        #if INTPTR_MAX == INT32_MAX
+        return _mm_set1_epi32((uint32_t)a);
+        #else
         return _mm_loadl_epi64((__m128i const*)&a);
+        #endif
     }
 // vec4
     __forceinline vec4f vec_set_xyzw ( float x, float y, float z, float w ) {
