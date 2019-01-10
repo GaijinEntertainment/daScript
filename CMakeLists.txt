@@ -231,10 +231,10 @@ endif()
 if(URIPARSER_BUILD_DOCS)
     find_package(Doxygen REQUIRED dot doxygen)
     find_program(QHG_LOCATION qhelpgenerator)
-    find_program(HHC_LOCATION hhc)
+    include(FindHTMLHelp)
 
     # Generate Doxyfile
-    if(HHC_LOCATION)
+    if(HTML_HELP_COMPILER)
         set(GENERATE_HTMLHELP YES)
     else()
         set(GENERATE_HTMLHELP NO)
