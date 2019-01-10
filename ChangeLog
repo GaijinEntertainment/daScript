@@ -9,6 +9,13 @@ NOTE: uriparser is looking for help with a few things:
   * Fixed: Visual Studio 2005 project lacked integration of UriMemory.c and .h,
       regression introduced in 0.9.0 (GitHub #49)
       Thanks to Adam Frisby for the patch!
+  * Changed: Migrated from GNU Autotools to CMake (GitHub #17, #47)
+      Thanks for their support with the CMake migration to:
+      - David Demelier
+      - Jørgen Ibsen
+      - KangLin
+      - Richard Hodges
+      - Zachary Lund
   * Soname: TODO
 
 2019-01-02 -- 0.9.1
