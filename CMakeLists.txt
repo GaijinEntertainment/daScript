@@ -231,12 +231,14 @@ endif()
 if(URIPARSER_BUILD_DOCS)
     find_package(Doxygen REQUIRED dot doxygen)
     find_program(QHG_LOCATION qhelpgenerator)
+    find_program(HHC_LOCATION hhc)
 
     # Generate Doxyfile
-    set(PACKAGE ${PROJECT_NAME})
-    set(VERSION ${PROJECT_VERSION})
-    set(ac_abs_confdir ${CMAKE_CURRENT_SOURCE_DIR})
-    set(GENERATE_HTMLHELP NO)
+    if(HHC_LOCATION)
+        set(GENERATE_HTMLHELP YES)
+    else()
+        set(GENERATE_HTMLHELP NO)
+    endif()
     configure_file(doc/Doxyfile.in doc/Doxyfile @ONLY)
     configure_file(doc/release.sh.in doc/release.sh @ONLY)
 

@@ -2,7 +2,7 @@
 (
 cd $(dirname $(which "$0")) || exit 1
 
-distdir="@PACKAGE@-@VERSION@-doc"
+distdir="@PROJECT_NAME@-@PROJECT_VERSION@-doc"
 [ -z $MAKE ] && MAKE=make
 
 # Clean up
