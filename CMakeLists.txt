@@ -166,6 +166,18 @@ add_executable(uriparse
 
 target_link_libraries(uriparse PUBLIC uriparser)
 
+if(HAIKU)
+    # Function inet_ntop needs -lsocket or -lnetwork (see pull request #45)
+    check_library_exists(socket inet_ntop "" HAVE_LIBSOCKET__INET_NTOP)
+    check_library_exists(network inet_ntop "" HAVE_LIBNETWORK__INET_NTOP)
+    if(HAVE_LIBSOCKET__INET_NTOP)
+        target_link_libraries(uriparse PUBLIC socket)
+    endif(HAVE_LIBSOCKET__INET_NTOP)
+    if(HAVE_LIBNETWORK__INET_NTOP)
+        target_link_libraries(uriparse PUBLIC network)
+    endif(HAVE_LIBNETWORK__INET_NTOP)
+endif(HAIKU)
+
 install(
     TARGETS
         uriparse
