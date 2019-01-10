@@ -1,6 +1,6 @@
 %{
-    #include "platform.h"
-    #include "ast.h"
+    #include "daScript/misc/platform.h"
+    #include "daScript/ast/ast.h"
     #include "ds_parser.hpp"
     
     #ifdef FLEX_DEBUG

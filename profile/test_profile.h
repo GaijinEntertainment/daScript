@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vectypes.h"
+#include "daScript/misc/vectypes.h"
 
 struct Object {
     das::float3   pos;

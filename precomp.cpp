@@ -1,1 +1,1 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"

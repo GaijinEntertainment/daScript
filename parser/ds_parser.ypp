@@ -1,6 +1,6 @@
 %code requires {
-    #include "platform.h"
-    #include "ast.h"
+	#include "daScript/misc/platform.h"
+	#include "daScript/ast/ast.h"
     
     using namespace das;
     using namespace std;
@@ -28,9 +28,9 @@
 }
 
 %{
-	#include "platform.h"
-    #include "debug_info.h"
-    #include "compilation_errors.h"
+	#include "daScript/misc/platform.h"
+	#include "daScript/simulate/debug_info.h"
+	#include "daScript/ast/compilation_errors.h"
     
     void yyerror (const std::string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
     void yyerror (const std::string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);

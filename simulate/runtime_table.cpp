@@ -1,6 +1,6 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
-#include "runtime_table.h"
+#include "daScript/simulate/runtime_table.h"
 
 namespace das
 {

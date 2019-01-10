@@ -1,11 +1,11 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
-#include "debug_info.h"
+#include "daScript/simulate/debug_info.h"
 
-#include "enums.h"
-#include "cast.h"
-#include "runtime_string.h"
-#include "arraytype.h"
+#include "daScript/misc/enums.h"
+#include "daScript/simulate/cast.h"
+#include "daScript/simulate/runtime_string.h"
+#include "daScript/misc/arraytype.h"
 
 namespace das
 {

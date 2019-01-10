@@ -1,7 +1,7 @@
 #pragma once
 
-#include "simulate.h"
-#include "function_traits.h"
+#include "daScript/simulate/simulate.h"
+#include "daScript/misc/function_traits.h"
 
 namespace das
 {

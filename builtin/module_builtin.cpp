@@ -1,9 +1,9 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
 #include "module_builtin.h"
 
-#include "ast_interop.h"
-#include "ast_policy_types.h"
+#include "daScript/ast/ast_interop.h"
+#include "daScript/ast/ast_policy_types.h"
 
 namespace das
 {

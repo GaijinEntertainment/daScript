@@ -1,6 +1,6 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
-#include "runtime_range.h"
+#include "daScript/simulate/runtime_range.h"
 
 #ifdef _MSC_VER
 

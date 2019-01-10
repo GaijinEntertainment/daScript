@@ -1,8 +1,8 @@
 #pragma once
 
-#include "cast.h"
-#include "compilation_errors.h"
-#include "sim_policy.h"
+#include "daScript/simulate/cast.h"
+#include "daScript/ast/compilation_errors.h"
+#include "daScript/simulate/sim_policy.h"
 
 namespace das
 {

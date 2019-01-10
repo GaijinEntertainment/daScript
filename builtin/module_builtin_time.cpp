@@ -1,8 +1,8 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
 #include "module_builtin.h"
-#include "ast_interop.h"
-#include "ast_handle.h"
+#include "daScript/ast/ast_interop.h"
+#include "daScript/ast/ast_handle.h"
 
 #include <ctime>
 

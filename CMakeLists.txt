@@ -33,7 +33,7 @@ IF(MSVC)
 ENDIF()
 
 SET(AST_SRC
-ast/compilation_errors.h
+include/daScript/ast/compilation_errors.h
 ast/ast.cpp
 ast/ast_module.cpp
 ast/ast_print.cpp
@@ -44,10 +44,10 @@ ast/ast_const_folding.cpp
 ast/ast_block_folding.cpp
 ast/ast_unused.cpp
 ast/ast_annotations.cpp
-ast/ast.h
-ast/ast_interop.h
-ast/ast_handle.h
-ast/ast_policy_types.h
+include/daScript/ast/ast.h
+include/daScript/ast/ast_interop.h
+include/daScript/ast/ast_handle.h
+include/daScript/ast/ast_policy_types.h
 )
 SOURCE_GROUP_FILES("ast" AST_SRC)
 
@@ -61,45 +61,44 @@ builtin/module_builtin_time.cpp
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 
 SET(MISC_SRC
-misc/enums.h
-misc/function_traits.h
-misc/hal.h
-misc/platform.h
-misc/vectypes.h
-misc/arraytype.h
-misc/rangetype.h
-precomp.h
+include/daScript/misc/enums.h
+include/daScript/misc/function_traits.h
+include/daScript/misc/hal.h
+include/daScript/misc/platform.h
+include/daScript/misc/vectypes.h
+include/daScript/misc/arraytype.h
+include/daScript/misc/rangetype.h
 precomp.cpp
 )
 SOURCE_GROUP_FILES("misc" MISC_SRC)
 
 SET(SIMULATE_SRC
-simulate/cast.h
-simulate/hash.h
+include/daScript/simulate/cast.h
+include/daScript/simulate/hash.h
 simulate/hash.cpp
 simulate/debug_info.cpp
-simulate/debug_info.h
-simulate/interop.h
+include/daScript/simulate/debug_info.h
+include/daScript/simulate/interop.h
 simulate/runtime_string.cpp
-simulate/runtime_string.h
+include/daScript/simulate/runtime_string.h
 simulate/runtime_array.cpp
-simulate/runtime_array.h
+include/daScript/simulate/runtime_array.h
 simulate/runtime_table.cpp
-simulate/runtime_table.h
+include/daScript/simulate/runtime_table.h
 simulate/runtime_range.cpp
-simulate/runtime_range.h
+include/daScript/simulate/runtime_range.h
 simulate/runtime_profile.cpp
-simulate/runtime_profile.h
+include/daScript/simulate/runtime_profile.h
 simulate/simulate.cpp
-simulate/simulate.h
-simulate/sim_policy.h
+include/daScript/simulate/simulate.h
+include/daScript/simulate/sim_policy.h
 )
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
-include_directories(libDaScript PUBLIC ast misc simulate ".")
+include_directories(include ".")
 ADD_LIBRARY(libDaScript ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
-ADD_PRECOMPILED_HEADER(libDaScript precomp.h precomp.h)
+ADD_PRECOMPILED_HEADER(libDaScript platform.h include/daScript/misc/platform.h)
 
 add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
 add_dependencies(libDaScript daScriptGenDir)
@@ -110,12 +109,12 @@ SET(DASCRIPT_MAIN_SRC
 daScript/main.cpp
 )
 
-include_directories(daScript PUBLIC ast lexer misc simulate test)
+include_directories(include lexer test)
 add_executable(daScript ${DASCRIPT_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScript libDaScript)
 ADD_DEPENDENCIES(daScript libDaScript)
 SETUP_CPP11(daScript)
-ADD_PRECOMPILED_HEADER(daScript precomp.h precomp.h)
+ADD_PRECOMPILED_HEADER(daScript platform.h include/daScript/misc/platform.h)
 
 # Test
 
@@ -150,20 +149,20 @@ list(SORT MIX_TEST_SRC)
 SOURCE_GROUP_FILES("test/mix" MIX_TEST_SRC)
 
 SET(TEST_MAIN_SRC
-precomp.h
+include/daScript/misc/platform.h
 precomp.cpp
 test/main.cpp
 test/test_handles.cpp
 )
 SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)
 
-include_directories(daScriptTest PUBLIC ast lexer misc simulate test)
+include_directories(include lexer test)
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC})
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)
-ADD_PRECOMPILED_HEADER(daScriptTest precomp.h precomp.h)
+ADD_PRECOMPILED_HEADER(daScriptTest platform.h include/daScript/misc/platform.h)
 
 # Profile
 
@@ -174,17 +173,17 @@ list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
-precomp.h
+include/daScript/misc/platform.h
 precomp.cpp
 profile/main.cpp
 profile/test_profile.cpp
 )
 SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)
 
-include_directories(daScriptProfile PUBLIC ast lexer misc simulate test)
+include_directories(include lexer)
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScriptProfile libDaScript)
 ADD_DEPENDENCIES(daScriptProfile libDaScript)
 SETUP_CPP11(daScriptProfile)
-ADD_PRECOMPILED_HEADER(daScriptProfile precomp.h precomp.h)
+ADD_PRECOMPILED_HEADER(daScriptProfile platform.h include/daScript/misc/platform.h)
 

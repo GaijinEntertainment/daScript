@@ -1,7 +1,7 @@
 #pragma once
 
-#include "simulate.h"
-#include "arraytype.h"
+#include "daScript/simulate/simulate.h"
+#include "daScript/misc/arraytype.h"
 
 namespace das
 {

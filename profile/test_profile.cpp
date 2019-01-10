@@ -1,10 +1,10 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
 #include "test_profile.h"
 
-#include "ast.h"
-#include "ast_interop.h"
-#include "ast_handle.h"
+#include "daScript/ast/ast.h"
+#include "daScript/ast/ast_interop.h"
+#include "daScript/ast/ast_handle.h"
 
 using namespace std;
 using namespace das;

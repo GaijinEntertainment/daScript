@@ -1,12 +1,12 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
-#include "ast.h"
-#include "enums.h"
+#include "daScript/ast/ast.h"
+#include "daScript/misc/enums.h"
 
-#include "runtime_array.h"
-#include "runtime_table.h"
-#include "runtime_range.h"
-#include "hash.h"
+#include "daScript/simulate/runtime_array.h"
+#include "daScript/simulate/runtime_table.h"
+#include "daScript/simulate/runtime_range.h"
+#include "daScript/simulate/hash.h"
 
 void yybegin(const char * str);
 int yyparse();

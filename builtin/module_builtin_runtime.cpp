@@ -1,12 +1,12 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
 #include "module_builtin.h"
 
-#include "ast_interop.h"
+#include "daScript/ast/ast_interop.h"
 
-#include "runtime_array.h"
-#include "runtime_table.h"
-#include "runtime_profile.h"
+#include "daScript/simulate/runtime_array.h"
+#include "daScript/simulate/runtime_table.h"
+#include "daScript/simulate/runtime_profile.h"
 
 namespace das
 {

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "vectypes.h"
-#include "arraytype.h"
-#include "cast.h"
-#include "runtime_string.h"
-#include "debug_info.h"
-#include "sim_policy.h"
+#include "daScript/misc/vectypes.h"
+#include "daScript/misc/arraytype.h"
+#include "daScript/simulate/cast.h"
+#include "daScript/simulate/runtime_string.h"
+#include "daScript/simulate/debug_info.h"
+#include "daScript/simulate/sim_policy.h"
 
 namespace das
 {

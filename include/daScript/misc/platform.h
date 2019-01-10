@@ -40,7 +40,7 @@ __forceinline uint32_t __builtin_clz(uint32_t x) {
 }
 #endif
 
-#include "hal.h"
+#include "daScript/misc/hal.h"
 
 
 

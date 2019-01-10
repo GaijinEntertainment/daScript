@@ -1,7 +1,7 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
-#include "simulate.h"
-#include "runtime_string.h"
+#include "daScript/simulate/simulate.h"
+#include "daScript/simulate/runtime_string.h"
 
 // this is here for the default implementation of to_out and to_err
 #include <iostream>

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "simulate.h"
-#include "arraytype.h"
-#include "hash.h"
+#include "daScript/simulate/simulate.h"
+#include "daScript/misc/arraytype.h"
+#include "daScript/simulate/hash.h"
 
 namespace das
 {

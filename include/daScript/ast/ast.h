@@ -1,15 +1,15 @@
 #pragma once
 
-#include "simulate.h"
-#include "vectypes.h"
-#include "arraytype.h"
-#include "rangetype.h"
-#include "function_traits.h"
-#include "interop.h"
-#include "debug_info.h"
-#include "compilation_errors.h"
-#include "runtime_table.h"
-#include "runtime_array.h"
+#include "daScript/simulate/simulate.h"
+#include "daScript/misc/vectypes.h"
+#include "daScript/misc/arraytype.h"
+#include "daScript/misc/rangetype.h"
+#include "daScript/misc/function_traits.h"
+#include "daScript/simulate/interop.h"
+#include "daScript/simulate/debug_info.h"
+#include "daScript/ast/compilation_errors.h"
+#include "daScript/simulate/runtime_table.h"
+#include "daScript/simulate/runtime_array.h"
 
 namespace das
 {

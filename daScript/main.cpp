@@ -1,6 +1,6 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
-#include "ast.h"
+#include "daScript/ast/ast.h"
 
 #include <iostream>
 #include <fstream>

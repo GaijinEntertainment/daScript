@@ -1,7 +1,7 @@
-#include "precomp.h"
+#include "daScript/misc/platform.h"
 
-#include "runtime_string.h"
-#include "simulate.h"
+#include "daScript/simulate/runtime_string.h"
+#include "daScript/simulate/simulate.h"
 
 namespace das
 {

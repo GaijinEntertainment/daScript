@@ -1,8 +1,8 @@
 #pragma once
 
-#include "vectypes.h"
-#include "arraytype.h"
-#include "rangetype.h"
+#include "daScript/misc/vectypes.h"
+#include "daScript/misc/arraytype.h"
+#include "daScript/misc/rangetype.h"
 
 namespace das
 {
