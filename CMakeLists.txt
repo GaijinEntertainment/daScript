@@ -222,6 +222,7 @@ if(URIPARSER_BUILD_DOCS)
     set(ac_abs_confdir ${CMAKE_CURRENT_SOURCE_DIR})
     set(GENERATE_HTMLHELP NO)
     configure_file(doc/Doxyfile.in doc/Doxyfile @ONLY)
+    configure_file(doc/release.sh.in doc/release.sh @ONLY)
 
     add_custom_target(doc
         COMMAND

@@ -62,6 +62,7 @@ script:
   - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" all
   - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" test
   - cat Testing/Temporary/LastTest.log
+  - ./doc/release.sh
   - make DESTDIR="${PWD}"/ROOT/ install
   - find ROOT | sort
   - popd

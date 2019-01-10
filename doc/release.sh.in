@@ -9,7 +9,7 @@ distdir="@PACKAGE@-@VERSION@-doc"
 rm -Rf "${distdir}" "${distdir}.zip"
 
 # Generate
-"${MAKE}" || exit 1
+"${MAKE}" -C .. doc || exit 1
 
 # Copy
 mkdir -p "${distdir}/html/search"
