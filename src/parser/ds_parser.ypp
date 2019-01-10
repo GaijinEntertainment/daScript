@@ -31,6 +31,12 @@
 	#include "daScript/misc/platform.h"
 	#include "daScript/simulate/debug_info.h"
 	#include "daScript/ast/compilation_errors.h"
+
+	#ifdef _MSC_VER
+	#pragma warning(disable:4262)
+	#pragma warning(disable:4127)
+	#pragma warning(disable:4702)
+	#endif
     
     void yyerror (const std::string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
     void yyerror (const std::string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);

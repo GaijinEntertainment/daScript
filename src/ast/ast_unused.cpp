@@ -206,7 +206,7 @@ namespace das {
             var->access_ref = false;
         }
     // for loop sources
-        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override {
+        virtual void preVisitFor ( ExprFor *, const VariablePtr & var, bool ) override {
             var->access_init = true;
         }
     // var

@@ -51,7 +51,7 @@ namespace das
         return pTable->size != 0;
     }
     
-    bool TableIterator::next  ( Context & context, IteratorContext & itc ) {
+    bool TableIterator::next  ( Context &, IteratorContext & itc ) {
         char * data = cast<char *>::to(itc.value);
         char * tableData = getData(itc.table);
         size_t index = nextValid(itc.table, (data - tableData) / stride + 1 );

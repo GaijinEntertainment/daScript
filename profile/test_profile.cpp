@@ -71,10 +71,10 @@ struct EsAttribute {
     EsAttribute() = default;
     EsAttribute ( const string & n, uint32_t sz, bool rf, vec4f d )
         : name(n), size(sz), ref(rf), def(d) {}
+	vec4f      def = vec_setzero_ps();
     string      name;
     uint32_t    size = 0;
     bool        ref;
-    vec4f      def = vec_setzero_ps();
 };
 
 struct EsAttributeTable {
@@ -118,7 +118,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             tab.attributes.emplace_back(arg->name, arg->type->getSizeOf(), arg->type->isRef(), def);
         }
     }
-    virtual bool apply ( ExprBlock * block, const AnnotationArgumentList & args, string & err ) override {
+    virtual bool apply ( ExprBlock * block, const AnnotationArgumentList &, string & err ) override {
         assert(block->isClosure);
         if ( block->annotationData ) {
             err = "annotation already specified";
@@ -132,7 +132,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         g_esBlockTable.resize(g_esBlockTable.size() + 1);
         return true;
     }
-    virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList & args, string & err ) override {
+    virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList &, string & err ) override {
         size_t index = intptr_t(block->annotationData);
         if ( (index & 0xfff00000) != 0xbad00000 ) {
             err = "invalid block";
@@ -163,7 +163,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         g_esPassTable.push_back(tab);
         return true;
     };
-    virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
+    virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList &, string & err ) override {
         size_t index = intptr_t(func->annotationData);
         if ( index<0 || index>=g_esPassTable.size() || g_esPassTable[index].functionName!=func->name ) {
             err = "invalid function";

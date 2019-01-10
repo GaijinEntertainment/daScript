@@ -139,8 +139,8 @@ namespace das
             return secondType ? secondType->findAlias(name,allowAuto) : nullptr;
         } else if ( baseType==Type::tBlock ) {
             for ( auto & arg : argTypes ) {
-                if ( auto at = arg->findAlias(name,allowAuto) ) {
-                    return at;
+                if ( auto att = arg->findAlias(name,allowAuto) ) {
+                    return att;
                 }
             }
             return firstType->findAlias(name,allowAuto);
@@ -587,9 +587,9 @@ namespace das
         return size;
     }
     
-    const Structure::FieldDeclaration * Structure::findField ( const string & name ) const {
+    const Structure::FieldDeclaration * Structure::findField ( const string & na ) const {
         for ( const auto & fd : fields ) {
-            if ( fd.name==name ) {
+            if ( fd.name==na ) {
                 return &fd;
             }
         }
@@ -686,9 +686,9 @@ namespace das
         return ss.str();
     }
     
-    VariablePtr Function::findArgument(const string & name) {
+    VariablePtr Function::findArgument(const string & na) {
         for ( auto & arg : arguments ) {
-            if ( arg->name==name ) {
+            if ( arg->name==na ) {
                 return arg;
             }
         }
@@ -741,7 +741,7 @@ namespace das
     // type annotation
     
     void debugType ( TypeAnnotation * ta, stringstream & ss , void * data, PrintFlags flags ) {
-        ta->debug(ss, data);
+        ta->debug(ss, data, flags);
     }
     
     // expression
@@ -880,7 +880,7 @@ namespace das
         return cexpr;
     }
     
-    SimNode * ExprStaticAssert::simulate (Context & context) const {
+    SimNode * ExprStaticAssert::simulate (Context &) const {
         return nullptr;
     }
     
@@ -1215,11 +1215,11 @@ namespace das
     }
     
     uint32_t ExprBlock::getEvalFlags() const {
-        uint32_t flags = 0;
+        uint32_t flg = 0;
         for ( const auto & ex : list ) {
-            flags |= ex->getEvalFlags();
+			flg |= ex->getEvalFlags();
         }
-        return flags;
+        return flg;
     }
     
     SimNode * ExprBlock::simulate (Context & context) const {
@@ -1243,7 +1243,7 @@ namespace das
                 : context.makeNode<SimNode_Block>(at);
             block->total = int(simlist.size());
             block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
-            for ( int i = 0; i != block->total; ++i )
+            for ( uint32_t i = 0; i != block->total; ++i )
                 block->list[i] = simlist[i];
             return block;
         } else {

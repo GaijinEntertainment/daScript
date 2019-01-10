@@ -8,10 +8,19 @@ namespace das
     
     template  <typename FuncT, FuncT fn>
     class ExternalFn : public BuiltInFunction {
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4100)
+#endif
         template <typename ArgumentsType, size_t... I>
-        __forceinline vector<TypeDeclPtr> makeArgs ( const ModuleLibrary & lib, index_sequence<I...> ) {
+        inline vector<TypeDeclPtr> makeArgs ( const ModuleLibrary & lib, index_sequence<I...> ) {
             return { makeType< typename tuple_element<I, ArgumentsType>::type>(lib)... };
         }
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
     public:
         ExternalFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
             using FunctionTrait = function_traits<FuncT>;

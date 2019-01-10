@@ -35,7 +35,7 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
     TestObjectFooAnnotation() : ManagedStructureAnnotation ("TestObjectFoo") {
         addField("fooData", offsetof(TestObjectFoo,fooData),make_shared<TypeDecl>(Type::tInt));
     }
-    virtual void debug ( stringstream & ss, void * data ) const override {
+    virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
         TestObjectFoo * of = (TestObjectFoo *) data;
         ss << "{fooData=" << of->fooData << "}";
     }
@@ -48,7 +48,7 @@ struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
         addField("fooPtr", offsetof(TestObjectBar,fooPtr),fooPtr);
         addField("barData", offsetof(TestObjectBar,barData),make_shared<TypeDecl>(Type::tFloat));
     }
-    virtual void debug ( stringstream & ss, void * data ) const override {
+    virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
         TestObjectBar * ob = (TestObjectBar *) data;
         ss << "{";
         if ( ob->fooPtr ) {
@@ -137,25 +137,25 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         }
         return !fail;
     }
-    virtual TypeDeclPtr makeFieldType ( const string & name ) const override {
-        if ( auto pF = makeSafeFieldType(name) ) {
+    virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
+        if ( auto pF = makeSafeFieldType(na) ) {
             pF->ref = true;
             return pF;
         } else {
             return nullptr;
         }
     }
-    virtual TypeDeclPtr makeSafeFieldType ( const string & name ) const override {
-        auto pF = structureType->findField(name);
+    virtual TypeDeclPtr makeSafeFieldType ( const string & na ) const override {
+        auto pF = structureType->findField(na);
         return pF ? make_shared<TypeDecl>(*pF->type) : nullptr;
     }
-    virtual SimNode * simulateGetField ( const string & name, Context & context, const LineInfo & at, SimNode * rv ) const  override {
-        return context.makeNode<SimNode_IntFieldDeref>(at,rv,context.allocateName(name));
+    virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
+        return context.makeNode<SimNode_IntFieldDeref>(at,rv,context.allocateName(na));
     }
-    virtual SimNode * simulateSafeGetField ( const string & name, Context & context, const LineInfo & at, SimNode * rv ) const  override {
-        return context.makeNode<SimNode_SafeIntFieldDeref>(at,rv,context.allocateName(name));
+    virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
+        return context.makeNode<SimNode_SafeIntFieldDeref>(at,rv,context.allocateName(na));
     }
-    virtual void debug ( stringstream & ss, void * data ) const override {
+    virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
         IntFields * prv = (IntFields *) data;
         if ( !prv ) {
             ss << "null";

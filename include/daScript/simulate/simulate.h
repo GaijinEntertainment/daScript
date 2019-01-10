@@ -26,11 +26,11 @@ namespace das
     struct Block;
     
     struct GlobalVariable {
-        char *          name;
         vec4f			value;
-        uint32_t        size;
+		char *          name;
         VarInfo *       debug;
         SimNode *       init;
+		uint32_t        size;
     };
     
     struct SimFunction {
@@ -163,8 +163,8 @@ namespace das
             stopFlags = 0;
         }
         
-        __forceinline vec4f eval ( int fnIndex, vec4f * args = nullptr, void * result = nullptr ) {
-            return call(fnIndex, args, result, 0);
+        __forceinline vec4f eval ( int fnIndex, vec4f * args = nullptr, void * res = nullptr ) {
+            return call(fnIndex, args, res, 0);
         }
         
         __forceinline void throw_error ( const char * message ) {
@@ -235,8 +235,8 @@ namespace das
 			invokeStackTop = stackTop;
 			stackTop = stack + block.stackOffset;
 			assert(stackTop >= stack && stackTop < stackTop + stackSize);
-            BlockArguments * ba = nullptr;
-            BlockArguments saveArguments;
+            BlockArguments * __restrict ba = nullptr;
+			BlockArguments saveArguments;
             if ( block.argumentsOffset ) {
                 ba = (BlockArguments *) ( stack + block.argumentsOffset );
                 saveArguments = *ba;
@@ -244,7 +244,7 @@ namespace das
                 ba->copyOrMoveResult = (char *) cmres;
             }
 			vec4f block_result = block.body->eval(*this);
-			if ( ba ) {
+			if (block.argumentsOffset) {
                 *ba = saveArguments;
 			}
 			invokeStackTop = saveISp;
@@ -587,26 +587,41 @@ namespace das
     
     // VECTOR C-TOR
     template <int vecS>
-    struct SimNode_VecCtor : SimNode_CallBase {
-        SimNode_VecCtor ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual vec4f eval ( Context & context ) override {
-            vec4f argValues[vecS];
-            evalArgs(context, argValues);
-            if ( vecS==2 )
-                return vec_set_xyzw(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
-                                   0.0f,0.0f);
-            else if ( vecS==3 )
-                return vec_set_xyzw(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
-                                   cast<float>::to(argValues[2]),0.0f);
-            else if ( vecS==4 )
-                return vec_set_xyzw(cast<float>::to(argValues[0]),cast<float>::to(argValues[1]),
-                                   cast<float>::to(argValues[2]),cast<float>::to(argValues[3]));
-            else
-                return vec_setzero_ps();
-        }
-    };
-    
-    // "DEBUG"
+	struct SimNode_VecCtor;
+
+	template <>
+	struct SimNode_VecCtor<2> : SimNode_CallBase {
+		SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+		virtual vec4f eval(Context & context) override {
+			vec4f argValues[2];
+			evalArgs(context, argValues);
+			return vec_set_xyzw(cast<float>::to(argValues[0]), cast<float>::to(argValues[1]),0.0f, 0.0f);
+		}
+	};
+
+	template <>
+	struct SimNode_VecCtor<3> : SimNode_CallBase {
+		SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+		virtual vec4f eval(Context & context) override {
+			vec4f argValues[3];
+			evalArgs(context, argValues);
+			return vec_set_xyzw(cast<float>::to(argValues[0]), cast<float>::to(argValues[1]),
+					cast<float>::to(argValues[2]), 0.0f);
+		}
+	};
+
+	template <>
+	struct SimNode_VecCtor<4> : SimNode_CallBase {
+		SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+		virtual vec4f eval(Context & context) override {
+			vec4f argValues[4];
+			evalArgs(context, argValues);
+			return vec_set_xyzw(cast<float>::to(argValues[0]), cast<float>::to(argValues[1]),
+				cast<float>::to(argValues[2]), cast<float>::to(argValues[3]));
+		}
+	};
+
+	// "DEBUG"
     struct SimNode_Debug : SimNode {
         SimNode_Debug ( const LineInfo & at, SimNode * s, TypeInfo * ti, char * msg )
             : SimNode(at), subexpr(s), typeInfo(ti), message(msg) {}
@@ -969,11 +984,11 @@ namespace das
     // CONST-VALUE
     struct SimNode_ConstValue : SimNode {
         SimNode_ConstValue(const LineInfo & at, vec4f c) : SimNode(at), value(c) { }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f eval ( Context & ) override {
             return value;
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
-        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+        virtual CTYPE eval##TYPE ( Context & ) override {			\
             return cast<CTYPE>::to(value);                          \
         }
         DAS_EVAL_NODE;
@@ -1097,8 +1112,8 @@ namespace das
     };
         
     // iterator
-    
-    struct IteratorContext {
+
+	struct IteratorContext {
         vec4f value;
         union {
             vec4f tail;

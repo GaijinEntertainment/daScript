@@ -39,7 +39,7 @@ namespace das
 {
     float builtin_profile ( int32_t count, char * category, Block block, Context * context ) {
         count = max(count,1);
-        uint64_t minT = -1;
+        uint64_t minT = -1U;
         for ( int32_t i = 0; i != count; ++i ) {
             uint64_t t0 = profileGetTime();
             context->invoke(block, nullptr, nullptr);

@@ -288,7 +288,7 @@ namespace das {
             return resT;
         }
         
-        vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
+        vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
@@ -303,7 +303,7 @@ namespace das {
             return result;
         }
         
-        vector<FunctionPtr> findGenericCandidates ( const string & name, const vector<TypeDeclPtr> & types ) const {
+        vector<FunctionPtr> findGenericCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
@@ -1742,7 +1742,7 @@ namespace das {
             return Visitor::visit(expr);
         }
         // StringBuilder
-        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
+        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder *, Expression * expr, bool ) override {
             return Expression::autoDereference(expr->shared_from_this());
         }
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {

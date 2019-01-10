@@ -13,16 +13,16 @@ namespace das
         return (r.from!=r.to);
     }
     
-    bool RangeIterator::next  ( Context & context, IteratorContext & itc ) {
+    bool RangeIterator::next  ( Context &, IteratorContext & itc ) {
         int32_t nextValue = cast<int32_t>::to(itc.value) + 1;
         itc.value = cast<int32_t>::from(nextValue);
         return (nextValue != itc.range_to);
     }
 
-    void RangeIterator::close ( Context & context, IteratorContext & itc ) {
+    void RangeIterator::close ( Context &, IteratorContext & ) {
     }
     
-    vec4f SimNode_RangeIterator::eval ( Context & context ) {
+    vec4f SimNode_RangeIterator::eval ( Context & ) {
         return cast<Iterator *>::from(static_cast<RangeIterator *>(this));
     }
     

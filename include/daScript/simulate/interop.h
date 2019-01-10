@@ -7,7 +7,7 @@ namespace das
 {
     template <typename TT>
     struct cast_arg {
-        static __forceinline TT to ( Context & ctx, vec4f x ) {
+        static __forceinline TT to ( Context &, vec4f x ) {
             return cast<TT>::to(x);
         }
     };
@@ -19,6 +19,10 @@ namespace das
         }
     };
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4100)
+#endif
     template <typename Result>
     struct ImplCallStaticFunction {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
@@ -26,7 +30,7 @@ namespace das
             return cast<Result>::from ( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ) );
         }
     };
-    
+
     template <>
     struct ImplCallStaticFunction<void> {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
@@ -35,7 +39,10 @@ namespace das
             return vec_setzero_ps();
         }
     };
-    
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
     template <typename FuncT, FuncT fn >
     struct SimNode_ExtFuncCall : SimNode_CallBase {
         SimNode_ExtFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}

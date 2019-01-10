@@ -19,20 +19,20 @@ namespace das
         virtual bool isRefType() const override { return true; }
         virtual bool isNewable() const override { return true; }
         virtual bool isLocal() const override { return true; }
-        virtual TypeDeclPtr makeFieldType ( const string & name ) const override {
-            if ( auto t = makeSafeFieldType(name) ) {
+        virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
+            if ( auto t = makeSafeFieldType(na) ) {
                 t->ref = true;
                 return t;
             } else {
                 return nullptr;
             }
         }
-        virtual TypeDeclPtr makeSafeFieldType ( const string & name ) const override {
-            auto it = fields.find(name);
+        virtual TypeDeclPtr makeSafeFieldType ( const string & na ) const override {
+            auto it = fields.find(na);
             return it!=fields.end() ? make_shared<TypeDecl>(*it->second.decl) : nullptr;
         }
-        virtual SimNode * simulateGetField ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
-            auto it = fields.find(name);
+        virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+            auto it = fields.find(na);
             if ( it!=fields.end() ) {
                 return context.makeNode<SimNode_FieldDeref>(at,value,it->second.offset);
             } else {
@@ -42,24 +42,24 @@ namespace das
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
             return context.makeNode<SimNode_New>(at,int32_t(sizeof(OT)));
         }
-        virtual SimNode * simulateSafeGetField ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
-            auto it = fields.find(name);
+        virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+            auto it = fields.find(na);
             if ( it!=fields.end() ) {
                 return context.makeNode<SimNode_SafeFieldDeref>(at,value,it->second.offset);
             } else {
                 return nullptr;
             }
         };
-        virtual SimNode * simulateSafeGetFieldPtr ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
-            auto it = fields.find(name);
+        virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+            auto it = fields.find(na);
             if ( it!=fields.end() ) {
                 return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value,it->second.offset);
             } else {
                 return nullptr;
             }
         };
-        void addField ( const string & name, off_t offset, TypeDeclPtr pT ) {
-            auto & field = fields[name]; assert(!field.decl && "field already exist");
+        void addField ( const string & na, off_t offset, TypeDeclPtr pT ) {
+            auto & field = fields[na]; assert(!field.decl && "field already exist");
             field.offset = offset;
             field.decl = pT;
         }
@@ -110,19 +110,19 @@ namespace das
                 itc.array      = nullptr;
                 return size != 0;
             }
-            virtual bool next  ( Context & context, IteratorContext & itc ) override {
+            virtual bool next  ( Context &, IteratorContext & itc ) override {
                 char * data = cast<char *>::to(itc.value) + sizeof(OT);
                 itc.value = cast<char *>::from(data);
                 return data != itc.array_end;
             }
-            virtual void close ( Context & context, IteratorContext & itc ) override {
+            virtual void close ( Context &, IteratorContext & ) override {
             }
             SimNode *   source;
         };
         struct SimNode_VectorIterator : SimNode, VectorIterator {
             SimNode_VectorIterator ( const LineInfo & at, SimNode * s )
             : SimNode(at) { VectorIterator::source = s;}
-            virtual vec4f eval ( Context & context ) override {
+            virtual vec4f eval ( Context & ) override {
                 return cast<Iterator *>::from(static_cast<VectorIterator *>(this));
             }
         };
@@ -135,8 +135,8 @@ namespace das
         virtual bool isRefType() const override { return true; }
         virtual bool isIndexable ( const TypeDeclPtr & indexType ) const override { return indexType->isIndex(); }
         virtual bool isIterable ( ) const override { return true; }
-        virtual TypeDeclPtr makeFieldType ( const string & name ) const override {
-            if ( name=="length" ) return make_shared<TypeDecl>(Type::tInt);
+        virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
+            if ( na=="length" ) return make_shared<TypeDecl>(Type::tInt);
             return nullptr;
         }
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
@@ -147,8 +147,8 @@ namespace das
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
             return context.makeNode<SimNode_VectorIterator>(at, rv);
         }
-        virtual SimNode * simulateGetField ( const string & name, Context & context, const LineInfo & at, SimNode * value ) const override {
-            if ( name=="length" ) return context.makeNode<SimNode_VectorLength>(at,value);
+        virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+            if ( na=="length" ) return context.makeNode<SimNode_VectorLength>(at,value);
             return nullptr;
         }
         TypeDeclPtr vecType;

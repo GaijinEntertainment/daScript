@@ -56,7 +56,7 @@ namespace das
     
     // PUSH VALUE
     
-    vec4f SimNode_ArrayPush::apply ( Context & context, Array * pA, uint32_t index ) {
+    vec4f SimNode_ArrayPush::apply ( Context &, Array *, uint32_t ) {
         return vec_setzero_ps();
     }
     
@@ -125,7 +125,7 @@ namespace das
         return pArray->size != 0;
     }
 
-    bool GoodArrayIterator::next  ( Context & context, IteratorContext & itc )  {
+    bool GoodArrayIterator::next  ( Context &, IteratorContext & itc )  {
         char * data = cast<char *>::to(itc.value) + stride;
         itc.value = cast<char *>::from(data);
         return data != itc.array_end;
@@ -137,7 +137,7 @@ namespace das
         }
     }
 
-    vec4f SimNode_GoodArrayIterator::eval ( Context & context ) {
+    vec4f SimNode_GoodArrayIterator::eval ( Context & ) {
         return cast<Iterator *>::from(static_cast<GoodArrayIterator *>(this));
     }
     
@@ -152,16 +152,16 @@ namespace das
         return size != 0;
     }
 
-    bool FixedArrayIterator::next  ( Context & context, IteratorContext & itc )  {
+    bool FixedArrayIterator::next  ( Context & , IteratorContext & itc )  {
         char * data = cast<char *>::to(itc.value) + stride;
         itc.value = cast<char *>::from(data);
         return data != itc.fixed_array_end;
     }
 
-    void FixedArrayIterator::close ( Context & context, IteratorContext & itc )  {
+    void FixedArrayIterator::close ( Context &, IteratorContext &  )  {
     }
 
-    vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {
+    vec4f SimNode_FixedArrayIterator::eval ( Context & ) {
         return cast<Iterator *>::from(static_cast<FixedArrayIterator *>(this));
     }
 }

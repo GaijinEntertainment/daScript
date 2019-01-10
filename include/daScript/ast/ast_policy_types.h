@@ -97,7 +97,7 @@ namespace  das {
     
     // vector-scalar combinations
     template <typename TT, typename TTS>
-    void addFunctionVecNumeric(Module & mod, const ModuleLibrary & lib, bool hasMod = true) {
+    void addFunctionVecNumeric(Module & mod, const ModuleLibrary & lib) {
         //                                     policy               ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_MulScalVec<TT>,  TT,   TTS, TT>  >("*",    lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_DivScalVec<TT>,  TT,   TTS, TT>  >("/",    lib) );

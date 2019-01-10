@@ -52,9 +52,9 @@ bool compilation_fail_test ( const string & fn ) {
                 cout << "failed";
                 if ( any_errors ) {
                     cout << ", expecting errors";
-                    for ( auto cerr : errors  ) {
-                        if ( cerr.second > 0 ) {
-                            cout << " " << int(cerr.first) << ":" << cerr.second;
+                    for ( auto terr : errors  ) {
+                        if (terr.second > 0 ) {
+                            cout << " " << int(terr.first) << ":" << terr.second;
                         }
                     }
                 }
@@ -202,7 +202,7 @@ bool run_exception_tests( const string & path ) {
     return run_tests(path, exception_test);
 }
 
-int main(int argc, const char * argv[]) {
+int main() {
 #ifdef _MSC_VER
 	#define	TEST_PATH "../"
 #else

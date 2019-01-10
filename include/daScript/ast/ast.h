@@ -169,7 +169,7 @@ namespace das
 
     
     template <typename TT>
-    __forceinline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
+    inline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
         return typeFactory<TT>::make(ctx);
     }
     
@@ -295,22 +295,22 @@ namespace das
         virtual bool isRefType() const { return false; }
         virtual bool isLocal() const { return false; }
         virtual bool isNewable() const { return false; }
-        virtual bool isIndexable ( const TypeDeclPtr & indexType ) const { return false; }
+        virtual bool isIndexable ( const TypeDeclPtr & ) const { return false; }
         virtual bool isIterable ( ) const { return false; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual TypeDeclPtr makeFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeSafeFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const { return nullptr; }
         virtual TypeDeclPtr makeIteratorType () const { return nullptr; }
-        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const { return nullptr; }
-        virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const { return nullptr; }
-        virtual SimNode * simulateGetField ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
-        virtual SimNode * simulateSafeGetField ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
-        virtual SimNode * simulateSafeGetFieldPtr ( const string & name, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateCopy ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateRef2Value ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateGetField ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateSafeGetField ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateSafeGetFieldPtr ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
-        virtual void debug ( stringstream & ss, void * data ) const { ss << "handle<" << name << ">"; }
+        virtual void debug ( stringstream & ss, void *, PrintFlags ) const { ss << "handle<" << name << ">"; }
     };
     
     // annotated structure
@@ -382,7 +382,7 @@ namespace das
     };
     
     template <typename ExprType>
-    __forceinline shared_ptr<ExprType> clonePtr ( const ExpressionPtr & expr ) {
+    inline shared_ptr<ExprType> clonePtr ( const ExpressionPtr & expr ) {
         return expr ? static_pointer_cast<ExprType>(expr) : make_shared<ExprType>();
     }
     
@@ -641,16 +641,23 @@ namespace das
         virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForBreak; }
         virtual bool rtti_isBreak() const override { return true; }
     };
-    
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4324)
+#endif
     struct ExprConst : Expression {
         ExprConst ( Type t ) : baseType(t) {}
         ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) {}
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isConstant() const override { return true; }
-        vec4f  value;
-        Type    baseType;
-    };
-    
+		Type    baseType;
+		vec4f  value;
+      };
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
     template <typename TT, typename ExprConstExt>
     struct ExprConstT : ExprConst {
         ExprConstT ( TT val, Type bt ) : ExprConst(bt) { value = cast<TT>::from(val); }
@@ -801,7 +808,7 @@ namespace das
         ExprLooksLikeCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         void autoDereference();
-        virtual SimNode * simulate (Context & context) const override { return nullptr; }
+        virtual SimNode * simulate (Context &) const override { return nullptr; }
         virtual ExpressionPtr visit(Visitor & vis) override;
         string describe() const;
         virtual bool rtti_isCall() const override { return true; }
@@ -935,14 +942,14 @@ namespace das
     
     struct ExprErase : ExprLikeCall<ExprErase> {
         ExprErase() = default;
-        ExprErase ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprErase>(a, "erase") {}
+        ExprErase ( const LineInfo & a, const string & ) : ExprLikeCall<ExprErase>(a, "erase") {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
     
     struct ExprFind : ExprLikeCall<ExprFind> {
         ExprFind() = default;
-        ExprFind ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprFind>(a, "find") {}
+        ExprFind ( const LineInfo & a, const string & ) : ExprLikeCall<ExprFind>(a, "find") {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
@@ -1200,6 +1207,12 @@ namespace das
          
     ProgramPtr parseDaScript ( const char * script, ostream & logs );
     
+	// NOTE: parameters here are unreferenced for a reason
+	//			the idea is you copy the function defintion, and paste to your code
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4100)	// unreferenced formal parameter
+#endif
     class Visitor {
     public:
         // STRUCTURE
@@ -1337,6 +1350,10 @@ namespace das
         VISIT_EXPR(ExprWhile)
 #undef VISIT_EXPR
     };
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
     
     class OptVisitor : public Visitor {
     public:

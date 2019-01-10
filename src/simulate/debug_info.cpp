@@ -203,7 +203,7 @@ namespace das
         bool first = true;
         int keySize = getTypeSize(info->firstType);
         int valueSize = getTypeSize(info->secondType);
-        for ( int i=0; i!=tab.capacity; ++i ) {
+        for ( uint32_t i=0; i!=tab.capacity; ++i ) {
             if ( tab.distance[i]>=0 ) {
                 if ( !first ) ss << " "; first = false;
                 ss << "("; // ss << "(@ " << i << " ";

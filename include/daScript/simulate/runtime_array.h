@@ -23,7 +23,7 @@ namespace das
     struct SimNode_ArrayAt : SimNode_Array {
         DAS_PTR_NODE;
         SimNode_ArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
-        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override {
+        virtual vec4f apply ( Context &, Array *, uint32_t  ) override {
             assert(0 && "we should not even be here");
             return vec_setzero_ps();
         }
@@ -135,12 +135,12 @@ namespace das
                 ph[t]  = pha[t]->data;
             }
             char ** __restrict pi[total];
-            int size = INT_MAX;
+            int szz = INT_MAX;
             for ( int t=0; t!=total; ++t ) {
                 pi[t] = (char **)(context.stackTop + stackTop[t]);
-                size = min(size, int(pha[t]->size));
+                szz = min(szz, int(pha[t]->size));
             }
-            for (int i = 0; i!=size && !context.stopFlags; ++i) {
+            for (int i = 0; i!=szz && !context.stopFlags; ++i) {
                 for (int t = 0; t != total; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
@@ -170,7 +170,7 @@ namespace das
             for ( int t=0; t!=total; ++t ) {
                 pi[t] = (char **)(context.stackTop + stackTop[t]);
             }
-            for (int i = 0; i != size && !context.stopFlags; ++i) {
+            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
                 for (int t = 0; t != total; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];

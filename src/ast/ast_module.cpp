@@ -112,8 +112,8 @@ namespace das
         }
     }
     
-    VariablePtr Module::findVariable ( const string & name ) const {
-        auto it = globals.find(name);
+    VariablePtr Module::findVariable ( const string & na ) const {
+        auto it = globals.find(na);
         return it != globals.end() ? it->second : VariablePtr();
     }
     
@@ -122,18 +122,18 @@ namespace das
         return it != functions.end() ? it->second : FunctionPtr();
     }
     
-    StructurePtr Module::findStructure ( const string & name ) const {
-        auto it = structures.find(name);
+    StructurePtr Module::findStructure ( const string & na ) const {
+        auto it = structures.find(na);
         return it != structures.end() ? it->second : StructurePtr();
     }
     
-    AnnotationPtr Module::findAnnotation ( const string & name ) const {
-        auto it = handleTypes.find(name);
+    AnnotationPtr Module::findAnnotation ( const string & na ) const {
+        auto it = handleTypes.find(na);
         return it != handleTypes.end() ? it->second : nullptr;
     }
     
-    ExprCallFactory * Module::findCall ( const string & name ) const {
-        auto it = callThis.find(name);
+    ExprCallFactory * Module::findCall ( const string & na ) const {
+        auto it = callThis.find(na);
         return it != callThis.end() ? &it->second : nullptr;
     }
     

@@ -184,13 +184,13 @@ namespace das
     // SimNode_Block
     
     vec4f SimNode_Block::eval ( Context & context ) {
-        for ( int i = 0; i!=total && !context.stopFlags; ++i )
+        for ( uint32_t i = 0; i!=total && !context.stopFlags; ++i )
             list[i]->eval(context);
         return vec_setzero_ps();
     }
     
     vec4f SimNode_ClosureBlock::eval ( Context & context ) {
-        for ( int i = 0; i!=total && !context.stopFlags; ++i )
+        for ( uint32_t i = 0; i!=total && !context.stopFlags; ++i )
             list[i]->eval(context);
         if ( context.stopFlags & EvalFlags::stopForReturn ) {
             context.stopFlags &= ~EvalFlags::stopForReturn;
@@ -204,7 +204,7 @@ namespace das
     // SimNode_Let
     
     vec4f SimNode_Let::eval ( Context & context ) {
-        for ( int i = 0; i!=total && !context.stopFlags; ++i )
+        for ( uint32_t i = 0; i!=total && !context.stopFlags; ++i )
             list[i]->eval(context);
         DAS_EXCEPTION_POINT;
         return subexpr ? subexpr->eval(context) : vec_setzero_ps();
@@ -354,9 +354,9 @@ namespace das
             throw_error("out of linear allocator space");
             return nullptr;
         }
-        void * result = linearAllocator;
+        void * res = linearAllocator;
         linearAllocator += size;
-        return result;
+        return res;
     }
     
     char * Context::allocateName ( const string & name ) {
@@ -491,7 +491,7 @@ namespace das
         return ssw.str();
     }
     
-    void Context::breakPoint(int column, int line) const {
+    void Context::breakPoint(int, int ) const {
 #ifdef _MSC_VER
 		__debugbreak();
 #else

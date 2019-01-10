@@ -4,6 +4,8 @@
 #pragma warning(disable:4005)	// macro redifinition (in flex file)
 #pragma warning(disable:4146)	// unsigned unary minus
 #pragma warning(disable:4996)	// swap ranges
+#pragma warning(disable:4201)	// nonstandard extension used : nameless struct / union
+//#pragma warning(disable:4234)
 #endif
 
 #include <signal.h>

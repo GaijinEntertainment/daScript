@@ -136,7 +136,7 @@ namespace das
     protected:
         pair<size_t,bool> insert_new ( Table & tab, int8_t dist, size_t index, const KeyType & key, void * value ) {
             KeyType * keys = (KeyType *)(tab.keys);
-            if ( tab.capacity==0 || dist==tab.maxLookups || (tab.size+1)>(tab.capacity/2) ) {
+            if ( tab.capacity==0 || uint32_t(dist)==tab.maxLookups || (tab.size+1)>(tab.capacity/2) ) {
                 grow(tab);
                 return insert(tab, key, value);
             } else if ( tab.distance[index]<0 ) {
@@ -164,7 +164,7 @@ namespace das
                     ++ dist;
                 } else {
                     ++ dist;
-                    if ( dist == tab.maxLookups ) {
+                    if ( uint32_t(dist) == tab.maxLookups ) {
                         swap(insertKey, keys[index]);
                         swap_value(tab, index, value);
                         grow(tab);
@@ -210,7 +210,7 @@ namespace das
     struct SimNode_TableIndex : SimNode_Table {
 		DAS_PTR_NODE;
         SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-		virtual vec4f tabEval(Context & context, Table * tab, vec4f xkey) override {
+		virtual vec4f tabEval(Context & , Table *, vec4f ) override {
 			assert(0 && "we should not even be here");
 			return vec_setzero_ps();
 		}
@@ -245,7 +245,7 @@ namespace das
     struct SimNode_TableFind : SimNode_Table {
 		DAS_PTR_NODE;
         SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-		virtual vec4f tabEval(Context & context, Table * tab, vec4f xkey) override {
+		virtual vec4f tabEval(Context &, Table *, vec4f) override {
 			assert(0 && "we should not even be here");
 			return vec_setzero_ps();
 		}
@@ -282,7 +282,7 @@ namespace das
     struct SimNode_TableIterator : SimNode {
         SimNode_TableIterator(const LineInfo & at, SimNode * sk, uint32_t stride)
             : SimNode(at) { subexpr.source = sk; subexpr.stride = stride; }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f eval ( Context & ) override {
             return cast<Iterator *>::from(&subexpr);
         }
         IterType   subexpr;
