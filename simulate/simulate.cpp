@@ -265,15 +265,18 @@ namespace das
 
     vec4f SimNode_ReturnReference::eval ( Context & context ) {
         char * ref = subexpr->evalPtr(context);
-        auto pp = (Prologue *) context.stackTop;
-        auto top = context.stackTop + pp->info->stackSize;
         if ( context.stack<=ref && ref<context.stackTop ) {
             context.throw_error("reference bellow current function stack frame");
             return vec_setzero_ps();
-        } else if ( context.stackTop<=ref && ref<top ) {
+        }
+#if DAS_ENABLE_STACK_WALK
+        auto pp = (Prologue *) context.stackTop;
+        auto top = context.stackTop + pp->info->stackSize;
+        if ( context.stackTop<=ref && ref<top ) {
             context.throw_error("reference to current function stack frame");
             return vec_setzero_ps();
         }
+#endif
         context.abiResult() = cast<char *>::from(ref);
         context.stopFlags |= EvalFlags::stopForReturn;
         return vec_setzero_ps();
