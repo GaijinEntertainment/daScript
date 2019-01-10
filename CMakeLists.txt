@@ -243,6 +243,7 @@ if(URIPARSER_BUILD_DOCS)
     configure_file(doc/release.sh.in doc/release.sh @ONLY)
 
     add_custom_target(doc
+        ALL
         COMMAND
             ${DOXYGEN_EXECUTABLE}
             Doxyfile
@@ -252,7 +253,6 @@ if(URIPARSER_BUILD_DOCS)
             "Generating API documentation with Doxygen"
         VERBATIM
     )
-    add_dependencies(uriparser doc)
 
     install(
         DIRECTORY
