@@ -1,7 +1,7 @@
 # Doxyfile for Doxygen 1.5.7
 
 # .qhp output
-GENERATE_QHP = yes
+GENERATE_QHP = @GENERATE_QHP@
 QHP_NAMESPACE = "io.github.uriparser"
 QHP_VIRTUAL_FOLDER = "uriparser-@PROJECT_VERSION@"
 
