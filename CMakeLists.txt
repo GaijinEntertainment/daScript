@@ -294,3 +294,22 @@ if(NOT WIN32)
             ${CMAKE_INSTALL_LIBDIR}/pkgconfig/
     )
 endif()
+
+#
+# Summary
+#
+message("===========================================================================")
+message("")
+message("Configuration")
+message("  Prefix ............... ${CMAKE_INSTALL_PREFIX}")
+message("  Code for char * ...... ${URIPARSER_BUILD_CHAR}")
+message("  Code for wchar_t * ... ${URIPARSER_BUILD_WCHAR_T}")
+message("  Test suite ........... ${URIPARSER_BUILD_TESTS}")
+message("  Documentation ........ ${URIPARSER_BUILD_DOCS}")
+message("")
+message("Continue with")
+message("  make")
+message("  make test")
+message("  sudo make install")
+message("")
+message("===========================================================================")
