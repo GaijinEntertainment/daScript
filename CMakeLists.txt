@@ -47,6 +47,7 @@ set(URIPARSER_SO_REVISION  24)
 set(URIPARSER_SO_AGE        0)
 
 include(CheckFunctionExists)
+include(CheckLibraryExists)
 include(CheckSymbolExists)
 include(GNUInstallDirs)
 
