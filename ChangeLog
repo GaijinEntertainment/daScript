@@ -2,6 +2,12 @@ NOTE: uriparser is looking for help with a few things:
       https://github.com/uriparser/uriparser/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
+2019-xx-xx -- 0.x.x
+
+  * Fixed: Link errors on Haiku regarding function inet_ntop (GitHub #45)
+      Thanks to Schrijvers Luc for the patch!
+  * Soname: TODO
+
 2019-01-02 -- 0.9.1
 
 >>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
