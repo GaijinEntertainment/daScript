@@ -133,7 +133,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         g_esBlockTable.push_back(tab);
         return err.empty();
     }
-    virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
+    virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList &, string & err ) override {
         if ( func->arguments.empty() ) {
             err = "function needs arguments";
             return false;

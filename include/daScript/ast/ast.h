@@ -1354,7 +1354,7 @@ namespace das
     };
 #if defined(_MSC_VER)
 #pragma warning(pop)
-##elif defined(__APPLE__)
+#elif defined(__APPLE__)
 #pragma clang diagnostic pop
 #endif
 

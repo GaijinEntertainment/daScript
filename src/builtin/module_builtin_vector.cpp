@@ -88,8 +88,8 @@ namespace das
     template <typename TT, int mask>
     struct SimPolicy_iVec {
         // setXYZW
-        static __forceinline vec4i setXYZW ( int32_t x, int32_t y, int32_t z, int32_t w ) {
-            return vec_set_pi_xyzw(x, y, z, w);
+        static __forceinline vec4f setXYZW ( int32_t x, int32_t y, int32_t z, int32_t w ) {
+            return vec_cast_esi_ps(vec_set_pi_xyzw(x, y, z, w));
         }
         // basic
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
@@ -247,6 +247,11 @@ namespace das
     template <typename TT, typename Policy, int vecS>
     struct SimNode_VecCtor;
     
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4244)
+#endif
+
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,1> : SimNode_CallBase {
         SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
@@ -297,6 +302,10 @@ namespace das
         }
     };
     
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
 #define ADD_VEC_CTOR_1(VTYPE) \
 addFunction ( make_shared<BuiltInFn<SimNode_Zero,VTYPE>> (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,1>,VTYPE,float>>   (#VTYPE,lib) ); \

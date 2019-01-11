@@ -374,6 +374,7 @@ namespace das
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4324)
+#pragma warning(disable:4701)
 #endif
     vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when) {
         char * saveSp = stackTop;
