@@ -151,7 +151,7 @@ namespace das {
 				if (block->isClosure) {
 					connect(block, block->list[0], "color=" + flow_color + " constraint=false");
 				}
-				for (int i = 1; i < block->list.size(); ++i) {
+				for (size_t i = 1; i < block->list.size(); ++i) {
 					connect(block->list[i - 1], block->list[i], "color=" + flow_color);
 				}
 			}

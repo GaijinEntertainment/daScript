@@ -199,7 +199,7 @@ namespace das
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(eval(context));                  \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef  EVAL_NODE
         SimNode * tabExpr;
         SimNode * keyExpr;

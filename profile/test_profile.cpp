@@ -70,8 +70,8 @@ int AddOne(int a) {
 struct EsAttribute {
     EsAttribute() = default;
     EsAttribute ( const string & n, uint32_t sz, bool rf, vec4f d )
-        : name(n), size(sz), ref(rf), def(d) {}
-	vec4f      def = vec_setzero_ps();
+        : def(d), name(n), size(sz), ref(rf) {}
+	vec4f       def = vec_setzero_ps();
     string      name;
     uint32_t    size = 0;
     bool        ref;

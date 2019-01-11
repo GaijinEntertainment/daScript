@@ -53,7 +53,7 @@ namespace das
     public:
         InteropFnBase(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
-            for ( int argi=0; argi!=args.size(); ++argi ) {
+            for ( size_t argi=0; argi!=args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
                 arg->name = "arg" + std::to_string(argi);
                 arg->type = args[argi];

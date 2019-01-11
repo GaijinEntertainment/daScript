@@ -139,7 +139,7 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             if ( !expr->func->noSideEffects ) {
-                for ( int ai=0; ai != expr->arguments.size(); ++ai ) {
+                for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                     const auto & argT = expr->func->arguments[ai]->type;
                     if ( argT->isRef() && !argT->isConst() ) {
                         propagateWrite(expr->arguments[ai].get());
@@ -150,7 +150,7 @@ namespace das {
     // LooksLikeCall
         virtual void preVisit ( ExprLooksLikeCall * expr ) override {
             Visitor::preVisit(expr);
-            for ( int ai=0; ai != expr->arguments.size(); ++ai ) {
+            for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                 const auto & argT = expr->arguments[ai]->type;
                 if ( argT->isRef() && !argT->isConst() ) {  // should we propagate const?
                     propagateWrite(expr->arguments[ai].get());

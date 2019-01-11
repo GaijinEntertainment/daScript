@@ -359,7 +359,7 @@ namespace das {
             if ( pFn->arguments.size() < types.size() ) {
                 return false;
             }
-            for ( auto ai = 0; ai != types.size(); ++ai ) {
+            for ( size_t ai = 0; ai != types.size(); ++ai ) {
 				if (!isMatchingArgument(pFn, pFn->arguments[ai]->type, types[ai],inferAuto,inferBlock)) {
 					return false;
 				}
@@ -374,7 +374,7 @@ namespace das {
 
 		string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
 			stringstream ss;
-			for (auto ai = 0; ai != types.size(); ++ai) {
+			for (size_t ai = 0; ai != types.size(); ++ai) {
 				auto & arg = pFn->arguments[ai];
 				auto & passType = types[ai];
 				if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {

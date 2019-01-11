@@ -375,7 +375,7 @@ namespace das
             DAS_NODE_EXCEPTION_POINT(CTYPE);                        \
             return * (CTYPE *)( prv + offset );                     \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
     };
 
@@ -481,7 +481,7 @@ namespace das
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(eval(context));                  \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef  EVAL_NODE
         SimNode ** arguments;
         int32_t  fnIndex;
@@ -500,7 +500,7 @@ namespace das
                 DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
                 return cast<CTYPE>::to(context.call(fnIndex, argValues, nullptr, debug.line));  \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef  EVAL_NODE
     };
     
@@ -516,7 +516,7 @@ namespace das
                 auto cmres = context.stackTop + stackTop;                                       \
                 return cast<CTYPE>::to(context.call(fnIndex, argValues, cmres, debug.line));    \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef  EVAL_NODE
     };
     
@@ -536,7 +536,7 @@ namespace das
                 return cast<CTYPE>::to(context.invoke(block, nullptr, nullptr));                \
             }                                                                                   \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef  EVAL_NODE
     };
     
@@ -558,7 +558,7 @@ namespace das
                 return cast<CTYPE>::to(context.invoke(block, nullptr, cmres));                  \
             }                                                                                   \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef  EVAL_NODE
     };
     
@@ -659,7 +659,7 @@ namespace das
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return *(CTYPE *)(context.stackTop + stackTop);         \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
     };
     
@@ -683,7 +683,7 @@ namespace das
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return **(CTYPE **)(context.stackTop + stackTop);       \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
     };
     
@@ -752,7 +752,7 @@ namespace das
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(context.abiArguments()[index]);  \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
         int32_t index;
     };
@@ -776,7 +776,7 @@ namespace das
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
             return * cast<CTYPE *>::to(context.abiArguments()[index]);      \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
     };
     
@@ -793,7 +793,7 @@ namespace das
             vec4f * args = *((vec4f **)(context.stackTop + stackTop));    \
             return cast<CTYPE>::to(args[index]);                            \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
         int32_t     index;
         uint32_t    stackTop;
@@ -813,7 +813,7 @@ namespace das
             vec4f * args = *((vec4f **)(context.stackTop + stackTop));    \
             return * cast<CTYPE *>::to(args[index]);                        \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
     };
     
@@ -850,7 +850,7 @@ namespace das
         virtual CTYPE eval##TYPE ( Context & context ) override {               \
             return *cast<CTYPE *>::to(context.globalVariables[index].value);    \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
     };
     
@@ -928,7 +928,7 @@ namespace das
             DAS_NODE_EXCEPTION_POINT(CTYPE);                        \
             return *pR;                                             \
 		}
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
         SimNode * subexpr;
     };
@@ -963,7 +963,7 @@ namespace das
             DAS_NODE_EXCEPTION_POINT(CTYPE);                        \
             return pR ? *pR : value->eval##TYPE(context);           \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
 
         SimNode * value;
@@ -998,7 +998,7 @@ namespace das
         virtual CTYPE eval##TYPE ( Context & ) override {			\
             return cast<CTYPE>::to(value);                          \
         }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
         vec4f value;
     };
@@ -1106,7 +1106,7 @@ namespace das
                     return (CTYPE) 0;                               \
                 }                                                   \
             }
-        DAS_EVAL_NODE;
+        DAS_EVAL_NODE
 #undef EVAL_NODE
         SimNode * cond, * if_true, * if_false;
     };

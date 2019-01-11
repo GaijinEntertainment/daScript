@@ -5,7 +5,11 @@
 #pragma warning(disable:4146)	// unsigned unary minus
 #pragma warning(disable:4996)	// swap ranges
 #pragma warning(disable:4201)	// nonstandard extension used : nameless struct / union
-//#pragma warning(disable:4234)
+#endif
+
+#ifdef __APPLE__
+#pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
+#pragma clang diagnostic ignored "-Wnested-anon-types"
 #endif
 
 #include <signal.h>

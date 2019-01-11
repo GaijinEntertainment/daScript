@@ -1212,6 +1212,9 @@ namespace das
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable:4100)	// unreferenced formal parameter
+#elif defined(__APPLE__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 #endif
     class Visitor {
     public:
@@ -1352,6 +1355,8 @@ namespace das
     };
 #if defined(_MSC_VER)
 #pragma warning(pop)
+##elif defined(__APPLE__)
+#pragma clang diagnostic pop
 #endif
 
     

@@ -168,7 +168,7 @@ namespace das
         virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const override {
             return context.makeNode<SimNode_Ref2Value<OT>>(at, l);
         }
-        virtual void debug ( stringstream & ss, void * data ) const override {
+        virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
             ss << (* (OT*)data);
         }
     };
