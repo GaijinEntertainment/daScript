@@ -213,6 +213,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\src\UriMemory.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\UriMemory.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\src\UriNormalize.c"
 				>
 			</File>
