@@ -9,19 +9,12 @@ rm -vf uriparser-*.tar.* uriparser-*.zip 2> /dev/null
 rm -vRf uriparser-* 2> /dev/null
 
 echo
-echo ========== bootstrap ==========
-./autogen.sh || exit 1
-
-echo
 echo ========== configure ==========
-configure_flags=(
-    --enable-doc
-)
-./configure "${configure_flags[@]}" || exit 1
+./configure || exit 1
 
 echo
 echo ========== make distcheck ==========
-make -j10 DISTCHECK_CONFIGURE_FLAGS="${configure_flags[*]}" distcheck || exit 1
+./make-distcheck.sh || exit 1
 
 echo
 echo ========== package docs ==========
