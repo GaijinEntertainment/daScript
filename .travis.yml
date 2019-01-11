@@ -13,6 +13,7 @@ addons:
     packages:
       - clang-7
       - cmake
+      - lzip
     # Documentation:
       - doxygen
       - graphviz
@@ -66,3 +67,4 @@ script:
   - make DESTDIR="${PWD}"/ROOT/ install
   - find ROOT | sort
   - popd
+  - ./make-distcheck.sh -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}  # without AddressSanitizer
