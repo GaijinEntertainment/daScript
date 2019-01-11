@@ -78,8 +78,6 @@ endif()
 #
 # config.h
 #
-# NOTE that add_compile_definitions would require CMake >=3.12
-add_definitions(-DHAVE_CONFIG_H)
 check_symbol_exists(wprintf wchar.h HAVE_WPRINTF)
 check_function_exists(reallocarray HAVE_REALLOCARRAY)  # no luck with CheckSymbolExists
 configure_file(src/UriConfig.h.in config.h)
