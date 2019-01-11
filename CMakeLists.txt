@@ -66,15 +66,6 @@ if(URIPARSER_BUILD_TESTS AND NOT (URIPARSER_BUILD_CHAR AND URIPARSER_BUILD_WCHAR
     message(FATAL_ERROR "URIPARSER_BUILD_TESTS=ON requires both URIPARSER_BUILD_CHAR=ON and URIPARSER_BUILD_WCHAR_T=ON.")
 endif()
 
-if(NOT URIPARSER_BUILD_CHAR)
-    # NOTE that add_compile_definitions would require CMake >=3.12
-    add_definitions(-DURI_NO_ANSI)
-endif()
-if(NOT URIPARSER_BUILD_WCHAR_T)
-    # NOTE that add_compile_definitions would require CMake >=3.12
-    add_definitions(-DURI_NO_UNICODE)
-endif()
-
 #
 # config.h
 #
@@ -130,6 +121,13 @@ set_property(
     PROPERTY
         PUBLIC_HEADER "${API_HEADER_FILES}"
 )
+
+if(NOT URIPARSER_BUILD_CHAR)
+    target_compile_definitions(uriparser PUBLIC -DURI_NO_ANSI)
+endif()
+if(NOT URIPARSER_BUILD_WCHAR_T)
+    target_compile_definitions(uriparser PUBLIC -DURI_NO_UNICODE)
+endif()
 
 target_include_directories(uriparser
     PUBLIC
