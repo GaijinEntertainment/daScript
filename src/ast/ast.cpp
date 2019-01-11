@@ -629,12 +629,11 @@ namespace das
     
     FunctionPtr Function::clone() const {
         auto cfun = make_shared<Function>();
-        // TODO:
-        //  what do we do with annotations?
         cfun->name = name;
         for ( const auto & arg : arguments ) {
             cfun->arguments.push_back(arg->clone());
         }
+        cfun->annotations = annotations;
         cfun->result = make_shared<TypeDecl>(*result);
         cfun->body = body->clone();
         cfun->index = -1;

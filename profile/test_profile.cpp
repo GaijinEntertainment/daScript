@@ -119,38 +119,28 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         }
     }
     virtual bool apply ( ExprBlock * block, const AnnotationArgumentList &, string & err ) override {
-        assert(block->isClosure);
-        if ( block->annotationData ) {
-            err = "annotation already specified";
-            return false;
-        }
         if ( block->arguments.empty() ) {
             err = "block needs arguments";
             return false;
         }
-        block->annotationData = (void *)(g_esBlockTable.size() | 0xbad00000);
-        g_esBlockTable.resize(g_esBlockTable.size() + 1);
         return true;
     }
     virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList &, string & err ) override {
-        size_t index = intptr_t(block->annotationData);
-        if ( (index & 0xfff00000) != 0xbad00000 ) {
-            err = "invalid block";
-            return false;
-        }
-        index &= 0x000fffff;
-        if ( index<0 || index>=g_esBlockTable.size() ) {
-            err = "invalid block";
-            return false;
-        }
-        buildAttributeTable(g_esBlockTable[index], block->arguments, err);
+        size_t index = g_esBlockTable.size();
+        block->annotationData = (void *)(index | 0xbad00000);
+        EsAttributeTable tab;
+        buildAttributeTable(tab, block->arguments, err);
+        g_esBlockTable.push_back(tab);
         return err.empty();
     }
     virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
-        if ( func->annotationData ) {
-            err = "annotation already specified";
+        if ( func->arguments.empty() ) {
+            err = "function needs arguments";
             return false;
         }
+        return true;
+    };
+    virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
         EsPassAttributeTable tab;
         if ( auto pp = args.find("pass", Type::tString) ) {
             tab.pass = pp->sValue;
@@ -159,17 +149,8 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             return false;
         }
         tab.functionName = func->name;
-        func->annotationData = (void *)(g_esPassTable.size());
+        buildAttributeTable(tab, func->arguments, err);
         g_esPassTable.push_back(tab);
-        return true;
-    };
-    virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList &, string & err ) override {
-        size_t index = intptr_t(func->annotationData);
-        if ( index<0 || index>=g_esPassTable.size() || g_esPassTable[index].functionName!=func->name ) {
-            err = "invalid function";
-            return false;
-        }
-        buildAttributeTable(g_esPassTable[index], func->arguments, err);
         return err.empty();
     }
 };

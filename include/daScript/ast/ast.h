@@ -1031,7 +1031,6 @@ namespace das
         string getLocationExtra() const;
     public:
         AnnotationList      annotations;
-        void *              annotationData = nullptr;   // to be filled with annotation
         string              name;
         vector<VariablePtr> arguments;
         TypeDeclPtr         result;
