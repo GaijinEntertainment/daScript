@@ -27,7 +27,11 @@ script:
     ; wget https://github.com/google/googletest/archive/release-${GTEST_VERSION}.tar.gz
     && tar xf release-${GTEST_VERSION}.tar.gz
     && ( cd googletest-release-${GTEST_VERSION}/
-      && cmake -DCVF_VERSION=${GTEST_VERSION} -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX} .
+      && cmake
+          -DBUILD_SHARED_LIBS=ON
+          -DCVF_VERSION=${GTEST_VERSION}
+          -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}
+          .
       && make
       && make install )
   - mkdir build
