@@ -232,7 +232,11 @@ endif()
 #
 if(URIPARSER_BUILD_DOCS)
     find_package(Doxygen REQUIRED dot doxygen)
-    find_program(QHG_LOCATION qhelpgenerator)
+    find_program(QHG_LOCATION
+        NAMES
+            qhelpgenerator
+            qhelpgenerator-qt5  # e.g. CentOS 7
+    )
     include(FindHTMLHelp)
 
     # Generate Doxyfile
