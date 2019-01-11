@@ -223,6 +223,8 @@ if(URIPARSER_BUILD_TESTS)
         COMMAND
             testrunner
     )
+
+    add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 endif()
 
 #
@@ -309,7 +311,7 @@ message("  Documentation ........ ${URIPARSER_BUILD_DOCS}")
 message("")
 message("Continue with")
 message("  make")
-message("  make test")
+message("  make check")
 message("  sudo make install")
 message("")
 message("===========================================================================")
