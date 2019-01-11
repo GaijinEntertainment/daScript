@@ -1,4 +1,3 @@
-Makefile
 /config.h
 /build/
 /CMakeCache.txt
@@ -10,6 +9,7 @@ Makefile
 /liburiparser.a
 /liburiparser.pc
 /liburiparser.so*
+/Makefile
 /Testing/
 /testrunner
 /uriparser-*.tar.bz2
