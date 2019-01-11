@@ -770,6 +770,9 @@ expr
             $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@name),*$name),$arguments);
             delete $name;
         }
+    |   basic_type_declaration[type] '(' ')' {
+        $$ = g_Program->makeCall(tokAt(@type),to_string($type));
+    }
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
             $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),to_string($type)),$arguments);
         }

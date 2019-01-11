@@ -175,13 +175,13 @@
         BEGIN(strb);
         return BEGIN_STRING;
     }
-<normal>0[xX][0-9a-fA-F]+                               return sscanf(yytext, "%u", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
+<normal>0[xX][0-9a-fA-F]+                               return sscanf(yytext, "%i", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                    return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9]+(l|L)?                                    return sscanf(yytext, "%i", &yylval.i)!=1 ? LEXER_ERROR : INTEGER;
-<normal>0[xX][0-9a-fA-F]+(u|U)                          return sscanf(yytext, "%u", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
+<normal>0[xX][0-9a-fA-F]+(u|U)                          return sscanf(yytext, "%i", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>[0-9]+(u|U)                                     return sscanf(yytext, "%u", &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>\)                                  {
     if ( !nested_parentheses ) {

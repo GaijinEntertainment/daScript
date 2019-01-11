@@ -65,7 +65,7 @@ namespace das {
         #endif
     }
 // vec4
-    __forceinline vec4f vec_set_xyzw ( float x, float y, float z, float w ) {
+    __forceinline vec4f vec_set_ps_xyzw ( float x, float y, float z, float w ) {
         return _mm_setr_ps(x,y,z,w);
     }
     __forceinline vec4f vec_setzero_ps () {
@@ -107,6 +107,9 @@ namespace das {
         return r;
     }
 // vec4i
+    __forceinline vec4i vec_set_pi_xyzw ( int32_t x, int32_t y, int32_t z, int32_t w ) {
+        return _mm_setr_epi32(x,y,z,w);
+    }
     __forceinline vec4i vec_setzero_epi () {
         return _mm_setzero_si128();
     }

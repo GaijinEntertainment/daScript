@@ -1,10 +1,6 @@
-options log=true, logStack = false
-
-def addX(a,b)
-    assert(b==2 | b==3)
-    return a + b
+// note: don't enable optimize on the math runtime tests
+// functions bellow optimizes to literally nothing otherwise
+options log=false, optimize=false
 
 def test
-    let t = 12 |> addX(2) |> addX(3)
-    assert(t==17)
     return true

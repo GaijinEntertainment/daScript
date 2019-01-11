@@ -27,15 +27,13 @@ def testInterop(objects:ObjectArray)
     for obj in objects
         interopUpdate(obj)
 
-def initObj(index:int;a:Object)
-    let ( oi = float(index); ii=oi*2.0 )
-        a.position=float3(oi+0.1,oi+0.2,oi+0.3)
-        a.velocity=float3(1.0,2.0,3.0)
+def initObj(i:int;a:Object)
+    a.position=float3(i++,i+1,i+2)
+    a.velocity=float3(1.0,2.0,3.0)
 
-def initObj(index:int;a:NObject)
-    let ( oi=float(index); ii=oi*2.0 )
-        a.position=float3(oi+0.1,oi+0.2,oi+0.3)
-        a.velocity=float3(1.0,2.0,3.0)
+def initObj(i:int;a:NObject)
+    a.position=float3(i++,i+1,i+2)
+    a.velocity=float3(1.0,2.0,3.0)
 
 def init(objects:ObjectArray)
     let index = 0
@@ -50,32 +48,22 @@ def init(objects:NObject[10000])
     assert(index==10000)
 
 def verify(total:int;objects:ObjectArray)
-    // print("\n")
-    let index = 0
+    let i = 0
     let t = float(total)
     for obj in objects
-        let ( oi=float(index); ii=oi*2.0 )
-            let apos = float3(oi+0.1,oi+0.2,oi+0.3)
-            let avel = float3(1.0,2.0,3.0)
-            let npos = apos + avel*t
-            // debug(npos,"npos=")
-            // debug(obj.position,"obj.position=")
-            assert(obj.position==npos)
-            index ++
+        let apos = float3(i++,i+1,i+2)
+        let avel = float3(1.0,2.0,3.0)
+        let npos = apos + avel*t
+        assert(obj.position==npos)
 
 def verify(total:int;objects:NObject[10000])
-    // print("\n")
-    let index = 0
+    let i = 0
     let t = float(total)
     for obj in objects
-        let ( oi=float(index); ii=oi*2.0 )
-            let apos = float3(oi+0.1,oi+0.2,oi+0.3)
-            let avel = float3(1.0,2.0,3.0)
-            let npos = apos + avel*t
-            // debug(npos,"npos=")
-            // debug(obj.position,"obj.position=")
-            assert(obj.position==npos)
-            index ++
+        let apos = float3(i++,i+1,i+2)
+        let avel = float3(1.0,2.0,3.0)
+        let npos = apos + avel*t
+        assert(obj.position==npos)
 
 def test(objects:ObjectArray)
     let(simTN,simT,cT,intT,manyT,manyKsT:float)

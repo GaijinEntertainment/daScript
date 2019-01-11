@@ -591,42 +591,6 @@ namespace das
             return cast<char *>::from(cpy);
         }
     };
-    
-    // VECTOR C-TOR
-    template <int vecS>
-	struct SimNode_VecCtor;
-
-	template <>
-	struct SimNode_VecCtor<2> : SimNode_CallBase {
-		SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
-		virtual vec4f eval(Context & context) override {
-			vec4f argValues[2];
-			evalArgs(context, argValues);
-			return vec_set_xyzw(cast<float>::to(argValues[0]), cast<float>::to(argValues[1]),0.0f, 0.0f);
-		}
-	};
-
-	template <>
-	struct SimNode_VecCtor<3> : SimNode_CallBase {
-		SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
-		virtual vec4f eval(Context & context) override {
-			vec4f argValues[3];
-			evalArgs(context, argValues);
-			return vec_set_xyzw(cast<float>::to(argValues[0]), cast<float>::to(argValues[1]),
-					cast<float>::to(argValues[2]), 0.0f);
-		}
-	};
-
-	template <>
-	struct SimNode_VecCtor<4> : SimNode_CallBase {
-		SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
-		virtual vec4f eval(Context & context) override {
-			vec4f argValues[4];
-			evalArgs(context, argValues);
-			return vec_set_xyzw(cast<float>::to(argValues[0]), cast<float>::to(argValues[1]),
-				cast<float>::to(argValues[2]), cast<float>::to(argValues[3]));
-		}
-	};
 
 	// "DEBUG"
     struct SimNode_Debug : SimNode {
@@ -1001,6 +965,19 @@ namespace das
         DAS_EVAL_NODE
 #undef EVAL_NODE
         vec4f value;
+    };
+    
+    struct SimNode_Zero : SimNode {
+        SimNode_Zero(const LineInfo & at) : SimNode(at) { }
+        virtual vec4f eval ( Context & ) override {
+            return vec_setzero_ps();
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & ) override {			\
+            return 0;                                               \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
     };
     
     // COPY REFERENCE (int & a = b)

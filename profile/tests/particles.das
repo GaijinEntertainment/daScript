@@ -24,13 +24,11 @@ def testSim2I(objects:array<NObject>; count:int)
 
 def init(objects:array<NObject>)
     resize(objects, 50000)
-    let index = 0
+    let i = 0
     for obj in objects
-        let oi = float(index++)
-		let ii = oi*2.0
-        obj.position=float3(oi+0.1,oi+0.2,oi+0.3)
+        obj.position=float3(i++,i+1,i+2)
         obj.velocity=float3(1.0,2.0,3.0)
-    assert(index==length(objects))
+    assert(i==length(objects))
 
 def test()
     let objects:array<NObject>
