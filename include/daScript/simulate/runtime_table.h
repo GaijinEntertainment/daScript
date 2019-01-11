@@ -9,16 +9,16 @@ namespace das
     // TODO:
     //  -   return correct insert index of original value? is this at all possible?
     //  -   throw runtime error in the context, when grow inside locked table (recover well)
-    
+
     extern const char * rts_null;
-    
+
     template <typename KeyType>
     struct KeyCompare {
         __forceinline bool operator () ( const KeyType & a, const KeyType & b ) {
             return a == b;
         }
     };
-    
+
     template <>
     struct KeyCompare <char *> {
         __forceinline bool operator () ( const char * a, const char * b ) {
@@ -27,8 +27,8 @@ namespace das
             return strcmp(A,B)==0;
         }
     };
-    
-    
+
+
     template <typename KeyType>
     class RobinHoodHash {
         Context *   context = nullptr;
@@ -202,11 +202,11 @@ namespace das
             }
         }
     };
-    
+
     void table_clear ( Context & context, Table & arr );
     void table_lock ( Context & context, Table & arr );
     void table_unlock ( Context & context, Table & arr );
-    
+
     struct SimNode_Table : SimNode {
         SimNode_Table(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
             : SimNode(at), tabExpr(t), keyExpr(k), valueTypeSize(vts) {}
@@ -222,7 +222,7 @@ namespace das
         SimNode * keyExpr;
         uint32_t valueTypeSize;
     };
-    
+
     template <typename KeyType>
     struct SimNode_TableIndex : SimNode_Table {
 		DAS_PTR_NODE;
@@ -247,7 +247,7 @@ namespace das
             return tab->data + at.first * valueTypeSize;
         }
     };
-    
+
     template <typename KeyType>
     struct SimNode_TableErase : SimNode_Table {
         SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
@@ -257,7 +257,7 @@ namespace das
             return cast<bool>::from(it.second);
         }
     };
-    
+
     template <typename KeyType>
     struct SimNode_TableFind : SimNode_Table {
 		DAS_PTR_NODE;
@@ -276,7 +276,7 @@ namespace das
 			return at.second ? tab->data + at.first * valueTypeSize : nullptr;
 		}
     };
-    
+
     struct TableIterator : Iterator {
         size_t nextValid ( Table * tab, size_t index ) const;
         virtual bool first ( Context & context, IteratorContext & itc ) override;
@@ -286,15 +286,15 @@ namespace das
         SimNode *   source;
         uint32_t    stride;
     };
-    
+
     struct TableKeysIterator : TableIterator {
         virtual char * getData ( Table * tab ) const override;
     };
-    
+
     struct TableValuesIterator : TableIterator {
         virtual char * getData ( Table * tab ) const override;
     };
-    
+
     template <typename IterType>
     struct SimNode_TableIterator : SimNode {
         SimNode_TableIterator(const LineInfo & at, SimNode * sk, uint32_t stride)

@@ -1,7 +1,7 @@
 #pragma once
 
 namespace  das {
-    
+
     template  <typename SimT, typename RetT, typename ...Args>
     class BuiltInFn : public BuiltInFunction {
     public:
@@ -41,7 +41,7 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Equ<TT>,         bool, TT,  TT>  >("==",     lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_NotEqu<TT>,      bool, TT,  TT>  >("!=",     lib) );
     }
-    
+
     // built-in boolean types
     template <typename TT>
     void addFunctionBoolean(Module & mod, const ModuleLibrary & lib) {
@@ -54,7 +54,7 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolOr<TT>,   void, TT&, TT>  >("|=",     lib)->sideEffects(true) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolXor<TT>,  void, TT&, TT>  >("^=",     lib)->sideEffects(true) );
     }
-    
+
     // ordered types
     template <typename TT>
     void addFunctionOrdered(Module & mod, const ModuleLibrary & lib) {
@@ -64,7 +64,7 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Gt<TT>,         bool, TT,  TT>  >(">",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Less<TT>,       bool, TT,  TT>  >("<",      lib) );
     }
-    
+
 
     // concatination types
     template <typename TT>
@@ -73,7 +73,7 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Add<TT>,        TT,   TT,  TT>  >("+",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetAdd<TT>,     void, TT&, TT>  >("+=",     lib)->sideEffects(true) );
     }
-    
+
     // group by add
     template <typename TT>
     void addFunctionGroupByAdd(Module & mod, const ModuleLibrary & lib) {
@@ -84,7 +84,7 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Sub<TT>,        TT,   TT,  TT>  >("-",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<TT>,     void, TT&, TT>  >("-=",     lib)->sideEffects(true) );
     }
-    
+
     // numeric types
     template <typename TT>
     void addFunctionNumeric(Module & mod, const ModuleLibrary & lib) {
@@ -99,7 +99,7 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_SetMul<TT>,  void, TT&, TT>  >("*=",     lib)->sideEffects(true) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetDiv<TT>,  void, TT&, TT>  >("/=",     lib)->sideEffects(true) );
     }
-    
+
     // numeric types
     template <typename TT>
     void addFunctionNumericWithMod(Module & mod, const ModuleLibrary & lib) {
@@ -107,7 +107,7 @@ namespace  das {
         //                                     policy       ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Mod<TT>, TT,   TT,  TT>  >("%",      lib) );
     }
-    
+
     // vector-scalar combinations
     template <typename TT, typename TTS>
     void addFunctionVecNumeric(Module & mod, const ModuleLibrary & lib) {
@@ -119,7 +119,7 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<TT>,  void, TT&, TT>  >("*=",   lib)->sideEffects(true) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<TT>,  void, TT&, TT>  >("/=",   lib)->sideEffects(true) );
     }
-    
+
     // inc-dec
     template <typename TT>
     void addFunctionIncDec(Module & mod, const ModuleLibrary & lib) {
@@ -129,7 +129,7 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_IncPost<TT>,    TT,   TT&>      >("+++",    lib)->sideEffects(true) );
         mod.addFunction( make_shared<BuiltInFn<Sim_DecPost<TT>,    TT,   TT&>      >("---",    lib)->sideEffects(true) );
     }
-    
+
     // built-in numeric types
     template <typename TT>
     void addFunctionBit(Module & mod, const ModuleLibrary & lib) {

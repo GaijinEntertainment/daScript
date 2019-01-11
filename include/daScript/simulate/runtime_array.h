@@ -10,7 +10,7 @@ namespace das
     void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride );
     void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero );
     void array_clear ( Context & context, Array & arr );
-    
+
     // AT (INDEX)
     struct SimNode_ArrayAt : SimNode {
         DAS_PTR_NODE;
@@ -32,7 +32,7 @@ namespace das
         SimNode * l, * r;
         uint32_t stride;
     };
-    
+
     struct GoodArrayIterator : Iterator {
         virtual bool first ( Context & context, IteratorContext & itc ) override;
         virtual bool next  ( Context & context, IteratorContext & itc ) override;
@@ -40,13 +40,13 @@ namespace das
         SimNode *   source;
         uint32_t    stride;
     };
-    
+
     struct SimNode_GoodArrayIterator : SimNode, GoodArrayIterator {
         SimNode_GoodArrayIterator ( const LineInfo & at, SimNode * s, uint32_t st )
             : SimNode(at) { source = s; stride = st; }
         virtual vec4f eval ( Context & context ) override;
     };
-    
+
     struct FixedArrayIterator : Iterator {
         virtual bool first ( Context & context, IteratorContext & itc ) override;
         virtual bool next  ( Context & context, IteratorContext & itc ) override;
@@ -55,13 +55,13 @@ namespace das
         uint32_t    size;
         uint32_t    stride;
     };
-    
+
     struct SimNode_FixedArrayIterator : SimNode, FixedArrayIterator {
         SimNode_FixedArrayIterator ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t st )
             : SimNode(at) { source = s; size = sz; stride = st; }
         virtual vec4f eval ( Context & context ) override;
     };
-    
+
     template <int total>
     struct SimNode_ForGoodArray : public SimNode_ForBase {
         SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
@@ -96,7 +96,7 @@ namespace das
             return v_zero();
         }
     };
-    
+
     // FOR
     template <int total>
     struct SimNode_ForFixedArray : SimNode_ForBase {

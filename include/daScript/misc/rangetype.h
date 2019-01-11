@@ -14,7 +14,7 @@ namespace das
             return from==vec.from && to==vec.to;
         }
     };
-    
+
     typedef RangeType<int32_t>  range;
     typedef RangeType<uint32_t> urange;
 }

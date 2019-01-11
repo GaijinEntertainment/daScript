@@ -5,7 +5,7 @@
 namespace das
 {
     using namespace std;
-    
+
     template <typename OT>
     struct ManagedStructureAnnotation  : TypeAnnotation {
         struct StructureField {
@@ -75,7 +75,7 @@ namespace das
         }
         map<string,StructureField> fields;
     };
-    
+
     template <typename OT>
     struct ManagedVectorAnnotation : TypeAnnotation {
         typedef vector<OT> VectorType;
@@ -164,7 +164,7 @@ namespace das
         }
         TypeDeclPtr vecType;
     };
-    
+
     template <typename OT>
     struct ManagedValueAnnotation : TypeAnnotation {
         static_assert(sizeof(OT)<=sizeof(vec4f), "value types have to fit in ABI");
