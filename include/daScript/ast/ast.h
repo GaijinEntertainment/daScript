@@ -85,6 +85,9 @@ namespace das
         bool isFoldable() const;
         bool isAlias() const;
         bool isAuto() const;
+        bool isVectorType() const;
+        Type getVectorBaseType() const;
+        int getVectorDim() const;
         Type getRangeBaseType() const;
         const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
         Type                baseType = Type::tVoid;

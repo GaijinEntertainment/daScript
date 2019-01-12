@@ -946,7 +946,11 @@ namespace das {
                     error("index must int or uint", expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
-                if ( seT->isGoodArrayType() ) {
+                if ( seT->isVectorType() ) {
+                    expr->type = make_shared<TypeDecl>(seT->getVectorBaseType());
+                    expr->type->ref = seT->ref;
+                    expr->type->constant = seT->constant;
+                } else if ( seT->isGoodArrayType() ) {
                     expr->type = make_shared<TypeDecl>(*seT->firstType);
                     expr->type->ref = true;
                     expr->type->constant |= seT->constant;

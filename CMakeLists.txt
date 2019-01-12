@@ -22,6 +22,7 @@ SET(PARSER_SRC
 src/parser/ds_parser.ypp
 src/parser/ds_lexer.lpp
 )
+list(SORT PARSER_SRC)
 SOURCE_GROUP_FILES("parser" PARSER_SRC)
 SOURCE_GROUP_FILES("parser/generated" PARSER_GENERATED_SRC)
 
@@ -50,6 +51,7 @@ include/daScript/ast/ast_interop.h
 include/daScript/ast/ast_handle.h
 include/daScript/ast/ast_policy_types.h
 )
+list(SORT AST_SRC)
 SOURCE_GROUP_FILES("ast" AST_SRC)
 
 SET(BUILTIN_SRC
@@ -59,6 +61,7 @@ src/builtin/module_builtin_runtime.cpp
 src/builtin/module_builtin_vector.cpp
 src/builtin/module_builtin_time.cpp
 )
+list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 
 SET(MISC_SRC
@@ -70,6 +73,7 @@ include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
 include/daScript/misc/rangetype.h
 )
+list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
 
 SET(SIMULATE_SRC
@@ -93,6 +97,7 @@ include/daScript/simulate/runtime_profile.h
 include/daScript/simulate/simulate.h
 include/daScript/simulate/sim_policy.h
 )
+list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
 include_directories(include ".")
@@ -151,6 +156,7 @@ include/daScript/misc/platform.h
 test/main.cpp
 test/test_handles.cpp
 )
+list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)
 
 include_directories(include lexer test)
@@ -173,6 +179,7 @@ include/daScript/misc/platform.h
 profile/main.cpp
 profile/test_profile.cpp
 )
+list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)
 
 include_directories(include lexer)

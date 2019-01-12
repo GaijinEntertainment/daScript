@@ -79,3 +79,4 @@ def test
     test_vec2(range())
     test_vec2(urange())
     return true
+

@@ -89,7 +89,7 @@ namespace das
         addFunctionIncDec<uint32_t>(*this,lib);
         addFunctionOrdered<uint32_t>(*this,lib);
         addFunctionBit<uint32_t>(*this,lib);
-        ADD_NUMERIC_CASTS(uint, int32_t);
+        ADD_NUMERIC_CASTS(uint, uint32_t);
         // int64
         addFunctionBasic<int64_t>(*this,lib);
         addFunctionNumericWithMod<int64_t>(*this,lib);

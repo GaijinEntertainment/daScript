@@ -469,6 +469,37 @@ namespace das
         uint32_t  stride, range;
     };
     
+    // AT (INDEX)
+    template <typename TT>
+    struct SimNode_AtVector;
+    
+#define SIM_NODE_AT_VECTOR(TYPE,CTYPE)                                                          \
+    template <>                                                                                 \
+    struct SimNode_AtVector<CTYPE> : SimNode {                                                  \
+        SimNode_AtVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t rng )     \
+            : SimNode(at), value(rv), index(idx), range(rng) {}                                 \
+        __forceinline CTYPE compute ( Context & context ) {                                     \
+            auto vec = value->eval(context);                                                    \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
+            uint32_t idx = cast<uint32_t>::to(index->eval(context));                            \
+            DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
+            if (idx >= range) {                                                                 \
+                context.throw_error("index out of range");                                      \
+                return (CTYPE) 0;                                                               \
+            } else {                                                                            \
+                CTYPE * pv = (CTYPE *) &vec;                                                    \
+                return pv[idx];                                                                 \
+            }                                                                                   \
+        }                                                                                       \
+        DAS_NODE(TYPE, CTYPE)                                                                   \
+        SimNode * value, * index;                                                               \
+        uint32_t  range;                                                                        \
+    };
+
+SIM_NODE_AT_VECTOR(Int,   int32_t)
+SIM_NODE_AT_VECTOR(UInt,  uint32_t)
+SIM_NODE_AT_VECTOR(Float, float)
+
     // FUNCTION CALL
     struct SimNode_CallBase : SimNode {
         SimNode_CallBase ( const LineInfo & at ) : SimNode(at) {}

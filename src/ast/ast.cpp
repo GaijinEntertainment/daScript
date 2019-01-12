@@ -123,7 +123,7 @@ namespace das
     const TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) const {
 		if (baseType == Type::alias) {
 			return nullptr; // if it is another alias, can't find it
-		} else if (alias == name) {
+        } else if (alias == name) {
 			return this;
 		}
         if ( baseType==Type::tPointer ) {
@@ -301,6 +301,67 @@ namespace das
             if ( constant!=decl.constant )
                 return false;
         return true;
+    }
+    
+    bool TypeDecl::isVectorType() const {
+        if ( dim.size() ) return false;
+        switch (baseType) {
+            case tInt2:
+            case tInt3:
+            case tInt4:
+            case tUInt2:
+            case tUInt3:
+            case tUInt4:
+            case tFloat2:
+            case tFloat3:
+            case tFloat4:
+            case tRange:
+            case tURange:
+                return true;
+            default:
+                return false;
+        }
+    }
+    
+    int TypeDecl::getVectorDim() const {
+        switch (baseType) {
+            case tInt2:
+            case tUInt2:
+            case tFloat2:
+            case tRange:
+            case tURange:
+                return 2;
+            case tInt3:
+            case tUInt3:
+            case tFloat3:
+                return 3;
+            case tInt4:
+            case tUInt4:
+            case tFloat4:
+                return 4;
+            default:
+                assert(0 && "we should not even be here");
+                return 0;
+        }
+    }
+    
+    Type TypeDecl::getVectorBaseType() const {
+        switch (baseType) {
+            case tInt2:
+            case tInt3:
+            case tInt4:     return Type::tInt;
+            case tUInt2:
+            case tUInt3:
+            case tUInt4:    return Type::tUInt;
+            case tFloat2:
+            case tFloat3:
+            case tFloat4:   return Type::tFloat;
+            case tRange:    return Type::tInt;
+            case tURange:   return Type::tUInt;
+            default:
+                assert(0 && "we should not even be here");
+                return Type::none;
+        }
     }
     
     bool TypeDecl::isGoodIteratorType() const {
@@ -1150,8 +1211,22 @@ namespace das
     SimNode * ExprAt::simulate (Context & context) const {
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
-        SimNode * result;
-        if ( subexpr->type->isGoodTableType() ) {
+        SimNode * result = nullptr;
+        if ( subexpr->type->isVectorType() ) {
+            uint32_t range = subexpr->type->getVectorDim();
+            uint32_t stride = type->getSizeOf();
+            if ( subexpr->type->ref ) {
+                result = context.makeNode<SimNode_At>(at, prv, pidx, stride, range);
+            } else {
+                switch ( type->baseType ) {
+                    case tInt:      return context.makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range);
+                    case tUInt:     return context.makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range);
+                    case tFloat:    return context.makeNode<SimNode_AtVector<float>>(at, prv, pidx, range);
+                    default:
+                        assert(0 && "we should not even be here");
+                }
+            }
+        } else if ( subexpr->type->isGoodTableType() ) {
             uint32_t valueTypeSize = subexpr->type->secondType->getSizeOf();
             result = context.makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize);
         } else if ( subexpr->type->isGoodArrayType() ) {
