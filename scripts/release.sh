@@ -10,7 +10,7 @@ rm -vRf uriparser-* 2> /dev/null
 
 echo
 echo ========== configure ==========
-./configure || exit 1
+cmake . || exit 1
 
 echo
 echo ========== make distcheck ==========

@@ -70,9 +70,9 @@ check_tarball() (
         mkdir build
         cd build
 
-        ../configure "${@:2}"
+        cmake "${@:2}" ..
         make
-        make check
+        make test
         make DESTDIR="${PWD}"/ROOT/ install
     )
     rm -Rf "${tarname}"
