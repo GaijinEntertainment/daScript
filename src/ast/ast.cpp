@@ -123,7 +123,10 @@ namespace das
     const TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) const {
 		if (baseType == Type::alias) {
 			return nullptr; // if it is another alias, can't find it
-        } else if (alias == name) {
+        } else if (baseType == Type::autoinfer && !allowAuto) {
+			return nullptr; // if it has not been infered yet, can't find it
+		}
+		else if (alias == name) {
 			return this;
 		}
         if ( baseType==Type::tPointer ) {
@@ -144,8 +147,6 @@ namespace das
                 }
             }
             return firstType->findAlias(name,allowAuto);
-        } else if ( baseType==Type::autoinfer && !allowAuto) {
-            return nullptr; // if it has not been infered yet, can't find it
         } else {
 			return nullptr;
         }
