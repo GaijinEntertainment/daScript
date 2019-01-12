@@ -348,6 +348,21 @@ namespace das
         const char *    message;
     };
     
+    // VECTOR SWIZZLE
+    // TODO: make at least 3 different versions
+    struct SimNode_Swizzle : SimNode {
+        SimNode_Swizzle ( const LineInfo & at, SimNode * rv, uint8_t * fi )
+            : SimNode(at), value(rv) {
+                fields[0] = fi[0];
+                fields[1] = fi[1];
+                fields[2] = fi[2];
+                fields[3] = fi[3];
+            }
+        virtual vec4f eval ( Context & context ) override;
+        SimNode *   value;
+        uint8_t     fields[4];
+    };
+    
     // FIELD .
     struct SimNode_FieldDeref : SimNode {
         DAS_PTR_NODE;

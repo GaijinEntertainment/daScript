@@ -58,6 +58,11 @@ namespace das {
             Visitor::preVisit(expr);
             expr->noSideEffects = !expr->write;
         }
+    // swizzle
+        virtual void preVisit ( ExprSwizzle * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = !expr->write;
+        }
     // field
         virtual void preVisit ( ExprField * expr ) override {
             Visitor::preVisit(expr);
@@ -195,6 +200,17 @@ namespace das {
             return nullptr;
         }
     protected:
+    // swizzle
+        virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
+            if ( expr->type->baseType == expr->value->type->baseType ) {
+                if ( expr->fields[0]==0 && TypeDecl::isSequencialMask(expr->fields) ) {
+                    if ( !expr->r2v ) {
+                        return expr->value;
+                    }
+                }
+            }
+            return Visitor::visit(expr);
+        }
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             if ( expr->type->isFoldable() && expr->subexpr->constexpression ) {

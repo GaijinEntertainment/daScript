@@ -43,6 +43,20 @@ namespace das
         return cast<char *>::to(eval(context));
     }
     
+    vec4f SimNode_Swizzle::eval ( Context & context ) {
+        union {
+            vec4f   res;
+            float   val[4];
+        } R, S;
+        S.res = value->eval(context);
+        DAS_EXCEPTION_POINT;
+        R.val[0] = S.val[fields[0]];
+        R.val[1] = S.val[fields[1]];
+        R.val[2] = S.val[fields[2]];
+        R.val[3] = S.val[fields[3]];
+        return R.res;
+    }
+    
     // SimNode_MakeBlock
     
     vec4f SimNode_MakeBlock::eval ( Context & context )  {

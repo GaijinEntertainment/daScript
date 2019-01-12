@@ -30,6 +30,7 @@ namespace das
     ,   invalid_new_type                        =   30109       //  new int&, new int
     ,   invalid_index_type                      =   30110       //  a[wtf]
     ,   invalid_annotation                      =   30111       //  [wtf] a
+    ,   invalid_swizzle_mask                    =   30112       //  vec.xxxxx or vec.xAz or vec.wtf
         
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)

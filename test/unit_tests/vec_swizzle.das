@@ -1,5 +1,3 @@
-options log=false, optimize = true, printRef=true, printVarAccess=true
-
 def test_vec2(a:auto(vec2)!const !&)
     let f2_x  = vec2(1,2)
     let x : auto(numT) = f2_x[0]
@@ -70,3 +68,4 @@ def test
     test_vec3(uint3())
     test_vec4(uint4())
     return true
+

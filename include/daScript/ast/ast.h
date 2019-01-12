@@ -88,6 +88,9 @@ namespace das
         bool isVectorType() const;
         Type getVectorBaseType() const;
         int getVectorDim() const;
+        static Type getVectorType ( Type baseType, int dim );
+        static bool isSequencialMask ( vector<uint8_t> & fields );
+        static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
         Type getRangeBaseType() const;
         const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
         Type                baseType = Type::tVoid;
@@ -358,6 +361,7 @@ namespace das
         virtual bool rtti_isBlock() const { return false; }
         virtual bool rtti_isVar() const { return false; }
         virtual bool rtti_isField() const { return false; }
+        virtual bool rtti_isSwizzle() const { return false; }
         virtual bool rtti_isSafeField() const { return false; }
         virtual bool rtti_isAt() const { return false; }
         virtual bool rtti_isOp3() const { return false; }
@@ -523,8 +527,18 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isSwizzle() const override { return true; }
         ExpressionPtr   value;
         string          mask;
+        vector<uint8_t> fields;
+        union {
+            struct {
+                bool        r2v : 1;
+                bool        r2cr : 1;
+                bool        write : 1;
+            };
+            uint32_t fieldFlags = 0;
+        };
     };
     
     struct ExprSafeField : ExprField {

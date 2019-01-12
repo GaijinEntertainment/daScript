@@ -31,7 +31,11 @@ namespace das {
                 auto field = (ExprField *) expr;
                 field->r2cr = true;
                 propagateRead(field->value.get());
-            } else if ( expr->rtti_isAt() ) {
+            } else if ( expr->rtti_isSwizzle() ) {
+                auto swiz = (ExprSwizzle *) expr;
+                swiz->r2cr = true;
+                propagateRead(swiz->value.get());
+            }else if ( expr->rtti_isAt() ) {
                 auto at = (ExprAt *) expr;
                 at->r2cr = true;
                 propagateRead(at->subexpr.get());
@@ -62,7 +66,11 @@ namespace das {
                 auto field = (ExprField *) expr;
                 field->write = true;
                 propagateWrite(field->value.get());
-            } else if ( expr->rtti_isAt() ) {
+            } else if ( expr->rtti_isSwizzle() ) {
+                auto swiz = (ExprField *) expr;
+                swiz->write = true;
+                propagateWrite(swiz->value.get());
+            }else if ( expr->rtti_isAt() ) {
                 auto at = (ExprAt *) expr;
                 at->write = true;
                 propagateWrite(at->subexpr.get());

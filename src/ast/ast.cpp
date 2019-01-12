@@ -304,6 +304,47 @@ namespace das
         return true;
     }
     
+    // validate swizzle mask and build mask type
+    
+    bool TypeDecl::isSequencialMask ( vector<uint8_t> & fields ) {
+        for ( size_t i=1; i<fields.size(); ++i ) {
+            if ( (fields[i-1]+1)!=fields[i] ) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    bool TypeDecl::buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields ) {
+        fields.clear();
+        for ( auto ch : mask ) {
+            int field = -1;
+            switch ( ch ) {
+                case 'x':
+                case 'X':
+                    field = 0;
+                    break;
+                case 'y':
+                case 'Y':
+                    field = 1;
+                    break;
+                case 'z':
+                case 'Z':
+                    field = 2;
+                    break;
+                case 'w':
+                case 'W':
+                    field = 3;
+                    break;
+            }
+            if ( field==-1 || field>=dim ) {
+                return false;
+            }
+            fields.push_back(field);
+        }
+        return fields.size()>=1 && fields.size()<=4;
+    }
+    
     bool TypeDecl::isVectorType() const {
         if ( dim.size() ) return false;
         switch (baseType) {
@@ -362,6 +403,35 @@ namespace das
             default:
                 assert(0 && "we should not even be here");
                 return Type::none;
+        }
+    }
+    
+    Type TypeDecl::getVectorType ( Type bt, int dim ) {
+        if ( dim==1 ) return bt;
+        if ( bt==Type::tFloat ) {
+            switch ( dim ) {
+                case 2:     return Type::tFloat2;
+                case 3:     return Type::tFloat3;
+                case 4:     return Type::tFloat4;
+                default:    assert(0 && "we should not be here"); return Type::none;
+            }
+        } else if ( bt==Type::tInt ) {
+            switch ( dim ) {
+                case 2:     return Type::tInt2;
+                case 3:     return Type::tInt3;
+                case 4:     return Type::tInt4;
+                default:    assert(0 && "we should not be here"); return Type::none;
+            }
+        } else if ( bt==Type::tUInt ) {
+            switch ( dim ) {
+                case 2:     return Type::tUInt2;
+                case 3:     return Type::tUInt3;
+                case 4:     return Type::tUInt4;
+                default:    assert(0 && "we should not be here"); return Type::none;
+            }
+        } else {
+            assert(0 && "we should not be here");
+            return Type::none;
         }
     }
     
@@ -1353,7 +1423,28 @@ namespace das
     }
     
     SimNode * ExprSwizzle::simulate (Context & context) const {
-        return nullptr;
+        uint32_t offset = fields[0] * sizeof(float);
+        auto simV = value->simulate(context);
+        if ( type->ref ) {
+            if ( r2v ) {
+                return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,simV,offset);
+            } else {
+                return context.makeNode<SimNode_FieldDeref>(at,simV,offset);
+            }
+        } else {
+            assert(!r2v && "how did it ever become value");
+            if ( fields.size()==1 ) {
+                return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,simV,offset);
+            } else {
+                auto fsz = fields.size();
+                uint8_t fs[4];
+                fs[0] = fields[0];
+                fs[1] = fields[1];
+                fs[2] = fsz>=3 ? fields[2] : fields[0];
+                fs[3] = fsz>=4 ? fields[3] : fields[0];
+                return context.makeNode<SimNode_Swizzle>(at,simV,fs);
+            }
+        }
     }
     
     // ExprField

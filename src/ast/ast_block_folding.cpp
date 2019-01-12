@@ -22,7 +22,12 @@ namespace das {
                 efield->r2v = true;
                 efield->type->ref = false;
                 return efield;
-            } else if ( expr->subexpr->rtti_isSafeField() ) {
+            } else if ( expr->subexpr->rtti_isSwizzle() ) {
+                auto eswiz = static_pointer_cast<ExprSwizzle>(expr->subexpr);
+                eswiz->r2v = true;
+                eswiz->type->ref = false;
+                return eswiz;
+            }else if ( expr->subexpr->rtti_isSafeField() ) {
                 auto efield = static_pointer_cast<ExprSafeField>(expr->subexpr);
                 efield->r2v = true;
                 efield->type->ref = false;

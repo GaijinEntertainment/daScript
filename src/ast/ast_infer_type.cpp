@@ -1047,16 +1047,40 @@ namespace das {
             }
             return Visitor::visit(block);
         }
+    // Swizzle
+            virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
+                if ( !expr->value->type ) return Visitor::visit(expr);
+                auto valT = expr->value->type;
+                int dim = valT->getVectorDim();
+                if ( !TypeDecl::buildSwizzleMask(expr->mask, dim, expr->fields) ) {
+                    error("invalid swizzle mask", expr->at, CompilationError::invalid_swizzle_mask);
+                } else {
+                    auto bt = valT->getVectorBaseType();
+                    auto rt = TypeDecl::getVectorType(bt, expr->fields.size());
+                    expr->type = make_shared<TypeDecl>(rt);
+                    expr->type->constant = valT->constant;
+                    expr->type->ref = valT->ref;
+                    if ( expr->type->ref ) {
+                        expr->type->ref &= TypeDecl::isSequencialMask(expr->fields);
+                    }
+                    if ( !expr->type->ref ) {
+                        expr->value = Expression::autoDereference(expr->value);
+                    }
+                }
+                return Visitor::visit(expr);
+            }
     // ExprField
         virtual ExpressionPtr visit ( ExprField * expr ) override {
             if ( !expr->value->type ) return Visitor::visit(expr);
             // infer
             auto valT = expr->value->type;
-            if ( valT->isArray() ) {
+            if ( valT->isVectorType() ) {
+                reportGenericInfer();
+                return make_shared<ExprSwizzle>(expr->at,expr->value,expr->name);
+            } else if ( valT->isArray() ) {
                 error("can't get a field of an array", expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
-            }
-            if ( valT->isHandle() ) {
+            } else if ( valT->isHandle() ) {
                 expr->annotation = valT->annotation;
                 expr->type = expr->annotation->makeFieldType(expr->name);
             } else if ( valT->baseType==Type::tStructure ) {

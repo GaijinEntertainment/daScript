@@ -381,6 +381,23 @@ namespace das {
             ss << var->name;
             return Visitor::visit(var);
         }
+    // swizzle
+        virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
+            ss << ".";
+            if ( printRef && expr->r2v ) ss << "@";
+            if ( printRef && expr->r2cr ) ss << "$";
+            if ( printRef && expr->write ) ss << "#";
+            for ( auto f : expr->fields ) {
+                switch ( f ) {
+                    case 0:     ss << "x"; break;
+                    case 1:     ss << "y"; break;
+                    case 2:     ss << "z"; break;
+                    case 3:     ss << "w"; break;
+                    default:    ss << "?"; break;
+                }
+            }
+            return Visitor::visit(expr);
+        }
     // field
         virtual ExpressionPtr visit ( ExprField * field ) override {
             if ( printRef && field->r2v ) ss << "@";
