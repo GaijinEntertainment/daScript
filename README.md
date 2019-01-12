@@ -43,6 +43,9 @@ URIPARSER_BUILD_DOCS:BOOL=ON
 // Build test suite (requires GTest >=1.8.1)
 URIPARSER_BUILD_TESTS:BOOL=ON
 --
+// Build tools (e.g. CLI "uriparse")
+URIPARSER_BUILD_TOOLS:BOOL=ON
+--
 // Build code supporting data type 'wchar_t'
 URIPARSER_BUILD_WCHAR_T:BOOL=ON
 ```
