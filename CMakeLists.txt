@@ -114,7 +114,7 @@ add_library(uriparser
     src/UriShorten.c
 )
 
-if(NOT WIN32)
+if(NOT MSVC)
     math(EXPR URIPARSER_SO_CURRENT_MINUS_AGE "${URIPARSER_SO_CURRENT} - ${URIPARSER_SO_AGE}")
     set_property(TARGET uriparser PROPERTY VERSION ${URIPARSER_SO_CURRENT_MINUS_AGE}.${URIPARSER_SO_AGE}.${URIPARSER_SO_REVISION})
     set_property(TARGET uriparser PROPERTY SOVERSION ${URIPARSER_SO_CURRENT_MINUS_AGE})
@@ -297,7 +297,7 @@ install(
 #
 # pkg-config file
 #
-if(NOT WIN32)
+if(NOT MSVC)
     configure_file(liburiparser.pc.in liburiparser.pc @ONLY)
     install(
         FILES
