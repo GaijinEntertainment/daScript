@@ -28,9 +28,10 @@ please check out [https://uriparser.github.io/](https://uriparser.github.io/).
 # make install
 ```
 
-## Available CMake options
+## Available CMake options (and defaults)
 ```console
-# cmake -LAH | grep -B1 'URIPARSER_\|BUILD_SHARED_LIBS'
+# rm -f CMakeCache.txt ; cmake -LAH | grep -B1 'URIPARSER_\|BUILD_SHARED_LIBS'
+[..]
 // Build shared libraries (rather than static ones)
 BUILD_SHARED_LIBS:BOOL=ON
 --
