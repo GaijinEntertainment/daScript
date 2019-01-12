@@ -2,6 +2,7 @@
 //options log=true
 //options optimize=false,log=true
 
+[export]
 def test:bool
     let(i:int)
         assert(true)

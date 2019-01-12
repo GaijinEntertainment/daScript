@@ -34,6 +34,7 @@ def queryThree()
     catch
         assert(count==100)
 
+[export]
 def test
     testProfile::initEsComponents()
     testProfile::testEsUpdate("ks")

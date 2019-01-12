@@ -112,7 +112,6 @@ namespace das {
         vector<ExprBlock *>     blocks;
         vector<size_t>          varStack;
         int                     fieldOffset = 0;
-        int                     globalVarIndex = 0;
         bool                    needRestart = false;
     protected:
         void pushVarStack() { varStack.push_back(local.size()); }
@@ -465,7 +464,6 @@ namespace das {
     // globals
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
-            var->index = globalVarIndex ++;
             if ( var->type->isAuto() && !var->init) {
                 error("global variable type can't be infered, it needs an initializer",
                       var->at, CompilationError::cant_infer_missing_initializer );

@@ -172,6 +172,10 @@ void testFields ( Context * ctx ) {
     int32_t t = 0;
     IntFields x;
     auto fx = ctx->findFunction("testFields");
+	if (fx < 0) {
+		ctx->throw_error("function testFields not found");
+		return;
+	}
     vec4f args[1] = { cast<IntFields *>::from(&x) };
     x.fields["a"] = 1;
     t = cast<int32_t>::to ( ctx->eval(fx, args) );

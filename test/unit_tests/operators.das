@@ -2,6 +2,7 @@ def charg(t:int):int
 	t++
 	return t
 
+[export]
 def test:bool
 	let(x:int=1;y:int)
 		y=charg(x)

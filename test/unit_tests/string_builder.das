@@ -3,6 +3,7 @@
 def test_arg(a:string):string
     return "hello,{a}!"
 
+[export]
 def test:bool
     let q:string = "blah" + "blah"
     let s:string = "hello,world!"

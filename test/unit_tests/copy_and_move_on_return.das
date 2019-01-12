@@ -31,6 +31,7 @@ def joinSequences(l:array<auto(numT)>;r:array<numT>)
 def makeSequenceB(b:block< array<auto> >)
     return <- invoke(b)
 
+[export]
 def test
     // copy on return
     let t = addBar(newFoo(),newFoo())

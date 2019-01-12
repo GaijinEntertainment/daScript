@@ -1,4 +1,4 @@
-// options log = true
+// options logStack = true
 
 require UnitTest
 
@@ -6,6 +6,7 @@ require UnitTest
 struct Fields
     a,b,c,d:int
 
+[export]
 def testFields(x:Fields?):int
     let(t:int)
         t = 0
@@ -15,6 +16,7 @@ def testFields(x:Fields?):int
         t += x?.d ?? 0
         return t
 
+[export]
 def test:bool
     UnitTest::testFields()
     return true

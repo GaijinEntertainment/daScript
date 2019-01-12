@@ -1,6 +1,7 @@
 def pass_array ( arr )
     push(arr,4)
 
+[export]
 def test
     let ( arr:array<int>; arr2:array<int>; val2:int=2 )
         assert(length(arr)==0,"array starts at 0 length")

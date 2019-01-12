@@ -13,9 +13,11 @@ def testSim(objects:NObject[10000])
     for obj in objects
         update(obj)
 
+[export]
 def ks_update(pos:float3 &;vel:float3)
     pos += vel
 
+[export]
 def update(a:Object)
     a.position+=a.velocity
 
@@ -65,6 +67,7 @@ def verify(total:int;objects:NObject[10000])
         let npos = apos + avel*t
         assert(obj.position==npos)
 
+[export]
 def test(objects:ObjectArray)
     let(simTN,simT,cT,intT,manyT,manyKsT:float)
         // verify

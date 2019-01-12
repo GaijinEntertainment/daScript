@@ -641,7 +641,7 @@ namespace das
         cfun->totalStackSize = 0;
         cfun->at = at;
         cfun->module = nullptr;
-        cfun->flags = 0;
+        cfun->flags = flags;
         cfun->inferStack = inferStack;
         return cfun;
     }
@@ -1439,6 +1439,7 @@ namespace das
 				}
             }
         } else {
+			assert(variable->index >= 0 && "using variable which is not used. how?");
             if ( r2v ) {
                 return context.makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->index);
             } else {
@@ -2097,6 +2098,7 @@ namespace das
     SimNode * ExprCall::simulate (Context & context) const {
         SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
         pCall->debug = at;
+		assert((func->builtIn || func->index>=0) && "calling function which is not used. how?");
         pCall->fnIndex = func->index;
         pCall->stackTop = stackTop;
         if ( int nArg = (int) arguments.size() ) {
@@ -2200,9 +2202,12 @@ namespace das
     
     bool Program::simulate ( Context & context ) {
         context.thisProgram = this;
-        context.globalVariables = (GlobalVariable *) context.allocate( uint32_t(thisModule->globals.size()*sizeof(GlobalVariable)) );
+        context.globalVariables = (GlobalVariable *) context.allocate( totalVariables*sizeof(GlobalVariable) );
         for ( auto & it : thisModule->globals ) {
             auto pvar = it.second;
+			if (!pvar->used)
+				continue;
+			assert(pvar->index >= 0 && "we are simulating variable, which is not used");
             auto & gvar = context.globalVariables[pvar->index];
             gvar.name = context.allocateName(pvar->name);
             gvar.size = pvar->type->getSizeOf();
@@ -2210,12 +2215,12 @@ namespace das
             gvar.value = cast<char *>::from((char *)context.allocate(gvar.size));
             gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
         }
-        context.totalVariables = (int) thisModule->globals.size();
+        context.totalVariables = totalVariables;
         context.functions = (SimFunction *) context.allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
         for ( auto & it : thisModule->functions ) {
             auto pfun = it.second;
-            if ( pfun->index==-1 )
+            if ( pfun->index<0 || !pfun->used )
                 continue;
             auto & gfun = context.functions[pfun->index];
             gfun.name = context.allocateName(pfun->name);
@@ -2446,11 +2451,12 @@ namespace das
 				}
                 if (!program->failed())
 					program->staticAsserts();
-                if (!program->failed())
+				if (!program->failed())
+					program->finalizeAnnotations();
+				if (!program->failed()) 
+					program->markUsedSymols();
+				if (!program->failed())
                     program->allocateStack(logs);
-                if ( !program->failed() ) {
-                    program->finalizeAnnotations();
-                }
             }
 			if (!program->failed()) {
 				if (program->options.getOption("log")) {

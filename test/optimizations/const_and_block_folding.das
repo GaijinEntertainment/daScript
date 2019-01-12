@@ -34,6 +34,7 @@ def test_empty_if(cond:bool)
     else
         assert(false)
 
+[export]
 def test:bool
     if (3 + ( 2>3 ? 0 : 1 ))!=4
         3 + ( 2>3 ? 0 : 1 )

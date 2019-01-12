@@ -257,6 +257,7 @@ namespace das
         union {
             struct {
                 bool    move_to_init : 1;
+				bool	used : 1;
             };
             uint32_t flags = 0;
         };
@@ -1039,6 +1040,8 @@ namespace das
         uint32_t            totalStackSize = 0;
         LineInfo            at;
         Module *            module = nullptr;
+		set<FunctionPtr>	useFunctions;
+		set<VariablePtr>	useGlobalVariables;
         union {
             struct {
                 bool    builtIn : 1;
@@ -1046,6 +1049,8 @@ namespace das
                 bool    hasReturn: 1;
                 bool    copyOnReturn : 1;
                 bool    moveOnReturn : 1;
+				bool	exports : 1;
+				bool	used : 1;
             };
             uint32_t flags = 0;
         };
@@ -1162,6 +1167,7 @@ namespace das
         bool optimizationUnused();
         bool staticAsserts();
         void optimize(ostream & logs);
+		void markUsedSymols();
         void allocateStack(ostream & logs);
 		string dotGraph();
         bool simulate ( Context & context );
@@ -1196,6 +1202,7 @@ namespace das
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
         int                         totalFunctions = 0;
+		int							totalVariables = 0;
         vector<Error>               errors;
         bool                        failToCompile = false;
     public:

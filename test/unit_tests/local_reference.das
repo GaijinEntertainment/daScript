@@ -1,3 +1,4 @@
+[export]
 def test
     let a : int = 1
     let b : int& = a

@@ -5,6 +5,7 @@ def fold(a:array<auto(numt)>;from:numt)
         from += x
     return from
 
+[export]
 def test:bool
     let ( a:array<float> )
         push(a,1.0)

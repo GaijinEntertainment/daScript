@@ -10,6 +10,24 @@
 
 namespace das
 {
+	struct ExportFunctionAnnotation : FunctionAnnotation {
+		ExportFunctionAnnotation() : FunctionAnnotation("export") { }
+		virtual bool apply(ExprBlock *, const AnnotationArgumentList &, string & err) override {
+			err = "can't export block";
+			return false;
+		}
+		virtual bool finalize(ExprBlock *, const AnnotationArgumentList &, string &) override {
+			return true;
+		}
+		virtual bool apply(const FunctionPtr &, const AnnotationArgumentList &, string &) override {
+			return true;
+		};
+		virtual bool finalize(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
+			func->exports = true;
+			return true;
+		}
+	};
+
     // core functions
     
     void builtin_throw ( char * text, Context * context ) {
@@ -52,6 +70,8 @@ namespace das
     }
     
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
+		// function annotations
+		addAnnotation(make_shared<ExportFunctionAnnotation>());
         // functions
         addExtern<decltype(builtin_throw),builtin_throw>         (*this, lib, "throw");
         addExtern<decltype(builtin_print),builtin_print>         (*this, lib, "print");

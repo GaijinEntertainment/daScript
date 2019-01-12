@@ -17,6 +17,7 @@ def foobar(b:block<(a:int;b:float):string>)
 def madd(a,b,c)
     return a*b+c
 
+[export]
 def test
     // regular array
     let a:int[10]

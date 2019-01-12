@@ -217,7 +217,7 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "test/hello_world.das");
+    unit_test(TEST_PATH "test/unit_tests/structure_annotation.das");
     Module::Shutdown();
     return 0;
 #endif

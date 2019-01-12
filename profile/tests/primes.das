@@ -11,6 +11,7 @@ def primes(n)
             ++count
     return count;
 
+[export]
 def test()
     profile(20,"primes loop") <|
         primes(14000)

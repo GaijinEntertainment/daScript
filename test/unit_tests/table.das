@@ -1,3 +1,4 @@
+[export]
 def test : bool
     let(tab:table<string,int>;i,del:int;total:int=1000)
         assert(!erase(tab,"0"))

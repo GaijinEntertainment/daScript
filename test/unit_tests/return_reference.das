@@ -1,3 +1,5 @@
+// options logStack=true
+
 let
     g_t = 2
 
@@ -11,6 +13,7 @@ def ret_safe_ref(a:auto&) : auto&
 def add2(bl:block<int&>)
     invoke(bl) += 2
 
+[export]
 def test
     let x = ret_ref()
     let xx : int& = ret_safe_ref(x)

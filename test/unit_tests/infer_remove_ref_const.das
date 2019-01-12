@@ -20,6 +20,7 @@ def aliasLogTNoRefNoConst(x:auto(numT);y:numT !const !&)
     let z : auto(passT) = y
     return typename(type passT)
 
+[export]
 def test
     let x : auto const = 1
     assert(logT(x)=="int const&")

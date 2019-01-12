@@ -7,6 +7,7 @@ struct TestObjectBarNative
     fooPtr:TestObjectFooNative?
     barData:float
 
+[export]
 def test:bool
     // with native type
     let ( a:TestObjectFooNative?;b:TestObjectBarNative?;idummy:int;fdummy:float)

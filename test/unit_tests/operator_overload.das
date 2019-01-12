@@ -11,6 +11,7 @@ def operator - ( a: iVec2 ) : int
 def operator + ( a,b:iVec2 ) : int
     return a.x + b.x
 
+[export]
 def test:bool
     let a,b:iVec2
     a.x = 4

@@ -6,6 +6,7 @@ def testAdds()
         count = AddOne(count)
     return count
 
+[export]
 def test()
     profile(20,"native loop") <|
         testAdds()

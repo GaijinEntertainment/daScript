@@ -6,6 +6,7 @@ def join(a:array<auto(numt)>)
         t += x
     return t
 
+[export]
 def test:bool
     let ( a:array<float> )
         push(a,1.0)

@@ -1,3 +1,4 @@
+[export]
 def test:bool
     // 1 variable
     let(a:int[10];i:int=0)

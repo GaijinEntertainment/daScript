@@ -26,7 +26,11 @@ void updateTest ( ObjectArray & objects ) {
 
 void update10000 ( ObjectArray & objects, Context * context ) {
     int updateFn = context->findFunction("update");
-    for ( auto & obj : objects ) {
+	if (updateFn < 0) {
+		context->throw_error("update not exported");
+		return;
+	}
+	for ( auto & obj : objects ) {
         vec4f args[1] = { cast<Object &>::from(obj) };
         context->eval(updateFn,  args);
     }
@@ -34,6 +38,10 @@ void update10000 ( ObjectArray & objects, Context * context ) {
 
 void update10000ks ( ObjectArray & objects, Context * context ) {
     int ksUpdateFn = context->findFunction("ks_update");
+	if (ksUpdateFn < 0) {
+		context->throw_error("ks_update not exported");
+		return;
+	}
     for ( auto & obj : objects ) {
         vec4f args[2] = { cast<float3 &>::from(obj.pos), cast<float3>::from(obj.vel) };
         context->eval(ksUpdateFn,  args);
@@ -138,6 +146,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             err = "function needs arguments";
             return false;
         }
+		func->exports = true;
         return true;
     };
     virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
@@ -158,8 +167,10 @@ struct EsFunctionAnnotation : FunctionAnnotation {
 bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
     if ( table.functionIndex==-2 )
         table.functionIndex = context.findFunction(table.functionName.c_str());
-    if ( table.functionIndex==-1 )
-        return false;
+	if (table.functionIndex < 0) {
+		context.throw_error("function not found");
+		return false;
+	}
     int fnIndex = table.functionIndex;
     context.restart();
 	vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
@@ -292,14 +303,16 @@ void initEsComponents() {
 }
 
 void verifyEsComponents() {
-    for ( int i=0; i != g_total; ++i ) {
-        float f = float(i);
-        float3 pos = { f, f*2, f*3 };
-        float3 vel = { f+1, f+2, f+3 };
-        pos.x += vel.x;
-        pos.y += vel.y;
-        pos.z += vel.z;
-        assert(g_pos[i].x==pos.x && g_pos[i].y==pos.y &&g_pos[i].z==pos.z );
+	float t = 1.0f;
+	float f = 1.0f;
+	for (int i = 0; i != g_total; ++i) {
+		float3 apos = { f++, f + 1, f + 2 };
+		float3 avel = { 1.0f, 2.0f, 3.0f };
+		float3 npos;
+		npos.x = apos.x + avel.x * t;
+        npos.y = apos.y + avel.y * t;
+        npos.z = apos.z + avel.z * t;
+        assert(g_pos[i].x==npos.x && g_pos[i].y==npos.y &&g_pos[i].z==npos.z );
     }
 }
 

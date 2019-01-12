@@ -56,6 +56,7 @@ def test_block
         b_var_s += "_blah"
         assert(b_var_s == "blah_blah")
 
+[export]
 def test:bool
     test_local()
     test_global()

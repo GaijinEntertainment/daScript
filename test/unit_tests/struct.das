@@ -43,6 +43,7 @@ struct L1
 let
     glob : L1? = null
 
+[export]
 def test:bool
     let ( b:Ball? = new Ball )
         b.position = float3(1.0,2.0,3.0)

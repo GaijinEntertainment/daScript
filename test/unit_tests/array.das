@@ -16,6 +16,7 @@ def verify_test_array(a:array<int>;extra:int=0)
 def pass_array ( arr:array<int> )
     push(arr,4)
 
+[export]
 def test:bool
     let(a:array<int>)
         make_test_array(a)

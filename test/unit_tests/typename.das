@@ -18,6 +18,7 @@ def arrType(a:array<auto(arrT)>)
 def tabTypes(a:table<auto(key),auto(value)>)
     return typename(type key) + ":" + typename(type value)
 
+[export]
 def test:bool
     let x : auto(numT)  = 3
     assert(typename(type numT)=="int")

@@ -62,6 +62,7 @@ def test_vec4(a:auto(vec4)!const !&)
     assert("{f4_zz}"=="1,1,1,1")
     assert("{f4_ww}"=="1,1,1,1")
 
+[export]
 def test
     test_vec2(float2())
     test_vec3(float3())

@@ -42,6 +42,7 @@ def badd(ext:int;b:block<(arg:int):int>) : int
 def radd(ext:int&;b:block<(arg:int&):int>):int
     return invoke(b,ext)
 
+[export]
 def test:bool
     let(a,b:int=0)
         twice({ a++; })

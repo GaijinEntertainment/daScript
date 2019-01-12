@@ -15,6 +15,7 @@ def fibI(n)
         last = tmp
     return cur
 
+[export]
 def test()
     profile(20,"fibbonacci loop") <|
         fibI(6511134)

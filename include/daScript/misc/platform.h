@@ -22,6 +22,7 @@
 #include <stdint.h>
 
 #include <cmath>
+#include <set>
 #include <map>
 #include <string>
 #include <memory>
