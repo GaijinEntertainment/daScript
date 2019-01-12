@@ -167,6 +167,17 @@ namespace das {
     public:
         ConstFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
     protected:
+        // function which is fully a nop
+        bool isNop ( const FunctionPtr & func ) {
+            if ( func->builtIn ) return false;
+            if ( func->body->rtti_isBlock() ) {
+                auto block = static_pointer_cast<ExprBlock>(func->body);
+                if ( block->list.size()==0 ) {
+                    return true;
+                }
+            }
+            return false;
+        }
         // function which is 'return const'
         ExpressionPtr getSimpleConst ( const FunctionPtr & func ) {
             if ( func->builtIn ) return nullptr;
@@ -311,6 +322,10 @@ namespace das {
                 allNoSideEffects &= arg->noSideEffects;
             }
             if ( allNoSideEffects ) {
+                if ( isNop(expr->func) ) {
+                    reportFolding();
+                    return nullptr;
+                }
                 if ( auto sc = getSimpleConst(expr->func) ) {
                     reportFolding();
                     return sc;

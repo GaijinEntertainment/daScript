@@ -1,104 +1,79 @@
-// options plot=true,plotFile="../../test.dot"
-options log=false, logStack=true, optimize=false
+// note: don't enable optimize on the math runtime tests
+// functions bellow optimizes to literally nothing otherwise
+options log=true, optimize=true
 
-def make_test_array(a:array<int>;extra:int=0)
-    let i:int=0
-    resize(a,10)
-    for x in a
-        x = i++ + extra
+def test_vec2(a:auto(vec2)!const !&)
+    let f2_0  = vec2()
+    let f2_x  = vec2(1.0,2.0)
+    let f2_y  = vec2(1,2)
+    let f2_z  = vec2(0x1,0x2)
+    let f2_w  = vec2(1u,2u)
+    let f2_xx = vec2(1.0)
+    let f2_yy = vec2(1)
+    let f2_zz = vec2(0x1)
+    let f2_ww = vec2(1u)
+    assert("{f2_0}"=="0,0")
+    assert("{f2_x}"=="1,2")
+    assert("{f2_y}"=="1,2")
+    assert("{f2_z}"=="1,2")
+    assert("{f2_w}"=="1,2")
+    assert("{f2_xx}"=="1,1")
+    assert("{f2_yy}"=="1,1")
+    assert("{f2_zz}"=="1,1")
+    assert("{f2_ww}"=="1,1")
+    return
 
-def verify_test_array(a:array<int>;extra:int=0)
-    assert(length(a)==10)
-    let(i:int=0)
-        for x in a
-            assert(x==(extra+i++))
+def test_vec3(a:auto(vec3)!const !&)
+    let f3_0  = vec3()
+    let f3_x  = vec3(1.0,2.0,3.0)
+    let f3_y  = vec3(1,2,3)
+    let f3_z  = vec3(0x1,0x2,0x3)
+    let f3_w  = vec3(1u,2u,3u)
+    let f3_xx = vec3(1.0)
+    let f3_yy = vec3(1)
+    let f3_zz = vec3(0x1)
+    let f3_ww = vec3(1u)
+    assert("{f3_0}"=="0,0,0")
+    assert("{f3_x}"=="1,2,3")
+    assert("{f3_y}"=="1,2,3")
+    assert("{f3_z}"=="1,2,3")
+    assert("{f3_w}"=="1,2,3")
+    assert("{f3_xx}"=="1,1,1")
+    assert("{f3_yy}"=="1,1,1")
+    assert("{f3_zz}"=="1,1,1")
+    assert("{f3_ww}"=="1,1,1")
 
-def pass_array ( arr:array<int> )
-    push(arr,4)
+def test_vec4(a:auto(vec4)!const !&)
+    let f4_0  = vec4()
+    let f4_x  = vec4(1.0,2.0,3.0,4.0)
+    let f4_y  = vec4(1,2,3,4)
+    let f4_z  = vec4(0x1,0x2,0x3,0x4)
+    let f4_w  = vec4(1u,2u,3u,4u)
+    let f4_xx = vec4(1.0)
+    let f4_yy = vec4(1)
+    let f4_zz = vec4(0x1)
+    let f4_ww = vec4(1u)
+    assert("{f4_0}"=="0,0,0,0")
+    assert("{f4_x}"=="1,2,3,4")
+    assert("{f4_y}"=="1,2,3,4")
+    assert("{f4_z}"=="1,2,3,4")
+    assert("{f4_w}"=="1,2,3,4")
+    assert("{f4_xx}"=="1,1,1,1")
+    assert("{f4_yy}"=="1,1,1,1")
+    assert("{f4_zz}"=="1,1,1,1")
+    assert("{f4_ww}"=="1,1,1,1")
 
 [export]
-def test:bool
-    let(a:array<int>)
-        make_test_array(a)
-        verify_test_array(a)
-        make_test_array(a,13)
-        verify_test_array(a,13)
-        make_test_array(a)
-        verify_test_array(a)
-        let(b:array<int> <- a)
-            assert(length(a)==0)
-            verify_test_array(b)
-            a <- b
-        verify_test_array(a)
-    let(a,b:array<int>;i:int=0)
-        resize(a,10)
-        resize(b,10)
-        for l,r in a,b
-            l = i
-            r = i*2-5
-            i++
-        verify_test_array(a)
-        i = 0
-        for l,r in a,b
-            assert(l==i)
-            assert(r==i*2-5)
-            i++
-        i = 0
-        for l,r in a,b
-            if l>r
-                assert(l>r)
-                i++
-        assert(i==5)
-    let(a:array<int>[10]; i:int=0)
-        for b in a
-            make_test_array(b,i++)
-        i = 0
-        for b in a
-            verify_test_array(b,i++)
-    let ( arr:array<int>; arr2:array<int>; val2:int=2 )
-        assert(length(arr)==0,"array starts at 0 length")
-        push(arr,1)     // push value
-        push(arr,val2)  // push reference
-        push(arr,3)
-        assert(length(arr)==3,"array length is 3")
-        assert(capacity(arr)==16,"its 2x, but no less than 16")
-        assert(arr[0]==1)
-        assert(arr[1]==2)
-        assert(arr[2]==3)
-        pass_array(arr)
-        assert(length(arr)==4,"array length is 4")
-        resize(arr,6)
-        assert(length(arr)==6,"array length is now 6")
-        resize(arr,17)
-        assert(capacity(arr)==32,"now bigger")
-        reserve(arr,33)
-        assert(capacity(arr)==33,"now even bigger")
-        resize(arr,4)
-        assert(capacity(arr)==33,"did not grow smaller")
-        assert(length(arr)==4,"resized properly")
-        arr2 <- arr
-        assert(length(arr)==0)
-        assert(length(arr2)==4)
-        let ( index:int = 0 )
-            while index < 4
-                arr2[index++]++
-        arr <- arr2
-        resize(arr,3)
-        resize(arr,4)
-        assert(arr[3]==0,"new element after resize is 0")
-        push(arr,1,0)
-        resize(arr,4)
-        push(arr,5,4)
-        push(arr,7,2)
-        assert(length(arr)==6)
-        assert(arr[2]==7 & arr[5]==5)
-        erase(arr,2)
-        erase(arr,0)
-        erase(arr,3)
-        assert(length(arr)==3)
-        assert(arr[0]==2 & arr[1]==3 & arr[2]==4)
+def test
+    test_vec2(float2())
+    test_vec3(float3())
+    // test_vec4(float4())
+    // test_vec2(int2())
+    // test_vec3(int3())
+    // test_vec4(int4())
+    // test_vec2(uint2())
+    // test_vec3(uint3())
+    // test_vec4(uint4())
+    // test_vec2(range())
+    // test_vec2(urange())
     return true
-
-
-
-

@@ -2454,7 +2454,7 @@ namespace das
 				if (!program->failed())
 					program->finalizeAnnotations();
 				if (!program->failed()) 
-					program->markUsedSymols();
+					program->markOrRemoveUnusedSymbols();
 				if (!program->failed())
                     program->allocateStack(logs);
             }

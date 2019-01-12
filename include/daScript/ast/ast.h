@@ -1167,7 +1167,7 @@ namespace das
         bool optimizationUnused();
         bool staticAsserts();
         void optimize(ostream & logs);
-		void markUsedSymols();
+		void markOrRemoveUnusedSymbols();
         void allocateStack(ostream & logs);
 		string dotGraph();
         bool simulate ( Context & context );

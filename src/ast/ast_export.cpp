@@ -24,6 +24,23 @@ namespace das {
 				}
 			}
 		}
+        void RemoveUnusedSymbols ( Module & mod ) {
+            map<string,FunctionPtr> functions;
+            map<string,VariablePtr> globals;
+            swap(functions,mod.functions);
+            swap(globals,mod.globals);
+            mod.functionsByName.clear();
+            for ( auto & fn : functions ) {
+                if ( fn.second->used ) {
+                    mod.addFunction(fn.second);
+                }
+            }
+            for ( auto & var : globals ) {
+                if ( var.second->used ) {
+                    mod.addVariable(var.second);
+                }
+            }
+        }
 	protected:
 		ProgramPtr              program;
 		FunctionPtr             func;
@@ -81,9 +98,12 @@ namespace das {
 		}
 	};
 
-	void Program::markUsedSymols() {
+	void Program::markOrRemoveUnusedSymbols() {
 		MarkSymbolUse vis;
 		visit(vis);
 		vis.markUsedFunctions(*thisModule);
+        if ( options.getOption("removeUnusedSymbols",true) ) {
+            vis.RemoveUnusedSymbols(*thisModule);
+        }
 	}
 }
