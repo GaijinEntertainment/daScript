@@ -1335,6 +1335,26 @@ namespace das
         return nullptr;
     }
     
+    // ExprSwizzle
+    
+    ExpressionPtr ExprSwizzle::visit(Visitor & vis) {
+        vis.preVisit(this);
+        value = value->visit(vis);
+        return vis.visit(this);
+    }
+    
+    ExpressionPtr ExprSwizzle::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprSwizzle>(expr);
+        Expression::clone(cexpr);
+        cexpr->mask = mask;
+        cexpr->value = value->clone();
+        return cexpr;
+    }
+    
+    SimNode * ExprSwizzle::simulate (Context & context) const {
+        return nullptr;
+    }
+    
     // ExprField
     
     ExpressionPtr ExprField::visit(Visitor & vis) {

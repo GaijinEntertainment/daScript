@@ -516,6 +516,17 @@ namespace das
         };
     };
     
+    struct ExprSwizzle : Expression {
+        ExprSwizzle () = default;
+        ExprSwizzle ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+            : Expression(a), value(val), mask(n) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        ExpressionPtr   value;
+        string          mask;
+    };
+    
     struct ExprSafeField : ExprField {
         ExprSafeField () = default;
         ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
@@ -1323,6 +1334,7 @@ namespace das
         VISIT_EXPR(ExprAt)
         VISIT_EXPR(ExprBlock)
         VISIT_EXPR(ExprVar)
+        VISIT_EXPR(ExprSwizzle)
         VISIT_EXPR(ExprField)
         VISIT_EXPR(ExprSafeField)
         VISIT_EXPR(ExprOp1)
