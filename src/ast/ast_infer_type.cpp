@@ -1056,7 +1056,7 @@ namespace das {
                     error("invalid swizzle mask", expr->at, CompilationError::invalid_swizzle_mask);
                 } else {
                     auto bt = valT->getVectorBaseType();
-                    auto rt = TypeDecl::getVectorType(bt, expr->fields.size());
+                    auto rt = TypeDecl::getVectorType(bt, int(expr->fields.size()));
                     expr->type = make_shared<TypeDecl>(rt);
                     expr->type->constant = valT->constant;
                     expr->type->ref = valT->ref;

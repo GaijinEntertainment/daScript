@@ -340,7 +340,7 @@ namespace das
             if ( field==-1 || field>=dim ) {
                 return false;
             }
-            fields.push_back(field);
+            fields.push_back(uint8_t(field));
         }
         return fields.size()>=1 && fields.size()<=4;
     }
