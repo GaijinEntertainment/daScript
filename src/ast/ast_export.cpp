@@ -29,7 +29,7 @@ namespace das {
 		FunctionPtr             func;
 	protected:
 		// global variable declaration
-		virtual void preVisitGlobalLet(const VariablePtr & var) {
+		virtual void preVisitGlobalLet(const VariablePtr & var) override {
 			Visitor::preVisitGlobalLet(var);
 			var->used = false;
 		}
