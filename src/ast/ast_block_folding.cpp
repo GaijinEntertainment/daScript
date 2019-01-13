@@ -13,10 +13,14 @@ namespace das {
     protected:
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
             if ( expr->subexpr->rtti_isVar() ) {
-                auto evar = static_pointer_cast<ExprVar>(expr->subexpr);
-                evar->r2v = true;
-                evar->type->ref = false;
-                return evar;
+                if ( expr->subexpr->type->isHandle() ) {
+                    return Visitor::visit(expr);
+                } else {
+                    auto evar = static_pointer_cast<ExprVar>(expr->subexpr);
+                    evar->r2v = true;
+                    evar->type->ref = false;
+                    return evar;
+                }
             } else if ( expr->subexpr->rtti_isField() ) {
                 auto efield = static_pointer_cast<ExprField>(expr->subexpr);
                 efield->r2v = true;

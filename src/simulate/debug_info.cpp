@@ -104,7 +104,8 @@ namespace das
         return getDimSize(info) * getTypeBaseSize(info);
     }
     
-    void debugType ( TypeAnnotation *, stringstream & , void *, PrintFlags flags );
+    void debugType ( TypeAnnotation *, stringstream & , void *, PrintFlags );
+    void debugType ( TypeAnnotation *, stringstream &, vec4f, PrintFlags );
     void debug_structure ( stringstream & ss, char * ps, StructInfo * info, PrintFlags flags );
     void debug_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags );
     
@@ -266,7 +267,7 @@ namespace das
                 case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType, flags); break;
                 case Type::tVoid:       ss << "void"; break;
                 case Type::tBlock:      ss << "block"; break;
-                case Type::tHandle:     debugType(info->annotation, ss, cast<void*>::to(x), flags); break;
+                case Type::tHandle:     debugType(info->annotation, ss, x, flags); break;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }
