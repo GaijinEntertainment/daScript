@@ -81,5 +81,6 @@ script:
   - make
   - ./hello
   - popd
+  - git fetch --tags --unshallow origin  # for "git describe" in make-distcheck.sh
   - ./make-distcheck.sh -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}  # without AddressSanitizer
   - "! git status | fgrep -A100 'Untracked files:'  # works best at the very end"
