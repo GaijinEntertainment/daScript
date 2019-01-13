@@ -39,6 +39,15 @@ namespace das
                 return nullptr;
             }
         }
+        virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+            auto it = fields.find(na);
+            if ( it!=fields.end() ) {
+                auto itT = it->second.decl;
+                return context.makeValueNode<SimNode_FieldDerefR2V>(itT->baseType,at,value,it->second.offset);
+            } else {
+                return nullptr;
+            }
+        }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
             return context.makeNode<SimNode_New>(at,int32_t(sizeof(OT)));
         }
@@ -121,14 +130,14 @@ namespace das
         };
         struct SimNode_VectorIterator : SimNode, VectorIterator {
             SimNode_VectorIterator ( const LineInfo & at, SimNode * s )
-            : SimNode(at) { VectorIterator::source = s;}
+                : SimNode(at) { VectorIterator::source = s;}
             virtual vec4f eval ( Context & ) override {
                 return cast<Iterator *>::from(static_cast<VectorIterator *>(this));
             }
         };
         ManagedVectorAnnotation(const string & n, const TypeDeclPtr & d)
-        : TypeAnnotation(n), vecType(d) {
-            vecType->ref = true;
+            : TypeAnnotation(n), vecType(d) {
+                vecType->ref = true;
         }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(VectorType); }

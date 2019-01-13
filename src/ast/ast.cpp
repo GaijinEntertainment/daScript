@@ -1465,23 +1465,24 @@ namespace das
     }
     
     SimNode * ExprField::simulate (Context & context) const {
+        auto simV = value->simulate(context);
         if ( !field ) {
-            auto result = annotation->simulateGetField(name, context, at, value->simulate(context));
             if ( r2v ) {
-                result = ExprRef2Value::GetR2V(context, at, type, result);
+                return annotation->simulateGetFieldR2V(name, context, at, simV);
+            } else {
+                return annotation->simulateGetField(name, context, at, simV);
             }
-            return result;
         } else {
 			if (type->isPointer()) {
 				if (r2v)
-					return context.makeValueNode<SimNode_PtrFieldDerefR2V>(type->baseType, at, value->simulate(context), field->offset);
+					return context.makeValueNode<SimNode_PtrFieldDerefR2V>(type->baseType, at, simV, field->offset);
 				else
-					return context.makeNode<SimNode_PtrFieldDeref>(at, value->simulate(context), field->offset);
+					return context.makeNode<SimNode_PtrFieldDeref>(at, simV, field->offset);
 			} else {
 				if (r2v)
-					return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType, at, value->simulate(context), field->offset);
+					return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType, at, simV, field->offset);
 				else
-					return context.makeNode<SimNode_FieldDeref>(at, value->simulate(context), field->offset);
+					return context.makeNode<SimNode_FieldDeref>(at, simV, field->offset);
 			}
         }
     }

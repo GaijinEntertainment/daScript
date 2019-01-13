@@ -100,6 +100,30 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         char *      name;
     };
     
+    struct SimNode_IntFieldDerefR2V : SimNode_IntFieldDeref {
+        DAS_INT_NODE;
+        SimNode_IntFieldDerefR2V ( const LineInfo & at, SimNode * rv, char * n )
+            : SimNode_IntFieldDeref(at,rv,n) {}
+        __forceinline int32_t compute ( Context & context ) {
+            vec4f rv = value->eval(context);
+            DAS_INT_EXCEPTION_POINT;
+            if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
+                auto it = prv->fields.find(name);
+                if ( it != prv->fields.end() ) {
+                    return it->second;
+                } else {
+                    context.throw_error("field not found");
+                    return 0;
+                }
+            } else {
+                context.throw_error("dereferencing null pointer");
+                return 0;
+            }
+        }
+        SimNode *   value;
+        char *      name;
+    };
+    
     // FIELD ?.
     struct SimNode_SafeIntFieldDeref : SimNode_IntFieldDeref {
         DAS_PTR_NODE;
@@ -151,6 +175,9 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     }
     virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
         return context.makeNode<SimNode_IntFieldDeref>(at,rv,context.allocateName(na));
+    }
+    virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
+        return context.makeNode<SimNode_IntFieldDerefR2V>(at,rv,context.allocateName(na));
     }
     virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
         return context.makeNode<SimNode_SafeIntFieldDeref>(at,rv,context.allocateName(na));

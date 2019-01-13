@@ -312,6 +312,7 @@ namespace das
         virtual SimNode * simulateCopy ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateRef2Value ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetField ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateGetFieldR2V ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateSafeGetField ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateSafeGetFieldPtr ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
@@ -322,7 +323,7 @@ namespace das
     
     // annotated structure
     //  needs to override
-    //      create,clone, simulateGetField, SafeGetField, and SafeGetFieldPtr
+    //      create,clone, simulateGetField, simulateGetFieldR2V, SafeGetField, and SafeGetFieldPtr
     struct StructureTypeAnnotation : TypeAnnotation {
         StructureTypeAnnotation ( const string & n ) : TypeAnnotation(n) {}
         virtual bool rtti_isStructureAnnotation() const override { return true; }
