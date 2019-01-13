@@ -114,8 +114,13 @@ namespace das {
         int                     fieldOffset = 0;
         bool                    needRestart = false;
     protected:
-        void pushVarStack() { varStack.push_back(local.size()); }
-        void popVarStack()  { local.resize(varStack.back()); varStack.pop_back(); }
+        void pushVarStack() {
+            varStack.push_back(local.size());
+        }
+        void popVarStack()  {
+            local.resize(varStack.back());
+            varStack.pop_back();
+        }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
             if ( func ) {
                 string extra = func->getLocationExtra();
@@ -565,6 +570,7 @@ namespace das {
                 func->moveOnReturn = false;
             }
             assert(blocks.size()==0);
+            assert(local.size()==0);
             func.reset();
             return Visitor::visit(that);
         }
@@ -991,7 +997,6 @@ namespace das {
                 block->type = make_shared<TypeDecl>(*block->returnType);
             }
             pushVarStack();
-            
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
@@ -1502,7 +1507,9 @@ namespace das {
     // ExprLet
         virtual void preVisit ( ExprLet * expr ) override {
             Visitor::preVisit(expr);
-            pushVarStack();
+            if ( expr->scoped ) {
+                pushVarStack();
+            }
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);

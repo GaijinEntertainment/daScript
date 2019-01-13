@@ -11,25 +11,15 @@ using namespace das;
 struct TestObjectFoo {
     int fooData;
 };
+MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 
-template <>
-struct typeFactory<TestObjectFoo> {
-    static TypeDeclPtr make(const ModuleLibrary & library ) {
-        return library.makeHandleType("TestObjectFoo");
-    }
-};
 
 struct TestObjectBar {
     TestObjectFoo * fooPtr;
     float           barData;
 };
+MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 
-template <>
-struct typeFactory<TestObjectBar> {
-    static TypeDeclPtr make(const ModuleLibrary & library ) {
-        return library.makeHandleType("TestObjectBar");
-    }
-};
 
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
     TestObjectFooAnnotation() : ManagedStructureAnnotation ("TestObjectFoo") {

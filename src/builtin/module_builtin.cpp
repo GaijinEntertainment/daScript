@@ -119,8 +119,9 @@ namespace das
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int64_t>,   char *,int64_t>>    ("string",lib) );
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint64_t>,  char *,uint64_t>>   ("string",lib) );
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float>>      ("string",lib) );
-        // VECTOR TYPES
+        // VECTOR & MATRIX TYPES
         addVectorTypes(lib);
+        addMatrixTypes(lib);
         // RUNTIME
         addRuntime(lib);
         // TIME

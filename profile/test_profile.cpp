@@ -55,19 +55,8 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
     }
 };
 
-template <>
-struct typeFactory<Object> {
-    static TypeDeclPtr make(const ModuleLibrary & library ) {
-        return library.makeHandleType("Object");
-    }
-};
-
-template <>
-struct typeFactory<ObjectArray> {
-    static TypeDeclPtr make(const ModuleLibrary & library ) {
-        return library.makeHandleType("ObjectArray");
-    }
-};
+MAKE_TYPE_FACTORY(Object, Object)
+MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
 
 int AddOne(int a) {
     return a+1;

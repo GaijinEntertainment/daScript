@@ -9,6 +9,7 @@ namespace das {
     protected:
         void addRuntime(ModuleLibrary & lib);
         void addVectorTypes(ModuleLibrary & lib);
+        void addMatrixTypes(ModuleLibrary & lib);
         void addTime(ModuleLibrary & lib);
     };
 }

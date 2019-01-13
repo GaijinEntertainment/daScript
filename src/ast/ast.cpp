@@ -315,28 +315,29 @@ namespace das
         return true;
     }
     
+    int TypeDecl::getMaskFieldIndex ( char ch ) {
+        switch ( ch ) {
+            case 'x':
+            case 'X':
+                return 0;
+            case 'y':
+            case 'Y':
+                return 1;
+            case 'z':
+            case 'Z':
+                return 2;
+            case 'w':
+            case 'W':
+                return 3;
+            default:
+                return -1;
+        }
+    }
+    
     bool TypeDecl::buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields ) {
         fields.clear();
         for ( auto ch : mask ) {
-            int field = -1;
-            switch ( ch ) {
-                case 'x':
-                case 'X':
-                    field = 0;
-                    break;
-                case 'y':
-                case 'Y':
-                    field = 1;
-                    break;
-                case 'z':
-                case 'Z':
-                    field = 2;
-                    break;
-                case 'w':
-                case 'W':
-                    field = 3;
-                    break;
-            }
+            int field = getMaskFieldIndex(ch);
             if ( field==-1 || field>=dim ) {
                 return false;
             }

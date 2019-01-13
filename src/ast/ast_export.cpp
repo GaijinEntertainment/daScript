@@ -92,7 +92,7 @@ namespace das {
 		// Op3
 		virtual void preVisit(ExprOp3 * expr) override {
 			Visitor::preVisit(expr);
-			if (!expr->func->builtIn) {
+			if (expr->func && !expr->func->builtIn) {
 				func->useFunctions.insert(expr->func);
 			}
 		}

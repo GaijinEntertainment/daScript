@@ -167,13 +167,7 @@ namespace das
             return call(fnIndex, args, res, 0);
         }
         
-        __forceinline void throw_error ( const char * message ) {
-            exception = message;
-            stopFlags |= EvalFlags::stopForThrow;
-            #if !DAS_ENABLE_EXCEPTIONS
-                throw runtime_error(message ? message : "");
-            #endif
-        }
+        void throw_error ( const char * message );
         
         int findFunction ( const char * name ) const;
         int findVariable ( const char * name ) const;

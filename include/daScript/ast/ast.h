@@ -89,6 +89,7 @@ namespace das
         Type getVectorBaseType() const;
         int getVectorDim() const;
         static Type getVectorType ( Type baseType, int dim );
+        static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
         Type getRangeBaseType() const;
@@ -178,6 +179,14 @@ namespace das
     inline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
         return typeFactory<TT>::make(ctx);
     }
+    
+#define MAKE_TYPE_FACTORY(TYPE,CTYPE)                                   \
+    template <>                                                         \
+    struct typeFactory<CTYPE> {                                         \
+        static TypeDeclPtr make(const ModuleLibrary & library ) {       \
+            return library.makeHandleType(#TYPE);                       \
+        }                                                               \
+    };
     
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
     
