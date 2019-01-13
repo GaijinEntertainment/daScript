@@ -5,6 +5,7 @@
 #pragma warning(disable:4146)	// unsigned unary minus
 #pragma warning(disable:4996)	// swap ranges
 #pragma warning(disable:4201)	// nonstandard extension used : nameless struct / union
+#pragma warning(disable:4324)	// structure was padded due to alignment specifier
 #endif
 
 #ifdef __APPLE__
