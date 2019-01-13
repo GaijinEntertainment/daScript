@@ -50,6 +50,7 @@ script:
     )
     && CFLAGS="${compile_flags[*]} -std=c89"
     && CXXFLAGS="${compile_flags[*]} -std=c++98"
+    && LDFLAGS='-g -fsanitize=address'
     && cmake_args=(
         -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}
 
@@ -57,13 +58,16 @@ script:
         -Werror=dev
         -Wdeprecated
         -Werror=deprecated
+
+        -DCMAKE_C_COMPILER=clang-7
+        -DCMAKE_CXX_COMPILER=clang++-7
+        -DCMAKE_C_FLAGS="${CFLAGS}"
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS}"
+        -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS}"
+        -DCMAKE_MODULE_LINKER_FLAGS="${LDFLAGS}"
+        -DCMAKE_SHARED_LINKER_FLAGS="${LDFLAGS}"
     )
-    && CC=clang-7
-            CXX=clang++-7
-            CFLAGS="${CFLAGS}"
-            CXXFLAGS="${CXXFLAGS}"
-            LDFLAGS='-g -fsanitize=address'
-        cmake "${cmake_args[@]}" ..  # -Werror would fail checks!
+    && cmake "${cmake_args[@]}" ..  # -Werror would fail checks!
   - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" all
   - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" test
   - cat Testing/Temporary/LastTest.log
