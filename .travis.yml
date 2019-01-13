@@ -71,9 +71,15 @@ script:
   - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" all
   - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" test
   - cat Testing/Temporary/LastTest.log
+  - make install
   - ./doc/release.sh
   - make DESTDIR="${PWD}"/ROOT/ install
   - find ROOT | sort
+  - popd
+  - pushd cmake/test_find_package
+  - cmake "${cmake_args[@]}" .
+  - make
+  - ./hello
   - popd
   - ./make-distcheck.sh -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}  # without AddressSanitizer
   - "! git status | fgrep -A100 'Untracked files:'  # works best at the very end"
