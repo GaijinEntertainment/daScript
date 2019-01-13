@@ -16,6 +16,20 @@ To learn more about uriparser,
 please check out [https://uriparser.github.io/](https://uriparser.github.io/).
 
 
+# Example use from an existing CMake project
+```cmake
+project(hello VERSION 1.0)
+
+find_package(uriparser 0.9.1 CONFIG REQUIRED char wchar_t)
+
+add_executable(hello
+    hello.c
+)
+
+target_link_libraries(hello PUBLIC uriparser::uriparser)
+```
+
+
 # Compilation
 
 ## Compilation (standalone, GNU make, Linux)

@@ -49,6 +49,7 @@ set(URIPARSER_SO_AGE        0)
 include(CheckFunctionExists)
 include(CheckLibraryExists)
 include(CheckSymbolExists)
+include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
 
 #
@@ -283,13 +284,38 @@ if(URIPARSER_BUILD_DOCS)
 endif()
 
 #
-# CMake files for find_package(uriparser [..])
+# CMake files for find_package(uriparser [..] CONFIG [..])
 #
+configure_package_config_file(
+        cmake/uriparser-config.cmake.in
+        cmake/uriparser-config.cmake
+    INSTALL_DESTINATION
+        ${CMAKE_INSTALL_LIBDIR}/cmake/uriparser-${PROJECT_VERSION}/
+    PATH_VARS
+        CMAKE_INSTALL_INCLUDEDIR
+)
+write_basic_package_version_file(
+    cmake/uriparser-config-version.cmake
+    COMPATIBILITY SameMajorVersion  # i.e. semver
+)
+export(
+    TARGETS
+        uriparser
+    FILE
+        cmake/uriparser-targets.cmake  # not going to be installed
+)
+install(
+    FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/cmake/uriparser-config.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/cmake/uriparser-config-version.cmake
+    DESTINATION
+        ${CMAKE_INSTALL_LIBDIR}/cmake/uriparser-${PROJECT_VERSION}/
+)
 install(
     EXPORT
         uriparser
     DESTINATION
-        ${CMAKE_INSTALL_LIBDIR}/cmake/uriparser
+        ${CMAKE_INSTALL_LIBDIR}/cmake/uriparser-${PROJECT_VERSION}/
     NAMESPACE
         uriparser::
 )
