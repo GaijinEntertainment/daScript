@@ -72,3 +72,4 @@ script:
   - find ROOT | sort
   - popd
   - ./make-distcheck.sh -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}  # without AddressSanitizer
+  - "! git status | fgrep -A100 'Untracked files:'  # works best at the very end"
