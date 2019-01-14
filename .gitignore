@@ -4,4 +4,7 @@ cmake_temp/
 .DS_Store
 tmtags
 
+src/builtin/builtin.das.inc
+
+
 

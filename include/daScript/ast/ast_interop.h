@@ -90,7 +90,7 @@ namespace das
         }
     };
     
-    template <typename FuncT, FuncT fn, template <typename FuncT, FuncT fn> typename SimNodeT = SimNode_ExtFuncCall>
+    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> typename SimNodeT = SimNode_ExtFuncCall>
     __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, bool hasSideEffects = true ) {
         mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>>>(name,lib)->sideEffects(hasSideEffects));
     }

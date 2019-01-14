@@ -53,7 +53,7 @@ MACRO(XXD input)
 	ADD_CUSTOM_COMMAND(
 		DEPENDS ${input_src}
 		OUTPUT ${input_src}.inc
-		COMMAND cd ${input_dir}
-        	COMMAND xxd -i ${input_name} ${input_name}.inc
-        	COMMENT "compiling ${input} to c++ string")
+		WORKING_DIRECTORY ${input_dir}
+		COMMAND xxd -i ${input_name} ${input_name}.inc
+		COMMENT "compiling ${input} to c++ string")
 ENDMACRO()
