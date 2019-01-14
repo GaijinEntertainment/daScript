@@ -1003,8 +1003,8 @@ VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt110(bbox3f_cref b){ return v_perm_xyc
 
 static VECMATH_FINLINE float VECTORCALL quat_qslerp_counter_warp(float t, float cos_alpha)
 {
-  const float ATTENUATION = 0.82279687;
-  const float WORST_CASE_SLOPE = 0.58549219;
+  const float ATTENUATION = 0.82279687f;
+  const float WORST_CASE_SLOPE = 0.58549219f;
 
   float factor = 1 - ATTENUATION * fabsf(cos_alpha);
   factor *= factor;

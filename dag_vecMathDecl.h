@@ -70,11 +70,11 @@ typedef const struct bsph3f& bsph3f_cref;
 
 //if target is not defined, try to auto-detect target
 #ifndef _TARGET_SIMD_SSE
-  #if __SSE4_1__
+  #if __SSE4_1__ || defined(__AVX__) || defined(__AVX2__)
     #define _TARGET_SIMD_SSE 4
   #elif __SSSE3__
     #define _TARGET_SIMD_SSE 3
-  #elif defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
+  #elif defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP>=1)
     #define _TARGET_SIMD_SSE 2
   #endif
 #endif

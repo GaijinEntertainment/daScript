@@ -837,8 +837,8 @@ VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt110(bbox3f_cref b){ return v_perm_xyc
 
 VECMATH_FINLINE float VECTORCALL quat_qslerp_counter_warp(float t, float cos_alpha)
 {
-  const float ATTENUATION = 0.82279687;
-  const float WORST_CASE_SLOPE = 0.58549219;
+  const float ATTENUATION = 0.82279687f;
+  const float WORST_CASE_SLOPE = 0.58549219f;
 
   float factor = 1 - ATTENUATION * fabsf(cos_alpha);
   factor *= factor;
@@ -980,7 +980,7 @@ VECMATH_FINLINE int VECTORCALL v_extract_yi(vec4i v) {return _mm_cvtsi128_si32(_
 VECMATH_FINLINE int VECTORCALL v_extract_zi(vec4i v) {return _mm_cvtsi128_si32(_mm_shuffle_epi32(v, _MM_SHUFFLE(2,2,2,2)));}
 VECMATH_FINLINE int VECTORCALL v_extract_wi(vec4i v) {return _mm_cvtsi128_si32(_mm_shuffle_epi32(v, _MM_SHUFFLE(3,3,3,3)));}
 
-VECMATH_FINLINE short VECTORCALL v_extract_xi16(vec4i v) {return _mm_extract_epi16(v, 0);}
+VECMATH_FINLINE short VECTORCALL v_extract_xi16(vec4i v) {return (short)_mm_extract_epi16(v, 0);}
 
 
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_eq(vec3f v, vec3f a)
