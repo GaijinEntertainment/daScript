@@ -11,6 +11,11 @@
 
 
 #include "dag_vecMath.h"
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4800)
+//we use direct conversion to bool from int
+#endif
 
 VECMATH_FINLINE void VECTORCALL v_set_vec3_mem(vec3f &v, float x, float y, float z)
 {
@@ -2326,5 +2331,9 @@ VECMATH_INLINE int VECTORCALL vec_float_to_int(float x)
 {
   return v_extract_xi(v_cvt_vec4i(v_splats(x)));
 }
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #endif
