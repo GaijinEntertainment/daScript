@@ -980,6 +980,16 @@ VECMATH_FINLINE int VECTORCALL v_extract_yi(vec4i v) {return _mm_cvtsi128_si32(_
 VECMATH_FINLINE int VECTORCALL v_extract_zi(vec4i v) {return _mm_cvtsi128_si32(_mm_shuffle_epi32(v, _MM_SHUFFLE(2,2,2,2)));}
 VECMATH_FINLINE int VECTORCALL v_extract_wi(vec4i v) {return _mm_cvtsi128_si32(_mm_shuffle_epi32(v, _MM_SHUFFLE(3,3,3,3)));}
 
+VECMATH_FINLINE int64_t VECTORCALL v_extract_xi64 ( vec4i a )
+{
+#if defined(_MSC_VER)//visual studio is not capable of produce reasonable code otherwise!
+    return a.m128i_i64[0];
+#else
+    int64_t t; _mm_storel_epi64((__m128i*)&t, a); return t;
+#endif
+}
+VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a) {return _mm_loadl_epi64(&a);}
+
 VECMATH_FINLINE short VECTORCALL v_extract_xi16(vec4i v) {return (short)_mm_extract_epi16(v, 0);}
 
 
