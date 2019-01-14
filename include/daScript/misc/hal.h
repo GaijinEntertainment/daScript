@@ -2,6 +2,24 @@
 
 #include <vecmath/dag_vecMath.h>
 
+__forceinline void * v_extract_ptr(vec4i a) {
+#if INTPTR_MAX == INT32_MAX
+	return (void*)v_extract_xi(a);
+#else
+	return (void*)v_extract_xi64(a);
+#endif
+
+}
+__forceinline vec4i v_splats_ptr(void * a) {
+#if INTPTR_MAX == INT32_MAX
+	return v_splatsi((int32_t)a);
+#else
+	return v_splatsi64((int64_t)a);
+#endif
+}
+
+/*
+
 #if defined(_MSC_VER) || __APPLE__
     #ifdef _MSC_VER
         #include <intrin.h>
@@ -13,7 +31,6 @@
     #error "unsupported target"
 #endif
 
-/*
 namespace das {
     
 #if defined(_MSC_VER) || __APPLE__
@@ -38,14 +55,14 @@ namespace das {
     __forceinline vec4i v_splatsi ( int32_t a ) {
         return _mm_set1_epi32(a);
     }
-    __forceinline int64_t vec_cast_esi_int64 ( vec4i a ) {
+    __forceinline int64_t v_splatsi64 ( vec4i a ) {
 #if defined(_MSC_VER)
 		return a.m128i_i64[0];
 #else
         int64_t t; _mm_storel_epi64((__m128i*)&t, a); return t;
 #endif
     }
-    __forceinline vec4i vec_cast_int64_esi ( int64_t a ) {
+    __forceinline vec4i v_extract_xi64 ( int64_t a ) {
         return _mm_loadl_epi64((__m128i const*)&a);
     }
     __forceinline void * vec_cast_esi_ptr ( vec4i a ) {

@@ -51,14 +51,14 @@ namespace das
     
     template <>
     struct cast <int64_t> {
-        static __forceinline int64_t to ( vec4f x )            { return vec_cast_esi_int64(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( int64_t x )          { return v_cast_vec4f(vec_cast_int64_esi(x)); }
+        static __forceinline int64_t to ( vec4f x )            { return v_splatsi64(v_cast_vec4i(x)); }
+        static __forceinline vec4f from ( int64_t x )          { return v_cast_vec4f(v_extract_xi64(x)); }
     };
     
     template <>
     struct cast <uint64_t> {
-        static __forceinline uint64_t to ( vec4f x )           { return vec_cast_esi_int64(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( uint64_t x )         { return v_cast_vec4f(vec_cast_int64_esi(x)); }
+        static __forceinline uint64_t to ( vec4f x )           { return v_splatsi64(v_cast_vec4i(x)); }
+        static __forceinline vec4f from ( uint64_t x )         { return v_cast_vec4f(v_extract_xi64(x)); }
     };
     
     template <>
