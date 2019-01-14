@@ -57,6 +57,8 @@ def test_any(t:auto(mat))
     let v : auto(vec) = t[0]
     let col = sizeof(type vec) / 4
     let row = sizeof(type mat) / col / 4
+    identity(t)
+    verifyIdentity(t)
     for r in range(0,row)
         t[r] = vec(r)
     verifyRows(t)
@@ -76,5 +78,5 @@ def test
     test_4x4()
     test_any(float4x4())
     test_any(float3x4())
-
     return true
+

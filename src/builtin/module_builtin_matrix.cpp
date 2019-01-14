@@ -3,12 +3,25 @@
 #include "module_builtin.h"
 
 #include "daScript/ast/ast_interop.h"
+#include "daScript/ast/ast_policy_types.h"
 
 namespace das {
     
     template <typename VecT, int rowC>
     struct Matrix {
         VecT    m[rowC];
+    };
+    
+    template <typename VecT, int rowC>
+    struct cast<Matrix<VecT,rowC>> {
+        static __forceinline bool to ( vec4f ) {
+            assert(0 && "we should not even be here");
+            return false;
+        }
+        static __forceinline vec4f from ( Matrix<VecT,rowC> ) {
+            assert(0 && "we should not even be here");
+            return vec_setzero_ps();
+        }
     };
 
     template <typename VecT, int RowC>
@@ -134,6 +147,16 @@ namespace das {
     
     MAKE_TYPE_FACTORY(float4x4, float4x4)
     MAKE_TYPE_FACTORY(float3x4, float3x4)
+    
+    template <typename MatT>
+    struct SimNode_MatrixCtor : SimNode_CallBase {
+        SimNode_MatrixCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual vec4f eval(Context & context) override {
+            auto cmres = context.stackTop + stackTop;
+            memset ( cmres, 0, sizeof(MatT) );
+            return cast<void *>::from(cmres);
+        }
+    };
 
     __forceinline void matrix_identity ( float * mat, int r, int c ) {
         for ( int y=0; y!=r; ++y ) {
@@ -155,8 +178,12 @@ namespace das {
         // structure annotations
         addAnnotation(make_shared<float4x4_ann>());
         addAnnotation(make_shared<float3x4_ann>());
-        // identity
+        // c-tor
+        addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float3x4>,float4x4 > >("float3x4",lib) );
+        addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
+        // 4x4
         addExtern<decltype(float4x4_identity),float4x4_identity>(*this, lib, "identity");
+        // 3x4
         addExtern<decltype(float3x4_identity),float3x4_identity>(*this, lib, "identity");
     }
 }

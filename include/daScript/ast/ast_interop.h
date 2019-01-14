@@ -40,11 +40,28 @@ namespace das
             }
             this->result = makeType<Result>(lib);
             this->totalStackSize = sizeof(Prologue);
+            if ( result->isRefType() ) {
+                if ( result->canCopy() ) {
+                    copyOnReturn = true;
+                    moveOnReturn = false;
+                } else if ( result->canMove() ) {
+                    copyOnReturn = false;
+                    moveOnReturn = true;
+                } else {
+                    assert(0 && "we should not even be here");
+                }
+            }
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
-            auto pCall = context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(at);
-            pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
-            return pCall;
+            if ( copyOnReturn || moveOnReturn ) {
+                auto pCall = context.makeNode<SimNode_ExtFuncCallAndCopyOrMove<FuncT,fn>>(at);
+                pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
+                return pCall;
+            } else {
+                auto pCall = context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(at);
+                pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
+                return pCall;
+            }
         }
     };
     
