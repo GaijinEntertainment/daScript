@@ -12,7 +12,6 @@
 
 #include "dag_vecMathDecl.h"
 #include <stdint.h>
-//#include <supp/dag_math.h>
 //
 // basic arithmetic
 //

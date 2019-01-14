@@ -581,13 +581,14 @@ VECMATH_FINLINE vec4f VECTORCALL v_transpose4w(vec4f a, vec4f b, vec4f c, vec4f 
   return vcombine_f32(a3b3, c3d3);
 }
 
-VECMATH_FINLINE vec4f VECTORCALL v_dot3(vec4f a, vec4f b)
+VECMATH_FINLINE vec4f VECTORCALL v_dot3_x(vec4f a, vec4f b)
 {
   vec4f m;
   m = v_mul(a, b);
   m = v_madd(v_rot_1(a), v_rot_1(b), m);
-  return v_splat_x(v_madd(v_rot_2(a), v_rot_2(b), m));
+  return v_madd(v_rot_2(a), v_rot_2(b), m);
 }
+VECMATH_FINLINE vec4f VECTORCALL v_dot3(vec4f a, vec4f b) { return v_splat_x(v_dot3_x(a, b)); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_dot4(vec4f a, vec4f b)
 {
@@ -596,15 +597,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_dot4(vec4f a, vec4f b)
   m = v_madd(v_rot_1(a), v_rot_1(b), m);
   return v_add(v_rot_2(m), m);
 }
-VECMATH_FINLINE vec4f VECTORCALL v_dot3_x(vec4f a, vec4f b)
-{
-  return v_dot3(a,b);
-}
-
-VECMATH_FINLINE vec4f VECTORCALL v_dot4_x(vec4f a, vec4f b)
-{
-  return v_dot4(a,b);
-}
+VECMATH_FINLINE vec4f VECTORCALL v_dot4_x(vec4f a, vec4f b) { return v_dot4(a,b); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_length4_sq(vec4f a)
 {
@@ -613,10 +606,8 @@ VECMATH_FINLINE vec4f VECTORCALL v_length4_sq(vec4f a)
   m = v_madd(ar1, ar1, m);
   return v_add(v_rot_2(m), m);
 }
-VECMATH_FINLINE vec4f VECTORCALL v_length4_sq_x(vec4f a)
-{
-  return v_length4_sq(a);
-}
+VECMATH_FINLINE vec4f VECTORCALL v_length4_sq_x(vec4f a) { return v_length4_sq(a); }
+
 VECMATH_FINLINE float32x2_t VECTORCALL v_length4_sq_xd(vec4f a)
 {
   vec4f m = v_mul(a, a);
