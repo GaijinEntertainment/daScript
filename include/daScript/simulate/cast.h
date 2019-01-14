@@ -13,14 +13,14 @@ namespace das
     
     template <typename TT>
     struct cast <TT *> {
-        static __forceinline TT * to ( vec4f a )               { return (TT *) vec_cast_esi_ptr(v_cast_vec4i((a))); }
-        static __forceinline vec4f from ( TT * p )             { return v_cast_vec4f(vec_cast_ptr_esi((void *)p)); }
+        static __forceinline TT * to ( vec4f a )               { return (TT *) v_extract_ptr(v_cast_vec4i((a))); }
+        static __forceinline vec4f from ( TT * p )             { return v_cast_vec4f(v_splats_ptr((void *)p)); }
     };
     
     template <typename TT>
     struct cast <TT &> {
-        static __forceinline TT & to ( vec4f a )               { return *(TT *) vec_cast_esi_ptr(v_cast_vec4i((a))); }
-        static __forceinline vec4f from ( TT & p )             { return v_cast_vec4f(vec_cast_ptr_esi((void *)&p)); }
+        static __forceinline TT & to ( vec4f a )               { return *(TT *) v_extract_ptr(v_cast_vec4i((a))); }
+        static __forceinline vec4f from ( TT & p )             { return v_cast_vec4f(v_splats_ptr((void *)&p)); }
     };
     
     template <>
@@ -51,14 +51,14 @@ namespace das
     
     template <>
     struct cast <int64_t> {
-        static __forceinline int64_t to ( vec4f x )            { return v_splatsi64(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( int64_t x )          { return v_cast_vec4f(v_extract_xi64(x)); }
+        static __forceinline int64_t to ( vec4f x )            { return v_extract_xi64(v_cast_vec4i(x)); }
+        static __forceinline vec4f from ( int64_t x )          { return v_cast_vec4f(v_splatsi64(x)); }
     };
     
     template <>
     struct cast <uint64_t> {
-        static __forceinline uint64_t to ( vec4f x )           { return v_splatsi64(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( uint64_t x )         { return v_cast_vec4f(v_extract_xi64(x)); }
+        static __forceinline uint64_t to ( vec4f x )           { return v_extract_xi64(v_cast_vec4i(x)); }
+        static __forceinline vec4f from ( uint64_t x )         { return v_cast_vec4f(v_splatsi64(x)); }
     };
     
     template <>
@@ -105,7 +105,7 @@ namespace das
             return *((TT *)&x);
         }
         static __forceinline vec4f from ( const TT & x ) {
-            return  v_cast_vec4f(v_ldu_w((vec4i*)&x.x));
+            return  v_cast_vec4f(v_ldu_w((const int*)&x.x));
         }
     };
     

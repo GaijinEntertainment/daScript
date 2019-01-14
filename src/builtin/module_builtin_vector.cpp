@@ -106,10 +106,10 @@ namespace das
             return v_cast_vec4f(vec_neg_epi(v_cast_vec4i(x)));
         }
         static __forceinline vec4f Add ( vec4f a, vec4f b, Context & ) {
-            return v_cast_vec4f(vec_add_epi(v_cast_vec4i(a),v_cast_vec4i(b)));
+            return v_cast_vec4f(v_addi(v_cast_vec4i(a),v_cast_vec4i(b)));
         }
         static __forceinline vec4f Sub ( vec4f a, vec4f b, Context & ) {
-            return v_cast_vec4f(vec_sub_epi(v_cast_vec4i(a),v_cast_vec4i(b)));
+            return v_cast_vec4f(v_subi(v_cast_vec4i(a),v_cast_vec4i(b)));
         }
         static __forceinline vec4f Div ( vec4f a, vec4f b, Context & ) {
             return v_cast_vec4f(vec_div_epi(v_cast_vec4i(a),v_cast_vec4i(b)));
@@ -122,11 +122,11 @@ namespace das
         }
         static __forceinline void SetAdd  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (v_cast_vec4f(vec_add_epi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
+            *pa = cast<TT>::to (v_cast_vec4f(v_addi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
         }
         static __forceinline void SetSub  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
-            *pa = cast<TT>::to (v_cast_vec4f(vec_sub_epi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
+            *pa = cast<TT>::to (v_cast_vec4f(v_subi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
         }
         static __forceinline void SetDiv  ( char * a, vec4f b, Context & ) {
 			TT * pa = (TT *)a;
