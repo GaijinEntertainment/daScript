@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vecmath/dag_vecMath.h>
+
 #if defined(_MSC_VER) || __APPLE__
     #ifdef _MSC_VER
         #include <intrin.h>
@@ -11,6 +13,7 @@
     #error "unsupported target"
 #endif
 
+/*
 namespace das {
     
 #if defined(_MSC_VER) || __APPLE__
@@ -188,3 +191,4 @@ namespace das {
     #error "unsupported target"
 #endif
 }
+ */

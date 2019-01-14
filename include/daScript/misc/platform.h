@@ -12,6 +12,7 @@
 #ifdef __APPLE__
 #pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
 #pragma clang diagnostic ignored "-Wnested-anon-types"
+#pragma clang diagnostic ignored "-Wmissing-braces"
 #endif
 
 #include <signal.h>
