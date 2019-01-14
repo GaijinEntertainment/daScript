@@ -13,40 +13,20 @@ namespace das {
                 logs << "\nSTACK INFORMATION:\n";
             }
         }
-        int getFuncCount() const { return totalFunctions; }
-		int getVarCount() const { return totalVariables; }
     protected:
         ProgramPtr              program;
         FunctionPtr             func;
         uint32_t                stackTop = 0;
         vector<uint32_t>        stackTopStack;
         vector<ExprBlock *>     blocks;
-        int                     totalFunctions = 0;
-		int						totalVariables = 0;
         bool                    log = false;
         ostream &               logs;
     protected:
-	// globals
-		virtual void preVisitGlobalLet(const VariablePtr & var) override {
-			Visitor::preVisitGlobalLet(var);
-			if (var->used) {
-				var->index = totalVariables++;
-			}
-			else {
-				var->index = -2;
-			}
-		}
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
             func = f->shared_from_this();
             func->totalStackSize = stackTop = sizeof(Prologue);
-			if (func->used) {
-				func->index = totalFunctions++;
-			}
-			else {
-				func->index = -2;
-			}
             if ( log ) {
 				if (!func->used) logs << "unused ";
                 logs << func->describe() << "\n";
@@ -154,8 +134,29 @@ namespace das {
     void Program::allocateStack(ostream & logs) {
         AllocateStack context(shared_from_this(), logs);
         visit(context);
-        totalFunctions = context.getFuncCount();
-		totalVariables = context.getVarCount();
+		// allocate used variables and functions indices
+		totalVariables = 0;
+		totalFunctions = 0;
+		for (auto & pm : library.modules) {
+			for (auto & pv : pm->globals) {
+				auto & var = pv.second;
+				if (var->used) {
+					var->index = totalVariables++;
+				}
+				else {
+					var->index = -2;
+				}
+			}
+			for (auto & pf : pm->functions) {
+				auto & func = pf.second;
+				if (func->used) {
+					func->index = totalFunctions++;
+				}
+				else {
+					func->index = -2;
+				}
+			}
+		}
     }
 }
 

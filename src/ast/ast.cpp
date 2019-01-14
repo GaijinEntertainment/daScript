@@ -2396,31 +2396,35 @@ namespace das
     bool Program::simulate ( Context & context ) {
         context.thisProgram = this;
         context.globalVariables = (GlobalVariable *) context.allocate( totalVariables*sizeof(GlobalVariable) );
-        for ( auto & it : thisModule->globals ) {
-            auto pvar = it.second;
-			if (!pvar->used)
-				continue;
-			assert(pvar->index >= 0 && "we are simulating variable, which is not used");
-            auto & gvar = context.globalVariables[pvar->index];
-            gvar.name = context.allocateName(pvar->name);
-            gvar.size = pvar->type->getSizeOf();
-            gvar.debug = makeVariableDebugInfo(context, *it.second);
-            gvar.value = cast<char *>::from((char *)context.allocate(gvar.size));
-            gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
-        }
+		for (auto & pm : library.modules ) {
+			for (auto & it : pm->globals) {
+				auto pvar = it.second;
+				if (!pvar->used)
+					continue;
+				assert(pvar->index >= 0 && "we are simulating variable, which is not used");
+				auto & gvar = context.globalVariables[pvar->index];
+				gvar.name = context.allocateName(pvar->name);
+				gvar.size = pvar->type->getSizeOf();
+				gvar.debug = makeVariableDebugInfo(context, *it.second);
+				gvar.value = cast<char *>::from((char *)context.allocate(gvar.size));
+				gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
+			}
+		}
         context.totalVariables = totalVariables;
         context.functions = (SimFunction *) context.allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
-        for ( auto & it : thisModule->functions ) {
-            auto pfun = it.second;
-            if ( pfun->index<0 || !pfun->used )
-                continue;
-            auto & gfun = context.functions[pfun->index];
-            gfun.name = context.allocateName(pfun->name);
-            gfun.code = pfun->simulate(context);
-            gfun.stackSize = pfun->totalStackSize;
-            gfun.debug = makeFunctionDebugInfo(context, *pfun);
-        }
+		for (auto & pm : library.modules) {
+			for (auto & it : pm->functions) {
+				auto pfun = it.second;
+				if (pfun->index < 0 || !pfun->used)
+					continue;
+				auto & gfun = context.functions[pfun->index];
+				gfun.name = context.allocateName(pfun->name);
+				gfun.code = pfun->simulate(context);
+				gfun.stackSize = pfun->totalStackSize;
+				gfun.debug = makeFunctionDebugInfo(context, *pfun);
+			}
+		}
         sdebug.clear();
         context.simEnd();
         context.restart();

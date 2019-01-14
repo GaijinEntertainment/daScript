@@ -4,4 +4,5 @@ options log=true, logStack=true, optimize=false
 def test
     let t = translation(float3(1,2,3))
 	print("t={t}")
+	builtin_func()
     return true

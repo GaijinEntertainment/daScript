@@ -126,6 +126,8 @@ namespace das
         addRuntime(lib);
         // TIME
         addTime(lib);
+		// NOW, for the builtin module
+		appendCompiledFunctions();
     }
 }
 

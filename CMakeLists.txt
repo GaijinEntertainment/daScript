@@ -61,9 +61,13 @@ src/builtin/module_builtin_runtime.cpp
 src/builtin/module_builtin_vector.cpp
 src/builtin/module_builtin_matrix.cpp
 src/builtin/module_builtin_time.cpp
+src/builtin/module_builtin_das.cpp
+src/builtin/builtin.das.inc
+src/builtin/builtin.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
+XXD(src/builtin/builtin.das)
 
 SET(MISC_SRC
 include/daScript/misc/enums.h
