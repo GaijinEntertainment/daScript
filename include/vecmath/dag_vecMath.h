@@ -182,6 +182,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_max(vec4f a, vec4f b);
 VECMATH_FINLINE vec4i VECTORCALL v_maxi(vec4i a, vec4i b);
 //! -a
 VECMATH_FINLINE vec4f VECTORCALL v_neg(vec4f a);
+VECMATH_FINLINE vec4i VECTORCALL v_negi(vec4i a);
 //! fabs(a)
 VECMATH_FINLINE vec4f VECTORCALL v_abs(vec4f a);
 VECMATH_FINLINE vec4i VECTORCALL v_absi(vec4i a);

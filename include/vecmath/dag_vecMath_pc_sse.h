@@ -324,6 +324,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_absi(vec4i a) {return sse2_absi(a);}
 #endif
 
 VECMATH_FINLINE vec4f VECTORCALL v_neg(vec4f a) { return v_sub(v_zero(), a); }
+VECMATH_FINLINE vec4i VECTORCALL v_negi(vec4i a){ return v_subi(v_cast_vec4i(v_zero()), a); }
 VECMATH_FINLINE vec4f VECTORCALL v_abs(vec4f a)
 {
   #if defined(__clang)
