@@ -39,11 +39,6 @@ namespace das {
                 return nullptr;
             }
         }
-        // boxing restrictions
-        if ( autoT->alwaysBoxed && !initT->isRefType() )
-            return nullptr;
-        if ( autoT->notBoxed && initT->isRefType() )
-            return nullptr;
         // auto & can't be infered from non-ref
         if ( autoT->ref && !initT->ref )
             return nullptr;
@@ -142,16 +137,6 @@ namespace das {
         void verifyType ( const TypeDeclPtr & decl ) const {
             if ( decl->dim.size() && decl->ref ) {
                 error("can't declare an array of references",decl->at,CompilationError::invalid_type);
-            }
-            if ( decl->baseType==Type::autoinfer || decl->baseType==Type::alias ) {
-                if ( decl->notBoxed && decl->alwaysBoxed ) {
-                    error("can only have one boxing restruction",decl->at,CompilationError::invalid_type);
-                }
-                return; // alias or auto types always ok, until infered
-            } else {
-                if ( decl->notBoxed || decl->alwaysBoxed ) {
-                    error("regular types can't have boxing restrictions",decl->at,CompilationError::invalid_type);
-                }
             }
             if ( decl->baseType==Type::tVoid ) {
                 if ( decl->dim.size() ) {

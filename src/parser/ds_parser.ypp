@@ -1001,22 +1001,6 @@ auto_type_declaration
         $$->alias = *$alias;
         delete $alias;
     }
-    |   _AUTO[loc] '(' NAME[alias] '@' ')'  {
-        $$ = new TypeDecl(Type::autoinfer);
-        $$->at = tokAt(@loc);
-        $$->alias = *$alias;
-        $$->alwaysBoxed = true;
-        $$->notBoxed = false;
-        delete $alias;
-    }
-    |   _AUTO[loc] '(' NAME[alias] '!' '@' ')'  {
-        $$ = new TypeDecl(Type::autoinfer);
-        $$->at = tokAt(@loc);
-        $$->alias = *$alias;
-        $$->alwaysBoxed = false;
-        $$->notBoxed = true;
-        delete $alias;
-    }
     ;
 
 type_declaration
@@ -1045,16 +1029,6 @@ type_declaration
     |   type_declaration[typeDecl] '!' '&' {
         $typeDecl->ref = false;
         $typeDecl->removeRef = true;
-        $$ = $typeDecl;
-    }
-    |   type_declaration[typeDecl] '@' {
-        $typeDecl->alwaysBoxed = true;
-        $typeDecl->notBoxed = false;
-        $$ = $typeDecl;
-    }
-    |   type_declaration[typeDecl] '!' '@' {
-        $typeDecl->alwaysBoxed = false;
-        $typeDecl->notBoxed = true;
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] '?' {

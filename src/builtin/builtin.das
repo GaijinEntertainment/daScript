@@ -4,8 +4,9 @@ def resize(Arr:array<auto(numT)>;newSize:int)
 def reserve(Arr:array<auto(numT)>;newSize:int)
     __builtin_array_reserve(Arr,newSize,sizeof(type numT))
 
-def push(Arr:array<auto(numT!@)>;value:numT;at:int=-1)
-    __builtin_array_push_value(Arr,value,at,sizeof(type numT))
+def push(Arr:array<auto(numT)>;value:numT;at:int=-1)
+    Arr[__builtin_array_push(Arr,at,sizeof(type numT))] = value
 
-def push(Arr:array<auto(numT@)>;value:numT;at:int=-1)
-    __builtin_array_push_boxed(Arr,value,at,sizeof(type numT))
+def emplace(Arr:array<auto(numT)>;value:numT;at:int=-1)
+    Arr[__builtin_array_push(Arr,at,sizeof(type numT))] <- value
+

@@ -95,11 +95,6 @@ namespace das
         } else if ( removeRef ) {
             stream << "!&";
         }
-        if ( alwaysBoxed ) {
-            stream << "@";
-        } else if ( notBoxed ) {
-            stream << "!@";
-        }
         return stream.str();
     }
 
@@ -236,12 +231,8 @@ namespace das
         } else {
             ss << to_string(baseType);
         }
-        if ( ref )
+        if ( ref ) {
             ss << "#ref";
-        if ( alwaysBoxed ) {
-            ss << "#@";
-        } else if ( notBoxed ) {
-            ss << "#!@";
         }
         if ( dim.size() ) {
             for ( auto d : dim ) {

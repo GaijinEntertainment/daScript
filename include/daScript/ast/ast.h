@@ -107,8 +107,6 @@ namespace das
                 bool    constant : 1;
                 bool    removeRef : 1;
                 bool    removeConstant : 1;
-                bool    notBoxed : 1;
-                bool    alwaysBoxed : 1;
             };
             uint32_t flags = 0;
         };
