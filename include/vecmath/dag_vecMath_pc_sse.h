@@ -988,7 +988,7 @@ VECMATH_FINLINE int64_t VECTORCALL v_extract_xi64 ( vec4i a )
     int64_t t; _mm_storel_epi64((__m128i*)&t, a); return t;
 #endif
 }
-VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a) {return _mm_loadl_epi64(&a);}
+VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a) {return _mm_loadl_epi64((const __m128i*)&a);}
 
 VECMATH_FINLINE short VECTORCALL v_extract_xi16(vec4i v) {return (short)_mm_extract_epi16(v, 0);}
 
