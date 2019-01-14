@@ -9,13 +9,12 @@ namespace das {
 
 	bool Module_BuiltIn::appendCompiledFunctions() {
 		stringstream issues;
-		const char * src = (const char *) builtin_das;
-		if (auto program = parseDaScript(src, issues)) {
+        string src_str ( (const char *) builtin_das, size_t(builtin_das_len) );
+		if (auto program = parseDaScript(src_str.c_str(), issues)) {
 			if (program->failed()) {
 #if 1
-				string str(src);
 				for (auto & err : program->errors) {
-					issues << reportError(&str, err.at.line, err.at.column, err.what, err.cerr);
+					issues << reportError(&src_str, err.at.line, err.at.column, err.what, err.cerr);
 				}
 				printf("%s\n", issues.str().c_str());
 #endif

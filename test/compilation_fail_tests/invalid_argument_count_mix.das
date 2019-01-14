@@ -1,4 +1,4 @@
-expect 30107:12    // invalid_argument_count
+expect 30107:10    // invalid_argument_count
 
 def test
     // assert 1 or 2 arguments
@@ -20,9 +20,3 @@ def test
     let(t:table<string,int>)
         find(t,"1",0)
         find(t,"1")     // this one fine
-    // push(array,value) or push(array,value,at)
-    let(a:array<int>)
-        push(a)
-        push(a,1)       // this one fine
-        push(a,1,0)     // this one too
-        push(a,1,0,11)

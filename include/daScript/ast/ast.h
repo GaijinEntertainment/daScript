@@ -107,6 +107,8 @@ namespace das
                 bool    constant : 1;
                 bool    removeRef : 1;
                 bool    removeConstant : 1;
+                bool    notBoxed : 1;
+                bool    alwaysBoxed : 1;
             };
             uint32_t flags = 0;
         };
@@ -144,6 +146,7 @@ namespace das
     template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
     template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
     template<> struct ToBasicType<Context *>    { enum { type = Type::fakeContext }; };
+    template<> struct ToBasicType<vec4f>        { enum { type = Type::anyArgument }; };
 
     template <typename TT>
     struct typeFactory {
@@ -912,13 +915,6 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
     };
     
-    struct ExprArrayPush : ExprLikeCall<ExprArrayPush> {
-        ExprArrayPush() = default;
-        ExprArrayPush ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprArrayPush>(a, name) {}
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-    };
-    
     template <typename It, typename SimNodeT, bool first>
     struct ExprTableKeysOrValues : ExprLooksLikeCall {
         ExprTableKeysOrValues() = default;
@@ -1338,7 +1334,6 @@ namespace das
         VISIT_EXPR(ExprHash)
         VISIT_EXPR(ExprKeys)
         VISIT_EXPR(ExprValues)
-        VISIT_EXPR(ExprArrayPush)
         VISIT_EXPR(ExprErase)
         VISIT_EXPR(ExprFind)
         VISIT_EXPR(ExprNew)

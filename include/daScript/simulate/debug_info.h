@@ -9,6 +9,7 @@ namespace das
         autoinfer,
         alias,
         fakeContext,
+        anyArgument,
         tVoid,
         tBool,
         tInt64,

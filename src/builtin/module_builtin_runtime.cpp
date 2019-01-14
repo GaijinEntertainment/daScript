@@ -82,8 +82,6 @@ namespace das
         // table expressions
         addCall<ExprKeys>("keys");
         addCall<ExprValues>("values");
-        // array expresisons
-        addCall<ExprArrayPush>("push");
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile

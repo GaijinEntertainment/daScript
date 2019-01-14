@@ -25,6 +25,35 @@ namespace das {
         array_reserve( *context, *pArray, newSize, stride );
     }
     
+    void builtin_array_push_value ( Array * pArray, vec4f value, int index, int stride, Context * context ) {
+        uint32_t idx = pArray->size;
+        array_resize(*context, *pArray, idx + 1, stride, false);
+        if ( index >=0 ) {
+            if ( uint32_t(index) >= pArray->size ) {
+                context->throw_error("insert index out of range");
+                return;
+            }
+            memmove ( pArray->data+(index+1)*stride, pArray->data+index*stride, (idx-index)*stride );
+            idx = index;
+        }
+        memcpy ( pArray->data + idx*stride, &value, stride );
+    }
+    
+    void builtin_array_push_boxed ( Array * pArray, vec4f value, int index, int stride, Context * context ) {
+        uint32_t idx = pArray->size;
+        array_resize(*context, *pArray, idx + 1, stride, false);
+        if ( index >=0 ) {
+            if ( uint32_t(index) >= pArray->size ) {
+                context->throw_error("insert index out of range");
+                return;
+            }
+            memmove ( pArray->data+(index+1)*stride, pArray->data+index*stride, (idx-index)*stride );
+            idx = index;
+        }
+        auto data = cast<char *>::to(value);
+        memcpy ( pArray->data + idx*stride, data, stride );
+    }
+    
     void Module_BuiltIn::addArrayTypes(ModuleLibrary & lib) {
         // array functions
         addExtern<decltype(builtin_array_size), builtin_array_size>(*this, lib, "length", false);
@@ -32,5 +61,7 @@ namespace das {
         // array built-in functions
         addExtern<decltype(builtin_array_resize), builtin_array_resize>(*this, lib, "__builtin_array_resize", true);
         addExtern<decltype(builtin_array_reserve), builtin_array_reserve>(*this, lib, "__builtin_array_reserve", true);
+        addExtern<decltype(builtin_array_push_value), builtin_array_push_value>(*this, lib, "__builtin_array_push_value", true);
+        addExtern<decltype(builtin_array_push_boxed), builtin_array_push_boxed>(*this, lib, "__builtin_array_push_boxed", true);
     }
 }

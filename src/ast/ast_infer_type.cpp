@@ -39,6 +39,11 @@ namespace das {
                 return nullptr;
             }
         }
+        // boxing restrictions
+        if ( autoT->alwaysBoxed && !initT->isRefType() )
+            return nullptr;
+        if ( autoT->notBoxed && initT->isRefType() )
+            return nullptr;
         // auto & can't be infered from non-ref
         if ( autoT->ref && !initT->ref )
             return nullptr;
@@ -139,7 +144,14 @@ namespace das {
                 error("can't declare an array of references",decl->at,CompilationError::invalid_type);
             }
             if ( decl->baseType==Type::autoinfer || decl->baseType==Type::alias ) {
+                if ( decl->notBoxed && decl->alwaysBoxed ) {
+                    error("can only have one boxing restruction",decl->at,CompilationError::invalid_type);
+                }
                 return; // alias or auto types always ok, until infered
+            } else {
+                if ( decl->notBoxed || decl->alwaysBoxed ) {
+                    error("regular types can't have boxing restrictions",decl->at,CompilationError::invalid_type);
+                }
             }
             if ( decl->baseType==Type::tVoid ) {
                 if ( decl->dim.size() ) {
@@ -326,6 +338,9 @@ namespace das {
 			if (!passType) {
 				return false;
 			}
+            if ( argType->baseType==Type::anyArgument ) {
+                return true;
+            }
 			if (inferAuto) {
 				// if it's an alias, we de'alias it, and see if it matches at all
 				if (argType->isAlias()) {
@@ -378,13 +393,14 @@ namespace das {
 
 		string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
 			stringstream ss;
-			for (size_t ai = 0; ai != types.size(); ++ai) {
+            size_t tot = min ( types.size(), pFn->arguments.size() );
+            for (size_t ai = 0; ai != tot; ++ai) {
 				auto & arg = pFn->arguments[ai];
 				auto & passType = types[ai];
-				if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
-					ss << "\ninvalid argument " << arg->name << ", expecting ("
+                if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
+                    ss << "\ninvalid argument " << arg->name << ", expecting ("
                         << arg->type->describe() << ") passing (" << passType->describe() << ")";
-				}
+                }
 			}
 			return ss.str();
 		}
@@ -760,28 +776,6 @@ namespace das {
             // infer
             expr->arguments[0]->type->constant = true;
             expr->type = make_shared<TypeDecl>(Type::tUInt64);
-            return Visitor::visit(expr);
-        }
-    // ExprArrayPush
-        virtual ExpressionPtr visit ( ExprArrayPush * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
-            if ( expr->arguments.size()!=2 && expr->arguments.size()!=3 ) {
-                error("push(array,value) or push(array,value,at)", expr->at, CompilationError::invalid_argument_count);
-                return Visitor::visit(expr);
-            }
-            // infer
-            auto arrayType = expr->arguments[0]->type;
-            auto valueType = expr->arguments[1]->type;
-            if ( !arrayType->isGoodArrayType() ) {
-                error("push first argument must be fully qualified array", expr->at, CompilationError::invalid_argument_type);
-                return Visitor::visit(expr);
-            }
-            if ( !arrayType->firstType->isSameType(*valueType,false) )
-                error("can't push value of different type", expr->at, CompilationError::invalid_argument_type);
-            if ( expr->arguments.size()==3 && !expr->arguments[2]->type->isIndex() )
-                error("push at must be an index", expr->at, CompilationError::invalid_argument_type);
-            valueType->constant = true;
-            expr->type = make_shared<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
     // ExprErase

@@ -11,6 +11,8 @@ namespace das
 {
     Enum<Type> g_typeTable = {
         {   Type::autoinfer,    "auto"  },
+        {   Type::alias,        "alias"  },
+        {   Type::anyArgument,  "any"  },
         {   Type::tVoid,        "void"  },
         {   Type::tBool,        "bool"  },
         {   Type::tInt64,       "int64"  },

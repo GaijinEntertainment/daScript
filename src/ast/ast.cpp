@@ -95,6 +95,11 @@ namespace das
         } else if ( removeRef ) {
             stream << "!&";
         }
+        if ( alwaysBoxed ) {
+            stream << "@";
+        } else if ( notBoxed ) {
+            stream << "!@";
+        }
         return stream.str();
     }
 
@@ -233,6 +238,11 @@ namespace das
         }
         if ( ref )
             ss << "#ref";
+        if ( alwaysBoxed ) {
+            ss << "#@";
+        } else if ( notBoxed ) {
+            ss << "#!@";
+        }
         if ( dim.size() ) {
             for ( auto d : dim ) {
                 ss << "#" << d;
@@ -1123,25 +1133,6 @@ namespace das
             auto typeInfo = context.makeNode<TypeInfo>();
             context.thisProgram->makeTypeInfo(typeInfo, context, arguments[0]->type);
             return context.makeNode<SimNode_HashOfMixedType>(at, val, typeInfo);
-        }
-    }
-
-    // ExprArrayPush
-    
-    ExpressionPtr ExprArrayPush::clone( const ExpressionPtr & expr ) const {
-        auto cexpr = clonePtr<ExprArrayPush>(expr);
-        ExprLooksLikeCall::clone(cexpr);
-        return cexpr;
-    }
-    
-    SimNode * ExprArrayPush::simulate (Context & context) const {
-        auto arr = arguments[0]->simulate(context);
-        auto val = arguments[1]->simulate(context);
-        auto idx = arguments.size()==3 ? arguments[2]->simulate(context) : nullptr;
-        if ( arguments[1]->type->isRef() ) {
-            return context.makeNode<SimNode_ArrayPushRefValue>(at, arr, val, idx, arguments[0]->type->firstType->getSizeOf());
-        } else {
-            return context.makeValueNode<SimNode_ArrayPushValue>(arguments[1]->type->baseType, at, arr, val, idx);
         }
     }
     

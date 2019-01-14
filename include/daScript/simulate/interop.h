@@ -18,6 +18,13 @@ namespace das
             return &ctx;
         }
     };
+    
+    template <>
+    struct cast_arg<vec4f> {
+        static __forceinline vec4f to ( Context &, vec4f x ) {
+            return x;
+        }
+    };
 
 #ifdef _MSC_VER
 #pragma warning(push)

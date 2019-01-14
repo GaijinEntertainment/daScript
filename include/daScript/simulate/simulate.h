@@ -81,6 +81,8 @@ namespace das
         friend class Program;
     public:
         Context(const string * lines, int las = 4*1024*1024);
+        Context(const Context &) = delete;
+        Context & operator = (const Context &) = delete;
         ~Context();
         
         void * reallocate ( void * oldData, uint32_t oldSize, uint32_t size );
