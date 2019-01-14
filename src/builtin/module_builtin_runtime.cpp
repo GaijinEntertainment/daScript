@@ -84,7 +84,6 @@ namespace das
         addCall<ExprValues>("values");
         // array expresisons
         addCall<ExprArrayPush>("push");
-        addCall<ExprArrayReserve>("reserve");
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile

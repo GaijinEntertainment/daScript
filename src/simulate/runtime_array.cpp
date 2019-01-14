@@ -96,14 +96,6 @@ namespace das
         return vec_setzero_ps();
     }
 
-    
-    // RESERVE
-
-    vec4f SimNode_ArrayReserve::apply ( Context & context, Array * pA, uint32_t newCapacity ) {
-        array_reserve(context, *pA, newCapacity, stride);
-        return vec_setzero_ps();
-    }
-    
     // GoodArrayIterator
     
     bool GoodArrayIterator::first ( Context & context, IteratorContext & itc )  {

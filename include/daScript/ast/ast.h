@@ -968,12 +968,6 @@ namespace das
         virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
     
-    struct ExprArrayReserve : ExprArrayCallWithSizeOrIndex<ExprArrayReserve, SimNode_ArrayReserve> {
-        ExprArrayReserve() = default;
-        ExprArrayReserve ( const LineInfo & a, const string & n )
-            : ExprArrayCallWithSizeOrIndex<ExprArrayReserve, SimNode_ArrayReserve>(a,n) {}
-    };
-    
     struct ExprErase : ExprLikeCall<ExprErase> {
         ExprErase() = default;
         ExprErase ( const LineInfo & a, const string & ) : ExprLikeCall<ExprErase>(a, "erase") {}
@@ -1345,7 +1339,6 @@ namespace das
         VISIT_EXPR(ExprKeys)
         VISIT_EXPR(ExprValues)
         VISIT_EXPR(ExprArrayPush)
-        VISIT_EXPR(ExprArrayReserve)
         VISIT_EXPR(ExprErase)
         VISIT_EXPR(ExprFind)
         VISIT_EXPR(ExprNew)

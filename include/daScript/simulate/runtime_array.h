@@ -48,12 +48,6 @@ namespace das
         virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override;
     };
     
-    // RESERVE(CAPACITY)
-    struct SimNode_ArrayReserve : SimNode_Array {
-        SimNode_ArrayReserve(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {};
-        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override;
-    };
-    
     // PUSH VALUE
     struct SimNode_ArrayPush : SimNode_Array {
         SimNode_ArrayPush(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii, uint32_t sz)

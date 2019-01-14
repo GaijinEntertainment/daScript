@@ -12,7 +12,7 @@ namespace das {
 		const char * src = (const char *) builtin_das;
 		if (auto program = parseDaScript(src, issues)) {
 			if (program->failed()) {
-#if 0
+#if 1
 				string str(src);
 				for (auto & err : program->errors) {
 					issues << reportError(&str, err.at.line, err.at.column, err.what, err.cerr);
