@@ -35,6 +35,7 @@ __forceinline vec4i v_muli(vec4i a, vec4i b) {
 	C[0] = A[0] * B[0];   C[1] = A[1] * B[1];   C[2] = A[2] * B[2];   C[3] = A[3] * B[3];
 	return c;
 }
+
 __forceinline vec4i v_divi(vec4i a, vec4i b) {
 	vec4i c;
 	uint32_t * A = (uint32_t *)&a;
@@ -43,12 +44,22 @@ __forceinline vec4i v_divi(vec4i a, vec4i b) {
 	C[0] = A[0] / B[0];   C[1] = A[1] / B[1];   C[2] = A[2] / B[2];   C[3] = A[3] / B[3];
 	return c;
 }
-__forceinline vec4i vec_modi(vec4i a, vec4i b) {
+
+__forceinline vec4i v_modi(vec4i a, vec4i b) {
 	vec4i c;
 	int32_t * A = (int32_t *)&a;
 	int32_t * B = (int32_t *)&b;
 	int32_t * C = (int32_t *)&c;
 	C[0] = A[0] % B[0];   C[1] = A[1] % B[1];   C[2] = A[2] % B[2];   C[3] = A[3] % B[3];
+	return c;
+}
+
+__forceinline vec4i v_mulu(vec4i a, vec4i b) {
+	vec4i c;
+	uint32_t * A = (uint32_t *)&a;
+	uint32_t * B = (uint32_t *)&b;
+	uint32_t * C = (uint32_t *)&c;
+	C[0] = A[0] * B[0];   C[1] = A[1] * B[1];   C[2] = A[2] * B[2];   C[3] = A[3] * B[3];
 	return c;
 }
 
@@ -149,19 +160,19 @@ namespace das {
     __forceinline vec4f vec_neg_ps ( vec4f a ) {
         return _mm_sub_ps(_mm_setzero_ps(), a);
     }
-    __forceinline vec4f vec_add_ps ( vec4f a, vec4f b ) {
+    __forceinline vec4f v_add ( vec4f a, vec4f b ) {
         return _mm_add_ps(a,b);
     }
-    __forceinline vec4f vec_sub_ps ( vec4f a, vec4f b ) {
+    __forceinline vec4f v_sub ( vec4f a, vec4f b ) {
         return _mm_sub_ps(a,b);
     }
-    __forceinline vec4f vec_div_ps ( vec4f a, vec4f b ) {
+    __forceinline vec4f v_div ( vec4f a, vec4f b ) {
         return _mm_div_ps(a,b);
     }
-    __forceinline vec4f vec_mul_ps ( vec4f a, vec4f b ) {
+    __forceinline vec4f v_mul ( vec4f a, vec4f b ) {
         return _mm_mul_ps(a,b);
     }
-    __forceinline vec4f vec_shuffle_ps_xxxx ( vec4f a ) {
+    __forceinline vec4f v_splat_x ( vec4f a ) {
         return _mm_shuffle_ps(a,a,_MM_SHUFFLE(0,0,0,0));
     }
     __forceinline bool vec_equ_ps ( vec4f a, vec4f b, int mask ) {
@@ -170,7 +181,7 @@ namespace das {
     __forceinline bool vec_nequ_ps ( vec4f a, vec4f b, int mask ) {
         return (_mm_movemask_ps(_mm_cmpeq_ps(a,b)) & mask)!=mask;
     }
-    __forceinline vec4f vec_mod_ps(vec4f  a, vec4f aDiv) {
+    __forceinline vec4f v_mod(vec4f  a, vec4f aDiv) {
         vec4f c = _mm_div_ps(a,aDiv);
         vec4i i = _mm_cvttps_epi32(c);
         vec4f cTrunc = _mm_cvtepi32_ps(i);
@@ -194,7 +205,7 @@ namespace das {
     __forceinline vec4i v_subi ( vec4i a, vec4i b ) {
         return _mm_sub_epi32(a,b);
     }
-    __forceinline vec4i vec_shuffle_epi_xxxx ( vec4i a ) {
+    __forceinline vec4i v_splat_xi ( vec4i a ) {
         return _mm_shuffle_epi32(a,_MM_SHUFFLE(0,0,0,0));
     }
     __forceinline bool vec_equ_epi ( vec4i a, vec4i b, int mask ) {
