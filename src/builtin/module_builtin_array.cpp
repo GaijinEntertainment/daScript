@@ -39,6 +39,14 @@ namespace das {
         return idx;
     }
 
+    void builtin_array_erase ( Array * pArray, int index, int stride, Context * context ) {
+        if ( uint32_t(index) >= pArray->size ) {
+            context->throw_error("erase index out of range");
+            return;
+        }
+        memmove ( pArray->data+index*stride, pArray->data+(index+1)*stride, (pArray->size-index-1)*stride );
+        array_resize(*context, *pArray, pArray->size-1, stride, false);
+    }
     
     void Module_BuiltIn::addArrayTypes(ModuleLibrary & lib) {
         // array functions
@@ -48,5 +56,6 @@ namespace das {
         addExtern<decltype(builtin_array_resize), builtin_array_resize>(*this, lib, "__builtin_array_resize", true);
         addExtern<decltype(builtin_array_reserve), builtin_array_reserve>(*this, lib, "__builtin_array_reserve", true);
         addExtern<decltype(builtin_array_push), builtin_array_push>(*this, lib, "__builtin_array_push", true);
+        addExtern<decltype(builtin_array_erase), builtin_array_erase>(*this, lib, "__builtin_array_erase", true);
     }
 }

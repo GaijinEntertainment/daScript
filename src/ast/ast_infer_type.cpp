@@ -767,23 +767,19 @@ namespace das {
         virtual ExpressionPtr visit ( ExprErase * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()!=2 ) {
-                error("erase(table,key) or erase(array,index)", expr->at, CompilationError::invalid_argument_count);
+                error("eraseKey(table,key)", expr->at, CompilationError::invalid_argument_count);
                 return Visitor::visit(expr);
             }
             // infer
             expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
             auto containerType = expr->arguments[0]->type;
             auto valueType = expr->arguments[1]->type;
-            if ( containerType->isGoodArrayType() ) {
-                if ( !valueType->isIndex() )
-                    error("size must be int or uint", expr->at, CompilationError::invalid_argument_type);
-                expr->type = make_shared<TypeDecl>(Type::tVoid);
-            } else if ( containerType->isGoodTableType() ) {
+            if ( containerType->isGoodTableType() ) {
                 if ( !containerType->firstType->isSameType(*valueType,false) )
                     error("key must be of the same type as table<key,...>", expr->at, CompilationError::invalid_argument_type);
                 expr->type = make_shared<TypeDecl>(Type::tBool);
             } else {
-                error("first argument must be fully qualified array or table", expr->at, CompilationError::invalid_argument_type);
+                error("first argument must be fully qualified table", expr->at, CompilationError::invalid_argument_type);
             }
             valueType->constant = true;
             return Visitor::visit(expr);
@@ -792,23 +788,20 @@ namespace das {
         virtual ExpressionPtr visit ( ExprFind * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()!=2 ) {
-                error("find(table,key) or find(array,value)", expr->at, CompilationError::invalid_argument_count);
+                error("findKey(table,key)", expr->at, CompilationError::invalid_argument_count);
                 return Visitor::visit(expr);
             }
             // infer
             expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
             auto containerType = expr->arguments[0]->type;
             auto valueType = expr->arguments[1]->type;
-            if ( containerType->isGoodArrayType() ) {
-                if ( !valueType->isSameType(*containerType->firstType) )
-                    error("value must be of the same type as array<value>", expr->at, CompilationError::invalid_argument_type);
-            } else if ( containerType->isGoodTableType() ) {
+            if ( containerType->isGoodTableType() ) {
                 if ( !containerType->firstType->isSameType(*valueType,false) )
                     error("key must be of the same type as table<key,...>", expr->at, CompilationError::invalid_argument_type);
                 expr->type = make_shared<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_shared<TypeDecl>(*containerType->secondType);
             } else {
-                error("first argument must be fully qualified array or table", expr->at, CompilationError::invalid_argument_type);
+                error("first argument must be fully qualified table", expr->at, CompilationError::invalid_argument_type);
             }
             containerType->constant = true;
             valueType->constant = true;

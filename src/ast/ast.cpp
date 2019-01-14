@@ -1138,10 +1138,7 @@ namespace das
     SimNode * ExprErase::simulate (Context & context) const {
         auto cont = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
-        if ( arguments[0]->type->isGoodArrayType() ) {
-            auto size = arguments[0]->type->firstType->getSizeOf();
-            return context.makeNode<SimNode_ArrayErase>(at,cont,val,size);
-        } else if ( arguments[0]->type->isGoodTableType() ) {
+        if ( arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
             return context.makeValueNode<SimNode_TableErase>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
         } else {
@@ -1161,12 +1158,7 @@ namespace das
     SimNode * ExprFind::simulate (Context & context) const {
         auto cont = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
-        if ( arguments[0]->type->isGoodArrayType() ) {
-            assert(0);
-            return nullptr;
-            // auto size = arguments[0]->type->firstType->getSizeOf();
-            // return context.makeNode<SimNode_ArrayErase>(at,cont,val,size);
-        } else if ( arguments[0]->type->isGoodTableType() ) {
+        if ( arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
             return context.makeValueNode<SimNode_TableFind>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
         } else {

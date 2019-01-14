@@ -10,23 +10,11 @@ namespace das
     void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride );
     void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero );
     
-    // BASIC ARRAY NODE
-    struct SimNode_Array : SimNode {
-        SimNode_Array(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t s) : SimNode(at), l(ll), r(rr), stride(s) {}
-        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) = 0;
-        virtual vec4f eval ( Context & context ) override;
-        SimNode * l, * r;
-        uint32_t stride;
-    };
-    
     // AT (INDEX)
-    struct SimNode_ArrayAt : SimNode_Array {
+    struct SimNode_ArrayAt : SimNode {
         DAS_PTR_NODE;
-        SimNode_ArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
-        virtual vec4f apply ( Context &, Array *, uint32_t  ) override {
-            assert(0 && "we should not even be here");
-            return vec_setzero_ps();
-        }
+        SimNode_ArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
+            : SimNode(at), l(ll), r(rr), stride(sz) {}
         __forceinline char * compute ( Context & context ) {
             Array * pA = (Array *) l->evalPtr(context);
             DAS_PTR_EXCEPTION_POINT;
@@ -40,44 +28,8 @@ namespace das
                 return pA->data + idx*stride;
             }
         }
-    };
-    
-    // ERASE(INDEX)
-    struct SimNode_ArrayErase : SimNode_Array {
-        SimNode_ArrayErase(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz) : SimNode_Array(at,ll,rr,sz) {}
-        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override;
-    };
-    
-    // PUSH VALUE
-    struct SimNode_ArrayPush : SimNode_Array {
-        SimNode_ArrayPush(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii, uint32_t sz)
-            : SimNode_Array(at, ll, rr, sz), index(ii) {};
-        virtual void copyValue ( char * at, vec4f value ) = 0;
-        virtual vec4f eval ( Context & context ) override;
-        virtual vec4f apply ( Context & context, Array * pA, uint32_t index ) override;
-        SimNode *index;
-    };
-    
-    // PUSH VALUE
-    template <typename TT>
-    struct SimNode_ArrayPushValue : SimNode_ArrayPush {
-        SimNode_ArrayPushValue(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii)
-            : SimNode_ArrayPush(at, ll, rr, ii, sizeof(TT)) {};
-        virtual void copyValue ( char * at, vec4f value ) override {
-            TT * pl = (TT *) at;
-            TT * pr = (TT *) &value;
-            *pl = *pr;
-        }
-    };
-    
-    // PUSH REFERENCE VALUE
-    struct SimNode_ArrayPushRefValue : SimNode_ArrayPush {
-        SimNode_ArrayPushRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, SimNode * ii, uint32_t sz)
-            : SimNode_ArrayPush(at, ll, rr, ii, sz) {};
-        virtual void copyValue ( char * at, vec4f value ) override {
-            auto pr = cast<void *>::to(value);
-            memcpy ( at, pr, stride );
-        }
+        SimNode * l, * r;
+        uint32_t stride;
     };
     
     struct GoodArrayIterator : Iterator {

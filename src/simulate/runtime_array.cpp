@@ -42,59 +42,6 @@ namespace das
             memset ( arr.data + arr.size*stride, 0, (newSize-arr.size)*stride );
         arr.size = newSize;
     }
-    
-    // SimNode_Array
-    
-    vec4f SimNode_Array::eval ( Context & context ) {
-		Array * pA = (Array *) l->evalPtr(context);
-        DAS_EXCEPTION_POINT;
-        vec4f rr = r->eval(context);
-        DAS_EXCEPTION_POINT;
-        uint32_t idx = cast<uint32_t>::to(rr);
-        return apply(context, pA, idx);
-    }
-    
-    // PUSH VALUE
-    
-    vec4f SimNode_ArrayPush::apply ( Context &, Array *, uint32_t ) {
-        return vec_setzero_ps();
-    }
-    
-    vec4f SimNode_ArrayPush::eval ( Context & context ) {
-        vec4f arr = l->eval(context);
-        DAS_EXCEPTION_POINT;
-        vec4f val = r->eval(context);
-        DAS_EXCEPTION_POINT;
-        auto * pA = cast<Array *>::to(arr);
-        uint32_t idx = pA->size;
-        array_resize(context, *pA, idx + 1, stride, false);
-        DAS_EXCEPTION_POINT;
-        if ( index ) {
-            vec4f ati = index->eval(context);
-            DAS_EXCEPTION_POINT;
-            uint32_t i = cast<uint32_t>::to(ati);
-            if ( i >= pA->size ) {
-                context.throw_error("insert index out of range");
-                return vec_setzero_ps();
-            }
-            memmove ( pA->data+(i+1)*stride, pA->data+i*stride, (idx-i)*stride );
-            idx = i;
-        }
-        copyValue ( pA->data + idx*stride, val );
-        return vec_setzero_ps();
-    }
-    
-    // ERASE
-
-    vec4f SimNode_ArrayErase::apply ( Context & context, Array * pA, uint32_t index ) {
-        if ( index >= pA->size ) {
-            context.throw_error("erase index out of range");
-            return vec_setzero_ps();
-        }
-        memmove ( pA->data+index*stride, pA->data+(index+1)*stride, (pA->size-index-1)*stride );
-        array_resize(context, *pA, pA->size-1, stride, false);
-        return vec_setzero_ps();
-    }
 
     // GoodArrayIterator
     

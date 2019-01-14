@@ -76,10 +76,9 @@ namespace das
         // table functions
         addExtern<decltype(builtin_table_size), builtin_table_size>(*this, lib, "length", false);
         addExtern<decltype(builtin_table_capacity), builtin_table_capacity>(*this, lib, "capacity", false);
-        // shared expressions
-        addCall<ExprErase>("erase");
-        addCall<ExprFind>("find");
         // table expressions
+        addCall<ExprErase>("__builtin_table_erase");
+        addCall<ExprFind>("__builtin_table_find");
         addCall<ExprKeys>("keys");
         addCall<ExprValues>("values");
         // blocks
