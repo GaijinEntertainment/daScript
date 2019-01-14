@@ -74,8 +74,14 @@ typedef const struct bsph3f& bsph3f_cref;
     #define _TARGET_SIMD_SSE 4
   #elif __SSSE3__
     #define _TARGET_SIMD_SSE 3
-  #elif __SSE2__
+  #elif defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
     #define _TARGET_SIMD_SSE 2
+  #endif
+#endif
+
+#ifndef _TARGET_64BIT
+  #if defined(_M_AMD64) || defined(_M_X64) || defined(_M_ARM64) || INTPTR_MAX == INT32_MAX
+    #define _TARGET_64BIT 1
   #endif
 #endif
 
