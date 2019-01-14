@@ -62,8 +62,8 @@ def test_any(t:auto(mat))
     for r in range(0,row)
         t[r] = vec(r)
     verifyRows(t)
-    for y in range(0,4)
-        for x in range(0,4)
+    for y in range(0,row)
+        for x in range(0,col)
             t[y][x] = x==y ? 1.0 : 0.0
     verifyIdentity(t)
     let ops = false

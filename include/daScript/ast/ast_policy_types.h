@@ -8,12 +8,25 @@ namespace  das {
         BuiltInFn(const string & fn, const ModuleLibrary & lib) : BuiltInFunction(fn) {
             noSideEffects = true;
             this->result = makeType<RetT>(lib);
+            this->totalStackSize = sizeof(Prologue);
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
             for ( size_t argi=0; argi != args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
                 arg->name = "arg" + std::to_string(argi);
                 arg->type = args[argi];
                 this->arguments.push_back(arg);
+            }
+            // copy on return and move on return
+            if ( result->isRefType() ) {
+                if ( result->canCopy() ) {
+                    copyOnReturn = true;
+                    moveOnReturn = false;
+                } else if ( result->canMove() ) {
+                    copyOnReturn = false;
+                    moveOnReturn = true;
+                } else {
+                    assert(0 && "we should not even be here");
+                }
             }
         }
         virtual SimNode * makeSimNode ( Context & context ) override {

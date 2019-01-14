@@ -152,13 +152,15 @@ namespace das {
     struct SimNode_MatrixCtor : SimNode_CallBase {
         SimNode_MatrixCtor(const LineInfo & at) : SimNode_CallBase(at) {}
         virtual vec4f eval(Context & context) override {
+            assert(stackTop && "copy on return memory not allocated");
             auto cmres = context.stackTop + stackTop;
             memset ( cmres, 0, sizeof(MatT) );
             return cast<void *>::from(cmres);
         }
     };
 
-    __forceinline void matrix_identity ( float * mat, int r, int c ) {
+    template <int r, int c>
+    __forceinline void matrix_identity ( float * mat ) {
         for ( int y=0; y!=r; ++y ) {
             for ( int x=0; x!=c; ++x ) {
                 *mat++ = x==y ? 1.0f : 0.0f;
@@ -167,11 +169,11 @@ namespace das {
     }
 
     void float4x4_identity ( float4x4 & mat ) {
-        matrix_identity((float*)&mat, 4, 4);
+        matrix_identity<4,4>((float*)&mat);
     }
     
     void float3x4_identity ( float3x4 & mat ) {
-        matrix_identity((float*)&mat, 4, 3);
+        matrix_identity<4,3>((float*)&mat);
     }
     
     void Module_BuiltIn::addMatrixTypes(ModuleLibrary & lib) {
@@ -179,7 +181,7 @@ namespace das {
         addAnnotation(make_shared<float4x4_ann>());
         addAnnotation(make_shared<float3x4_ann>());
         // c-tor
-        addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float3x4>,float4x4 > >("float3x4",lib) );
+        addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
         addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
         // 4x4
         addExtern<decltype(float4x4_identity),float4x4_identity>(*this, lib, "identity");

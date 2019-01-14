@@ -87,8 +87,17 @@ namespace das
     
     template <typename TT>
     struct cast_fVec {
-        static __forceinline TT to ( vec4f x )                 { return *((TT *)&x); }
-        static __forceinline vec4f from ( const TT & x )       { return vec_loadu_ps(&x.x); }
+        static __forceinline TT to ( vec4f x ) {
+            return *((TT *)&x);
+        }
+        static __forceinline vec4f from ( const TT & x )       {
+        #if defined(__has_feature) && __has_feature(address_sanitizer)
+            union { TT t; vec4f vec; } X;
+            X.t = x; return X.vec;
+        #else
+            return vec_loadu_ps(&x.x);
+        #endif
+        }
     };
     
     template <> struct cast <float2>  : cast_fVec<float2> {};
@@ -97,8 +106,17 @@ namespace das
     
     template <typename TT>
     struct cast_iVec {
-        static __forceinline TT to ( vec4f x )                 { return *((TT *)&x); }
-        static __forceinline vec4f from ( const TT & x )       { return  vec_cast_esi_ps(vec_loadu_esi((vec4i*)&x.x)); }
+        static __forceinline TT to ( vec4f x ) {
+            return *((TT *)&x);
+        }
+        static __forceinline vec4f from ( const TT & x ) {
+        #if defined(__has_feature) && __has_feature(address_sanitizer)
+            union { TT t; vec4i vec; } X;
+            X.t = x; return X.vec;
+        #else
+            return  vec_cast_esi_ps(vec_loadu_esi((vec4i*)&x.x));
+        #endif
+        }
     };
     
     template <> struct cast <int2>  : cast_iVec<int2> {};
