@@ -54,6 +54,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_splat_wi(vec4i a);
 //! .xyzw = a
 VECMATH_FINLINE vec4f VECTORCALL v_splats(float a);
 VECMATH_FINLINE vec4i VECTORCALL v_splatsi(int a);
+VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a);
 
 //! .xyzw = {x y z w}
 VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f(float x, float y, float z, float w);
@@ -738,6 +739,9 @@ VECMATH_FINLINE float VECTORCALL v_extract_w(vec4f v);
 
 //! extracts i16 x-component of short[8]
 VECMATH_FINLINE short VECTORCALL v_extract_xi16(vec4i v);
+
+//! extracts i64 x-component of i64[2]
+VECMATH_FINLINE int64_t VECTORCALL v_extract_xi64 ( vec4i a );
 
 //! extracts ith-component of short[8]
 VECMATH_FINLINE short VECTORCALL v_extract_i16(vec4i v, int i);
