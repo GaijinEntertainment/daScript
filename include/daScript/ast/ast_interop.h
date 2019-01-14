@@ -1,12 +1,13 @@
 #pragma once
 
 #include "daScript/ast/ast.h"
+#include "daScript/simulate/interop.h"
 
 namespace das
 {
     using namespace std;
     
-    template  <typename FuncT, FuncT fn>
+    template  <typename FuncT, FuncT fn, typename SimNodeT>
     class ExternalFn : public BuiltInFunction {
 
 #ifdef _MSC_VER
@@ -53,15 +54,9 @@ namespace das
             }
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
-            if ( copyOnReturn || moveOnReturn ) {
-                auto pCall = context.makeNode<SimNode_ExtFuncCallAndCopyOrMove<FuncT,fn>>(at);
-                pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
-                return pCall;
-            } else {
-                auto pCall = context.makeNode<SimNode_ExtFuncCall<FuncT,fn>>(at);
-                pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
-                return pCall;
-            }
+            auto pCall = context.makeNode<SimNodeT>(at);
+            pCall->info = context.thisProgram->makeFunctionDebugInfo(context, *this);
+            return pCall;
         }
     };
     
@@ -95,9 +90,9 @@ namespace das
         }
     };
     
-    template <typename FuncT, FuncT fn>
+    template <typename FuncT, FuncT fn, template <typename FuncT, FuncT fn> typename SimNodeT = SimNode_ExtFuncCall>
     __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, bool hasSideEffects = true ) {
-        mod.addFunction(make_shared<ExternalFn<FuncT,fn>>(name,lib)->sideEffects(hasSideEffects));
+        mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>>>(name,lib)->sideEffects(hasSideEffects));
     }
     
     template <InteropFunction func, typename RetT, typename ...Args>

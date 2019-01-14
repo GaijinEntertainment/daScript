@@ -12,18 +12,6 @@ namespace das {
         VecT    m[rowC];
     };
     
-    template <typename VecT, int rowC>
-    struct cast<Matrix<VecT,rowC>> {
-        static __forceinline bool to ( vec4f ) {
-            assert(0 && "we should not even be here");
-            return false;
-        }
-        static __forceinline vec4f from ( Matrix<VecT,rowC> ) {
-            assert(0 && "we should not even be here");
-            return vec_setzero_ps();
-        }
-    };
-
     template <typename VecT, int RowC>
     class MatrixAnnotation : public TypeAnnotation {
         enum { ColC = sizeof(VecT) / sizeof(float) };
@@ -176,6 +164,15 @@ namespace das {
         matrix_identity<4,3>((float*)&mat);
     }
     
+	float4x4 float_4x4_translation(float3 xyz) {
+		float4x4 mat;
+		matrix_identity<4,4>((float*)&mat);
+		mat.m[3].x = xyz.x;
+		mat.m[3].y = xyz.y;
+		mat.m[3].z = xyz.z;
+		return mat;
+	}
+
     void Module_BuiltIn::addMatrixTypes(ModuleLibrary & lib) {
         // structure annotations
         addAnnotation(make_shared<float4x4_ann>());
@@ -185,6 +182,7 @@ namespace das {
         addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
         // 4x4
         addExtern<decltype(float4x4_identity),float4x4_identity>(*this, lib, "identity");
+		addExtern<decltype(float_4x4_translation), float_4x4_translation, SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation");
         // 3x4
         addExtern<decltype(float3x4_identity),float3x4_identity>(*this, lib, "identity");
     }

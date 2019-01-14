@@ -1,9 +1,7 @@
 options log=true, logStack=true, optimize=false
 
-def dummy(a)
-    return true
-
 [export]
 def test
-    dummy(float4x4())
+    let t = translation(float3(1,2,3))
+	print("t={t}")
     return true
