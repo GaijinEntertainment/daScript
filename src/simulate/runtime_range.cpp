@@ -37,6 +37,6 @@ namespace das
             body->eval(context);
         }
         context.stopFlags &= ~EvalFlags::stopForBreak;
-        return vec_setzero_ps();
+        return v_zero();
     }
 }

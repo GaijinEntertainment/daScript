@@ -68,7 +68,7 @@ struct EsAttribute {
     EsAttribute() = default;
     EsAttribute ( const string & n, uint32_t sz, bool rf, vec4f d )
         : def(d), name(n), size(sz), ref(rf) {}
-	vec4f       def = vec_setzero_ps();
+	vec4f       def = v_zero();
     string      name;
     uint32_t    size = 0;
     bool        ref;
@@ -103,7 +103,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
     EsFunctionAnnotation() : FunctionAnnotation("es") { }
     void buildAttributeTable ( EsAttributeTable & tab, const vector<VariablePtr> & arguments, string & err  ) {
         for ( const auto & arg : arguments ) {
-            vec4f def = vec_setzero_ps();
+            vec4f def = v_zero();
             if ( arg->init ) {
                 if ( arg->init->rtti_isConstant() && !arg->init->rtti_isStringConstant() ) {
                     auto pConst = static_pointer_cast<ExprConst>(arg->init);
@@ -191,7 +191,7 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
                 if ( data[a] ) {
                     char * src =  boxed[a] ? *((char **)data[a]) : data[a];
                     if ( !ref[a] ) {
-                        args[a] = vec_loadu_ps((float *)src);
+                        args[a] = v_ldu((float *)src);
                     } else {
                         *((void **)&args[a]) = src;
                     }
@@ -252,7 +252,7 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
                 if ( data[a] ) {
                     char * src =  boxed[a] ? *((char **)data[a]) : data[a];
                     if ( !ref[a] ) {
-                        args[a] = vec_loadu_ps((float *)src);
+                        args[a] = v_ldu((float *)src);
                     } else {
                         *((void **)&args[a]) = src;
                     }

@@ -20,22 +20,22 @@ namespace das {
     typedef __m128 vec4f;
     typedef __m128i vec4i;
 // casts
-    __forceinline vec4f vec_cast_esi_ps ( const vec4i a ) {
+    __forceinline vec4f v_cast_vec4f ( const vec4i a ) {
         return _mm_castsi128_ps(a);
     }
-    __forceinline vec4i vec_cast_ps_esi ( const vec4f a ) {
+    __forceinline vec4i v_cast_vec4i ( const vec4f a ) {
         return _mm_castps_si128(a);
     }
-    __forceinline float vec_cast_ps_ss ( vec4f a ) {
+    __forceinline float v_extract_x ( vec4f a ) {
         return _mm_cvtss_f32(a);
     }
-    __forceinline vec4f vec_cast_ss_ps ( float a ) {
+    __forceinline vec4f v_splats ( float a ) {
         return _mm_set_ss(a);
     }
-    __forceinline int32_t vec_cast_esi_int32 ( vec4i a ) {
+    __forceinline int32_t v_extract_xi ( vec4i a ) {
         return _mm_cvtsi128_si32(a);
     }
-    __forceinline vec4i vec_cast_int32_esi ( int32_t a ) {
+    __forceinline vec4i v_splatsi ( int32_t a ) {
         return _mm_set1_epi32(a);
     }
     __forceinline int64_t vec_cast_esi_int64 ( vec4i a ) {
@@ -71,10 +71,10 @@ namespace das {
     __forceinline vec4f vec_set_ps_xyzw ( float x, float y, float z, float w ) {
         return _mm_setr_ps(x,y,z,w);
     }
-    __forceinline vec4f vec_setzero_ps () {
+    __forceinline vec4f v_zero () {
         return _mm_setzero_ps();
     }
-    __forceinline vec4f vec_loadu_ps ( const float * src ) {
+    __forceinline vec4f v_ldu ( const float * src ) {
         return _mm_loadu_ps(src);
     }
     __forceinline vec4f vec_neg_ps ( vec4f a ) {
@@ -159,7 +159,7 @@ namespace das {
         return c;
     }
 // vec4i unsigned
-    __forceinline vec4i vec_loadu_esi ( const vec4i * t ) {
+    __forceinline vec4i v_ldu_w ( const vec4i * t ) {
         return _mm_loadu_si128(t);
     }
     

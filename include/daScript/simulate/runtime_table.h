@@ -212,7 +212,7 @@ namespace das
         SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
 		virtual vec4f tabEval(Context & , Table *, vec4f ) override {
 			assert(0 && "we should not even be here");
-			return vec_setzero_ps();
+			return v_zero();
 		}
 		__forceinline char * compute ( Context & context ) {
 			Table * tab = (Table *) tabExpr->evalPtr(context);
@@ -247,7 +247,7 @@ namespace das
         SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
 		virtual vec4f tabEval(Context &, Table *, vec4f) override {
 			assert(0 && "we should not even be here");
-			return vec_setzero_ps();
+			return v_zero();
 		}
 		__forceinline char * compute(Context & context) {
 			Table * tab = (Table *)tabExpr->evalPtr(context);

@@ -262,7 +262,7 @@ namespace das {
                 } else {
                     if ( expr->type->isFoldable() && !expr->variable->access_init ) {
                         reportFolding();
-                        return Program::makeConst(expr->at, expr->type, vec_setzero_ps());
+                        return Program::makeConst(expr->at, expr->type, v_zero());
                     }
                 }
             }

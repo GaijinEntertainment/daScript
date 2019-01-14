@@ -123,7 +123,7 @@ namespace das {
             vec4f result = node->eval(ctx);
             if ( ctx.getException() ) {
                 program->error("internal error, failed to fold constant", expr->at );
-                return vec_setzero_ps();
+                return v_zero();
             }
             return result;
         }

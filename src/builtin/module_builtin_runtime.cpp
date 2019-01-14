@@ -40,7 +40,7 @@ namespace das
     
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * ) {
         context.breakPoint(call->debug.column, call->debug.line);
-        return vec_setzero_ps();
+        return v_zero();
     }
     
     void builtin_stackwalk ( Context * context) {

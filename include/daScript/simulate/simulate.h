@@ -200,7 +200,7 @@ namespace das
             char * top = invokeStackTop ? invokeStackTop : stackTop;
             if (stack - (top - fn.stackSize) > stackSize) {
                 throw_error("stack overflow");
-                return vec_setzero_ps();
+                return v_zero();
             }
             char * pushStack = stackTop;
             char * pushInvokeStack = invokeStackTop;
@@ -286,7 +286,7 @@ namespace das
     
 #if DAS_ENABLE_EXCEPTIONS
     #define DAS_EXCEPTION_POINT \
-        { if ( context.stopFlags ) return vec_setzero_ps(); }
+        { if ( context.stopFlags ) return v_zero(); }
     #define DAS_PTR_EXCEPTION_POINT \
         { if ( context.stopFlags ) return nullptr; }
     #define DAS_ITERATOR_EXCEPTION_POINT \
@@ -421,7 +421,7 @@ namespace das
 			}
 			else {
 				context.throw_error("dereferencing null pointer");
-				return vec_setzero_ps();
+				return v_zero();
 			}
 		}
 		virtual char * evalPtr(Context & context) override {
@@ -701,7 +701,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             TT * pl = (TT *) ( context.stackTop + stackTopLeft );
             TT * pr = (TT *) ( context.stackTop + stackTopRight );
             *pl = *pr;
-            return vec_setzero_ps();
+            return v_zero();
         }
         SimNode * r;
         uint32_t stackTopLeft, stackTopRight;
@@ -716,7 +716,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_EXCEPTION_POINT;
             TT * pl = (TT *) ( context.stackTop + stackTop );
             *pl = *pr;
-            return vec_setzero_ps();
+            return v_zero();
         }
         SimNode * r;
         uint32_t stackTop;
@@ -731,7 +731,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_EXCEPTION_POINT;
             TT * pl = (TT *) ( context.stackTop + stackTop );
             *pl = cast<TT>::to(rres);
-            return vec_setzero_ps();
+            return v_zero();
         }
         SimNode * r;
         uint32_t stackTop;
@@ -743,7 +743,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz) : SimNode(at), stackTop(sp), size(sz) {}
         virtual vec4f eval ( Context & context ) override {
             memset(context.stackTop + stackTop, 0, size);
-            return vec_setzero_ps();
+            return v_zero();
         }
         uint32_t stackTop, size;
     };
@@ -915,7 +915,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Break ( const LineInfo & at ) : SimNode(at) {}
         virtual vec4f eval ( Context & context ) override {
             context.stopFlags |= EvalFlags::stopForBreak;
-            return vec_setzero_ps();
+            return v_zero();
         }
     };
     
@@ -1012,7 +1012,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_Zero : SimNode {
         SimNode_Zero(const LineInfo & at) : SimNode(at) { }
         virtual vec4f eval ( Context & ) override {
-            return vec_setzero_ps();
+            return v_zero();
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & ) override {			\
@@ -1031,7 +1031,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * pr = r->evalPtr(context);
             DAS_EXCEPTION_POINT;
             *pl = pr;
-            return vec_setzero_ps();
+            return v_zero();
         }
         SimNode * l, * r;
     };
@@ -1047,7 +1047,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_EXCEPTION_POINT;
             TT * pr = (TT *) &rr;
             *pl = *pr;
-            return vec_setzero_ps();
+            return v_zero();
         }
         SimNode * l, * r;
     };
@@ -1071,7 +1071,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             TT * pr = (TT *) r->evalPtr(context);
             DAS_EXCEPTION_POINT;
             *pl = *pr;
-            return vec_setzero_ps();
+            return v_zero();
         }
         SimNode * l, * r;
     };
@@ -1218,7 +1218,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 sources[t]->close(context, ph[t]);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
-            return vec_setzero_ps();
+            return v_zero();
         }
     };
     
@@ -1382,7 +1382,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto rv = r->eval(context);                                 \
             DAS_EXCEPTION_POINT;                                        \
             SimPolicy<CTYPE>::CALL(lv,rv,context);                      \
-            return vec_setzero_ps();                                    \
+            return v_zero();                                    \
         }                                                               \
     };
     

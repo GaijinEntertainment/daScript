@@ -43,7 +43,7 @@ namespace das
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline vec4f call(FunctionType & fn, Context & ctx, vec4f * args, index_sequence<I...> ) {
             fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
-            return vec_setzero_ps();
+            return v_zero();
         }
     };
     
@@ -83,7 +83,7 @@ namespace das
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
             if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
                 context.throw_error("stack overflow");
-                return vec_setzero_ps();
+                return v_zero();
             }
             char * pushStack = context.stackTop;
             char * pushInvokeStack = context.invokeStackTop;
@@ -126,7 +126,7 @@ namespace das
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
             if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
                 context.throw_error("stack overflow");
-                return vec_setzero_ps();
+                return v_zero();
             }
             char * pushStack = context.stackTop;
             char * pushInvokeStack = context.invokeStackTop;
@@ -166,7 +166,7 @@ namespace das
             char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
             if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
                 context.throw_error("stack overflow");
-                return vec_setzero_ps();
+                return v_zero();
             }
             char * pushStack = context.stackTop;
             char * pushInvokeStack = context.invokeStackTop;
