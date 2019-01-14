@@ -6,6 +6,7 @@
 #pragma warning(disable:4996)	// swap ranges
 #pragma warning(disable:4201)	// nonstandard extension used : nameless struct / union
 #pragma warning(disable:4324)	// structure was padded due to alignment specifier
+#pragma warning(disable:4067)	//  unexpected tokens following preprocessor directive - expected a newline
 #endif
 
 #ifdef __APPLE__

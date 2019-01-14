@@ -30,10 +30,10 @@ namespace das {
         typedef MatrixAnnotation<VecT,RowC> ThisAnnotation;
         typedef Matrix<VecT,RowC> ThisMatrix;
     protected:
-        int GetField ( const string & name ) const {
-            if ( name.length()!=1 )
+        int GetField ( const string & na ) const {
+            if ( na.length()!=1 )
                 return -1;
-            int field = TypeDecl::getMaskFieldIndex(name[0]);
+            int field = TypeDecl::getMaskFieldIndex(na[0]);
             if ( field<0 || field>=RowC )
                 return -1;
             return field;
@@ -91,7 +91,7 @@ namespace das {
         virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.makeNode<SimNode_FieldDeref>(at,value,field*sizeof(VecT));
+                return context.makeNode<SimNode_FieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
@@ -100,7 +100,7 @@ namespace das {
             int field = GetField(na);
             if ( field!=-1 ) {
                 auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-                return context.makeValueNode<SimNode_FieldDerefR2V>(bt,at,value,field*sizeof(VecT));
+                return context.makeValueNode<SimNode_FieldDerefR2V>(bt,at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
@@ -111,7 +111,7 @@ namespace das {
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.makeNode<SimNode_SafeFieldDeref>(at,value,field*sizeof(VecT));
+                return context.makeNode<SimNode_SafeFieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
@@ -119,13 +119,13 @@ namespace das {
         virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value,field*sizeof(VecT));
+                return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
         };
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, SimNode * rv, SimNode * idx ) const override {
-            return context.makeNode<SimNode_At>(at, rv, idx, sizeof(float)*ColC, RowC);
+            return context.makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), RowC);
         }
         virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
             auto pM = (ThisMatrix *) data;
