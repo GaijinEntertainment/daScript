@@ -99,7 +99,7 @@ namespace das {
             if ( func->body && func->result->isVoid() ) {   // remove trailing return on the void function
                 if ( func->body->rtti_isBlock() ) {
                     auto block = static_pointer_cast<ExprBlock>(func->body);
-                    if ( block->list.back()->rtti_isReturn() ) {
+                    if ( block->list.size() && block->list.back()->rtti_isReturn() ) {
                         block->list.resize(block->list.size()-1);
                         reportFolding();
                         return Visitor::visit(func);

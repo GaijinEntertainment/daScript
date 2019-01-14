@@ -1,5 +1,3 @@
-
-[export]
-def builtin_func
-	print("hello,world!\n")
+def resize(Arr:array<auto(numT)>;newSize:int)
+    __builtin_array_resize(Arr,newSize,sizeof(type numT))
 

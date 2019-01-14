@@ -1732,28 +1732,7 @@ namespace das {
             expr->type->firstType->constant = false;
             return Visitor::visit(expr);
         }
-    // ArrayResize
-        virtual ExpressionPtr visit ( ExprArrayResize * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
-            if ( expr->arguments.size()!=2 ) {
-                error("expecting ArrayResize(array,size)", expr->at);
-                return Visitor::visit(expr);
-            }
-            // infer
-            auto arrayType = expr->arguments[0]->type;
-            auto valueType = expr->arguments[1]->type;
-            if ( !arrayType->isGoodArrayType() ) {
-                error("must be fully qualified array", expr->at);
-                return Visitor::visit(expr);
-            }
-            if ( !valueType->isIndex() )
-                error("size must be int or uint", expr->at);
-            expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
-            valueType->constant = true;
-            expr->type = make_shared<TypeDecl>(Type::tVoid);
-            return Visitor::visit(expr);
-        }
-        // ArrayReserve
+    // ArrayReserve
         virtual ExpressionPtr visit ( ExprArrayReserve * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()!=2 ) {

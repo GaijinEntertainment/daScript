@@ -95,13 +95,7 @@ namespace das
         array_resize(context, *pA, pA->size-1, stride, false);
         return vec_setzero_ps();
     }
-    
-    // RESIZE
 
-    vec4f SimNode_ArrayResize::apply ( Context & context, Array * pA, uint32_t newSize ) {
-        array_resize(context, *pA, newSize, stride, true);
-        return vec_setzero_ps();
-    }
     
     // RESERVE
 

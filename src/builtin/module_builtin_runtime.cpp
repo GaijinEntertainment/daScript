@@ -51,16 +51,6 @@ namespace das
         context->stopFlags |= EvalFlags::stopForTerminate;
     }
     
-    // array functions
-    
-    int builtin_array_size ( const Array * arr ) {
-        return arr->size;
-    }
-    
-    int builtin_array_capacity ( const Array * arr ) {
-        return arr->capacity;
-    }
-    
     int builtin_table_size ( const Table * arr ) {
         return arr->size;
     }
@@ -86,9 +76,6 @@ namespace das
         // table functions
         addExtern<decltype(builtin_table_size), builtin_table_size>(*this, lib, "length", false);
         addExtern<decltype(builtin_table_capacity), builtin_table_capacity>(*this, lib, "capacity", false);
-        // array functions
-        addExtern<decltype(builtin_array_size), builtin_array_size>(*this, lib, "length", false);
-        addExtern<decltype(builtin_array_capacity), builtin_array_capacity>(*this, lib, "capacity", false);
         // shared expressions
         addCall<ExprErase>("erase");
         addCall<ExprFind>("find");
@@ -97,7 +84,6 @@ namespace das
         addCall<ExprValues>("values");
         // array expresisons
         addCall<ExprArrayPush>("push");
-        addCall<ExprArrayResize>("resize");
         addCall<ExprArrayReserve>("reserve");
         // blocks
         addCall<ExprInvoke>("invoke");
