@@ -972,6 +972,14 @@ namespace das {
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
+            for ( auto & lv : local ) {
+                if ( lv->name==var->name ) {
+                    error("block argument " + var->name +" is shadowed by local variable "
+                          + lv->name + " : " + lv->type->describe() + " at line " + std::to_string(lv->at.line),
+                              var->at, CompilationError::variable_not_found);
+                    break;
+                }
+            }
             if ( var->type->isAuto() && !var->init) {
                 error("block argument type can't be infered, it needs an initializer",
                       var->at, CompilationError::cant_infer_missing_initializer );
