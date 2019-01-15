@@ -39,7 +39,7 @@ cmake_minimum_required(VERSION 3.0)
 project(test-find-package VERSION 1.0)
 
 
-# Cover version mis-match
+# Cover version mismatch
 find_package(uriparser 1 CONFIG QUIET)
 if (uriparser_FOUND)
     message(SEND_ERROR "Was not expecting for find uriparser 1.x.x")
@@ -69,7 +69,7 @@ if (NOT uriparser_FOUND)
 endif()
 
 
-# Build and link some hello world using uriparser
+# Compile and link some hello world using uriparser
 add_executable(hello
     hello.c
 )
