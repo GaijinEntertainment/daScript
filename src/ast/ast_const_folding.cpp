@@ -111,8 +111,8 @@ namespace das {
             program = prog;
         }
     protected:
-        Context     ctx;
-        ProgramPtr  program;
+        Context         ctx;
+        ProgramPtr      program;
     protected:
         vec4f eval ( Expression * expr ) {
             ctx.simEnd();
@@ -138,8 +138,8 @@ namespace das {
         ExpressionPtr evalAndFoldString ( Expression * expr ) {
             if ( expr->rtti_isStringConstant() ) return expr->shared_from_this();
             vec4f value = eval(expr);
-            TypeInfo * pTypeInfo = ctx.debugInfo.makeNode<TypeInfo>();
-            program->makeTypeInfo(pTypeInfo, ctx, expr->type);
+            DebugInfoHelper helper(ctx.debugInfo);
+            auto pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
             auto sim = make_shared<ExprConstString>(expr->at, res);
             sim->type = make_shared<TypeDecl>(Type::tString);

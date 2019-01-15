@@ -92,6 +92,7 @@ namespace das
         
         __forceinline void simEnd() {
             thisProgram = nullptr;
+            thisHelper = nullptr;
 			heapWatermark = heap.getWatermark();
         }
         
@@ -207,6 +208,7 @@ namespace das
     public:
         const string * debugInput = nullptr;
         class Program * thisProgram = nullptr;
+        class DebugInfoHelper * thisHelper = nullptr;
 	public:
         uint32_t stopFlags = 0;
         vec4f result;

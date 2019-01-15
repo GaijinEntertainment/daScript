@@ -94,7 +94,7 @@ bool unit_test ( const string & fn ) {
             return false;
         } else {
             Context ctx(&str);
-            program->simulate(ctx);
+            program->simulate(ctx, cout);
             int fnTest = ctx.findFunction("test");
             if ( fnTest != -1 ) {
                 ctx.restart();
@@ -140,7 +140,7 @@ bool exception_test ( const string & fn ) {
             return false;
         } else {
             Context ctx(&str);
-            program->simulate(ctx);
+            program->simulate(ctx, cout);
             int fnTest = ctx.findFunction("test");
             if ( fnTest != -1 ) {
                 ctx.restart();

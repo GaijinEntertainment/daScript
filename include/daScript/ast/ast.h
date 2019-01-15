@@ -254,6 +254,7 @@ namespace das
         bool canCopy() const;
         bool isPod() const;
         string describe() const { return name; }
+        string getMangledName() const;
     public:
         string                      name;
         vector<FieldDeclaration>    fields;
@@ -264,6 +265,7 @@ namespace das
     struct Variable : public enable_shared_from_this<Variable> {
         friend ostream& operator<< (ostream& stream, const Variable & var);
         VariablePtr clone() const;
+        string getMangledName() const;
         string          name;
         TypeDeclPtr     type;
         ExpressionPtr   init;
@@ -1169,6 +1171,22 @@ namespace das
         vector<Module *>                modules;
     };
     
+    class DebugInfoHelper {
+    public:
+        DebugInfoHelper ( NodeAllocator & di ) : debugInfo(di) {}
+    public:
+        TypeInfo * makeTypeInfo ( TypeInfo * info, const TypeDeclPtr & type );
+        VarInfo * makeVariableDebugInfo ( const Variable & var );
+        StructInfo * makeStructureDebugInfo ( const Structure & st );
+        FuncInfo * makeFunctionDebugInfo ( const Function & fn );
+    protected:
+        NodeAllocator &             debugInfo;
+        map<string,StructInfo *>    smn2s;
+        map<string,TypeInfo *>      tmn2t;
+        map<string,VarInfo *>       vmn2v;
+        map<string,FuncInfo *>      fmn2f;
+    };
+    
     class Program : public enable_shared_from_this<Program> {
     public:
         Program();
@@ -1194,18 +1212,13 @@ namespace das
 		void markOrRemoveUnusedSymbols();
         void allocateStack(ostream & logs);
 		string dotGraph();
-        bool simulate ( Context & context );
+        bool simulate ( Context & context, ostream & logs );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
         void visit(Visitor & vis, bool visitGenerics = false);
-    public:
-        void makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type );
-        VarInfo * makeVariableDebugInfo ( Context & context, const Variable & var );
-        StructInfo * makeStructureDebugInfo ( Context & context, const Structure & st );
-        FuncInfo * makeFunctionDebugInfo ( Context & context, const Function & fn );
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {
@@ -1220,8 +1233,6 @@ namespace das
             }
             return ss.str();
         }
-    public:
-        map<string,StructInfo *>    sdebug;
     public:
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;

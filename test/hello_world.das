@@ -17,6 +17,7 @@ def info(t:auto(SType))
     debug(t,"debug t=")
     print("t={t}\n")
     print("sizeof(t)={sizeof(type SType)}\n")
+    stackwalk()
 
 [export]
 def test

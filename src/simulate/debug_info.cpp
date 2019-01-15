@@ -327,6 +327,7 @@ namespace das
                 case Type::tVoid:       ss << "void"; break;
                 case Type::tBlock:      ss << "block"; break;
                 case Type::tHandle:     debugType(info->annotation, ss, x, flags); break;
+                case Type::fakeContext: ss << "__context__"; break;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }

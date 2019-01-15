@@ -56,6 +56,7 @@ src/ast/ast_block_folding.cpp
 src/ast/ast_unused.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp
+src/ast/ast_debug_info_helper.cpp
 include/daScript/ast/compilation_errors.h
 include/daScript/ast/ast.h
 include/daScript/ast/ast_interop.h

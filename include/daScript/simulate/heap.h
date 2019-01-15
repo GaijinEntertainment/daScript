@@ -17,6 +17,14 @@ namespace das {
 			_mm_free(linearAllocatorBase);
 		}
 
+        __forceinline uint32_t bytesAllocated() const {
+            return linearAllocator - linearAllocatorBase;
+        }
+        
+        __forceinline uint32_t bytesTotal() const {
+            return linearAllocatorSize;
+        }
+        
 		__forceinline void reset() {
 			linearAllocator = linearAllocatorBase;
 		}

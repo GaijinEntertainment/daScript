@@ -36,7 +36,7 @@ bool unit_test ( const string & fn ) {
         } else {
             // cout << *program << "\n";
             Context ctx(&str, 64<<20);
-            program->simulate(ctx);
+            program->simulate(ctx, cout);
             // vector of 10000 objects
             vector<Object> objects;
             objects.resize(10000);

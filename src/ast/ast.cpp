@@ -758,6 +758,10 @@ namespace das
         stream << ")";
         return stream;
     }
+    
+    string Structure::getMangledName() const {
+        return module ? module->name+"::"+name : name;
+    }
 
     // variable
     
@@ -777,6 +781,11 @@ namespace das
         pVar->at = at;
         pVar->flags = flags;
         return pVar;
+    }
+    
+    string Variable::getMangledName() const {
+        string mn = module ? module->name+"::"+name : name;
+        return mn + " " + type->getMangledName();
     }
     
     // function
@@ -831,11 +840,11 @@ namespace das
     
     string Function::getMangledName() const {
         stringstream ss;
+        // TODO: module name?
         ss << name;
         for ( auto & arg : arguments ) {
             ss << " " << arg->type->getMangledName();
         }
-        // ss << "->" << result->getMangledName();
         return ss.str();
     }
     
@@ -1065,8 +1074,7 @@ namespace das
     }
     
     SimNode * ExprDebug::simulate (Context & context) const {
-        TypeInfo * pTypeInfo = context.debugInfo.makeNode<TypeInfo>();
-        context.thisProgram->makeTypeInfo(pTypeInfo, context, arguments[0]->type);
+        TypeInfo * pTypeInfo = context.thisHelper->makeTypeInfo(nullptr, arguments[0]->type);
         string message;
         if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
@@ -1140,8 +1148,7 @@ namespace das
         } else if ( arguments[0]->type->isPod() ) {
             return context.code.makeNode<SimNode_HashOfRef>(at, val, arguments[0]->type->getSizeOf());
         } else {
-            auto typeInfo = context.debugInfo.makeNode<TypeInfo>();
-            context.thisProgram->makeTypeInfo(typeInfo, context, arguments[0]->type);
+            auto typeInfo = context.thisHelper->makeTypeInfo(nullptr, arguments[0]->type);
             return context.code.makeNode<SimNode_HashOfMixedType>(at, val, typeInfo);
         }
     }
@@ -1547,8 +1554,7 @@ namespace das
             pSB->nArguments = nArg;
             for ( int a=0; a!=nArg; ++a ) {
                 pSB->arguments[a] = elements[a]->simulate(context);
-                pSB->types[a] = context.code.makeNode<TypeInfo>();
-                context.thisProgram->makeTypeInfo(pSB->types[a], context, elements[a]->type);
+                pSB->types[a] = context.thisHelper->makeTypeInfo(nullptr, elements[a]->type);
             }
         } else {
             pSB->arguments = nullptr;
@@ -2314,83 +2320,10 @@ namespace das
         return thisModule->findVariable(name);
     }
     
-    FuncInfo * Program::makeFunctionDebugInfo ( Context & context, const Function & fn ) {
-        FuncInfo * fni = context.debugInfo.makeNode<FuncInfo>();
-        fni->name = context.debugInfo.allocateName(fn.name);
-        fni->stackSize = fn.totalStackSize;
-        fni->argsSize = (uint32_t) fn.arguments.size();
-        fni->args = (VarInfo **) context.debugInfo.allocate(sizeof(VarInfo *) * fni->argsSize);
-        for ( uint32_t i=0; i!=fni->argsSize; ++i ) {
-            fni->args[i] = makeVariableDebugInfo(context, *fn.arguments[i]);
-        }
-        return fni;
-    }
-    
-    StructInfo * Program::makeStructureDebugInfo ( Context & context, const Structure & st ) {
-        StructInfo * sti = context.debugInfo.makeNode<StructInfo>();
-        sti->name = context.debugInfo.allocateName(st.name);
-        sti->fieldsSize = (uint32_t) st.fields.size();
-        sti->size = st.getSizeOf();
-        sti->fields = (VarInfo **) context.debugInfo.allocate( sizeof(VarInfo *) * sti->fieldsSize );
-        for ( uint32_t i=0; i!=sti->fieldsSize; ++i ) {
-            auto & var = st.fields[i];
-            VarInfo * vi = context.debugInfo.makeNode<VarInfo>();
-            makeTypeInfo(vi, context, var.type);
-            vi->name = context.debugInfo.allocateName(var.name);
-            vi->offset = st.fields[i].offset;
-            sti->fields[i] = vi;
-        }
-        return sti;
-    }
-    
-    void Program::makeTypeInfo ( TypeInfo * info, Context & context, const TypeDeclPtr & type ) {
-        info->type = type->baseType;
-        info->dimSize = (uint32_t) type->dim.size();
-        info->annotation = type->annotation.get();
-        if ( info->dimSize ) {
-            info->dim = (uint32_t *) context.debugInfo.allocate(sizeof(uint32_t) * info->dimSize );
-            for ( uint32_t i=0; i != info->dimSize; ++i ) {
-                info->dim[i] = type->dim[i];
-            }
-        }
-        if ( type->baseType==Type::tStructure  ) {
-            auto st = sdebug.find(type->structType->name);
-            if ( st==sdebug.end() ) {
-                info->structType = makeStructureDebugInfo(context, *type->structType);
-                sdebug[type->structType->name] = info->structType;
-            } else {
-                info->structType = st->second;
-            }
-        }
-        info->ref = type->ref;
-        if ( type->isRefType() )
-            info->ref = false;
-        info->canCopy = type->canCopy();
-        info->isPod = type->isPod();
-        if ( type->firstType ) {
-            info->firstType = context.debugInfo.makeNode<TypeInfo>();
-            makeTypeInfo(info->firstType, context, type->firstType);
-        } else {
-            info->firstType = nullptr;
-        }
-        if ( type->secondType ) {
-            info->secondType = context.debugInfo.makeNode<TypeInfo>();
-            makeTypeInfo(info->secondType , context, type->secondType);
-        } else {
-            info->secondType = nullptr;
-        }
-    }
-
-    VarInfo * Program::makeVariableDebugInfo ( Context & context, const Variable & var ) {
-        VarInfo * vi = context.debugInfo.makeNode<VarInfo>();
-        makeTypeInfo(vi, context, var.type);
-        vi->name = context.debugInfo.allocateName(var.name);
-        vi->offset = 0;
-        return vi;
-    }
-    
-    bool Program::simulate ( Context & context ) {
+    bool Program::simulate ( Context & context, ostream & logs ) {
         context.thisProgram = this;
+        DebugInfoHelper helper(context.debugInfo);
+        context.thisHelper = &helper;
         context.globalVariables = (GlobalVariable *) context.code.allocate( totalVariables*sizeof(GlobalVariable) );
 		for (auto & pm : library.modules ) {
 			for (auto & it : pm->globals) {
@@ -2401,7 +2334,7 @@ namespace das
 				auto & gvar = context.globalVariables[pvar->index];
 				gvar.name = context.code.allocateName(pvar->name);
 				gvar.size = pvar->type->getSizeOf();
-				gvar.debug = makeVariableDebugInfo(context, *it.second);
+				gvar.debug = helper.makeVariableDebugInfo(*it.second);
 				gvar.value = cast<char *>::from((char *)context.heap.allocate(gvar.size));
 				gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
 			}
@@ -2418,14 +2351,18 @@ namespace das
 				gfun.name = context.code.allocateName(pfun->name);
 				gfun.code = pfun->simulate(context);
 				gfun.stackSize = pfun->totalStackSize;
-				gfun.debug = makeFunctionDebugInfo(context, *pfun);
+				gfun.debug = helper.makeFunctionDebugInfo(*pfun);
 			}
 		}
-        sdebug.clear();
         context.simEnd();
         context.restart();
         context.runInitScript();
         context.restart();
+        if (options.getOption("logMem")) {
+            logs << "code  " << context.code.bytesAllocated()       << " of " << context.code.bytesTotal() << "\n";
+            logs << "debug " << context.debugInfo.bytesAllocated()  << " of " << context.debugInfo.bytesTotal() << "\n";
+            logs << "heap  " << context.heap.bytesAllocated()       << " of " << context.heap.bytesTotal() << "\n";
+        }
         return errors.size() == 0;
     }
     

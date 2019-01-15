@@ -28,7 +28,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
             if ( outputProgramCode )
                 cout << *program << "\n";
             Context ctx(&str);
-            program->simulate(ctx);
+            program->simulate(ctx, cout);
             int fnTest = ctx.findFunction(mainFnName.c_str());
             if ( fnTest != -1 ) {
                 ctx.restart();
