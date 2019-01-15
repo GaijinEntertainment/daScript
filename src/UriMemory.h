@@ -37,6 +37,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef URI_MEMORY_H
+#define URI_MEMORY_H 1
+
+
+
 #ifndef URI_DOXYGEN
 # include <uriparser/Uri.h>
 #endif
@@ -57,3 +62,7 @@
 extern UriMemoryManager defaultMemoryManager;
 
 UriBool uriMemoryManagerIsComplete(const UriMemoryManager * memory);
+
+
+
+#endif /* URI_MEMORY_H */
