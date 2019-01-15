@@ -33,6 +33,17 @@ IF(MSVC)
 	ENDFOREACH()
 ENDIF()
 
+SET(VECMATH_SRC
+include/vecmath/dag_vecMath.h
+include/vecmath/dag_vecMathDecl.h
+include/vecmath/dag_vecMath_common.h
+include/vecmath/dag_vecMath_const.h
+include/vecmath/dag_vecMath_neon.h
+include/vecmath/dag_vecMath_pc_sse.h
+)
+list(SORT VECMATH_SRC)
+SOURCE_GROUP_FILES("vecmath" VECMATH_SRC)
+
 SET(AST_SRC
 src/ast/ast.cpp
 src/ast/ast_module.cpp
@@ -107,7 +118,7 @@ list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
 include_directories(include ".")
-ADD_LIBRARY(libDaScript ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
+ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
 
 add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
