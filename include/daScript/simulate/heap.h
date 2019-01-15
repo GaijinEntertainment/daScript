@@ -18,7 +18,7 @@ namespace das {
 		}
 
         __forceinline uint32_t bytesAllocated() const {
-            return linearAllocator - linearAllocatorBase;
+            return uint32_t(linearAllocator - linearAllocatorBase);
         }
         
         __forceinline uint32_t bytesTotal() const {
