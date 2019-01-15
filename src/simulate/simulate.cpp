@@ -347,7 +347,8 @@ namespace das
 #pragma warning(disable:4701)
 #endif
     vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when) {
-		auto watermark = stack.invoke(block.stackOffset);
+		char * EP, *SP;
+		stack.invoke(block.stackOffset,EP,SP);
         BlockArguments * ba = nullptr;
         BlockArguments saveArguments;
         if ( block.argumentsOffset ) {
@@ -360,7 +361,7 @@ namespace das
         if ( ba ) {
             *ba = saveArguments;
         }
-		stack.pop(watermark);
+		stack.pop(EP,SP);
         return result;
     }
 #ifdef _MSC_VER
@@ -371,8 +372,8 @@ namespace das
         assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
         auto & fn = functions[fnIndex];
         // PUSH
-		auto watermark = stack.push(fn.stackSize);
-		if ( watermark==-1u ) {
+		char * EP, *SP;
+		if(!stack.push(fn.stackSize,EP,SP)) {
             throw_error("stack overflow");
             return v_zero();
         }
@@ -388,7 +389,7 @@ namespace das
         when(fn.code);
         stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
         // POP
-		stack.pop(watermark);
+		stack.pop(EP,SP);
         return result;
     }
 
