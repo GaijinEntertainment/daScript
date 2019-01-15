@@ -67,7 +67,7 @@ script:
         -DCMAKE_MODULE_LINKER_FLAGS="${LDFLAGS}"
         -DCMAKE_SHARED_LINKER_FLAGS="${LDFLAGS}"
     )
-    && cmake "${cmake_args[@]}" ..  # -Werror would fail checks!
+    && cmake "${cmake_args[@]}" -DCMAKE_INSTALL_INCLUDEDIR=include123 ..  # -Werror would fail checks!
   - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" all
   - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" test
   - cat Testing/Temporary/LastTest.log
@@ -78,7 +78,7 @@ script:
   - popd
   - pushd cmake/test_find_package
   - cmake "${cmake_args[@]}" .
-  - make
+  - make VERBOSE=1
   - ./hello
   - popd
   - git fetch --tags --unshallow origin  # for "git describe" in make-distcheck.sh
