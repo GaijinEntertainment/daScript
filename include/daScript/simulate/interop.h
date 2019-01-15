@@ -76,11 +76,15 @@ namespace das
             using Arguments = typename FunctionTrait::arguments;
             const int nargs = tuple_size<Arguments>::value;
             using Indices = make_index_sequence<nargs>;
-			vec4f * args = (vec4f *)(alloca(nArguments*sizeof(vec4f)));
-			evalArgs(context, args);
+			vec4f args[tuple_size<Arguments>::value ? tuple_size<Arguments>::value : 1];
+			EvalBlock<tuple_size<Arguments>::value>::eval(context, arguments, args);
             DAS_EXCEPTION_POINT;
 #if DAS_ENABLE_STACK_WALK
 			auto watermark = context.stack.push(sizeof(Prologue));
+			if (watermark == -1u) {
+				context.throw_error("stack overflow");
+				return v_zero();
+			}
             // fill prologue
             Prologue * pp = (Prologue *) context.stack.sp();
             pp->arguments =			args;
@@ -108,12 +112,16 @@ namespace das
             using Arguments = typename FunctionTrait::arguments;
             const int nargs = tuple_size<Arguments>::value;
             using Indices = make_index_sequence<nargs>;
-			vec4f * args = (vec4f *)(alloca(nArguments*sizeof(vec4f)));
-			evalArgs(context, args);
-            DAS_EXCEPTION_POINT;
+			vec4f args[tuple_size<Arguments>::value ? tuple_size<Arguments>::value : 1];
+			EvalBlock<tuple_size<Arguments>::value>::eval(context, arguments, args);
+			DAS_EXCEPTION_POINT;
             Result * cmres = (Result *)(context.stack.sp() + stackTop);
 #if DAS_ENABLE_STACK_WALK
 			auto watermark = context.stack.push(sizeof(Prologue));
+			if (watermark == -1u) {
+				context.throw_error("stack overflow");
+				return v_zero();
+			}
             Prologue * pp = (Prologue *) context.stack.sp();
             pp->arguments =			args;
             pp->copyOrMoveResult =	nullptr;
@@ -142,6 +150,10 @@ namespace das
             DAS_EXCEPTION_POINT;
 #if DAS_ENABLE_STACK_WALK
 			auto watermark = context.stack.push(sizeof(Prologue));
+			if (watermark == -1u) {
+				context.throw_error("stack overflow");
+				return v_zero();
+			}
             Prologue * pp = (Prologue *) context.stack.sp();
             pp->arguments =			args;
             pp->copyOrMoveResult =	nullptr;
