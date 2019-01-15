@@ -80,8 +80,8 @@ namespace das
 			EvalBlock<tuple_size<Arguments>::value>::eval(context, arguments, args);
             DAS_EXCEPTION_POINT;
 #if DAS_ENABLE_STACK_WALK
-			auto watermark = context.stack.push(sizeof(Prologue));
-			if (watermark == -1u) {
+			char * EP, *SP;
+			if (!context.stack.push(sizeof(Prologue), EP, SP)) {
 				context.throw_error("stack overflow");
 				return v_zero();
 			}
@@ -96,7 +96,7 @@ namespace das
             auto res = ImplCallStaticFunction<Result>::template call<FuncT,Arguments>(*fn, context, args, Indices());
             // POP
 #if DAS_ENABLE_STACK_WALK
-			context.stack.pop(watermark);
+			context.stack.pop(EP, SP);
 #endif
             return res;
         }
@@ -117,8 +117,8 @@ namespace das
 			DAS_EXCEPTION_POINT;
             Result * cmres = (Result *)(context.stack.sp() + stackTop);
 #if DAS_ENABLE_STACK_WALK
-			auto watermark = context.stack.push(sizeof(Prologue));
-			if (watermark == -1u) {
+			char * EP, *SP;
+			if (!context.stack.push(sizeof(Prologue), EP, SP)) {
 				context.throw_error("stack overflow");
 				return v_zero();
 			}
@@ -131,7 +131,7 @@ namespace das
             // calc
             ImplCallStaticFunctionAndCopy<Result>::template call<FuncT,Arguments>(*fn, context, cmres, args, Indices());
 #if DAS_ENABLE_STACK_WALK
-			context.stack.pop(watermark);
+			context.stack.pop(EP, SP);
 #endif
             return cast<Result *>::from(cmres);
         }
@@ -149,8 +149,8 @@ namespace das
             evalArgs(context, args);
             DAS_EXCEPTION_POINT;
 #if DAS_ENABLE_STACK_WALK
-			auto watermark = context.stack.push(sizeof(Prologue));
-			if (watermark == -1u) {
+			char * EP, *SP;
+			if (!context.stack.push(sizeof(Prologue), EP, SP)) {
 				context.throw_error("stack overflow");
 				return v_zero();
 			}
@@ -163,7 +163,7 @@ namespace das
             // calc
             auto res = fn(context,this,args);
 #if DAS_ENABLE_STACK_WALK
-			context.stack.pop(watermark);
+			context.stack.pop(EP,SP);
 #endif
             return res;
         }

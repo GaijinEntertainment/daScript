@@ -105,36 +105,26 @@ namespace das {
 			evalTop = stackTop = stack + stackSize;
 		}
 
-		__forceinline uint64_t watermark() const {
-			uint64_t evt = uint64_t(evalTop - stack);
-			uint64_t stt = uint64_t(stackTop - stack);
-			return (stt << 32u) | evt;
-		}
-
-		__forceinline uint64_t push(uint32_t size) {		// stack watermark
+		__forceinline bool push(uint32_t size, char * & EP, char * & SP ) {		// stack watermark
 			if (stackTop - size < stack ) {
-				return -1u;
+				return false;
 			}
-			auto wm = watermark();
+			EP = evalTop;
+			SP = stackTop;
 			stackTop -= size;
 			evalTop = stackTop;
-			return wm;
+			return true;
 		}
 
-		__forceinline void pop(uint64_t watermark) {	// restore stack to watermark
-			uint32_t stt = uint32_t(watermark >> 32u);
-			uint32_t ett = uint32_t(watermark);
-            assert(stt<=stackSize && ett<=stackSize);
-			stackTop = stack + stt;
-			evalTop = stack + ett;
+		__forceinline void pop(char * EP, char * SP ) {	// restore stack to watermark
+			evalTop = EP;
+			stackTop = SP;
 		}
 
-		__forceinline uint64_t invoke(uint32_t et) {	// pass bottom portion of the watermark
-			auto wm = watermark();
-            assert(et<=stackSize);
+		__forceinline void invoke(uint32_t et, char * & EP, char * & SP ) {	// pass bottom portion of the watermark
+			EP = evalTop;
+			SP = stackTop;
 			evalTop = stack + et;
-            assert(evalTop>=stackTop);
-			return wm;
 		}
 
 		__forceinline char * ap() const {				// allocation stack

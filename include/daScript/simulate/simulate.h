@@ -136,12 +136,12 @@ namespace das
             return ((Prologue *)stack.sp())->copyOrMoveResult;
         }
         
-        __forceinline vec4f call(int fnIndex, vec4f * args, void * cmres, int line) {
-            assert(fnIndex >= 0 && fnIndex<totalFunctions && "function index out of range");
-            auto & fn = functions[fnIndex];
-            // PUSH
-			auto watermark = stack.push(fn.stackSize);
-			if ( watermark==-1u ) {
+		__forceinline vec4f call(int fnIndex, vec4f * args, void * cmres, int line) {
+			assert(fnIndex >= 0 && fnIndex < totalFunctions && "function index out of range");
+			auto & fn = functions[fnIndex];
+			// PUSH
+			char * EP, *SP;
+			if (!stack.push(fn.stackSize, EP, SP)) {
                 throw_error("stack overflow");
                 return v_zero();
             }
@@ -157,7 +157,7 @@ namespace das
             fn.code->eval(*this);
             stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
             // POP
-			stack.pop(watermark);
+			stack.pop(EP, SP);
             return result;
         }
 
@@ -166,7 +166,8 @@ namespace das
 #pragma warning(disable:4701)
 #endif
 		__forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
-			auto watermark = stack.invoke(block.stackOffset);
+			char * EP, *SP;
+			stack.invoke(block.stackOffset, EP, SP);
             BlockArguments * __restrict ba = nullptr;
 			BlockArguments saveArguments;
             if ( block.argumentsOffset ) {
@@ -179,7 +180,7 @@ namespace das
 			if ( ba ) {
                 *ba = saveArguments;
 			}
-			stack.pop(watermark);
+			stack.pop(EP, SP);
 			return block_result;
 		}
 #ifdef _MSC_VER
