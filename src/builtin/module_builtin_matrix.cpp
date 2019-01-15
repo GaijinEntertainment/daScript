@@ -77,12 +77,12 @@ namespace das {
             return pt;
         }
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.makeNode<SimNode_CopyValue<ThisMatrix>>(at, l, r);
+            return context.code.makeNode<SimNode_CopyValue<ThisMatrix>>(at, l, r);
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.makeNode<SimNode_FieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
+                return context.code.makeNode<SimNode_FieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
@@ -91,18 +91,18 @@ namespace das {
             int field = GetField(na);
             if ( field!=-1 ) {
                 auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-                return context.makeValueNode<SimNode_FieldDerefR2V>(bt,at,value,uint32_t(field*sizeof(VecT)));
+                return context.code.makeValueNode<SimNode_FieldDerefR2V>(bt,at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
         }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.makeNode<SimNode_New>(at,int32_t(sizeof(ThisMatrix)));
+            return context.code.makeNode<SimNode_New>(at,int32_t(sizeof(ThisMatrix)));
         }
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.makeNode<SimNode_SafeFieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
+                return context.code.makeNode<SimNode_SafeFieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
@@ -110,13 +110,13 @@ namespace das {
         virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value,uint32_t(field*sizeof(VecT)));
+                return context.code.makeNode<SimNode_SafeFieldDerefPtr>(at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
         };
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, SimNode * rv, SimNode * idx ) const override {
-            return context.makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), RowC);
+            return context.code.makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), RowC);
         }
         virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
             auto pM = (ThisMatrix *) data;
@@ -144,7 +144,7 @@ namespace das {
         SimNode_MatrixCtor(const LineInfo & at) : SimNode_CallBase(at) {}
         virtual vec4f eval(Context & context) override {
             assert(stackTop && "copy on return memory not allocated");
-            auto cmres = context.stackTop + stackTop;
+            auto cmres = context.stack.sp() + stackTop;
             memset ( cmres, 0, sizeof(MatT) );
             return cast<void *>::from(cmres);
         }

@@ -35,7 +35,7 @@ namespace das
         virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
-                return context.makeNode<SimNode_FieldDeref>(at,value,it->second.offset);
+                return context.code.makeNode<SimNode_FieldDeref>(at,value,it->second.offset);
             } else {
                 return nullptr;
             }
@@ -44,18 +44,18 @@ namespace das
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
                 auto itT = it->second.decl;
-                return context.makeValueNode<SimNode_FieldDerefR2V>(itT->baseType,at,value,it->second.offset);
+                return context.code.makeValueNode<SimNode_FieldDerefR2V>(itT->baseType,at,value,it->second.offset);
             } else {
                 return nullptr;
             }
         }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.makeNode<SimNode_New>(at,int32_t(sizeof(OT)));
+            return context.code.makeNode<SimNode_New>(at,int32_t(sizeof(OT)));
         }
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
-                return context.makeNode<SimNode_SafeFieldDeref>(at,value,it->second.offset);
+                return context.code.makeNode<SimNode_SafeFieldDeref>(at,value,it->second.offset);
             } else {
                 return nullptr;
             }
@@ -63,7 +63,7 @@ namespace das
         virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
-                return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value,it->second.offset);
+                return context.code.makeNode<SimNode_SafeFieldDerefPtr>(at,value,it->second.offset);
             } else {
                 return nullptr;
             }
@@ -153,13 +153,13 @@ namespace das
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
         virtual TypeDeclPtr makeIteratorType () const override { return make_shared<TypeDecl>(*vecType); }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, SimNode * rv, SimNode * idx ) const override {
-            return context.makeNode<SimNode_AtVector>(at, rv, idx);
+            return context.code.makeNode<SimNode_AtVector>(at, rv, idx);
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
-            return context.makeNode<SimNode_VectorIterator>(at, rv);
+            return context.code.makeNode<SimNode_VectorIterator>(at, rv);
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
-            if ( na=="length" ) return context.makeNode<SimNode_VectorLength>(at,value);
+            if ( na=="length" ) return context.code.makeNode<SimNode_VectorLength>(at,value);
             return nullptr;
         }
         TypeDeclPtr vecType;
@@ -174,10 +174,10 @@ namespace das
         virtual size_t getSizeOf() const override { return sizeof(OT); }
         virtual bool isRefType() const override { return false; }
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.makeNode<SimNode_CopyValue<OT>>(at, l, r);
+            return context.code.makeNode<SimNode_CopyValue<OT>>(at, l, r);
         }
         virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const override {
-            return context.makeNode<SimNode_Ref2Value<OT>>(at, l);
+            return context.code.makeNode<SimNode_Ref2Value<OT>>(at, l);
         }
         virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
             ss << (* (OT*)data);

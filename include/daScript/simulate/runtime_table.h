@@ -72,7 +72,7 @@ namespace das
             uint32_t newCapacity = max(minCapacity, tab.capacity*2);
             Table newTab;
             uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint8_t));
-            newTab.data = (char *) context->allocate(memSize);
+            newTab.data = (char *) context->heap.allocate(memSize);
             if ( context->stopFlags & EvalFlags::stopForThrow ) {
                 return false;
             }

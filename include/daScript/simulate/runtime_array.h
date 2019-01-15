@@ -77,7 +77,7 @@ namespace das
             char ** __restrict pi[total];
             int szz = INT_MAX;
             for ( int t=0; t!=total; ++t ) {
-                pi[t] = (char **)(context.stackTop + stackTop[t]);
+                pi[t] = (char **)(context.stack.sp() + stackTop[t]);
                 szz = min(szz, int(pha[t]->size));
             }
             for (int i = 0; i!=szz && !context.stopFlags; ++i) {
@@ -108,7 +108,7 @@ namespace das
             }
             char ** __restrict pi[total];
             for ( int t=0; t!=total; ++t ) {
-                pi[t] = (char **)(context.stackTop + stackTop[t]);
+                pi[t] = (char **)(context.stack.sp() + stackTop[t]);
             }
             for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
                 for (int t = 0; t != total; ++t) {

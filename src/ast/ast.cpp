@@ -948,7 +948,7 @@ namespace das
             if ( type->isRefType() ) {
                 return expr;
             } else {
-                return context.makeValueNode<SimNode_Ref2Value>(type->baseType, at, expr);
+                return context.code.makeValueNode<SimNode_Ref2Value>(type->baseType, at, expr);
             }
         }
     }
@@ -973,7 +973,7 @@ namespace das
     }
     
     SimNode * ExprPtr2Ref::simulate (Context & context) const {
-        return context.makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
+        return context.code.makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
 
     // ExprNullCoalescing
@@ -995,16 +995,16 @@ namespace das
     
     SimNode * ExprNullCoalescing::simulate (Context & context) const {
         if ( type->ref ) {
-            return context.makeNode<SimNode_NullCoalescingRef>(at,subexpr->simulate(context),defaultValue->simulate(context));
+            return context.code.makeNode<SimNode_NullCoalescingRef>(at,subexpr->simulate(context),defaultValue->simulate(context));
         } else {
-            return context.makeValueNode<SimNode_NullCoalescing>(type->baseType,at,subexpr->simulate(context),defaultValue->simulate(context));
+            return context.code.makeValueNode<SimNode_NullCoalescing>(type->baseType,at,subexpr->simulate(context),defaultValue->simulate(context));
         }
     }
     
     // Const
     
     SimNode * ExprConst::simulate (Context & context) const {
-        return context.makeNode<SimNode_ConstValue>(at,value);
+        return context.code.makeNode<SimNode_ConstValue>(at,value);
     }
     
     ExpressionPtr ExprConstString::visit(Visitor & vis) {
@@ -1025,8 +1025,8 @@ namespace das
     }
     
     SimNode * ExprConstString::simulate (Context & context) const {
-        char * str = context.allocateName(text);
-        return context.makeNode<SimNode_ConstValue>(at,cast<char *>::from(str));
+        char * str = context.code.allocateName(text);
+        return context.code.makeNode<SimNode_ConstValue>(at,cast<char *>::from(str));
     }
 
     // ExprStaticAssert
@@ -1053,7 +1053,7 @@ namespace das
         string message;
         if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
-        return context.makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.allocateName(message));
+        return context.code.makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.code.allocateName(message));
     }
     
     // ExprDebug
@@ -1065,15 +1065,15 @@ namespace das
     }
     
     SimNode * ExprDebug::simulate (Context & context) const {
-        TypeInfo * pTypeInfo = context.makeNode<TypeInfo>();
+        TypeInfo * pTypeInfo = context.debugInfo.makeNode<TypeInfo>();
         context.thisProgram->makeTypeInfo(pTypeInfo, context, arguments[0]->type);
         string message;
         if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
-        return context.makeNode<SimNode_Debug>(at,
+        return context.code.makeNode<SimNode_Debug>(at,
                                                arguments[0]->simulate(context),
                                                pTypeInfo,
-                                               context.allocateName(message));
+                                               context.code.allocateName(message));
     }
 
     // ExprMakeBlock
@@ -1086,7 +1086,7 @@ namespace das
     
     SimNode * ExprMakeBlock::simulate (Context & context) const {
         uint32_t argSp = static_pointer_cast<ExprBlock>(block)->stackTop;
-        return context.makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp);
+        return context.code.makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp);
     }
     
     ExpressionPtr ExprMakeBlock::clone( const ExpressionPtr & expr ) const {
@@ -1107,13 +1107,13 @@ namespace das
         auto blockT = arguments[0]->type;
         SimNode_Invoke * pInvoke;
         if ( blockT->firstType && blockT->firstType->isRefType() ) {
-            pInvoke = context.makeNode<SimNode_InvokeAndCopyOrMove>(at, stackTop);
+            pInvoke = context.code.makeNode<SimNode_InvokeAndCopyOrMove>(at, stackTop);
         } else {
-            pInvoke = context.makeNode<SimNode_Invoke>(at);
+            pInvoke = context.code.makeNode<SimNode_Invoke>(at);
         }
         pInvoke->debug = at;
         if ( int nArg = (int) arguments.size() ) {
-            pInvoke->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
+            pInvoke->arguments = (SimNode **) context.code.allocate(nArg * sizeof(SimNode *));
             pInvoke->nArguments = nArg;
             for ( int a=0; a!=nArg; ++a ) {
                 pInvoke->arguments[a] = arguments[a]->simulate(context);
@@ -1136,13 +1136,13 @@ namespace das
     SimNode * ExprHash::simulate (Context & context) const {
         auto val = arguments[0]->simulate(context);
         if ( !arguments[0]->type->isRef() ) {
-            return context.makeValueNode<SimNode_HashOfValue>(arguments[0]->type->baseType, at, val);
+            return context.code.makeValueNode<SimNode_HashOfValue>(arguments[0]->type->baseType, at, val);
         } else if ( arguments[0]->type->isPod() ) {
-            return context.makeNode<SimNode_HashOfRef>(at, val, arguments[0]->type->getSizeOf());
+            return context.code.makeNode<SimNode_HashOfRef>(at, val, arguments[0]->type->getSizeOf());
         } else {
-            auto typeInfo = context.makeNode<TypeInfo>();
+            auto typeInfo = context.debugInfo.makeNode<TypeInfo>();
             context.thisProgram->makeTypeInfo(typeInfo, context, arguments[0]->type);
-            return context.makeNode<SimNode_HashOfMixedType>(at, val, typeInfo);
+            return context.code.makeNode<SimNode_HashOfMixedType>(at, val, typeInfo);
         }
     }
     
@@ -1159,7 +1159,7 @@ namespace das
         auto val = arguments[1]->simulate(context);
         if ( arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
-            return context.makeValueNode<SimNode_TableErase>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
+            return context.code.makeValueNode<SimNode_TableErase>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
         } else {
             assert(0 && "we should not even be here");
             return nullptr;
@@ -1179,7 +1179,7 @@ namespace das
         auto val = arguments[1]->simulate(context);
         if ( arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
-            return context.makeValueNode<SimNode_TableFind>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
+            return context.code.makeValueNode<SimNode_TableFind>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
         } else {
             assert(0 && "we should not even be here");
             return nullptr;
@@ -1208,7 +1208,7 @@ namespace das
     
     SimNode * ExprSizeOf::simulate (Context & context) const {
         uint32_t size = typeexpr->getSizeOf();
-        return context.makeNode<SimNode_ConstValue>(at,cast<uint32_t>::from(size));
+        return context.code.makeNode<SimNode_ConstValue>(at,cast<uint32_t>::from(size));
     }
     
     // ExprTypeName
@@ -1232,8 +1232,8 @@ namespace das
     }
     
     SimNode * ExprTypeName::simulate (Context & context) const {
-        auto pName = context.allocateName(typeexpr->describe(false));
-        return context.makeNode<SimNode_ConstValue>(at,cast<char *>::from(pName));
+        auto pName = context.code.allocateName(typeexpr->describe(false));
+        return context.code.makeNode<SimNode_ConstValue>(at,cast<char *>::from(pName));
     }
     
     // ExprNew
@@ -1255,7 +1255,7 @@ namespace das
             return typeexpr->annotation->simulateGetNew(context, at);
         } else {
             int32_t bytes = typeexpr->getSizeOf();
-            return context.makeNode<SimNode_New>(at,bytes);
+            return context.code.makeNode<SimNode_New>(at,bytes);
         }
     }
 
@@ -1285,28 +1285,28 @@ namespace das
             uint32_t range = subexpr->type->getVectorDim();
             uint32_t stride = type->getSizeOf();
             if ( subexpr->type->ref ) {
-                result = context.makeNode<SimNode_At>(at, prv, pidx, stride, range);
+                result = context.code.makeNode<SimNode_At>(at, prv, pidx, stride, range);
             } else {
                 switch ( type->baseType ) {
-                    case tInt:      return context.makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range);
-                    case tUInt:     return context.makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range);
-                    case tFloat:    return context.makeNode<SimNode_AtVector<float>>(at, prv, pidx, range);
+                    case tInt:      return context.code.makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range);
+                    case tUInt:     return context.code.makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range);
+                    case tFloat:    return context.code.makeNode<SimNode_AtVector<float>>(at, prv, pidx, range);
                     default:
                         assert(0 && "we should not even be here");
                 }
             }
         } else if ( subexpr->type->isGoodTableType() ) {
             uint32_t valueTypeSize = subexpr->type->secondType->getSizeOf();
-            result = context.makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize);
+            result = context.code.makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize);
         } else if ( subexpr->type->isGoodArrayType() ) {
             uint32_t stride = subexpr->type->firstType->getSizeOf();
-            result = context.makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
+            result = context.code.makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
         } else if ( subexpr->type->isHandle() ) {
             result = subexpr->type->annotation->simulateGetAt(context, at, prv, pidx);
         } else {
             uint32_t stride = subexpr->type->getStride();
             uint32_t range = subexpr->type->dim.back();
-            result = context.makeNode<SimNode_At>(at, prv, pidx, stride, range);
+            result = context.code.makeNode<SimNode_At>(at, prv, pidx, stride, range);
         }
         if ( r2v ) {
             return ExprRef2Value::GetR2V(context, at, type, result);
@@ -1383,10 +1383,10 @@ namespace das
         }
         // TODO: what if list size is 0?
         if ( simlist.size()!=1 || isClosure ) {
-            auto block = isClosure ? context.makeNode<SimNode_ClosureBlock>(at, type!=nullptr && type->baseType!=Type::tVoid, annotationData)
-                : context.makeNode<SimNode_Block>(at);
+            auto block = isClosure ? context.code.makeNode<SimNode_ClosureBlock>(at, type!=nullptr && type->baseType!=Type::tVoid, annotationData)
+                : context.code.makeNode<SimNode_Block>(at);
             block->total = int(simlist.size());
-            block->list = (SimNode **) context.allocate(sizeof(SimNode *)*block->total);
+            block->list = (SimNode **) context.code.allocate(sizeof(SimNode *)*block->total);
             for ( uint32_t i = 0; i != block->total; ++i )
                 block->list[i] = simlist[i];
             return block;
@@ -1425,14 +1425,14 @@ namespace das
         auto simV = value->simulate(context);
         if ( type->ref ) {
             if ( r2v ) {
-                return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,simV,offset);
+                return context.code.makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,simV,offset);
             } else {
-                return context.makeNode<SimNode_FieldDeref>(at,simV,offset);
+                return context.code.makeNode<SimNode_FieldDeref>(at,simV,offset);
             }
         } else {
             assert(!r2v && "how did it ever become value");
             if ( fields.size()==1 ) {
-                return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,simV,offset);
+                return context.code.makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,simV,offset);
             } else {
                 auto fsz = fields.size();
                 uint8_t fs[4];
@@ -1440,7 +1440,7 @@ namespace das
                 fs[1] = fields[1];
                 fs[2] = fsz>=3 ? fields[2] : fields[0];
                 fs[3] = fsz>=4 ? fields[3] : fields[0];
-                return context.makeNode<SimNode_Swizzle>(at,simV,fs);
+                return context.code.makeNode<SimNode_Swizzle>(at,simV,fs);
             }
         }
     }
@@ -1473,14 +1473,14 @@ namespace das
         } else {
 			if (type->isPointer()) {
 				if (r2v)
-					return context.makeValueNode<SimNode_PtrFieldDerefR2V>(type->baseType, at, simV, field->offset);
+					return context.code.makeValueNode<SimNode_PtrFieldDerefR2V>(type->baseType, at, simV, field->offset);
 				else
-					return context.makeNode<SimNode_PtrFieldDeref>(at, simV, field->offset);
+					return context.code.makeNode<SimNode_PtrFieldDeref>(at, simV, field->offset);
 			} else {
 				if (r2v)
-					return context.makeValueNode<SimNode_FieldDerefR2V>(type->baseType, at, simV, field->offset);
+					return context.code.makeValueNode<SimNode_FieldDerefR2V>(type->baseType, at, simV, field->offset);
 				else
-					return context.makeNode<SimNode_FieldDeref>(at, simV, field->offset);
+					return context.code.makeNode<SimNode_FieldDeref>(at, simV, field->offset);
 			}
         }
     }
@@ -1504,13 +1504,13 @@ namespace das
             if ( annotation ) {
                 return annotation->simulateSafeGetFieldPtr(name, context, at, value->simulate(context));
             } else {
-                return context.makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),field->offset);
+                return context.code.makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),field->offset);
             }
         } else {
             if ( annotation ) {
                 return annotation->simulateSafeGetField(name, context, at, value->simulate(context));
             } else {
-                return context.makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),field->offset);
+                return context.code.makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),field->offset);
             }
         }
     }
@@ -1540,14 +1540,14 @@ namespace das
     }
     
     SimNode * ExprStringBuilder::simulate (Context & context) const {
-        SimNode_StringBuilder * pSB = context.makeNode<SimNode_StringBuilder>(at);
+        SimNode_StringBuilder * pSB = context.code.makeNode<SimNode_StringBuilder>(at);
         if ( int nArg = (int) elements.size() ) {
-            pSB->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
-            pSB->types = (TypeInfo **) context.allocate(nArg * sizeof(TypeInfo *));
+            pSB->arguments = (SimNode **) context.code.allocate(nArg * sizeof(SimNode *));
+            pSB->types = (TypeInfo **) context.code.allocate(nArg * sizeof(TypeInfo *));
             pSB->nArguments = nArg;
             for ( int a=0; a!=nArg; ++a ) {
                 pSB->arguments[a] = elements[a]->simulate(context);
-                pSB->types[a] = context.makeNode<TypeInfo>();
+                pSB->types[a] = context.code.makeNode<TypeInfo>();
                 context.thisProgram->makeTypeInfo(pSB->types[a], context, elements[a]->type);
             }
         } else {
@@ -1583,53 +1583,53 @@ namespace das
             auto blk = pBlock.lock();
             if (variable->type->isRef()) {
                 if (r2v && !type->isRefType()) {
-                    return context.makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
+                    return context.code.makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
                 } else {
-                    return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+                    return context.code.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
                 }
             } else {
                 if (r2v && !type->isRefType()) {
-                    return context.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+                    return context.code.makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
                 }
                 else {
-                    return context.makeNode<SimNode_GetBlockArgumentRef>(at, argumentIndex, blk->stackTop);
+                    return context.code.makeNode<SimNode_GetBlockArgumentRef>(at, argumentIndex, blk->stackTop);
                 }
             }
         } else if ( local ) {
             if ( variable->type->ref ) {
                 if ( r2v && !type->isRefType() ) {
-                    return context.makeValueNode<SimNode_GetLocalRefR2V>(type->baseType, at, variable->stackTop);
+                    return context.code.makeValueNode<SimNode_GetLocalRefR2V>(type->baseType, at, variable->stackTop);
                 } else {
-                    return context.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
+                    return context.code.makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
                 }
             } else {
                 if ( r2v && !type->isRefType()) {
-                    return context.makeValueNode<SimNode_GetLocalR2V>(type->baseType, at, variable->stackTop);
+                    return context.code.makeValueNode<SimNode_GetLocalR2V>(type->baseType, at, variable->stackTop);
                 } else {
-                    return context.makeNode<SimNode_GetLocal>(at, variable->stackTop);
+                    return context.code.makeNode<SimNode_GetLocal>(at, variable->stackTop);
                 }
             }
         } else if ( argument) {
 			if (variable->type->isRef()) {
 				if (r2v && !type->isRefType()) {
-					return context.makeValueNode<SimNode_GetArgumentR2V>(type->baseType, at, argumentIndex);
+					return context.code.makeValueNode<SimNode_GetArgumentR2V>(type->baseType, at, argumentIndex);
 				} else {
-					return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
+					return context.code.makeNode<SimNode_GetArgument>(at, argumentIndex);
 				}
 			} else {
 				if (r2v && !type->isRefType()) {
-					return context.makeNode<SimNode_GetArgument>(at, argumentIndex);
+					return context.code.makeNode<SimNode_GetArgument>(at, argumentIndex);
 				}
 				else {
-					return context.makeNode<SimNode_GetArgumentRef>(at, argumentIndex);
+					return context.code.makeNode<SimNode_GetArgumentRef>(at, argumentIndex);
 				}
             }
         } else {
 			assert(variable->index >= 0 && "using variable which is not used. how?");
             if ( r2v ) {
-                return context.makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->index);
+                return context.code.makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->index);
             } else {
-                return context.makeNode<SimNode_GetGlobal>(at, variable->index);
+                return context.code.makeNode<SimNode_GetGlobal>(at, variable->index);
             }
         }
     }
@@ -1672,7 +1672,7 @@ namespace das
             SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
             pCall->debug = at;
             pCall->fnIndex = func->index;
-            pCall->arguments = (SimNode **) context.allocate(1 * sizeof(SimNode *));
+            pCall->arguments = (SimNode **) context.code.allocate(1 * sizeof(SimNode *));
             pCall->nArguments = 1;
             pCall->arguments[0] = subexpr->simulate(context);
             return pCall;
@@ -1707,7 +1707,7 @@ namespace das
             SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
             pCall->debug = at;
             pCall->fnIndex = func->index;
-            pCall->arguments = (SimNode **) context.allocate(2 * sizeof(SimNode *));
+            pCall->arguments = (SimNode **) context.code.allocate(2 * sizeof(SimNode *));
             pCall->nArguments = 2;
             pCall->arguments[0] = left->simulate(context);
             pCall->arguments[1] = right->simulate(context);
@@ -1737,7 +1737,7 @@ namespace das
     }
     
     SimNode * ExprOp3::simulate (Context & context) const {
-        return context.makeNode<SimNode_IfThenElse>(at,
+        return context.code.makeNode<SimNode_IfThenElse>(at,
                                                     subexpr->simulate(context),
                                                     left->simulate(context),
                                                     right->simulate(context));
@@ -1761,16 +1761,16 @@ namespace das
                 if ( rE->rtti_isVar() ) {
                     auto rvar = static_pointer_cast<ExprVar>(rE);
                     if ( rvar->local && !rvar->variable->type->ref ) {
-                        return context.makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
+                        return context.code.makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
                                 at, var->variable->stackTop, rvar->variable->stackTop);
                     }
                 }
                 auto right = rE->simulate(context);
                 if ( rightType.ref ) {
-                    return context.makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
+                    return context.code.makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
                                 at, right, var->variable->stackTop);
                 } else {
-                    return context.makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
+                    return context.code.makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
                                 at, right, var->variable->stackTop);
                 }
             }
@@ -1780,20 +1780,20 @@ namespace das
         auto right = rE->simulate(context);
         if ( rightType.isRef() ) {
             if ( rightType.isWorkhorseType() ) {
-                return context.makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
+                return context.code.makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
             } else {
-                return context.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+                return context.code.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
             }
         } else if ( rightType.isHandle() ) {
             return rightType.annotation->simulateCopy(context, at, left, right);
         } else {
-            return context.makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
+            return context.code.makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
     }
     
     SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
         if ( rightType.isRef() ) {
-            return context.makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
+            return context.code.makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
             assert(0 && "we should not be here");
             return nullptr;
@@ -1859,7 +1859,7 @@ namespace das
     }
 
     SimNode * ExprTryCatch::simulate (Context & context) const {
-        return context.makeNode<SimNode_TryCatch>(at,
+        return context.code.makeNode<SimNode_TryCatch>(at,
                                                   try_block->simulate(context),
                                                   catch_block->simulate(context));
     }
@@ -1895,26 +1895,26 @@ namespace das
         SimNode * simSubE = subexpr ? subexpr->simulate(context) : nullptr;
         if ( returnReference ) {
             if ( returnInBlock ) {
-                return context.makeNode<SimNode_ReturnReferenceFromBlock>(at, simSubE);
+                return context.code.makeNode<SimNode_ReturnReferenceFromBlock>(at, simSubE);
             } else {
-                return context.makeNode<SimNode_ReturnReference>(at, simSubE);
+                return context.code.makeNode<SimNode_ReturnReference>(at, simSubE);
             }
         } else if ( copyOnReturn ) {
             if ( returnInBlock ) {
-                return context.makeNode<SimNode_ReturnAndCopyFromBlock>(at,
+                return context.code.makeNode<SimNode_ReturnAndCopyFromBlock>(at,
                             simSubE, subexpr->type->getSizeOf(), stackTop);
             } else {
-                return context.makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
+                return context.code.makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
             }
         } else if ( moveOnReturn ) {
             if ( returnInBlock ) {
-                return context.makeNode<SimNode_ReturnAndMoveFromBlock>(at,
+                return context.code.makeNode<SimNode_ReturnAndMoveFromBlock>(at,
                             simSubE, subexpr->type->getSizeOf(), stackTop);
             } else {
-                return context.makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
+                return context.code.makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
             }
         } else {
-            return context.makeNode<SimNode_Return>(at, simSubE);
+            return context.code.makeNode<SimNode_Return>(at, simSubE);
         }
     }
     
@@ -1932,7 +1932,7 @@ namespace das
     }
     
     SimNode * ExprBreak::simulate (Context & context) const {
-        return context.makeNode<SimNode_Break>(at);
+        return context.code.makeNode<SimNode_Break>(at);
     }
 
     // ExprIfThenElse
@@ -1960,7 +1960,7 @@ namespace das
     }
     
     SimNode * ExprIfThenElse::simulate (Context & context) const {
-        return context.makeNode<SimNode_IfThenElse>(at, cond->simulate(context), if_true->simulate(context),
+        return context.code.makeNode<SimNode_IfThenElse>(at, cond->simulate(context), if_true->simulate(context),
                                                     if_false ? if_false->simulate(context) : nullptr);
     }
 
@@ -1987,7 +1987,7 @@ namespace das
     }
 
     SimNode * ExprWhile::simulate (Context & context) const {
-        return context.makeNode<SimNode_While>(at, cond->simulate(context),body->simulate(context));
+        return context.code.makeNode<SimNode_While>(at, cond->simulate(context),body->simulate(context));
     }
     
     // ExprFor
@@ -2062,17 +2062,17 @@ namespace das
         bool hybridRange = rangeBase && (total>1);
         if ( (sourceTypes>1) || hybridRange || nativeIterators ) {
             SimNode_ForWithIteratorBase * result = (SimNode_ForWithIteratorBase *)
-                context.makeNodeUnroll<SimNode_ForWithIterator>(total, at);
+                context.code.makeNodeUnroll<SimNode_ForWithIterator>(total, at);
             for ( int t=0; t!=total; ++t ) {
                 if ( sources[t]->type->isGoodIteratorType() ) {
                     result->source_iterators[t] = sources[t]->simulate(context);
                 } else if ( sources[t]->type->isGoodArrayType() ) {
-                    result->source_iterators[t] = context.makeNode<SimNode_GoodArrayIterator>(
+                    result->source_iterators[t] = context.code.makeNode<SimNode_GoodArrayIterator>(
                         sources[t]->at,
                         sources[t]->simulate(context),
                         sources[t]->type->firstType->getStride());
                 } else if ( sources[t]->type->isRange() ) {
-                    result->source_iterators[t] = context.makeNode<SimNode_RangeIterator>(
+                    result->source_iterators[t] = context.code.makeNode<SimNode_RangeIterator>(
                         sources[t]->at,
                         sources[t]->simulate(context));
                 } else if ( sources[t]->type->isHandle() ) {
@@ -2082,7 +2082,7 @@ namespace das
                          sources[t]->simulate(context)
                     );
                 } else if ( sources[t]->type->dim.size() ) {
-                    result->source_iterators[t] = context.makeNode<SimNode_FixedArrayIterator>(
+                    result->source_iterators[t] = context.code.makeNode<SimNode_FixedArrayIterator>(
                         sources[t]->at,
                         sources[t]->simulate(context),
                         sources[t]->type->dim.back(),
@@ -2098,12 +2098,12 @@ namespace das
         } else {
             SimNode_ForBase * result;
             if ( dynamicArrays ) {
-                result = (SimNode_ForBase *) context.makeNodeUnroll<SimNode_ForGoodArray>(total, at);
+                result = (SimNode_ForBase *) context.code.makeNodeUnroll<SimNode_ForGoodArray>(total, at);
             } else if ( fixedArrays ) {
-                result = (SimNode_ForBase *) context.makeNodeUnroll<SimNode_ForFixedArray>(total, at);
+                result = (SimNode_ForBase *) context.code.makeNodeUnroll<SimNode_ForFixedArray>(total, at);
             } else if ( rangeBase ) {
                 assert(total==1 && "simple range on 1 loop only");
-                result = context.makeNode<SimNode_ForRange>(at);
+                result = context.code.makeNode<SimNode_ForRange>(at);
             } else {
                 assert(0 && "we should not be here yet");
                 return nullptr;
@@ -2176,7 +2176,7 @@ namespace das
 			if (var->init) {
 				init = ExprLet::simulateInit(context, var, true);
 			} else {
-				init = context.makeNode<SimNode_InitLocal>(pLet->at, var->stackTop, var->type->getSizeOf());
+				init = context.code.makeNode<SimNode_InitLocal>(pLet->at, var->stackTop, var->type->getSizeOf());
 			}
 			if (init)
 				simlist.push_back(init);
@@ -2188,11 +2188,11 @@ namespace das
         SimNode * init = var->init->simulate(context);
         SimNode * get;
         if ( local )
-            get = context.makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
+            get = context.code.makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
         else
-            get = context.makeNode<SimNode_GetGlobal>(var->init->at, var->index);
+            get = context.code.makeNode<SimNode_GetGlobal>(var->init->at, var->index);
         if ( var->type->ref ) {
-            return context.makeNode<SimNode_CopyReference>(var->init->at, get, init);
+            return context.code.makeNode<SimNode_CopyReference>(var->init->at, get, init);
         } else if ( var->type->canCopy() ) {
             auto varExpr = make_shared<ExprVar>(var->at, var->name);
             varExpr->variable = var;
@@ -2209,9 +2209,9 @@ namespace das
     }
     
     SimNode * ExprLet::simulate (Context & context) const {
-        auto let = context.makeNode<SimNode_Let>(at);
+        auto let = context.code.makeNode<SimNode_Let>(at);
         let->total = (uint32_t) variables.size();
-        let->list = (SimNode **) context.allocate(let->total * sizeof(SimNode*));
+        let->list = (SimNode **) context.code.allocate(let->total * sizeof(SimNode*));
 		auto simList = ExprLet::simulateInit(context, this);
 		std::copy(simList.data(), simList.data() + simList.size(), let->list);
         let->subexpr = subexpr ? subexpr->simulate(context) : nullptr;
@@ -2288,7 +2288,7 @@ namespace das
         pCall->fnIndex = func->index;
         pCall->stackTop = stackTop;
         if ( int nArg = (int) arguments.size() ) {
-            pCall->arguments = (SimNode **) context.allocate(nArg * sizeof(SimNode *));
+            pCall->arguments = (SimNode **) context.code.allocate(nArg * sizeof(SimNode *));
             pCall->nArguments = nArg;
             for ( int a=0; a!=nArg; ++a ) {
                 pCall->arguments[a] = arguments[a]->simulate(context);
@@ -2315,11 +2315,11 @@ namespace das
     }
     
     FuncInfo * Program::makeFunctionDebugInfo ( Context & context, const Function & fn ) {
-        FuncInfo * fni = context.makeNode<FuncInfo>();
-        fni->name = context.allocateName(fn.name);
+        FuncInfo * fni = context.debugInfo.makeNode<FuncInfo>();
+        fni->name = context.debugInfo.allocateName(fn.name);
         fni->stackSize = fn.totalStackSize;
         fni->argsSize = (uint32_t) fn.arguments.size();
-        fni->args = (VarInfo **) context.allocate(sizeof(VarInfo *) * fni->argsSize);
+        fni->args = (VarInfo **) context.debugInfo.allocate(sizeof(VarInfo *) * fni->argsSize);
         for ( uint32_t i=0; i!=fni->argsSize; ++i ) {
             fni->args[i] = makeVariableDebugInfo(context, *fn.arguments[i]);
         }
@@ -2327,16 +2327,16 @@ namespace das
     }
     
     StructInfo * Program::makeStructureDebugInfo ( Context & context, const Structure & st ) {
-        StructInfo * sti = context.makeNode<StructInfo>();
-        sti->name = context.allocateName(st.name);
+        StructInfo * sti = context.debugInfo.makeNode<StructInfo>();
+        sti->name = context.debugInfo.allocateName(st.name);
         sti->fieldsSize = (uint32_t) st.fields.size();
         sti->size = st.getSizeOf();
-        sti->fields = (VarInfo **) context.allocate( sizeof(VarInfo *) * sti->fieldsSize );
+        sti->fields = (VarInfo **) context.debugInfo.allocate( sizeof(VarInfo *) * sti->fieldsSize );
         for ( uint32_t i=0; i!=sti->fieldsSize; ++i ) {
             auto & var = st.fields[i];
-            VarInfo * vi = context.makeNode<VarInfo>();
+            VarInfo * vi = context.debugInfo.makeNode<VarInfo>();
             makeTypeInfo(vi, context, var.type);
-            vi->name = context.allocateName(var.name);
+            vi->name = context.debugInfo.allocateName(var.name);
             vi->offset = st.fields[i].offset;
             sti->fields[i] = vi;
         }
@@ -2348,7 +2348,7 @@ namespace das
         info->dimSize = (uint32_t) type->dim.size();
         info->annotation = type->annotation.get();
         if ( info->dimSize ) {
-            info->dim = (uint32_t *) context.allocate(sizeof(uint32_t) * info->dimSize );
+            info->dim = (uint32_t *) context.debugInfo.allocate(sizeof(uint32_t) * info->dimSize );
             for ( uint32_t i=0; i != info->dimSize; ++i ) {
                 info->dim[i] = type->dim[i];
             }
@@ -2368,13 +2368,13 @@ namespace das
         info->canCopy = type->canCopy();
         info->isPod = type->isPod();
         if ( type->firstType ) {
-            info->firstType = context.makeNode<TypeInfo>();
+            info->firstType = context.debugInfo.makeNode<TypeInfo>();
             makeTypeInfo(info->firstType, context, type->firstType);
         } else {
             info->firstType = nullptr;
         }
         if ( type->secondType ) {
-            info->secondType = context.makeNode<TypeInfo>();
+            info->secondType = context.debugInfo.makeNode<TypeInfo>();
             makeTypeInfo(info->secondType , context, type->secondType);
         } else {
             info->secondType = nullptr;
@@ -2382,16 +2382,16 @@ namespace das
     }
 
     VarInfo * Program::makeVariableDebugInfo ( Context & context, const Variable & var ) {
-        VarInfo * vi = context.makeNode<VarInfo>();
+        VarInfo * vi = context.debugInfo.makeNode<VarInfo>();
         makeTypeInfo(vi, context, var.type);
-        vi->name = context.allocateName(var.name);
+        vi->name = context.debugInfo.allocateName(var.name);
         vi->offset = 0;
         return vi;
     }
     
     bool Program::simulate ( Context & context ) {
         context.thisProgram = this;
-        context.globalVariables = (GlobalVariable *) context.allocate( totalVariables*sizeof(GlobalVariable) );
+        context.globalVariables = (GlobalVariable *) context.code.allocate( totalVariables*sizeof(GlobalVariable) );
 		for (auto & pm : library.modules ) {
 			for (auto & it : pm->globals) {
 				auto pvar = it.second;
@@ -2399,15 +2399,15 @@ namespace das
 					continue;
 				assert(pvar->index >= 0 && "we are simulating variable, which is not used");
 				auto & gvar = context.globalVariables[pvar->index];
-				gvar.name = context.allocateName(pvar->name);
+				gvar.name = context.code.allocateName(pvar->name);
 				gvar.size = pvar->type->getSizeOf();
 				gvar.debug = makeVariableDebugInfo(context, *it.second);
-				gvar.value = cast<char *>::from((char *)context.allocate(gvar.size));
+				gvar.value = cast<char *>::from((char *)context.heap.allocate(gvar.size));
 				gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
 			}
 		}
         context.totalVariables = totalVariables;
-        context.functions = (SimFunction *) context.allocate( totalFunctions*sizeof(SimFunction) );
+        context.functions = (SimFunction *) context.code.allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
 		for (auto & pm : library.modules) {
 			for (auto & it : pm->functions) {
@@ -2415,7 +2415,7 @@ namespace das
 				if (pfun->index < 0 || !pfun->used)
 					continue;
 				auto & gfun = context.functions[pfun->index];
-				gfun.name = context.allocateName(pfun->name);
+				gfun.name = context.code.allocateName(pfun->name);
 				gfun.code = pfun->simulate(context);
 				gfun.stackSize = pfun->totalStackSize;
 				gfun.debug = makeFunctionDebugInfo(context, *pfun);

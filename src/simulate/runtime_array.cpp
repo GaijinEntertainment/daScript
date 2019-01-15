@@ -26,7 +26,7 @@ namespace das
         if ( arr.capacity >= newCapacity ) {
             return;
         }
-        arr.data = (char *) context.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
+        arr.data = (char *) context.heap.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
         if ( context.stopFlags & EvalFlags::stopForThrow ) {
             return;
         }

@@ -929,7 +929,7 @@ namespace das
             auto tableType = arguments[0]->type;
             auto iterType = first ? tableType->firstType : tableType->secondType;
             auto stride = iterType->getSizeOf();
-            return context.makeNode<SimNodeT>(at,subexpr,stride);
+            return context.code.makeNode<SimNodeT>(at,subexpr,stride);
         }
         virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
@@ -1043,9 +1043,9 @@ namespace das
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context ) {
             if ( copyOnReturn || moveOnReturn ) {
-                return context.makeNode<SimNode_CallAndCopyOrMove>(at);
+                return context.code.makeNode<SimNode_CallAndCopyOrMove>(at);
             } else {
-                return context.makeNode<SimNode_Call>(at);
+                return context.code.makeNode<SimNode_Call>(at);
             }
         }
         string describe() const;

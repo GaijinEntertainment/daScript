@@ -10,7 +10,7 @@ namespace das
     vec4f SimPolicy_String::Add ( vec4f a, vec4f b, Context & context ) {
         const char *  sA = to_rts(a); auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
-        char * sAB = (char * ) context.allocate(uint32_t(la + lb + 1));
+        char * sAB = (char * ) context.heap.allocate(uint32_t(la + lb + 1));
         memcpy ( sAB, sA, la );
         memcpy ( sAB+la, sB, lb+1 );
         return from_rts(sAB);
@@ -20,7 +20,7 @@ namespace das
 		char ** pA = (char **)a;
         const char *  sA = *pA ? *pA : rts_null; auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
-        *pA = (char * ) context.allocate(uint32_t(la + lb + 1));
+        *pA = (char * ) context.heap.allocate(uint32_t(la + lb + 1));
         memcpy ( *pA , sA, la );
         memcpy ( *pA +la, sB, lb+1 );
     }
@@ -123,7 +123,7 @@ namespace das
             // TODO: different output for strings?
             ssw << debug_value(argValues[i], types[i], PrintFlags::string_builder);
         }
-        auto pStr = context.allocateName(ssw.str());
+        auto pStr = context.heap.allocateName(ssw.str());
         return cast<char *>::from(pStr);
     }
 }

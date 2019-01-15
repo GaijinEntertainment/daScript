@@ -30,7 +30,7 @@ namespace das
         vec4f ll = sources[0]->eval(context);
         DAS_EXCEPTION_POINT;
         range r = cast<range>::to(ll);
-        int32_t * __restrict pi = (int32_t *)(context.stackTop + stackTop[0]);
+        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
 		int32_t r_to = r.to;
         for (int32_t i = r.from; i != r_to && !context.stopFlags; ++i) {
             *pi = i;

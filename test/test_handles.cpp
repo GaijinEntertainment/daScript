@@ -164,13 +164,13 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         return pF ? make_shared<TypeDecl>(*pF->type) : nullptr;
     }
     virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
-        return context.makeNode<SimNode_IntFieldDeref>(at,rv,context.allocateName(na));
+        return context.code.makeNode<SimNode_IntFieldDeref>(at,rv,context.code.allocateName(na));
     }
     virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
-        return context.makeNode<SimNode_IntFieldDerefR2V>(at,rv,context.allocateName(na));
+        return context.code.makeNode<SimNode_IntFieldDerefR2V>(at,rv,context.code.allocateName(na));
     }
     virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
-        return context.makeNode<SimNode_SafeIntFieldDeref>(at,rv,context.allocateName(na));
+        return context.code.makeNode<SimNode_SafeIntFieldDeref>(at,rv,context.code.allocateName(na));
     }
     virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
         IntFields * prv = (IntFields *) data;

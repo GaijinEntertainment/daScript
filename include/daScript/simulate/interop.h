@@ -79,31 +79,21 @@ namespace das
 			vec4f * args = (vec4f *)(alloca(nArguments*sizeof(vec4f)));
 			evalArgs(context, args);
             DAS_EXCEPTION_POINT;
-            // PUSH
-            char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
-            if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
-                context.throw_error("stack overflow");
-                return v_zero();
-            }
-            char * pushStack = context.stackTop;
-            char * pushInvokeStack = context.invokeStackTop;
-			context.invokeStackTop = nullptr;
-		#if DAS_ENABLE_STACK_WALK
-            context.stackTop = top - sizeof(Prologue);
-            assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
+#if DAS_ENABLE_STACK_WALK
+			auto watermark = context.stack.push(sizeof(Prologue));
             // fill prologue
-            Prologue * pp = (Prologue *) context.stackTop;
-            pp->arguments =     args;
-            pp->copyOrMoveResult = nullptr;
-            pp->info =          info;
-            pp->line =          debug.line;
-        #endif
+            Prologue * pp = (Prologue *) context.stack.sp();
+            pp->arguments =			args;
+            pp->copyOrMoveResult =	nullptr;
+            pp->info =				info;
+            pp->line =				debug.line;
+#endif
             // calc
             auto res = ImplCallStaticFunction<Result>::template call<FuncT,Arguments>(*fn, context, args, Indices());
             // POP
-            context.invokeStackTop = pushInvokeStack;
-            context.stackTop = pushStack;
-            assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
+#if DAS_ENABLE_STACK_WALK
+			context.stack.pop(watermark);
+#endif
             return res;
         }
         FuncInfo * info = nullptr;
@@ -121,32 +111,20 @@ namespace das
 			vec4f * args = (vec4f *)(alloca(nArguments*sizeof(vec4f)));
 			evalArgs(context, args);
             DAS_EXCEPTION_POINT;
-            Result * cmres = (Result *)(context.stackTop + stackTop);
-            // PUSH
-            char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
-            if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
-                context.throw_error("stack overflow");
-                return v_zero();
-            }
-            char * pushStack = context.stackTop;
-            char * pushInvokeStack = context.invokeStackTop;
-			context.invokeStackTop = nullptr;
-		#if DAS_ENABLE_STACK_WALK
-            context.stackTop = top - sizeof(Prologue);
-            assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
-            // fill prologue
-            Prologue * pp = (Prologue *) context.stackTop;
-            pp->arguments =     args;
-            pp->copyOrMoveResult = nullptr;
-            pp->info =          info;
-            pp->line =          debug.line;
-        #endif
+            Result * cmres = (Result *)(context.stack.sp() + stackTop);
+#if DAS_ENABLE_STACK_WALK
+			auto watermark = context.stack.push(sizeof(Prologue));
+            Prologue * pp = (Prologue *) context.stack.sp();
+            pp->arguments =			args;
+            pp->copyOrMoveResult =	nullptr;
+            pp->info =				info;
+            pp->line =				debug.line;
+#endif
             // calc
             ImplCallStaticFunctionAndCopy<Result>::template call<FuncT,Arguments>(*fn, context, cmres, args, Indices());
-            // POP
-            context.invokeStackTop = pushInvokeStack;
-            context.stackTop = pushStack;
-            assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
+#if DAS_ENABLE_STACK_WALK
+			context.stack.pop(watermark);
+#endif
             return cast<Result *>::from(cmres);
         }
         FuncInfo * info = nullptr;
@@ -162,31 +140,19 @@ namespace das
 			vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);
             DAS_EXCEPTION_POINT;
-            // PUSH
-            char * top = context.invokeStackTop ? context.invokeStackTop : context.stackTop;
-            if ( context.stack - ( top - sizeof(Prologue) ) > context.stackSize ) {
-                context.throw_error("stack overflow");
-                return v_zero();
-            }
-            char * pushStack = context.stackTop;
-            char * pushInvokeStack = context.invokeStackTop;
-			context.invokeStackTop = nullptr;
 #if DAS_ENABLE_STACK_WALK
-            context.stackTop = top - sizeof(Prologue);
-            assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
-            // fill prologue
-            Prologue * pp = (Prologue *) context.stackTop;
-            pp->arguments =     args;
-            pp->copyOrMoveResult = nullptr;
-            pp->info =          info;
-            pp->line =          debug.line;
+			auto watermark = context.stack.push(sizeof(Prologue));
+            Prologue * pp = (Prologue *) context.stack.sp();
+            pp->arguments =			args;
+            pp->copyOrMoveResult =	nullptr;
+            pp->info =				info;
+            pp->line =				debug.line;
 #endif
             // calc
             auto res = fn(context,this,args);
-            // POP
-            context.invokeStackTop = pushInvokeStack;
-            context.stackTop = pushStack;
-            assert ( context.stackTop >= context.stack && context.stackTop < context.stackTop + context.stackSize );
+#if DAS_ENABLE_STACK_WALK
+			context.stack.pop(watermark);
+#endif
             return res;
         }
         FuncInfo * info = nullptr;

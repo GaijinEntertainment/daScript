@@ -138,7 +138,7 @@ namespace das {
         ExpressionPtr evalAndFoldString ( Expression * expr ) {
             if ( expr->rtti_isStringConstant() ) return expr->shared_from_this();
             vec4f value = eval(expr);
-            TypeInfo * pTypeInfo = ctx.makeNode<TypeInfo>();
+            TypeInfo * pTypeInfo = ctx.debugInfo.makeNode<TypeInfo>();
             program->makeTypeInfo(pTypeInfo, ctx, expr->type);
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
             auto sim = make_shared<ExprConstString>(expr->at, res);

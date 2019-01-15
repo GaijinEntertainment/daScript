@@ -61,8 +61,8 @@ namespace das
     
     vec4f SimNode_MakeBlock::eval ( Context & context )  {
         Block block;
-        block.stackOffset = uint32_t(context.stackTop - context.stack);
-        block.argumentsOffset = argStackTop ? uint32_t(context.stackTop + argStackTop - context.stack) : 0;
+        block.stackOffset = context.stack.spi();
+        block.argumentsOffset = argStackTop ? (context.stack.spi() + argStackTop) : 0;
         block.body = subexpr;
         return cast<Block>::from(block);
     }
@@ -80,7 +80,7 @@ namespace das
         vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
         DAS_EXCEPTION_POINT;
-        auto cmres = context.stackTop + stackTop;
+        auto cmres = context.stack.sp() + stackTop;
         return context.call(fnIndex, argValues, cmres, debug.line);
     }
 
@@ -103,7 +103,7 @@ namespace das
         evalArgs(context, argValues);
         DAS_EXCEPTION_POINT;
         Block block = cast<Block>::to(argValues[0]);
-        auto cmres = context.stackTop + stackTop;
+        auto cmres = context.stack.sp() + stackTop;
         if ( nArguments>1 ) {
             return context.invoke(block, argValues + 1, cmres);
         } else {
@@ -163,7 +163,7 @@ namespace das
     // SimNode_New
     
     vec4f SimNode_New::eval ( Context & context ) {
-        if ( void * ptr = context.allocate(bytes) ) {
+        if ( void * ptr = context.heap.allocate(bytes) ) {
             memset ( ptr, 0, bytes );
             return cast<void *>::from(ptr);
         } else {
@@ -279,14 +279,14 @@ namespace das
 
     vec4f SimNode_ReturnReference::eval ( Context & context ) {
         char * ref = subexpr->evalPtr(context);
-        if ( context.stack<=ref && ref<context.stackTop ) {
+        if ( context.stack.bottom()<=ref && ref<context.stack.sp()) {
             context.throw_error("reference bellow current function stack frame");
             return v_zero();
         }
 #if DAS_ENABLE_STACK_WALK
-        auto pp = (Prologue *) context.stackTop;
-        auto top = context.stackTop + pp->info->stackSize;
-        if ( context.stackTop<=ref && ref<top ) {
+        auto pp = (Prologue *) context.stack.sp();
+        auto top = context.stack.sp() + pp->info->stackSize;
+        if ( context.stack.sp()<=ref && ref<top ) {
             context.throw_error("reference to current function stack frame");
             return v_zero();
         }
@@ -299,7 +299,7 @@ namespace das
     vec4f SimNode_ReturnAndCopyFromBlock::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
         DAS_EXCEPTION_POINT;
-        auto ba = (BlockArguments *) ( context.stackTop + argStackTop );
+        auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
         auto pl = ba->copyOrMoveResult;
         memcpy ( pl, pr, size);
         context.abiResult() = cast<char *>::from(pl);
@@ -310,7 +310,7 @@ namespace das
     vec4f SimNode_ReturnAndMoveFromBlock::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
         DAS_EXCEPTION_POINT;
-        auto ba = (BlockArguments *) ( context.stackTop + argStackTop );
+        auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
         auto pl = ba->copyOrMoveResult;
         memcpy ( pl, pr, size);
         memset ( pr, 0, size);
@@ -321,7 +321,7 @@ namespace das
     
     vec4f SimNode_ReturnReferenceFromBlock::eval ( Context & context ) {
         char * ref = subexpr->evalPtr(context);
-        if ( context.stack<=ref && ref<context.invokeStackTop ) {
+        if ( context.stack.bottom()<=ref && ref<context.stack.ap() ) {
             context.throw_error("reference bellow current call chain stack frame");
             return v_zero();
         }
@@ -332,57 +332,13 @@ namespace das
     
     // Context
     
-    Context::Context(const string * lines, int las) {
-        linearAllocatorSize = las;
-        linearAllocator = linearAllocatorBase = (char *) _mm_malloc(linearAllocatorSize, 16);
-        stack = (char *) _mm_malloc(stackSize, 16);
-        stackTop = stack + stackSize;
+    Context::Context(const string * lines, uint32_t heapSize)
+		: stack(16*1024)
+		, code(64*1024)
+		, debugInfo(64*1024)
+		, heap(heapSize)
+	{
         debugInput = lines;
-    }
-    
-    Context::~Context() {
-        _mm_free(linearAllocatorBase);
-        _mm_free(stack);
-    }
-    
-    void * Context::reallocate ( void * oldData, uint32_t oldSize, uint32_t size ) {
-        if ( size <= oldSize ) return oldData;
-        size = (size + 0x0f) & ~0x0f;
-        oldSize = (oldSize + 0x0f) & ~0x0f;
-        if ( oldData && (oldData == linearAllocator - oldSize) ) {
-            uint32_t extra = size - oldSize;
-            if ( linearAllocator - linearAllocatorBase + extra > linearAllocatorSize ) {
-                throw_error("out of linear allocator space");
-                return nullptr;
-            }
-            linearAllocator += extra;
-            return oldData;
-        } else {
-            return allocate(size);
-        }
-    }
-    
-    void * Context::allocate ( uint32_t size ) {
-        size = (size + 0x0f) & ~0x0f;
-        if ( linearAllocator - linearAllocatorBase + size > linearAllocatorSize ) {
-            throw_error("out of linear allocator space");
-            return nullptr;
-        }
-        void * res = linearAllocator;
-        linearAllocator += size;
-        return res;
-    }
-    
-    char * Context::allocateName ( const string & name ) {
-        if ( name.empty() )
-            return nullptr;
-        auto size = name.length() + 1;
-        if ( char * str = (char *) allocate(uint32_t(size+1)) ) {
-            memcpy ( str, name.c_str(), size );
-            return str;
-        } else {
-            return nullptr;
-        }
     }
     
 #ifdef _MSC_VER
@@ -391,15 +347,11 @@ namespace das
 #pragma warning(disable:4701)
 #endif
     vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when) {
-        char * saveSp = stackTop;
-        char * saveISp = invokeStackTop;
-        invokeStackTop = stackTop;
-        stackTop = stack + block.stackOffset;
-        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
+		auto watermark = stack.invoke(block.stackOffset);
         BlockArguments * ba = nullptr;
         BlockArguments saveArguments;
         if ( block.argumentsOffset ) {
-            ba = (BlockArguments *) ( stack + block.argumentsOffset );
+            ba = (BlockArguments *) ( stack.sp() + block.argumentsOffset );
             saveArguments = *ba;
             ba->arguments = args;
             ba->copyOrMoveResult = (char *) cmres;
@@ -408,9 +360,7 @@ namespace das
         if ( ba ) {
             *ba = saveArguments;
         }
-        invokeStackTop = saveISp;
-        stackTop = saveSp;
-        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
+		stack.pop(watermark);
         return result;
     }
 #ifdef _MSC_VER
@@ -421,18 +371,13 @@ namespace das
         assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
         auto & fn = functions[fnIndex];
         // PUSH
-        char * top = invokeStackTop ? invokeStackTop : stackTop;
-        if ( stack - ( top - fn.stackSize ) > stackSize ) {
+		auto watermark = stack.push(fn.stackSize);
+		if ( watermark==-1u ) {
             throw_error("stack overflow");
             return v_zero();
         }
-        char * pushStack = stackTop;
-        char * pushInvokeStack = invokeStackTop;
-        stackTop = top - fn.stackSize;
-        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
-        invokeStackTop = nullptr;
         // fill prologue
-        Prologue * pp = (Prologue *) stackTop;
+        Prologue * pp = (Prologue *) stack.sp();
         pp->arguments =     args;
         pp->copyOrMoveResult = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
@@ -443,9 +388,7 @@ namespace das
         when(fn.code);
         stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
         // POP
-        invokeStackTop = pushInvokeStack;
-        stackTop = pushStack;
-        assert ( stackTop >= stack && stackTop < stackTop + stackSize );
+		stack.pop(watermark);
         return result;
     }
 
@@ -487,15 +430,14 @@ namespace das
     string Context::getStackWalk( bool args ) {
         stringstream ssw;
     #if DAS_ENABLE_STACK_WALK
-        ssw << "\nCALL STACK (sp=" << (stack + stackSize - stackTop) << "):\n";
-        char * sp = stackTop;
-        while ( sp>=stackTop && sp <(stack+stackSize) ) {
-            int isp = int(stack + stackSize - sp);
+        ssw << "\nCALL STACK (sp=" << (stack.top() - stack.sp()) << "):\n";
+        char * sp = stack.sp();
+        while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             if ( pp->line ) {
-                ssw << pp->info->name << " at line " << pp->line << " (sp=" << isp << ")\n";
+                ssw << pp->info->name << " at line " << pp->line << " (sp=" << (stack.top() - sp) << ")\n";
             } else {
-                ssw << pp->info->name << "(sp=" << isp << ")\n";
+                ssw << pp->info->name << "(sp=" << (stack.top() - sp) << ")\n";
             }
             if ( args ) {
                 for ( uint32_t i = 0; i != pp->info->argsSize; ++i ) {

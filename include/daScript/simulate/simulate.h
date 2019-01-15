@@ -6,6 +6,7 @@
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_info.h"
 #include "daScript/simulate/sim_policy.h"
+#include "daScript/simulate/heap.h"
 
 namespace das
 {
@@ -80,73 +81,9 @@ namespace das
         friend struct SimNode_GetGlobal;
         friend class Program;
     public:
-        Context(const string * lines, int las = 4*1024*1024);
+        Context(const string * lines, uint32_t heapSize = 4*1024*1024);
         Context(const Context &) = delete;
         Context & operator = (const Context &) = delete;
-        ~Context();
-        
-        void * reallocate ( void * oldData, uint32_t oldSize, uint32_t size );
-        void * allocate ( uint32_t size );
-        char * allocateName ( const string & name );
-        
-        template<typename TT, typename... Params>
-        __forceinline TT * makeNode(Params... args) {
-            return new (allocate(sizeof(TT))) TT(args...);
-        }
-        
-        template < template <typename TT> class NodeType, typename... Params>
-        __forceinline SimNode * makeValueNode(Type baseType, Params... args) {
-            switch ( baseType ) {
-                case Type::tBool:       return makeNode<NodeType<bool>>     (args...);
-                case Type::tInt64:      return makeNode<NodeType<int64_t>>  (args...);
-                case Type::tUInt64:     return makeNode<NodeType<uint64_t>> (args...);
-                case Type::tInt:        return makeNode<NodeType<int32_t>>  (args...);
-                case Type::tInt2:       return makeNode<NodeType<int2>>     (args...);
-                case Type::tInt3:       return makeNode<NodeType<int3>>     (args...);
-                case Type::tInt4:       return makeNode<NodeType<int4>>     (args...);
-                case Type::tUInt:       return makeNode<NodeType<uint32_t>> (args...);
-                case Type::tUInt2:      return makeNode<NodeType<uint2>>    (args...);
-                case Type::tUInt3:      return makeNode<NodeType<uint3>>    (args...);
-                case Type::tUInt4:      return makeNode<NodeType<uint4>>    (args...);
-                case Type::tFloat:      return makeNode<NodeType<float>>    (args...);
-                case Type::tFloat2:     return makeNode<NodeType<float2>>   (args...);
-                case Type::tFloat3:     return makeNode<NodeType<float3>>   (args...);
-                case Type::tFloat4:     return makeNode<NodeType<float4>>   (args...);
-                case Type::tRange:      return makeNode<NodeType<range>>    (args...);
-                case Type::tURange:     return makeNode<NodeType<urange>>   (args...);
-                case Type::tString:     return makeNode<NodeType<char *>>   (args...);
-                case Type::tPointer:    return makeNode<NodeType<void *>>   (args...);
-                case Type::tBlock:      return makeNode<NodeType<Block>>    (args...);
-                default:
-                    assert(0 && "we should not even be here");
-                    return nullptr;
-            }
-        }
-        
-        template < template <int TT> class NodeType, typename... Params>
-        __forceinline SimNode * makeNodeUnroll ( int count, Params... args ) {
-            switch ( count ) {
-                case  1: return makeNode<NodeType< 1>>(args...);
-                case  2: return makeNode<NodeType< 2>>(args...);
-                case  3: return makeNode<NodeType< 3>>(args...);
-                case  4: return makeNode<NodeType< 4>>(args...);
-                case  5: return makeNode<NodeType< 5>>(args...);
-                case  6: return makeNode<NodeType< 6>>(args...);
-                case  7: return makeNode<NodeType< 7>>(args...);
-                case  8: return makeNode<NodeType< 8>>(args...);
-                case  9: return makeNode<NodeType< 9>>(args...);
-                case 10: return makeNode<NodeType<10>>(args...);
-                case 11: return makeNode<NodeType<11>>(args...);
-                case 12: return makeNode<NodeType<12>>(args...);
-                case 13: return makeNode<NodeType<13>>(args...);
-                case 14: return makeNode<NodeType<14>>(args...);
-                case 15: return makeNode<NodeType<15>>(args...);
-                case 16: return makeNode<NodeType<16>>(args...);
-                default:
-                    assert(0 && "we should not even be here");
-                    return nullptr;
-            }
-        }
         
         __forceinline vec4f getVariable ( int index ) const {
             assert(index>=0 && index<totalVariables && "variable index out of range");
@@ -155,14 +92,13 @@ namespace das
         
         __forceinline void simEnd() {
             thisProgram = nullptr;
-            linearAllocatorExecuteBase = linearAllocator;
+			heapWatermark = heap.getWatermark();
         }
         
         __forceinline void restart( ) {
-            linearAllocator = linearAllocatorExecuteBase;
-            invokeStackTop = nullptr;
-            stackTop = stack + stackSize;
             stopFlags = 0;
+			stack.reset();
+			heap.setWatermark(heapWatermark);
         }
         
         __forceinline vec4f eval ( int fnIndex, vec4f * args = nullptr, void * res = nullptr ) {
@@ -188,7 +124,7 @@ namespace das
         virtual void breakPoint(int column, int line) const;    // what to do in case of breakpoint
         
         __forceinline vec4f * abiArguments() {
-            return ((Prologue *)stackTop)->arguments;
+            return ((Prologue *)stack.sp())->arguments;
         }
 
 		__forceinline vec4f & abiResult() {
@@ -196,25 +132,20 @@ namespace das
         }
         
         __forceinline char * abiCopyOrMoveResult() {
-            return ((Prologue *)stackTop)->copyOrMoveResult;
+            return ((Prologue *)stack.sp())->copyOrMoveResult;
         }
         
         __forceinline vec4f call(int fnIndex, vec4f * args, void * cmres, int line) {
             assert(fnIndex >= 0 && fnIndex<totalFunctions && "function index out of range");
             auto & fn = functions[fnIndex];
             // PUSH
-            char * top = invokeStackTop ? invokeStackTop : stackTop;
-            if (stack - (top - fn.stackSize) > stackSize) {
+			auto watermark = stack.push(fn.stackSize);
+			if ( watermark==-1u ) {
                 throw_error("stack overflow");
                 return v_zero();
             }
-            char * pushStack = stackTop;
-            char * pushInvokeStack = invokeStackTop;
-            stackTop = top - fn.stackSize;
-            assert(stackTop >= stack && stackTop < stackTop + stackSize);
-            invokeStackTop = nullptr;
             // fill prologue
-            Prologue * pp = (Prologue *)stackTop;
+            Prologue * pp = (Prologue *)stack.sp();
             pp->arguments = args;
             pp->copyOrMoveResult = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
@@ -225,9 +156,7 @@ namespace das
             fn.code->eval(*this);
             stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
             // POP
-            invokeStackTop = pushInvokeStack;
-            stackTop = pushStack;
-            assert(stackTop >= stack && stackTop < stackTop + stackSize);
+			stack.pop(watermark);
             return result;
         }
 
@@ -236,15 +165,11 @@ namespace das
 #pragma warning(disable:4701)
 #endif
 		__forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
-			char * saveSp = stackTop;
-			char * saveISp = invokeStackTop;
-			invokeStackTop = stackTop;
-			stackTop = stack + block.stackOffset;
-			assert(stackTop >= stack && stackTop < stackTop + stackSize);
+			auto watermark = stack.invoke(block.stackOffset);
             BlockArguments * __restrict ba = nullptr;
 			BlockArguments saveArguments;
             if ( block.argumentsOffset ) {
-                ba = (BlockArguments *) ( stack + block.argumentsOffset );
+                ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
                 saveArguments = *ba;
                 ba->arguments = args;
                 ba->copyOrMoveResult = (char *) cmres;
@@ -253,9 +178,7 @@ namespace das
 			if ( ba ) {
                 *ba = saveArguments;
 			}
-			invokeStackTop = saveISp;
-			stackTop = saveSp;
-			assert(stackTop >= stack && stackTop < stackTop + stackSize);
+			stack.pop(watermark);
 			return block_result;
 		}
 #ifdef _MSC_VER
@@ -269,11 +192,13 @@ namespace das
             return stopFlags & EvalFlags::stopForThrow ? exception : nullptr;
         }
         
-    protected:
-        int linearAllocatorSize;
-        char * linearAllocator = nullptr;
-        char * linearAllocatorBase = nullptr;
-        char * linearAllocatorExecuteBase = nullptr;
+    public:
+		LinearAllocator	heap;
+		NodeAllocator	code;
+		NodeAllocator	debugInfo;
+		StackAllocator	stack;
+		void *			heapWatermark = nullptr;
+	protected:
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
         int totalVariables = 0;
@@ -282,10 +207,7 @@ namespace das
     public:
         const string * debugInput = nullptr;
         class Program * thisProgram = nullptr;
-        char * invokeStackTop = nullptr;
-        char * stackTop = nullptr;
-        char * stack = nullptr;
-        int stackSize = 16*1024;
+	public:
         uint32_t stopFlags = 0;
         vec4f result;
     };
@@ -561,7 +483,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));                  \
                 evalArgs(context, argValues);                                                   \
                 DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
-                auto cmres = context.stackTop + stackTop;                                       \
+                auto cmres = context.stack.sp() + stackTop;                                     \
                 return cast<CTYPE>::to(context.call(fnIndex, argValues, cmres, debug.line));    \
         }
         DAS_EVAL_NODE
@@ -599,7 +521,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             evalArgs(context, argValues);                                                       \
             DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
             Block block = cast<Block>::to(argValues[0]);                                        \
-            auto cmres = context.stackTop + stackTop;                                           \
+            auto cmres = context.stack.sp() + stackTop;                                         \
             if ( nArguments>1 ) {                                                               \
                 return cast<CTYPE>::to(context.invoke(block, argValues + 1, cmres));            \
             } else {                                                                            \
@@ -635,7 +557,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f res = arguments[0]->eval(context);
             auto str = std::to_string ( cast<CastFrom>::to(res) );
-            auto cpy = context.allocateName(str);
+            auto cpy = context.heap.allocateName(str);
             return cast<char *>::from(cpy);
         }
     };
@@ -655,7 +577,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_PTR_NODE;
         SimNode_GetLocal(const LineInfo & at, uint32_t sp) : SimNode(at), stackTop(sp) {}
         __forceinline char * compute ( Context & context ) {
-            return context.stackTop + stackTop;
+            return context.stack.sp() + stackTop;
         }
         uint32_t stackTop;
     };
@@ -664,12 +586,12 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_GetLocalR2V : SimNode_GetLocal {
         SimNode_GetLocalR2V(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp)  {}
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = (TT *)(context.stackTop + stackTop);
+            TT * pR = (TT *)(context.stack.sp() + stackTop);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return *(CTYPE *)(context.stackTop + stackTop);         \
+            return *(CTYPE *)(context.stack.sp() + stackTop);       \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -680,7 +602,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_PTR_NODE;
         SimNode_GetLocalRef(const LineInfo & at, uint32_t sp) : SimNode_GetLocal(at,sp) {}
         __forceinline char * compute ( Context & context ) {
-            return *(char **)(context.stackTop + stackTop);
+            return *(char **)(context.stack.sp() + stackTop);
         }
     };
     
@@ -688,12 +610,12 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_GetLocalRefR2V : SimNode_GetLocalRef {
         SimNode_GetLocalRefR2V(const LineInfo & at, uint32_t sp) : SimNode_GetLocalRef(at,sp) {}
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = *(TT **)(context.stackTop + stackTop);
+            TT * pR = *(TT **)(context.stack.sp() + stackTop);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return **(CTYPE **)(context.stackTop + stackTop);       \
+            return **(CTYPE **)(context.stack.sp() + stackTop);     \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -704,8 +626,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_CopyLocal2LocalT(const LineInfo & at, uint32_t spL, uint32_t spR)
             : SimNode(at), stackTopLeft(spL), stackTopRight(spR) {}
         virtual vec4f eval ( Context & context ) override {
-            TT * pl = (TT *) ( context.stackTop + stackTopLeft );
-            TT * pr = (TT *) ( context.stackTop + stackTopRight );
+            TT * pl = (TT *) ( context.stack.sp() + stackTopLeft );
+            TT * pr = (TT *) ( context.stack.sp() + stackTopRight );
             *pl = *pr;
             return v_zero();
         }
@@ -720,7 +642,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             auto pr = (TT *) r->evalPtr(context);
             DAS_EXCEPTION_POINT;
-            TT * pl = (TT *) ( context.stackTop + stackTop );
+            TT * pl = (TT *) ( context.stack.sp() + stackTop );
             *pl = *pr;
             return v_zero();
         }
@@ -735,7 +657,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f rres = r->eval(context);
             DAS_EXCEPTION_POINT;
-            TT * pl = (TT *) ( context.stackTop + stackTop );
+            TT * pl = (TT *) ( context.stack.sp() + stackTop );
             *pl = cast<TT>::to(rres);
             return v_zero();
         }
@@ -748,7 +670,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_InitLocal : SimNode {
         SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz) : SimNode(at), stackTop(sp), size(sz) {}
         virtual vec4f eval ( Context & context ) override {
-            memset(context.stackTop + stackTop, 0, size);
+            memset(context.stack.sp() + stackTop, 0, size);
             return v_zero();
         }
         uint32_t stackTop, size;
@@ -797,12 +719,12 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetBlockArgument ( const LineInfo & at, int32_t i, uint32_t sp )
             : SimNode(at), index(i), stackTop(sp) {}
         virtual vec4f eval ( Context & context ) override {
-            vec4f * args = *((vec4f **)(context.stackTop + stackTop));
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
             return args[index];
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            vec4f * args = *((vec4f **)(context.stackTop + stackTop));    \
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));    \
             return cast<CTYPE>::to(args[index]);                            \
         }
         DAS_EVAL_NODE
@@ -816,13 +738,13 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetBlockArgumentR2V ( const LineInfo & at, int32_t i, uint32_t sp )
             : SimNode_GetBlockArgument(at,i,sp) {}
         virtual vec4f eval ( Context & context ) override {
-            vec4f * args = *((vec4f **)(context.stackTop + stackTop));
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
             TT * pR = (TT *) cast<char *>::to(args[index]);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            vec4f * args = *((vec4f **)(context.stackTop + stackTop));    \
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));    \
             return * cast<CTYPE *>::to(args[index]);                        \
         }
         DAS_EVAL_NODE
@@ -834,7 +756,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetBlockArgumentRef(const LineInfo & at, int32_t i, uint32_t sp)
             : SimNode_GetBlockArgument(at,i,sp) {}
         __forceinline char * compute(Context & context) {
-            vec4f * args = *((vec4f **)(context.stackTop + stackTop));
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
             return (char *)(&args[index]);
         }
     };
@@ -1194,7 +1116,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f * pi[total];
             for ( int t=0; t!=total; ++t ) {
-                pi[t] = (vec4f *)(context.stackTop + stackTop[t]);
+                pi[t] = (vec4f *)(context.stack.sp() + stackTop[t]);
             }
             Iterator * sources[total] = {};
             for ( int t=0; t!=total; ++t ) {
