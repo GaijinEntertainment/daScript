@@ -36,6 +36,7 @@ def queryThree()
 
 [export]
 def test
+    return true
     testProfile::initEsComponents()
     testProfile::testEsUpdate("ks")
     testProfile::verifyEsComponents()

@@ -960,7 +960,7 @@ namespace das
             auto arr = arguments[0]->simulate(context);
             auto newSize = arguments[1]->simulate(context);
             auto size = arguments[0]->type->firstType->getSizeOf();
-            return context.makeNode<SimNodeT>(at,arr,newSize,size);
+            return context.code.makeNode<SimNodeT>(at,arr,newSize,size);
         }
         virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
