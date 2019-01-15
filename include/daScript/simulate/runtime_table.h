@@ -68,11 +68,14 @@ namespace das
             }
             return { 0, false };
         }
-        void grow ( Table & tab ) {
+        bool grow ( Table & tab ) {
             uint32_t newCapacity = max(minCapacity, tab.capacity*2);
             Table newTab;
             uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint8_t));
             newTab.data = (char *) context->allocate(memSize);
+            if ( context->stopFlags & EvalFlags::stopForThrow ) {
+                return false;
+            }
             newTab.keys = newTab.data + newCapacity * valueTypeSize;
             newTab.distance = (int8_t *)( newTab.data + newCapacity * (valueTypeSize + sizeof(KeyType)) );
             newTab.size = 0;
@@ -92,11 +95,16 @@ namespace das
                 }
             }
             swap(newTab, tab);
+            return true;
         }
         // this moves on insert. be warned!!!
         // returns where it think it inserted, also if it inserted or not
         pair<size_t,bool> insert ( Table & tab, const KeyType & key, void * value ) {
-            if ( tab.capacity==0 ) {  grow(tab); }
+            if ( tab.capacity==0 ) {
+                if ( !grow(tab) ) {
+                    return { -1u, false };
+                }
+            }
             auto hash = hash_function(key);
             size_t index = indexForHash(tab, hash );
             KeyType * keys = (KeyType *)(tab.keys);
@@ -110,7 +118,11 @@ namespace das
         }
         // returns where it think it inserted, also if it inserted or not
         pair<size_t,bool> reserve ( Table & tab, const KeyType & key ) {
-            if ( tab.capacity==0 ) {  grow(tab); }
+            if ( tab.capacity==0 ) {
+                if ( !grow(tab) ) {
+                    return { -1u, false };
+                }
+            }
             auto hash = hash_function(key);
             size_t index = indexForHash(tab, hash );
             KeyType * keys = (KeyType *)(tab.keys);
@@ -137,7 +149,9 @@ namespace das
         pair<size_t,bool> insert_new ( Table & tab, int8_t dist, size_t index, const KeyType & key, void * value ) {
             KeyType * keys = (KeyType *)(tab.keys);
             if ( tab.capacity==0 || uint32_t(dist)==tab.maxLookups || (tab.size+1)>(tab.capacity/2) ) {
-                grow(tab);
+                if ( !grow(tab) ) {
+                    return { -1u, false };
+                }
                 return insert(tab, key, value);
             } else if ( tab.distance[index]<0 ) {
                 tab.size ++;
@@ -167,7 +181,9 @@ namespace das
                     if ( uint32_t(dist) == tab.maxLookups ) {
                         swap(insertKey, keys[index]);
                         swap_value(tab, index, value);
-                        grow(tab);
+                        if ( !grow(tab) ) {
+                            return { -1u, false };
+                        }
                         return insert(tab, insertKey, value);
                     }
                 }

@@ -28,6 +28,9 @@ namespace das {
     int builtin_array_push ( Array * pArray, int index, int stride, Context * context ) {
         uint32_t idx = pArray->size;
         array_resize(*context, *pArray, idx + 1, stride, false);
+        if ( context->stopFlags & EvalFlags::stopForThrow ) {
+            return 0;
+        }
         if ( index >=0 ) {
             if ( uint32_t(index) >= pArray->size ) {
                 context->throw_error("insert index out of range");

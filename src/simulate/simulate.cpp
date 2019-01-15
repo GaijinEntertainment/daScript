@@ -528,12 +528,4 @@ namespace das
     void Context::to_err ( const char * message ) {
         cerr << message;
     }
-    
-    void Context::throw_error ( const char * message ) {
-        exception = message;
-        stopFlags |= EvalFlags::stopForThrow;
-#if !DAS_ENABLE_EXCEPTIONS
-        throw runtime_error(message ? message : "");
-#endif
-    }
 }

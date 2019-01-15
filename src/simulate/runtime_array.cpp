@@ -23,8 +23,13 @@ namespace das
             context.throw_error("changing capacity of a locked array");
             return;
         }
-        if ( arr.capacity >= newCapacity ) return;
+        if ( arr.capacity >= newCapacity ) {
+            return;
+        }
         arr.data = (char *) context.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
+        if ( context.stopFlags & EvalFlags::stopForThrow ) {
+            return;
+        }
         arr.capacity = newCapacity;
     }
     
@@ -37,6 +42,9 @@ namespace das
             uint32_t newCapacity = 1 << (32 - __builtin_clz (max(newSize,2u) - 1));
             newCapacity = max(newCapacity, 16u);
             array_reserve(context, arr, newCapacity, stride);
+        }
+        if ( context.stopFlags & EvalFlags::stopForThrow ) {
+            return;
         }
         if ( zero && newSize>arr.size )
             memset ( arr.data + arr.size*stride, 0, (newSize-arr.size)*stride );
