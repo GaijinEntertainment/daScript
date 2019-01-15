@@ -333,10 +333,10 @@ namespace das
     // Context
     
     Context::Context(const string * lines, uint32_t heapSize)
-		: stack(16*1024)
-		, code(64*1024)
-		, debugInfo(64*1024)
-		, heap(heapSize)
+        :   heap(heapSize)
+		,   code(64*1024)
+		,   debugInfo(64*1024)
+        ,   stack(16*1024)
 	{
         debugInput = lines;
     }
@@ -351,7 +351,7 @@ namespace das
         BlockArguments * ba = nullptr;
         BlockArguments saveArguments;
         if ( block.argumentsOffset ) {
-            ba = (BlockArguments *) ( stack.sp() + block.argumentsOffset );
+            ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
             saveArguments = *ba;
             ba->arguments = args;
             ba->copyOrMoveResult = (char *) cmres;

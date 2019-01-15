@@ -161,7 +161,6 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
 		return false;
 	}
     int fnIndex = table.functionIndex;
-    context.restart();
 	vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
     context.callEx(fnIndex, _args, nullptr, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
@@ -222,7 +221,6 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
         return false;
     }
     EsAttributeTable & table = g_esBlockTable[index];
-    context.restart();
     uint32_t nAttr = (uint32_t) table.attributes.size();
     vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
     context.invokeEx(block, _args, nullptr, [&](SimNode * code){
@@ -279,10 +277,10 @@ vector<EsComponent> g_components;
 
 void initEsComponents() {
     // build components
+    float f = 1.0f;
     for ( int i=0; i != g_total; ++i ) {
-        float f = float(i);
-        g_pos[i] = { f, f*2, f*3 };
-        g_vel[i] = { f+1, f+2, f+3 };
+        g_pos[i] = { f++, f+1, f+2 };
+        g_vel[i] = { 1.0f, 2.0f, 3.0f };
         g_velBoxed[i] = &g_vel[i];
     }
     g_components.clear();

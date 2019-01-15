@@ -117,13 +117,16 @@ namespace das {
 		__forceinline void pop(uint32_t watermark) {	// restore stack to watermark
 			uint32_t stt = watermark >> 16u;
 			uint32_t ett = watermark & 0x0000ffff;
+            assert(stt<=stackSize && ett<=stackSize);
 			stackTop = stack + stt;
 			evalTop = stack + ett;
 		}
 
 		__forceinline uint32_t invoke(uint32_t et) {	// pass bottom portion of the watermark
 			auto wm = watermark();
+            assert(et<=stackSize);
 			evalTop = stack + et;
+            assert(evalTop>=stackTop);
 			return wm;
 		}
 
