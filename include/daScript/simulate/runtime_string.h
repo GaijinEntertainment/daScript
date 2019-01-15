@@ -29,7 +29,7 @@ namespace das
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & )
             { return strcmp(to_rts(a), to_rts(b))==0; }
         static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & )
-            { return strcmp(to_rts(a), to_rts(b))!=0; }
+            { return (bool) strcmp(to_rts(a), to_rts(b)); }
         // ordered
         static __forceinline bool LessEqu ( vec4f a, vec4f b, Context & )
             { return strcmp(to_rts(a), to_rts(b))<=0; }

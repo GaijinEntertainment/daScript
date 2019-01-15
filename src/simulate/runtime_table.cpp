@@ -48,7 +48,7 @@ namespace das
         itc.value      = cast<char *>::from(data + index * stride);
         itc.table_end  = data + pTable->capacity * stride;
         itc.table      = pTable;
-        return pTable->size != 0;
+        return (bool) pTable->size;
     }
     
     bool TableIterator::next  ( Context &, IteratorContext & itc ) {

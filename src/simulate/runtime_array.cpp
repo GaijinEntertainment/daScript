@@ -55,7 +55,7 @@ namespace das
         itc.value      = cast<char *>::from(data);
         itc.array_end  = data + pArray->size * stride;
         itc.array      = pArray;
-        return pArray->size != 0;
+        return (bool) pArray->size;
     }
 
     bool GoodArrayIterator::next  ( Context &, IteratorContext & itc )  {
@@ -82,7 +82,7 @@ namespace das
         char * data = cast<char *>::to(ll);
         itc.value = cast<char *>::from(data);
         itc.fixed_array_end = data + size*stride;
-        return size != 0;
+        return (bool) size;
     }
 
     bool FixedArrayIterator::next  ( Context & , IteratorContext & itc )  {

@@ -655,7 +655,7 @@ namespace das
     }
     
     bool TypeDecl::isArray() const {
-        return dim.size() != 0;
+        return (bool) dim.size();
     }
     
     bool TypeDecl::isRef() const {

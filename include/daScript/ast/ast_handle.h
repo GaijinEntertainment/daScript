@@ -117,7 +117,7 @@ namespace das
                 itc.value      = cast<char *>::from(data);
                 itc.array_end  = data + size * sizeof(OT);
                 itc.array      = nullptr;
-                return size != 0;
+                return (bool) size;
             }
             virtual bool next  ( Context &, IteratorContext & itc ) override {
                 char * data = cast<char *>::to(itc.value) + sizeof(OT);
