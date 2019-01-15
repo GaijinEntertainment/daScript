@@ -111,7 +111,7 @@ namespace das {
         vector<ExpressionPtr>   loop;
         vector<ExprBlock *>     blocks;
         vector<size_t>          varStack;
-        int                     fieldOffset = 0;
+        size_t                  fieldOffset = 0;
         bool                    needRestart = false;
     protected:
         void pushVarStack() {
@@ -463,7 +463,9 @@ namespace das {
             }
             */
             verifyType(decl.type);
-            decl.offset = fieldOffset;
+            auto fa = decl.type->getAlignOf() - 1;
+            fieldOffset = (fieldOffset + fa) & ~fa;
+            decl.offset = int(fieldOffset);
             fieldOffset += decl.type->getSizeOf();
         }
 
@@ -828,7 +830,7 @@ namespace das {
                 }
             }
             if ( expr->typeexpr->ref ) {
-                error("szieof(ref) is prohibited, " + expr->typeexpr->describe(),
+                error("sizeof(ref) is prohibited, " + expr->typeexpr->describe(),
                       expr->at,CompilationError::sizeof_reference);
             } else if ( expr->typeexpr->isAuto() ) {
                 error("sizeof(auto) is undefined, " + expr->typeexpr->describe(),

@@ -66,12 +66,14 @@ namespace das
     
     struct VarInfo : TypeInfo {
         char *      name;
+        uint32_t    offset;
     };
     
     struct StructInfo {
         char *      name;
         VarInfo **  fields;
         uint32_t    fieldsSize;
+        uint32_t    size;
     };
     
     struct FuncInfo {
@@ -85,9 +87,11 @@ namespace das
     Type nameToBasicType(const string & name);
     
     int getTypeBaseSize ( Type type );
+    int getTypeBaseAlign ( Type type );
     int getTypeBaseSize ( TypeInfo * info );
     int getDimSize ( TypeInfo * info );
     int getTypeSize ( TypeInfo * info );
+    int getTypeAlign ( TypeInfo * info );
     
     enum class PrintFlags : uint32_t {
         none         = 0

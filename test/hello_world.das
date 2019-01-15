@@ -1,12 +1,27 @@
-options log=true
+options log=true, optimize=true
 
-def add(x,y:int;a:block<(x:int;y:int):int>)
-    return invoke(a,x,y)
+struct Foo
+    a:bool
+    b:int
+    c:bool
+
+struct Bar
+    a:bool
+    m:float3x4
+    c:bool
+
+def info(t:auto(SType))
+    print("info on {typename(type SType)}\n")
+    t.a = false
+    t.c = true
+    debug(t,"debug t=")
+    print("t={t}\n")
+    print("sizeof(t)={sizeof(type SType)}\n")
 
 [export]
 def test
-    let x : int = 13
-    let t = add(1,2) <| $(x,y)
-        return x+y
-    print("t={t}\n")
+    let foo : Foo
+    let bar : Bar
+    info(foo)
+    info(bar)
     return true

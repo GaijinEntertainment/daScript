@@ -80,16 +80,66 @@ namespace das
         }
     }
     
+    int getTypeBaseAlign ( Type type ) {
+        switch ( type ) {
+            case tPointer:      return alignof(void *);
+            case tIterator:     return alignof(void *);          // Iterator *
+            case tHandle:       assert(0 && "we should not be here"); return alignof(void *);
+            case tString:       return alignof(char *);
+            case tBool:         return alignof(bool);            static_assert(alignof(bool)==1,"4 byte bool");
+            case tInt64:        return alignof(int64_t);
+            case tUInt64:       return alignof(uint64_t);
+            case tInt:          return alignof(int32_t);
+            case tInt2:         return alignof(int2);
+            case tInt3:         return alignof(int3);
+            case tInt4:         return alignof(int4);
+            case tUInt:         return alignof(uint32_t);
+            case tUInt2:        return alignof(uint2);
+            case tUInt3:        return alignof(uint3);
+            case tUInt4:        return alignof(uint4);
+            case tFloat:        return alignof(float);
+            case tFloat2:       return alignof(float2);
+            case tFloat3:       return alignof(float3);
+            case tFloat4:       return alignof(float4);
+            case tRange:        return alignof(range);
+            case tURange:       return alignof(urange);
+            case tArray:        return alignof(Array);
+            case tTable:        return alignof(Table);
+            case tStructure:    return 1;
+            case tVoid:         return 1;
+            case tBlock:        return alignof(Block);
+            default:
+                assert(0 && "not implemented");
+                return 0;
+        }
+    }
+    
+    int getStructAlign ( StructInfo * info ) {
+        int al = 0;
+        for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
+            al = max ( al, getTypeAlign(info->fields[i]) );
+        }
+        return al;
+    }
+    
     int getStructSize ( StructInfo * info ) {
         int size = 0;
         for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
+            int al = getTypeAlign(info->fields[i]) - 1;
+            size = (size + al) & ~al;
             size += getTypeSize(info->fields[i]);
         }
+        int al = getStructAlign(info) - 1;
+        size = (size + al) & ~al;
         return size;
     }
     
     int getTypeBaseSize ( TypeInfo * info ) {
         return info->type!=Type::tStructure ? getTypeBaseSize(info->type) : getStructSize(info->structType);
+    }
+    
+    int getTypeBaseAlign ( TypeInfo * info ) {
+        return info->type!=Type::tStructure ? getTypeBaseAlign(info->type) : getStructAlign(info->structType);
     }
     
     int getDimSize ( TypeInfo * info ) {
@@ -106,28 +156,35 @@ namespace das
         return getDimSize(info) * getTypeBaseSize(info);
     }
     
+    int getTypeAlign ( TypeInfo * info ) {
+        return getTypeBaseAlign(info);
+    }
+    
     void debugType ( TypeAnnotation *, stringstream & , void *, PrintFlags );
     void debugType ( TypeAnnotation *, stringstream &, vec4f, PrintFlags );
     void debug_structure ( stringstream & ss, char * ps, StructInfo * info, PrintFlags flags );
     void debug_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags );
     
     void debug_structure ( stringstream & ss, char * ps, StructInfo * info, PrintFlags flags ) {
-        char * pf = ps;
         ss << "(";
         for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
             VarInfo * vi = info->fields[i];
+            char * pf = ps + vi->offset;
             if ( i ) ss << " ";
-            ss << "(" << vi->name << " ";
+            ss << "(" << vi->name;
+            ss << " ";
             debug_value(ss, pf, vi, flags);
             ss << ")";
-            pf += getTypeSize(vi);
         }
         ss << ")";
     }
     
     void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info, PrintFlags flags ) {
         char * pA = (char *) pX;
-        ss << "([size=" << count << ",stride=" << stride << "] ";
+        ss << "(";
+        if ( int(flags) & int(PrintFlags::debugger) ) {
+            ss << "[size=" << count << ",stride=" << stride << "] ";
+        }
         for ( int i=0; i!=count; ++i ) {
             if ( i ) ss << " ";
             debug_value(ss, pA, info, flags);

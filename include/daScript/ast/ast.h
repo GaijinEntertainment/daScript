@@ -71,6 +71,7 @@ namespace das
         bool isPointer() const;
         bool isHandle() const;
         int getSizeOf() const;
+        int getAlignOf() const;
         int getBaseSizeOf() const;
         int getStride() const;
         string describe ( bool extra = true ) const;
@@ -249,6 +250,7 @@ namespace das
         const FieldDeclaration * findField ( const string & name ) const;
         friend ostream& operator<< (ostream& stream, const Structure & structure);
         int getSizeOf() const;
+        int getAlignOf() const;
         bool canCopy() const;
         bool isPod() const;
         string describe() const { return name; }
@@ -315,6 +317,7 @@ namespace das
         virtual bool isIndexable ( const TypeDeclPtr & ) const { return false; }
         virtual bool isIterable ( ) const { return false; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
+        virtual size_t getAlignOf() const { return 1; }
         virtual TypeDeclPtr makeFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeSafeFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const { return nullptr; }

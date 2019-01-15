@@ -324,12 +324,16 @@ namespace das {
     // sizeof
         virtual ExpressionPtr visit ( ExprSizeOf * expr ) override {
             reportFolding();
-            return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
+            auto ci = make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
+            ci->type = make_shared<TypeDecl>(Type::tInt);
+            return ci;
         }
     // typename
         virtual ExpressionPtr visit ( ExprTypeName * expr ) override {
             reportFolding();
-            return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false));
+            auto cs = make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false));
+            cs->type = make_shared<TypeDecl>(Type::tString);
+            return cs;
         }
     // ExprCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {

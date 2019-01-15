@@ -183,6 +183,8 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
             ss << " " << f.first << ":" << f.second;
         ss << " }";
     }
+    virtual size_t getSizeOf() const override { return sizeof(IntFields); }
+    virtual size_t getAlignOf() const override { return alignof(IntFields); }
 };
 
 void testFields ( Context * ctx ) {

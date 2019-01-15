@@ -680,6 +680,13 @@ namespace das
         return baseType==Type::tStructure ? structType->getSizeOf() : getTypeBaseSize(baseType);
     }
     
+    int TypeDecl::getAlignOf() const {
+        if ( baseType==Type::tHandle ) {
+            return int(annotation->getAlignOf());
+        }
+        return baseType==Type::tStructure ? structType->getAlignOf() : getTypeBaseAlign(baseType);
+    }
+    
     int TypeDecl::getSizeOf() const {
         int size = 1;
         for ( auto i : dim )
@@ -717,9 +724,21 @@ namespace das
     int Structure::getSizeOf() const {
         int size = 0;
         for ( const auto & fd : fields ) {
+            int al = fd.type->getAlignOf() - 1;
+            size = (size + al) & ~al;
             size += fd.type->getSizeOf();
         }
+        int al = getAlignOf() - 1;
+        size = (size + al) & ~al;
         return size;
+    }
+    
+    int Structure::getAlignOf() const {
+        int align = 1;
+        for ( const auto & fd : fields ) {
+            align = max ( fd.type->getAlignOf(), align );
+        }
+        return align;
     }
     
     const Structure::FieldDeclaration * Structure::findField ( const string & na ) const {
@@ -2311,12 +2330,14 @@ namespace das
         StructInfo * sti = context.makeNode<StructInfo>();
         sti->name = context.allocateName(st.name);
         sti->fieldsSize = (uint32_t) st.fields.size();
+        sti->size = st.getSizeOf();
         sti->fields = (VarInfo **) context.allocate( sizeof(VarInfo *) * sti->fieldsSize );
         for ( uint32_t i=0; i!=sti->fieldsSize; ++i ) {
             auto & var = st.fields[i];
             VarInfo * vi = context.makeNode<VarInfo>();
             makeTypeInfo(vi, context, var.type);
             vi->name = context.allocateName(var.name);
+            vi->offset = st.fields[i].offset;
             sti->fields[i] = vi;
         }
         return sti;
@@ -2364,6 +2385,7 @@ namespace das
         VarInfo * vi = context.makeNode<VarInfo>();
         makeTypeInfo(vi, context, var.type);
         vi->name = context.allocateName(var.name);
+        vi->offset = 0;
         return vi;
     }
     

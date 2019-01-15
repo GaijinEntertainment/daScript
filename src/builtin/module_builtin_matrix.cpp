@@ -48,6 +48,9 @@ namespace das {
         virtual bool isIndexable ( const TypeDeclPtr & decl ) const override {
             return decl->isIndex();
         }
+        virtual size_t getAlignOf() const override {
+            return alignof(vec4f);
+        }
         virtual size_t getSizeOf() const override {
             return sizeof(ThisMatrix);
         }

@@ -16,6 +16,7 @@ namespace das
         ManagedStructureAnnotation (const string & n) : TypeAnnotation(n) {}
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }
+        virtual size_t getAlignOf() const override { return alignof(OT); }
         virtual bool isRefType() const override { return true; }
         virtual bool isNewable() const override { return true; }
         virtual bool isLocal() const override { return true; }
@@ -141,6 +142,7 @@ namespace das
         }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(VectorType); }
+        virtual size_t getAlignOf() const override { return alignof(VectorType); }
         virtual bool isRefType() const override { return true; }
         virtual bool isIndexable ( const TypeDeclPtr & indexType ) const override { return indexType->isIndex(); }
         virtual bool isIterable ( ) const override { return true; }
