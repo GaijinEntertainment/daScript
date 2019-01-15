@@ -81,9 +81,8 @@ namespace das {
 
 		StackAllocator(uint32_t size) {
 			stackSize = size;
-			assert(stackSize <= 64 * 1024);
 			stack = (char *)_mm_malloc(stackSize, 16);
-			evalTop = stackTop = stack + stackSize;
+			reset();
 		}
 
 		~StackAllocator() {
@@ -98,13 +97,13 @@ namespace das {
 			evalTop = stackTop = stack + stackSize;
 		}
 
-		__forceinline uint32_t watermark() const {
-			uint32_t evt = uint32_t(evalTop - stack);
-			uint32_t stt = uint32_t(stackTop - stack);
-			return (stt << 16) | evt;
+		__forceinline uint64_t watermark() const {
+			uint64_t evt = uint64_t(evalTop - stack);
+			uint64_t stt = uint64_t(stackTop - stack);
+			return (stt << 32u) | evt;
 		}
 
-		__forceinline uint32_t push(uint32_t size) {		// stack watermark
+		__forceinline uint64_t push(uint32_t size) {		// stack watermark
 			if (stackTop - size < stack ) {
 				return -1u;
 			}
@@ -114,15 +113,15 @@ namespace das {
 			return wm;
 		}
 
-		__forceinline void pop(uint32_t watermark) {	// restore stack to watermark
-			uint32_t stt = watermark >> 16u;
-			uint32_t ett = watermark & 0x0000ffff;
+		__forceinline void pop(uint64_t watermark) {	// restore stack to watermark
+			uint32_t stt = uint32_t(watermark >> 32u);
+			uint32_t ett = uint32_t(watermark);
             assert(stt<=stackSize && ett<=stackSize);
 			stackTop = stack + stt;
 			evalTop = stack + ett;
 		}
 
-		__forceinline uint32_t invoke(uint32_t et) {	// pass bottom portion of the watermark
+		__forceinline uint64_t invoke(uint32_t et) {	// pass bottom portion of the watermark
 			auto wm = watermark();
             assert(et<=stackSize);
 			evalTop = stack + et;
