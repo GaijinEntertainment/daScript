@@ -53,10 +53,5 @@ _register_component(char @URIPARSER_BUILD_CHAR@)
 _register_component(wchar_t @URIPARSER_BUILD_WCHAR_T@)
 check_required_components(uriparser)
 
-#
-# Exported variables
-#
-set_and_check(uriparser_INCLUDE_DIRS "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
-
 
 endif(NOT _uriparser_config_included)

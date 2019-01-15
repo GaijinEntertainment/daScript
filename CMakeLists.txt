@@ -291,8 +291,6 @@ configure_package_config_file(
         cmake/uriparser-config.cmake
     INSTALL_DESTINATION
         ${CMAKE_INSTALL_LIBDIR}/cmake/uriparser-${PROJECT_VERSION}/
-    PATH_VARS
-        CMAKE_INSTALL_INCLUDEDIR
 )
 write_basic_package_version_file(
     cmake/uriparser-config-version.cmake

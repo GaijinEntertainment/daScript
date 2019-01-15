@@ -69,12 +69,6 @@ if (NOT uriparser_FOUND)
 endif()
 
 
-# Cover uriparser_INCLUDE_DIRS
-if (NOT uriparser_INCLUDE_DIRS MATCHES "/include$")
-    message(SEND_ERROR "Unexpected uriparser_INCLUDE_DIRS: \"${uriparser_INCLUDE_DIRS}\"")
-endif()
-
-
 # Build and link some hello world using uriparser
 add_executable(hello
     hello.c
