@@ -4,14 +4,22 @@
 
 namespace das
 {
-    void table_lock ( Context & context, Array & arr ) {
+    void table_clear ( Context & context, Table & arr ) {
+        if ( arr.lock==0 ) {
+            context.throw_error("clearing locked table");
+            return;
+        }
+        memset(arr.distance, -1, arr.capacity * sizeof(uint8_t));
+    }
+    
+    void table_lock ( Context & context, Table & arr ) {
         arr.lock ++;
         if ( arr.lock==0 ) {
             context.throw_error("table lock overflow");
         }
     }
     
-    void table_unlock ( Context & context, Array & arr ) {
+    void table_unlock ( Context & context, Table & arr ) {
         if ( arr.lock==0 ) {
             context.throw_error("table lock underflow");
         }

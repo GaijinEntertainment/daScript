@@ -51,8 +51,13 @@ namespace das {
         array_resize(*context, *pArray, pArray->size-1, stride, false);
     }
     
+    void builtin_array_clear ( Array * pArray, Context * context ) {
+        array_clear(*context, *pArray);
+    }
+    
     void Module_BuiltIn::addArrayTypes(ModuleLibrary & lib) {
         // array functions
+        addExtern<decltype(builtin_array_clear), builtin_array_clear>(*this, lib, "clear", true);
         addExtern<decltype(builtin_array_size), builtin_array_size>(*this, lib, "length", false);
         addExtern<decltype(builtin_array_capacity), builtin_array_capacity>(*this, lib, "capacity", false);
         // array built-in functions

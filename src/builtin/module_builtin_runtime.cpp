@@ -59,6 +59,10 @@ namespace das
         return arr->capacity;
     }
     
+    void builtin_table_clear ( Table * arr, Context * context ) {
+        table_clear(*context, *arr);
+    }
+    
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
 		// function annotations
 		addAnnotation(make_shared<ExportFunctionAnnotation>());
@@ -74,6 +78,7 @@ namespace das
         addCall<ExprDebug>          ("debug");
         addCall<ExprHash>           ("hash");
         // table functions
+        addExtern<decltype(builtin_table_clear), builtin_table_clear>(*this, lib, "clear", true);
         addExtern<decltype(builtin_table_size), builtin_table_size>(*this, lib, "length", false);
         addExtern<decltype(builtin_table_capacity), builtin_table_capacity>(*this, lib, "capacity", false);
         // table expressions

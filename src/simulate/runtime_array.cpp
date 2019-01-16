@@ -4,6 +4,14 @@
 
 namespace das
 {
+    void array_clear ( Context & context, Array & arr ) {
+        if ( arr.lock ) {
+            context.throw_error("clearing locked array");
+            return;
+        }
+        arr.size = 0;
+    }
+    
     void array_lock ( Context & context, Array & arr ) {
         arr.lock ++;
         if ( arr.lock==0 ) {

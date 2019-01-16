@@ -82,7 +82,7 @@ namespace das
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
             newTab.maxLookups = computeMaxLookups(newCapacity);
-            memset(newTab.data, 0, newCapacity*valueTypeSize);
+            // memset(newTab.data, 0, newCapacity*valueTypeSize);
             memset(newTab.distance, -1, newCapacity * sizeof(uint8_t));
             if ( tab.size ) {
                 KeyType * keys = (KeyType *)(tab.keys);
@@ -203,8 +203,9 @@ namespace das
         }
     };
     
-    void table_lock ( Context & context, Array & arr );
-    void table_unlock ( Context & context, Array & arr );
+    void table_clear ( Context & context, Table & arr );
+    void table_lock ( Context & context, Table & arr );
+    void table_unlock ( Context & context, Table & arr );
     
     struct SimNode_Table : SimNode {
         SimNode_Table(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
