@@ -14,3 +14,53 @@ is licensed under the [New BSD license](https://github.com/uriparser/uriparser/b
 
 To learn more about uriparser,
 please check out [https://uriparser.github.io/](https://uriparser.github.io/).
+
+
+# Example use from an existing CMake project
+```cmake
+project(hello VERSION 1.0)
+
+find_package(uriparser 0.9.1 CONFIG REQUIRED char wchar_t)
+
+add_executable(hello
+    hello.c
+)
+
+target_link_libraries(hello PUBLIC uriparser::uriparser)
+```
+
+
+# Compilation
+
+## Compilation (standalone, GNU make, Linux)
+```console
+# mkdir build
+# cd build
+# cmake -DCMAKE_BUILD_TYPE=Release ..  # see CMakeLists.txt for options
+# make
+# make test
+# make install
+```
+
+## Available CMake options (and defaults)
+```console
+# rm -f CMakeCache.txt ; cmake -LAH | grep -B1 'URIPARSER_\|BUILD_SHARED_LIBS'
+[..]
+// Build shared libraries (rather than static ones)
+BUILD_SHARED_LIBS:BOOL=ON
+--
+// Build code supporting data type 'char'
+URIPARSER_BUILD_CHAR:BOOL=ON
+--
+// Build API documentation (requires Doxygen, Graphviz, and (optional) Qt's qhelpgenerator)
+URIPARSER_BUILD_DOCS:BOOL=ON
+--
+// Build test suite (requires GTest >=1.8.1)
+URIPARSER_BUILD_TESTS:BOOL=ON
+--
+// Build tools (e.g. CLI "uriparse")
+URIPARSER_BUILD_TOOLS:BOOL=ON
+--
+// Build code supporting data type 'wchar_t'
+URIPARSER_BUILD_WCHAR_T:BOOL=ON
+```

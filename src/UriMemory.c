@@ -42,11 +42,9 @@
  * Holds memory manager implementation.
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#include <config.h>
 
-#if HAVE_REALLOCARRAY
+#ifdef HAVE_REALLOCARRAY
 # ifndef _GNU_SOURCE
 #  define _GNU_SOURCE 1
 # endif
@@ -97,7 +95,7 @@ static void * uriDefaultRealloc(UriMemoryManager * URI_UNUSED(memory),
 
 static void * uriDefaultReallocarray(UriMemoryManager * URI_UNUSED(memory),
 		void * ptr, size_t nmemb, size_t size) {
-#if HAVE_REALLOCARRAY
+#ifdef HAVE_REALLOCARRAY
 	return reallocarray(ptr, nmemb, size);
 #else
 	const size_t total_size = nmemb * size;
