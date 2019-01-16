@@ -29,6 +29,8 @@ namespace  das {
         static __forceinline bool GtEqu   ( TT a, TT b, Context & ) { return a >= b;  }
         static __forceinline bool Less    ( TT a, TT b, Context & ) { return a < b;  }
         static __forceinline bool Gt      ( TT a, TT b, Context & ) { return a > b;  }
+		static __forceinline TT Min       ( TT a, TT b, Context & ) { return a <= b ? a : b; }
+		static __forceinline TT Max       ( TT a, TT b, Context & ) { return a >= b ? a : b; }
     };
 
     template <typename TT>

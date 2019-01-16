@@ -65,6 +65,14 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Less<TT>,       bool, TT,  TT>  >("<",      lib) );
     }
 
+    // min-max types
+    template <typename TT>
+    void addFunctionMinMax(Module & mod, const ModuleLibrary & lib) {
+        //                                     policy              ret   arg1 arg2    name
+        mod.addFunction( make_shared<BuiltInFn<Sim_Min<TT>,        TT,   TT,  TT>  >("min",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Max<TT>,        TT,   TT,  TT>  >("max",    lib) );
+    }
+
 
     // concatination types
     template <typename TT>

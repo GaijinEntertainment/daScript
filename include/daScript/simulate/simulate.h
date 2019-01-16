@@ -1334,6 +1334,20 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
     };
 
+#define IMPLEMENT_OP2_FUNCTION_POLICY(CALL,TYPE,CTYPE)					\
+	template <>															\
+	struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
+        DAS_NODE(TYPE,CTYPE);											\
+		Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
+		__forceinline CTYPE compute ( Context & context ) {             \
+			auto lv = arguments[0]->eval##TYPE(context);				\
+			DAS_NODE_EXCEPTION_POINT(CTYPE);							\
+			auto rv = arguments[1]->eval##TYPE(context);				\
+			DAS_NODE_EXCEPTION_POINT(CTYPE);							\
+			return SimPolicy<CTYPE>::##CALL(lv,rv,context);				\
+		}																\
+	};
+
 #define IMPLEMENT_OP2_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
@@ -1413,6 +1427,16 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define DEFINE_OP2_NUMERIC(CALL);                       \
     DEFINE_OP2_NUMERIC_INTEGER(CALL);                   \
     IMPLEMENT_OP2_POLICY(CALL,Float,float);
+
+#define DEFINE_OP2_FUNCTION_NUMERIC_INTEGER(CALL)                \
+    IMPLEMENT_OP2_FUNCTION_POLICY(CALL,Int,int32_t);             \
+    IMPLEMENT_OP2_FUNCTION_POLICY(CALL,UInt,uint32_t);           \
+    IMPLEMENT_OP2_FUNCTION_POLICY(CALL,Int64,int64_t);           \
+    IMPLEMENT_OP2_FUNCTION_POLICY(CALL,UInt64,uint64_t);         \
+
+#define DEFINE_OP2_FUNCTION_NUMERIC(CALL);                       \
+    DEFINE_OP2_FUNCTION_NUMERIC_INTEGER(CALL);                   \
+    IMPLEMENT_OP2_FUNCTION_POLICY(CALL,Float,float);
 
 #define DEFINE_OP2_BOOL_NUMERIC_INTEGER(CALL)           \
     IMPLEMENT_OP2_BOOL_POLICY(CALL,Int,int32_t);        \
@@ -1506,7 +1530,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_POLICY(GtEqu);
     DEFINE_POLICY(Less);
     DEFINE_POLICY(Gt);
-    // binary and, or, xor
+	DEFINE_POLICY(Min);
+	DEFINE_POLICY(Max);
+	// binary and, or, xor
     DEFINE_POLICY(BinAnd);
     DEFINE_POLICY(BinOr);
     DEFINE_POLICY(BinXor);

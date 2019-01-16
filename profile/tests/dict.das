@@ -1,3 +1,5 @@
+// options log=true, printVarAccess=true, printRef=true
+
 require testProfile
 
 let
@@ -19,9 +21,7 @@ def dict(tab:table<string,int>; src:array<string>)
     clear(tab)
     let maxOcc = 0
     for s in src
-        let occ = ++tab[s]
-        if occ > maxOcc
-            maxOcc = occ
+        maxOcc = max(++tab[s],maxOcc)
     return maxOcc
 
 [export]
@@ -29,8 +29,9 @@ def test
     let tab : table<string,int>
     let src : array<string>
     makeRandomSequence(src)
-    profile(20,"dictionary") <|
+	profile(20,"dictionary") <|
         dict(tab,src)
     profile(20,"c++ dictionary") <|
         testProfile::testDict(src)
     return true
+
