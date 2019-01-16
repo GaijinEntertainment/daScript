@@ -1350,7 +1350,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 			DAS_NODE_EXCEPTION_POINT(CTYPE);							\
 			auto rv = arguments[1]->eval##TYPE(context);				\
 			DAS_NODE_EXCEPTION_POINT(CTYPE);							\
-			return SimPolicy<CTYPE>::##CALL(lv,rv,context);				\
+            return SimPolicy<CTYPE>::CALL(lv,rv,context);				\
 		}																\
 	};
 
