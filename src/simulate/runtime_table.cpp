@@ -5,11 +5,12 @@
 namespace das
 {
     void table_clear ( Context & context, Table & arr ) {
-        if ( arr.lock==0 ) {
+        if ( arr.lock ) {
             context.throw_error("clearing locked table");
             return;
         }
         memset(arr.distance, -1, arr.capacity * sizeof(uint8_t));
+        arr.size = 0;
     }
     
     void table_lock ( Context & context, Table & arr ) {

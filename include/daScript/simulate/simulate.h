@@ -622,6 +622,10 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f res = arguments[0]->eval(context);
             auto str = std::to_string ( cast<CastFrom>::to(res) );
             auto cpy = context.heap.allocateName(str);
+            if ( !cpy ) {
+                context.throw_error("can't cast to string, out of heap");
+                return v_zero();
+            }
             return cast<char *>::from(cpy);
         }
     };

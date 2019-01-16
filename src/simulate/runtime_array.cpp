@@ -35,7 +35,8 @@ namespace das
             return;
         }
         arr.data = (char *) context.heap.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
-        if ( context.stopFlags & EvalFlags::stopForThrow ) {
+        if ( !arr.data ) {
+            context.throw_error("out of linear allocator memory");
             return;
         }
         arr.capacity = newCapacity;

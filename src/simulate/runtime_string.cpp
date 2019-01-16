@@ -11,6 +11,10 @@ namespace das
         const char *  sA = to_rts(a); auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
         char * sAB = (char * ) context.heap.allocate(uint32_t(la + lb + 1));
+        if ( !sAB ) {
+            context.throw_error("can't add two strings, out of heap");
+            return v_zero();
+        }
         memcpy ( sAB, sA, la );
         memcpy ( sAB+la, sB, lb+1 );
         return from_rts(sAB);
@@ -21,6 +25,9 @@ namespace das
         const char *  sA = *pA ? *pA : rts_null; auto la = strlen(sA);
         const char *  sB = to_rts(b); auto lb = strlen(sB);
         *pA = (char * ) context.heap.allocate(uint32_t(la + lb + 1));
+        if ( !*pA ) {
+            context.throw_error("can't add tow strings, out of heap");
+        }
         memcpy ( *pA , sA, la );
         memcpy ( *pA +la, sB, lb+1 );
     }
@@ -124,6 +131,9 @@ namespace das
             ssw << debug_value(argValues[i], types[i], PrintFlags::string_builder);
         }
         auto pStr = context.heap.allocateName(ssw.str());
+        if ( !pStr ) {
+            context.throw_error("can't allocate string builder result, out of heap");
+        }
         return cast<char *>::from(pStr);
     }
 }

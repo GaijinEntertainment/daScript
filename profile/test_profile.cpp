@@ -315,6 +315,19 @@ void queryEs (Block block, Context * context) {
     EsRunBlock(*context, block, g_components, g_total);
 }
 
+#include <unordered_map>
+
+int testDict(Array * arr) {
+    unordered_map<string,int> tab;
+    char ** data = (char **) arr->data;
+    int maxOcc = 0;
+    for ( uint32_t t = 0; t !=arr->size; ++t ) {
+        int occ = ++tab[data[t]];
+        if ( occ > maxOcc )
+            maxOcc = occ;
+    }
+    return maxOcc;
+}
 
 class Module_TestProfile : public Module {
 public:
@@ -338,6 +351,8 @@ public:
         addExtern<decltype(testEsUpdate), testEsUpdate>(*this, lib, "testEsUpdate");
         addExtern<decltype(initEsComponents), initEsComponents>(*this, lib, "initEsComponents");
         addExtern<decltype(verifyEsComponents), verifyEsComponents>(*this, lib, "verifyEsComponents");
+        // C++ dictionary
+        addExtern<decltype(testDict), testDict>(*this, lib, "testDict");
     }
 };
 

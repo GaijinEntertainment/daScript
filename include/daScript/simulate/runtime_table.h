@@ -73,7 +73,8 @@ namespace das
             Table newTab;
             uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint8_t));
             newTab.data = (char *) context->heap.allocate(memSize);
-            if ( context->stopFlags & EvalFlags::stopForThrow ) {
+            if ( !newTab.data ) {
+                context->throw_error("can't grow table, out of heap");
                 return false;
             }
             newTab.keys = newTab.data + newCapacity * valueTypeSize;
@@ -82,7 +83,7 @@ namespace das
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
             newTab.maxLookups = computeMaxLookups(newCapacity);
-            // memset(newTab.data, 0, newCapacity*valueTypeSize);
+            memset(newTab.data, 0, newCapacity*valueTypeSize);
             memset(newTab.distance, -1, newCapacity * sizeof(uint8_t));
             if ( tab.size ) {
                 KeyType * keys = (KeyType *)(tab.keys);

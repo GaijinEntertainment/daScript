@@ -123,7 +123,7 @@ namespace das
             memset ( ptr, 0, bytes );
             return cast<void *>::from(ptr);
         } else {
-            context.throw_error("out of memory");
+            context.throw_error("out of heap");
             return v_zero();
         }
     }

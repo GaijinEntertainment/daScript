@@ -2336,7 +2336,12 @@ namespace das
 				gvar.name = context.code.allocateName(pvar->name);
 				gvar.size = pvar->type->getSizeOf();
 				gvar.debug = helper.makeVariableDebugInfo(*it.second);
-				gvar.value = cast<char *>::from((char *)context.heap.allocate(gvar.size));
+                auto varData = context.heap.allocate(gvar.size);
+				gvar.value = cast<char *>::from((char *)varData);
+                if ( !varData ) {
+                    context.throw_error("can't allocate variable data, out of heap");
+                    return false;
+                }
 				gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
 			}
 		}
