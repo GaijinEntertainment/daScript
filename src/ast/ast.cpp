@@ -1113,11 +1113,12 @@ namespace das
     
     SimNode * ExprInvoke::simulate (Context & context) const {
         auto blockT = arguments[0]->type;
-        SimNode_Invoke * pInvoke;
+        SimNode_CallBase * pInvoke;
         if ( blockT->firstType && blockT->firstType->isRefType() ) {
-            pInvoke = context.code.makeNode<SimNode_InvokeAndCopyOrMove>(at, stackTop);
+            pInvoke = (SimNode_CallBase *) context.code.makeNodeUnroll<SimNode_InvokeAndCopyOrMove>(
+                                                arguments.size(), at, stackTop);
         } else {
-            pInvoke = context.code.makeNode<SimNode_Invoke>(at);
+            pInvoke = (SimNode_CallBase *) context.code.makeNodeUnroll<SimNode_Invoke>(arguments.size(),at);
         }
         pInvoke->debug = at;
         if ( int nArg = (int) arguments.size() ) {
@@ -1675,7 +1676,7 @@ namespace das
             pSimOp1->x = subexpr->simulate(context);
             return pSimOp1;
         } else {
-            SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
+            auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
             pCall->debug = at;
             pCall->fnIndex = func->index;
             pCall->arguments = (SimNode **) context.code.allocate(1 * sizeof(SimNode *));
@@ -1710,7 +1711,7 @@ namespace das
             pSimOp2->r = right->simulate(context);
             return pSimOp2;
         } else {
-            SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
+            auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
             pCall->debug = at;
             pCall->fnIndex = func->index;
             pCall->arguments = (SimNode **) context.code.allocate(2 * sizeof(SimNode *));
@@ -2288,7 +2289,7 @@ namespace das
     }
     
     SimNode * ExprCall::simulate (Context & context) const {
-        SimNode_Call * pCall = static_cast<SimNode_Call *>(func->makeSimNode(context));
+        auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
         pCall->debug = at;
 		assert((func->builtIn || func->index>=0) && "calling function which is not used. how?");
         pCall->fnIndex = func->index;

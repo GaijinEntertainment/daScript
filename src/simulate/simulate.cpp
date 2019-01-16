@@ -67,50 +67,6 @@ namespace das
         return cast<Block>::from(block);
     }
     
-    // SimNode_Call
-    
-    vec4f SimNode_Call::eval ( Context & context ) {
-		vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
-        evalArgs(context, argValues);
-        DAS_EXCEPTION_POINT;
-        return context.call(fnIndex, argValues, nullptr, debug.line);
-    }
-    
-    vec4f SimNode_CallAndCopyOrMove::eval ( Context & context ) {
-        vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
-        evalArgs(context, argValues);
-        DAS_EXCEPTION_POINT;
-        auto cmres = context.stack.sp() + stackTop;
-        return context.call(fnIndex, argValues, cmres, debug.line);
-    }
-
-    // SimNode_Invoke
-    
-    vec4f SimNode_Invoke::eval ( Context & context )  {
-        vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
-        evalArgs(context, argValues);
-        DAS_EXCEPTION_POINT;
-        Block block = cast<Block>::to(argValues[0]);
-        if ( nArguments>1 ) {
-            return context.invoke(block, argValues + 1, nullptr);
-        } else {
-            return context.invoke(block, nullptr, nullptr);
-        }
-    }
-    
-    vec4f SimNode_InvokeAndCopyOrMove::eval ( Context & context )  {
-        vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
-        evalArgs(context, argValues);
-        DAS_EXCEPTION_POINT;
-        Block block = cast<Block>::to(argValues[0]);
-        auto cmres = context.stack.sp() + stackTop;
-        if ( nArguments>1 ) {
-            return context.invoke(block, argValues + 1, cmres);
-        } else {
-            return context.invoke(block, nullptr, cmres);
-        }
-    }
-    
     // SimNode_Debug
     
     vec4f SimNode_Debug::eval ( Context & context ) {

@@ -96,6 +96,14 @@ namespace das
             return v_zero();
         }
     };
+    
+    template <>
+    struct SimNode_ForGoodArray<0> : public SimNode_ForBase {
+        SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual vec4f eval ( Context & ) override {
+            return v_zero();
+        }
+    };
 
     // FOR
     template <int total>
@@ -122,5 +130,12 @@ namespace das
             return v_zero();
         }
     };
-
+    
+    template <>
+    struct SimNode_ForFixedArray<0> : SimNode_ForBase {
+        SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual vec4f eval ( Context & ) override {
+            return v_zero();
+        }
+    };
 }

@@ -488,13 +488,19 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // FUNCTION CALL
+    template <int argCount>
     struct SimNode_Call : SimNode_CallBase {
         SimNode_Call ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override {
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            DAS_EXCEPTION_POINT;
+            return context.call(fnIndex, argValues, nullptr, debug.line);
+        }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
-            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));                  \
-                evalArgs(context, argValues);                                                   \
+                vec4f argValues[argCount ? argCount : 1];                                       \
+                EvalBlock<argCount>::eval(context, arguments, argValues);                       \
                 DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
                 return cast<CTYPE>::to(context.call(fnIndex, argValues, nullptr, debug.line));  \
         }
@@ -503,13 +509,20 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // FUNCTION CALL with copy-or-move-on-return
+    template <int argCount>
     struct SimNode_CallAndCopyOrMove : SimNode_CallBase {
         SimNode_CallAndCopyOrMove ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override {
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            DAS_EXCEPTION_POINT;
+            auto cmres = context.stack.sp() + stackTop;
+            return context.call(fnIndex, argValues, cmres, debug.line);
+        }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
-            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));                  \
-                evalArgs(context, argValues);                                                   \
+                vec4f argValues[argCount ? argCount : 1];                                       \
+                EvalBlock<argCount>::eval(context, arguments, argValues);                       \
                 DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
                 auto cmres = context.stack.sp() + stackTop;                                     \
                 return cast<CTYPE>::to(context.call(fnIndex, argValues, cmres, debug.line));    \
@@ -519,16 +532,27 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // Invoke
+    template <int argCount>
     struct SimNode_Invoke : SimNode_CallBase {
         SimNode_Invoke ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override {
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            DAS_EXCEPTION_POINT;
+            Block block = cast<Block>::to(argValues[0]);
+            if ( argCount>1 ) {
+                return context.invoke(block, argValues + 1, nullptr);
+            } else {
+                return context.invoke(block, nullptr, nullptr);
+            }
+        }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
-            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));                  \
-            evalArgs(context, argValues);                                                       \
+            vec4f argValues[argCount ? argCount : 1];                                           \
+            EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
             Block block = cast<Block>::to(argValues[0]);                                        \
-            if ( nArguments>1 ) {                                                               \
+            if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.invoke(block, argValues + 1, nullptr));          \
             } else {                                                                            \
                 return cast<CTYPE>::to(context.invoke(block, nullptr, nullptr));                \
@@ -539,18 +563,30 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // Invoke with copy-or-move-on-return
-    struct SimNode_InvokeAndCopyOrMove : SimNode_Invoke {
+    template <int argCount>
+    struct SimNode_InvokeAndCopyOrMove : SimNode_CallBase {
         SimNode_InvokeAndCopyOrMove ( const LineInfo & at, uint32_t sp )
-            : SimNode_Invoke(at) { stackTop = sp; }
-        virtual vec4f eval ( Context & context ) override;
+            : SimNode_CallBase(at) { stackTop = sp; }
+        virtual vec4f eval ( Context & context ) override {
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            DAS_EXCEPTION_POINT;
+            Block block = cast<Block>::to(argValues[0]);
+            auto cmres = context.stack.sp() + stackTop;
+            if ( argCount>1 ) {
+                return context.invoke(block, argValues + 1, cmres);
+            } else {
+                return context.invoke(block, nullptr, cmres);
+            }
+        }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
-            vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));                  \
-            evalArgs(context, argValues);                                                       \
+            vec4f argValues[argCount ? argCount : 1];                                           \
+            EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
             Block block = cast<Block>::to(argValues[0]);                                        \
             auto cmres = context.stack.sp() + stackTop;                                         \
-            if ( nArguments>1 ) {                                                               \
+            if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.invoke(block, argValues + 1, cmres));            \
             } else {                                                                            \
                 return cast<CTYPE>::to(context.invoke(block, nullptr, cmres));                  \
@@ -1174,6 +1210,14 @@ SIM_NODE_AT_VECTOR(Float, float)
                 sources[t]->close(context, ph[t]);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+    
+    template <>
+    struct SimNode_ForWithIterator<0> : SimNode_ForWithIteratorBase {
+        SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
+        virtual vec4f eval ( Context & ) override {
             return v_zero();
         }
     };

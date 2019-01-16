@@ -195,6 +195,7 @@ namespace das {
 		template < template <int TT> class NodeType, typename... Params>
 		SimNode * makeNodeUnroll(int count, Params... args) {
 			switch (count) {
+            case  0: return makeNode<NodeType< 0>>(args...);
 			case  1: return makeNode<NodeType< 1>>(args...);
 			case  2: return makeNode<NodeType< 2>>(args...);
 			case  3: return makeNode<NodeType< 3>>(args...);
