@@ -21,11 +21,12 @@ NOTE: uriparser is looking for help with a few things:
 2019-01-02 -- 0.9.1
 
 >>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-  * Fixed:
+  * Fixed: [CVE-2018-20721]
       Out-of-bounds read in uriParse*Ex* for incomplete URIs with IPv6
       addresses with embedded IPv4 address, e.g. "//[::44.1";
       mitigated if passed parameter <afterLast> points to readable memory
       containing a '\0' byte.
+      Commit cef25028de5ff872c2e1f0a6c562eb3ea9ecbce4
       Thanks to Joergen Ibsen for the report!
 >>>>>>>>>>>>> SECURITY >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
   * Fixed: When parsing a malformed URI with an IPvFuture address
