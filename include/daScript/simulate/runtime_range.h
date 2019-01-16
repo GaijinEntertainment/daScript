@@ -10,7 +10,7 @@ namespace das
         virtual void close ( Context & context, IteratorContext & itc ) override;
         SimNode * subexpr;
     };
-    
+
     struct SimNode_RangeIterator : SimNode, RangeIterator {
             SimNode_RangeIterator ( const LineInfo & at, SimNode * rng )
             : SimNode(at) { subexpr = rng; }

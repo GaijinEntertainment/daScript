@@ -20,16 +20,16 @@ namespace das {
         __forceinline uint32_t bytesAllocated() const {
             return uint32_t(linearAllocator - linearAllocatorBase);
         }
-        
+
         __forceinline uint32_t bytesTotal() const {
             return linearAllocatorSize;
         }
-        
+
 		__forceinline void reset() {
 			linearAllocator = linearAllocatorBase;
 		}
 
-		__forceinline void * getWatermark() const { 
+		__forceinline void * getWatermark() const {
 			return linearAllocator;
 		}
 

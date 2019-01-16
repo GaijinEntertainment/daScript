@@ -3,7 +3,7 @@
 namespace das
 {
     using namespace std;
-    
+
     template <typename TT>
     struct vec2 {
         TT   x, y;
@@ -15,7 +15,7 @@ namespace das
             return x==vec.x && y==vec.y;
         }
     };
-    
+
     template <typename TT>
     struct vec3 {
         TT   x, y, z;
@@ -27,7 +27,7 @@ namespace das
             return x==vec.x && y==vec.y && z==vec.z;
         }
     };
-    
+
     template <typename TT>
     struct vec4 {
         TT  x, y, z, w;
@@ -39,15 +39,15 @@ namespace das
             return x==vec.x && y==vec.y && z==vec.z && w==vec.w;
         }
     };
-    
+
     typedef vec2<float> float2;
     typedef vec3<float> float3;
     typedef vec4<float> float4;
-    
+
     typedef vec2<int32_t> int2;
     typedef vec3<int32_t> int3;
     typedef vec4<int32_t> int4;
-    
+
     typedef vec2<uint32_t> uint2;
     typedef vec3<uint32_t> uint3;
     typedef vec4<uint32_t> uint4;

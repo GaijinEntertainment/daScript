@@ -11,14 +11,14 @@ namespace das
             return cast<TT>::to(x);
         }
     };
-    
+
     template <>
     struct cast_arg<Context *> {
         static __forceinline Context * to ( Context & ctx, vec4f ) {
             return &ctx;
         }
     };
-    
+
     template <>
     struct cast_arg<vec4f> {
         static __forceinline vec4f to ( Context &, vec4f x ) {
@@ -46,7 +46,7 @@ namespace das
             return v_zero();
         }
     };
-    
+
     template <typename Result>
     struct ImplCallStaticFunctionAndCopy {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
@@ -54,7 +54,7 @@ namespace das
             *res = fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
         }
     };
-    
+
     template <>
     struct ImplCallStaticFunctionAndCopy<void> {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
@@ -102,7 +102,7 @@ namespace das
         }
         FuncInfo * info = nullptr;
     };
-    
+
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCallAndCopyOrMove : SimNode_CallBase {
         SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at ) : SimNode_CallBase(at) {}
@@ -138,9 +138,9 @@ namespace das
         FuncInfo * info = nullptr;
     };
 
-    
+
     typedef vec4f ( InteropFunction ) ( Context & context, SimNode_CallBase * node, vec4f * args );
-    
+
     template <InteropFunction fn>
     struct SimNode_InteropFuncCall : SimNode_CallBase {
         SimNode_InteropFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}

@@ -9,7 +9,7 @@ namespace das
     struct tuple_tail<std::tuple<Head, Tail...>> {
         using type = std::tuple<Tail... >;
     };
-    
+
     // function traits
     template<typename F>
     struct function_traits;

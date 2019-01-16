@@ -7,23 +7,23 @@
 namespace das
 {
     extern const char * rts_null;
-    
+
     class Context;
-    
+
     __forceinline const char * safe_str ( void * pX ) {
         const char * s = *((char **)pX);
         return s ? s : rts_null;
     }
-    
+
     __forceinline const char * to_rts ( vec4f a ) {
         const char * s = cast<const char *>::to(a);
         return s ? s : rts_null;
     }
-    
+
     __forceinline vec4f from_rts ( const char * a ) {
         return cast<const char *>::from(a==rts_null ? nullptr : a);
     }
-    
+
     struct SimPolicy_String {
         // basic
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & )
@@ -42,9 +42,9 @@ namespace das
         static vec4f Add  ( vec4f a, vec4f b, Context & context );
         static void SetAdd ( char * a, vec4f b, Context & context );
     };
-    
+
     template <> struct SimPolicy<char *> : SimPolicy_String {};
-    
+
     string unescapeString ( const string & input );
     string escapeString ( const string & input );
     string to_string_ex ( double dnum );
