@@ -8,6 +8,7 @@
 #pragma warning(disable:4324)	// structure was padded due to alignment specifier
 #pragma warning(disable:4067)	// unexpected tokens following preprocessor directive - expected a newline
 #pragma warning(disable:4800)	// forcing value to bool 'true' or 'false' (performance warning)
+#pragma warning(disable:4127)	// conditional expression is constant
 #endif
 
 #ifdef __APPLE__

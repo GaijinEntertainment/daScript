@@ -1045,9 +1045,9 @@ namespace das
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context ) {
             if ( copyOnReturn || moveOnReturn ) {
-                return context.code.makeNodeUnroll<SimNode_CallAndCopyOrMove>(arguments.size(), at);
+                return context.code.makeNodeUnroll<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
             } else {
-                return context.code.makeNodeUnroll<SimNode_Call>(arguments.size(), at);
+                return context.code.makeNodeUnroll<SimNode_Call>(int(arguments.size()), at);
             }
         }
         string describe() const;

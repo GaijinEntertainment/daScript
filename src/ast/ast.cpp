@@ -1116,9 +1116,9 @@ namespace das
         SimNode_CallBase * pInvoke;
         if ( blockT->firstType && blockT->firstType->isRefType() ) {
             pInvoke = (SimNode_CallBase *) context.code.makeNodeUnroll<SimNode_InvokeAndCopyOrMove>(
-                                                arguments.size(), at, stackTop);
+                                                int(arguments.size()), at, stackTop);
         } else {
-            pInvoke = (SimNode_CallBase *) context.code.makeNodeUnroll<SimNode_Invoke>(arguments.size(),at);
+            pInvoke = (SimNode_CallBase *) context.code.makeNodeUnroll<SimNode_Invoke>(int(arguments.size()),at);
         }
         pInvoke->debug = at;
         if ( int nArg = (int) arguments.size() ) {
