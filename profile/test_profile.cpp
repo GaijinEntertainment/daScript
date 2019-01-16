@@ -314,7 +314,7 @@ void queryEs (Block block, Context * context) {
 
 #include <unordered_map>
 
-int testDict(Array * arr) {
+__noinline int testDict(Array * arr) {
     unordered_map<string,int> tab;
     char ** data = (char **) arr->data;
     int maxOcc = 0;
@@ -324,7 +324,7 @@ int testDict(Array * arr) {
     return maxOcc;
 }
 
-bool isprime(int n) {
+__noinline bool isprime(int n) {
 	for (int i = 2; i != n; ++i) {
 		if (n % i == 0) {
 			return false;
@@ -333,7 +333,7 @@ bool isprime(int n) {
 	return true;
 }
 
-int testPrimes(int n) {
+__noinline int testPrimes(int n) {
 	int count = 0;
 	for (int i = 2; i != n + 1; ++i) {
 		if (isprime(i)) {
@@ -343,7 +343,7 @@ int testPrimes(int n) {
 	return count;
 }
 
-int testFibR(int n) {
+__noinline int testFibR(int n) {
 	if (n < 2) {
 		return n;
 	}
@@ -352,7 +352,7 @@ int testFibR(int n) {
 	}
 }
 
-int testFibI(int n) {
+__noinline int testFibI(int n) {
 	int last = 0;
 	int cur = 1;
 	for (int i = 0; i != n - 1; ++i) {
@@ -381,16 +381,37 @@ __noinline void particlesI(ObjectArray & objects, int count) {
 	}
 }
 
-void testParticles(int count) {
+__noinline void testParticles(int count) {
 	ObjectArray objects;
 	objects.resize(50000);
 	particles(objects, count);
 }
 
-void testParticlesI(int count) {
+__noinline void testParticlesI(int count) {
 	ObjectArray objects;
 	objects.resize(50000);
 	particlesI(objects, count);
+}
+
+__noinline void testTryCatch(Context * context) {
+	int arr[1000];
+	int cnt = 0;
+	for (int j = 0; j != 100; ++j) {
+		int fail = 0;
+		for (int i = 0; i != 2000; ++i) {
+			try {
+				if (i < 0 || i>=1000) throw runtime_error("range check error");
+				cnt += arr[i];
+			}
+			catch (...) {
+				fail++;
+			}
+		}
+		if (fail != 1000) {
+			context->throw_error("test optimized out");
+			return;
+		}
+	}
 }
 
 class Module_TestProfile : public Module {
@@ -422,6 +443,7 @@ public:
 		addExtern<decltype(testFibI), testFibI>(*this, lib, "testFibI");
 		addExtern<decltype(testParticles), testParticles>(*this, lib, "testParticles");
 		addExtern<decltype(testParticlesI), testParticlesI>(*this, lib, "testParticlesI");
+		addExtern<decltype(testTryCatch), testTryCatch>(*this, lib, "testTryCatch");
     }
 };
 

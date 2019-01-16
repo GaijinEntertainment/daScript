@@ -1,14 +1,23 @@
+require testProfile
+
+def tryCatch()
+	let arr:int[1000]
+	let cnt = 0
+	for j in range (0, 100)
+		let fail = 0
+		for i in range (0, 2000)
+			try
+				cnt += arr[i]
+			catch
+				fail ++
+		assert(fail==1000)
+
+
 [export]
 def test
-    let ( i,fail,cnt = 0; arr:int[1000] )
-        profile(20,"try-catch") <|
-            for j in range (0, 100)
-                fail = 0
-                for i in range (0, 2000)
-                    try
-                        cnt += arr[i]
-                    catch
-                        fail ++
-        assert(fail==1000)
+	profile(20,"try-catch") <|
+		tryCatch()
+	profile(20,"try-catch c++") <|
+		testProfile::testTryCatch()
     return true
 
