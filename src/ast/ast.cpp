@@ -1900,6 +1900,16 @@ namespace das
 
     SimNode * ExprReturn::simulate (Context & context) const {
         SimNode * simSubE = subexpr ? subexpr->simulate(context) : nullptr;
+		if (subexpr && subexpr->rtti_isConstant()) {
+			if (subexpr->type->isSimpleType(Type::tString)) {
+				auto cVal = static_pointer_cast<ExprConstString>(subexpr);
+				char * str = context.code.allocateName(cVal->text);
+				return context.code.makeNode<SimNode_ReturnConst>(at, cast<char *>::from(str));
+			} else {
+				auto cVal = static_pointer_cast<ExprConst>(subexpr);
+				return context.code.makeNode<SimNode_ReturnConst>(at, cVal->value);
+			}
+		}
         if ( returnReference ) {
             if ( returnInBlock ) {
                 return context.code.makeNode<SimNode_ReturnReferenceFromBlock>(at, simSubE);

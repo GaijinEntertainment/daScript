@@ -211,7 +211,13 @@ namespace das
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
-    
+
+	vec4f SimNode_ReturnConst::eval ( Context & context ) {
+		context.abiResult() = value;
+		context.stopFlags |= EvalFlags::stopForReturn;
+		return v_zero();
+	}
+
     vec4f SimNode_ReturnAndCopy::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
         DAS_EXCEPTION_POINT;

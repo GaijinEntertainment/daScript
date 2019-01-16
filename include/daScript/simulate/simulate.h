@@ -870,6 +870,12 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * subexpr;
     };
 
+	struct SimNode_ReturnConst : SimNode {
+		SimNode_ReturnConst ( const LineInfo & at, vec4f v ) : SimNode(at), value(v) {}
+		virtual vec4f eval ( Context & context ) override;
+		vec4f value;
+	};
+
     struct SimNode_ReturnAndCopy : SimNode_Return {
         SimNode_ReturnAndCopy ( const LineInfo & at, SimNode * s, uint32_t sz )
             : SimNode_Return(at,s), size(sz) {}
