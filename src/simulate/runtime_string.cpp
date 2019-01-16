@@ -26,7 +26,8 @@ namespace das
         const char *  sB = to_rts(b); auto lb = strlen(sB);
         *pA = (char * ) context.heap.allocate(uint32_t(la + lb + 1));
         if ( !*pA ) {
-            context.throw_error("can't add tow strings, out of heap");
+            context.throw_error("can't add two strings, out of heap");
+            return;
         }
         memcpy ( *pA , sA, la );
         memcpy ( *pA +la, sB, lb+1 );
