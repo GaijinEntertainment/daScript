@@ -1,5 +1,7 @@
 // options log=true,logInferPasses=true
 
+require testProfile
+
 def fibR(n)
     if (n < 2)
         return n
@@ -21,5 +23,9 @@ def test()
         fibI(6511134)
     profile(20,"fibbonacci recursive") <|
         fibR(31)
+    profile(20,"fibbonacci loop c++") <|
+        testProfile::testFibI(6511134)
+    profile(20,"fibbonacci recursive c++") <|
+        testProfile::testFibR(31)
     return true
 

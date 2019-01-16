@@ -9,10 +9,7 @@
 using namespace std;
 using namespace das;
 
-#ifndef _MSC_VER
-__attribute__((noinline)) 
-#endif
-void updateObject ( Object & obj ) {
+__noinline void updateObject ( Object & obj ) {
     obj.pos.x += obj.vel.x;
     obj.pos.y += obj.vel.y;
     obj.pos.z += obj.vel.z;
@@ -322,11 +319,78 @@ int testDict(Array * arr) {
     char ** data = (char **) arr->data;
     int maxOcc = 0;
     for ( uint32_t t = 0; t !=arr->size; ++t ) {
-        int occ = ++tab[data[t]];
-        if ( occ > maxOcc )
-            maxOcc = occ;
+		maxOcc = max(++tab[data[t]], maxOcc);
     }
     return maxOcc;
+}
+
+bool isprime(int n) {
+	for (int i = 2; i != n; ++i) {
+		if (n % i == 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
+int testPrimes(int n) {
+	int count = 0;
+	for (int i = 2; i != n + 1; ++i) {
+		if (isprime(i)) {
+			++count;
+		}
+	}
+	return count;
+}
+
+int testFibR(int n) {
+	if (n < 2) {
+		return n;
+	}
+	else {
+		return testFibR(n - 1) + testFibR(n - 2);
+	}
+}
+
+int testFibI(int n) {
+	int last = 0;
+	int cur = 1;
+	for (int i = 0; i != n - 1; ++i) {
+		int tmp = cur;
+		cur += last;
+		last = tmp;
+	}
+	return cur;
+}
+
+__noinline void particles(ObjectArray & objects, int count) {
+	for (int i = 0; i != count; ++i) {
+		for (auto & obj : objects) {
+			updateObject(obj);
+		}
+	}
+}
+
+__noinline void particlesI(ObjectArray & objects, int count) {
+	for (int i = 0; i != count; ++i) {
+		for (auto & obj : objects) {
+			obj.pos.x += obj.vel.x;
+			obj.pos.y += obj.vel.y;
+			obj.pos.z += obj.vel.z;
+		}
+	}
+}
+
+void testParticles(int count) {
+	ObjectArray objects;
+	objects.resize(50000);
+	particles(objects, count);
+}
+
+void testParticlesI(int count) {
+	ObjectArray objects;
+	objects.resize(50000);
+	particlesI(objects, count);
 }
 
 class Module_TestProfile : public Module {
@@ -351,8 +415,13 @@ public:
         addExtern<decltype(testEsUpdate), testEsUpdate>(*this, lib, "testEsUpdate");
         addExtern<decltype(initEsComponents), initEsComponents>(*this, lib, "initEsComponents");
         addExtern<decltype(verifyEsComponents), verifyEsComponents>(*this, lib, "verifyEsComponents");
-        // C++ dictionary
+        // C++ copy of all tests
+		addExtern<decltype(testPrimes), testPrimes>(*this, lib, "testPrimes");
         addExtern<decltype(testDict), testDict>(*this, lib, "testDict");
+		addExtern<decltype(testFibR), testFibR>(*this, lib, "testFibR");
+		addExtern<decltype(testFibI), testFibI>(*this, lib, "testFibI");
+		addExtern<decltype(testParticles), testParticles>(*this, lib, "testParticles");
+		addExtern<decltype(testParticlesI), testParticlesI>(*this, lib, "testParticlesI");
     }
 };
 

@@ -39,4 +39,8 @@ def test()
             testSim2(objects,100)
         profile(total,"particles kinematics, inlined") <|
             testSim2I(objects,100)
+        profile(total,"particles kinematics, C++") <|
+            testProfile::testParticles(100)
+        profile(total,"particles kinematics, inlined C++") <|
+            testProfile::testParticlesI(100)
     return true

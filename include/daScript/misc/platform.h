@@ -44,6 +44,12 @@
 	#define __forceinline inline __attribute__((always_inline))
 #endif
 
+#ifndef _MSC_VER
+#define __noinline	__attribute__((noinline)) 
+#else
+#define __noinline	__declspec(noinline)
+#endif
+
 #ifdef _MSC_VER
 __forceinline uint32_t __builtin_clz(uint32_t x) {
 	unsigned long r = 0;
