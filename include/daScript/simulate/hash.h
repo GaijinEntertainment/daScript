@@ -7,6 +7,8 @@ namespace das
     using namespace std;
 
 	uint64_t hash_block(uint8_t * block, size_t size);
+    
+    uint64_t hash_blockz(uint8_t * block);
 
     __forceinline uint64_t hash_function ( const void * x, size_t size ) {
 		return hash_block((uint8_t *)x, size);
@@ -24,7 +26,7 @@ namespace das
 
     template <>
     __forceinline uint64_t hash_function ( char * x ) {
-		return hash_function(x, strlen(x));
+		return hash_blockz((uint8_t *)x);
     }
 
     template <typename QQ>

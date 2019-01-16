@@ -15,6 +15,16 @@ namespace das
 		}
 		return offset_basis;
 	}
+    
+    uint64_t hash_blockz(uint8_t * block) {
+        const uint64_t fnv_prime = 1099511628211UL;
+        const uint64_t fnv_bias = 14695981039346656037UL;
+        uint64_t offset_basis = fnv_bias;
+        for ( ; *block ; block++) {
+            offset_basis = offset_basis * fnv_prime ^ *block;
+        }
+        return offset_basis;
+    }
 
     __forceinline uint64_t _rotl ( uint64_t value, int shift ) {
         return (value<<shift) | (value>>(64-shift));
