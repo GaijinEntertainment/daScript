@@ -1977,8 +1977,13 @@ namespace das
     }
     
     SimNode * ExprIfThenElse::simulate (Context & context) const {
-        return context.code.makeNode<SimNode_IfThenElse>(at, cond->simulate(context), if_true->simulate(context),
-                                                    if_false ? if_false->simulate(context) : nullptr);
+        if ( if_false ) {
+            return context.code.makeNode<SimNode_IfThenElse>(at, cond->simulate(context),
+                                if_true->simulate(context), if_false->simulate(context));
+        } else {
+            return context.code.makeNode<SimNode_IfThen>(at, cond->simulate(context),
+                                if_true->simulate(context));
+        }
     }
 
     // ExprWhile

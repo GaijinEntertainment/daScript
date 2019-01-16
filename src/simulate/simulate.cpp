@@ -187,8 +187,16 @@ namespace das
         DAS_EXCEPTION_POINT;
         if ( cmp ) {
             return if_true->eval(context);
-        } else if ( if_false ) {
+        } else {
             return if_false->eval(context);
+        }
+    }
+    
+    vec4f SimNode_IfThen::eval ( Context & context ) {
+        bool cmp = cond->evalBool(context);
+        DAS_EXCEPTION_POINT;
+        if ( cmp ) {
+            return if_true->eval(context);
         } else {
             return v_zero();
         }

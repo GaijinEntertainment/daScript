@@ -1121,15 +1121,33 @@ SIM_NODE_AT_VECTOR(Float, float)
                 DAS_NODE_EXCEPTION_POINT(CTYPE);                    \
                 if ( cmp ) {                                        \
                     return if_true->eval##TYPE(context);            \
-                } else if ( if_false ) {                            \
+                } else {                                            \
                     return if_false->eval##TYPE(context);           \
+                }                                                   \
+            }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+        SimNode * cond, * if_true, * if_false;
+    };
+    
+    // IF-THEN
+    struct SimNode_IfThen : SimNode {
+        SimNode_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
+            : SimNode(at), cond(c), if_true(t) {}
+        virtual vec4f eval ( Context & context ) override;
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+                bool cmp = cond->evalBool(context);                 \
+                DAS_NODE_EXCEPTION_POINT(CTYPE);                    \
+                if ( cmp ) {                                        \
+                    return if_true->eval##TYPE(context);            \
                 } else {                                            \
                     return (CTYPE) 0;                               \
                 }                                                   \
             }
         DAS_EVAL_NODE
 #undef EVAL_NODE
-        SimNode * cond, * if_true, * if_false;
+        SimNode * cond, * if_true;
     };
 
     // WHILE
