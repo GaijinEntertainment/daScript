@@ -5,6 +5,62 @@
 
 namespace das
 {
+	// ideas from http://isthe.com/chongo/tech/comp/fnv/
+
+	uint32_t hash_block32(uint8_t * block, size_t size) {
+		const uint32_t fnv_prime = 16777619;
+		const uint32_t fnv_bias = 2166136261;
+		uint32_t offset_basis = fnv_bias;
+		for (; size; size--, block++) {
+			offset_basis = offset_basis * fnv_prime ^ *block;
+		}
+		if (offset_basis <= HASH_KILLED32) {
+			return fnv_prime;
+		}
+		return offset_basis;
+	}
+
+	uint32_t hash_blockz32(uint8_t * block) {
+		const uint32_t fnv_prime = 16777619;
+		const uint32_t fnv_bias = 2166136261;
+		uint32_t offset_basis = fnv_bias;
+		for ( ; *block ; block++) {
+			offset_basis = offset_basis * fnv_prime ^ *block;
+		}
+		if (offset_basis <= HASH_KILLED32) {
+			return fnv_prime;
+		}
+		return offset_basis;
+	}
+
+	uint64_t hash_block64(uint8_t * block, size_t size) {
+		const uint64_t fnv_prime = 1099511628211UL;
+		const uint64_t fnv_bias = 14695981039346656037UL;
+		uint64_t offset_basis = fnv_bias;
+		for (; size; size--, block++) {
+			offset_basis = offset_basis * fnv_prime ^ *block;
+		}
+		assert(offset_basis != HASH_EMPTY64 && offset_basis != HASH_KILLED64);
+		if (offset_basis == HASH_EMPTY64 && offset_basis == HASH_KILLED64) {
+			return fnv_prime;
+		}
+		return offset_basis;
+	}
+    
+    uint64_t hash_blockz64(uint8_t * block) {
+        const uint64_t fnv_prime = 1099511628211UL;
+        const uint64_t fnv_bias = 14695981039346656037UL;
+        uint64_t offset_basis = fnv_bias;
+        for ( ; *block ; block++) {
+            offset_basis = offset_basis * fnv_prime ^ *block;
+        }
+		assert(offset_basis != HASH_EMPTY64 && offset_basis != HASH_KILLED64);
+		if (offset_basis == HASH_EMPTY64 && offset_basis == HASH_KILLED64) {
+			return fnv_prime;
+		}
+        return offset_basis;
+    }
+
     __forceinline uint32_t _rotl ( uint32_t value, int shift ) {
         return (value<<shift) | (value>>(32-shift));
     }

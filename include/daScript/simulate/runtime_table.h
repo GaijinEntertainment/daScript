@@ -57,7 +57,7 @@ namespace das
             auto pHashes = tab.hashes;
             for ( int i=0; i!=maxI; ++i ) {
                 auto kh = pHashes[index];
-                if ( kh==DAS_HASH_EMPTY32 ) {
+                if ( kh==HASH_EMPTY32 ) {
                     return -1;
                 } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
                     return (int) index;
@@ -75,7 +75,7 @@ namespace das
             auto pHashes = tab.hashes;
             for ( int i=0; i!=maxI; ++i ) {
                 auto kh = pHashes[index];
-                if ( kh==DAS_HASH_EMPTY32 ) {
+                if ( kh==HASH_EMPTY32 ) {
                     return (int) index;
                 }
                 index = (index + 1) & mask;
@@ -92,7 +92,7 @@ namespace das
                 auto pHashes = tab.hashes;
 				for (int i = 0; i != maxI; ++i) {
 					auto kh = pHashes[index];
-					if (kh <= DAS_HASH_KILLED32) {
+					if (kh <= HASH_KILLED32) {
 						pHashes[index] = hash;
 						pKeys[index] = key;
 						tab.size++;
@@ -116,11 +116,11 @@ namespace das
             auto pHashes = tab.hashes;
             for ( int i=0; i!=maxI; ++i ) {
                 auto kh = pHashes[index];
-                if ( kh==DAS_HASH_EMPTY32 ) {
+                if ( kh==HASH_EMPTY32 ) {
                     return -1;
                 } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
 					tab.size--;
-                    pHashes[index] = DAS_HASH_KILLED32;
+                    pHashes[index] = HASH_KILLED32;
                     return (int) index;
                 }
                 index = (index + 1) & mask;
@@ -157,7 +157,7 @@ namespace das
                 auto pOldHashes = tab.hashes;
                 for ( uint32_t i=0; i!=tab.capacity; ++i ) {
                     auto hash = pOldHashes[i];
-                    if ( hash>DAS_HASH_KILLED32 ) {
+                    if ( hash>HASH_KILLED32 ) {
                         int index = insertNew(newTab, hash);
                         if ( index==-1 ) {
                              newCapacity *= 2;

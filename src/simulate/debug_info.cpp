@@ -268,7 +268,7 @@ namespace das
 #if USE_ROBIN_HOOD
             if ( tab.distance[i]>=0 ) {
 #else
-			if ( tab.hashes[i] != DAS_HASH_KILLED32 && tab.hashes[i] != DAS_HASH_EMPTY32 ) {
+			if ( tab.hashes[i] != HASH_KILLED32 && tab.hashes[i] != HASH_EMPTY32 ) {
 #endif
                 if ( !first ) ss << " "; first = false;
                 ss << "("; // ss << "(@ " << i << " ";
