@@ -93,9 +93,9 @@ namespace das
 				for (int i = 0; i != maxI; ++i) {
 					auto kh = pHashes[index];
 					if (kh <= HASH_KILLED32) {
+                        tab.size++;
 						pHashes[index] = hash;
 						pKeys[index] = key;
-						tab.size++;
 						return (int)index;
 					} else if (kh == hash && KeyCompare<KeyType>()(pKeys[index], key)) {
 						return (int)index;
@@ -121,6 +121,7 @@ namespace das
                 } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
 					tab.size--;
                     pHashes[index] = HASH_KILLED32;
+                    memset(tab.data + index*valueTypeSize, 0, valueTypeSize);
                     return (int) index;
                 }
                 index = (index + 1) & mask;
