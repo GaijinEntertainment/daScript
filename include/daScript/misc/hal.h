@@ -2,6 +2,10 @@
 
 #include <vecmath/dag_vecMath.h>
 
+__forceinline uint32_t v_crc32u8(uint32_t crc, uint8_t u8) {
+	return _mm_crc32_u8(crc, u8);
+}
+
 __forceinline void * v_extract_ptr(vec4i a) {
 #if INTPTR_MAX == INT32_MAX
 	return (void*)v_extract_xi(a);

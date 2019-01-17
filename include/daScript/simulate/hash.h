@@ -6,16 +6,24 @@ namespace das
 {
     using namespace std;
 
-	#define HASH_EMPTY64	0
-	#define HASH_KILLED64	1
+	#define DAS_HASH_EMPTY32	0
+	#define DAS_HASH_KILLED32	1
 
-	#define HASH_EMPTY32	0
-	#define HASH_KILLED32	1
+	__forceinline uint32_t hash_block32(uint8_t * block, size_t size) {
+		uint32_t crc = 0xFFFFFFFF;
+		while(size--) {
+			crc = v_crc32u8(crc, *block++);
+		}
+		return crc <= DAS_HASH_KILLED32 ? 16777619 : crc;
+	}
 
-	uint32_t hash_block32(uint8_t * block, size_t size);
-	uint32_t hash_blockz32(uint8_t * block);
-	uint64_t hash_block64(uint8_t * block, size_t size);
-    uint64_t hash_blockz64(uint8_t * block);
+	__forceinline uint32_t hash_blockz32(uint8_t * block) {
+		uint32_t crc = 0xFFFFFFFF;
+		while(*block) {
+			crc = v_crc32u8(crc, *block++);
+		}
+		return crc <= DAS_HASH_KILLED32 ? 16777619 : crc;
+	}
 
     __forceinline uint32_t hash_function ( const void * x, size_t size ) {
 		return hash_block32((uint8_t *)x, size);
@@ -23,11 +31,8 @@ namespace das
 
     template <typename TT>
     __forceinline uint32_t hash_function ( TT x ) {
-        uint32_t res = (uint32_t) hash<TT>()(x);
-		if (res <= HASH_KILLED32) {
-			return 16777619;
-		}
-		return res;
+        uint32_t crc = (uint32_t) hash<TT>()(x);
+		return crc <= DAS_HASH_KILLED32 ? 16777619 : crc;
     }
 
     template <>

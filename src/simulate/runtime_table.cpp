@@ -49,7 +49,7 @@ namespace das
 			if (tab->distance[index] >= 0)
 				break;
 #else
-			if (tab->hashes[index] != HASH_EMPTY32 && tab->hashes[index] != HASH_KILLED32)
+			if (tab->hashes[index] != DAS_HASH_EMPTY32 && tab->hashes[index] != DAS_HASH_KILLED32)
 				break;
 #endif
         return index;
