@@ -308,6 +308,10 @@ namespace das {
             ss << c->getValue();
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit ( ExprConstInt64 * c ) override {
+            ss << c->getValue();
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstUInt64 * c ) override {
             ss << "0x" << hex << c->getValue() << dec;
             return Visitor::visit(c);

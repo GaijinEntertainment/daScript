@@ -311,6 +311,10 @@ namespace das {
 			label(c, std::to_string(c->getValue()));
 			return Visitor::visit(c);
 		}
+        virtual ExpressionPtr visit(ExprConstInt64 * c) override {
+            label(c, std::to_string(c->getValue()));
+            return Visitor::visit(c);
+        }
 		virtual ExpressionPtr visit(ExprConstUInt64 * c) override {
 			stringstream ss;
 			ss << "0x" << hex << intptr_t(c->getValue()) << dec;

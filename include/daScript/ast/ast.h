@@ -733,6 +733,11 @@ namespace das
         ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConstT(a,i,Type::tInt) {}
     };
     
+    struct ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
+        ExprConstInt64(int64_t i = 0)  : ExprConstT(i,Type::tInt64) {}
+        ExprConstInt64(const LineInfo & a, int64_t i = 0)  : ExprConstT(a,i,Type::tInt64) {}
+    };
+    
     struct ExprConstInt2 : ExprConstT<int2,ExprConstInt2> {
         ExprConstInt2(int2 i = int2())  : ExprConstT(i,Type::tInt2) {}
         ExprConstInt2(const LineInfo & a, int2 i)  : ExprConstT(a,i,Type::tInt2) {}
@@ -1366,6 +1371,7 @@ namespace das
         VISIT_EXPR(ExprConst)
 		VISIT_EXPR(ExprFakeContext)
         VISIT_EXPR(ExprConstPtr)
+        VISIT_EXPR(ExprConstInt64)
         VISIT_EXPR(ExprConstInt)
         VISIT_EXPR(ExprConstInt2)
         VISIT_EXPR(ExprConstInt3)

@@ -51,8 +51,10 @@
 %union {
     char                            ch;
     bool                            b;
-    int                             i;
+    int32_t                         i;
     uint32_t                        ui;
+    int64_t                         i64;
+    uint64_t                        ui64;
     double                          d;
     string *                        s;
     vector<string> *                pNameList;
@@ -104,10 +106,12 @@
 %token  GREQU       EQUEQU      NOTEQU      RARROW      LARROW
 %token  QQ          QDOT        LPIPE       LBPIPE      RPIPE
 
-%token<i>   INTEGER
-%token<ui>  UNSIGNED_INTEGER
-%token<d>   DOUBLE
-%token<s>   NAME
+%token<i>       INTEGER
+%token<i64>     LONG_INTEGER
+%token<ui>      UNSIGNED_INTEGER
+%token<ui64>    UNSIGNED_LONG_INTEGER
+%token<d>       DOUBLE
+%token<s>       NAME
 
 %token      BEGIN_STRING
 %token<ch>  STRING_CHARACTER
@@ -155,7 +159,7 @@
 %type <pExpression>     expr_typename
 %type <pExpression>     expr_block
 %type <pExpression>     expression_any
-
+%type <pExpression>     expr_numeric_const
 %type <pExpression>     string_builder_body
 %type <pExpression>     string_builder
 
@@ -717,12 +721,18 @@ expr_block
     }
     ;
 
+expr_numeric_const
+    :   INTEGER[const]                        { $$ = new ExprConstInt(tokAt(@const),(int32_t)$const); }
+    |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(@const),(uint32_t)$const); }
+    |   LONG_INTEGER[const]                   { $$ = new ExprConstInt64(tokAt(@const),(int64_t)$const); }
+    |   UNSIGNED_LONG_INTEGER[const]          { $$ = new ExprConstUInt64(tokAt(@const),(uint64_t)$const); }
+    |   DOUBLE[const]                         { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }
+    ;
+
 expr
     :   _NULL[loc]                            { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
     |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
-    |   INTEGER[const]                        { $$ = new ExprConstInt(tokAt(@const),(int32_t)$const); }
-    |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(@const),(uint32_t)$const); }
-    |   DOUBLE[const]                         { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }
+    |   expr_numeric_const[nc]                { $$ = $nc; }
     |   string_builder[sb]                    { $$ = $sb; }
     |   _TRUE[loc]                            { $$ = new ExprConstBool(tokAt(@loc),true); }
     |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }

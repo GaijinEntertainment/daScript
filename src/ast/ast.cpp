@@ -2505,6 +2505,7 @@ namespace das
         if ( type->dim.size() || type->ref ) return nullptr;
         switch ( type->baseType ) {
             case Type::tBool:       return make_shared<ExprConstBool>(at, cast<bool>::to(value));
+            case Type::tInt64:      return make_shared<ExprConstInt64>(at, cast<int64_t>::to(value));
             case Type::tInt:        return make_shared<ExprConstInt>(at, cast<int32_t>::to(value));
             case Type::tInt2:       return make_shared<ExprConstInt2>(at, cast<int2>::to(value));
             case Type::tInt3:       return make_shared<ExprConstInt3>(at, cast<int3>::to(value));
