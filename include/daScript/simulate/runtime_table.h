@@ -50,7 +50,7 @@ namespace das
             return std::max(minLookups, desired * 4);
         }
         
-        int find ( Table & tab, KeyType key, uint32_t hash ) const {
+		__forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {
 			uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
             int maxI = tab.maxLookups;
@@ -68,7 +68,7 @@ namespace das
             return -1;
         }
         
-        int insertNew ( Table & tab, uint32_t hash ) const {
+		__forceinline int insertNew ( Table & tab, uint32_t hash ) const {
 			// TODO: take key under account and be less agressive?
 			uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
@@ -84,32 +84,32 @@ namespace das
             return -1;
         }
         
-        int reserve ( Table & tab, KeyType key, uint32_t hash ) {
+        __forceinline int reserve ( Table & tab, KeyType key, uint32_t hash ) {
             for ( ;; ) {
 				uint32_t mask = tab.capacity - 1;
                 uint32_t index = hash & mask;
                 int maxI = tab.maxLookups;
                 auto pKeys = (KeyType *) tab.keys;
                 auto pHashes = tab.hashes;
-                for ( int i=0; i!=maxI; ++i ) {
-                    auto kh = pHashes[index];
-                    if ( kh==HASH_EMPTY32 || kh==HASH_KILLED32 ) {
+				for (int i = 0; i != maxI; ++i) {
+					auto kh = pHashes[index];
+					if (kh <= HASH_KILLED32) {
 						pHashes[index] = hash;
 						pKeys[index] = key;
 						tab.size++;
-                        return (int) index;
-                    } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
-                        return (int) index;
-                    }
-                    index = (index + 1) & mask;
-                }
+						return (int)index;
+					} else if (kh == hash && KeyCompare<KeyType>()(pKeys[index], key)) {
+						return (int)index;
+					}
+					index = (index + 1) & mask;
+				}
                 if ( !grow(tab) ) {
                     return -1;
                 }
             }
         }
         
-        int erase ( Table & tab, KeyType key, uint32_t hash ) {
+        __forceinline int erase ( Table & tab, KeyType key, uint32_t hash ) {
 			uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
             int maxI = tab.maxLookups;
@@ -146,11 +146,10 @@ namespace das
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
             newTab.maxLookups = computeMaxLookups(newCapacity);
+			assert((newTab.maxLookups & 3) == 0);
             memset(newTab.data, 0, newCapacity*valueTypeSize);
             auto pHashes = newTab.hashes;
-            for ( uint32_t i=0; i!=newCapacity; ++i ) {
-                pHashes[i] = HASH_EMPTY32;
-            }
+			memset(pHashes, 0, newCapacity * sizeof(uint32_t));
             if ( tab.size ) {
                 auto pKeys = (KeyType *) newTab.keys;
                 auto pOldValues = tab.data;
@@ -159,7 +158,7 @@ namespace das
                 auto pOldHashes = tab.hashes;
                 for ( uint32_t i=0; i!=tab.capacity; ++i ) {
                     auto hash = pOldHashes[i];
-                    if ( hash!=HASH_KILLED32 && hash!=HASH_EMPTY32 ) {
+                    if ( hash>HASH_KILLED32 ) {
                         int index = insertNew(newTab, hash);
                         if ( index==-1 ) {
                              newCapacity *= 2;
@@ -401,7 +400,6 @@ namespace das
 #else
             TableHash<KeyType> thh(&context,valueTypeSize);
 			auto hfn = hash_function(key);
-			assert(hfn != HASH_KILLED32 && hfn != HASH_EMPTY32);
             int index = thh.reserve(*tab, key, hfn);    // if index==-1, it was a through, so safe to do
             return tab->data + index * valueTypeSize;
 #endif
@@ -418,7 +416,6 @@ namespace das
             return cast<bool>::from(it.second);
 #else
 			auto hfn = hash_function(key);
-			assert(hfn != HASH_KILLED32 && hfn != HASH_EMPTY32);
             TableHash<KeyType> thh(&context,valueTypeSize);
             bool erased = thh.erase(*tab, key, hfn) != -1;
             return cast<bool>::from(erased);
@@ -445,7 +442,6 @@ namespace das
 			return at.second ? tab->data + at.first * valueTypeSize : nullptr;
 #else
             auto hfn = hash_function(key);
-			assert(hfn != HASH_KILLED32 && hfn != HASH_EMPTY32);
             TableHash<KeyType> thh(&context,valueTypeSize);
             int index = thh.find(*tab, key, hfn);
             return index!=-1 ? tab->data + index * valueTypeSize : nullptr;

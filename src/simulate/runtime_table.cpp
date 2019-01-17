@@ -12,9 +12,7 @@ namespace das
 #if USE_ROBIN_HOOD
         memset(arr.distance, -1, arr.capacity * sizeof(uint8_t));
 #else
-		for (uint32_t i = 0; i != arr.capacity; ++i) {
-			arr.hashes[i] = HASH_EMPTY32;
-		}
+		memset(arr.hashes, 0, arr.capacity * sizeof(uint32_t));
 #endif
         arr.size = 0;
     }

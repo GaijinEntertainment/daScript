@@ -14,8 +14,7 @@ namespace das
 		for (; size; size--, block++) {
 			offset_basis = offset_basis * fnv_prime ^ *block;
 		}
-		assert(offset_basis != HASH_EMPTY32 && offset_basis != HASH_KILLED32);
-		if (offset_basis == HASH_EMPTY32 && offset_basis == HASH_KILLED32) {
+		if (offset_basis <= HASH_KILLED32) {
 			return fnv_prime;
 		}
 		return offset_basis;
@@ -28,8 +27,7 @@ namespace das
 		for ( ; *block ; block++) {
 			offset_basis = offset_basis * fnv_prime ^ *block;
 		}
-		assert(offset_basis != HASH_EMPTY32 && offset_basis != HASH_KILLED32);
-		if (offset_basis == HASH_EMPTY32 && offset_basis == HASH_KILLED32) {
+		if (offset_basis <= HASH_KILLED32) {
 			return fnv_prime;
 		}
 		return offset_basis;

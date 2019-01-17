@@ -6,11 +6,11 @@ namespace das
 {
     using namespace std;
 
-	#define HASH_EMPTY64	0xbad0bad0bad0bad0
-	#define HASH_KILLED64	0xdeaddeaddeaddead
+	#define HASH_EMPTY64	0
+	#define HASH_KILLED64	1
 
-	#define HASH_EMPTY32	0xbad0bad0
-	#define HASH_KILLED32	0xdeaddead
+	#define HASH_EMPTY32	0
+	#define HASH_KILLED32	1
 
 	uint32_t hash_block32(uint8_t * block, size_t size);
 	uint32_t hash_blockz32(uint8_t * block);
@@ -24,7 +24,9 @@ namespace das
     template <typename TT>
     __forceinline uint32_t hash_function ( TT x ) {
         uint32_t res = (uint32_t) hash<TT>()(x);
-		assert(res != HASH_EMPTY32 && res != HASH_KILLED32);
+		if (res <= HASH_KILLED32) {
+			return 16777619;
+		}
 		return res;
     }
 
