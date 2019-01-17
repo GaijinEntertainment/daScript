@@ -31,9 +31,6 @@ namespace das
         }
     };
     
-#define HASH_EMPTY      0xbad0bad0bad0bad0
-#define HASH_KILLED     0xdeaddeaddeaddead
-    
 #if !USE_ROBIN_HOOD
     
     template <typename KeyType>
@@ -47,63 +44,64 @@ namespace das
         TableHash ( const TableHash & ) = delete;
         TableHash ( Context * ctx, uint32_t vs ) : context(ctx), valueTypeSize(vs) {}
         
-        __forceinline int indexForHash ( const Table & tab, uint64_t hash ) const {
-            return int ( hash & (tab.capacity-1) );
-        }
-        
+		// NOTE: maxLookups is divisable by 4
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
             uint32_t desired = 32 - __builtin_clz(capacity-1);
             return std::max(minLookups, desired * 4);
         }
         
-        int find ( Table & tab, KeyType key, uint64_t hash ) const {
-            int index = indexForHash(tab,hash);
+        int find ( Table & tab, KeyType key, uint32_t hash ) const {
+			uint32_t mask = tab.capacity - 1;
+            uint32_t index = hash & mask;
             int maxI = tab.maxLookups;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
             for ( int i=0; i!=maxI; ++i ) {
                 auto kh = pHashes[index];
-                if ( kh==HASH_EMPTY ) {
+                if ( kh==HASH_EMPTY32 ) {
                     return -1;
                 } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
-                    return index;
+                    return (int) index;
                 }
-                index = (index + 1) & (tab.capacity - 1);
+                index = (index + 1) & mask;
             }
             return -1;
         }
         
-        int insertNew ( Table & tab, uint64_t hash ) const {
-            int index = indexForHash(tab,hash);
+        int insertNew ( Table & tab, uint32_t hash ) const {
+			// TODO: take key under account and be less agressive?
+			uint32_t mask = tab.capacity - 1;
+            uint32_t index = hash & mask;
             int maxI = tab.maxLookups;
             auto pHashes = tab.hashes;
             for ( int i=0; i!=maxI; ++i ) {
                 auto kh = pHashes[index];
-                if ( kh==HASH_EMPTY ) {
-                    return index;
+                if ( kh==HASH_EMPTY32 ) {
+                    return (int) index;
                 }
-                index = (index + 1) & (tab.capacity - 1);
+                index = (index + 1) & mask;
             }
             return -1;
         }
         
-        int reserve ( Table & tab, KeyType key, uint64_t hash ) {
+        int reserve ( Table & tab, KeyType key, uint32_t hash ) {
             for ( ;; ) {
-                int index = indexForHash(tab,hash);
+				uint32_t mask = tab.capacity - 1;
+                uint32_t index = hash & mask;
                 int maxI = tab.maxLookups;
                 auto pKeys = (KeyType *) tab.keys;
                 auto pHashes = tab.hashes;
                 for ( int i=0; i!=maxI; ++i ) {
                     auto kh = pHashes[index];
-                    if ( kh==HASH_EMPTY || kh==HASH_KILLED ) {
+                    if ( kh==HASH_EMPTY32 || kh==HASH_KILLED32 ) {
 						pHashes[index] = hash;
 						pKeys[index] = key;
 						tab.size++;
-                        return index;
+                        return (int) index;
                     } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
-                        return index;
+                        return (int) index;
                     }
-                    index = (index + 1) & (tab.capacity - 1);
+                    index = (index + 1) & mask;
                 }
                 if ( !grow(tab) ) {
                     return -1;
@@ -111,21 +109,22 @@ namespace das
             }
         }
         
-        int erase ( Table & tab, KeyType key, uint64_t hash ) {
-            int index = indexForHash(tab,hash);
+        int erase ( Table & tab, KeyType key, uint32_t hash ) {
+			uint32_t mask = tab.capacity - 1;
+            uint32_t index = hash & mask;
             int maxI = tab.maxLookups;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
             for ( int i=0; i!=maxI; ++i ) {
                 auto kh = pHashes[index];
-                if ( kh==HASH_EMPTY ) {
+                if ( kh==HASH_EMPTY32 ) {
                     return -1;
                 } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
 					tab.size--;
-                    pHashes[index] = HASH_KILLED;
-                    return index;
+                    pHashes[index] = HASH_KILLED32;
+                    return (int) index;
                 }
-                index = (index + 1) & (tab.capacity - 1);
+                index = (index + 1) & mask;
             }
             return -1;
         }
@@ -134,7 +133,7 @@ namespace das
             uint32_t newCapacity = max(minCapacity, tab.capacity*2);
         repeatIt:;
             Table newTab;
-            uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint64_t));
+            uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint32_t));
             newTab.data = (char *) context->heap.allocate(memSize);
             if ( !newTab.data ) {
                 context->throw_error("can't grow table, out of heap");
@@ -142,7 +141,7 @@ namespace das
             }
             newTab.keys = newTab.data + newCapacity * valueTypeSize;
             newTab.distance = nullptr;
-            newTab.hashes = (uint64_t *)(newTab.keys + newCapacity * sizeof(KeyType));
+            newTab.hashes = (uint32_t *)(newTab.keys + newCapacity * sizeof(KeyType));
             newTab.size = tab.size;
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
@@ -150,7 +149,7 @@ namespace das
             memset(newTab.data, 0, newCapacity*valueTypeSize);
             auto pHashes = newTab.hashes;
             for ( uint32_t i=0; i!=newCapacity; ++i ) {
-                pHashes[i] = HASH_EMPTY;
+                pHashes[i] = HASH_EMPTY32;
             }
             if ( tab.size ) {
                 auto pKeys = (KeyType *) newTab.keys;
@@ -160,11 +159,10 @@ namespace das
                 auto pOldHashes = tab.hashes;
                 for ( uint32_t i=0; i!=tab.capacity; ++i ) {
                     auto hash = pOldHashes[i];
-                    if ( hash!=HASH_KILLED && hash!=HASH_EMPTY ) {
+                    if ( hash!=HASH_KILLED32 && hash!=HASH_EMPTY32 ) {
                         int index = insertNew(newTab, hash);
                         if ( index==-1 ) {
-                            // assert(0 && "do we need to grow faster?");
-                            newCapacity *= 2;
+                             newCapacity *= 2;
                             goto repeatIt;
                         } else {
 							pHashes[index] = hash;
@@ -402,8 +400,8 @@ namespace das
             return tab->data + at.first * valueTypeSize;
 #else
             TableHash<KeyType> thh(&context,valueTypeSize);
-            uint64_t hfn = hash_function(key);
-			assert(hfn != HASH_KILLED && hfn != HASH_EMPTY);
+			auto hfn = hash_function(key);
+			assert(hfn != HASH_KILLED32 && hfn != HASH_EMPTY32);
             int index = thh.reserve(*tab, key, hfn);    // if index==-1, it was a through, so safe to do
             return tab->data + index * valueTypeSize;
 #endif
@@ -419,8 +417,8 @@ namespace das
             auto it = RobinHoodHash<KeyType>(&context,valueTypeSize).erase(*tab, key);
             return cast<bool>::from(it.second);
 #else
-            uint64_t hfn = hash_function(key);
-			assert(hfn != HASH_KILLED && hfn != HASH_EMPTY);
+			auto hfn = hash_function(key);
+			assert(hfn != HASH_KILLED32 && hfn != HASH_EMPTY32);
             TableHash<KeyType> thh(&context,valueTypeSize);
             bool erased = thh.erase(*tab, key, hfn) != -1;
             return cast<bool>::from(erased);
@@ -446,8 +444,8 @@ namespace das
 			auto at = RobinHoodHash<KeyType>(&context, valueTypeSize).find(*tab, key);
 			return at.second ? tab->data + at.first * valueTypeSize : nullptr;
 #else
-            uint64_t hfn = hash_function(key);
-			assert(hfn != HASH_KILLED && hfn != HASH_EMPTY);
+            auto hfn = hash_function(key);
+			assert(hfn != HASH_KILLED32 && hfn != HASH_EMPTY32);
             TableHash<KeyType> thh(&context,valueTypeSize);
             int index = thh.find(*tab, key, hfn);
             return index!=-1 ? tab->data + index * valueTypeSize : nullptr;

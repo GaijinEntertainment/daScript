@@ -13,7 +13,7 @@ namespace das
         memset(arr.distance, -1, arr.capacity * sizeof(uint8_t));
 #else
 		for (uint32_t i = 0; i != arr.capacity; ++i) {
-			arr.hashes[i] = HASH_EMPTY;
+			arr.hashes[i] = HASH_EMPTY32;
 		}
 #endif
         arr.size = 0;
@@ -51,7 +51,7 @@ namespace das
 			if (tab->distance[index] >= 0)
 				break;
 #else
-			if (tab->hashes[index] != HASH_EMPTY && tab->hashes[index] != HASH_KILLED)
+			if (tab->hashes[index] != HASH_EMPTY32 && tab->hashes[index] != HASH_KILLED32)
 				break;
 #endif
         return index;

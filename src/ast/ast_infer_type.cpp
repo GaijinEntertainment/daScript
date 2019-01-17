@@ -762,7 +762,7 @@ namespace das {
             }
             // infer
             expr->arguments[0]->type->constant = true;
-            expr->type = make_shared<TypeDecl>(Type::tUInt64);
+            expr->type = make_shared<TypeDecl>(Type::tUInt);
             return Visitor::visit(expr);
         }
     // ExprErase

@@ -2,6 +2,7 @@
 
 #include "daScript/simulate/debug_info.h"
 
+#include "daScript/simulate/hash.h"
 #include "daScript/misc/enums.h"
 #include "daScript/simulate/cast.h"
 #include "daScript/simulate/runtime_string.h"
@@ -258,9 +259,6 @@ namespace das
         }
     }
 
-#define HASH_EMPTY      0xbad0bad0bad0bad0
-#define HASH_KILLED     0xdeaddeaddeaddead
-    
     void debug_table_value (  stringstream & ss, Table & tab, TypeInfo * info, PrintFlags flags ) {
         ss << "([" << tab.size << " of " << tab.capacity << "] ";
         bool first = true;
@@ -270,7 +268,7 @@ namespace das
 #if USE_ROBIN_HOOD
             if ( tab.distance[i]>=0 ) {
 #else
-			if ( tab.hashes[i] != HASH_KILLED && tab.hashes[i] != HASH_EMPTY ) {
+			if ( tab.hashes[i] != HASH_KILLED32 && tab.hashes[i] != HASH_EMPTY32 ) {
 #endif
                 if ( !first ) ss << " "; first = false;
                 ss << "("; // ss << "(@ " << i << " ";

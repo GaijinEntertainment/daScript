@@ -6,37 +6,74 @@
 namespace das
 {
 	// ideas from http://isthe.com/chongo/tech/comp/fnv/
-	uint64_t hash_block(uint8_t * block, size_t size) {
+
+	uint32_t hash_block32(uint8_t * block, size_t size) {
+		const uint32_t fnv_prime = 16777619;
+		const uint32_t fnv_bias = 2166136261;
+		uint32_t offset_basis = fnv_bias;
+		for (; size; size--, block++) {
+			offset_basis = offset_basis * fnv_prime ^ *block;
+		}
+		assert(offset_basis != HASH_EMPTY32 && offset_basis != HASH_KILLED32);
+		if (offset_basis == HASH_EMPTY32 && offset_basis == HASH_KILLED32) {
+			return fnv_prime;
+		}
+		return offset_basis;
+	}
+
+	uint32_t hash_blockz32(uint8_t * block) {
+		const uint32_t fnv_prime = 16777619;
+		const uint32_t fnv_bias = 2166136261;
+		uint32_t offset_basis = fnv_bias;
+		for ( ; *block ; block++) {
+			offset_basis = offset_basis * fnv_prime ^ *block;
+		}
+		assert(offset_basis != HASH_EMPTY32 && offset_basis != HASH_KILLED32);
+		if (offset_basis == HASH_EMPTY32 && offset_basis == HASH_KILLED32) {
+			return fnv_prime;
+		}
+		return offset_basis;
+	}
+
+	uint64_t hash_block64(uint8_t * block, size_t size) {
 		const uint64_t fnv_prime = 1099511628211UL;
 		const uint64_t fnv_bias = 14695981039346656037UL;
 		uint64_t offset_basis = fnv_bias;
 		for (; size; size--, block++) {
 			offset_basis = offset_basis * fnv_prime ^ *block;
 		}
+		assert(offset_basis != HASH_EMPTY64 && offset_basis != HASH_KILLED64);
+		if (offset_basis == HASH_EMPTY64 && offset_basis == HASH_KILLED64) {
+			return fnv_prime;
+		}
 		return offset_basis;
 	}
     
-    uint64_t hash_blockz(uint8_t * block) {
+    uint64_t hash_blockz64(uint8_t * block) {
         const uint64_t fnv_prime = 1099511628211UL;
         const uint64_t fnv_bias = 14695981039346656037UL;
         uint64_t offset_basis = fnv_bias;
         for ( ; *block ; block++) {
             offset_basis = offset_basis * fnv_prime ^ *block;
         }
+		assert(offset_basis != HASH_EMPTY64 && offset_basis != HASH_KILLED64);
+		if (offset_basis == HASH_EMPTY64 && offset_basis == HASH_KILLED64) {
+			return fnv_prime;
+		}
         return offset_basis;
     }
 
-    __forceinline uint64_t _rotl ( uint64_t value, int shift ) {
-        return (value<<shift) | (value>>(64-shift));
+    __forceinline uint32_t _rotl ( uint32_t value, int shift ) {
+        return (value<<shift) | (value>>(32-shift));
     }
     
-    uint64_t hash_value ( void * pX, TypeInfo * info );
+	uint32_t hash_value ( void * pX, TypeInfo * info );
     
-    uint64_t hash_structure ( char * ps, StructInfo * info, int size, bool isPod ) {
+	uint32_t hash_structure ( char * ps, StructInfo * info, int size, bool isPod ) {
         if ( isPod ) {
             return hash_function(ps, size);
         } else {
-            uint64_t hash = 0;
+			uint32_t hash = 0;
             char * pf = ps;
             for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
                 VarInfo * vi = info->fields[i];
@@ -47,11 +84,11 @@ namespace das
         }
     }
     
-    uint64_t hash_array_value ( void * pX, int stride, int count, TypeInfo * info ) {
+	uint32_t hash_array_value ( void * pX, int stride, int count, TypeInfo * info ) {
         if ( info->isPod ) {
             return hash_function(pX, stride * count);
         } else {
-            uint64_t hash = 0;
+			uint32_t hash = 0;
             char * pA = (char *) pX;
             for ( int i=0; i!=count; ++i ) {
                 hash = _rotl(hash,2) ^ hash_value(pA, info);
@@ -60,9 +97,8 @@ namespace das
             return hash;
         }
     }
-
     
-    uint64_t hash_dim_value ( void * pX, TypeInfo * info ) {
+	uint32_t hash_dim_value ( void * pX, TypeInfo * info ) {
         TypeInfo copyInfo = *info;
         assert(copyInfo.dimSize);
         copyInfo.dimSize --;
@@ -71,7 +107,7 @@ namespace das
         return hash_array_value(pX, stride, count, &copyInfo);
     }
     
-    uint64_t hash_value ( void * pX, TypeInfo * info ) {
+	uint32_t hash_value ( void * pX, TypeInfo * info ) {
         if ( info->ref ) {
             TypeInfo ti = *info;
             ti.ref = false;
@@ -109,7 +145,7 @@ namespace das
         }
     }
     
-    uint64_t hash_function ( void * data, TypeInfo * type ) {
+	uint32_t hash_function ( void * data, TypeInfo * type ) {
         return hash_value(data, type);
     }
 }
