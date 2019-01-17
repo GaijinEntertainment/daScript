@@ -257,6 +257,9 @@ namespace das
             }
         }
     }
+
+#define HASH_EMPTY      0xbad0bad0bad0bad0
+#define HASH_KILLED     0xdeaddeaddeaddead
     
     void debug_table_value (  stringstream & ss, Table & tab, TypeInfo * info, PrintFlags flags ) {
         ss << "([" << tab.size << " of " << tab.capacity << "] ";
@@ -264,7 +267,11 @@ namespace das
         int keySize = getTypeSize(info->firstType);
         int valueSize = getTypeSize(info->secondType);
         for ( uint32_t i=0; i!=tab.capacity; ++i ) {
+#if USE_ROBIN_HOOD
             if ( tab.distance[i]>=0 ) {
+#else
+			if ( tab.hashes[i] != HASH_KILLED && tab.hashes[i] != HASH_EMPTY ) {
+#endif
                 if ( !first ) ss << " "; first = false;
                 ss << "("; // ss << "(@ " << i << " ";
                 debug_value ( ss, tab.keys + i*keySize, info->firstType, flags );

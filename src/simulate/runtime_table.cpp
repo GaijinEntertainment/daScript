@@ -9,7 +9,13 @@ namespace das
             context.throw_error("clearing locked table");
             return;
         }
+#if USE_ROBIN_HOOD
         memset(arr.distance, -1, arr.capacity * sizeof(uint8_t));
+#else
+		for (uint32_t i = 0; i != arr.capacity; ++i) {
+			arr.hashes[i] = HASH_EMPTY;
+		}
+#endif
         arr.size = 0;
     }
     
@@ -40,9 +46,14 @@ namespace das
     // TableIterator
     
     size_t TableIterator::nextValid ( Table * tab, size_t index ) const {
-        for ( ; index < tab->capacity; index++ )
-            if ( tab->distance[index]>=0 )
-                break;
+		for (; index < tab->capacity; index++)
+#if USE_ROBIN_HOOD
+			if (tab->distance[index] >= 0)
+				break;
+#else
+			if (tab->hashes[index] != HASH_EMPTY && tab->hashes[index] != HASH_KILLED)
+				break;
+#endif
         return index;
     }
     
