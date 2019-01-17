@@ -44,10 +44,9 @@ namespace das
         TableHash ( const TableHash & ) = delete;
         TableHash ( Context * ctx, uint32_t vs ) : context(ctx), valueTypeSize(vs) {}
         
-		// NOTE: maxLookups is divisable by 4
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
             uint32_t desired = 32 - __builtin_clz(capacity-1);
-            return std::max(minLookups, desired * 4);
+            return std::max(minLookups, desired * 6);
         }
         
 		__forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {
