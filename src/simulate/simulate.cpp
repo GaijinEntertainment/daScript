@@ -348,22 +348,23 @@ namespace das
             return v_zero();
         }
         // fill prologue
-        Prologue * pp = (Prologue *) stack.sp();
-        pp->arguments =     args;
-        pp->copyOrMoveResult = (char *)cmres;
+        vec4f * aa = abiArg;
+        Prologue * pp           = (Prologue *) stack.sp();
+        pp->arguments           = abiArg = args;
+        pp->copyOrMoveResult    = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
-        pp->info =          fn.debug;
-        pp->line =          line;
+        pp->info                = fn.debug;
+        pp->line                = line;
 #endif
         // CALL
         when(fn.code);
         stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
         // POP
+        abiArg = aa;
 		stack.pop(EP,SP);
         return result;
     }
 
-    
     void Context::runInitScript ( void ) {
         for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
             auto & pv = globalVariables[i];

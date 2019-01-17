@@ -125,7 +125,7 @@ namespace das
         virtual void breakPoint(int column, int line) const;    // what to do in case of breakpoint
 
         __forceinline vec4f * abiArguments() {
-            return ((Prologue *)stack.sp())->arguments;
+            return abiArg;
         }
 
 		__forceinline vec4f & abiResult() {
@@ -146,8 +146,9 @@ namespace das
                 return v_zero();
             }
             // fill prologue
+            vec4f * aa = abiArg;
             Prologue * pp = (Prologue *)stack.sp();
-            pp->arguments = args;
+            pp->arguments = abiArg = args;
             pp->copyOrMoveResult = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
             pp->info = fn.debug;
@@ -157,7 +158,9 @@ namespace das
             fn.code->eval(*this);
             stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
             // POP
+            abiArg = aa;
 			stack.pop(EP, SP);
+            // abiArg = ((Prologue *)stack.sp())->arguments;
             return result;
         }
 
@@ -200,6 +203,8 @@ namespace das
 		NodeAllocator	debugInfo;
 		StackAllocator	stack;
 		void *			heapWatermark = nullptr;
+    public:
+        vec4f *         abiArg;
 	protected:
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
