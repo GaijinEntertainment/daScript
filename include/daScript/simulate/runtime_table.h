@@ -145,7 +145,6 @@ namespace das
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
             newTab.maxLookups = computeMaxLookups(newCapacity);
-			assert((newTab.maxLookups & 3) == 0);
             memset(newTab.data, 0, newCapacity*valueTypeSize);
             auto pHashes = newTab.hashes;
 			memset(pHashes, 0, newCapacity * sizeof(uint32_t));

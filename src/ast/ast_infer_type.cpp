@@ -1602,6 +1602,7 @@ namespace das {
                             auto & passT = types[sz];
                             auto resT = inferAutoType(argT, passT);
                             assert(resT && "how? we had this working at findMatchingGenerics");
+                            resT->ref = false; // by default no ref
                             applyAutoContracts(resT, argT);
                             if ( resT->isRefType() ) {   // we don't pass boxed type by reference ever
                                 resT->ref = false;

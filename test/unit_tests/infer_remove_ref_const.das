@@ -1,6 +1,6 @@
-// options log=true, logGenerics=true
+// options log=true, logGenerics=false, optimize=false
 
-def logT(x:auto(numT))
+def logT(x:auto(numT)&)
     return typename(type numT)
 
 def logTNoRef(x:auto(numT)!&)
@@ -9,7 +9,7 @@ def logTNoRef(x:auto(numT)!&)
 def logTNoRefNoConst(x:auto(numT) !const !&)
     return typename(type numT)
 
-def aliasLogT(x:auto(numT);y:numT)
+def aliasLogT(x:auto(numT)&;y:numT)
     return typename(type numT)
 
 def aliasLogTNoRef(x:auto(numT);y:numT!&)
