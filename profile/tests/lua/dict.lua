@@ -20,9 +20,10 @@ local function dict(tab, src)
   local max = 0
   local n = 0
   for i,l in ipairs(src) do
-  	if (tab[l]) then tab[l] = tab[l] + 1
-  	else n, tab[l] = n + 1, 1 end
-  	max = max > tab[l] and max or tab[l]
+    local tabL
+  	if (tab[l]) then tabL = tab[l] + 1; tab[l] = tabL
+  	else n, tab[l], tabL = n + 1, 1,1 end
+  	max = max > tabL and max or tabL
   end
   return max
 end
@@ -38,5 +39,4 @@ for i = 1, n do
 end
 
 loadfile("profile.lua")()
-io.write(string.format("dictionary: %.8f\n", profile_it(20, function () clear(tab); print(dict(tab, src)); end)))
-io.write(string.format("dictionary-simple-clear: %.8f\n", profile_it(20, function () tab = {}; dict(tab, src); end)))
+io.write(string.format("dictionary: %.8f\n", profile_it(20, function () clear(tab); dict(tab, src); end)))
