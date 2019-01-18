@@ -1,6 +1,4 @@
-#include "daScript/misc/platform.h"
-
-#include "daScript/ast/ast.h"
+#include "daScript/daScript.h"
 
 #include <fstream>
 #include <iostream>

@@ -1,10 +1,6 @@
-#include "daScript/misc/platform.h"
+#include "daScript/daScript.h"
 
 #include "test_profile.h"
-
-#include "daScript/ast/ast.h"
-#include "daScript/ast/ast_interop.h"
-#include "daScript/ast/ast_handle.h"
 
 using namespace std;
 using namespace das;

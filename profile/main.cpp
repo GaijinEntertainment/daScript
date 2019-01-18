@@ -1,6 +1,5 @@
-#include "daScript/misc/platform.h"
+#include "daScript/daScript.h"
 
-#include "daScript/ast/ast.h"
 #include "test_profile.h"
 
 #include <fstream>

@@ -1,9 +1,4 @@
-#include "daScript/misc/platform.h"
-
-#include "daScript/ast/ast.h"
-#include "daScript/ast/ast_interop.h"
-#include "daScript/ast/ast_handle.h"
-#include "daScript/simulate/interop.h"
+#include "daScript/daScript.h"
 
 using namespace std;
 using namespace das;

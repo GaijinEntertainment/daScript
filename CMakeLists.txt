@@ -121,8 +121,14 @@ include/daScript/simulate/sim_policy.h
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
+SET(MAIN_SRC
+include/daScript/daScript.h
+)
+SOURCE_GROUP_FILES("main" MAIN_SRC)
+
 include_directories(include ".")
-ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
+ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} 
+	${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
 
 add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
@@ -173,7 +179,6 @@ list(SORT MIX_TEST_SRC)
 SOURCE_GROUP_FILES("test/mix" MIX_TEST_SRC)
 
 SET(TEST_MAIN_SRC
-include/daScript/misc/platform.h
 test/main.cpp
 test/test_handles.cpp
 )
@@ -196,9 +201,9 @@ list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
-include/daScript/misc/platform.h
 profile/main.cpp
 profile/test_profile.cpp
+profile/test_profile.h
 )
 list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)
