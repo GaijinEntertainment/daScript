@@ -47,7 +47,7 @@ namespace das
     ,   handle_not_found                        =   30306       //  external type has colliding name
     ,   annotation_not_found                    =   30307       //  [wtf] struct or [wtf] function
         
-    ,   cant_initialize                         =   30401       //  struct x=0
+    ,   cant_initialize                         =   30401       //  block type declaration, default values
         
     ,   cant_dereference                        =   30501
     ,   cant_index                              =   30502       //  wtf[a]

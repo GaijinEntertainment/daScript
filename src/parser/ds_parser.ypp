@@ -913,17 +913,14 @@ structure_declaration
         auto pStruct = make_shared<Structure>(*$name);
         pStruct->at = tokAt(@loc);
         for ( auto pDecl : *$list ) {
-            if ( pDecl->pInit ) {
-                yyerror("structure field can't have initialization",tokAt(@loc),CompilationError::cant_initialize);
-            } else {
-                for ( const auto & name : *pDecl->pNameList ) {
-                    if ( !pStruct->findField(name) ) {
-                        auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        pStruct->fields.emplace_back(name, td, pDecl->at);
-                    } else {
-                        yyerror("structure field is already declared "+name,pDecl->at,
-                            CompilationError::structure_field_already_declared);
-                    }
+            for ( const auto & name : *pDecl->pNameList ) {
+                if ( !pStruct->findField(name) ) {
+                    auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                    auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
+                    pStruct->fields.emplace_back(name, td, init, pDecl->at);
+                } else {
+                    yyerror("structure field is already declared "+name,pDecl->at,
+                        CompilationError::structure_field_already_declared);
                 }
             }
         }

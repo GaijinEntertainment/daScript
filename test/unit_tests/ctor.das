@@ -1,4 +1,4 @@
-options log=true, logInferPasses=false, optimize=true
+// options log=true, logInferPasses=false, optimize=true
 
 struct Foo
     i : int = 5
@@ -21,4 +21,3 @@ def test
     let b = Bar()
     assert(b.i==13)
     return true
-

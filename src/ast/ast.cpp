@@ -705,6 +705,13 @@ namespace das
     
     // structure
     
+    bool Structure::hasAnyInitializers() const {
+        for ( const auto & fd : fields ) {
+            if ( fd.init ) return true;
+        }
+        return false;
+    }
+    
     bool Structure::canCopy() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->canCopy() )

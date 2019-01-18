@@ -238,12 +238,14 @@ namespace das
     class Structure : public enable_shared_from_this<Structure> {
     public:
 		struct FieldDeclaration {
-			string      name;
-			TypeDeclPtr type;
-			LineInfo    at;
-			int         offset = 0;
+			string          name;
+			TypeDeclPtr     type;
+            ExpressionPtr   init;
+			LineInfo        at;
+			int             offset = 0;
 			FieldDeclaration() = default;
-			FieldDeclaration(const string & n, const TypeDeclPtr & t, const LineInfo & a) : name(n), type(t), at(a) {}
+			FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i, const LineInfo & a )
+                : name(n), type(t), init(i), at(a) {}
         };
     public:
         Structure ( const string & n ) : name(n) {}
@@ -255,11 +257,13 @@ namespace das
         bool isPod() const;
         string describe() const { return name; }
         string getMangledName() const;
+        bool hasAnyInitializers() const;
     public:
         string                      name;
         vector<FieldDeclaration>    fields;
         LineInfo                    at;
         Module *                    module = nullptr;
+        bool                        genCtor = false;
     };
     
     struct Variable : public enable_shared_from_this<Variable> {

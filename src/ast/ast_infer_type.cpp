@@ -96,6 +96,57 @@ namespace das {
         return TT;
     }
     
+    /*
+     def STRUCT_NAME
+        let t : STRUCT_TYPE
+        t.field1 = init1
+        t.field2 = init2
+        return t
+     */
+    FunctionPtr makeConstructor ( Structure * str ) {
+        auto fn = make_shared<Function>();
+        fn->name = str->name;
+        fn->result = make_shared<TypeDecl>(Type::tStructure);
+        fn->result->structType = str->shared_from_this();
+        auto block = make_shared<ExprBlock>();
+        // let t : STRUCT_TYPE
+        auto varDecl = make_shared<ExprLet>();
+        varDecl->scoped = false;
+        auto varT = make_shared<Variable>();
+        varT->name = "t";
+        varT->type = make_shared<TypeDecl>(Type::tStructure);
+        varT->type->structType = str->shared_from_this();
+        varDecl->variables.push_back(varT);
+        block->list.push_back(varDecl);
+        // for each initialized field
+        for ( auto & fd : str->fields ) {
+            if ( fd.init ) {
+                // t.field = init
+                auto getT = make_shared<ExprVar>();
+                getT->name = "t";
+                auto getTField = make_shared<ExprField>();
+                getTField->value = getT;
+                getTField->name = fd.name;
+                shared_ptr<ExprOp2> opEq = fd.type->canCopy() ?
+                    static_pointer_cast<ExprOp2>(make_shared<ExprCopy>()) :
+                    static_pointer_cast<ExprOp2>(make_shared<ExprMove>());
+                opEq->left = getTField;
+                opEq->right = fd.init->clone();
+                block->list.push_back(opEq);
+            }
+        }
+        // return t
+        auto returnDecl = make_shared<ExprReturn>();
+        auto getT = make_shared<ExprVar>();
+        getT->name = "t";
+        returnDecl->subexpr = getT;
+        returnDecl->moveSemantics = !str->canCopy();
+        block->list.push_back(returnDecl);
+        fn->body = block;
+        return fn;
+    }
+    
+    
     // type inference
 
     class InferTypes : public Visitor {
@@ -113,6 +164,8 @@ namespace das {
         vector<size_t>          varStack;
         size_t                  fieldOffset = 0;
         bool                    needRestart = false;
+    public:
+        vector<FunctionPtr>     extraFunctions;
     protected:
         void pushVarStack() {
             varStack.push_back(local.size());
@@ -441,6 +494,12 @@ namespace das {
 				error(extra + "\n" + candidates, at, CompilationError::function_not_found);
 			}
 		}
+        
+        bool hasUserConstructor ( const string & sna ) const {
+            vector<TypeDeclPtr> argDummy;
+            auto fnlist = findMatchingFunctions(sna, argDummy);
+            return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
+        }
 
     protected:
     // strcuture
@@ -458,17 +517,21 @@ namespace das {
             } else if ( decl.type->ref ) {
                 error("structure field type can't be declared a reference",decl.at,CompilationError::invalid_structure_field_type);
             }
-            /*else if ( decl.pInit ) {
-                error("structure field can't have initialization",decl.at,CompilationError::cant_initialize);
-            }
-            */
             verifyType(decl.type);
             auto fa = decl.type->getAlignOf() - 1;
             fieldOffset = (fieldOffset + fa) & ~fa;
             decl.offset = int(fieldOffset);
             fieldOffset += decl.type->getSizeOf();
         }
-
+        virtual StructurePtr visit ( Structure * var ) override {
+            if ( !var->genCtor && var->hasAnyInitializers() && !hasUserConstructor(var->name) ) {
+                auto ctor = makeConstructor(var);
+                extraFunctions.push_back(ctor);
+                var->genCtor = true;
+                reportGenericInfer();
+            }
+            return Visitor::visit(var);
+        }
     // globals
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
@@ -1738,6 +1801,9 @@ namespace das {
             errors.clear();
             InferTypes context(shared_from_this());
             visit(context);
+            for ( auto efn : context.extraFunctions ) {
+                addFunction(efn);
+            }
             if ( log ) {
                 logs << "PASS " << pass << ":\n" << *this;
 				sort(errors.begin(), errors.end());
