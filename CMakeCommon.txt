@@ -49,6 +49,10 @@ MACRO(ADD_PRECOMPILED_HEADER _targetName _input _inputXcode)
 	ENDIF(MSVC)
 ENDMACRO(ADD_PRECOMPILED_HEADER)
 
+MACRO(FIND_XXD)
+	find_program(XXD_BIN xxd)
+ENDMACRO(FIND_XXD)
+
 MACRO(XXD input)
 	get_filename_component(input_src ${input} ABSOLUTE)
 	get_filename_component(input_dir ${input_src} DIRECTORY)
@@ -57,6 +61,6 @@ MACRO(XXD input)
 		DEPENDS ${input_src}
 		OUTPUT ${input_src}.inc
 		WORKING_DIRECTORY ${input_dir}
-		COMMAND xxd -i ${input_name} ${input_name}.inc
+		COMMAND ${XXD_BIN} -i ${input_name} ${input_name}.inc
 		COMMENT "compiling ${input} to c++ string")
 ENDMACRO()
