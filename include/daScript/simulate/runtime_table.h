@@ -23,9 +23,9 @@ namespace das
     template <>
     struct KeyCompare <char *> {
         __forceinline bool operator () ( const char * a, const char * b ) {
-            const char * A = a ? a : rts_null;
-            const char * B = b ? b : rts_null;
-            return strcmp(A,B)==0;
+            if ( a==b ) return true;
+            if ( !a || !b ) return false;
+            return strcmp(a,b)==0;
         }
     };
     
