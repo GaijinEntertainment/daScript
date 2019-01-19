@@ -265,11 +265,7 @@ namespace das
         int keySize = getTypeSize(info->firstType);
         int valueSize = getTypeSize(info->secondType);
         for ( uint32_t i=0; i!=tab.capacity; ++i ) {
-#if USE_ROBIN_HOOD
-            if ( tab.distance[i]>=0 ) {
-#else
-			if ( tab.hashes[i] != HASH_KILLED32 && tab.hashes[i] != HASH_EMPTY32 ) {
-#endif
+			if ( tab.hashes[i] <= HASH_KILLED32 ) {
                 if ( !first ) ss << " "; first = false;
                 ss << "("; // ss << "(@ " << i << " ";
                 debug_value ( ss, tab.keys + i*keySize, info->firstType, flags );

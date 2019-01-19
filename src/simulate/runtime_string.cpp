@@ -2,35 +2,47 @@
 
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/hash.h"
 
 namespace das
 {
     // string operations
     
     vec4f SimPolicy_String::Add ( vec4f a, vec4f b, Context & context ) {
-        const char *  sA = to_rts(a); auto la = strlen(sA);
-        const char *  sB = to_rts(b); auto lb = strlen(sB);
-        char * sAB = (char * ) context.heap.allocate(uint32_t(la + lb + 1));
-        if ( !sAB ) {
+        const char *  sA = to_rts(a);
+        auto la = stringLength(context, sA);
+        const char *  sB = to_rts(b);
+        auto lb = stringLength(context, sB);
+        uint32_t commonLength = la + lb;
+        if ( !commonLength ) {
+            return v_zero();
+        } else if ( char * sAB = (char * ) context.heap.allocateString(nullptr, commonLength) ) {
+            memcpy ( sAB, sA, la );
+            memcpy ( sAB+la, sB, lb+1 );
+            return cast<char *>::from(sAB);
+        } else {
             context.throw_error("can't add two strings, out of heap");
             return v_zero();
         }
-        memcpy ( sAB, sA, la );
-        memcpy ( sAB+la, sB, lb+1 );
-        return from_rts(sAB);
     }
   
     void SimPolicy_String::SetAdd ( char * a, vec4f b, Context & context ) {
 		char ** pA = (char **)a;
-        const char *  sA = *pA ? *pA : rts_null; auto la = strlen(sA);
-        const char *  sB = to_rts(b); auto lb = strlen(sB);
-        *pA = (char * ) context.heap.allocate(uint32_t(la + lb + 1));
-        if ( !*pA ) {
-            context.throw_error("can't add two strings, out of heap");
+        const char *  sA = *pA ? *pA : rts_null;
+        auto la = stringLength(context, sA);
+        const char *  sB = to_rts(b);
+        auto lb = stringLength(context, sB);
+        uint32_t commonLength = la + lb;
+        if ( !commonLength ) {
+            // *pA = nullptr; is unnecessary, because its already nullptr
             return;
+        } else if ( char * sAB = (char * ) context.heap.allocateString(nullptr, commonLength) ) {
+            memcpy ( sAB, sA, la );
+            memcpy ( sAB+la, sB, lb+1 );
+            *pA = sAB;
+        } else {
+            context.throw_error("can't add two strings, out of heap");
         }
-        memcpy ( *pA , sA, la );
-        memcpy ( *pA +la, sB, lb+1 );
     }
     
     // helper functions
@@ -131,7 +143,7 @@ namespace das
             // TODO: different output for strings?
             ssw << debug_value(argValues[i], types[i], PrintFlags::string_builder);
         }
-        auto pStr = context.heap.allocateName(ssw.str());
+        auto pStr = context.heap.allocateString(ssw.str());
         if ( !pStr ) {
             context.throw_error("can't allocate string builder result, out of heap");
         }

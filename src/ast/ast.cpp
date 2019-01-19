@@ -1041,7 +1041,7 @@ namespace das
     }
     
     SimNode * ExprConstString::simulate (Context & context) const {
-        char * str = context.code.allocateName(text);
+        char * str = context.code.allocateString(text);
         return context.code.makeNode<SimNode_ConstValue>(at,cast<char *>::from(str));
     }
 
@@ -1069,7 +1069,7 @@ namespace das
         string message;
         if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
-        return context.code.makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.code.allocateName(message));
+        return context.code.makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.code.allocateString(message));
     }
     
     // ExprDebug
@@ -1088,7 +1088,7 @@ namespace das
         return context.code.makeNode<SimNode_Debug>(at,
                                                arguments[0]->simulate(context),
                                                pTypeInfo,
-                                               context.code.allocateName(message));
+                                               context.code.allocateString(message));
     }
 
     // ExprMakeBlock
@@ -1247,7 +1247,7 @@ namespace das
     }
     
     SimNode * ExprTypeName::simulate (Context & context) const {
-        auto pName = context.code.allocateName(typeexpr->describe(false));
+        auto pName = context.code.allocateString(typeexpr->describe(false));
         return context.code.makeNode<SimNode_ConstValue>(at,cast<char *>::from(pName));
     }
     
@@ -1910,7 +1910,7 @@ namespace das
 		if (subexpr && subexpr->rtti_isConstant()) {
 			if (subexpr->type->isSimpleType(Type::tString)) {
 				auto cVal = static_pointer_cast<ExprConstString>(subexpr);
-				char * str = context.code.allocateName(cVal->text);
+				char * str = context.code.allocateString(cVal->text);
 				return context.code.makeNode<SimNode_ReturnConst>(at, cast<char *>::from(str));
 			} else {
 				auto cVal = static_pointer_cast<ExprConst>(subexpr);

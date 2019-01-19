@@ -1,6 +1,12 @@
 #pragma once
 
 namespace das {
+    
+    struct StringHeader {
+        uint32_t    hash;
+        uint32_t    length;
+    };
+    static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
 
 	class LinearAllocator {
 	public:
@@ -65,7 +71,7 @@ namespace das {
 			return res;
 		}
 
-		inline char * allocateName(const string & name) {
+		__forceinline char * allocateName(const string & name) {
 			if (!name.empty()) {
 				auto size = uint32_t(name.length() + 1);
 				if (auto str = (char *)allocate(size)) {
@@ -75,6 +81,31 @@ namespace das {
 			}
 			return nullptr;
 		}
+        
+        __forceinline char * allocateString ( const char * text, uint32_t length ) {
+            if ( length==0 ) {
+                return nullptr;
+            } else if ( char * str = (char *) allocate(1+length+sizeof(StringHeader)) ) {
+                auto header = (StringHeader *) str;
+                header->hash = 0;
+                header->length = length;
+                auto stxt = str + sizeof(StringHeader);
+                if ( text ) {
+                    memcpy ( stxt, text, length+1 );
+                }
+                return stxt;
+            } else {
+                return nullptr;
+            }
+        }
+        
+        __forceinline char * allocateString ( const string & str ) {
+            return allocateString ( str.c_str(), uint32_t(str.length()) );
+        }
+        
+        __forceinline bool isHeapPtr ( const char * ptr ) const {
+            return (ptr - linearAllocatorBase) < linearAllocatorSize;
+        }
 
 	protected:
 		uint32_t	linearAllocatorSize;
