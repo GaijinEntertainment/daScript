@@ -1,4 +1,5 @@
 [![Travis CI Build Status](https://travis-ci.org/uriparser/uriparser.svg?branch=master)](https://travis-ci.org/uriparser/uriparser)
+[![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/github/uriparseradmin/uriparser?svg=true)](https://ci.appveyor.com/project/uriparseradmin/uriparser)
 
 
 # uriparser
