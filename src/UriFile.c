@@ -67,6 +67,10 @@
 
 
 
+#include <stdlib.h>  /* for size_t, avoiding stddef.h for older MSVCs */
+
+
+
 static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 		URI_CHAR * uriString, UriBool fromUnix) {
 	const URI_CHAR * input = filename;
@@ -92,7 +96,7 @@ static URI_INLINE int URI_FUNC(FilenameToUriString)(const URI_CHAR * filename,
 				: is_windows_network
 					? _UT("file:")
 					: _UT("file:///");
-		const int prefixLen = URI_STRLEN(prefix);
+		const size_t prefixLen = URI_STRLEN(prefix);
 
 		/* Copy prefix */
 		memcpy(uriString, prefix, prefixLen * sizeof(URI_CHAR));
