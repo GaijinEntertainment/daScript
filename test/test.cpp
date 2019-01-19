@@ -22,9 +22,9 @@
 #include <uriparser/Uri.h>
 #include <gtest/gtest.h>
 #include <memory>
-#include <stdio.h>
-#include <stdlib.h>
-#include <wchar.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cwchar>
 
 using namespace std;
 

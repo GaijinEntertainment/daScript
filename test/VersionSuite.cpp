@@ -20,7 +20,7 @@
 
 #include <gtest/gtest.h>
 
-#include <stdio.h>
+#include <cstdio>
 
 
 #include <config.h>  // for PACKAGE_VERSION
