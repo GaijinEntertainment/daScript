@@ -20,6 +20,7 @@
  */
 
 #include <uriparser/Uri.h>
+#include <uriparser/UriIp4.h>
 #include <gtest/gtest.h>
 #include <memory>
 #include <cstdio>
@@ -2140,6 +2141,18 @@ TEST(FreeUriMembersSuite, MultiFreeWorksFine) {
 	EXPECT_NE(memcmp(&uriBackup, &uri, sizeof(UriUriA)), 0);
 
 	uriFreeUriMembersA(&uri);  // second time
+}
+
+TEST(ParseIpFourAddressSuite, FourSaneOctets) {
+	unsigned char octetOutput[4];
+	const char * const ipAddressText = "111.22.3.40";
+	const int res = uriParseIpFourAddressA(octetOutput, ipAddressText,
+			ipAddressText + strlen(ipAddressText));
+	EXPECT_EQ(res, URI_SUCCESS);
+	EXPECT_EQ(octetOutput[0], 111);
+	EXPECT_EQ(octetOutput[1], 22);
+	EXPECT_EQ(octetOutput[2], 3);
+	EXPECT_EQ(octetOutput[3], 40);
 }
 
 
