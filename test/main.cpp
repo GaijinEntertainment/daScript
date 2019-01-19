@@ -214,7 +214,7 @@ int main() {
     Module::Shutdown();
     return 0;
 #endif
-#if 1 // Debug this one test
+#if 0 // Debug this one test
     unit_test(TEST_PATH "test/unit_tests/table.das");
     Module::Shutdown();
     return 0;

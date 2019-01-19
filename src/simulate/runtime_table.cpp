@@ -41,7 +41,7 @@ namespace das
     
     size_t TableIterator::nextValid ( Table * tab, size_t index ) const {
 		for (; index < tab->capacity; index++)
-			if (tab->hashes[index] <= HASH_KILLED32)
+			if (tab->hashes[index] > HASH_KILLED32)
 				break;
         return index;
     }

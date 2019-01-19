@@ -11,14 +11,23 @@ namespace das
 
     // ideas from http://isthe.com/chongo/tech/comp/fnv/
     
-    __forceinline uint32_t hash_block32(uint8_t * block, size_t size) {
+    __forceinline uint32_t hash_block32(uint8_t * block, uint32_t size) {
         const uint32_t fnv_prime = 16777619;
         const uint32_t fnv_bias = 2166136261;
         uint32_t offset_basis = fnv_bias;
-        // todo: unroll
-        for (; size; size--, block++) {
-            offset_basis = ( offset_basis ^ *block ) * fnv_prime;
+        for ( ; size >=4; size-=4 ) {
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+			offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+			offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+			offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
         }
+		if (size & 2u) {
+			offset_basis = (offset_basis ^ *block++) * fnv_prime;
+			offset_basis = (offset_basis ^ *block++) * fnv_prime;
+		}
+		if (size & 1u) {
+			offset_basis = (offset_basis ^ *block++) * fnv_prime;
+		}
         if (offset_basis <= HASH_KILLED32) {
             return fnv_prime;
         }
@@ -39,7 +48,7 @@ namespace das
     }
 
     __forceinline uint32_t hash_function ( Context &, const void * x, size_t size ) {
-		return hash_block32((uint8_t *)x, size);
+		return hash_block32((uint8_t *)x, uint32_t(size));
     }
     
     __forceinline uint32_t stringLength ( Context & ctx, const char * str ) {
@@ -47,7 +56,7 @@ namespace das
             auto header = (StringHeader *) ( str - sizeof(StringHeader) );
             return header->length;
         } else {
-            return strlen(str);
+            return uint32_t(strlen(str));
         }
     }
 
@@ -70,12 +79,11 @@ namespace das
     __forceinline uint32_t hash_function ( Context & ctx, char * str ) {
         if ( ctx.heap.isHeapPtr(str) ) {
             auto header = (StringHeader *) ( str - sizeof(StringHeader) );
-            if ( !header->hash ) {
-                header->hash = hash_blockz32((uint8_t *)str); // hash_block32((uint8_t *)str, header->length);
+			auto hh = header->hash;
+            if ( !hh ) {
+                header->hash = hh = hash_block32((uint8_t *)str, header->length);
             }
-            uint32_t hashHash = hash_blockz32((uint8_t *)str);
-            assert ( header->hash == hashHash );
-            return header->hash;
+            return hh;
         } else {
             return hash_blockz32((uint8_t *)str);
         }

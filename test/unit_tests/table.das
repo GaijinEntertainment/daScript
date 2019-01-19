@@ -1,14 +1,12 @@
 [export]
 def test : bool
-    let(tab:table<string,int>;i,del:int;total:int=2)
+    let(tab:table<string,int>;i,del:int;total:int=1000)
         assert(!erase(tab,"0"))
         i = 0
         while i!=total
-            let q = string(i)
-            debug(q,"q=")
             tab[string(i)] = i++
         assert(length(tab)==total)
-        debug(tab)
+        // debug(tab)
         i = 0
         while i!=total
             assert(tab[string(i)]==i++)
@@ -60,11 +58,14 @@ def test : bool
         while i!=total
             assert(tab[string(i)]==i++)
         assert(length(tab)==total)
-        debug(tab)
+        // debug(tab)
+		let cnt = 0
         for k,v in keys(tab),values(tab)
-            debug(k,"key=")
-            debug(v,"value=")
+            // debug(k,"key=")
+            // debug(v,"value=")
             assert(k==string(v))
+			cnt ++
+		assert(cnt==total)
         assert(erase(tab,"1"))
         assert(!erase(tab,"-1"))
     return true
