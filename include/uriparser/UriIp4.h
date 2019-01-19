@@ -75,6 +75,12 @@
 
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+
 /**
  * Converts a IPv4 text representation into four bytes.
  *
@@ -85,6 +91,12 @@
  */
 int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
+
+
+
+#ifdef __cplusplus
+}
+#endif
 
 
 

@@ -4,6 +4,7 @@ NOTE: uriparser is looking for help with a few things:
 
 2019-xx-xx -- 0.x.x
 
+  * Fixed: Add missing extern "C" wrapper to UriIp4.h for use from C++
   * Fixed: Link errors on Haiku regarding function inet_ntop (GitHub #45)
       Thanks to Schrijvers Luc for the patch!
   * Fixed: Visual Studio 2005 project lacked integration of UriMemory.c and .h,
