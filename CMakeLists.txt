@@ -87,6 +87,7 @@ src/builtin/module_builtin_matrix.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_time.cpp
 src/builtin/module_builtin_das.cpp
+src/builtin/module_builtin_math.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das
 )
