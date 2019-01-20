@@ -102,8 +102,8 @@ namespace das
 			heap.setWatermark(heapWatermark);
         }
 
-        __forceinline vec4f eval ( int fnIndex, vec4f * args = nullptr, void * res = nullptr ) {
-            return call(fnIndex, args, res, 0);
+        __forceinline vec4f eval ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
+            return call(fnPtr, args, res, 0);
         }
 
         __forceinline void throw_error ( const char * message ) {
@@ -113,8 +113,12 @@ namespace das
             throw runtime_error(message ? message : "");
 #endif
         }
+        
+        __forceinline SimFunction * getFunction ( int index ) const {
+            return (index>=0 && index<totalFunctions) ? functions + index : nullptr;
+        }
 
-        int findFunction ( const char * name ) const;
+        SimFunction * findFunction ( const char * name ) const;
         int findVariable ( const char * name ) const;
         void stackWalk();
         string getStackWalk( bool args = true );
@@ -136,12 +140,10 @@ namespace das
             return ((Prologue *)stack.sp())->copyOrMoveResult;
         }
 
-		__forceinline vec4f call(int fnIndex, vec4f * args, void * cmres, int line) {
-			assert(fnIndex >= 0 && fnIndex < totalFunctions && "function index out of range");
-			auto & fn = functions[fnIndex];
+		__forceinline vec4f call(SimFunction * fn, vec4f * args, void * cmres, int line) {
 			// PUSH
 			char * EP, *SP;
-			if (!stack.push(fn.stackSize, EP, SP)) {
+			if (!stack.push(fn->stackSize, EP, SP)) {
                 throw_error("stack overflow");
                 return v_zero();
             }
@@ -151,11 +153,11 @@ namespace das
             pp->arguments = abiArg = args;
             pp->copyOrMoveResult = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
-            pp->info = fn.debug;
+            pp->info = fn->debug;
             pp->line = line;
 #endif
             // CALL
-            fn.code->eval(*this);
+            fn->code->eval(*this);
             stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
             // POP
             abiArg = aa;
@@ -190,7 +192,7 @@ namespace das
 #pragma warning(pop)
 #endif
 
-        vec4f callEx ( int fnIndex, vec4f * args, void * cmres, int line, function<void (SimNode *)> && when );
+        vec4f callEx ( SimFunction * fn, vec4f * args, void * cmres, int line, function<void (SimNode *)> && when );
         vec4f invokeEx ( const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when );
 
         __forceinline const char * getException() const {
@@ -509,7 +511,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_EVAL_NODE
 #undef  EVAL_NODE
         SimNode ** arguments;
-        int32_t  fnIndex;
+        SimFunction * fnPtr;
         int32_t  nArguments;
         uint32_t stackTop;
     };
@@ -522,14 +524,14 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             DAS_EXCEPTION_POINT;
-            return context.call(fnIndex, argValues, nullptr, debug.line);
+            return context.call(fnPtr, argValues, nullptr, debug.line);
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
                 DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
-                return cast<CTYPE>::to(context.call(fnIndex, argValues, nullptr, debug.line));  \
+                return cast<CTYPE>::to(context.call(fnPtr, argValues, nullptr, debug.line));    \
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE
@@ -544,7 +546,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             EvalBlock<argCount>::eval(context, arguments, argValues);
             DAS_EXCEPTION_POINT;
             auto cmres = context.stack.sp() + stackTop;
-            return context.call(fnIndex, argValues, cmres, debug.line);
+            return context.call(fnPtr, argValues, cmres, debug.line);
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
@@ -552,7 +554,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
                 DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
                 auto cmres = context.stack.sp() + stackTop;                                     \
-                return cast<CTYPE>::to(context.call(fnIndex, argValues, cmres, debug.line));    \
+                return cast<CTYPE>::to(context.call(fnPtr, argValues, cmres, debug.line));      \
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE

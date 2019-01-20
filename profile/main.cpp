@@ -40,8 +40,7 @@ bool unit_test ( const string & fn ) {
             vector<Object> objects;
             objects.resize(10000);
             // run the test
-            int fnTest = ctx.findFunction("test");
-            if ( fnTest != -1 ) {
+            if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 vec4f args[1] = { cast<vector<Object> *>::from(&objects) };
                 bool result = cast<bool>::to(ctx.eval(fnTest, args));

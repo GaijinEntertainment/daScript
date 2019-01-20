@@ -93,8 +93,7 @@ bool unit_test ( const string & fn ) {
         } else {
             Context ctx(&str);
             program->simulate(ctx, cout);
-            int fnTest = ctx.findFunction("test");
-            if ( fnTest != -1 ) {
+            if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
                 if ( auto ex = ctx.getException() ) {
@@ -139,8 +138,7 @@ bool exception_test ( const string & fn ) {
         } else {
             Context ctx(&str);
             program->simulate(ctx, cout);
-            int fnTest = ctx.findFunction("test");
-            if ( fnTest != -1 ) {
+            if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 ctx.eval(fnTest, nullptr);
                 if ( auto ex = ctx.getException() ) {

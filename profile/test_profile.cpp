@@ -18,8 +18,8 @@ void updateTest ( ObjectArray & objects ) {
 }
 
 void update10000 ( ObjectArray & objects, Context * context ) {
-    int updateFn = context->findFunction("update");
-	if (updateFn < 0) {
+    auto updateFn = context->findFunction("update");
+	if (!updateFn) {
 		context->throw_error("update not exported");
 		return;
 	}
@@ -30,8 +30,8 @@ void update10000 ( ObjectArray & objects, Context * context ) {
 }
 
 void update10000ks ( ObjectArray & objects, Context * context ) {
-    int ksUpdateFn = context->findFunction("ks_update");
-	if (ksUpdateFn < 0) {
+    auto ksUpdateFn = context->findFunction("ks_update");
+	if (!ksUpdateFn) {
 		context->throw_error("ks_update not exported");
 		return;
 	}
@@ -74,7 +74,7 @@ struct EsAttributeTable {
 struct EsPassAttributeTable  : EsAttributeTable {
     string  pass;
     string  functionName;
-    int32_t functionIndex = -2;
+    SimFunction * functionPtr = nullptr;
 };
 
 struct EsComponent {
@@ -147,15 +147,14 @@ struct EsFunctionAnnotation : FunctionAnnotation {
 };
 
 bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
-    if ( table.functionIndex==-2 )
-        table.functionIndex = context.findFunction(table.functionName.c_str());
-	if (table.functionIndex < 0) {
+    if ( table.functionPtr==nullptr )
+        table.functionPtr = context.findFunction(table.functionName.c_str());
+	if (!table.functionPtr) {
 		context.throw_error("function not found");
 		return false;
 	}
-    int fnIndex = table.functionIndex;
 	vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
-    context.callEx(fnIndex, _args, nullptr, 0, [&](SimNode * code){
+    context.callEx(table.functionPtr, _args, nullptr, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
         vec4f * args = _args;
 		char **		data	= (char **) alloca(nAttr * sizeof(char *));

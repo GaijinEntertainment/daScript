@@ -27,8 +27,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                 cout << *program << "\n";
             Context ctx(&str);
             program->simulate(ctx, cout);
-            int fnTest = ctx.findFunction(mainFnName.c_str());
-            if ( fnTest != -1 ) {
+            if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
                 ctx.restart();
                 ctx.eval(fnTest, nullptr);
             } else {

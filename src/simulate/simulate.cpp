@@ -316,12 +316,10 @@ namespace das
 #pragma warning(pop)
 #endif
 
-    vec4f Context::callEx(int fnIndex, vec4f *args, void * cmres, int line, function<void (SimNode *)> && when) {
-        assert(fnIndex>=0 && fnIndex<totalFunctions && "function index out of range");
-        auto & fn = functions[fnIndex];
+    vec4f Context::callEx(SimFunction * fn, vec4f *args, void * cmres, int line, function<void (SimNode *)> && when) {
         // PUSH
 		char * EP, *SP;
-		if(!stack.push(fn.stackSize,EP,SP)) {
+		if(!stack.push(fn->stackSize,EP,SP)) {
             throw_error("stack overflow");
             return v_zero();
         }
@@ -331,11 +329,11 @@ namespace das
         pp->arguments           = abiArg = args;
         pp->copyOrMoveResult    = (char *)cmres;
 #if DAS_ENABLE_STACK_WALK
-        pp->info                = fn.debug;
+        pp->info                = fn->debug;
         pp->line                = line;
 #endif
         // CALL
-        when(fn.code);
+        when(fn->code);
         stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
         // POP
         abiArg = aa;
@@ -354,13 +352,13 @@ namespace das
         }
     }
     
-    int Context::findFunction ( const char * name ) const {
+    SimFunction * Context::findFunction ( const char * name ) const {
         for ( int fni = 0; fni != totalFunctions; ++fni ) {
             if ( strcmp(functions[fni].name, name)==0 ) {
-                return fni;
+                return functions + fni;
             }
         }
-        return -1;
+        return nullptr;
     }
     
     int Context::findVariable ( const char * name ) const {

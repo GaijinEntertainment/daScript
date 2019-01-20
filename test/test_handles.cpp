@@ -186,7 +186,7 @@ void testFields ( Context * ctx ) {
     int32_t t = 0;
     IntFields x;
     auto fx = ctx->findFunction("testFields");
-	if (fx < 0) {
+	if (!fx) {
 		ctx->throw_error("function testFields not found");
 		return;
 	}

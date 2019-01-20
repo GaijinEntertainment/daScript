@@ -361,7 +361,7 @@ namespace das
         } else {
             auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
             pCall->debug = at;
-            pCall->fnIndex = func->index;
+            pCall->fnPtr = context.getFunction(func->index);
             pCall->arguments = (SimNode **) context.code.allocate(1 * sizeof(SimNode *));
             pCall->nArguments = 1;
             pCall->arguments[0] = subexpr->simulate(context);
@@ -378,7 +378,7 @@ namespace das
         } else {
             auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
             pCall->debug = at;
-            pCall->fnIndex = func->index;
+            pCall->fnPtr = context.getFunction(func->index);
             pCall->arguments = (SimNode **) context.code.allocate(2 * sizeof(SimNode *));
             pCall->nArguments = 2;
             pCall->arguments[0] = left->simulate(context);
@@ -694,7 +694,7 @@ namespace das
         auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
         pCall->debug = at;
 		assert((func->builtIn || func->index>=0) && "calling function which is not used. how?");
-        pCall->fnIndex = func->index;
+        pCall->fnPtr = context.getFunction(func->index);
         pCall->stackTop = stackTop;
         if ( int nArg = (int) arguments.size() ) {
             pCall->arguments = (SimNode **) context.code.allocate(nArg * sizeof(SimNode *));
