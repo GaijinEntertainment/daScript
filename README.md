@@ -64,4 +64,7 @@ URIPARSER_BUILD_TOOLS:BOOL=ON
 --
 // Build code supporting data type 'wchar_t'
 URIPARSER_BUILD_WCHAR_T:BOOL=ON
+--
+// Use of specific runtime library (/MT /MTd /MD /MDd) with MSVC
+URIPARSER_MSVC_RUNTIME:STRING=
 ```
