@@ -193,6 +193,20 @@ namespace das {
 		__forceinline TT * makeNode(Params... args) {
 			return new (allocate(sizeof(TT))) TT(args...);
 		}
+        
+        template < template <typename TT> class NodeType, typename... Params>
+        SimNode * makeNumericValueNode(Type baseType, Params... args) {
+            switch (baseType) {
+                case Type::tInt64:      return makeNode<NodeType<int64_t>>(args...);
+                case Type::tUInt64:     return makeNode<NodeType<uint64_t>>(args...);
+                case Type::tInt:        return makeNode<NodeType<int32_t>>(args...);
+                case Type::tUInt:       return makeNode<NodeType<uint32_t>>(args...);
+                case Type::tFloat:      return makeNode<NodeType<float>>(args...);
+                default:
+                    assert(0 && "we should not even be here");
+                    return nullptr;
+            }
+        }
 
 		template < template <typename TT> class NodeType, typename... Params>
 		SimNode * makeValueNode(Type baseType, Params... args) {

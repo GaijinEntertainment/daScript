@@ -262,7 +262,29 @@ namespace das
 #define DAS_PTR_NODE    DAS_NODE(Ptr,char *)
 #define DAS_BOOL_NODE   DAS_NODE(Bool,bool)
 #define DAS_INT_NODE    DAS_NODE(Int,int32_t)
-
+    
+    template <typename TT>
+    struct EvalTT { static __forceinline TT eval ( Context & context, SimNode * node ) {
+        return cast<TT>::to(node->eval(context)); }};
+    template <>
+    struct EvalTT<int32_t> { static __forceinline int32_t eval ( Context & context, SimNode * node ) {
+        return node->evalInt(context); }};
+    template <>
+    struct EvalTT<uint32_t> { static __forceinline uint32_t eval ( Context & context, SimNode * node ) {
+        return node->evalUInt(context); }};
+    template <>
+    struct EvalTT<int64_t> { static __forceinline int64_t eval ( Context & context, SimNode * node ) {
+        return node->evalInt64(context); }};
+    template <>
+    struct EvalTT<uint64_t> { static __forceinline uint64_t eval ( Context & context, SimNode * node ) {
+        return node->evalUInt64(context); }};
+    template <>
+    struct EvalTT<float> { static __forceinline float eval ( Context & context, SimNode * node ) {
+        return node->evalFloat(context); }};
+    template <>
+    struct EvalTT<bool> { static __forceinline bool eval ( Context & context, SimNode * node ) {
+        return node->evalBool(context); }};
+    
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
         SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a )
@@ -1119,7 +1141,15 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_IfThenElse : SimNode {
         SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override {
+            bool cmp = cond->evalBool(context);
+            DAS_EXCEPTION_POINT;
+            if ( cmp ) {
+                return if_true->eval(context);
+            } else {
+                return if_false->eval(context);
+            }
+        }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
                 bool cmp = cond->evalBool(context);                 \
@@ -1135,26 +1165,111 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * cond, * if_true, * if_false;
     };
     
-    // IF-THEN
-    struct SimNode_IfThen : SimNode {
-        SimNode_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
-            : SimNode(at), cond(c), if_true(t) {}
-        virtual vec4f eval ( Context & context ) override;
+    template <typename TT>
+    struct SimNode_IfZeroThenElse : SimNode {
+        SimNode_IfZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
+            : SimNode(at), cond(c), if_true(t), if_false(f) {}
+        virtual vec4f eval ( Context & context ) override {
+            auto res = EvalTT<TT>::eval(context,cond);
+            DAS_EXCEPTION_POINT;
+            if ( res == 0 ) {
+                return if_true->eval(context);
+            } else {
+                return if_false->eval(context);
+            }
+        }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-                bool cmp = cond->evalBool(context);                 \
+                auto res = EvalTT<TT>::eval(context,cond);          \
                 DAS_NODE_EXCEPTION_POINT(CTYPE);                    \
-                if ( cmp ) {                                        \
+                if ( res==0 ) {                                     \
                     return if_true->eval##TYPE(context);            \
                 } else {                                            \
-                    return (CTYPE) 0;                               \
+                    return if_false->eval##TYPE(context);           \
                 }                                                   \
             }
         DAS_EVAL_NODE
 #undef EVAL_NODE
+        SimNode * cond, * if_true, * if_false;
+    };
+    
+    template <typename TT>
+    struct SimNode_IfNotZeroThenElse : SimNode {
+        SimNode_IfNotZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
+            : SimNode(at), cond(c), if_true(t), if_false(f) {}
+        virtual vec4f eval ( Context & context ) override {
+            auto res = EvalTT<TT>::eval(context,cond);
+            DAS_EXCEPTION_POINT;
+            if ( res != 0 ) {
+                return if_true->eval(context);
+            } else {
+                return if_false->eval(context);
+            }
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+                auto res = EvalTT<TT>::eval(context,cond);          \
+                DAS_NODE_EXCEPTION_POINT(CTYPE);                    \
+                if ( res!=0 ) {                                     \
+                    return if_true->eval##TYPE(context);            \
+                } else {                                            \
+                    return if_false->eval##TYPE(context);           \
+                }                                                   \
+            }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+        SimNode * cond, * if_true, * if_false;
+    };
+    
+    // IF-THEN
+    struct SimNode_IfThen : SimNode {
+        SimNode_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
+            : SimNode(at), cond(c), if_true(t) {}
+        virtual vec4f eval ( Context & context ) override {
+            bool cmp = cond->evalBool(context);
+            DAS_EXCEPTION_POINT;
+            if ( cmp ) {
+                return if_true->eval(context);
+            } else {
+                return v_zero();
+            }
+        }
         SimNode * cond, * if_true;
     };
-
+    
+    template <typename TT>
+    struct SimNode_IfZeroThen : SimNode {
+        SimNode_IfZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
+            : SimNode(at), cond(c), if_true(t) {}
+        virtual vec4f eval ( Context & context ) override {
+            auto res = EvalTT<TT>::eval(context,cond);
+            DAS_EXCEPTION_POINT;
+            if ( res==0 ) {
+                return if_true->eval(context);
+            } else {
+                return v_zero();
+            }
+        }
+        SimNode * cond, * if_true;
+    };
+    
+    template <typename TT>
+    struct SimNode_IfNotZeroThen : SimNode {
+        SimNode_IfNotZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
+        : SimNode(at), cond(c), if_true(t) {}
+        virtual vec4f eval ( Context & context ) override {
+            auto res = EvalTT<TT>::eval(context,cond);
+            DAS_EXCEPTION_POINT;
+            if ( res != 0 ) {
+                return if_true->eval(context);
+            } else {
+                return v_zero();
+            }
+        }
+        SimNode * cond, * if_true;
+    };
+    
+    
     // WHILE
     struct SimNode_While : SimNode {
         SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b ) : SimNode(at), cond(c), body(b) {}

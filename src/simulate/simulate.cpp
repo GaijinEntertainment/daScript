@@ -180,28 +180,6 @@ namespace das
         return subexpr ? subexpr->eval(context) : v_zero();
     }
     
-    // SimNode_IfThenElse
-    
-    vec4f SimNode_IfThenElse::eval ( Context & context ) {
-        bool cmp = cond->evalBool(context);
-        DAS_EXCEPTION_POINT;
-        if ( cmp ) {
-            return if_true->eval(context);
-        } else {
-            return if_false->eval(context);
-        }
-    }
-    
-    vec4f SimNode_IfThen::eval ( Context & context ) {
-        bool cmp = cond->evalBool(context);
-        DAS_EXCEPTION_POINT;
-        if ( cmp ) {
-            return if_true->eval(context);
-        } else {
-            return v_zero();
-        }
-    }
-    
     // SimNode_While
     
     vec4f SimNode_While::eval ( Context & context ) {

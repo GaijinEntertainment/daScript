@@ -385,6 +385,8 @@ namespace das
         virtual bool rtti_isSwizzle() const { return false; }
         virtual bool rtti_isSafeField() const { return false; }
         virtual bool rtti_isAt() const { return false; }
+        virtual bool rtti_isOp1() const { return false; }
+        virtual bool rtti_isOp2() const { return false; }
         virtual bool rtti_isOp3() const { return false; }
         virtual bool rtti_isNullCoalescing() const { return false; }
         virtual bool rtti_isValues() const { return false; }
@@ -591,6 +593,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual Expression * tail() override { return subexpr->tail(); }
+        virtual bool rtti_isOp1() const override { return true; }
         ExpressionPtr   subexpr;
     };
     
@@ -603,6 +606,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual Expression * tail() override { return right->tail(); }
+        virtual bool rtti_isOp2() const override { return true; }
         ExpressionPtr   left, right;
     };
     
@@ -644,7 +648,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual Expression * tail() override { return right->tail(); }
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual bool rtti_isOp3() const override { return true; };
+        virtual bool rtti_isOp3() const override { return true; }
         ExpressionPtr   subexpr, left, right;
     };
     

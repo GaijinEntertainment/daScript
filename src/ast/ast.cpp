@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_match.h"
 #include "daScript/misc/enums.h"
 
 #include "daScript/simulate/runtime_array.h"
@@ -1984,12 +1985,39 @@ namespace das
     }
     
     SimNode * ExprIfThenElse::simulate (Context & context) const {
-        if ( if_false ) {
-            return context.code.makeNode<SimNode_IfThenElse>(at, cond->simulate(context),
-                                if_true->simulate(context), if_false->simulate(context));
+        ExpressionPtr zeroCond;
+        bool condIfZero = false;
+        if ( matchEquNequZero(cond, zeroCond, condIfZero) ) {
+            if ( condIfZero ) {
+                if ( if_false ) {
+                    return context.code.makeNumericValueNode<SimNode_IfZeroThenElse>(zeroCond->type->baseType,
+                                    at, zeroCond->simulate(context), if_true->simulate(context),
+                                            if_false->simulate(context));
+                
+                } else {
+                    return context.code.makeNumericValueNode<SimNode_IfZeroThen>(zeroCond->type->baseType,
+                                    at, zeroCond->simulate(context), if_true->simulate(context));
+                }
+            } else {
+                if ( if_false ) {
+                    return context.code.makeNumericValueNode<SimNode_IfNotZeroThenElse>(zeroCond->type->baseType,
+                                    at, zeroCond->simulate(context), if_true->simulate(context),
+                                            if_false->simulate(context));
+                
+                } else {
+                    return context.code.makeNumericValueNode<SimNode_IfNotZeroThen>(zeroCond->type->baseType,
+                                    at, zeroCond->simulate(context), if_true->simulate(context));
+                }
+            }
         } else {
-            return context.code.makeNode<SimNode_IfThen>(at, cond->simulate(context),
-                                if_true->simulate(context));
+            // good old if
+            if ( if_false ) {
+                return context.code.makeNode<SimNode_IfThenElse>(at, cond->simulate(context),
+                                    if_true->simulate(context), if_false->simulate(context));
+            } else {
+                return context.code.makeNode<SimNode_IfThen>(at, cond->simulate(context),
+                                    if_true->simulate(context));
+            }
         }
     }
 
