@@ -221,6 +221,10 @@ if(URIPARSER_BUILD_TESTS)
         test/VersionSuite.cpp
     )
 
+    if(MSVC)
+        target_compile_definitions(testrunner PRIVATE -D_CRT_SECURE_NO_WARNINGS)
+    endif()
+
     target_include_directories(testrunner SYSTEM PRIVATE
         ${GTEST_INCLUDE_DIR}
     )
