@@ -7,7 +7,7 @@ struct Foo
     n : int64
 
 struct Bar
-    i : int = 5
+    i : int
 
 def Bar
     let b : Bar

@@ -1,152 +1,10 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_generate.h"
 
 namespace das {
-    
-    // auto or generic type conversion
-    
-    void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
-        if ( !autoT->isAuto() ) return;
-        TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef;
-        TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant;
-        if ( autoT->isPointer() ) {
-            applyAutoContracts(TT->firstType, autoT->firstType);
-        } else if ( autoT->baseType==Type::tArray ) {
-            applyAutoContracts(TT->firstType, autoT->firstType);
-        } else if ( autoT->baseType==Type::tTable ) {
-            applyAutoContracts(TT->firstType, autoT->firstType);
-            applyAutoContracts(TT->secondType, autoT->secondType);
-        } else if ( autoT->baseType==Type::tBlock ) {
-            if ( TT->firstType ) {
-                applyAutoContracts(TT->firstType, autoT->firstType);
-            }
-            for ( size_t i=0; i!=autoT->argTypes.size(); ++i ) {
-                applyAutoContracts(TT->argTypes[i], autoT->argTypes[i]);
-            }
-        }
-    }
-    
-    TypeDeclPtr inferAutoType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
-        // can't infer from the type, which is already 'auto'
-        if ( initT->isAuto() )
-            return nullptr;
-        // if its not an auto type, return as is
-        if ( !autoT->isAuto() ) {
-            if ( autoT->isSameType(*initT) ) {
-                return make_shared<TypeDecl>(*autoT);
-            } else {
-                return nullptr;
-            }
-        }
-        // auto & can't be infered from non-ref
-        if ( autoT->ref && !initT->ref )
-            return nullptr;
-        // auto[][][] can't be infered from non-array
-        if ( autoT->dim.size() && autoT->dim!=initT->dim )
-            return nullptr;
-        // auto? can't be infered from non-pointer
-        if ( autoT->isPointer() && (!initT->isPointer() || !initT->firstType) )
-            return nullptr;
-        // array has to match array
-        if ( autoT->baseType==Type::tArray && (initT->baseType!=Type::tArray || !initT->firstType) )
-            return nullptr;
-        // table has to match table
-        if ( autoT->baseType==Type::tTable && (initT->baseType!=Type::tTable || !initT->firstType || !initT->secondType) )
-            return nullptr;
-        // block has to match block
-        if ( autoT->baseType==Type::tBlock ) {
-            if ( initT->baseType!=Type::tBlock )
-                return nullptr;
-            if ( (autoT->firstType!=nullptr) != (initT->firstType!=nullptr) )   // both do or don't have return type
-                return nullptr;
-            if ( autoT->argTypes.size() != initT->argTypes.size() )             // both have same number of arguments
-                return nullptr;
-        }
-        // now, lets make the type
-        auto TT = make_shared<TypeDecl>(*initT);
-        TT->at = autoT->at;
-        TT->alias = autoT->alias;
-        if ( autoT->isPointer() ) {
-            // if it's a pointer, infer pointer-to separately
-            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
-            if ( !TT->firstType ) return nullptr;
-        } else if ( autoT->baseType==Type::tArray ) {
-            // if it's an array, infer array type separately
-            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
-            if ( !TT->firstType ) return nullptr;
-        } else if ( autoT->baseType==Type::tTable ) {
-            // if it's a table, infer table keys and values types separately
-            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
-            if ( !TT->firstType ) return nullptr;
-            if ( !TT->firstType->isWorkhorseType() ) return nullptr;            // table key has to be hashable too
-            TT->secondType = inferAutoType(autoT->secondType, initT->secondType);
-            if ( !TT->secondType ) return nullptr;
-        } else if ( autoT->baseType==Type::tBlock ) {
-            // if it's a block, infer argument and return types
-            if ( autoT->firstType ) {
-                TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
-                if ( !TT->firstType ) return nullptr;
-            }
-            for ( size_t i=0; i!=autoT->argTypes.size(); ++i ) {
-                TT->argTypes[i] = inferAutoType(autoT->argTypes[i], initT->argTypes[i]);
-                if ( !TT->argTypes[i] ) return nullptr;
-            }
-        }
-        return TT;
-    }
-    
-    /*
-     def STRUCT_NAME
-        let t : STRUCT_TYPE
-        t.field1 = init1
-        t.field2 = init2
-        return t
-     */
-    FunctionPtr makeConstructor ( Structure * str ) {
-        auto fn = make_shared<Function>();
-        fn->name = str->name;
-        fn->result = make_shared<TypeDecl>(Type::tStructure);
-        fn->result->structType = str->shared_from_this();
-        auto block = make_shared<ExprBlock>();
-        // let t : STRUCT_TYPE
-        auto varDecl = make_shared<ExprLet>();
-        varDecl->scoped = false;
-        auto varT = make_shared<Variable>();
-        varT->name = "t";
-        varT->type = make_shared<TypeDecl>(Type::tStructure);
-        varT->type->structType = str->shared_from_this();
-        varDecl->variables.push_back(varT);
-        block->list.push_back(varDecl);
-        // for each initialized field
-        for ( auto & fd : str->fields ) {
-            if ( fd.init ) {
-                // t.field = init
-                auto getT = make_shared<ExprVar>();
-                getT->name = "t";
-                auto getTField = make_shared<ExprField>();
-                getTField->value = getT;
-                getTField->name = fd.name;
-                shared_ptr<ExprOp2> opEq = fd.type->canCopy() ?
-                    static_pointer_cast<ExprOp2>(make_shared<ExprCopy>()) :
-                    static_pointer_cast<ExprOp2>(make_shared<ExprMove>());
-                opEq->left = getTField;
-                opEq->right = fd.init->clone();
-                block->list.push_back(opEq);
-            }
-        }
-        // return t
-        auto returnDecl = make_shared<ExprReturn>();
-        auto getT = make_shared<ExprVar>();
-        getT->name = "t";
-        returnDecl->subexpr = getT;
-        returnDecl->moveSemantics = !str->canCopy();
-        block->list.push_back(returnDecl);
-        fn->body = block;
-        return fn;
-    }
-    
-    
+
     // type inference
 
     class InferTypes : public Visitor {
@@ -389,12 +247,12 @@ namespace das {
 				}
 				// match auto argument
 				if (argType->isAuto()) {
-					return inferAutoType(argType, passType) != nullptr;
+                    return TypeDecl::inferAutoType(argType, passType) != nullptr;
 				}
 			}
 			// match inferable block
 			if (inferBlock && passType->isAuto() && passType->isGoodBlockType()) {
-				return inferAutoType(passType, argType) != nullptr;
+				return TypeDecl::inferAutoType(passType, argType) != nullptr;
 			}
 			// compare types which don't need inference
 			if (passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false))) {
@@ -524,11 +382,16 @@ namespace das {
             fieldOffset += decl.type->getSizeOf();
         }
         virtual StructurePtr visit ( Structure * var ) override {
-            if ( !var->genCtor && var->hasAnyInitializers() && !hasUserConstructor(var->name) ) {
-                auto ctor = makeConstructor(var);
-                extraFunctions.push_back(ctor);
-                var->genCtor = true;
-                reportGenericInfer();
+            if ( !var->genCtor && var->hasAnyInitializers() ) {
+                if ( !hasUserConstructor(var->name) ) {
+                    auto ctor = makeConstructor(var);
+                    extraFunctions.push_back(ctor);
+                    var->genCtor = true;
+                    reportGenericInfer();
+                } else {
+                    error("structure already has user defined initializer", var->at,
+                          CompilationError::structure_already_has_initializer);
+                }
             }
             return Visitor::visit(var);
         }
@@ -543,14 +406,14 @@ namespace das {
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
             if ( !var->init->type ) return Visitor::visitGlobalLetInit(var, init);
             if ( var->type->isAuto() ) {
-                auto varT = inferAutoType(var->type, var->init->type);
+                auto varT = TypeDecl::inferAutoType(var->type, var->init->type);
                 if ( !varT ) {
                     error("global variable initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
                     varT->ref = false;
-                    applyAutoContracts(varT, var->type);
+                    TypeDecl::applyAutoContracts(varT, var->type);
                     var->type = varT;
                 }
             } else if ( !var->type->isSameType(*var->init->type,false) ) {
@@ -1056,13 +919,13 @@ namespace das {
         }
         virtual ExpressionPtr visitBlockArgumentInit (ExprBlock * block, const VariablePtr & arg, Expression * that ) override {
             if ( arg->type->isAuto() ) {
-                auto argT = inferAutoType(arg->type, arg->init->type);
+                auto argT = TypeDecl::inferAutoType(arg->type, arg->init->type);
                 if ( !argT ) {
                     error("block argument initialization type can't be infered, "
                           + arg->type->describe() + " = " + arg->init->type->describe(),
                           arg->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
-                    applyAutoContracts(argT, arg->type);
+                    TypeDecl::applyAutoContracts(argT, arg->type);
                     arg->type = argT;
                 }
             }
@@ -1368,14 +1231,14 @@ namespace das {
         bool inferReturnType ( TypeDeclPtr & resType, ExprReturn * expr ) {
             if ( resType->isAuto() ) {
                 if ( expr->subexpr ) {
-                    auto resT = inferAutoType(resType, expr->subexpr->type);
+                    auto resT = TypeDecl::inferAutoType(resType, expr->subexpr->type);
                     if ( !resT ) {
                         error("type can't be infered, "
                               + resType->describe() + ", returns " + expr->subexpr->type->describe(),
                               expr->at, CompilationError::cant_infer_mismatching_restrictions );
                     } else {
                         resT->ref = false;
-                        applyAutoContracts(resT, resType);
+                        TypeDecl::applyAutoContracts(resT, resType);
                         resType = resT;
                         reportGenericInfer();
                         return true;
@@ -1589,14 +1452,14 @@ namespace das {
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
             if ( !var->init->type ) return Visitor::visitLetInit(expr, var, init);
             if ( var->type->isAuto() ) {
-                auto varT = inferAutoType(var->type, var->init->type);
+                auto varT = TypeDecl::inferAutoType(var->type, var->init->type);
                 if ( !varT ) {
                     error("local variable initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
                     varT->ref = false;
-                    applyAutoContracts(varT, var->type);
+                    TypeDecl::applyAutoContracts(varT, var->type);
                     var->type = varT;
                 }
             } else if ( !var->type->isSameType(*var->init->type,false,false) ) {
@@ -1663,10 +1526,10 @@ namespace das {
                         auto & argT = clone->arguments[sz]->type;
                         if ( argT->isAuto() ) {
                             auto & passT = types[sz];
-                            auto resT = inferAutoType(argT, passT);
+                            auto resT = TypeDecl::inferAutoType(argT, passT);
                             assert(resT && "how? we had this working at findMatchingGenerics");
-                            resT->ref = false; // by default no ref
-                            applyAutoContracts(resT, argT);
+                            resT->ref = false;              // by default no ref
+                            TypeDecl::applyAutoContracts(resT, argT);
                             if ( resT->isRefType() ) {   // we don't pass boxed type by reference ever
                                 resT->ref = false;
                             }
@@ -1709,9 +1572,9 @@ namespace das {
                         assert ( arg->rtti_isMakeBlock() && "always MakeBlock" );
                         auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                        auto retT = inferAutoType(mkBlock->type, expr->func->arguments[iF]->type);
+                        auto retT = TypeDecl::inferAutoType(mkBlock->type, expr->func->arguments[iF]->type);
                         assert ( retT && "how? it matched during findMatchingFunctions the same way");
-                        applyAutoContracts(mkBlock->type, expr->func->arguments[iF]->type);
+                        TypeDecl::applyAutoContracts(mkBlock->type, expr->func->arguments[iF]->type);
                         block->returnType = make_shared<TypeDecl>(*retT->firstType);
                         for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
                             block->arguments[ba]->type = make_shared<TypeDecl>(*retT->argTypes[ba]);

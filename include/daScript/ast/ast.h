@@ -53,6 +53,7 @@ namespace das
         TypeDecl(const TypeDecl & decl);
         TypeDecl & operator = (const TypeDecl & decl) = delete;
         TypeDecl(Type tt) : baseType(tt) {}
+        TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp) {}
         friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
         string getMangledName() const;
         bool isSameType ( const TypeDecl & decl, bool refMatters = true, bool constMatters = true ) const;
@@ -93,6 +94,8 @@ namespace das
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
+        static TypeDeclPtr inferAutoType ( TypeDeclPtr autoT, TypeDeclPtr initT );
+        static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
         Type getRangeBaseType() const;
         const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
         Type                baseType = Type::tVoid;

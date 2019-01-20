@@ -38,6 +38,7 @@ namespace das
     ,   global_variable_already_declared        =   30204       //  let(...,x,...,x,...)
     ,   structure_field_already_declared        =   30205       //  struct ... x ... x
     ,   structure_already_declared              =   30206       //  ... struct x ... struct x ...
+    ,   structure_already_has_initializer       =   30207       //  struct Foo x = 5; def Foo() ...
         
     ,   type_not_found                          =   30301       //  a:wtf
     ,   structure_not_found                     =   30302       //  new wtf

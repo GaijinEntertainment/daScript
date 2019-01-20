@@ -48,6 +48,7 @@ SOURCE_GROUP_FILES("vecmath" VECMATH_SRC)
 
 SET(AST_SRC
 src/ast/ast.cpp
+src/ast/ast_generate.cpp
 src/ast/ast_simulate.cpp
 src/ast/ast_typedecl.cpp
 src/ast/ast_match.cpp
@@ -64,6 +65,7 @@ src/ast/ast_export.cpp
 src/ast/ast_debug_info_helper.cpp
 include/daScript/ast/compilation_errors.h
 include/daScript/ast/ast.h
+include/daScript/ast/ast_generate.h
 include/daScript/ast/ast_match.h
 include/daScript/ast/ast_interop.h
 include/daScript/ast/ast_handle.h

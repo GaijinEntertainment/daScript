@@ -4,6 +4,101 @@
 
 namespace das
 {
+    // auto or generic type conversion
+    
+    void TypeDecl::applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
+        if ( !autoT->isAuto() ) return;
+        TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef;
+        TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant;
+        if ( autoT->isPointer() ) {
+            applyAutoContracts(TT->firstType, autoT->firstType);
+        } else if ( autoT->baseType==Type::tArray ) {
+            applyAutoContracts(TT->firstType, autoT->firstType);
+        } else if ( autoT->baseType==Type::tTable ) {
+            applyAutoContracts(TT->firstType, autoT->firstType);
+            applyAutoContracts(TT->secondType, autoT->secondType);
+        } else if ( autoT->baseType==Type::tBlock ) {
+            if ( TT->firstType ) {
+                applyAutoContracts(TT->firstType, autoT->firstType);
+            }
+            for ( size_t i=0; i!=autoT->argTypes.size(); ++i ) {
+                applyAutoContracts(TT->argTypes[i], autoT->argTypes[i]);
+            }
+        }
+    }
+    
+    TypeDeclPtr TypeDecl::inferAutoType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
+        // can't infer from the type, which is already 'auto'
+        if ( initT->isAuto() )
+            return nullptr;
+        // if its not an auto type, return as is
+        if ( !autoT->isAuto() ) {
+            if ( autoT->isSameType(*initT) ) {
+                return make_shared<TypeDecl>(*autoT);
+            } else {
+                return nullptr;
+            }
+        }
+        // auto & can't be infered from non-ref
+        if ( autoT->ref && !initT->ref )
+            return nullptr;
+        // auto[][][] can't be infered from non-array
+        if ( autoT->dim.size() && autoT->dim!=initT->dim )
+            return nullptr;
+        // auto? can't be infered from non-pointer
+        if ( autoT->isPointer() && (!initT->isPointer() || !initT->firstType) )
+            return nullptr;
+        // array has to match array
+        if ( autoT->baseType==Type::tArray && (initT->baseType!=Type::tArray || !initT->firstType) )
+            return nullptr;
+        // table has to match table
+        if ( autoT->baseType==Type::tTable && (initT->baseType!=Type::tTable || !initT->firstType || !initT->secondType) )
+            return nullptr;
+        // block has to match block
+        if ( autoT->baseType==Type::tBlock ) {
+            if ( initT->baseType!=Type::tBlock )
+                return nullptr;
+            if ( (autoT->firstType!=nullptr) != (initT->firstType!=nullptr) )   // both do or don't have return type
+                return nullptr;
+            if ( autoT->argTypes.size() != initT->argTypes.size() )             // both have same number of arguments
+                return nullptr;
+        }
+        // now, lets make the type
+        auto TT = make_shared<TypeDecl>(*initT);
+        TT->at = autoT->at;
+        TT->alias = autoT->alias;
+        if ( autoT->isPointer() ) {
+            // if it's a pointer, infer pointer-to separately
+            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+            if ( !TT->firstType ) return nullptr;
+        } else if ( autoT->baseType==Type::tArray ) {
+            // if it's an array, infer array type separately
+            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+            if ( !TT->firstType ) return nullptr;
+        } else if ( autoT->baseType==Type::tTable ) {
+            // if it's a table, infer table keys and values types separately
+            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+            if ( !TT->firstType ) return nullptr;
+            if ( !TT->firstType->isWorkhorseType() ) return nullptr;            // table key has to be hashable too
+            TT->secondType = inferAutoType(autoT->secondType, initT->secondType);
+            if ( !TT->secondType ) return nullptr;
+        } else if ( autoT->baseType==Type::tBlock ) {
+            // if it's a block, infer argument and return types
+            if ( autoT->firstType ) {
+                TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+                if ( !TT->firstType ) return nullptr;
+            }
+            for ( size_t i=0; i!=autoT->argTypes.size(); ++i ) {
+                TT->argTypes[i] = inferAutoType(autoT->argTypes[i], initT->argTypes[i]);
+                if ( !TT->argTypes[i] ) return nullptr;
+            }
+        }
+        return TT;
+    }
+
+    
+    // TypeDecl
+    
     string TypeDecl::describe ( bool extra ) const {
         stringstream stream;
         if ( baseType==Type::alias ) {

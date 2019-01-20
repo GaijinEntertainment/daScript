@@ -1039,8 +1039,7 @@ namespace das
             return nullptr;
         } else if ( structs.size() ) {
             if ( structs.size()==1 ) {
-                auto pTD = new TypeDecl(Type::tStructure);
-                pTD->structType = structs.back();
+                auto pTD = new TypeDecl(structs.back());
                 pTD->at = at;
                 return pTD;
             } else {
