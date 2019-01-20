@@ -5,6 +5,8 @@ NOTE: uriparser is looking for help with a few things:
 2019-xx-xx -- 0.x.x
 
   * Fixed: Add missing extern "C" wrapper to UriIp4.h for use from C++
+  * Fixed: Linking error for symbol defaultMemoryManager from mixing C and C++
+      Thanks to Jørgen Ibsen for the report!
   * Fixed: Link errors on Haiku regarding function inet_ntop (GitHub #45)
       Thanks to Schrijvers Luc for the patch!
   * Changed: Migrated from GNU Autotools to CMake (GitHub #17, #47)

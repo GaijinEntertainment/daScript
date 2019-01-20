@@ -61,6 +61,7 @@ option(URIPARSER_BUILD_TESTS "Build test suite (requires GTest >=1.8.1)" ON)
 option(URIPARSER_BUILD_TOOLS "Build tools (e.g. CLI \"uriparse\")" ON)
 option(URIPARSER_BUILD_CHAR "Build code supporting data type 'char'" ON)
 option(URIPARSER_BUILD_WCHAR_T "Build code supporting data type 'wchar_t'" ON)
+set(URIPARSER_MSVC_RUNTIME "" CACHE STRING "Use of specific runtime library (/MT /MTd /MD /MDd) with MSVC")
 
 if(NOT URIPARSER_BUILD_CHAR AND NOT URIPARSER_BUILD_WCHAR_T)
     message(SEND_ERROR "One or more of URIPARSER_BUILD_CHAR and URIPARSER_BUILD_WCHAR_T needs to be enabled.")
@@ -70,6 +71,20 @@ if(URIPARSER_BUILD_TESTS AND NOT (URIPARSER_BUILD_CHAR AND URIPARSER_BUILD_WCHAR
 endif()
 if(URIPARSER_BUILD_TOOLS AND NOT URIPARSER_BUILD_CHAR)
     message(SEND_ERROR "URIPARSER_BUILD_TOOLS=ON requires URIPARSER_BUILD_CHAR=ON.")
+endif()
+
+if(MSVC AND URIPARSER_MSVC_RUNTIME)
+    set(_refs
+        CMAKE_CXX_FLAGS
+        CMAKE_CXX_FLAGS_DEBUG
+        CMAKE_CXX_FLAGS_RELEASE
+        CMAKE_C_FLAGS
+        CMAKE_C_FLAGS_DEBUG
+        CMAKE_C_FLAGS_RELEASE
+    )
+    foreach(_ref ${_refs})
+        string(REGEX REPLACE "/M[DT]d?" ${URIPARSER_MSVC_RUNTIME} ${_ref} "${${_ref}}")
+    endforeach()
 endif()
 
 #
@@ -205,6 +220,10 @@ if(URIPARSER_BUILD_TESTS)
         test/test.cpp
         test/VersionSuite.cpp
     )
+
+    if(MSVC)
+        target_compile_definitions(testrunner PRIVATE -D_CRT_SECURE_NO_WARNINGS)
+    endif()
 
     target_include_directories(testrunner SYSTEM PRIVATE
         ${GTEST_INCLUDE_DIR}

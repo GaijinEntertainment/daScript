@@ -59,7 +59,17 @@
 
 
 
-extern UriMemoryManager defaultMemoryManager;
+#ifdef __cplusplus
+# define URIPARSER_EXTERN extern "C"
+#else
+# define URIPARSER_EXTERN extern
+#endif
+
+URIPARSER_EXTERN UriMemoryManager defaultMemoryManager;
+
+#undef URIPARSER_EXTERN
+
+
 
 UriBool uriMemoryManagerIsComplete(const UriMemoryManager * memory);
 
