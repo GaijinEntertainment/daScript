@@ -32,6 +32,14 @@ namespace  das {
 		static __forceinline TT Min       ( TT a, TT b, Context & ) { return a <= b ? a : b; }
 		static __forceinline TT Max       ( TT a, TT b, Context & ) { return a >= b ? a : b; }
     };
+    
+    template <typename TT>  // float or double?
+    struct SimPolicy_Trig {
+        static __forceinline TT Sin   ( TT a, Context & )          { return sinf(a); }
+        static __forceinline TT Cos   ( TT a, Context & )          { return cosf(a); }
+        static __forceinline TT Tan   ( TT a, Context & )          { return tanf(a); }
+        static __forceinline TT ATan2 ( TT a, TT b, Context & )    { return atan2(a,b); }
+    };
 
     template <typename TT>
     struct SimPolicy_Type : SimPolicy_GroupByAdd<TT>, SimPolicy_Ordered<TT> {
@@ -73,7 +81,8 @@ namespace  das {
     struct SimPolicy_UInt : SimPolicy_Bin<uint32_t> {};
     struct SimPolicy_Int64 : SimPolicy_Bin<int64_t> {};
     struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t> {};
-    struct SimPolicy_Float : SimPolicy_Type<float> {
+    
+    struct SimPolicy_Float : SimPolicy_Type<float>, SimPolicy_Trig<float> {
         static __forceinline float Mod ( float a, float b, Context & ) { return fmod(a,b); }
         static __forceinline float & SetMod ( float & a, float b, Context & ) { return a = fmod(a,b); }
     };

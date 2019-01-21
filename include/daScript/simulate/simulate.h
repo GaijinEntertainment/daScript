@@ -1364,6 +1364,18 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
     };
 
+#define IMPLEMENT_OP1_FUNCTION_POLICY(CALL,TYPE,CTYPE)                  \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
+        DAS_NODE(TYPE,CTYPE);                                           \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
+        __forceinline CTYPE compute ( Context & context ) {             \
+            auto val = arguments[0]->eval##TYPE(context);               \
+            return SimPolicy<CTYPE>::CALL(val,context);                 \
+        }                                                               \
+    };
+
+    
 #define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
@@ -1381,6 +1393,16 @@ SIM_NODE_AT_VECTOR(Float, float)
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         virtual vec4f eval ( Context & context ) override {             \
             auto val = x->eval(context);                                \
+            return SimPolicy<CTYPE>::CALL(val,context);                 \
+        }                                                               \
+    };
+    
+#define IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(CALL,CTYPE)                  \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
+        virtual vec4f eval ( Context & context ) override {             \
+            auto val = arguments[0]->eval(context);                     \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
     };
@@ -1461,6 +1483,17 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {             \
             auto lv = l->eval(context);                                 \
             auto rv = r->eval(context);                                 \
+            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+        }                                                               \
+    };
+    
+#define IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(CALL,CTYPE)                  \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
+        virtual vec4f eval ( Context & context ) override {             \
+            auto lv = arguments[0]->eval(context);                      \
+            auto rv = arguments[1]->eval(context);                      \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
@@ -1573,6 +1606,12 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_OP2_EVAL_NUMERIC_POLICY(CTYPE);      \
     DEFINE_OP2_EVAL_VECNUMERIC_POLICY(CTYPE);
 
+#define DEFINE_EVAL_TRIG_POLICY(CTYPE)                  \
+    IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(Sin, CTYPE);     \
+    IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(Cos, CTYPE);     \
+    IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(Tan, CTYPE);     \
+    IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(ATan2, CTYPE);
+    
     // unary
     DEFINE_POLICY(Unp);
     DEFINE_POLICY(Unm);
@@ -1625,4 +1664,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_POLICY(SetBoolXor);
     DEFINE_POLICY(SetDivScal);
     DEFINE_POLICY(SetMulScal);
+    // trig
+    DEFINE_POLICY(Sin);
+    DEFINE_POLICY(Cos);
+    DEFINE_POLICY(Tan);
+    DEFINE_POLICY(ATan2);
 }

@@ -73,6 +73,15 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Max<TT>,        TT,   TT,  TT>  >("max",    lib) );
     }
 
+    // trig types
+    template <typename TT>
+    void addFunctionTrig(Module & mod, const ModuleLibrary & lib) {
+        //                                     policy              ret   arg1 arg2     name
+        mod.addFunction( make_shared<BuiltInFn<Sim_Sin<TT>,        TT,   TT>        >("sin",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Cos<TT>,        TT,   TT>        >("cos",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Tan<TT>,        TT,   TT>        >("tan",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_ATan2<TT>,      TT,   TT,  TT>   >("atan2",  lib) );
+    }
 
     // concatination types
     template <typename TT>
