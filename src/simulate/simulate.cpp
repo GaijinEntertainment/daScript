@@ -96,10 +96,10 @@ namespace das
     // SimNode_TryCatch
     
     vec4f SimNode_TryCatch::eval ( Context & context ) {
+        vec4f * aa = context.abiArg;
+        char * EP, * SP;
+        context.stack.watermark(EP,SP);
         #if DAS_ENABLE_EXCEPTIONS
-            vec4f * aa = context.abiArg;
-            char * EP, * SP;
-            context.stack.watermark(EP,SP);
             try {
                 try_block->eval(context);
             } catch ( const dasException & ) {
@@ -109,7 +109,19 @@ namespace das
                 catch_block->eval(context);
             }
         #else
-            static_assert(false, "implement");
+            jmp_buf ev;
+            jmp_buf * JB = context.throwBuf;
+            context.throwBuf = &ev;
+            if ( !setjmp(ev) ) {
+                try_block->eval(context);
+            } else {
+                context.throwBuf = JB;
+                context.abiArg = aa;
+                context.stack.pop(EP,SP);
+                context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+                catch_block->eval(context);
+            }
+            context.throwBuf = JB;
         #endif
         return v_zero();
     }
@@ -417,15 +429,29 @@ namespace das
 #if DAS_ENABLE_EXCEPTIONS
         throw dasException(message ? message : "");
 #else
-        static_assert(false, "implement");
+        if ( throwBuf ) {
+            longjmp(*throwBuf,1);
+        } else {
+            to_err("\nunhandled exception\n");
+            if ( exception ) {
+                to_err(exception);
+                to_err("\n");
+            }
+            stackWalk();
+#ifdef _MSC_VER
+            __debugbreak();
+#else
+            raise(SIGTRAP);
+#endif
+        }
 #endif
     }
     
     vec4f Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
-#if DAS_ENABLE_EXCEPTIONS
         vec4f * aa = abiArg;
         char * EP, * SP;
         stack.watermark(EP,SP);
+#if DAS_ENABLE_EXCEPTIONS
         try {
             return call(fnPtr, args, res, 0);
         } catch ( const dasException & ) {
@@ -442,7 +468,18 @@ namespace das
             return v_zero();
         }
 #else
-        static_assert(false,"implement");
+        jmp_buf ev;
+        jmp_buf * JB = throwBuf;
+        throwBuf = &ev;
+        if ( !setjmp(ev) ) {
+            return call(fnPtr, args, res, 0);
+        } else {
+            abiArg = aa;
+            stack.pop(EP,SP);
+            throwBuf = JB;
+            return v_zero();
+        }
+        throwBuf = JB;
 #endif
     }
     

@@ -86,6 +86,7 @@ namespace das
     class Context {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
+        friend struct SimNode_TryCatch;
         friend class Program;
     public:
         Context(const string * lines, uint32_t heapSize = 4*1024*1024);
@@ -218,6 +219,9 @@ namespace das
         int totalVariables = 0;
         int totalFunctions = 0;
         const char * exception = nullptr;
+#if !DAS_ENABLE_EXCEPTIONS
+        jmp_buf * throwBuf = nullptr;
+#endif
     public:
         const string * debugInput = nullptr;
         class Program * thisProgram = nullptr;

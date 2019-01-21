@@ -19,6 +19,7 @@
 
 #include <signal.h>
 #include <assert.h>
+#include <setjmp.h>
 
 #ifdef _MSC_VER
 #include <intsafe.h>
