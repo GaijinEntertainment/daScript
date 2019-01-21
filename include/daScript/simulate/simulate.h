@@ -526,7 +526,12 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            return context.call(fnPtr, argValues, debug.line);
+			auto aa = context.abiArg;                                                       
+			context.abiArg = argValues;                                                     
+			auto res = fnPtr->code->eval(context);                           
+			context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);     
+			context.abiArg = aa;                                                            
+			return res;             
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \

@@ -27,24 +27,6 @@ namespace das
 			return true;
 		}
 	};
-    
-    struct FastCallFunctionAnnotation : FunctionAnnotation {
-        FastCallFunctionAnnotation() : FunctionAnnotation("fastcall") { }
-        virtual bool apply(ExprBlock *, const AnnotationArgumentList &, string & err) override {
-            err = "can't mark block as fastcall";
-            return false;
-        }
-        virtual bool finalize(ExprBlock *, const AnnotationArgumentList &, string &) override {
-            return true;
-        }
-        virtual bool apply(const FunctionPtr &, const AnnotationArgumentList &, string &) override {
-            return true;
-        };
-        virtual bool finalize(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
-            func->fastCall = true;
-            return true;
-        }
-    };
 
     // core functions
     
@@ -84,7 +66,6 @@ namespace das
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
 		// function annotations
 		addAnnotation(make_shared<ExportFunctionAnnotation>());
-        addAnnotation(make_shared<FastCallFunctionAnnotation>());
         // functions
         addExtern<decltype(builtin_throw),builtin_throw>         (*this, lib, "throw");
         addExtern<decltype(builtin_print),builtin_print>         (*this, lib, "print");

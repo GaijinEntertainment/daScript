@@ -16,6 +16,7 @@ namespace das
             return nullptr;
         }
         if ( fastCall ) {
+			assert(totalStackSize == sizeof(Prologue) && "function can't allocate stack");
             assert(result->isWorkhorseType() && "fastcall can only return a workhoree type");
             assert(body->rtti_isBlock() && "function must contain a block");
             auto block = static_pointer_cast<ExprBlock>(body);

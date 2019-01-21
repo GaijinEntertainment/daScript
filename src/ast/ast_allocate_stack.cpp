@@ -34,8 +34,17 @@ namespace das {
         }
         virtual FunctionPtr visit ( Function * that ) override {
             func->totalStackSize = max(func->totalStackSize, stackTop);
+			// detecting fastcall
+			if (func->result->isWorkhorseType() && func->totalStackSize == sizeof(Prologue)) {
+				if (func->body->rtti_isBlock()) {
+					auto block = static_pointer_cast<ExprBlock>(func->body);
+					if (block->list.size() == 1 && block->list.back()->rtti_isReturn()) {
+						func->fastCall = true;
+					}
+				}
+			}
             if ( log ) {
-                logs << func->totalStackSize << "\ttotal\n";
+                logs << func->totalStackSize << "\ttotal" << (func->fastCall ? ", fastcall" : "") << "\n";
             }
             func.reset();
             return Visitor::visit(that);
