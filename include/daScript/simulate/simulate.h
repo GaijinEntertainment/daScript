@@ -15,7 +15,7 @@ namespace das
     #endif
 
     #ifndef DAS_ENABLE_EXCEPTIONS
-    #define DAS_ENABLE_EXCEPTIONS   1
+    #define DAS_ENABLE_EXCEPTIONS   0
     #endif
 
     #define MAX_FOR_ITERATORS   16
