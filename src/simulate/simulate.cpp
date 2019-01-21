@@ -105,7 +105,7 @@ namespace das
 #endif
 
     vec4f SimNode_TryCatch::eval ( Context & context ) {
-        vec4f * aa = context.abiArg;
+        auto aa = context.abiArg; auto acm = context.abiCMRES;
         char * EP, * SP;
         context.stack.watermark(EP,SP);
         #if DAS_ENABLE_EXCEPTIONS
@@ -113,6 +113,7 @@ namespace das
                 try_block->eval(context);
             } catch ( const dasException & ) {
                 context.abiArg = aa;
+                context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
                 context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
                 catch_block->eval(context);
@@ -126,6 +127,7 @@ namespace das
             } else {
                 context.throwBuf = JB;
                 context.abiArg = aa;
+                context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
                 context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
                 catch_block->eval(context);
@@ -341,11 +343,11 @@ namespace das
             return v_zero();
         }
         // fill prologue
-        vec4f * aa = abiArg;
-        Prologue * pp           = (Prologue *) stack.sp();
-        pp->arguments           = abiArg = args;
-        pp->copyOrMoveResult    = (char *)cmres;
+        auto aa = abiArg; auto acm = cmres;
+        abiArg = args;  abiCMRES = cmres;
 #if DAS_ENABLE_STACK_WALK
+        Prologue * pp           = (Prologue *) stack.sp();
+        pp->arguments           = args;
         pp->info                = fn->debug;
         pp->line                = line;
 #endif
@@ -353,7 +355,7 @@ namespace das
         when(fn->code);
         stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
         // POP
-        abiArg = aa;
+        abiArg = aa; abiCMRES = acm;
 		stack.pop(EP,SP);
         return result;
     }
@@ -466,7 +468,7 @@ namespace das
 #endif
 
     vec4f Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
-        vec4f * aa = abiArg;
+        auto aa = abiArg; auto acm = abiCMRES;
         char * EP, * SP;
         stack.watermark(EP,SP);
 #if DAS_ENABLE_EXCEPTIONS
@@ -481,7 +483,7 @@ namespace das
             }
             stackWalk();
             */
-            abiArg = aa;
+            abiArg = aa; abiCMRES = acm;
             stack.pop(EP,SP);
             return v_zero();
         }
@@ -490,9 +492,10 @@ namespace das
         jmp_buf * JB = throwBuf;
         throwBuf = &ev;
         if ( !setjmp(ev) ) {
-            return call(fnPtr, args, res, 0);
+            return callWithCopyOnReturn(fnPtr, args, res, 0);
         } else {
             abiArg = aa;
+            abiCMRES = acm;
             stack.pop(EP,SP);
             throwBuf = JB;
             return v_zero();
@@ -505,7 +508,7 @@ namespace das
 #pragma warning(pop)
 #endif
     
-    void Context::fakeCall ( FuncInfo * info, int line, vec4f * args, void * cmres, char * & EP, char * & SP ) {
+    void Context::fakeCall ( FuncInfo * info, int line, vec4f * args, char * & EP, char * & SP ) {
 #if DAS_ENABLE_STACK_WALK
         if (!stack.push(sizeof(Prologue), EP, SP)) {
             throw_error("stack overflow");
@@ -513,7 +516,6 @@ namespace das
         }
         Prologue * pp = (Prologue *) stack.sp();
         pp->arguments =           args;
-        pp->copyOrMoveResult =    (char *) cmres;
         pp->info =                info;
         pp->line =                line;
 #endif

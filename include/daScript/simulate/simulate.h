@@ -55,12 +55,14 @@ namespace das
     };
 
     struct Prologue {
-        vec4f *     arguments;
-        char *      copyOrMoveResult;
-#if DAS_ENABLE_STACK_WALK
-        FuncInfo *  info;
-        int32_t     line;
-#endif
+        union {
+            struct {
+                vec4f *     arguments;
+                FuncInfo *  info;
+                int32_t     line;
+            };
+            vec4f           dummy;
+        };
     };
     static_assert((sizeof(Prologue) & 0xf)==0, "it has to be 16 byte aligned");
 
@@ -111,10 +113,10 @@ namespace das
         }
 
         __forceinline vec4f eval ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
-            return call(fnPtr, args, res, 0);
+            return callWithCopyOnReturn(fnPtr, args, res, 0);
         }
         
-        void fakeCall ( FuncInfo * info, int line, vec4f * args, void * cmres, char * & EP, char * & SP );
+        void fakeCall ( FuncInfo * info, int line, vec4f * args, char * & EP, char * & SP );
         
         vec4f evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
 
@@ -143,10 +145,10 @@ namespace das
         }
 
         __forceinline char * abiCopyOrMoveResult() {
-            return ((Prologue *)stack.sp())->copyOrMoveResult;
+            return (char *) abiCMRES;
         }
 
-		__forceinline vec4f call(SimFunction * fn, vec4f * args, void * cmres, int line) {
+		__forceinline vec4f call(SimFunction * fn, vec4f * args, int line) {
 			// PUSH
 			char * EP, *SP;
 			if (!stack.push(fn->stackSize, EP, SP)) {
@@ -154,11 +156,11 @@ namespace das
                 return v_zero();
             }
             // fill prologue
-            vec4f * aa = abiArg;
-            Prologue * pp = (Prologue *)stack.sp();
-            pp->arguments = abiArg = args;
-            pp->copyOrMoveResult = (char *)cmres;
+            auto aa = abiArg;
+            abiArg = args;
 #if DAS_ENABLE_STACK_WALK
+            Prologue * pp = (Prologue *)stack.sp();
+            pp->arguments = args;
             pp->info = fn->debug;
             pp->line = line;
 #endif
@@ -168,7 +170,31 @@ namespace das
             // POP
             abiArg = aa;
 			stack.pop(EP, SP);
-            // abiArg = ((Prologue *)stack.sp())->arguments;
+            return result;
+        }
+        
+        __forceinline vec4f callWithCopyOnReturn(SimFunction * fn, vec4f * args, void * cmres, int line) {
+            // PUSH
+            char * EP, *SP;
+            if (!stack.push(fn->stackSize, EP, SP)) {
+                throw_error("stack overflow");
+                return v_zero();
+            }
+            // fill prologue
+            auto aa = abiArg; auto acm = abiCMRES;
+            abiArg = args; abiCMRES = cmres;
+#if DAS_ENABLE_STACK_WALK
+            Prologue * pp = (Prologue *)stack.sp();
+            pp->arguments = args;
+            pp->info = fn->debug;
+            pp->line = line;
+#endif
+            // CALL
+            fn->code->eval(*this);
+            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            // POP
+            abiArg = aa; abiCMRES = acm;
+            stack.pop(EP, SP);
             return result;
         }
 
@@ -213,6 +239,7 @@ namespace das
 		void *			heapWatermark = nullptr;
     public:
         vec4f *         abiArg;
+        void *          abiCMRES;
 	protected:
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
@@ -499,13 +526,13 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            return context.call(fnPtr, argValues, nullptr, debug.line);
+            return context.call(fnPtr, argValues, debug.line);
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
-                return cast<CTYPE>::to(context.call(fnPtr, argValues, nullptr, debug.line));    \
+                return cast<CTYPE>::to(context.call(fnPtr, argValues, debug.line));    \
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE
@@ -520,7 +547,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 vec4f argValues[argCount ? argCount : 1];
                 EvalBlock<argCount>::eval(context, arguments, argValues);
                 auto cmres = context.stack.sp() + stackTop;
-                return cast<char *>::to(context.call(fnPtr, argValues, cmres, debug.line));     
+                return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, debug.line));
         }
     };
 
