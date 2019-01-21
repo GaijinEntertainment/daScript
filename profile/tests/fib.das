@@ -1,16 +1,11 @@
-// options log=true,logInferPasses=true
+// options logStack=true, log=true
 
 require testProfile
 
 def fibR(n)
     if (n < 2)
         return n
-    else
-        return fibR(n - 1) + fibR(n - 2)
-
-[fastcall]
-def fibRF(n) : int
-    return (n < 2) ? n : (fibRF(n - 1) + fibRF(n - 2))
+	return fibR(n - 1) + fibR(n - 2)
 
 def fibI(n)
     let last = 0
@@ -44,8 +39,6 @@ def test()
         fibIU(6511134)
     profile(20,"fibbonacci recursive") <|
         fibR(31)
-    profile(20,"fibbonacci recursive [fastcall]") <|
-        fibRF(31)
     profile(20,"fibbonacci loop c++") <|
         testProfile::testFibI(6511134)
     profile(20,"fibbonacci recursive c++") <|
