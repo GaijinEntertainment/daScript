@@ -18,15 +18,6 @@ __forceinline vec4i v_splats_ptr(void * a) {
 #endif
 }
 
-__forceinline vec4f v_mod(vec4f  a, vec4f aDiv) {
-	vec4f c = _mm_div_ps(a, aDiv);
-	vec4i i = _mm_cvttps_epi32(c);
-	vec4f cTrunc = _mm_cvtepi32_ps(i);
-	vec4f base = _mm_mul_ps(cTrunc, aDiv);
-	vec4f r = _mm_sub_ps(a, base);
-	return r;
-}
-
 __forceinline vec4i v_muli(vec4i a, vec4i b) {
 	vec4i c;
 	int32_t * A = (int32_t *)&a;
