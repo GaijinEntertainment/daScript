@@ -104,6 +104,7 @@ int main(int argc, const char * argv[]) {
 #endif
     // register modules
     NEED_MODULE(Module_BuiltIn);
+    NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
 #if 0
     unit_test(TEST_PATH "profile/tests/annotation.das");

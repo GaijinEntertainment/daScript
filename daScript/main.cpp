@@ -74,6 +74,7 @@ int main(int argc, const char * argv[]) {
     }
     // register modules
     NEED_MODULE(Module_BuiltIn);
+    NEED_MODULE(Module_Math);
     // compile and run
     for ( const auto & fn : files ) {
         compile_and_run(fn, mainName, outputProgramCode);

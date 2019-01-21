@@ -1,3 +1,5 @@
+require math
+
 options optimize=false
 
 [export]
