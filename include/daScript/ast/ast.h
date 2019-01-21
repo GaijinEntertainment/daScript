@@ -1062,6 +1062,8 @@ namespace das
         virtual SimNode * makeSimNode ( Context & context ) {
             if ( copyOnReturn || moveOnReturn ) {
                 return context.code.makeNodeUnroll<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
+            } else if ( fastCall ) {
+                return context.code.makeNodeUnroll<SimNode_FastCall>(int(arguments.size()), at);
             } else {
                 return context.code.makeNodeUnroll<SimNode_Call>(int(arguments.size()), at);
             }
@@ -1093,6 +1095,7 @@ namespace das
                 bool    moveOnReturn : 1;
 				bool	exports : 1;
 				bool	used : 1;
+                bool    fastCall : 1;
             };
             uint32_t flags = 0;
         };

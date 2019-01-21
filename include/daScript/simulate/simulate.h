@@ -518,6 +518,30 @@ SIM_NODE_AT_VECTOR(Float, float)
         int32_t  nArguments;
         uint32_t stackTop;
     };
+    
+    // FUNCTION CALL via FASTCALL convention
+    template <int argCount>
+    struct SimNode_FastCall : SimNode_CallBase {
+        SimNode_FastCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            return context.call(fnPtr, argValues, debug.line);
+        }
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+                vec4f argValues[argCount ? argCount : 1];                                       \
+                EvalBlock<argCount>::eval(context, arguments, argValues);                       \
+                auto aa = context.abiArg;                                                       \
+                context.abiArg = argValues;                                                     \
+                auto res = EvalTT<CTYPE>::eval(context, fnPtr->code);                           \
+                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);     \
+                context.abiArg = aa;                                                            \
+                return res;                                                                     \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
 
     // FUNCTION CALL
     template <int argCount>

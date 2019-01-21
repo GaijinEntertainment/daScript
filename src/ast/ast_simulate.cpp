@@ -15,7 +15,18 @@ namespace das
             assert(0 && "can only simulate non built-in function");
             return nullptr;
         }
-        return body->simulate(context);
+        if ( fastCall ) {
+            assert(result->isWorkhorseType() && "fastcall can only return a workhoree type");
+            assert(body->rtti_isBlock() && "function must contain a block");
+            auto block = static_pointer_cast<ExprBlock>(body);
+            assert(block->list.size()==1 && "fastcall is only one expr in a function body");
+            assert(block->list.back()->rtti_isReturn() && "fastcall body expr is return");
+            auto retE = static_pointer_cast<ExprReturn>(block->list.back());
+            assert(retE->subexpr && "fastcall must return a value");
+            return retE->subexpr->simulate(context);
+        } else {
+            return body->simulate(context);
+        }
     }
     
     SimNode * ExprRef2Value::simulate (Context & context) const {
