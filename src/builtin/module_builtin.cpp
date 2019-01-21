@@ -7,6 +7,14 @@
 
 namespace das
 {
+    template <> struct SimPolicy<bool> : SimPolicy_Bool {};
+    template <> struct SimPolicy<int32_t> : SimPolicy_Bin<int32_t> {};
+    template <> struct SimPolicy<uint32_t> : SimPolicy_Bin<uint32_t> {};
+    template <> struct SimPolicy<int64_t> : SimPolicy_Bin<int64_t> {};
+    template <> struct SimPolicy<uint64_t> : SimPolicy_Bin<uint64_t> {};
+    template <> struct SimPolicy<float> : SimPolicy_Float {};
+    template <> struct SimPolicy<void *> : SimPolicy_Pointer {};
+    
     // unary
     DEFINE_OP1_NUMERIC(Unp);
     DEFINE_OP1_NUMERIC(Unm);

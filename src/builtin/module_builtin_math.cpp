@@ -7,6 +7,13 @@
 
 namespace das {
     
+    struct SimPolicy_MathFloat {
+        static __forceinline float Sin   ( float a, Context & )          { return sinf(a); }
+        static __forceinline float Cos   ( float a, Context & )          { return cosf(a); }
+        static __forceinline float Tan   ( float a, Context & )          { return tanf(a); }
+        static __forceinline float ATan2 ( float a, float b, Context & ) { return atan2(a,b); }
+    };
+    
     struct SimPolicy_MathVec {
         static __forceinline vec4f Sin ( vec4f a, Context & ) {
             return v_make_vec4f(sinf(v_extract_x(a)),
@@ -34,18 +41,40 @@ namespace das {
         }
     };
     
+    template <> struct SimPolicy<float>  : SimPolicy_MathFloat {};
     template <> struct SimPolicy<float2> : SimPolicy_MathVec {};
     template <> struct SimPolicy<float3> : SimPolicy_MathVec {};
     template <> struct SimPolicy<float4> : SimPolicy_MathVec {};
+    
+    DEFINE_POLICY(Sin);
+    DEFINE_POLICY(Cos);
+    DEFINE_POLICY(Tan);
+    DEFINE_POLICY(ATan2);
     
     IMPLEMENT_OP1_FUNCTION_POLICY(Sin,Float,float);
     IMPLEMENT_OP1_FUNCTION_POLICY(Cos,Float,float);
     IMPLEMENT_OP1_FUNCTION_POLICY(Tan,Float,float);
     IMPLEMENT_OP2_FUNCTION_POLICY(ATan2,Float,float);
     
+#define DEFINE_EVAL_TRIG_POLICY(CTYPE)                  \
+    IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(Sin, CTYPE);     \
+    IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(Cos, CTYPE);     \
+    IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(Tan, CTYPE);     \
+    IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(ATan2, CTYPE);
+    
     DEFINE_EVAL_TRIG_POLICY(float2);
     DEFINE_EVAL_TRIG_POLICY(float3);
     DEFINE_EVAL_TRIG_POLICY(float4);
+    
+    // trig types
+    template <typename TT>
+    void addFunctionTrig(Module & mod, const ModuleLibrary & lib) {
+        //                                     policy              ret   arg1 arg2     name
+        mod.addFunction( make_shared<BuiltInFn<Sim_Sin<TT>,        TT,   TT>        >("sin",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Cos<TT>,        TT,   TT>        >("cos",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Tan<TT>,        TT,   TT>        >("tan",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_ATan2<TT>,      TT,   TT,  TT>   >("atan2",  lib) );
+    }
     
     class Module_Math : public Module {
     public:
