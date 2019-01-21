@@ -152,6 +152,51 @@ VECMATH_FINLINE vec3f VECTORCALL v_vtriple3(vec3f a, vec3f b, vec3f c)
   return v_nmsub(c, ab, v_mul(b, ac));
 }
 
+VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f x, vec4f& s, vec4f& c)
+{
+  vec4f xl, xl2, xl3;
+  vec4i q;
+  vec4i offsetSin, offsetCos;
+  vec4f vzero = v_zero();
+
+  xl = v_mul(x, v_splats(0.63661977236f));
+  xl = v_add(xl, v_sel(V_C_HALF, x, v_msbit()));
+
+  q = v_cvt_vec4i(xl);
+
+  offsetSin = v_andi(q, V_CI_3);
+  offsetCos = v_addi(V_CI_1, offsetSin);
+
+  vec4f qf = v_cvt_vec4f(q);
+  vec4f p1 = v_nmsub(qf, v_splats(_SINCOS_KC1), x);
+  xl  = v_nmsub(qf, v_splats(_SINCOS_KC2), p1);
+
+  xl2 = v_mul(xl, xl);
+  xl3 = v_mul(xl2, xl);
+
+
+  vec4f ct1 = v_madd(v_splats(_SINCOS_CC0), xl2, v_splats(_SINCOS_CC1));
+  vec4f st1 = v_madd(v_splats(_SINCOS_SC0), xl2, v_splats(_SINCOS_SC1));
+
+  vec4f ct2 = v_madd(ct1, xl2, v_splats(_SINCOS_CC2));
+  vec4f st2 = v_madd(st1, xl2, v_splats(_SINCOS_SC2));
+
+  vec4f cx = v_madd(ct2, xl2, V_C_ONE);
+  vec4f sx = v_madd(st2, xl3, xl);
+
+  vec4f sinMask = v_cmp_eq_w(v_cast_vec4f(v_andi(offsetSin, V_CI_1)), vzero);
+  vec4f cosMask = v_cmp_eq_w(v_cast_vec4f(v_andi(offsetCos, V_CI_1)), vzero);
+  s = v_sel(cx, sx, sinMask);
+  c = v_sel(cx, sx, cosMask);
+
+  sinMask = v_cmp_eq_w(v_cast_vec4f(v_andi(offsetSin, V_CI_2)), vzero);
+  cosMask = v_cmp_eq_w(v_cast_vec4f(v_andi(offsetCos, V_CI_2)), vzero);
+
+  s = v_sel(v_neg(s), s, sinMask);
+  c = v_sel(v_neg(c), c, cosMask);
+}
+VECMATH_FINLINE void VECTORCALL v_sincos_x(vec4f a, vec4f& s, vec4f& c) { return v_sincos4(a, s, c); }
+
 VECMATH_FINLINE void VECTORCALL v_mat44_make_persp_forward(mat44f &dest, float wk, float hk, float zn, float zf)
 {
   float q = zf/(zf-zn);
@@ -1942,7 +1987,7 @@ VECMATH_FINLINE void VECTORCALL v_mat44_make_from_43ca(mat44f &tmV, const float 
 
 VECMATH_FINLINE vec4f VECTORCALL v_div_est(vec4f a, vec4f b) {return v_mul(a, v_rcp_est(b));}
 #if _TARGET_SIMD_SSE
-VECMATH_FINLINE vec4f VECTORCALL is_neg_special(vec4f a) {return v_cast_vec4f(_mm_srai_epi32(v_cast_vec4i(a), 31));}
+VECMATH_FINLINE vec4f VECTORCALL is_neg_special(vec4f a) {return v_cast_vec4f(v_srai(v_cast_vec4i(a), 31));}
 #else
 VECMATH_FINLINE vec4f VECTORCALL is_neg_special(vec4f a) {vec4f msbit = v_msbit(); return v_cmp_eq_w(v_and(a, msbit), msbit);}
 #endif
@@ -2046,9 +2091,10 @@ VECMATH_INLINE vec4f VECTORCALL v_atan2(vec4f y, vec4f x)
   vec4f halfpi = v_cast_vec4f(v_splatsi(0x3fc90fdb));
   vec4f yzeropos_fixed = v_sel(quad23_fixed, halfpi, v_and(y_zero, v_cmp_gt(y, v_zero())));
   vec4f yzeroneg_fixed = v_sel(yzeropos_fixed, v_neg(halfpi), v_and(y_zero, v_cmp_ge(v_zero(), y)));
+  vec4f x_yzero = v_andnot(v_and(y_zero, v_cmp_eq(y, v_zero())), yzeroneg_fixed);
 
 
-  return yzeroneg_fixed;
+  return x_yzero;
 }
 
 // fast approx atan version. |error| is < 0.0004
