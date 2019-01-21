@@ -34,7 +34,7 @@ namespace das
     struct ImplCallStaticFunction {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline vec4f call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            return cast<Result>::from ( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ) );
+            return cast<Result>::from( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ) );
         }
     };
 
@@ -44,6 +44,33 @@ namespace das
         static __forceinline vec4f call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
             return v_zero();
+        }
+    };
+    
+    template <typename Result, typename CType>
+    struct ImplCallStaticFunctionImm {
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline CType call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            assert(0 && "we should not even be here");
+            fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
+            return CType();
+        }
+    };
+    
+    template <typename Result>
+    struct ImplCallStaticFunctionImm<Result,Result> {
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline Result call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            return fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
+        }
+    };
+
+    template <typename CType>
+    struct ImplCallStaticFunctionImm<void,CType> {
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline CType call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
+            return CType();
         }
     };
 
@@ -76,9 +103,21 @@ namespace das
             using Arguments = typename FunctionTrait::arguments;
             const int nargs = tuple_size<Arguments>::value;
             using Indices = make_index_sequence<nargs>;
-            auto res = ImplCallStaticFunction<Result>::template call<FuncT,Arguments>(*fn, context, arguments, Indices());
-            return res;
+            return ImplCallStaticFunction<Result>::template
+                call<FuncT,Arguments>(*fn, context, arguments, Indices());
         }
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override {                   \
+                using FunctionTrait = function_traits<FuncT>;                       \
+                using Result = typename FunctionTrait::return_type;                 \
+                using Arguments = typename FunctionTrait::arguments;                \
+                const int nargs = tuple_size<Arguments>::value;                     \
+                using Indices = make_index_sequence<nargs>;                         \
+                return ImplCallStaticFunctionImm<Result,CTYPE>::template            \
+                    call<FuncT,Arguments>(*fn, context, arguments, Indices());      \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
     };
     
     template <typename FuncT, FuncT fn>
@@ -91,7 +130,8 @@ namespace das
             const int nargs = tuple_size<Arguments>::value;
             using Indices = make_index_sequence<nargs>;
             Result * cmres = (Result *)(context.stack.sp() + stackTop);
-            ImplCallStaticFunctionAndCopy<Result>::template call<FuncT,Arguments>(*fn, context, cmres, arguments, Indices());
+            ImplCallStaticFunctionAndCopy<Result>::template
+                call<FuncT,Arguments>(*fn, context, cmres, arguments, Indices());
             return cast<Result *>::from(cmres);
         }
     };
