@@ -15,5 +15,5 @@ def test
     assert(ceil(-1.1)==-1.)
     assert(floor(-1.1)==-2.)
     assert(exp(0.)==1.)
-    assert(fabs(log(exp(1.)) - 1.) < 1e-6)
+    assert(abs(log(exp(1.)) - 1.) < 1e-6)
     return true
