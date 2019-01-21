@@ -77,7 +77,7 @@ namespace das {
         }
     protected:
     // ExprBlock
-        virtual ExpressionPtr visit ( ExprBlock * block ) {
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
             vector<ExpressionPtr> list;
             collect(list, block);
             if ( list!=block->list ) {
@@ -87,7 +87,7 @@ namespace das {
             return Visitor::visit(block);
         }
     // ExprLet
-        virtual ExpressionPtr visit ( ExprLet * let ) {
+        virtual ExpressionPtr visit ( ExprLet * let ) override {
             if ( let->variables.size()==0 ) {
                 reportFolding();
                 return let->subexpr;
@@ -95,7 +95,7 @@ namespace das {
             return Visitor::visit(let);
         }
     // function
-        virtual FunctionPtr visit ( Function * func ) {
+        virtual FunctionPtr visit ( Function * func ) override {
             if ( func->body && func->result->isVoid() ) {   // remove trailing return on the void function
                 if ( func->body->rtti_isBlock() ) {
                     auto block = static_pointer_cast<ExprBlock>(func->body);
@@ -109,6 +109,85 @@ namespace das {
             return Visitor::visit(func);
         }
     };
+
+	class CondFolding : public OptVisitor {
+	protected:
+		virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
+			// if (cond) return x; else return y; => (cond ? x : y)
+			if (expr->if_false) {
+				shared_ptr<ExprReturn> lr, rr;
+				if (expr->if_true->rtti_isBlock()) {
+					auto tb = static_pointer_cast<ExprBlock>(expr->if_true);
+					if (tb->list.size() == 1 && tb->list.back()->rtti_isReturn()) {
+						lr = static_pointer_cast<ExprReturn>(tb->list.back());
+					}
+				}
+				if (expr->if_false->rtti_isBlock()) {
+					auto fb = static_pointer_cast<ExprBlock>(expr->if_false);
+					if (fb->list.size() == 1 && fb->list.back()->rtti_isReturn()) {
+						rr = static_pointer_cast<ExprReturn>(fb->list.back());
+					}
+				}
+				if (lr && rr) {
+					if ( lr->subexpr ) {
+						auto newCond = make_shared<ExprOp3>(expr->at, "?", expr->cond, lr->subexpr, rr->subexpr);
+						newCond->type = make_shared<TypeDecl>(*lr->subexpr->type);
+						auto newRet = make_shared<ExprReturn>(expr->at, newCond);
+						reportFolding();
+						return newRet;
+					} else {
+						// this is actually if ( a ) return; else return;
+						reportFolding();
+						return lr;
+					}
+				}
+			}
+			return Visitor::visit(expr);
+		}
+		// ExprBlock
+		virtual ExpressionPtr visit ( ExprBlock * block ) override {
+			/*
+			if ( cond )
+				...
+				break or return
+			b
+				=>
+			if ( cond )
+				...
+				break or return
+			else
+				b
+			*/
+			if (!block->isClosure && block->list.size() > 1) {
+				for ( int i=0; i!=block->list.size()-1; ++i ) {
+					auto expr = block->list[i];
+					if (expr != block->list.back()) {
+						if (expr->rtti_isIfThenElse()) {
+							auto ite = static_pointer_cast<ExprIfThenElse>(expr);
+							if (!ite->if_false) {
+								if (ite->if_true->rtti_isBlock()) {
+									auto tb = static_pointer_cast<ExprBlock>(ite->if_true);
+									auto lastE = tb->list.back();
+									if (lastE->rtti_isReturn() || lastE->rtti_isBreak()) {
+										vector<ExpressionPtr> tail;
+										tail.insert(tail.begin(), block->list.begin() + i + 1, block->list.end());
+										auto fb = make_shared<ExprBlock>();
+										fb->at = tail.front()->at;
+										swap(fb->list, tail);
+										ite->if_false = fb;
+										block->list.resize(i + 1);
+										reportFolding();
+										return Visitor::visit(block);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			return Visitor::visit(block);
+		}
+	};
     
     // program
     
@@ -128,5 +207,12 @@ namespace das {
         visit(context);
         return context.didAnything();
     }
+
+	bool Program::optimizationCondFolding() {
+		CondFolding context;
+		visit(context);
+		return context.didAnything();
+	}
+
 }
 
