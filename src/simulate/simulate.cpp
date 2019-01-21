@@ -148,14 +148,16 @@ namespace das
     // SimNode_Block
     
     vec4f SimNode_Block::eval ( Context & context ) {
-        for ( uint32_t i = 0; i!=total && !context.stopFlags; ++i )
-            list[i]->eval(context);
+        for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
+            list[i++]->eval(context);
+        }
         return v_zero();
     }
     
     vec4f SimNode_ClosureBlock::eval ( Context & context ) {
-        for ( uint32_t i = 0; i!=total && !context.stopFlags; ++i )
-            list[i]->eval(context);
+        for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
+            list[i++]->eval(context);
+        }
         if ( context.stopFlags & EvalFlags::stopForReturn ) {
             context.stopFlags &= ~EvalFlags::stopForReturn;
             return context.abiResult();
@@ -168,8 +170,9 @@ namespace das
     // SimNode_Let
     
     vec4f SimNode_Let::eval ( Context & context ) {
-        for ( uint32_t i = 0; i!=total && !context.stopFlags; ++i )
-            list[i]->eval(context);
+        for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
+            list[i++]->eval(context);
+        }
         return subexpr ? subexpr->eval(context) : v_zero();
     }
     
@@ -426,18 +429,35 @@ namespace das
         try {
             return call(fnPtr, args, res, 0);
         } catch ( const dasException & ) {
-            to_err("unhandled exception");
+            /*
+            to_err("\nunhandled exception\n");
             if ( exception ) {
                 to_err(exception);
                 to_err("\n");
             }
             stackWalk();
+            */
             abiArg = aa;
             stack.pop(EP,SP);
             return v_zero();
         }
 #else
         static_assert(false,"implement");
+#endif
+    }
+    
+    
+    void Context::fakeCall ( FuncInfo * info, int line, vec4f * args, void * cmres, char * & EP, char * & SP ) {
+#if DAS_ENABLE_STACK_WALK
+        if (!stack.push(sizeof(Prologue), EP, SP)) {
+            throw_error("stack overflow");
+            return;
+        }
+        Prologue * pp = (Prologue *) stack.sp();
+        pp->arguments =           args;
+        pp->copyOrMoveResult =    (char *) cmres;
+        pp->info =                info;
+        pp->line =                line;
 #endif
     }
 }

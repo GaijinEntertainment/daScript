@@ -54,9 +54,7 @@ namespace das
             }
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
-            auto pCall = context.code.makeNode<SimNodeT>(at);
-            pCall->info = context.thisHelper->makeFunctionDebugInfo(*this);
-            return pCall;
+            return context.code.makeNode<SimNodeT>(at);
         }
     };
     
@@ -84,9 +82,7 @@ namespace das
     public:
         InteropFn(const string & name, const ModuleLibrary & lib) : InteropFnBase<RetT,Args...>(name,lib) {}
         virtual SimNode * makeSimNode ( Context & context ) override {
-            auto pCall = context.code.makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at);
-            pCall->info = context.thisHelper->makeFunctionDebugInfo(*this);
-            return pCall;
+            return context.code.makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at);
         }
     };
     
