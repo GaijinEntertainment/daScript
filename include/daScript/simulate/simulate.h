@@ -719,9 +719,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_SetLocalValueT(const LineInfo & at, SimNode * rv, uint32_t sp)
         : SimNode(at), r(rv), stackTop(sp) {}
         virtual vec4f eval ( Context & context ) override {
-            vec4f rres = r->eval(context);
             TT * pl = (TT *) ( context.stack.sp() + stackTop );
-            *pl = cast<TT>::to(rres);
+            *pl = EvalTT<TT>::eval(context, r);
             return v_zero();
         }
         SimNode * r;
