@@ -80,7 +80,7 @@ typedef const struct bsph3f& bsph3f_cref;
 #endif
 
 #ifndef _TARGET_64BIT
-  #if defined(_M_AMD64) || defined(_M_X64) || defined(_M_ARM64) || INTPTR_MAX == INT32_MAX
+  #if defined(_M_AMD64) || defined(_M_X64) || defined(_M_ARM64) || INTPTR_MAX != INT32_MAX
     #define _TARGET_64BIT 1
   #endif
 #endif
@@ -208,5 +208,17 @@ typedef vec4f quat4f;
 
 //! plane as 4D vector, .xyz=Norm, .w=D
 typedef vec4f plane3f;
+
+//to avoid memsetting the data if using eastl!
+namespace eastl
+{
+  template <typename Count> inline void uninitialized_default_fill_n(vec4f* , Count){}
+  template <typename Count> inline void uninitialized_default_fill_n(vec4i* , Count){}
+  template <typename Count> inline void uninitialized_default_fill_n(bsph3f*, Count){}
+  template <typename Count> inline void uninitialized_default_fill_n(mat33f*, Count){}
+  template <typename Count> inline void uninitialized_default_fill_n(bbox3f*, Count){}
+  template <typename Count> inline void uninitialized_default_fill_n(mat43f*, Count){}
+  template <typename Count> inline void uninitialized_default_fill_n(mat44f*, Count){}
+}
 
 #endif

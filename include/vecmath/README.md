@@ -1,14 +1,17 @@
 # vecmath
-SIMD HAL header-only library by Gaijin Entertainment.
+SIMD HAL header-only library
 
-Currently SSE and NEON only versions. (PS4 and X360 are not shared due to NDA, and they are outdated anyway).
+This is one-header-only (it is 4 headers, but you need to include one) Hardware Abstraction Layer over SIMD intrinsics.
 
-The main purpose of this library is to work with SIMD vectorized code more or less optimal way with simple function like (no operators) syntax.
+Currently for SSE and NEON only, PS3/Xbox360 version is under NDA and not needed nowdays.
 
-Has planes, quaternions, 3 different matrices, vectors, bbox types, and simple wrappers over SSE/NEON intrinsics.
+It has been tested on PC, Linux, MacOS, iOS, tvOS, Shield, NSwitch, PlayStation4, Xbox One.
+And with gcc of several versions, VS 2015, VS 2017, clang 3.9+. Visual Studio of earlier versions used to work, but hasn't been tested in a while.
 
-In addition: pow, exp, log, sincos, frustum culling, and other rather complicated functions.
+Current version relies on alignas c++11 modifier, although it is easy to re-write it old-way (__attribute__ / __declspec(aligned)) if needed.
 
-It is tested on MSVC 2015, MSVC 2017, clang 3.9 and higher, gcc several versions, Nintendo Switch, tvOS, iOS, Android, PS4, XBox One, PC, Linux, Mac.
+It works with SSE2 set only, although there are some optimizations for SSSE3/SSE4.1, if they are mandatory (by architecture).
 
-It used to work on MSVC2008/2010, however, recent version hadn't been tested on these compilers.
+Basic types are - plane, point/vector (vec3f/vec4f, which is same 4-float words), bbox (2 words), mat33 (3 vec3f), mat43, mat44, sphere.
+
+In addition to common HAL over simple arithmetics intrinsics, there are some complex functions such as exp,log,sincos, quaternion interpolation, and frustum visibility.

@@ -31,6 +31,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_splat_wi(vec4i a) { return vdupq_lane_s32(vge
 
 VECMATH_FINLINE vec4f VECTORCALL v_splats(float a) { return vmovq_n_f32(a); }
 VECMATH_FINLINE vec4i VECTORCALL v_splatsi(int a) {return vmovq_n_s32(a);}
+VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a) {return vreinterpretq_s32_s64(vmovq_n_s64(a));}
 VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f(float x, float y, float z, float w) { return (vec4f){x, y, z, w}; }
 VECMATH_FINLINE vec4i VECTORCALL v_make_vec4i(int x, int y, int z, int w)
 {
@@ -198,6 +199,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_div_x(vec4f a, vec4f b) { return v_mul(a, v_r
 VECMATH_FINLINE vec4f VECTORCALL v_min(vec4f a, vec4f b) { return vminq_f32(a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_max(vec4f a, vec4f b) { return vmaxq_f32(a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_neg(vec4f a) { return vnegq_f32(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_negi(vec4i a){ return vnegq_s32(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_abs(vec4f a) { return vabsq_f32(a); }
 VECMATH_FINLINE vec4i VECTORCALL v_absi(vec4i a) { return vabsq_s32(a); }
 VECMATH_FINLINE vec4i VECTORCALL v_maxi(vec4i a, vec4i b) { return vmaxq_s32(a, b); }
@@ -581,13 +583,14 @@ VECMATH_FINLINE vec4f VECTORCALL v_transpose4w(vec4f a, vec4f b, vec4f c, vec4f 
   return vcombine_f32(a3b3, c3d3);
 }
 
-VECMATH_FINLINE vec4f VECTORCALL v_dot3(vec4f a, vec4f b)
+VECMATH_FINLINE vec4f VECTORCALL v_dot3_x(vec4f a, vec4f b)
 {
   vec4f m;
   m = v_mul(a, b);
   m = v_madd(v_rot_1(a), v_rot_1(b), m);
-  return v_splat_x(v_madd(v_rot_2(a), v_rot_2(b), m));
+  return v_madd(v_rot_2(a), v_rot_2(b), m);
 }
+VECMATH_FINLINE vec4f VECTORCALL v_dot3(vec4f a, vec4f b) { return v_splat_x(v_dot3_x(a, b)); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_dot4(vec4f a, vec4f b)
 {
@@ -596,15 +599,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_dot4(vec4f a, vec4f b)
   m = v_madd(v_rot_1(a), v_rot_1(b), m);
   return v_add(v_rot_2(m), m);
 }
-VECMATH_FINLINE vec4f VECTORCALL v_dot3_x(vec4f a, vec4f b)
-{
-  return v_dot3(a,b);
-}
-
-VECMATH_FINLINE vec4f VECTORCALL v_dot4_x(vec4f a, vec4f b)
-{
-  return v_dot4(a,b);
-}
+VECMATH_FINLINE vec4f VECTORCALL v_dot4_x(vec4f a, vec4f b) { return v_dot4(a,b); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_length4_sq(vec4f a)
 {
@@ -613,10 +608,8 @@ VECMATH_FINLINE vec4f VECTORCALL v_length4_sq(vec4f a)
   m = v_madd(ar1, ar1, m);
   return v_add(v_rot_2(m), m);
 }
-VECMATH_FINLINE vec4f VECTORCALL v_length4_sq_x(vec4f a)
-{
-  return v_length4_sq(a);
-}
+VECMATH_FINLINE vec4f VECTORCALL v_length4_sq_x(vec4f a) { return v_length4_sq(a); }
+
 VECMATH_FINLINE float32x2_t VECTORCALL v_length4_sq_xd(vec4f a)
 {
   vec4f m = v_mul(a, a);
@@ -1056,52 +1049,6 @@ VECMATH_FINLINE vec3f VECTORCALL v_quat_mul_vec3(quat4f q, vec3f v)
   return v_nmsub(tmp2, tmp3, res);
 }
 
-VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f x, vec4f& s, vec4f& c)
-{
-  vec4f xl, xl2, xl3;
-  vec4i   q;
-  vec4i   offsetSin, offsetCos;
-  vec4f vzero = v_zero();
-  vec4f smask = v_msbit();
-
-  xl = v_mul(x, vdupq_n_f32(0.63661977236f));
-
-  xl = v_add(xl, v_sel(V_C_HALF, xl, smask));
-  q = vcvtq_s32_f32(xl);
-
-  offsetSin = vandq_s32(q, V_CI_3);
-  offsetCos = vaddq_s32(V_CI_1, offsetSin);
-
-  vec4f qf = vcvtq_f32_s32(q);
-  vec4f p1 = v_nmsub(qf, vdupq_n_f32(_SINCOS_KC1), x);
-  xl  = v_nmsub(qf, vdupq_n_f32(_SINCOS_KC2), p1);
-
-  xl2 = v_madd(xl, xl, vzero);
-  xl3 = v_madd(xl2, xl, vzero);
-
-
-  vec4f ct1 = v_madd(vdupq_n_f32(_SINCOS_CC0), xl2, vdupq_n_f32(_SINCOS_CC1));
-  vec4f st1 = v_madd(vdupq_n_f32(_SINCOS_SC0), xl2, vdupq_n_f32(_SINCOS_SC1));
-
-  vec4f ct2 = v_madd(ct1, xl2, vdupq_n_f32(_SINCOS_CC2));
-  vec4f st2 = v_madd(st1, xl2, vdupq_n_f32(_SINCOS_SC2));
-
-  vec4f cx = v_madd(ct2, xl2, V_C_ONE);
-  vec4f sx = v_madd(st2, xl3, xl);
-
-  vec4f sinMask = (vec4f)vceqq_s32(vandq_s32(offsetSin, V_CI_1), (vec4i)vzero);
-  vec4f cosMask = (vec4f)vceqq_s32(vandq_s32(offsetCos, V_CI_1), (vec4i)vzero);
-  s = v_sel(cx, sx, sinMask);
-  c = v_sel(cx, sx, cosMask);
-
-  sinMask = (vec4f)vceqq_s32(vandq_s32(offsetSin, V_CI_2), (vec4i)vzero);
-  cosMask = (vec4f)vceqq_s32(vandq_s32(offsetCos, V_CI_2), (vec4i)vzero);
-
-  s = v_sel(v_xor(smask, s), s, sinMask);
-  c = v_sel(v_xor(smask, c), c, cosMask);
-}
-VECMATH_FINLINE void VECTORCALL v_sincos_x(vec4f a, vec4f& s, vec4f& c) { return v_sincos4(a, s, c); }
-
 VECMATH_FINLINE vec4f VECTORCALL v_insert(float s, vec4f v, int i)
 {
   if (i == 0)
@@ -1180,6 +1127,8 @@ VECMATH_FINLINE int VECTORCALL v_extract_xi(vec4i v) {return vgetq_lane_s32(v, 0
 VECMATH_FINLINE int VECTORCALL v_extract_yi(vec4i v) {return vgetq_lane_s32(v, 1);}
 VECMATH_FINLINE int VECTORCALL v_extract_zi(vec4i v) {return vgetq_lane_s32(v, 2);}
 VECMATH_FINLINE int VECTORCALL v_extract_wi(vec4i v) {return vgetq_lane_s32(v, 3);}
+
+VECMATH_FINLINE int64_t VECTORCALL v_extract_xi64(vec4i v) {return vgetq_lane_s64(vreinterpretq_s64_s32(v), 0);}
 
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_eq(vec3f v, vec3f a) { return vget_lane_u32(vceq_f32(vget_low_f32(v), vget_low_f32(a)), 0); }
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_gt(vec3f v, vec3f a) { return vget_lane_u32(vcgt_f32(vget_low_f32(v), vget_low_f32(a)), 0); }
