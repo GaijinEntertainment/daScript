@@ -8,38 +8,42 @@
 
 namespace das
 {
+	// this is here to occasionally investigate untyped evaluation paths
+	#define WARN_SLOW_CAST(TYPE)	
+	// #define WARN_SLOW_CAST(TYPE)	assert(0 && "internal perofrmance issue, casting eval to eval##TYPE" );
+
     bool SimNode::evalBool ( Context & context ) {
-        assert(0 && "we should never be here");
+		WARN_SLOW_CAST(Bool);
         return cast<bool>::to(eval(context));
     }
     
     float SimNode::evalFloat ( Context & context ) {
-        assert(0 && "we should never be here");
+		WARN_SLOW_CAST(Float);
         return cast<float>::to(eval(context));
     }
     
     int32_t SimNode::evalInt ( Context & context ) {
-        assert(0 && "we should never be here");
+		WARN_SLOW_CAST(Int);
         return cast<int32_t>::to(eval(context));
     }
     
     uint32_t SimNode::evalUInt ( Context & context ) {
-        assert(0 && "we should never be here");
+		WARN_SLOW_CAST(UInt);
         return cast<uint32_t>::to(eval(context));
     }
     
     int64_t SimNode::evalInt64 ( Context & context ) {
-        assert(0 && "we should never be here");
+		WARN_SLOW_CAST(Int64);
         return cast<int64_t>::to(eval(context));
     }
     
     uint64_t SimNode::evalUInt64 ( Context & context ) {
-        assert(0 && "we should never be here");
+		WARN_SLOW_CAST(UInt64);
         return cast<uint64_t>::to(eval(context));
     }
     
     char * SimNode::evalPtr ( Context & context ) {
-        assert(0 && "we should never be here");
+		WARN_SLOW_CAST(Ptr);
         return cast<char *>::to(eval(context));
     }
     
@@ -95,6 +99,11 @@ namespace das
     
     // SimNode_TryCatch
     
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4611)
+#endif
+
     vec4f SimNode_TryCatch::eval ( Context & context ) {
         vec4f * aa = context.abiArg;
         char * EP, * SP;
@@ -125,6 +134,10 @@ namespace das
         #endif
         return v_zero();
     }
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
     
     // SimNode_New
     
@@ -447,6 +460,11 @@ namespace das
 #endif
     }
     
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4611)
+#endif
+
     vec4f Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
         vec4f * aa = abiArg;
         char * EP, * SP;
@@ -482,7 +500,10 @@ namespace das
         throwBuf = JB;
 #endif
     }
-    
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
     
     void Context::fakeCall ( FuncInfo * info, int line, vec4f * args, void * cmres, char * & EP, char * & SP ) {
 #if DAS_ENABLE_STACK_WALK
