@@ -151,6 +151,8 @@ VECMATH_FINLINE vec4f VECTORCALL v_sub(vec4f a, vec4f b);
 VECMATH_FINLINE vec4f VECTORCALL v_mul(vec4f a, vec4f b);
 //! (a / b)
 VECMATH_FINLINE vec4f VECTORCALL v_div(vec4f a, vec4f b);
+//! (a % b) (float)
+VECMATH_FINLINE vec4f VECTORCALL v_mod(vec4f a, vec4f b);
 //! (a * b + c)
 VECMATH_FINLINE vec4f VECTORCALL v_madd(vec4f a, vec4f b, vec4f c);
 //! -(a * b - c) == c - a*b

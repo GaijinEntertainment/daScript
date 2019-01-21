@@ -44,6 +44,15 @@ VECMATH_FINLINE vec4f VECTORCALL v_safediv(vec4f a, vec4f b)
   return v_sel(b, v_div(a, b), v_cmp_gt(a, V_C_EPS_VAL));
 }
 
+VECMATH_FINLINE vec4f VECTORCALL v_mod(vec4f a, vec4f aDiv)
+{
+  vec4f c = v_div(a, aDiv);
+  vec4f cTrunc = v_cvt_vec4f(v_cvt_vec4i(c));
+  vec4f base = v_mul(cTrunc, aDiv);
+  vec4f r = v_sub(a, base);
+  return r;
+}
+
 VECMATH_FINLINE quat4f VECTORCALL v_lerp_vec4f(vec4f tttt, quat4f a, quat4f b)
 {
   return v_madd(v_sub(b, a), tttt, a);
