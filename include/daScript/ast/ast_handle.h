@@ -85,7 +85,6 @@ namespace das
                 : SimNode(at), value(rv) {}
             __forceinline int32_t compute ( Context & context ) {
                 auto pValue = (VectorType *) value->evalPtr(context);
-                DAS_INT_EXCEPTION_POINT;
                 return int32_t(pValue->size());
             }
             SimNode * value;
@@ -96,9 +95,7 @@ namespace das
                 : SimNode_At(at, rv, idx, 0, 0) {}
             __forceinline char * compute ( Context & context ) {
                 auto pValue = (VectorType *) value->evalPtr(context);
-                DAS_PTR_EXCEPTION_POINT;
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
-                DAS_PTR_EXCEPTION_POINT;
                 if ( idx >= pValue->size() ) {
                     context.throw_error("index out of range");
                     return nullptr;
@@ -110,9 +107,7 @@ namespace das
         struct VectorIterator : Iterator {
             virtual bool first ( Context & context, IteratorContext & itc ) override {
                 vec4f ll = source->eval(context);
-                DAS_ITERATOR_EXCEPTION_POINT;
                 VectorType * pArray = cast<VectorType *>::to(ll);
-                DAS_ITERATOR_EXCEPTION_POINT;
                 char * data    = (char *) pArray->data();
                 uint32_t size = (uint32_t) pArray->size();
                 itc.value      = cast<char *>::from(data);

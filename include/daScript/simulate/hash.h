@@ -126,7 +126,6 @@ namespace das
         SimNode_HashOfRef ( const LineInfo & at, SimNode * s, uint32_t sz ) : SimNode(at), subexpr(s), size(sz) {}
         virtual vec4f eval ( Context & context ) override {
             char * data = cast<char *>::to(subexpr->eval(context));
-            DAS_EXCEPTION_POINT;
             return cast<uint32_t>::from ( hash_function(context,data,size) );
         }
         SimNode *   subexpr;
@@ -137,7 +136,6 @@ namespace das
         SimNode_HashOfMixedType ( const LineInfo & at, SimNode * s, TypeInfo *t ) : SimNode(at), subexpr(s), typeInfo(t) {}
         virtual vec4f eval ( Context & context ) override {
             char * data = cast<char *>::to(subexpr->eval(context));
-            DAS_EXCEPTION_POINT;
             return cast<uint32_t>::from ( hash_function(context,data,typeInfo) );
         }
         SimNode *   subexpr;

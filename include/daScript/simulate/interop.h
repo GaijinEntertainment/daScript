@@ -78,7 +78,6 @@ namespace das
             using Indices = make_index_sequence<nargs>;
 			vec4f args[tuple_size<Arguments>::value ? tuple_size<Arguments>::value : 1];
 			EvalBlock<tuple_size<Arguments>::value>::eval(context, arguments, args);
-            DAS_EXCEPTION_POINT;
 #if DAS_ENABLE_STACK_WALK
 			char * EP, *SP;
 			if (!context.stack.push(sizeof(Prologue), EP, SP)) {
@@ -114,7 +113,6 @@ namespace das
             using Indices = make_index_sequence<nargs>;
 			vec4f args[tuple_size<Arguments>::value ? tuple_size<Arguments>::value : 1];
 			EvalBlock<tuple_size<Arguments>::value>::eval(context, arguments, args);
-			DAS_EXCEPTION_POINT;
             Result * cmres = (Result *)(context.stack.sp() + stackTop);
 #if DAS_ENABLE_STACK_WALK
 			char * EP, *SP;
@@ -147,7 +145,6 @@ namespace das
         virtual vec4f eval ( Context & context ) override {
 			vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);
-            DAS_EXCEPTION_POINT;
 #if DAS_ENABLE_STACK_WALK
 			char * EP, *SP;
 			if (!context.stack.push(sizeof(Prologue), EP, SP)) {

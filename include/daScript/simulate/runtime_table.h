@@ -200,9 +200,7 @@ namespace das
 		}
 		__forceinline char * compute ( Context & context ) {
 			Table * tab = (Table *) tabExpr->evalPtr(context);
-			DAS_PTR_EXCEPTION_POINT;
 			vec4f xkey = keyExpr->eval(context);
-			DAS_PTR_EXCEPTION_POINT;
             KeyType key = cast<KeyType>::to(xkey);
             TableHash<KeyType> thh(&context,valueTypeSize);
 			auto hfn = hash_function(context, key);
@@ -233,9 +231,7 @@ namespace das
 		}
 		__forceinline char * compute(Context & context) {
 			Table * tab = (Table *)tabExpr->evalPtr(context);
-			DAS_PTR_EXCEPTION_POINT;
 			vec4f xkey = keyExpr->eval(context);
-			DAS_PTR_EXCEPTION_POINT;
 			KeyType key = cast<KeyType>::to(xkey);
             auto hfn = hash_function(context, key);
             TableHash<KeyType> thh(&context,valueTypeSize);

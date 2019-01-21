@@ -31,9 +31,7 @@ namespace das
     
     vec4f SimNode_Table::eval ( Context & context ) {
 		Table * tab = (Table *)tabExpr->evalPtr(context);
-        DAS_EXCEPTION_POINT;
         vec4f xkey = keyExpr->eval(context);
-        DAS_EXCEPTION_POINT;
         return tabEval ( context, tab, xkey );
     }
 
@@ -48,10 +46,8 @@ namespace das
     
     bool TableIterator::first ( Context & context, IteratorContext & itc ) {
         vec4f ll = source->eval(context);
-        DAS_ITERATOR_EXCEPTION_POINT;
         auto pTable = cast<Table *>::to(ll);
         table_lock(context, *pTable);
-        DAS_ITERATOR_EXCEPTION_POINT;
         size_t index = nextValid(pTable, 0);
         char * data    = getData(pTable);
         itc.value      = cast<char *>::from(data + index * stride);

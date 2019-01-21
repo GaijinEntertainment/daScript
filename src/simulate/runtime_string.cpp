@@ -137,7 +137,6 @@ namespace das
     vec4f SimNode_StringBuilder::eval ( Context & context ) {
         vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
-        DAS_EXCEPTION_POINT;
         stringstream ssw;
         for ( int32_t i = 0; i!=nArguments; ++i ) {
             // TODO: different output for strings?

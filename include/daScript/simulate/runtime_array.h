@@ -18,9 +18,7 @@ namespace das
             : SimNode(at), l(ll), r(rr), stride(sz) {}
         __forceinline char * compute ( Context & context ) {
             Array * pA = (Array *) l->evalPtr(context);
-            DAS_PTR_EXCEPTION_POINT;
             vec4f rr = r->eval(context);
-            DAS_PTR_EXCEPTION_POINT;
             uint32_t idx = cast<uint32_t>::to(rr);
             if ( idx >= pA->size ) {
                 context.throw_error("index out of range");
@@ -70,9 +68,7 @@ namespace das
             char * __restrict ph[total];
             for ( int t=0; t!=total; ++t ) {
                 pha[t] = cast<Array *>::to(sources[t]->eval(context));
-                DAS_EXCEPTION_POINT;
                 array_lock(context, *pha[t]);
-                DAS_EXCEPTION_POINT;
                 ph[t]  = pha[t]->data;
             }
             char ** __restrict pi[total];
@@ -90,7 +86,6 @@ namespace das
             }
             for ( int t=0; t!=total; ++t ) {
                 array_unlock(context, *pha[t]);
-                DAS_EXCEPTION_POINT;
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
@@ -113,7 +108,6 @@ namespace das
             char * __restrict ph[total];
             for ( int t=0; t!=total; ++t ) {
                 ph[t] = cast<char *>::to(sources[t]->eval(context));
-                DAS_EXCEPTION_POINT;
             }
             char ** __restrict pi[total];
             for ( int t=0; t!=total; ++t ) {

@@ -6,7 +6,6 @@ namespace das
 {
     bool RangeIterator::first ( Context & context, IteratorContext & itc ) {
         vec4f ll = subexpr->eval(context);
-        DAS_ITERATOR_EXCEPTION_POINT;
         range r = cast<range>::to(ll);  // does not matter if its range or urange, hence only one type
         itc.value    = cast<int32_t>::from(r.from);
         itc.range_to = r.to;
@@ -28,7 +27,6 @@ namespace das
     
     vec4f SimNode_ForRange::eval ( Context & context ) {
         vec4f ll = sources[0]->eval(context);
-        DAS_EXCEPTION_POINT;
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
 		int32_t r_to = r.to;

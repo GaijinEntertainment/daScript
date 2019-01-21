@@ -146,6 +146,11 @@ namespace das {
 			evalTop = stackTop;
 			return true;
 		}
+        
+        __forceinline void watermark ( char * & EP, char * & SP ) {
+            EP = evalTop;
+            SP = stackTop;
+        }
 
 		__forceinline void pop(char * EP, char * SP ) {	// restore stack to watermark
 			evalTop = EP;

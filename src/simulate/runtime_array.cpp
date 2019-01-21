@@ -64,10 +64,8 @@ namespace das
     
     bool GoodArrayIterator::first ( Context & context, IteratorContext & itc )  {
         vec4f ll = source->eval(context);
-        DAS_ITERATOR_EXCEPTION_POINT;
         auto pArray = cast<Array *>::to(ll);
         array_lock(context, *pArray);
-        DAS_ITERATOR_EXCEPTION_POINT;
         char * data    = pArray->data;
         itc.value      = cast<char *>::from(data);
         itc.array_end  = data + pArray->size * stride;
@@ -95,7 +93,6 @@ namespace das
     
     bool FixedArrayIterator::first ( Context & context, IteratorContext & itc )  {
         vec4f ll = source->eval(context);
-        DAS_ITERATOR_EXCEPTION_POINT;
         char * data = cast<char *>::to(ll);
         itc.value = cast<char *>::from(data);
         itc.fixed_array_end = data + size*stride;

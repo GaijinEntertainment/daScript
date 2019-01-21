@@ -75,6 +75,13 @@ namespace das
     ,   stopForThrow        = 1 << 2
     ,   stopForTerminate    = 1 << 3
     };
+    
+#if DAS_ENABLE_EXCEPTIONS
+    class dasException : public runtime_error {
+    public:
+        dasException ( const char * why ) : runtime_error(why) {}
+    };
+#endif
 
     class Context {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
@@ -105,14 +112,10 @@ namespace das
         __forceinline vec4f eval ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
             return call(fnPtr, args, res, 0);
         }
+        
+        vec4f evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
 
-        __forceinline void throw_error ( const char * message ) {
-            exception = message;
-            stopFlags |= EvalFlags::stopForThrow;
-#if !DAS_ENABLE_EXCEPTIONS
-            throw runtime_error(message ? message : "");
-#endif
-        }
+        void throw_error ( const char * message );
         
         __forceinline SimFunction * getFunction ( int index ) const {
             return (index>=0 && index<totalFunctions) ? functions + index : nullptr;
@@ -222,28 +225,6 @@ namespace das
         vec4f result;
     };
 
-#if DAS_ENABLE_EXCEPTIONS
-    #define DAS_EXCEPTION_POINT \
-        { if ( context.stopFlags ) return v_zero(); }
-    #define DAS_PTR_EXCEPTION_POINT \
-        { if ( context.stopFlags ) return nullptr; }
-    #define DAS_ITERATOR_EXCEPTION_POINT \
-        { if ( context.stopFlags ) return false; }
-    #define DAS_BOOL_EXCEPTION_POINT \
-        { if ( context.stopFlags ) return false; }
-    #define DAS_INT_EXCEPTION_POINT \
-        { if ( context.stopFlags ) return 0; }
-    #define DAS_NODE_EXCEPTION_POINT(CTYPE) \
-        { if ( context.stopFlags ) return (CTYPE) 0; }
-#else
-    #define DAS_EXCEPTION_POINT
-    #define DAS_PTR_EXCEPTION_POINT
-    #define DAS_ITERATOR_EXCEPTION_POINT
-    #define DAS_BOOL_EXCEPTION_POINT
-    #define DAS_INT_EXCEPTION_POINT
-    #define DAS_NODE_EXCEPTION_POINT(CTYPE)
-#endif
-
 #define DAS_EVAL_NODE               \
     EVAL_NODE(Ptr,char *);          \
     EVAL_NODE(Int,int32_t);         \
@@ -335,7 +316,6 @@ namespace das
         SimNode_FieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
         virtual vec4f eval ( Context & context ) override {
             auto prv = value->evalPtr(context);
-            DAS_EXCEPTION_POINT;
             TT * pR = (TT *)( prv + offset );
             return cast<TT>::from(*pR);
 
@@ -343,7 +323,6 @@ namespace das
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             auto prv = value->evalPtr(context);                     \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                        \
             return * (CTYPE *)( prv + offset );                     \
         }
         DAS_EVAL_NODE
@@ -356,7 +335,6 @@ namespace das
 		SimNode_PtrFieldDeref(const LineInfo & at, SimNode * rv, uint32_t of) : SimNode(at), value(rv), offset(of) {}
 		__forceinline char * compute(Context & context) {
 			auto prv = value->evalPtr(context);
-			DAS_PTR_EXCEPTION_POINT;
 			if (prv) {
 				return prv + offset;
 			}
@@ -374,7 +352,6 @@ namespace das
 		SimNode_PtrFieldDerefR2V(const LineInfo & at, SimNode * rv, uint32_t of) : SimNode_PtrFieldDeref(at, rv, of) {}
 		virtual vec4f eval(Context & context) override {
 			auto prv = value->evalPtr(context);
-			DAS_EXCEPTION_POINT;
 			if (prv) {
 				TT * pR = (TT *)(prv + offset);
 				return cast<TT>::from(*pR);
@@ -386,7 +363,6 @@ namespace das
 		}
 		virtual char * evalPtr(Context & context) override {
 			auto prv = value->evalPtr(context);
-			DAS_PTR_EXCEPTION_POINT;
 			if (prv) {
 				return *(char **)(prv + offset);
 			}
@@ -403,7 +379,6 @@ namespace das
         SimNode_SafeFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
         __forceinline char * compute ( Context & context ) {
             auto prv = value->evalPtr(context);
-            DAS_PTR_EXCEPTION_POINT;
 			return prv ? prv + offset : nullptr;
         }
     };
@@ -414,7 +389,6 @@ namespace das
         SimNode_SafeFieldDerefPtr ( const LineInfo & at, SimNode * rv, uint32_t of ) : SimNode_FieldDeref(at,rv,of) {}
         __forceinline char * compute ( Context & context ) {
             char ** prv = (char **) value->evalPtr(context);
-            DAS_PTR_EXCEPTION_POINT;
 			return prv ? *(prv + offset) : nullptr;
         }
     };
@@ -426,9 +400,7 @@ namespace das
             : SimNode(at), value(rv), index(idx), stride(strd), range(rng) {}
 		__forceinline char * compute (Context & context) {
 			auto pValue = value->evalPtr(context);
-			DAS_PTR_EXCEPTION_POINT;
 			uint32_t idx = cast<uint32_t>::to(index->eval(context));
-			DAS_PTR_EXCEPTION_POINT;
 			if (idx >= range) {
 				context.throw_error("index out of range");
 				return nullptr;
@@ -451,9 +423,7 @@ namespace das
             : SimNode(at), value(rv), index(idx), range(rng) {}                                 \
         __forceinline CTYPE compute ( Context & context ) {                                     \
             auto vec = value->eval(context);                                                    \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
             uint32_t idx = cast<uint32_t>::to(index->eval(context));                            \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
             if (idx >= range) {                                                                 \
                 context.throw_error("index out of range");                                      \
                 return (CTYPE) 0;                                                               \
@@ -523,14 +493,12 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            DAS_EXCEPTION_POINT;
             return context.call(fnPtr, argValues, nullptr, debug.line);
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
-                DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
                 return cast<CTYPE>::to(context.call(fnPtr, argValues, nullptr, debug.line));    \
         }
         DAS_EVAL_NODE
@@ -544,7 +512,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            DAS_EXCEPTION_POINT;
             auto cmres = context.stack.sp() + stackTop;
             return context.call(fnPtr, argValues, cmres, debug.line);
         }
@@ -552,7 +519,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
-                DAS_NODE_EXCEPTION_POINT(CTYPE);                                                \
                 auto cmres = context.stack.sp() + stackTop;                                     \
                 return cast<CTYPE>::to(context.call(fnPtr, argValues, cmres, debug.line));      \
         }
@@ -567,7 +533,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            DAS_EXCEPTION_POINT;
             Block block = cast<Block>::to(argValues[0]);
             if ( argCount>1 ) {
                 return context.invoke(block, argValues + 1, nullptr);
@@ -579,7 +544,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
             Block block = cast<Block>::to(argValues[0]);                                        \
             if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.invoke(block, argValues + 1, nullptr));          \
@@ -599,7 +563,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            DAS_EXCEPTION_POINT;
             Block block = cast<Block>::to(argValues[0]);
             auto cmres = context.stack.sp() + stackTop;
             if ( argCount>1 ) {
@@ -612,7 +575,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                                                    \
             Block block = cast<Block>::to(argValues[0]);                                        \
             auto cmres = context.stack.sp() + stackTop;                                         \
             if ( argCount>1 ) {                                                                 \
@@ -738,7 +700,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), r(rv), stackTop(sp) {}
         virtual vec4f eval ( Context & context ) override {
             auto pr = (TT *) r->evalPtr(context);
-            DAS_EXCEPTION_POINT;
             TT * pl = (TT *) ( context.stack.sp() + stackTop );
             *pl = *pr;
             return v_zero();
@@ -753,7 +714,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         : SimNode(at), r(rv), stackTop(sp) {}
         virtual vec4f eval ( Context & context ) override {
             vec4f rres = r->eval(context);
-            DAS_EXCEPTION_POINT;
             TT * pl = (TT *) ( context.stack.sp() + stackTop );
             *pl = cast<TT>::to(rres);
             return v_zero();
@@ -956,13 +916,11 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Ref2Value ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *) subexpr->evalPtr(context);
-            DAS_EXCEPTION_POINT;
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE (Context & context) override {     \
 			auto pR = (CTYPE *)subexpr->evalPtr(context);           \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                        \
             return *pR;                                             \
 		}
         DAS_EVAL_NODE
@@ -976,7 +934,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
         __forceinline char * compute ( Context & context ) {
             auto ptr = subexpr->evalPtr(context);
-            DAS_PTR_EXCEPTION_POINT;
             if ( !ptr ) {
                 context.throw_error("dereferencing null pointer");
             }
@@ -991,13 +948,11 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_NullCoalescing ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
         virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *) subexpr->evalPtr(context);
-            DAS_EXCEPTION_POINT;
             return pR ? cast<TT>::from(*pR) : value->eval(context);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             auto pR = (CTYPE *) subexpr->evalPtr(context);          \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                        \
             return pR ? *pR : value->eval##TYPE(context);           \
         }
         DAS_EVAL_NODE
@@ -1012,7 +967,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_NullCoalescingRef ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
         __forceinline char * compute ( Context & context ) {
             auto ptr = subexpr->evalPtr(context);
-            DAS_PTR_EXCEPTION_POINT;
             return ptr ? ptr : value->evalPtr(context);
         }
         SimNode * value;
@@ -1058,9 +1012,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_CopyReference(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
         virtual vec4f eval ( Context & context ) override {
             char  ** pl = (char **) l->evalPtr(context);
-            DAS_EXCEPTION_POINT;
             char * pr = r->evalPtr(context);
-            DAS_EXCEPTION_POINT;
             *pl = pr;
             return v_zero();
         }
@@ -1073,9 +1025,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_CopyValue(const LineInfo & at, SimNode * ll, SimNode * rr) : SimNode(at), l(ll), r(rr) {};
         virtual vec4f eval ( Context & context ) override {
             TT * pl = (TT *) l->evalPtr(context);
-            DAS_EXCEPTION_POINT;
             vec4f rr = r->eval(context);
-            DAS_EXCEPTION_POINT;
             TT * pr = (TT *) &rr;
             *pl = *pr;
             return v_zero();
@@ -1098,9 +1048,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 			: SimNode(at), l(ll), r(rr) {};
         virtual vec4f eval ( Context & context ) override {
             TT * pl = (TT *) l->evalPtr(context);
-            DAS_EXCEPTION_POINT;
             TT * pr = (TT *) r->evalPtr(context);
-            DAS_EXCEPTION_POINT;
             *pl = *pr;
             return v_zero();
         }
@@ -1145,7 +1093,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         virtual vec4f eval ( Context & context ) override {
             bool cmp = cond->evalBool(context);
-            DAS_EXCEPTION_POINT;
             if ( cmp ) {
                 return if_true->eval(context);
             } else {
@@ -1155,7 +1102,6 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
                 bool cmp = cond->evalBool(context);                 \
-                DAS_NODE_EXCEPTION_POINT(CTYPE);                    \
                 if ( cmp ) {                                        \
                     return if_true->eval##TYPE(context);            \
                 } else {                                            \
@@ -1173,7 +1119,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         virtual vec4f eval ( Context & context ) override {
             auto res = EvalTT<TT>::eval(context,cond);
-            DAS_EXCEPTION_POINT;
             if ( res == 0 ) {
                 return if_true->eval(context);
             } else {
@@ -1183,7 +1128,6 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
                 auto res = EvalTT<TT>::eval(context,cond);          \
-                DAS_NODE_EXCEPTION_POINT(CTYPE);                    \
                 if ( res==0 ) {                                     \
                     return if_true->eval##TYPE(context);            \
                 } else {                                            \
@@ -1201,7 +1145,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         virtual vec4f eval ( Context & context ) override {
             auto res = EvalTT<TT>::eval(context,cond);
-            DAS_EXCEPTION_POINT;
             if ( res != 0 ) {
                 return if_true->eval(context);
             } else {
@@ -1211,7 +1154,6 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
                 auto res = EvalTT<TT>::eval(context,cond);          \
-                DAS_NODE_EXCEPTION_POINT(CTYPE);                    \
                 if ( res!=0 ) {                                     \
                     return if_true->eval##TYPE(context);            \
                 } else {                                            \
@@ -1229,7 +1171,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t) {}
         virtual vec4f eval ( Context & context ) override {
             bool cmp = cond->evalBool(context);
-            DAS_EXCEPTION_POINT;
             if ( cmp ) {
                 return if_true->eval(context);
             } else {
@@ -1245,7 +1186,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t) {}
         virtual vec4f eval ( Context & context ) override {
             auto res = EvalTT<TT>::eval(context,cond);
-            DAS_EXCEPTION_POINT;
             if ( res==0 ) {
                 return if_true->eval(context);
             } else {
@@ -1261,7 +1201,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         : SimNode(at), cond(c), if_true(t) {}
         virtual vec4f eval ( Context & context ) override {
             auto res = EvalTT<TT>::eval(context,cond);
-            DAS_EXCEPTION_POINT;
             if ( res != 0 ) {
                 return if_true->eval(context);
             } else {
@@ -1335,7 +1274,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             Iterator * sources[total] = {};
             for ( int t=0; t!=total; ++t ) {
                 vec4f ll = source_iterators[t]->eval(context);
-                DAS_EXCEPTION_POINT;
                 sources[t] = cast<Iterator *>::to(ll);
             }
             IteratorContext ph[total];
@@ -1390,7 +1328,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             if ( !l->evalBool(context) ) {      // if not left, then false
                 return false;
             } else {
-                DAS_BOOL_EXCEPTION_POINT;
                 return r->evalBool(context);    // if left, then right
             }
         }
@@ -1403,7 +1340,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             if ( l->evalBool(context) ) {       // if left, then true
                 return true;
             } else {
-                DAS_BOOL_EXCEPTION_POINT;
                 return r->evalBool(context);    // if not left, then right
             }
         }
@@ -1418,7 +1354,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto val = x->eval##TYPE(context);                          \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
     };
@@ -1430,7 +1365,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto val = (CTYPE *) x->evalPtr(context);                   \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             return SimPolicy<CTYPE>::CALL(*val,context);                \
         }                                                               \
     };
@@ -1439,9 +1373,8 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
-        virtual vec4f eval ( Context & context ) override {            \
+        virtual vec4f eval ( Context & context ) override {             \
             auto val = x->eval(context);                                \
-            DAS_EXCEPTION_POINT;                                        \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
     };
@@ -1473,9 +1406,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto lv = l->eval##TYPE(context);                           \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             auto rv = r->eval##TYPE(context);                           \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
@@ -1487,9 +1418,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 		Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
 		__forceinline CTYPE compute ( Context & context ) {             \
 			auto lv = arguments[0]->eval##TYPE(context);				\
-			DAS_NODE_EXCEPTION_POINT(CTYPE);							\
 			auto rv = arguments[1]->eval##TYPE(context);				\
-			DAS_NODE_EXCEPTION_POINT(CTYPE);							\
             return SimPolicy<CTYPE>::CALL(lv,rv,context);				\
 		}																\
 	};
@@ -1501,9 +1430,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto lv = (CTYPE *) l->evalPtr(context);                    \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             auto rv = r->eval##TYPE(context);                           \
-            DAS_NODE_EXCEPTION_POINT(CTYPE);                            \
             SimPolicy<CTYPE>::CALL(*lv,rv,context);                     \
             return CTYPE();                                             \
         }                                                               \
@@ -1516,9 +1443,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         __forceinline bool compute ( Context & context ) {              \
             auto lv = l->eval##TYPE(context);                           \
-            DAS_BOOL_EXCEPTION_POINT;                                   \
             auto rv = r->eval##TYPE(context);                           \
-            DAS_BOOL_EXCEPTION_POINT;                                   \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
@@ -1527,11 +1452,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
-        virtual vec4f eval ( Context & context ) override {            \
+        virtual vec4f eval ( Context & context ) override {             \
             auto lv = l->eval(context);                                 \
-            DAS_EXCEPTION_POINT;                                        \
             auto rv = r->eval(context);                                 \
-            DAS_EXCEPTION_POINT;                                        \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
@@ -1540,13 +1463,11 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
-        virtual vec4f eval ( Context & context ) override {            \
+        virtual vec4f eval ( Context & context ) override {             \
             auto lv = l->evalPtr(context);                              \
-            DAS_EXCEPTION_POINT;                                        \
             auto rv = r->eval(context);                                 \
-            DAS_EXCEPTION_POINT;                                        \
             SimPolicy<CTYPE>::CALL(lv,rv,context);                      \
-            return v_zero();                                    \
+            return v_zero();                                            \
         }                                                               \
     };
 
@@ -1557,9 +1478,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         __forceinline bool compute ( Context & context ) {              \
             auto lv = l->eval(context);                                 \
-            DAS_BOOL_EXCEPTION_POINT;                                   \
             auto rv = r->eval(context);                                 \
-            DAS_BOOL_EXCEPTION_POINT;                                   \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };

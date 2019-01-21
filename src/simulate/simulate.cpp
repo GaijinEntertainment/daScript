@@ -49,7 +49,6 @@ namespace das
             float   val[4];
         } R, S;
         S.res = value->eval(context);
-        DAS_EXCEPTION_POINT;
         R.val[0] = S.val[fields[0]];
         R.val[1] = S.val[fields[1]];
         R.val[2] = S.val[fields[2]];
@@ -71,7 +70,6 @@ namespace das
     
     vec4f SimNode_Debug::eval ( Context & context ) {
         vec4f res = subexpr->eval(context);
-        DAS_EXCEPTION_POINT;
         stringstream ssw;
         if ( message ) ssw << message << " ";
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger)
@@ -84,7 +82,6 @@ namespace das
     
     vec4f SimNode_Assert::eval ( Context & context ) {
         if ( !subexpr->evalBool(context) ) {
-            DAS_EXCEPTION_POINT;
             string error_message = "assert failed";
             if ( message )
                 error_message = error_message + ", " + message;
@@ -100,18 +97,19 @@ namespace das
     
     vec4f SimNode_TryCatch::eval ( Context & context ) {
         #if DAS_ENABLE_EXCEPTIONS
-            try_block->eval(context);
-            if ( context.stopFlags & EvalFlags::stopForThrow ) {
+            vec4f * aa = context.abiArg;
+            char * EP, * SP;
+            context.stack.watermark(EP,SP);
+            try {
+                try_block->eval(context);
+            } catch ( const dasException & ) {
+                context.abiArg = aa;
+                context.stack.pop(EP,SP);
                 context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
                 catch_block->eval(context);
             }
         #else
-            try {
-                try_block->eval(context);
-            } catch ( const runtime_error & ) {
-                context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
-                catch_block->eval(context);
-            }
+            static_assert(false, "implement");
         #endif
         return v_zero();
     }
@@ -132,9 +130,7 @@ namespace das
     
     vec4f SimNode_CopyRefValue::eval ( Context & context ) {
         auto pl = l->evalPtr(context);
-        DAS_EXCEPTION_POINT;
         auto pr = r->evalPtr(context);
-        DAS_EXCEPTION_POINT;
         memcpy ( pl, pr, size );
         return v_zero();
     }
@@ -143,9 +139,7 @@ namespace das
     
     vec4f SimNode_MoveRefValue::eval ( Context & context ) {
         auto pl = l->evalPtr(context);
-        DAS_EXCEPTION_POINT;
         auto pr = r->evalPtr(context);
-        DAS_EXCEPTION_POINT;
         memcpy ( pl, pr, size );
         memset ( pr, 0, size );
         return v_zero();
@@ -176,7 +170,6 @@ namespace das
     vec4f SimNode_Let::eval ( Context & context ) {
         for ( uint32_t i = 0; i!=total && !context.stopFlags; ++i )
             list[i]->eval(context);
-        DAS_EXCEPTION_POINT;
         return subexpr ? subexpr->eval(context) : v_zero();
     }
     
@@ -206,7 +199,6 @@ namespace das
 
     vec4f SimNode_ReturnAndCopy::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
-        DAS_EXCEPTION_POINT;
         auto pl = context.abiCopyOrMoveResult();
         memcpy ( pl, pr, size);
         context.abiResult() = cast<char *>::from(pl);
@@ -216,7 +208,6 @@ namespace das
     
     vec4f SimNode_ReturnAndMove::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
-        DAS_EXCEPTION_POINT;
         auto pl = context.abiCopyOrMoveResult();
         memcpy ( pl, pr, size);
         memset ( pr, 0, size);
@@ -246,7 +237,6 @@ namespace das
     
     vec4f SimNode_ReturnAndCopyFromBlock::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
-        DAS_EXCEPTION_POINT;
         auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
         auto pl = ba->copyOrMoveResult;
         memcpy ( pl, pr, size);
@@ -257,7 +247,6 @@ namespace das
     
     vec4f SimNode_ReturnAndMoveFromBlock::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
-        DAS_EXCEPTION_POINT;
         auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
         auto pl = ba->copyOrMoveResult;
         memcpy ( pl, pr, size);
@@ -412,10 +401,43 @@ namespace das
     }
     
     void Context::to_out ( const char * message ) {
-        cout << message;
+        if ( message ) cout << message;
     }
     
     void Context::to_err ( const char * message ) {
-        cerr << message;
+        if ( message ) cerr << message;
+    }
+    
+    void Context::throw_error ( const char * message ) {
+        exception = message;
+        stopFlags |= EvalFlags::stopForThrow;
+#if DAS_ENABLE_EXCEPTIONS
+        throw dasException(message ? message : "");
+#else
+        static_assert(false, "implement");
+#endif
+    }
+    
+    vec4f Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
+#if DAS_ENABLE_EXCEPTIONS
+        vec4f * aa = abiArg;
+        char * EP, * SP;
+        stack.watermark(EP,SP);
+        try {
+            return call(fnPtr, args, res, 0);
+        } catch ( const dasException & ) {
+            to_err("unhandled exception");
+            if ( exception ) {
+                to_err(exception);
+                to_err("\n");
+            }
+            stackWalk();
+            abiArg = aa;
+            stack.pop(EP,SP);
+            return v_zero();
+        }
+#else
+        static_assert(false,"implement");
+#endif
     }
 }

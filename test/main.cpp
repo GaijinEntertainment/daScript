@@ -140,7 +140,7 @@ bool exception_test ( const string & fn ) {
             program->simulate(ctx, cout);
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
-                ctx.eval(fnTest, nullptr);
+                ctx.evalWithCatch(fnTest, nullptr);
                 if ( auto ex = ctx.getException() ) {
                     cout << "ok\n";
                     return true;
