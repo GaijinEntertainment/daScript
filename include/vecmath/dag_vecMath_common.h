@@ -2171,6 +2171,14 @@ VECMATH_INLINE vec4f VECTORCALL v_exp2_est_p2(vec4f x)
   expfpart = POLY2(fpart, 1.0017247f, 6.5763628e-1f, 3.3718944e-1f);
   return v_mul(expipart, expfpart);
 }
+
+VECMATH_INLINE vec4f VECTORCALL v_exp2(vec4f x)
+{
+  EXP_DEF_PART
+  expfpart = POLY5(fpart, 9.9999994e-1f, 6.9315308e-1f, 2.4015361e-1f, 5.5826318e-2f, 8.9893397e-3f, 1.8775767e-3f);
+  return v_sel(v_mul(expipart, expfpart), expipart, v_cmp_eq(fpart, v_zero()));//ensure that exp2(int) = 2^int
+}
+
 #undef EXP_DEF_PART
 
 #define LOG_DEF_PART\
@@ -2217,6 +2225,17 @@ VECMATH_INLINE vec4f VECTORCALL v_log2_est(vec4f x) {return v_log2_est_p4(x);}
 VECMATH_FINLINE vec4f VECTORCALL v_pow_est(vec4f x, vec4f y)
 {
    return v_exp2_est_p4(v_mul(v_log2_est_p5(x), y));
+}
+//natural log
+VECMATH_FINLINE vec4f VECTORCALL v_log(vec4f x){return v_mul(v_log2_est_p5(x), v_splats(0.6931471805599453f));}
+//natural exponent
+VECMATH_FINLINE vec4f VECTORCALL v_exp(vec4f x){return v_exp2(v_mul(x, v_splats(1.4426950408889634073599f)));}//log2(e)
+//safer pow. checks for y == 0
+VECMATH_FINLINE vec4f VECTORCALL v_pow(vec4f x, vec4f y)
+{
+   vec4f ret = v_exp2(v_mul(v_log2_est_p5(x), y));
+   ret = v_sel(ret, V_C_ONE, v_cmp_eq(y, v_zero()));
+   return ret;
 }
 
 #undef POLY0
