@@ -1435,6 +1435,16 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
     };
 
+#define IMPLEMENT_OP1_FUNCTION_POLICY_EX(CALL,TYPE,CTYPE,ATYPE,ACTYPE)		\
+    template <>																\
+    struct Sim_##CALL <ACTYPE> : SimNode_CallBase {							\
+        DAS_NODE(TYPE,CTYPE);												\
+        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}		\
+        __forceinline CTYPE compute ( Context & context ) {					\
+            auto val = arguments[0]->eval##ATYPE(context);					\
+            return SimPolicy<ACTYPE>::CALL(val,context);					\
+        }																	\
+    };
     
 #define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \

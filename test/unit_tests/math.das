@@ -16,4 +16,10 @@ def test
     assert(floor(-1.1)==-2.)
     assert(exp(0.)==1.)
     assert(abs(log(exp(1.)) - 1.) < 1e-6)
+    assert(pow(0., 0.)==1.)
+    assert(pow(2., 2.)==4.)
+    assert(exp2(2.)==4.)
+    assert(log2(4.)==2.)
+    assert(abs(exp(1.) - 2.718281828459045f) < 1e-6)
+    assert(abs(log(2.718281828459045f) - 1.) < 1e-6)
     return true
