@@ -2218,6 +2218,17 @@ VECMATH_FINLINE vec4f VECTORCALL v_pow_est(vec4f x, vec4f y)
 {
    return v_exp2_est_p4(v_mul(v_log2_est_p5(x), y));
 }
+//natural log
+VECMATH_FINLINE vec4f VECTORCALL v_log(vec4f x){return v_log2_est_p5(v_mul(x, v_splats(7.38905609893f)));}//e^2
+//natural exponent
+VECMATH_FINLINE vec4f VECTORCALL v_exp(vec4f x){return v_exp2_est_p5(v_mul(x, v_splats(1.44269504089f)));}//log2(e)
+//safer pow. checks for y == 0
+VECMATH_FINLINE vec4f VECTORCALL v_pow(vec4f x, vec4f y)
+{
+   vec4f ret = v_exp2_est_p5(v_mul(v_log2_est_p5(x), y));
+   ret = v_sel(ret, V_C_ONE, v_cmp_eq(y, v_zero()));
+   return ret;
+}
 
 #undef POLY0
 #undef POLY1
