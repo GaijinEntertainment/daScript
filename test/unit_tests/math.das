@@ -22,4 +22,8 @@ def test
     assert(log2(4.)==2.)
     assert(abs(exp(1.) - 2.718281828459045f) < 1e-6)
     assert(abs(log(2.718281828459045f) - 1.) < 1e-6)
+    assert(ceili(float2(0.5,-0.1)) == int2(1,0))
+    assert(floori(float2(0.5,-0.1)) == int2(0,-1))
+    assert(roundi(float2(0.501,-0.1)) == int2(1,0))
+    assert(trunci(float2(0.501,-0.1)) == int2(0,0))
     return true
