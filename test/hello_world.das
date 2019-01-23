@@ -15,5 +15,7 @@ def test
     assert(q.i==6)
     assert(q.f==0.0)
     assert(q.s=="world")
+    let qq3 = [[Foo i=1; i=2; i=3]]
+    assert(qq3[0].i==1 & qq3[1].i==2 & qq3[2].i==3)
     return true
 

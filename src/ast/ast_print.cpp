@@ -539,13 +539,17 @@ namespace das {
             Visitor::preVisit(expr);
             ss << "[[" << expr->makeType->describe() << " ";
         }
-        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) override {
-            Visitor::preVisitMakeStructureField(expr,decl,last);
+        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
+            Visitor::preVisitMakeStructureField(expr,index,decl,last);
             ss << decl->name << " = ";
         }
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) override {
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !last ) ss << ", ";
-            return Visitor::visitMakeStructureField(expr, decl, last);
+            return Visitor::visitMakeStructureField(expr,index,decl,last);
+        }
+        virtual void visitMakeStructureIndex ( ExprMakeStructure * expr, int index, bool lastField ) override {
+            if ( !lastField ) ss << "; ";
+            Visitor::visitMakeStructureIndex(expr, index, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
             ss << "]]";

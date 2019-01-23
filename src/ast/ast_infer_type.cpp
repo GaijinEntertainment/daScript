@@ -1655,13 +1655,17 @@ namespace das {
             verifyType(expr->makeType);
             if ( expr->makeType->baseType != Type::tStructure ) {
                 error("[[ STRUCT ]] with non-structure type", expr->at, CompilationError::invalid_type);
-            } else if ( expr->makeType->dim.size() ) {
-                error("[[ STRUCT[dim] ]] NOT YET", expr->at, CompilationError::invalid_type);
+            } else if ( expr->makeType->dim.size()>1 ) {
+                error("[[ STRUCT[dim] ]] can only initialize single dimension arrays", expr->at, CompilationError::invalid_type);
+            } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=expr->structs.size() ) {
+                error("[[ " + expr->makeType->describe() + "] ]] dimension mismatch, provided " +
+                      std::to_string(expr->structs.size()) + " elements", expr->at,
+                          CompilationError::invalid_type);
             }
         }
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) override {
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !decl->value->type ) {
-                return Visitor::visitMakeStructureField(expr, decl, last);
+                return Visitor::visitMakeStructureField(expr,index,decl,last);
             }
             if ( expr->makeType->baseType == Type::tStructure ) {
                 if ( auto field = expr->makeType->structType->findField(decl->name) ) {
@@ -1674,10 +1678,18 @@ namespace das {
                     error("field not found, " + decl->name, decl->at, CompilationError::cant_get_field);
                 }
             }
-            return Visitor::visitMakeStructureField(expr, decl, last);
+            return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
         virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
-            expr->type = make_shared<TypeDecl>(*expr->makeType);
+            auto resT = make_shared<TypeDecl>(*expr->makeType);
+            uint32_t resDim = uint32_t(expr->structs.size());
+            if ( resDim!=1 ) {
+                resT->dim.resize(1);
+                resT->dim[0] = resDim;
+            } else {
+                resT->dim.clear();
+            }
+            expr->type = resT;
             return Visitor::visit(expr);
         }
     };

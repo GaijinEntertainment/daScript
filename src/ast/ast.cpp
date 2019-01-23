@@ -967,13 +967,18 @@ namespace das
     ExpressionPtr ExprMakeStructure::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeStructure>(expr);
         Expression::clone(cexpr);
-        cexpr->fields.reserve ( fields.size() );
-        for ( auto & fd : fields ) {
-            auto cfd = make_shared<MakeFieldDecl>();
-            cfd->at = fd->at;
-            cfd->name = fd->name;
-            cfd->value = fd->value->clone();
-            cexpr->fields.push_back(cfd);
+        cexpr->structs.reserve ( structs.size() );
+        for ( auto & fields : structs ) {
+            auto mfd = make_shared<MakeStruct>();
+            mfd->reserve( fields->size() );
+            for ( auto & fd : *fields ) {
+                auto cfd = make_shared<MakeFieldDecl>();
+                cfd->at = fd->at;
+                cfd->name = fd->name;
+                cfd->value = fd->value->clone();
+                mfd->push_back(cfd);
+            }
+            cexpr->structs.push_back(mfd);
         }
         cexpr->makeType = make_shared<TypeDecl>(*makeType);
         return cexpr;
@@ -981,14 +986,19 @@ namespace das
     
     ExpressionPtr ExprMakeStructure::visit(Visitor & vis) {
         vis.preVisit(this);
-        for ( auto it = fields.begin(); it != fields.end(); ) {
-            auto & field = *it;
-            vis.preVisitMakeStructureField(this, field.get(), field==fields.back());
-            field->value = field->value->visit(vis);
-            if ( field ) {
-                field = vis.visitMakeStructureField(this, field.get(), field==fields.back());
+        for ( int index=0; index != int(structs.size()); ++index ) {
+            vis.preVisitMakeStructureIndex(this, index, index==int(structs.size()-1));
+            auto & fields = structs[index];
+            for ( auto it = fields->begin(); it != fields->end(); ) {
+                auto & field = *it;
+                vis.preVisitMakeStructureField(this, index, field.get(), field==fields->back());
+                field->value = field->value->visit(vis);
+                if ( field ) {
+                    field = vis.visitMakeStructureField(this, index, field.get(), field==fields->back());
+                }
+                if ( field ) ++it; else it = fields->erase(it);
             }
-            if ( field ) ++it; else it = fields.erase(it);
+            vis.visitMakeStructureIndex(this, index, index==int(structs.size()-1));
         }
         return vis.visit(this);
     }

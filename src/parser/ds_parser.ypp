@@ -168,6 +168,7 @@
 %type <pExpression>     make_decl
 %type <pMakeStruct>     make_struct_fields
 %type <pExpression>     make_struct_decl
+%type <pExpression>     make_struct_dim
 
 %type <s>               character_sequence
 %type <s>               string_constant
@@ -1099,7 +1100,7 @@ make_struct_fields
     :   NAME[fn] '=' expr[value] {
         auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value));
         delete $fn;
-        auto msd = new MakeStructure();
+        auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
@@ -1114,17 +1115,17 @@ make_struct_fields
 make_struct_dim
     :   make_struct_fields[msf] {
         auto msd = new ExprMakeStructure();
-        msd->structs.push(MakeStructPtr($msf));
+        msd->structs.push_back(MakeStructPtr($msf));
         $$ = msd;
     }
     |   make_struct_dim[msd] ';' make_struct_fields[msf] {
-        ((ExprMakeStructure *) $msd)->structs.push(MakeStructPtr($msf));
+        ((ExprMakeStructure *) $msd)->structs.push_back(MakeStructPtr($msf));
         $$ = $msd;
     }
     ;
 
 make_struct_decl
-    :   '['[loc] '[' type_declaration[mkt] make_struct_fields[msd] ']' ']' {
+    :   '['[loc] '[' type_declaration[mkt] make_struct_dim[msd] ']' ']' {
         ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
         $msd->at = tokAt(@loc);
         $$ = $msd;

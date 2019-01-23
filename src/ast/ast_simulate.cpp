@@ -31,25 +31,29 @@ namespace das
     }
     
     SimNode * ExprMakeStructure::simulate (Context & context) const {
-
         vector<SimNode *> simlist;
         // init with 0
-        auto init0 = context.code.makeNode<SimNode_InitLocal>(at,stackTop,makeType->getSizeOf());
+        int total = structs.size();
+        int stride = makeType->getSizeOf();
+        auto init0 = context.code.makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
         simlist.push_back(init0);
-        for ( const auto & decl : fields ) {
-            auto field = makeType->structType->findField(decl->name);
-            assert(field && "should have failed in type infer otherwise");
-            auto rightType = decl->value->type;
-            auto right = decl->value->simulate(context);
-            uint32_t fieldStackTop = stackTop + field->offset;
-            if ( rightType->isRef() ) {
-                auto setE = context.code.makeValueNode<SimNode_SetLocalRefT>(rightType->baseType,
-                                                                        at, right, fieldStackTop);
-                simlist.push_back(setE);
-            } else {
-                auto setE = context.code.makeValueNode<SimNode_SetLocalValueT>(rightType->baseType,
-                                                                          at, right, fieldStackTop);
-                simlist.push_back(setE);
+        for ( int index=0; index != int(structs.size()); ++index ) {
+            auto & fields = structs[index];
+            for ( const auto & decl : *fields ) {
+                auto field = makeType->structType->findField(decl->name);
+                assert(field && "should have failed in type infer otherwise");
+                auto rightType = decl->value->type;
+                auto right = decl->value->simulate(context);
+                uint32_t fieldStackTop = stackTop + index*stride + field->offset;
+                if ( rightType->isRef() ) {
+                    auto setE = context.code.makeValueNode<SimNode_SetLocalRefT>(rightType->baseType,
+                                                                            at, right, fieldStackTop);
+                    simlist.push_back(setE);
+                } else {
+                    auto setE = context.code.makeValueNode<SimNode_SetLocalValueT>(rightType->baseType,
+                                                                              at, right, fieldStackTop);
+                    simlist.push_back(setE);
+                }
             }
         }
         // we make a block with all those things in it

@@ -135,7 +135,7 @@ namespace das {
         }
     // ExprMakeStructure
         virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
-            auto sz = expr->makeType->getSizeOf();
+            auto sz = expr->makeType->getSizeOf() * uint32_t(expr->structs.size());
             expr->stackTop = allocateStack(sz);
             if ( log ) {
                 logs << "\t" << expr->stackTop << "\t" << sz

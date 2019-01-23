@@ -1377,8 +1377,10 @@ namespace das
         virtual void preVisitForSource ( ExprFor *, Expression *, bool ) {}
         virtual ExpressionPtr visitForSource ( ExprFor *, Expression * that , bool ) { return that->shared_from_this(); }
         // MAKE STRUCTURE
-        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) {}
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) {
+        virtual void preVisitMakeStructureIndex ( ExprMakeStructure * expr, int index, bool lastIndex ) {}
+        virtual void visitMakeStructureIndex ( ExprMakeStructure * expr, int index, bool lastField ) {}
+        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool lastField ) {
             return decl->shared_from_this(); }
         // EXPRESSIONS
 #define VISIT_EXPR(ExprType) \
