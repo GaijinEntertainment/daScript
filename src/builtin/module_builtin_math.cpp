@@ -13,6 +13,12 @@ namespace das {
         static __forceinline float Ceil  ( float a, Context & )          { return v_extract_x(v_ceil(v_splats(a))); }
         static __forceinline float Sqrt  ( float a, Context & )          { return v_extract_x(v_sqrt_x(v_splats(a))); }
 
+        static __forceinline float Exp   ( float a, Context & )          { return v_extract_x(v_exp(v_splats(a))); }
+        static __forceinline float Log   ( float a, Context & )          { return v_extract_x(v_log(v_splats(a))); }
+        static __forceinline float Exp2  ( float a, Context & )          { return v_extract_x(v_exp2(v_splats(a))); }
+        static __forceinline float Log2  ( float a, Context & )          { return v_extract_x(v_log2_est_p5(v_splats(a))); }
+        static __forceinline float Pow   ( float a, float b, Context & ) { return v_extract_x(v_pow(v_splats(a), v_splats(b))); }
+
         static __forceinline float Sin   ( float a, Context & )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(s); }
         static __forceinline float Cos   ( float a, Context & )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(c); }
         static __forceinline float Tan   ( float a, Context & )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(v_div_x(s,c)); }
@@ -26,6 +32,12 @@ namespace das {
         static __forceinline vec4f Floor ( vec4f a, Context & )          { return v_floor(a); }
         static __forceinline vec4f Ceil  ( vec4f a, Context & )          { return v_ceil(a); }
         static __forceinline vec4f Sqrt  ( vec4f a, Context & )          { return v_sqrt4(a); }
+
+        static __forceinline vec4f Exp   ( vec4f a, Context & )          { return v_exp(a); }
+        static __forceinline vec4f Log   ( vec4f a, Context & )          { return v_log(a); }
+        static __forceinline vec4f Exp2  ( vec4f a, Context & )          { return v_exp2(a); }
+        static __forceinline vec4f Log2  ( vec4f a, Context & )          { return v_log2_est_p5(a); }
+        static __forceinline vec4f Pow   ( vec4f a, vec4f b, Context & ) { return v_pow(a, b); }
 
         static __forceinline vec4f Sin ( vec4f a, Context & ) { vec4f s,c; v_sincos4(a, s, c);return s; }
         static __forceinline vec4f Cos ( vec4f a, Context & ) { vec4f s,c; v_sincos4(a, s, c);return c; }
@@ -60,6 +72,13 @@ namespace das {
     MATH_FUN_OP1(Ceil)
     MATH_FUN_OP1(Sqrt)
 
+    //exp
+    MATH_FUN_OP1(Exp)
+    MATH_FUN_OP1(Log)
+    MATH_FUN_OP1(Exp2)
+    MATH_FUN_OP1(Log2)
+    MATH_FUN_OP2(Pow)
+
     //trig
     MATH_FUN_OP1(Sin)
     MATH_FUN_OP1(Cos)
@@ -90,6 +109,17 @@ namespace das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Sqrt<TT>, TT,   TT>   >("sqrt",   lib) );
     }
 
+    template <typename TT>
+    void addFunctionPow(Module & mod, const ModuleLibrary & lib) {
+        //                                     policy       ret   arg1 arg2     name
+        mod.addFunction( make_shared<BuiltInFn<Sim_Exp<TT>,  TT,   TT> >("exp",   lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Log<TT>,  TT,   TT> >("log",   lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Exp2<TT>, TT,   TT> >("exp2",  lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Log2<TT>, TT,   TT> >("log2",  lib) );
+
+        mod.addFunction( make_shared<BuiltInFn<Sim_Pow<TT>,  TT,   TT,   TT> >("pow",   lib) );
+    }
+
     class Module_Math : public Module {
     public:
         Module_Math() : Module("math") {
@@ -102,9 +132,10 @@ namespace das {
             addFunctionTrig<float3>(*this,lib);
             addFunctionTrig<float4>(*this,lib);
             // exp functions
-            addExtern<decltype(powf),  powf >(*this, lib, "pow",  false);
-            addExtern<decltype(expf),  expf >(*this, lib, "exp",  false);
-            addExtern<decltype(logf),  logf >(*this, lib, "log",  false);
+            addFunctionPow<float>(*this, lib);
+            addFunctionPow<float2>(*this,lib);
+            addFunctionPow<float3>(*this,lib);
+            addFunctionPow<float4>(*this,lib);
             //common
             addFunctionCommon<float>(*this, lib);
             addFunctionCommon<float2>(*this,lib);
