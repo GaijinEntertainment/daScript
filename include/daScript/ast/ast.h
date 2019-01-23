@@ -1063,6 +1063,8 @@ namespace das
             : at(a), name(n), value(e) {}
     };
     typedef shared_ptr<MakeFieldDecl>   MakeFieldDeclPtr;
+    typedef vector<MakeFieldDeclPtr>    MakeStruct;
+    typedef shared_ptr<MakeStruct>      MakeStructPtr;
     
     struct ExprMakeStructure : Expression {
         ExprMakeStructure() = default;
@@ -1071,7 +1073,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         TypeDeclPtr                 makeType;
-        vector<MakeFieldDeclPtr>    fields;
+        vector<MakeStructPtr>       structs;
         uint32_t                    stackTop = 0;
     };
     

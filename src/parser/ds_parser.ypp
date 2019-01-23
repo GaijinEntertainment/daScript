@@ -67,6 +67,8 @@
     AnnotationArgumentList *        aaList;
     AnnotationDeclaration *         fa;
     AnnotationList *                faList;
+    MakeStruct *                    pMakeStruct;
+    
 }
 
 %destructor { delete $$; } <s>
@@ -79,6 +81,7 @@
 %destructor { delete $$; } <aaList>
 %destructor { delete $$; } <fa>
 %destructor { delete $$; } <faList>
+%destructor { delete $$; } <pMakeStruct>
 
 %token  LEXER_ERROR
 
@@ -163,7 +166,7 @@
 %type <pExpression>     string_builder_body
 %type <pExpression>     string_builder
 %type <pExpression>     make_decl
-%type <pExpression>     make_struct_fields
+%type <pMakeStruct>     make_struct_fields
 %type <pExpression>     make_struct_decl
 
 %type <s>               character_sequence
@@ -1096,14 +1099,26 @@ make_struct_fields
     :   NAME[fn] '=' expr[expr] {
         auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($expr));
         delete $fn;
-        auto msd = new ExprMakeStructure();
-        msd->fields.push_back(mfd);
+        auto msd = new MakeStructure();
+        msd->push_back(mfd);
         $$ = msd;
     }
     |   make_struct_fields[msd] ',' NAME[fn] '=' expr[expr] {
         auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($expr));
         delete $fn;
-        ((ExprMakeStructure *)$msd)->fields.push_back(mfd);
+        ((MakeStruct *)$msd)->push_back(mfd);
+        $$ = $msd;
+    }
+    ;
+
+make_struct_dim
+    :   make_struct_fields[msf] {
+        auto msd = new ExprMakeStructure();
+        msd->structs.push(MakeStructPtr($msf));
+        $$ = msd;
+    }
+    |   make_struct_dim[msd] ';' make_struct_fields[msf] {
+        ((ExprMakeStructure *) $msd)->structs.push(MakeStructPtr($msf));
         $$ = $msd;
     }
     ;
