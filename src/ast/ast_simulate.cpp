@@ -33,7 +33,7 @@ namespace das
     SimNode * ExprMakeStructure::simulate (Context & context) const {
         vector<SimNode *> simlist;
         // init with 0
-        int total = structs.size();
+        int total = int(structs.size());
         int stride = makeType->getSizeOf();
         auto init0 = context.code.makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
         simlist.push_back(init0);
