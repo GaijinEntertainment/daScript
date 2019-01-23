@@ -30,6 +30,37 @@ namespace das
         }
     }
     
+    SimNode * ExprMakeStructure::simulate (Context & context) const {
+
+        vector<SimNode *> simlist;
+        // init with 0
+        auto init0 = context.code.makeNode<SimNode_InitLocal>(at,stackTop,makeType->getSizeOf());
+        simlist.push_back(init0);
+        for ( const auto & decl : fields ) {
+            auto field = makeType->structType->findField(decl->name);
+            assert(field && "should have failed in type infer otherwise");
+            auto rightType = decl->value->type;
+            auto right = decl->value->simulate(context);
+            uint32_t fieldStackTop = stackTop + field->offset;
+            if ( rightType->isRef() ) {
+                auto setE = context.code.makeValueNode<SimNode_SetLocalRefT>(rightType->baseType,
+                                                                        at, right, fieldStackTop);
+                simlist.push_back(setE);
+            } else {
+                auto setE = context.code.makeValueNode<SimNode_SetLocalValueT>(rightType->baseType,
+                                                                          at, right, fieldStackTop);
+                simlist.push_back(setE);
+            }
+        }
+        // we make a block with all those things in it
+        auto block = context.code.makeNode<SimNode_MakeLocal>(at, stackTop);
+        block->total = int(simlist.size());
+        block->list = (SimNode **) context.code.allocate(sizeof(SimNode *)*block->total);
+        for ( uint32_t i = 0; i != block->total; ++i )
+            block->list[i] = simlist[i];
+        return block;
+    }
+    
     SimNode * ExprRef2Value::simulate (Context & context) const {
         return GetR2V(context, at, type, subexpr->simulate(context));
     }

@@ -962,6 +962,37 @@ namespace das
         return cexpr;
     }
 
+    // make structure
+    
+    ExpressionPtr ExprMakeStructure::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMakeStructure>(expr);
+        Expression::clone(cexpr);
+        cexpr->fields.reserve ( fields.size() );
+        for ( auto & fd : fields ) {
+            auto cfd = make_shared<MakeFieldDecl>();
+            cfd->at = fd->at;
+            cfd->name = fd->name;
+            cfd->value = fd->value->clone();
+            cexpr->fields.push_back(cfd);
+        }
+        cexpr->makeType = make_shared<TypeDecl>(*makeType);
+        return cexpr;
+    }
+    
+    ExpressionPtr ExprMakeStructure::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto it = fields.begin(); it != fields.end(); ) {
+            auto & field = *it;
+            vis.preVisitMakeStructureField(this, field.get(), field==fields.back());
+            field->value = field->value->visit(vis);
+            if ( field ) {
+                field = vis.visitMakeStructureField(this, field.get(), field==fields.back());
+            }
+            if ( field ) ++it; else it = fields.erase(it);
+        }
+        return vis.visit(this);
+    }
+    
     // program
     
     vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {

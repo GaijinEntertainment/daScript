@@ -22,6 +22,11 @@ namespace das {
         bool                    log = false;
         ostream &               logs;
     protected:
+        uint32_t allocateStack ( uint32_t size ) {
+            auto result = stackTop;
+            stackTop += (size + 0xf) & ~0xf;
+            return result;
+        }
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -68,10 +73,10 @@ namespace das {
                 blocks.push_back(block);
             }
             if ( block->arguments.size() || block->copyOnReturn || block->moveOnReturn ) {
-                block->stackTop = stackTop;
-                stackTop += (sizeof(BlockArguments) + 0xf) & ~0xf;
+                auto sz = sizeof(BlockArguments);
+                block->stackTop = allocateStack(sz);
                 if ( log ) {
-                    logs << "\t" << block->stackTop << "\t" << sizeof(BlockArguments)
+                    logs << "\t" << block->stackTop << "\t" << sz
                         << "\tblock arguments, line " << block->at.line << "\n";
                 }
             }
@@ -87,8 +92,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
                 auto sz = expr->func->result->getSizeOf();
-                expr->stackTop = stackTop;
-                stackTop += (sz + 0xf) & ~0xf;
+                expr->stackTop = allocateStack(sz);
                 if ( log ) {
                     logs << "\t" << expr->stackTop << "\t" << sz
                         << "\tcall, line " << expr->at.line << "\n";
@@ -100,8 +104,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( expr->type->isRefType() ) {
                 auto sz = expr->type->getSizeOf();
-                expr->stackTop = stackTop;
-                stackTop += (sz + 0xf) & ~0xf;
+                expr->stackTop = allocateStack(sz);
                 if ( log ) {
                     logs << "\t" << expr->stackTop << "\t" << sz
                         << "\tinvoke, line " << expr->at.line << "\n";
@@ -109,32 +112,36 @@ namespace das {
             }
         }
     // ExprFor
-        virtual void preVisit ( ExprFor * expr ) override {
-            Visitor::preVisit(expr);
-        }
         virtual void preVisitForStack ( ExprFor * expr ) override {
             Visitor::preVisitForStack(expr);
             for ( auto & var : expr->iteratorVariables ) {
-                var->stackTop = stackTop;
-                stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
+                auto sz = var->type->getSizeOf();
+                var->stackTop = allocateStack(sz);
                 if ( log ) {
-                    logs << "\t" << var->stackTop << "\t" << var->type->getSizeOf()
+                    logs << "\t" << var->stackTop << "\t" << sz
                         << "\tfor " << var->name << ", line " << var->at.line << "\n";
                 }
             }
         }
     // ExprLet
-        virtual void preVisit ( ExprLet * expr ) override {
-            Visitor::preVisit(expr);
-        }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
-            var->stackTop = stackTop;
-            stackTop += (var->type->getSizeOf() + 0xf) & ~0xf;
+            auto sz = var->type->getSizeOf();
+            var->stackTop = allocateStack(sz);
             if ( log ) {
-                logs << "\t" << var->stackTop << "\t" << var->type->getSizeOf()
+                logs << "\t" << var->stackTop << "\t" << sz
                     << "\tlet " << var->name << ", line " << var->at.line << "\n";
             }
             return Visitor::visitLet(expr,var,last);
+        }
+    // ExprMakeStructure
+        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+            auto sz = expr->makeType->getSizeOf();
+            expr->stackTop = allocateStack(sz);
+            if ( log ) {
+                logs << "\t" << expr->stackTop << "\t" << sz
+                    << "\t[[" << expr->makeType->describe() << "]], line " << expr->at.line << "\n";
+            }
+            return Visitor::visit(expr);
         }
     };
     

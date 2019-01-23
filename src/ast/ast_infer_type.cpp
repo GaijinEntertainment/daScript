@@ -1649,6 +1649,37 @@ namespace das {
             expr->type = make_shared<TypeDecl>(Type::tString);
             return Visitor::visit(expr);
         }
+    // make structure
+        virtual void preVisit ( ExprMakeStructure * expr ) override {
+            Visitor::preVisit(expr);
+            verifyType(expr->makeType);
+            if ( expr->makeType->baseType != Type::tStructure ) {
+                error("[[ STRUCT ]] with non-structure type", expr->at, CompilationError::invalid_type);
+            } else if ( expr->makeType->dim.size() ) {
+                error("[[ STRUCT[dim] ]] NOT YET", expr->at, CompilationError::invalid_type);
+            }
+        }
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) override {
+            if ( !decl->value->type ) {
+                return Visitor::visitMakeStructureField(expr, decl, last);
+            }
+            if ( expr->makeType->baseType == Type::tStructure ) {
+                if ( auto field = expr->makeType->structType->findField(decl->name) ) {
+                    if ( !field->type->isSameType(*decl->value->type,false,false) ) {
+                        error("can't initialize field, " + decl->name + " expecting ("
+                              +field->type->describe()+"), passing ("+decl->value->type->describe()+")",
+                                decl->value->at, CompilationError::invalid_type );
+                    }
+                } else {
+                    error("field not found, " + decl->name, decl->at, CompilationError::cant_get_field);
+                }
+            }
+            return Visitor::visitMakeStructureField(expr, decl, last);
+        }
+        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+            expr->type = make_shared<TypeDecl>(*expr->makeType);
+            return Visitor::visit(expr);
+        }
     };
      
     // program

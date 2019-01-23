@@ -1,5 +1,5 @@
 //options logOptimizationPasses=true
-//options log=true
+options log=true
 
 def two_plus_two : int
     return 2 + 2

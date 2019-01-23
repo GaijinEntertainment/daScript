@@ -1132,6 +1132,19 @@ SIM_NODE_AT_VECTOR(Float, float)
         bool needResult = false;
         void * annotationData = nullptr;
     };
+    
+    struct SimNode_MakeLocal : SimNode_Block {
+        DAS_PTR_NODE;
+        SimNode_MakeLocal ( const LineInfo & at, uint32_t sp )
+            : SimNode_Block(at), stackTop(sp) {}
+        __forceinline char * compute ( Context & context ) {
+            for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
+                list[i++]->eval(context);
+            }
+            return context.stack.sp() + stackTop;
+        }
+        uint32_t stackTop;
+    };
 
     // LET
     struct SimNode_Let : SimNode_Block {

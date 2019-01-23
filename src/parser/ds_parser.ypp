@@ -162,6 +162,9 @@
 %type <pExpression>     expr_numeric_const
 %type <pExpression>     string_builder_body
 %type <pExpression>     string_builder
+%type <pExpression>     make_decl
+%type <pExpression>     make_struct_fields
+%type <pExpression>     make_struct_decl
 
 %type <s>               character_sequence
 %type <s>               string_constant
@@ -734,6 +737,7 @@ expr
     |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
     |   expr_numeric_const[nc]                { $$ = $nc; }
     |   string_builder[sb]                    { $$ = $sb; }
+    |   make_decl[md]                         { $$ = $md; }
     |   _TRUE[loc]                            { $$ = new ExprConstBool(tokAt(@loc),true); }
     |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }
     |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),"!",ExpressionPtr($subexpr)); }
@@ -1081,6 +1085,34 @@ type_declaration
             }
             deleteVariableDeclarationList($list);
         }
+    }
+    ;
+
+make_decl
+    :   make_struct_decl[msd]    { $$ = $msd; }
+    ;
+
+make_struct_fields
+    :   NAME[fn] '=' expr[expr] {
+        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($expr));
+        delete $fn;
+        auto msd = new ExprMakeStructure();
+        msd->fields.push_back(mfd);
+        $$ = msd;
+    }
+    |   make_struct_fields[msd] ',' NAME[fn] '=' expr[expr] {
+        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($expr));
+        delete $fn;
+        ((ExprMakeStructure *)$msd)->fields.push_back(mfd);
+        $$ = $msd;
+    }
+    ;
+
+make_struct_decl
+    :   '['[loc] '[' type_declaration[mkt] make_struct_fields[msd] ']' ']' {
+        ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
+        $msd->at = tokAt(@loc);
+        $$ = $msd;
     }
     ;
 

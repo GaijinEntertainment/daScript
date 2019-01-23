@@ -1054,6 +1054,27 @@ namespace das
         ExpressionPtr   cond, body;
     };
     
+    struct MakeFieldDecl : enable_shared_from_this<MakeFieldDecl> {
+        LineInfo        at;
+        string          name;
+        ExpressionPtr   value;
+        MakeFieldDecl () = default;
+        MakeFieldDecl ( const LineInfo & a, const string & n, const ExpressionPtr & e )
+            : at(a), name(n), value(e) {}
+    };
+    typedef shared_ptr<MakeFieldDecl>   MakeFieldDeclPtr;
+    
+    struct ExprMakeStructure : Expression {
+        ExprMakeStructure() = default;
+        ExprMakeStructure ( const LineInfo & at ) : Expression(at) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        TypeDeclPtr                 makeType;
+        vector<MakeFieldDeclPtr>    fields;
+        uint32_t                    stackTop = 0;
+    };
+    
     class Function : public enable_shared_from_this<Function> {
     public:
         virtual ~Function() {}
@@ -1353,6 +1374,10 @@ namespace das
         virtual void preVisitForBody ( ExprFor *, Expression * ) {}
         virtual void preVisitForSource ( ExprFor *, Expression *, bool ) {}
         virtual ExpressionPtr visitForSource ( ExprFor *, Expression * that , bool ) { return that->shared_from_this(); }
+        // MAKE STRUCTURE
+        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) {}
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) {
+            return decl->shared_from_this(); }
         // EXPRESSIONS
 #define VISIT_EXPR(ExprType) \
         virtual void preVisit ( ExprType * that ) { preVisitExpression(that); } \
@@ -1413,6 +1438,7 @@ namespace das
         VISIT_EXPR(ExprCall)
         VISIT_EXPR(ExprIfThenElse)
         VISIT_EXPR(ExprWhile)
+        VISIT_EXPR(ExprMakeStructure)
 #undef VISIT_EXPR
     };
 #if defined(_MSC_VER)

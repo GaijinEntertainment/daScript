@@ -534,6 +534,23 @@ namespace das {
             ss << ")";
             return Visitor::visit(expr);
         }
+    // make structure
+        virtual void preVisit ( ExprMakeStructure * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "[[" << expr->makeType->describe() << " ";
+        }
+        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) override {
+            Visitor::preVisitMakeStructureField(expr,decl,last);
+            ss << decl->name << " = ";
+        }
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, MakeFieldDecl * decl, bool last ) override {
+            if ( !last ) ss << ", ";
+            return Visitor::visitMakeStructureField(expr, decl, last);
+        }
+        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+            ss << "]]";
+            return Visitor::visit(expr);
+        }
     protected:
         stringstream        ss;
         ostream::pos_type   lastNewLine = -1;

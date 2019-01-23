@@ -1,4 +1,4 @@
-options log = true
+options log = false
 
 def if_to_cond(cond)		// folds to cond ? 1 : 2
 	if ( cond )
@@ -11,7 +11,7 @@ def if_in_block(cond)		// folds to if - else
 	if cond
 		print("2")
 		return 3
-	print("4")
+	assert(false)
 	return 5
 
 def life_after_if(cond)		// folds to cond ? 1 : 2
