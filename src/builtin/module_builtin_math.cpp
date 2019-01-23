@@ -7,18 +7,16 @@
 
 namespace das {
 
-	struct SimPolicy_MathInt {
-		static __forceinline int Trunci ( float a, Context & )          { return v_extract_xi(v_cvt_vec4i(v_splats(a))); }
-		static __forceinline int Roundi ( float a, Context & )          { return v_extract_xi(v_cvt_roundi(v_splats(a))); }
-		static __forceinline int Floori ( float a, Context & )          { return v_extract_xi(v_cvt_floori(v_splats(a))); }
-		static __forceinline int Ceili  ( float a, Context & )          { return v_extract_xi(v_cvt_ceili(v_splats(a))); }
-	};
-
     struct SimPolicy_MathFloat {
         static __forceinline float Abs   ( float a, Context & )          { return v_extract_x(v_abs(v_splats(a))); }
         static __forceinline float Floor ( float a, Context & )          { return v_extract_x(v_floor(v_splats(a))); }
         static __forceinline float Ceil  ( float a, Context & )          { return v_extract_x(v_ceil(v_splats(a))); }
         static __forceinline float Sqrt  ( float a, Context & )          { return v_extract_x(v_sqrt_x(v_splats(a))); }
+
+		static __forceinline int Trunci ( float a, Context & )          { return v_extract_xi(v_cvt_vec4i(v_splats(a))); }
+		static __forceinline int Roundi ( float a, Context & )          { return v_extract_xi(v_cvt_roundi(v_splats(a))); }
+		static __forceinline int Floori ( float a, Context & )          { return v_extract_xi(v_cvt_floori(v_splats(a))); }
+		static __forceinline int Ceili  ( float a, Context & )          { return v_extract_xi(v_cvt_ceili(v_splats(a))); }
 
         static __forceinline float Exp   ( float a, Context & )          { return v_extract_x(v_exp(v_splats(a))); }
         static __forceinline float Log   ( float a, Context & )          { return v_extract_x(v_log(v_splats(a))); }
@@ -34,18 +32,16 @@ namespace das {
         static __forceinline float ATan2_est ( float a, float b, Context & ) { return v_extract_x(v_atan2_est(v_splats(a), v_splats(b))); }
     };
 
-	struct SimPolicy_MathiVec {
-		static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
-		static __forceinline vec4f Roundi ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_roundi(a)); }
-		static __forceinline vec4f Floori ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_floori(a)); }
-		static __forceinline vec4f Ceili  ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_ceili(a)); }
-	};
-
     struct SimPolicy_MathVec {
         static __forceinline vec4f Abs   ( vec4f a, Context & )          { return v_abs(a); }
         static __forceinline vec4f Floor ( vec4f a, Context & )          { return v_floor(a); }
         static __forceinline vec4f Ceil  ( vec4f a, Context & )          { return v_ceil(a); }
         static __forceinline vec4f Sqrt  ( vec4f a, Context & )          { return v_sqrt4(a); }
+
+		static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
+		static __forceinline vec4f Roundi ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_roundi(a)); }
+		static __forceinline vec4f Floori ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_floori(a)); }
+		static __forceinline vec4f Ceili  ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_ceili(a)); }
 
         static __forceinline vec4f Exp   ( vec4f a, Context & )          { return v_exp(a); }
         static __forceinline vec4f Log   ( vec4f a, Context & )          { return v_log(a); }
@@ -61,14 +57,10 @@ namespace das {
         static __forceinline vec4f ATan2_est ( vec4f a, vec4f b, Context & ) { return v_atan2_est(a, b); }
     };
 
-	template <> struct SimPolicy<int>    : SimPolicy_MathInt {};
     template <> struct SimPolicy<float>  : SimPolicy_MathFloat {};
     template <> struct SimPolicy<float2> : SimPolicy_MathVec {};
     template <> struct SimPolicy<float3> : SimPolicy_MathVec {};
     template <> struct SimPolicy<float4> : SimPolicy_MathVec {};
-	template <> struct SimPolicy<int2> : SimPolicy_MathiVec {};
-	template <> struct SimPolicy<int3> : SimPolicy_MathiVec {};
-	template <> struct SimPolicy<int4> : SimPolicy_MathiVec {};
 
 #define MATH_FUN_OP1(fun)\
       DEFINE_POLICY(fun);\
@@ -79,10 +71,10 @@ namespace das {
 
 #define MATH_FUN_OP1_INT(fun)\
       DEFINE_POLICY(fun);\
-      IMPLEMENT_OP1_FUNCTION_POLICY_EX(fun,Int,int,Float);\
-      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int2);     \
-      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int3);     \
-      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int4);
+      IMPLEMENT_OP1_FUNCTION_POLICY_EX(fun,Int,int,Float,float);\
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float2);     \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float3);     \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float4);
 
 #define MATH_FUN_OP2(fun)\
       DEFINE_POLICY(fun);\
@@ -141,10 +133,10 @@ namespace das {
     template <typename Ret, typename TT>
     void addFunctionCommonConversion(Module & mod, const ModuleLibrary & lib) {
         //                                     policy			ret    arg1 arg2     name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Floori<Ret>, Ret,   TT>   >("floori",  lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Ceili <Ret>, Ret,   TT>   >("ceili",   lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Roundi<Ret>, Ret,   TT>   >("roundi",  lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Trunci<Ret>, Ret,   TT>   >("trunci",  lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Floori<TT>, Ret,   TT>   >("floori",  lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Ceili <TT>, Ret,   TT>   >("ceili",   lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Roundi<TT>, Ret,   TT>   >("roundi",  lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Trunci<TT>, Ret,   TT>   >("trunci",  lib) );
     }
 
     template <typename TT>
