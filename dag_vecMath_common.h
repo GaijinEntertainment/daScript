@@ -2233,7 +2233,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_exp(vec4f x){return v_exp2(v_mul(x, v_splats(
 //safer pow. checks for y == 0
 VECMATH_FINLINE vec4f VECTORCALL v_pow(vec4f x, vec4f y)
 {
-   vec4f ret = v_exp2_est_p5(v_mul(v_log2_est_p5(x), y));
+   vec4f ret = v_exp2(v_mul(v_log2_est_p5(x), y));
    ret = v_sel(ret, V_C_ONE, v_cmp_eq(y, v_zero()));
    return ret;
 }
