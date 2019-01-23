@@ -1096,15 +1096,15 @@ make_decl
     ;
 
 make_struct_fields
-    :   NAME[fn] '=' expr[expr] {
-        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($expr));
+    :   NAME[fn] '=' expr[value] {
+        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value));
         delete $fn;
         auto msd = new MakeStructure();
         msd->push_back(mfd);
         $$ = msd;
     }
-    |   make_struct_fields[msd] ',' NAME[fn] '=' expr[expr] {
-        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($expr));
+    |   make_struct_fields[msd] ',' NAME[fn] '=' expr[value] {
+        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value));
         delete $fn;
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;
