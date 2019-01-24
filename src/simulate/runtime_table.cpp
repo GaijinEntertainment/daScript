@@ -26,14 +26,6 @@ namespace das
         }
         arr.lock --;
     }
-    
-    // SimNode_Table
-    
-    vec4f SimNode_Table::eval ( Context & context ) {
-		Table * tab = (Table *)tabExpr->evalPtr(context);
-        vec4f xkey = keyExpr->eval(context);
-        return tabEval ( context, tab, xkey );
-    }
 
     // TableIterator
     

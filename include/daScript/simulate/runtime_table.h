@@ -177,14 +177,6 @@ namespace das
     struct SimNode_Table : SimNode {
         SimNode_Table(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
             : SimNode(at), tabExpr(t), keyExpr(k), valueTypeSize(vts) {}
-        virtual vec4f tabEval ( Context & context, Table * tab, vec4f xkey ) = 0;
-        virtual vec4f eval ( Context & context ) override;
-#define EVAL_NODE(TYPE,CTYPE)\
-        virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return cast<CTYPE>::to(eval(context));                  \
-        }
-        DAS_EVAL_NODE
-#undef  EVAL_NODE
         SimNode * tabExpr;
         SimNode * keyExpr;
         uint32_t valueTypeSize;
@@ -194,10 +186,6 @@ namespace das
     struct SimNode_TableIndex : SimNode_Table {
 		DAS_PTR_NODE;
         SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-		virtual vec4f tabEval(Context & , Table *, vec4f ) override {
-			assert(0 && "we should not even be here");
-			return v_zero();
-		}
 		__forceinline char * compute ( Context & context ) {
 			Table * tab = (Table *) tabExpr->evalPtr(context);
 			vec4f xkey = keyExpr->eval(context);
@@ -211,13 +199,15 @@ namespace das
 
     template <typename KeyType>
     struct SimNode_TableErase : SimNode_Table {
+		DAS_BOOL_NODE;
         SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-        virtual vec4f tabEval ( Context & context, Table * tab, vec4f xkey ) override {
+        __forceinline bool compute ( Context & context ) {
+			Table * tab = (Table *) tabExpr->evalPtr(context);
+			vec4f xkey = keyExpr->eval(context);
             KeyType key = cast<KeyType>::to(xkey);
 			auto hfn = hash_function(context, key);
             TableHash<KeyType> thh(&context,valueTypeSize);
-            bool erased = thh.erase(*tab, key, hfn) != -1;
-            return cast<bool>::from(erased);
+            return thh.erase(*tab, key, hfn) != -1;
         }
     };
 
@@ -225,10 +215,6 @@ namespace das
     struct SimNode_TableFind : SimNode_Table {
 		DAS_PTR_NODE;
         SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-		virtual vec4f tabEval(Context &, Table *, vec4f) override {
-			assert(0 && "we should not even be here");
-			return v_zero();
-		}
 		__forceinline char * compute(Context & context) {
 			Table * tab = (Table *)tabExpr->evalPtr(context);
 			vec4f xkey = keyExpr->eval(context);
