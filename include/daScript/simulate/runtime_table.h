@@ -48,10 +48,10 @@ namespace das
 		__forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {
 			uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
-            int maxI = tab.maxLookups;
+			uint32_t lastI = (index+tab.maxLookups) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-            for ( int i=0; i!=maxI; ++i ) {
+			while ( index != lastI ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY32 ) {
                     return -1;
@@ -67,9 +67,9 @@ namespace das
 			// TODO: take key under account and be less agressive?
 			uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
-            int maxI = tab.maxLookups;
+			uint32_t lastI = (index+tab.maxLookups) & mask;
             auto pHashes = tab.hashes;
-            for ( int i=0; i!=maxI; ++i ) {
+            while ( index != lastI ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY32 ) {
                     return (int) index;
@@ -83,15 +83,15 @@ namespace das
             for ( ;; ) {
 				uint32_t mask = tab.capacity - 1;
                 uint32_t index = hash & mask;
-                int maxI = tab.maxLookups;
+                uint32_t lastI = (index+tab.maxLookups) & mask;
                 auto pKeys = (KeyType *) tab.keys;
                 auto pHashes = tab.hashes;
-				for (int i = 0; i != maxI; ++i) {
+				while ( index != lastI ) {
 					auto kh = pHashes[index];
 					if (kh <= HASH_KILLED32) {
-                        tab.size++;
 						pHashes[index] = hash;
 						pKeys[index] = key;
+						tab.size++;
 						return (int)index;
 					} else if (kh == hash && KeyCompare<KeyType>()(pKeys[index], key)) {
 						return (int)index;
@@ -107,10 +107,10 @@ namespace das
         __forceinline int erase ( Table & tab, KeyType key, uint32_t hash ) {
 			uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
-            int maxI = tab.maxLookups;
+			uint32_t lastI = (index+tab.maxLookups) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-            for ( int i=0; i!=maxI; ++i ) {
+			while ( index != lastI ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY32 ) {
                     return -1;
