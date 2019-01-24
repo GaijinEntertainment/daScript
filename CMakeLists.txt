@@ -144,9 +144,29 @@ SETUP_CPP11(libDaScript)
 
 add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
 add_dependencies(libDaScript daScriptGenDir)
-IF(MSVC)
-set_target_properties(libDaScript PROPERTIES LINK_FLAGS "/LTCG")
-ENDIF()
+
+# JSON
+
+SET(JSON_MAIN
+json/json.cpp
+)
+
+ADD_LIBRARY(libDaScriptJson ${JSON_MAIN})
+SETUP_CPP11(libDaScriptJson)
+ADD_DEPENDENCIES(libDaScriptJson libDaScript)
+
+# JSON Example
+
+SET(JSON_MAIN_SRC
+json/main.cpp
+json/test.das
+)
+
+include_directories(include json)
+add_executable(jsonTest ${JSON_MAIN_SRC} )
+TARGET_LINK_LIBRARIES(jsonTest libDaScript libDaScriptJson)
+ADD_DEPENDENCIES(jsonTest libDaScript libDaScriptJson)
+SETUP_CPP11(jsonTest)
 
 # Stand alone command line compiler
 
@@ -159,10 +179,6 @@ add_executable(daScript ${DASCRIPT_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScript libDaScript)
 ADD_DEPENDENCIES(daScript libDaScript)
 SETUP_CPP11(daScript)
-IF(MSVC)
-set_target_properties(daScript PROPERTIES LINK_FLAGS "/LTCG")
-ENDIF()
-
 
 # Test
 
@@ -209,9 +225,6 @@ add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)
-IF(MSVC)
-set_target_properties(daScriptTest PROPERTIES LINK_FLAGS "/LTCG")
-ENDIF()
 
 # Profile
 
@@ -234,7 +247,4 @@ add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScriptProfile libDaScript)
 ADD_DEPENDENCIES(daScriptProfile libDaScript)
 SETUP_CPP11(daScriptProfile)
-IF(MSVC)
-set_target_properties(daScriptProfile PROPERTIES LINK_FLAGS "/LTCG")
-ENDIF()
 

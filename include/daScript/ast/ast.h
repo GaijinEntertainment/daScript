@@ -185,12 +185,12 @@ namespace das
         return typeFactory<TT>::make(ctx);
     }
     
-#define MAKE_TYPE_FACTORY(TYPE,CTYPE)                                   \
-    template <>                                                         \
-    struct typeFactory<CTYPE> {                                         \
-        static TypeDeclPtr make(const ModuleLibrary & library ) {       \
-            return library.makeHandleType(#TYPE);                       \
-        }                                                               \
+#define MAKE_TYPE_FACTORY(TYPE,CTYPE)										\
+    template <>																\
+    struct das::typeFactory<CTYPE> {										\
+        static das::TypeDeclPtr make(const das::ModuleLibrary & library ) {	\
+            return library.makeHandleType(#TYPE);							\
+        }																	\
     };
     
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
