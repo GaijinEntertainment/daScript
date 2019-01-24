@@ -29,11 +29,23 @@ namespace das
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
-		int32_t r_to = r.to;
-        for (int32_t i = r.from; i != r_to && !context.stopFlags; ++i) {
-            *pi = i;
-            body->eval(context);
+        int32_t count = r.to - r.from; // [0,3] 0,1,2
+        int32_t i = r.from;
+        while ( count>=4 ) {
+            *pi = i++; body->eval(context); if ( context.stopFlags ) goto done;
+            *pi = i++; body->eval(context); if ( context.stopFlags ) goto done;
+            *pi = i++; body->eval(context); if ( context.stopFlags ) goto done;
+            *pi = i++; body->eval(context); if ( context.stopFlags ) goto done;
+            count -= 4;
         }
+        if ( count & 2 ) {
+            *pi = i++; body->eval(context); if ( context.stopFlags ) goto done;
+            *pi = i++; body->eval(context); if ( context.stopFlags ) goto done;
+        }
+        if ( count & 1 ) {
+            *pi = i++; body->eval(context); if ( context.stopFlags ) goto done;
+        }
+    done:;
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
