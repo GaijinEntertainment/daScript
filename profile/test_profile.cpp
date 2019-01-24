@@ -409,6 +409,13 @@ __noinline void testTryCatch(Context * context) {
 	}
 }
 
+__noinline float testExpLoop(int count) {
+	float ret = 0;
+	for (int i = 0; i < count; ++i)
+		ret += expf(1.);//expf(1.f/(1.f+i));
+	return ret;
+}
+
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
@@ -439,6 +446,7 @@ public:
 		addExtern<decltype(testParticles), testParticles>(*this, lib, "testParticles");
 		addExtern<decltype(testParticlesI), testParticlesI>(*this, lib, "testParticlesI");
 		addExtern<decltype(testTryCatch), testTryCatch>(*this, lib, "testTryCatch");
+		addExtern<decltype(testExpLoop), testExpLoop>(*this, lib, "testExpLoop");
     }
 };
 

@@ -3,7 +3,7 @@ local function expLoop(n)
     local sum = 0
     local i;
     for (i = 0; i < n; ++i)
-      sum += exp(1./(1.+i))
+      sum += exp(1.)//exp(1./(1.+i))
     return sum
 }
 
