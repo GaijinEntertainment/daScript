@@ -1654,13 +1654,15 @@ namespace das {
             Visitor::preVisit(expr);
             verifyType(expr->makeType);
             if ( expr->makeType->baseType != Type::tStructure ) {
-                error("[[ STRUCT ]] with non-structure type", expr->at, CompilationError::invalid_type);
+                error("[[" + expr->makeType->describe() + "]] with non-structure type", expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->dim.size()>1 ) {
-                error("[[ STRUCT[dim] ]] can only initialize single dimension arrays", expr->at, CompilationError::invalid_type);
+                error("[[" + expr->makeType->describe() + "]] can only initialize single dimension arrays", expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=expr->structs.size() ) {
-                error("[[ " + expr->makeType->describe() + "] ]] dimension mismatch, provided " +
+                error("[[" + expr->makeType->describe() + "]] dimension mismatch, provided " +
                       std::to_string(expr->structs.size()) + " elements", expr->at,
                           CompilationError::invalid_type);
+            } else if ( expr->makeType->ref ) {
+                error("[[" + expr->makeType->describe() + "]] can't be reference", expr->at, CompilationError::invalid_type);
             }
         }
         virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
@@ -1690,6 +1692,48 @@ namespace das {
                 resT->dim.clear();
             }
             expr->type = resT;
+            verifyType(expr->type);
+            return Visitor::visit(expr);
+        }
+    // make array
+        virtual void preVisit ( ExprMakeArray * expr ) override {
+            Visitor::preVisit(expr);
+            verifyType(expr->makeType);
+            if ( expr->makeType->dim.size()>1 ) {
+                error("[[" + expr->makeType->describe() + "]] can only initialize single dimension arrays",
+                      expr->at, CompilationError::invalid_type);
+            } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=expr->values.size() ) {
+                error("[[" + expr->makeType->describe() + "]] dimension mismatch, provided " +
+                      std::to_string(expr->values.size()) + " elements", expr->at,
+                      CompilationError::invalid_type);
+            } else if ( expr->makeType->ref ) {
+                error("[[" + expr->makeType->describe() + "]] can't be reference", expr->at, CompilationError::invalid_type);
+            }
+            expr->recordType = make_shared<TypeDecl>(*expr->makeType);
+            expr->recordType->dim.clear();
+        }
+        virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last ) override {
+            if ( !init->type ) {
+                return Visitor::visitMakeArrayIndex(expr,index,init,last);
+            }
+            if ( !expr->recordType->isSameType(*init->type,false,false) ) {
+                error("can't initialize array element, " + std::to_string(index) + " expecting ("
+                      +expr->recordType->describe()+"), passing ("+init->type->describe()+")",
+                        init->at, CompilationError::invalid_type );
+            }
+            return Visitor::visitMakeArrayIndex(expr,index,init,last);
+        }
+        virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
+            auto resT = make_shared<TypeDecl>(*expr->makeType);
+            uint32_t resDim = uint32_t(expr->values.size());
+            if ( resDim!=1 ) {
+                resT->dim.resize(1);
+                resT->dim[0] = resDim;
+            } else {
+                resT->dim.clear();
+            }
+            expr->type = resT;
+            verifyType(expr->type);
             return Visitor::visit(expr);
         }
     };

@@ -135,11 +135,21 @@ namespace das {
         }
     // ExprMakeStructure
         virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
-            auto sz = expr->makeType->getSizeOf() * uint32_t(expr->structs.size());
+            auto sz = expr->type->getSizeOf();
             expr->stackTop = allocateStack(sz);
             if ( log ) {
                 logs << "\t" << expr->stackTop << "\t" << sz
-                    << "\t[[" << expr->makeType->describe() << "]], line " << expr->at.line << "\n";
+                    << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
+            }
+            return Visitor::visit(expr);
+        }
+    // ExprMakeArray
+        virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
+            auto sz = expr->type->getSizeOf();
+            expr->stackTop = allocateStack(sz);
+            if ( log ) {
+                logs << "\t" << expr->stackTop << "\t" << sz
+                << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
             }
             return Visitor::visit(expr);
         }

@@ -17,5 +17,9 @@ def test
     assert(q.s=="world")
     let qq3 = [[Foo i=1; i=2; i=3]]
     assert(qq3[0].i==1 & qq3[1].i==2 & qq3[2].i==3)
+    let ar = [[int 1 ; 2 ; 3 ; 4]]
+    assert(ar[0]==1 & ar[1]==2 & ar[2]==3 & ar[3]==4)
+    let arf = [[Foo Foo(); Foo()]]
+    assert(arf[0].i==5 & arf[1].i==5)
     return true
 

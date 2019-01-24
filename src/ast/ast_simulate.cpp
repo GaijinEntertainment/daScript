@@ -10,6 +10,107 @@
 
 namespace das
 {
+        // common for move and copy
+    
+    SimNode * makeLocalCopy(const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
+        const auto & rightType = *rE->type;
+        assert ( rightType.canCopy() && "should check above" );
+        // TODO:
+        //  expand to (while managing combinatorics explosion, policy?)
+        //      1. local ref variables (iterator results etc)
+        //      2. global variables
+        //      3. arguments
+        //      4. blocks
+        //      5. common cross-copy scenarios
+        if ( rightType.isWorkhorseType() ) {
+            if ( rE->rtti_isVar() ) {
+                auto rvar = static_pointer_cast<ExprVar>(rE);
+                if ( rvar->local && !rvar->variable->type->ref ) {
+                    return context.code.makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
+                                                                                at, stackTop,
+                                                                                rvar->variable->stackTop);
+                }
+            }
+            auto right = rE->simulate(context);
+            if ( rightType.ref ) {
+                return context.code.makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
+                                                                        at, right, stackTop);
+            } else {
+                return context.code.makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
+                                                                          at, right, stackTop);
+            }
+        }
+        // now, to the regular copy
+        auto left = context.code.makeNode<SimNode_GetLocal>(rE->at, stackTop);
+        auto right = rE->simulate(context);
+        if ( rightType.isRef() ) {
+            if ( rightType.isWorkhorseType() ) {
+                return context.code.makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
+            } else {
+                return context.code.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+            }
+        } else if ( rightType.isHandle() ) {
+            return rightType.annotation->simulateCopy(context, at, left, right);
+        } else {
+            return context.code.makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
+        }
+    }
+    
+    SimNode * makeCopy(const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
+        const auto & rightType = *rE->type;
+        assert ( rightType.canCopy() && "should check above" );
+        // TODO:
+        //  expand to (while managing combinatorics explosion, policy?)
+        //      1. local ref variables (iterator results etc)
+        //      2. global variables
+        //      3. arguments
+        //      4. blocks
+        //      5. common cross-copy scenarios
+        if ( rightType.isWorkhorseType() && lE->rtti_isVar() ) {
+            auto var = static_pointer_cast<ExprVar>(lE);
+            if ( var->local && !var->variable->type->ref ) {
+                if ( rE->rtti_isVar() ) {
+                    auto rvar = static_pointer_cast<ExprVar>(rE);
+                    if ( rvar->local && !rvar->variable->type->ref ) {
+                        return context.code.makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
+                                at, var->variable->stackTop, rvar->variable->stackTop);
+                    }
+                }
+                auto right = rE->simulate(context);
+                if ( rightType.ref ) {
+                    return context.code.makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
+                                at, right, var->variable->stackTop);
+                } else {
+                    return context.code.makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
+                                at, right, var->variable->stackTop);
+                }
+            }
+        }
+        // now, to the regular copy
+        auto left = lE->simulate(context);
+        auto right = rE->simulate(context);
+        if ( rightType.isRef() ) {
+            if ( rightType.isWorkhorseType() ) {
+                return context.code.makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
+            } else {
+                return context.code.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+            }
+        } else if ( rightType.isHandle() ) {
+            return rightType.annotation->simulateCopy(context, at, left, right);
+        } else {
+            return context.code.makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
+        }
+    }
+    
+    SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
+        if ( rightType.isRef() ) {
+            return context.code.makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
+        } else {
+            assert(0 && "we should not be here");
+            return nullptr;
+        }
+    }
+    
     SimNode * Function::simulate (Context & context) const {
         if ( builtIn ) {
             assert(0 && "can only simulate non built-in function");
@@ -34,27 +135,40 @@ namespace das
         vector<SimNode *> simlist;
         // init with 0
         int total = int(structs.size());
-        int stride = makeType->getSizeOf();
+        int stride = makeType->getStride();
         auto init0 = context.code.makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
         simlist.push_back(init0);
-        for ( int index=0; index != int(structs.size()); ++index ) {
+        for ( int index=0; index != total; ++index ) {
             auto & fields = structs[index];
             for ( const auto & decl : *fields ) {
                 auto field = makeType->structType->findField(decl->name);
                 assert(field && "should have failed in type infer otherwise");
-                auto rightType = decl->value->type;
-                auto right = decl->value->simulate(context);
                 uint32_t fieldStackTop = stackTop + index*stride + field->offset;
-                if ( rightType->isRef() ) {
-                    auto setE = context.code.makeValueNode<SimNode_SetLocalRefT>(rightType->baseType,
-                                                                            at, right, fieldStackTop);
-                    simlist.push_back(setE);
-                } else {
-                    auto setE = context.code.makeValueNode<SimNode_SetLocalValueT>(rightType->baseType,
-                                                                              at, right, fieldStackTop);
-                    simlist.push_back(setE);
-                }
+                auto cpy = makeLocalCopy(at,context,fieldStackTop,decl->value);
+                simlist.push_back(cpy);
             }
+        }
+        // we make a block with all those things in it
+        auto block = context.code.makeNode<SimNode_MakeLocal>(at, stackTop);
+        block->total = int(simlist.size());
+        block->list = (SimNode **) context.code.allocate(sizeof(SimNode *)*block->total);
+        for ( uint32_t i = 0; i != block->total; ++i )
+            block->list[i] = simlist[i];
+        return block;
+    }
+    
+    SimNode * ExprMakeArray::simulate (Context & context) const {
+        vector<SimNode *> simlist;
+        // init with 0
+        int total = int(values.size());
+        uint32_t stride = recordType->getSizeOf();
+        auto init0 = context.code.makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
+        simlist.push_back(init0);
+        for ( int index=0; index != total; ++index ) {
+            auto & val = values[index];
+            uint32_t indexStackTop = stackTop + index*stride;
+            auto cpy = makeLocalCopy(at,context,indexStackTop,val);
+            simlist.push_back(cpy);
         }
         // we make a block with all those things in it
         auto block = context.code.makeNode<SimNode_MakeLocal>(at, stackTop);
@@ -439,63 +553,6 @@ namespace das
                                                     subexpr->simulate(context),
                                                     left->simulate(context),
                                                     right->simulate(context));
-    }
-    
-    // common for move and copy
-    
-    SimNode * makeCopy(const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
-        const auto & rightType = *rE->type;
-        assert ( rightType.canCopy() && "should check above" );
-        // TODO:
-        //  expand to (while managing combinatorics explosion, policy?)
-        //      1. local ref variables (iterator results etc)
-        //      2. global variables
-        //      3. arguments
-        //      4. blocks
-        //      5. common cross-copy scenarios
-        if ( rightType.isWorkhorseType() && lE->rtti_isVar() ) {
-            auto var = static_pointer_cast<ExprVar>(lE);
-            if ( var->local && !var->variable->type->ref ) {
-                if ( rE->rtti_isVar() ) {
-                    auto rvar = static_pointer_cast<ExprVar>(rE);
-                    if ( rvar->local && !rvar->variable->type->ref ) {
-                        return context.code.makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
-                                at, var->variable->stackTop, rvar->variable->stackTop);
-                    }
-                }
-                auto right = rE->simulate(context);
-                if ( rightType.ref ) {
-                    return context.code.makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
-                                at, right, var->variable->stackTop);
-                } else {
-                    return context.code.makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
-                                at, right, var->variable->stackTop);
-                }
-            }
-        }
-        // now, to the regular copy
-        auto left = lE->simulate(context);
-        auto right = rE->simulate(context);
-        if ( rightType.isRef() ) {
-            if ( rightType.isWorkhorseType() ) {
-                return context.code.makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
-            } else {
-                return context.code.makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
-            }
-        } else if ( rightType.isHandle() ) {
-            return rightType.annotation->simulateCopy(context, at, left, right);
-        } else {
-            return context.code.makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
-        }
-    }
-    
-    SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
-        if ( rightType.isRef() ) {
-            return context.code.makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
-        } else {
-            assert(0 && "we should not be here");
-            return nullptr;
-        }
     }
 
     SimNode * ExprMove::simulate (Context & context) const {

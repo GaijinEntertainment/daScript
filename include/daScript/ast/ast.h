@@ -1077,6 +1077,18 @@ namespace das
         uint32_t                    stackTop = 0;
     };
     
+    struct ExprMakeArray : Expression {
+        ExprMakeArray() = default;
+        ExprMakeArray ( const LineInfo & at ) : Expression(at) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        TypeDeclPtr                 makeType;
+        TypeDeclPtr                 recordType;
+        vector<ExpressionPtr>       values;
+        uint32_t                    stackTop = 0;
+    };
+    
     class Function : public enable_shared_from_this<Function> {
     public:
         virtual ~Function() {}
@@ -1382,6 +1394,11 @@ namespace das
         virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
         virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool lastField ) {
             return decl->shared_from_this(); }
+        // MAKE ARRAY
+        virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastIndex ) {}
+        virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) {
+            return init->shared_from_this();
+        }
         // EXPRESSIONS
 #define VISIT_EXPR(ExprType) \
         virtual void preVisit ( ExprType * that ) { preVisitExpression(that); } \
@@ -1443,6 +1460,7 @@ namespace das
         VISIT_EXPR(ExprIfThenElse)
         VISIT_EXPR(ExprWhile)
         VISIT_EXPR(ExprMakeStructure)
+        VISIT_EXPR(ExprMakeArray)
 #undef VISIT_EXPR
     };
 #if defined(_MSC_VER)

@@ -170,6 +170,8 @@
 %type <pMakeStruct>     make_struct_fields
 %type <pExpression>     make_struct_decl
 %type <pExpression>     make_struct_dim
+%type <pExpression>     make_dim
+%type <pExpression>     make_dim_decl
 
 %type <s>               character_sequence
 %type <s>               string_constant
@@ -1099,6 +1101,7 @@ type_declaration
 
 make_decl
     :   make_struct_decl[msd]    { $$ = $msd; }
+    |   make_dim_decl[mdd]       { $$ = $mdd; }
     ;
 
 make_struct_fields
@@ -1134,6 +1137,26 @@ make_struct_decl
         ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
         $msd->at = tokAt(@loc);
         $$ = $msd;
+    }
+    ;
+
+make_dim
+    :   expr[val] {
+        auto mka = new ExprMakeArray();
+        mka->values.push_back(ExpressionPtr($val));
+        $$ = mka;
+    }
+    |   make_dim[mka] ';' expr[val] {
+        ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
+        $$ = $mka;
+    }
+    ;
+
+make_dim_decl
+    :   '['[loc] '[' type_declaration[mkt] make_dim[mka] ']' ']' {
+       ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
+       $mka->at = tokAt(@loc);
+       $$ = $mka;
     }
     ;
 

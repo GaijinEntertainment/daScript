@@ -537,7 +537,7 @@ namespace das {
     // make structure
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             Visitor::preVisit(expr);
-            ss << "[[" << expr->makeType->describe() << " ";
+            ss << "[[" << expr->type->describe() << " ";
         }
         virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);
@@ -552,6 +552,19 @@ namespace das {
             Visitor::visitMakeStructureIndex(expr, index, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+            ss << "]]";
+            return Visitor::visit(expr);
+        }
+    // make array
+        virtual void preVisit ( ExprMakeArray * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "[[" << expr->type->describe() << " ";
+        }
+        virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override {
+            if ( !lastField ) ss << "; ";
+            return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+        }
+        virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
             ss << "]]";
             return Visitor::visit(expr);
         }

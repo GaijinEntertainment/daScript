@@ -1003,6 +1003,35 @@ namespace das
         return vis.visit(this);
     }
     
+    // make structure
+    
+    ExpressionPtr ExprMakeArray::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMakeArray>(expr);
+        Expression::clone(cexpr);
+        cexpr->values.reserve ( values.size() );
+        for ( auto & val : values ) {
+            cexpr->values.push_back(val->clone());
+        }
+        cexpr->makeType = make_shared<TypeDecl>(*makeType);
+        return cexpr;
+    }
+    
+    ExpressionPtr ExprMakeArray::visit(Visitor & vis) {
+        vis.preVisit(this);
+        int index = 0;
+        for ( auto it = values.begin(); it != values.end(); ) {
+            auto & value = *it;
+            vis.preVisitMakeArrayIndex(this, index, value.get(), index==int(values.size()-1));
+            value = value->visit(vis);
+            if ( value ) {
+                value = vis.visitMakeArrayIndex(this, index, value.get(), index==int(values.size()-1));
+            }
+            if ( value ) ++it; else it = values.erase(it);
+            index ++;
+        }
+        return vis.visit(this);
+    }
+    
     // program
     
     vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {
