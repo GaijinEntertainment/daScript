@@ -5,10 +5,12 @@
 
 namespace das
 {
+#ifndef __GNUC__
     __forceinline uint32_t _rotl ( uint32_t value, int shift ) {
         return (value<<shift) | (value>>(32-shift));
     }
-    
+#endif // __GNUC__
+
 	uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
     
 	uint32_t hash_structure ( Context & ctx, char * ps, StructInfo * info, int size, bool isPod ) {

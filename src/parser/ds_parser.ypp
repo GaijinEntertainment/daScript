@@ -88,7 +88,7 @@
 /* keywords */
 %token  _STRUCT     _LET        _DEF        _WHILE
 %token  _IF         _ELSE       _FOR        _CATCH
-%token  _TRUE       _FALSE      _SIZEOF     _NEW
+%token  _TRUE       _FALSE      _SIZEOF     _NEWT
 %token  _TYPE       _IN         _ELIF       _ARRAY
 %token  _RETURN     _NULL       _BREAK      _TRY
 %token  _OPTIONS    _TABLE      _EXPECT     _CONST
@@ -564,7 +564,7 @@ name_in_namespace
     ;
 
 expr_new
-    :   _NEW[loc] name_in_namespace[structName]   {
+    :   _NEWT[loc] name_in_namespace[structName]   {
         auto pTypeDecl = g_Program->makeTypeDeclaration(tokAt(@loc), *$structName);
         $$ = new ExprNew(tokAt(@loc),TypeDeclPtr(pTypeDecl));
         delete $structName;
