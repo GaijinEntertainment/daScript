@@ -145,6 +145,7 @@
 %type <b>               copy_or_move
 
 %type <pExpression>     expr
+%type <pExpression>     expr_assign
 %type <pExpression>     expr_list
 %type <pExpression>     expression_let
 %type <pExpression>     expressions
@@ -511,8 +512,8 @@ expression_block
 
 expression_any
     :   ';'                                 { $$ = nullptr; }
-    |   expr[subexpr] ';'                   { $$ = $subexpr; }
     |   expr_pipe[subexpr]                  { $$ = $subexpr; }
+    |   expr_assign[subexpr] ';'            { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
@@ -536,7 +537,7 @@ expressions
     ;
 
 expr_pipe
-    :   expr[fncall] LBPIPE[loc] expr_block[arg] {
+    :   expr_assign[fncall] LBPIPE[loc] expr_block[arg] {
         Expression * pipeCall = $fncall->tail();
         if ( pipeCall->rtti_isCall() ) {
             auto pCall = (ExprLooksLikeCall *) pipeCall;
@@ -736,6 +737,19 @@ expr_numeric_const
     |   DOUBLE[const]                         { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }
     ;
 
+expr_assign
+    :   expr[ex]                             { $$ = $ex; }
+    |   expr[left] '='[loc]    expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] ANDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"&=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] OREQU[loc] expr[right]    { $$ = new ExprOp2(tokAt(@loc),"|=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] XOREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"^=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ADDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] SUBEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"-=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] MULEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] DIVEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"/=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] MODEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"%=", ExpressionPtr($left), ExpressionPtr($right)); }
+    ;
+
 expr
     :   _NULL[loc]                            { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
     |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
@@ -749,15 +763,6 @@ expr
     |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),"+",ExpressionPtr($subexpr)); }
     |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),"-",ExpressionPtr($subexpr)); }
     |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '='[loc]    expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
-    |   expr[left] ANDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"&=", ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] OREQU[loc] expr[right]    { $$ = new ExprOp2(tokAt(@loc),"|=", ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] XOREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"^=", ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] ADDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+=", ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] SUBEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"-=", ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] MULEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*=", ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] DIVEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"/=", ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] MODEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"%=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '+'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '-'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"-", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '*'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*", ExpressionPtr($left), ExpressionPtr($right)); }

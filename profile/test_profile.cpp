@@ -411,8 +411,8 @@ __noinline void testTryCatch(Context * context) {
 
 __noinline float testExpLoop(int count) {
 	float ret = 0;
-	for (int i = 0; i < count; ++i)
-		ret += expf(1.);//expf(1.f/(1.f+i));
+    for (int i = 0; i < count; ++i)
+        ret += expf(1.f/(1.f+i));
 	return ret;
 }
 
