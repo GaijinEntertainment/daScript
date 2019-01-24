@@ -5,8 +5,16 @@ struct Foo
     f : float = 6.0
     s : string = "hello"
 
+let
+	testFoo = Foo()
+
+let
+	jestFoo = [[Foo i=3, f=4., s="blah"]]
+
 [export]
 def test
+	assert(testFoo.i==5 & testFoo.f==6. & testFoo.s=="hello")
+	assert(jestFoo.i==3 & jestFoo.f==4. & jestFoo.s=="blah")
     let t = Foo()
     assert(t.i==5)
     assert(t.f==6.0)
@@ -22,4 +30,3 @@ def test
     let arf = [[Foo Foo(); Foo()]]
     assert(arf[0].i==5 & arf[1].i==5)
     return true
-

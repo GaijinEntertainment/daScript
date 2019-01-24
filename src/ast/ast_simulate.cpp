@@ -860,6 +860,7 @@ namespace das
 				gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
 			}
 		}
+		context.globalInitStackSize = globalInitStackSize;
         context.simEnd();
         context.restart();
         context.runInitScript();

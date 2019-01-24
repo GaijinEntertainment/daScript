@@ -1297,6 +1297,7 @@ namespace das
 		int							totalVariables = 0;
         vector<Error>               errors;
         bool                        failToCompile = false;
+		uint32_t					globalInitStackSize = 0;
     public:
         map<CompilationError,int>   expectErrors;
 	public:

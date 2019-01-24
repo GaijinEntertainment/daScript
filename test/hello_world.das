@@ -1,4 +1,4 @@
-options log=true, logStack=true, optimize=true
+// options log=true, logStack=true, optimize=true
 
 struct Foo
     i : int = 5
@@ -8,9 +8,13 @@ struct Foo
 let
 	testFoo = Foo()
 
+let
+	jestFoo = [[Foo i=3, f=4., s="blah"]]
+
 [export]
 def test
-	debug(testFoo,"testFoo=")
+	assert(testFoo.i==5 & testFoo.f==6. & testFoo.s=="hello")
+	assert(jestFoo.i==3 & jestFoo.f==4. & jestFoo.s=="blah")
     let t = Foo()
     assert(t.i==5)
     assert(t.f==6.0)

@@ -242,6 +242,7 @@ namespace das
         void *          abiCMRES;
 	protected:
         GlobalVariable * globalVariables = nullptr;
+		uint32_t globalInitStackSize = 0;
         SimFunction * functions = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;

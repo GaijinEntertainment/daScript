@@ -361,6 +361,11 @@ namespace das
     }
 
     void Context::runInitScript ( void ) {
+		char * EP, *SP;
+		if(!stack.push(globalInitStackSize,EP,SP)) {
+			throw_error("stack overflow");
+			return;
+		}
         for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
             auto & pv = globalVariables[i];
             if ( pv.init ) {
@@ -369,6 +374,7 @@ namespace das
                 memset ( cast<char *>::to(pv.value), 0, pv.size );
             }
         }
+		stack.pop(EP,SP);
     }
     
     SimFunction * Context::findFunction ( const char * name ) const {

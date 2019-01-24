@@ -27,6 +27,14 @@ namespace das {
             stackTop += (size + 0xf) & ~0xf;
             return result;
         }
+	// global variable init
+		virtual void preVisitGlobalLet ( const VariablePtr & ) override {
+			stackTop = 0;
+		}
+		virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override { 
+			program->globalInitStackSize = max(program->globalInitStackSize, stackTop);
+			return Visitor::visitGlobalLet(var); 
+		}
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
