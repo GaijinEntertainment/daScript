@@ -1377,6 +1377,32 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+	template <>
+	struct SimNode_ForWithIterator<1> : SimNode_ForWithIteratorBase {
+		SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
+		virtual vec4f eval ( Context & context ) override {
+			vec4f * pi = (vec4f *)(context.stack.sp() + stackTop[0]);
+			Iterator * sources;
+			vec4f ll = source_iterators[0]->eval(context);
+			sources = cast<Iterator *>::to(ll);
+			IteratorContext ph;
+			bool needLoop = true;
+			needLoop = sources->first(context, ph) && needLoop;
+			if ( context.stopFlags ) goto loopend;
+			if ( !needLoop ) goto loopend;
+			for ( int i=0; !context.stopFlags; ++i ) {
+				*pi = ph.value;
+				body->eval(context);
+				if ( !sources->next(context, ph) ) goto loopend;
+				if ( context.stopFlags ) goto loopend;
+			}
+		loopend:
+			sources->close(context, ph);
+			context.stopFlags &= ~EvalFlags::stopForBreak;
+			return v_zero();
+		}
+	};
+
     struct SimNode_Op1 : SimNode {
         SimNode_Op1 ( const LineInfo & at ) : SimNode(at) {}
         SimNode * x = nullptr;
