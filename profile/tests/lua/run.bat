@@ -22,3 +22,4 @@ lua.exe primes.lua
 lua.exe particles.lua
 lua.exe dict.lua 
 lua.exe profile_try_catch.lua 
+lua.exe exp.lua 
