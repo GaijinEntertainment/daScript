@@ -1,12 +1,16 @@
-// options log=true, logStack=true, optimize=true
+options log=true, logStack=true, optimize=true
 
 struct Foo
     i : int = 5
     f : float = 6.0
     s : string = "hello"
 
+let
+	testFoo = Foo()
+
 [export]
 def test
+	debug(testFoo,"testFoo=")
     let t = Foo()
     assert(t.i==5)
     assert(t.f==6.0)

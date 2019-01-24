@@ -834,7 +834,6 @@ namespace das
                     context.throw_error("can't allocate variable data, out of heap");
                     return false;
                 }
-				gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
 			}
 		}
         context.totalVariables = totalVariables;
@@ -850,6 +849,15 @@ namespace das
 				gfun.code = pfun->simulate(context);
 				gfun.stackSize = pfun->totalStackSize;
 				gfun.debug = helper.makeFunctionDebugInfo(*pfun);
+			}
+		}
+		for (auto & pm : library.modules ) {
+			for (auto & it : pm->globals) {
+				auto pvar = it.second;
+				if (!pvar->used)
+					continue;
+				auto & gvar = context.globalVariables[pvar->index];
+				gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
 			}
 		}
         context.simEnd();
