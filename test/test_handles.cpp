@@ -6,14 +6,16 @@ using namespace das;
 struct TestObjectFoo {
     int fooData;
 };
-MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
-
 
 struct TestObjectBar {
     TestObjectFoo * fooPtr;
     float           barData;
 };
-MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
+
+namespace das {
+    MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
+    MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
+}
 
 
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
@@ -222,9 +224,9 @@ public:
         addAnnotation(make_shared<TestObjectFooAnnotation>());
         addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
         // register function
-        addExtern<decltype(testFoo), testFoo>(*this, lib, "testFoo");
-        addExtern<decltype(testAdd), testAdd>(*this, lib, "testAdd");
-        addExtern<decltype(testFields), testFields>(*this, lib, "testFields");
+        addExtern<decltype(&testFoo), testFoo>(*this, lib, "testFoo");
+        addExtern<decltype(&testAdd), testAdd>(*this, lib, "testAdd");
+        addExtern<decltype(&testFields), testFields>(*this, lib, "testFields");
     }
 };
 

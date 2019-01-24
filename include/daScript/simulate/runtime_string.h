@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string.h>
 #include "daScript/simulate/cast.h"
 #include "daScript/ast/compilation_errors.h"
 #include "daScript/simulate/sim_policy.h"

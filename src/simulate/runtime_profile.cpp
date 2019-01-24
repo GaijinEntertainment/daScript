@@ -18,7 +18,25 @@ double profileGetTimeSec ( uint64_t minT ) {
     return double(minT) / double(freq.QuadPart);
 }
 
-#else
+#elif __linux__
+
+const uint64_t NSEC_IN_SEC = 1000000000LL;
+
+uint64_t profileGetTime () {
+    timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+      assert(false);
+        return -1;
+    }
+
+    return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
+}
+
+double profileGetTimeSec ( uint64_t minT ) {
+  return double(minT) / NSEC_IN_SEC;
+}
+
+#else // __linux__
 
 #include <mach/mach.h>
 #include <mach/mach_time.h>

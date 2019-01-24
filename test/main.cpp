@@ -199,7 +199,7 @@ bool run_exception_tests( const string & path ) {
 }
 
 int main() {
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(__linux__)
 	#define	TEST_PATH "../"
 #else
 	#define TEST_PATH "../../"
