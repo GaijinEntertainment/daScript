@@ -34,7 +34,7 @@ namespace das {
     
     template<>
     struct SimPolicy<Time> {
-        static __forceinline uint64_t to_time ( vec4f a ) {
+        static __forceinline auto to_time ( vec4f a ) {
             return cast<Time>::to(a).time;
         }
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
