@@ -8,7 +8,7 @@
 #include <ctime>
 
 namespace das {
-    
+
     struct Time {
         time_t time;
         friend ostream& operator<< (ostream& stream, const Time & t) {
@@ -19,19 +19,21 @@ namespace das {
             return stream;
         }
     };
-    
-    MAKE_TYPE_FACTORY(clock, Time)
-    
+}
+
+MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
+
+namespace das {
     struct TimeAnnotation : ManagedValueAnnotation<Time> {
         TimeAnnotation() : ManagedValueAnnotation<Time>("clock") {}
     };
-    
+
     template <>
     struct cast <Time> {
         static __forceinline Time to ( vec4f x )               { union { Time t; vec4f vec; } T; T.vec = x; return T.t; }
         static __forceinline vec4f from ( Time x )             { union { Time t; vec4f vec; } T; T.t = x; return T.vec; }
     };
-    
+
     template<>
     struct SimPolicy<Time> {
         static __forceinline auto to_time ( vec4f a ) {
