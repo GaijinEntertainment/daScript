@@ -37,12 +37,25 @@ namespace das {
         SimNode * subexpr;
     };
     
+    template <typename Fun, Fun BOOL_PROP>
+    struct SimNode_SafeAs : SimNode {
+        DAS_PTR_NODE;
+        SimNode_SafeAs(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        __forceinline char * compute(Context & context) {
+            auto pv = (JsValue *) subexpr->evalPtr(context);
+            if ( !pv || !(pv->*BOOL_PROP)() ) { return nullptr; }
+            return (char *) pv;
+        }
+        SimNode * subexpr;
+    };
+    
     struct SimNode_AsBool : SimNode {
         DAS_BOOL_NODE;
         SimNode_AsBool(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
         __forceinline bool compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return false; }
+            if ( !pv->IsBool() ) { context.throw_error("JSON not a boolean"); return false; }
             return pv->GetBool();
         }
         SimNode * subexpr;
@@ -54,6 +67,7 @@ namespace das {
         __forceinline int32_t compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return 0; }
+            if ( !pv->IsInt() ) { context.throw_error("JSON not a int"); return 0; }
             return pv->GetInt();
         }
         SimNode * subexpr;
@@ -65,6 +79,7 @@ namespace das {
         __forceinline float compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return 0.0f; }
+            if ( !pv->IsFloat() ) { context.throw_error("JSON not a float"); return 0.0f; }
             return (float) pv->GetDouble();
         }
         SimNode * subexpr;
@@ -76,6 +91,7 @@ namespace das {
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return nullptr; }
+            if ( !pv->IsString() ) { context.throw_error("JSON not a string"); return nullptr; }
             auto ps = pv->GetString();
             auto psl = pv->GetStringLength();
             return context.heap.allocateString(ps,psl);
@@ -94,6 +110,7 @@ namespace das {
         SimNode * subexpr;
     };
 
+    template <bool SAFE>
     struct SimNode_GetJsonFieldConst : SimNode {
         DAS_PTR_NODE;
         SimNode_GetJsonFieldConst(const LineInfo & a, SimNode * se, char * i )
@@ -101,16 +118,16 @@ namespace das {
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
-                context.throw_error("JSON dereferencing null pointer");
+                if ( !SAFE ) context.throw_error("JSON dereferencing null pointer");
                 return nullptr;
             }
             if ( !pv->IsObject() ) {
-                context.throw_error("JSON field is not an object");
+                if ( !SAFE ) context.throw_error("JSON field is not an object");
                 return nullptr;
             }
             auto hf = pv->FindMember(index);
             if ( hf == pv->MemberEnd() ) {
-                context.throw_error("JSON field not found");
+                if ( !SAFE ) context.throw_error("JSON field not found");
                 return nullptr;
             }
             JsValue & value = hf->value;
@@ -203,7 +220,10 @@ namespace das {
         }
 
         virtual TypeDeclPtr makeFieldType ( const string & fn ) const override {
-            if ( fn=="is_int" || fn=="is_float" || fn=="is_object" || fn=="is_array" || fn=="is_string" || fn=="is_bool" || fn=="as_bool" ) {
+            if ( fn=="is_int" || fn=="is_float" || fn=="is_object" || fn=="is_array" ||
+                fn=="is_null" || fn=="is_string" || fn=="is_bool" ) {
+                return make_shared<TypeDecl>(Type::tBool);
+            } else if ( fn=="as_bool" ) {
                 return make_shared<TypeDecl>(Type::tBool);
             } else if ( fn=="as_int" || fn=="size" ) {
                 return make_shared<TypeDecl>(Type::tInt);
@@ -216,38 +236,67 @@ namespace das {
             }
         }
 
-        virtual TypeDeclPtr makeSafeFieldType ( const string & ) const override {
-            assert(0 && "implement");
-            return nullptr;
+        virtual TypeDeclPtr makeSafeFieldType ( const string & fn ) const override {
+            Type bt;
+            if ( fn=="is_int" || fn=="is_float" || fn=="is_object" || fn=="is_array" ||
+                fn=="is_null" || fn=="is_string" || fn=="is_bool" ) {
+                return nullptr;
+            }
+            else if ( fn=="as_bool" ) {
+                bt = Type::tBool;
+            } else if ( fn=="as_int" || fn=="size" ) {
+                bt = Type::tInt;
+            } else if ( fn=="as_float" ) {
+                bt = Type::tFloat;
+            } else if ( fn=="as_string" ) {
+                bt = Type::tString;
+            } else {
+                return makeJsValuePtr();
+            }
+            auto pt = make_shared<TypeDecl>(Type::tPointer);
+            pt->firstType = make_shared<TypeDecl>(bt);
+            return pt;
         }
         virtual SimNode * simulateRef2Value ( Context &, const LineInfo &, SimNode * ) const override {
             assert(0 && "implement");
             return nullptr;
         }
 
-        virtual SimNode * simulateGetField ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr ) const override {
-            // IS XXX
+        SimNode * simulateIsField ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr ) const {
             if (fn == "is_object") {
                 return context.code.makeNode<SimNode_GetBoolProperty<
-                    decltype(&JsValue::IsObject),&JsValue::IsObject>>(at, subexpr);
+                decltype(&JsValue::IsObject),&JsValue::IsObject>>(at, subexpr);
             } else if (fn == "is_array") {
                 return context.code.makeNode<SimNode_GetBoolProperty<
-                    decltype(&JsValue::IsArray),&JsValue::IsArray>>(at, subexpr);
+                decltype(&JsValue::IsArray),&JsValue::IsArray>>(at, subexpr);
             } else if (fn == "is_string") {
                 return context.code.makeNode<SimNode_GetBoolProperty<
-                    decltype(&JsValue::IsString),&JsValue::IsString>>(at, subexpr);
+                decltype(&JsValue::IsString),&JsValue::IsString>>(at, subexpr);
+            } else if (fn == "is_null") {
+                return context.code.makeNode<SimNode_GetBoolProperty<
+                decltype(&JsValue::IsNull),&JsValue::IsNull>>(at, subexpr);
             } else if (fn == "is_bool") {
                 return context.code.makeNode<SimNode_GetBoolProperty<
-                    decltype(&JsValue::IsBool),&JsValue::IsBool>>(at, subexpr);
+                decltype(&JsValue::IsBool),&JsValue::IsBool>>(at, subexpr);
             } else if (fn == "is_int") {
                 return context.code.makeNode<SimNode_GetBoolProperty<
-                    decltype(&JsValue::IsInt),&JsValue::IsInt>>(at, subexpr);
+                decltype(&JsValue::IsInt),&JsValue::IsInt>>(at, subexpr);
             } else if (fn == "is_float") {
                 return context.code.makeNode<SimNode_GetBoolProperty<
-                    decltype(&JsValue::IsDouble),&JsValue::IsDouble>>(at, subexpr);
+                decltype(&JsValue::IsDouble),&JsValue::IsDouble>>(at, subexpr);
             } else if (fn == "is_number") {
                 return context.code.makeNode<SimNode_GetBoolProperty<
-                    decltype(&JsValue::IsNumber),&JsValue::IsNumber>>(at, subexpr);
+                decltype(&JsValue::IsNumber),&JsValue::IsNumber>>(at, subexpr);
+            } else {
+                return nullptr;
+            }
+        }
+
+        virtual SimNode * simulateGetField ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr ) const override {
+            // IS XXX
+            auto isField = simulateIsField(fn, context, at, subexpr);
+            if ( isField ) {
+                return isField;
             }
             // AS XXX
             else if (fn == "as_bool") {
@@ -266,7 +315,7 @@ namespace das {
             // FIELD
             else {
                 auto fieldName = context.code.allocateName(fn);
-                return context.code.makeNode<SimNode_GetJsonFieldConst>(at, subexpr, fieldName);
+                return context.code.makeNode<SimNode_GetJsonFieldConst<false>>(at, subexpr, fieldName);
             }
         }
 
@@ -275,13 +324,36 @@ namespace das {
             return nullptr;
         }
 
-        virtual SimNode * simulateSafeGetField ( const string &, Context &, const LineInfo &, SimNode * ) const override {
+        virtual SimNode * simulateSafeGetField ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr ) const override {
+            // IS XXX
+            auto isField = simulateIsField(fn, context, at, subexpr);
+            if ( isField ) {
+                return isField;
+            }
             assert(0 && "implement");
             return nullptr;
         }
 
-        virtual SimNode * simulateSafeGetFieldPtr ( const string &, Context &, const LineInfo &, SimNode * ) const override {
-            assert(0 && "implement");
+        virtual SimNode * simulateSafeGetFieldPtr ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr) const override {
+            // AS XXX
+            if (fn == "as_bool") {
+                return context.code.makeNode<SimNode_SafeAs<
+                    decltype(&JsValue::IsBool),&JsValue::IsBool>>(at, subexpr);
+            } else if (fn == "as_int") {
+                return context.code.makeNode<SimNode_SafeAs<
+                    decltype(&JsValue::IsInt),&JsValue::IsInt>>(at, subexpr);
+            } else if (fn == "as_float") {
+                return context.code.makeNode<SimNode_SafeAs<
+                    decltype(&JsValue::IsFloat),&JsValue::IsFloat>>(at, subexpr);
+            } else if (fn == "as_string") {
+                return context.code.makeNode<SimNode_SafeAs<
+                    decltype(&JsValue::IsString),&JsValue::IsString>>(at, subexpr);
+            }
+            // FIELD
+            else {
+                auto fieldName = context.code.allocateName(fn);
+                return context.code.makeNode<SimNode_GetJsonFieldConst<true>>(at, subexpr, fieldName);
+            }
             return nullptr;
         }
         

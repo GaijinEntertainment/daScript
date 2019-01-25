@@ -8,11 +8,19 @@ def test
 
     let root = readJson(json_text)
 
+    // general navigation
+
     debug(root)
     assert(root.is_object)
 
+    let r_n = root.n
+    assert(r_n.is_null)
+
     let r_t = root.t
     assert(r_t.is_bool & r_t.as_bool==true)
+
+    let r_i = root.i
+    assert(r_i.is_int & r_i.as_int==123)
 
     let r_f = root.f
     assert(r_f.is_bool & r_f.as_bool==false)
@@ -29,6 +37,17 @@ def test
     for t in range(0,r_a.size)
         let val = r_a->[t]
         assert(val.is_int & val.as_int==(t+1))
+
+    // safe navigation
+
+    let safe_i = root.i?.as_int ?? 456
+    assert(safe_i==123)
+
+    let safe_j = root?.j?.as_int ?? 456
+    assert(safe_j==456)
+
+    let safe_jj = root?.j?.j?.as_float ?? 1.0f
+    assert(safe_jj==1.0f)
 
 	return true
 
