@@ -147,7 +147,7 @@ namespace das
         }
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
         virtual TypeDeclPtr makeIteratorType () const override { return make_shared<TypeDecl>(*vecType); }
-        virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, SimNode * rv, SimNode * idx ) const override {
+        virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &, SimNode * rv, SimNode * idx ) const override {
             return context.code.makeNode<SimNode_AtVector>(at, rv, idx);
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {

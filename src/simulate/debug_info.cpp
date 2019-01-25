@@ -219,7 +219,7 @@ namespace das
             debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType, flags);
         } else {
             switch ( info->type ) {
-                case Type::tBool:       ss << *((bool *)pX); break;
+                case Type::tBool:       ss << (*((bool *)pX) ? "true" : "false"); break;
                 case Type::tInt64:      ss << *((int64_t *)pX); break;
                 case Type::tUInt64:     ss << "0x" << hex << *((uint64_t *)pX) << dec; break;
                 case Type::tString:
@@ -292,7 +292,7 @@ namespace das
             debug_table_value(ss, *tab, info, flags);
         } else {
             switch ( info->type ) {
-                case Type::tBool:       ss << cast<bool>::to(x); break;
+                case Type::tBool:       ss << (cast<bool>::to(x) ? "true" : "false"); break;
                 case Type::tInt64:      ss << cast<int64_t>::to(x); break;
                 case Type::tUInt64:     ss << "0x" << hex << cast<uint64_t>::to(x) << dec; break;
                 case Type::tString:

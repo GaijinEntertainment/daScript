@@ -115,7 +115,7 @@ namespace das {
                 return nullptr;
             }
         };
-        virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, SimNode * rv, SimNode * idx ) const override {
+        virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &, SimNode * rv, SimNode * idx ) const override {
             return context.code.makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), RowC);
         }
         virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {

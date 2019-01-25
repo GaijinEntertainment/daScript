@@ -338,7 +338,7 @@ namespace das
         virtual SimNode * simulateSafeGetField ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateSafeGetFieldPtr ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
-        virtual SimNode * simulateGetAt ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateGetAt ( Context &, const LineInfo &, const TypeDeclPtr &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual void debug ( stringstream & ss, void *, PrintFlags ) const { ss << "handle<" << name << ">"; }
         virtual void debug ( stringstream & ss, vec4f, PrintFlags ) const { ss << "handle<" << name << ">"; }

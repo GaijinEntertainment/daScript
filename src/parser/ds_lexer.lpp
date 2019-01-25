@@ -63,7 +63,7 @@
     yyerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
     return LEXER_ERROR;
 }
-<strb>\\[\{\"]          {
+<strb>\\[\{\"\}]        {
     yylval.ch = yytext[1];
     return STRING_CHARACTER;
 }
