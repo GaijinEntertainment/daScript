@@ -2062,10 +2062,6 @@ VECMATH_INLINE vec4f VECTORCALL v_atan(vec4f x)  // any x
 }
 
 // fast atan2 version. |error| is < 0.000007
-//
-// NOTE: does not handle any of the following inputs:
-// (+0, +0), (+0, -0), (-0, +0), (-0, -0)
-// could be fixed to handle
 VECMATH_INLINE vec4f VECTORCALL v_atan2(vec4f y, vec4f x)
 {
   vec4f pi = v_cast_vec4f(v_splatsi(0x40490fdb));        // 3.141593f
@@ -2099,6 +2095,9 @@ VECMATH_INLINE vec4f VECTORCALL v_atan2(vec4f y, vec4f x)
 
 // fast approx atan version. |error| is < 0.0004
 // ~50% faster then v_atan
+// NOTE: does not handle any of the following inputs:
+// (+0, +0), (+0, -0), (-0, +0), (-0, -0)
+// could be fixed to handle
 VECMATH_INLINE vec4f VECTORCALL v_atan2_est(vec4f y, vec4f x)
 {
   vec4f pi = v_cast_vec4f(v_splatsi(0x40490fdb));        // 3.141593f
@@ -2128,6 +2127,34 @@ VECMATH_INLINE vec4f VECTORCALL v_atan2_est(vec4f y, vec4f x)
 
   return yzeroneg_fixed;
 }
+
+
+VECMATH_INLINE vec4f VECTORCALL v_asin(vec4f a)
+{
+  return v_atan(v_div(a, v_sqrt4(v_sub(V_C_ONE, v_mul(a,a)))));
+}
+
+VECMATH_INLINE vec4f VECTORCALL v_acos(vec4f a)
+{
+  vec4f one = V_C_ONE;
+  a = v_sqrt4(v_div(v_sub(one, a), v_add(one, a)));
+  a = v_atan(a);
+  return v_add(a, a);
+}
+
+VECMATH_INLINE vec4f VECTORCALL v_asin_x(vec4f a)
+{
+  return v_atan(v_div_x(a, v_sqrt_x(v_sub_x(V_C_ONE, v_mul_x(a,a)))));
+}
+
+VECMATH_INLINE vec4f VECTORCALL v_acos_x(vec4f a)
+{
+  vec4f one = V_C_ONE;
+  a = v_sqrt_x(v_div_x(v_sub_x(one, a), v_add_x(one, a)));
+  a = v_atan(a);
+  return v_add_x(a, a);
+}
+
 
 #define POLY0(x, c0) v_splats(c0)
 #define POLY1(x, c0, c1) v_add(v_mul(POLY0(x, c1), x), v_splats(c0))

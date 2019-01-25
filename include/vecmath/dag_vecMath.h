@@ -699,15 +699,19 @@ VECMATH_INLINE vec4f VECTORCALL v_atan_est(vec4f x);  // any x
 // fast atan version. |error| is < 0.000007
 VECMATH_INLINE vec4f VECTORCALL v_atan(vec4f x);  // any x
 
+// fast asin/acos. Uses atan, so it is not precise
+VECMATH_INLINE vec4f VECTORCALL v_asin(vec4f a);
+VECMATH_INLINE vec4f VECTORCALL v_acos(vec4f a);
+VECMATH_INLINE vec4f VECTORCALL v_asin_x(vec4f a);
+VECMATH_INLINE vec4f VECTORCALL v_acos_x(vec4f a);
+
 // fast atan2 version. |error| is < 0.000007
-//
-// NOTE: does not handle any of the following inputs:
-// (+0, +0), (+0, -0), (-0, +0), (-0, -0)
-// could be fixed to handle
 VECMATH_INLINE vec4f VECTORCALL v_atan2(vec4f y, vec4f x);
 
 // fast approx atan version. |error| is < 0.0004
 // ~50% faster then v_atan2
+// NOTE: does not handle any of the following inputs:
+// (+0, +0), (+0, -0), (-0, +0), (-0, -0)
 VECMATH_INLINE vec4f VECTORCALL v_atan2_est(vec4f y, vec4f x);
 
 //exp,log, pow

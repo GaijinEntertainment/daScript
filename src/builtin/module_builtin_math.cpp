@@ -5,19 +5,6 @@
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
 
-__forceinline vec4f v_asin(vec4f a)
-{
-  return v_atan(v_div(a, v_sqrt4(v_sub(V_C_ONE, v_mul(a,a)))));
-}
-
-__forceinline vec4f v_acos(vec4f a)
-{
-  vec4f one = V_C_ONE;
-  a = v_sqrt4(v_div(v_sub(one, a), v_add(one, a)));
-  a = v_atan(a);
-  return v_add(a, a);
-}
-
 namespace das {
 
     struct SimPolicy_MathFloat {
@@ -41,8 +28,8 @@ namespace das {
         static __forceinline float Cos   ( float a, Context & )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(c); }
         static __forceinline float Tan   ( float a, Context & )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(v_div_x(s,c)); }
         static __forceinline float ATan   ( float a, Context & )         { return v_extract_x(v_atan(v_splats(a))); }
-        static __forceinline float ASin   ( float a, Context & )         { return v_extract_x(v_asin(v_splats(a))); }
-        static __forceinline float ACos   ( float a, Context & )         { return v_extract_x(v_acos(v_splats(a))); }
+        static __forceinline float ASin   ( float a, Context & )         { return v_extract_x(v_asin_x(v_splats(a))); }
+        static __forceinline float ACos   ( float a, Context & )         { return v_extract_x(v_acos_x(v_splats(a))); }
         static __forceinline float ATan2 ( float a, float b, Context & ) { return v_extract_x(v_atan2(v_splats(a), v_splats(b))); }
         static __forceinline float ATan2_est ( float a, float b, Context & ) { return v_extract_x(v_atan2_est(v_splats(a), v_splats(b))); }
     };
