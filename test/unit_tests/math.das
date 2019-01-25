@@ -7,6 +7,12 @@ def test
     assert(sin(0.)==0.)
     assert(cos(0.)==1.)
     assert(tan(0.)==0.)
+    assert(asin(0.)==0.)
+    assert(acos(1.)==0.)
+    assert(abs(asin(sin(0.5)) - 0.5) < 0.0001)
+    assert(abs(acos(cos(0.5)) - 0.5) < 0.0001)
+    assert(sin(0.1)*sin(0.1) + cos(0.1)*cos(0.1) == 1.)//cos^2 + sin^2 == 1
+
     assert(atan2(0.,0.)==0.)
     assert(sqrt(4.)==2.)
     assert(pow(2.,2.)==4.)
