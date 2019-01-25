@@ -91,8 +91,9 @@ namespace das {
                 header->length = length;
                 auto stxt = str + sizeof(StringHeader);
                 if ( text ) {
-                    memcpy ( stxt, text, length+1 );
+                    memcpy ( stxt, text, length );
                 }
+                stxt[length] = 0;
                 return stxt;
             } else {
                 return nullptr;
