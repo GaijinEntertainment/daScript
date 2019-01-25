@@ -222,9 +222,9 @@ public:
         addAnnotation(make_shared<TestObjectFooAnnotation>());
         addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
         // register function
-        addExtern<decltype(&testFoo), testFoo>(*this, lib, "testFoo");
-        addExtern<decltype(&testAdd), testAdd>(*this, lib, "testAdd");
-        addExtern<decltype(&testFields), testFields>(*this, lib, "testFields");
+        addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo");
+        addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd");
+        addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields");
     }
 };
 

@@ -10,6 +10,10 @@
 
 namespace das
 {
+    //for ease of binding
+    #define DAS_BIND_FUN(a) decltype(&a), a
+    //
+
     #ifndef DAS_ENABLE_STACK_WALK
     #define DAS_ENABLE_STACK_WALK   1
     #endif

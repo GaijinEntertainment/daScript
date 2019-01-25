@@ -79,10 +79,10 @@ namespace das
 		// function annotations
 		addAnnotation(make_shared<ExportFunctionAnnotation>());
         // functions
-        addExtern<decltype(&builtin_throw),builtin_throw>         (*this, lib, "throw");
-        addExtern<decltype(&builtin_print),builtin_print>         (*this, lib, "print");
-        addExtern<decltype(&builtin_terminate),builtin_terminate> (*this, lib, "terminate");
-        addExtern<decltype(&builtin_stackwalk),builtin_stackwalk> (*this, lib, "stackwalk");
+        addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "throw");
+        addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print");
+        addExtern<DAS_BIND_FUN(builtin_terminate)> (*this, lib, "terminate");
+        addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk");
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint");
         // function-like expresions
         addCall<ExprAssert>         ("assert");
@@ -90,9 +90,9 @@ namespace das
         addCall<ExprDebug>          ("debug");
         addCall<ExprHash>           ("hash");
         // table functions
-        addExtern<decltype(&builtin_table_clear), builtin_table_clear>(*this, lib, "clear", true);
-        addExtern<decltype(&builtin_table_size), builtin_table_size>(*this, lib, "length", false);
-        addExtern<decltype(&builtin_table_capacity), builtin_table_capacity>(*this, lib, "capacity", false);
+        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", true);
+        addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", false);
+        addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", false);
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprFind>("__builtin_table_find");
@@ -101,9 +101,9 @@ namespace das
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile
-        addExtern<decltype(&builtin_profile),builtin_profile>(*this,lib,"profile");
+        addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile");
         // string
-        addExtern<decltype(&builtin_string_endswith), builtin_string_endswith>(*this, lib, "endswith", false);
-        addExtern<decltype(&builtin_string_startswith), builtin_string_startswith>(*this, lib, "startswith", false);
+        addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", false);
+        addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", false);
     }
 }

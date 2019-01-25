@@ -428,25 +428,25 @@ public:
         addAnnotation(make_shared<ObjectStructureTypeAnnotation>());
         addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
         // register functions
-        addExtern<decltype(&AddOne),AddOne>(*this,lib,"AddOne");
-        addExtern<decltype(&updateObject),updateObject>(*this,lib,"interopUpdate");
-        addExtern<decltype(&updateTest),updateTest>(*this,lib,"interopUpdateTest");
-        addExtern<decltype(&update10000), update10000>(*this,lib,"update10000");
-        addExtern<decltype(&update10000ks), update10000ks>(*this,lib,"update10000ks");
+        addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne");
+        addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate");
+        addExtern<DAS_BIND_FUN(updateTest)>(*this,lib,"interopUpdateTest");
+        addExtern<DAS_BIND_FUN(update10000)>(*this,lib,"update10000");
+        addExtern<DAS_BIND_FUN(update10000ks)>(*this,lib,"update10000ks");
         // es
-        addExtern<decltype(&queryEs), queryEs>(*this, lib, "queryEs");
-        addExtern<decltype(&testEsUpdate), testEsUpdate>(*this, lib, "testEsUpdate");
-        addExtern<decltype(&initEsComponents), initEsComponents>(*this, lib, "initEsComponents");
-        addExtern<decltype(&verifyEsComponents), verifyEsComponents>(*this, lib, "verifyEsComponents");
+        addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs");
+        addExtern<DAS_BIND_FUN(testEsUpdate)>(*this, lib, "testEsUpdate");
+        addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents");
+        addExtern<DAS_BIND_FUN(verifyEsComponents)>(*this, lib, "verifyEsComponents");
         // C++ copy of all tests
-		addExtern<decltype(&testPrimes), testPrimes>(*this, lib, "testPrimes");
-        addExtern<decltype(&testDict), testDict>(*this, lib, "testDict");
-		addExtern<decltype(&testFibR), testFibR>(*this, lib, "testFibR");
-		addExtern<decltype(&testFibI), testFibI>(*this, lib, "testFibI");
-		addExtern<decltype(&testParticles), testParticles>(*this, lib, "testParticles");
-		addExtern<decltype(&testParticlesI), testParticlesI>(*this, lib, "testParticlesI");
-		addExtern<decltype(&testTryCatch), testTryCatch>(*this, lib, "testTryCatch");
-		addExtern<decltype(&testExpLoop), testExpLoop>(*this, lib, "testExpLoop");
+		addExtern<DAS_BIND_FUN(testPrimes)>(*this, lib, "testPrimes");
+        addExtern<DAS_BIND_FUN(testDict)>(*this, lib, "testDict");
+		addExtern<DAS_BIND_FUN(testFibR)>(*this, lib, "testFibR");
+		addExtern<DAS_BIND_FUN(testFibI)>(*this, lib, "testFibI");
+		addExtern<DAS_BIND_FUN(testParticles)>(*this, lib, "testParticles");
+		addExtern<DAS_BIND_FUN(testParticlesI)>(*this, lib, "testParticlesI");
+		addExtern<DAS_BIND_FUN(testTryCatch)>(*this, lib, "testTryCatch");
+		addExtern<DAS_BIND_FUN(testExpLoop)>(*this, lib, "testExpLoop");
     }
 };
 
