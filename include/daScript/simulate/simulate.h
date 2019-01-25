@@ -56,6 +56,8 @@ namespace das
         virtual int64_t     evalInt64 ( Context & context );
         virtual uint64_t    evalUInt64 ( Context & context );
         LineInfo debug;
+    protected:
+        virtual ~SimNode() {}
     };
 
     struct Prologue {
@@ -1313,6 +1315,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     struct Iterator {
+	      virtual ~Iterator() {}
         virtual bool first ( Context & context, IteratorContext & itc ) = 0;
         virtual bool next  ( Context & context, IteratorContext & itc ) = 0;
         virtual void close ( Context & context, IteratorContext & itc ) = 0;    // can't throw
