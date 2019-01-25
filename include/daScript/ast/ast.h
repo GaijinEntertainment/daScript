@@ -1316,6 +1316,9 @@ namespace das
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #endif
     class Visitor {
+    protected:
+      virtual ~Visitor() {}
+
     public:
         // STRUCTURE
         virtual void preVisit ( Structure * var ) { }
