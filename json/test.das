@@ -49,5 +49,19 @@ def test
     let safe_jj = root?.j?.j?.as_float ?? 1.0f
     assert(safe_jj==1.0f)
 
+    // setter
+
+    set(root.i,13)
+    assert(root.i.as_int==13)
+
+    set(root.t,false)
+    assert(root.t.as_bool==false)
+
+    set(root.hello,"hello")
+    assert(root.hello.as_string=="hello")
+
+    set(root.pi, 1.23)
+    assert(root.pi.as_float==1.23)
+
 	return true
 

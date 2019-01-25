@@ -391,6 +391,28 @@ namespace das {
         }
         return pDoc;
     }
+    
+    void json_set_i ( JsValue * rv, int32_t iv, Context * context ) {
+        if ( !rv->IsInt() ) { context->throw_error("JSON, not an integer"); return; }
+        rv->SetInt(iv);
+    }
+    
+    void json_set_f ( JsValue * rv, float fv, Context * context ) {
+        if ( !rv->IsFloat() ) { context->throw_error("JSON, not an float"); return; }
+        rv->SetFloat(fv);
+    }
+    
+    void json_set_b ( JsValue * rv, bool bv, Context * context ) {
+        if ( !rv->IsBool() ) { context->throw_error("JSON, not an boolean"); return; }
+        rv->SetBool(bv);
+    }
+    
+    void json_set_s ( JsValue * rv, char * sv, Context * context ) {
+        if ( !rv->IsString() ) { context->throw_error("JSON, not an string"); return; }
+        auto len = stringLength(*context, sv);
+        rv->SetString(sv, len);
+    }
+
 
     class Module_RapidJson : public Module {
     public:
@@ -402,6 +424,10 @@ namespace das {
             addAnnotation(make_shared<JsValueTypeAnnotation>());
             // functionality
             addExtern<decltype(readJson),readJson>(*this,lib,"readJson");
+            addExtern<decltype(json_set_i),json_set_i>(*this,lib,"set");
+            addExtern<decltype(json_set_f),json_set_f>(*this,lib,"set");
+            addExtern<decltype(json_set_b),json_set_b>(*this,lib,"set");
+            addExtern<decltype(json_set_s),json_set_s>(*this,lib,"set");
         }
     };
 }
