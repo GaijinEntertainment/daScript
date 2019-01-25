@@ -51,12 +51,20 @@ namespace das
 		return hash_block32((uint8_t *)x, uint32_t(size));
     }
     
-    __forceinline uint32_t stringLength ( Context & ctx, const char * str ) {
+    __forceinline uint32_t stringLength ( Context & ctx, const char * str ) {//should be non-null
         if ( ctx.heap.isHeapPtr(str) ) {
             auto header = (StringHeader *) ( str - sizeof(StringHeader) );
             return header->length;
         } else {
             return uint32_t(strlen(str));
+        }
+    }
+    __forceinline uint32_t stringLengthSafe ( Context & ctx, const char * str ) {//accepts nullptr
+        if ( ctx.heap.isHeapPtr(str) ) {
+            auto header = (StringHeader *) ( str - sizeof(StringHeader) );
+            return header->length;
+        } else {
+            return str ? uint32_t(strlen(str)) : 0;
         }
     }
 
