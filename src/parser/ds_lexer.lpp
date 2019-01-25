@@ -1,4 +1,5 @@
 %{
+    #include <inttypes.h>
     #include "daScript/misc/platform.h"
     #include "daScript/ast/ast.h"
     #include "ds_parser.hpp"
@@ -175,13 +176,13 @@
         BEGIN(strb);
         return BEGIN_STRING;
     }
-<normal>[0-9]+(u|U)(l|L)                return sscanf(yytext, "%llu", &yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
-<normal>[0-9]+(l|L)                     return sscanf(yytext, "%lli", &yylval.i64)!=1 ? LEXER_ERROR : LONG_INTEGER;
+<normal>[0-9]+(u|U)(l|L)                return sscanf(yytext, "%" SCNu64, &yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+<normal>[0-9]+(l|L)                     return sscanf(yytext, "%" SCNx64, &yylval.i64)!=1 ? LEXER_ERROR : LONG_INTEGER;
 <normal>[0-9]+(u|U)                     return sscanf(yytext, "%u",  &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>[0-9]+                          return sscanf(yytext, "%i",  &yylval.i)!=1 ? LEXER_ERROR : INTEGER;
 
-<normal>0[xX][0-9a-fA-F]+(u|U)(l|L)     return sscanf(yytext, "%lli", &yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
-<normal>0[xX][0-9a-fA-F]+(l|L)          return sscanf(yytext, "%lli", &yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+<normal>0[xX][0-9a-fA-F]+(u|U)(l|L)     return sscanf(yytext, "%" SCNu64, &yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+<normal>0[xX][0-9a-fA-F]+(l|L)          return sscanf(yytext, "%" SCNu64, &yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
 <normal>0[xX][0-9a-fA-F]+(u|U)          return sscanf(yytext, "%i",  &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>0[xX][0-9a-fA-F]+               return sscanf(yytext, "%i",  &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 
