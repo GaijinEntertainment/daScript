@@ -183,6 +183,11 @@ namespace das
     };
 
     template <typename KeyType>
+    constexpr uint32_t TableHash<KeyType>::minCapacity;
+    template <typename KeyType>
+    constexpr uint32_t TableHash<KeyType>::minLookups;
+
+    template <typename KeyType>
     struct SimNode_TableIndex : SimNode_Table {
 		DAS_PTR_NODE;
         SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}

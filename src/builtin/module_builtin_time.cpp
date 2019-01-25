@@ -82,6 +82,6 @@ namespace das {
         addFunctionBasic<Time>(*this,lib);
         addFunctionOrdered<Time>(*this,lib);
         addFunction( make_shared<BuiltInFn<Sim_Sub<Time>,float,Time,Time>>("-",lib));
-        addExtern<decltype(builtin_clock),builtin_clock>(*this, lib, "getClock");
+        addExtern<decltype(&builtin_clock),builtin_clock>(*this, lib, "getClock");
     }
 }

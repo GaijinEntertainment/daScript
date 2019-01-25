@@ -33,7 +33,7 @@ namespace das
     template <typename Result>
     struct ImplCallStaticFunction {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline vec4f call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+        static __forceinline vec4f call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             return cast<Result>::from( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ) );
         }
     };
@@ -41,7 +41,7 @@ namespace das
     template <>
     struct ImplCallStaticFunction<void> {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline vec4f call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+        static __forceinline vec4f call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
             return v_zero();
         }
@@ -50,7 +50,7 @@ namespace das
     template <typename Result, typename CType>
     struct ImplCallStaticFunctionImm {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline CType call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             assert(0 && "we should not even be here");
             fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
             return CType();
@@ -60,7 +60,7 @@ namespace das
     template <typename Result>
     struct ImplCallStaticFunctionImm<Result,Result> {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline Result call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+        static __forceinline Result call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             return fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
         }
     };
@@ -68,7 +68,7 @@ namespace das
     template <typename CType>
     struct ImplCallStaticFunctionImm<void,CType> {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline CType call(FunctionType & fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
             return CType();
         }
@@ -77,7 +77,7 @@ namespace das
     template <typename Result>
     struct ImplCallStaticFunctionAndCopy {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline void call(FunctionType & fn, Context & ctx, Result * res, SimNode ** args, index_sequence<I...> ) {
+        static __forceinline void call(FunctionType && fn, Context & ctx, Result * res, SimNode ** args, index_sequence<I...> ) {
             *res = fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
         }
     };
@@ -85,7 +85,7 @@ namespace das
     template <>
     struct ImplCallStaticFunctionAndCopy<void> {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline void call(FunctionType & fn, Context & ctx, void *, SimNode ** args, index_sequence<I...> ) {
+        static __forceinline void call(FunctionType && fn, Context & ctx, void *, SimNode ** args, index_sequence<I...> ) {
             assert(0 && "we should not even be here");
             fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
         }

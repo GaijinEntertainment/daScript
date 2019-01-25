@@ -148,7 +148,7 @@
 <normal>"break"                                         return _BREAK;
 <normal>"typename"                                      return _TYPENAME;
 <normal>"type"                                          return _TYPE;
-<normal>"new"                                           return _NEW;
+<normal>"new"                                           return _NEWT;
 <normal>"sizeof"                                        return _SIZEOF;
 <normal>"true"                                          return _TRUE;
 <normal>"false"                                         return _FALSE;
