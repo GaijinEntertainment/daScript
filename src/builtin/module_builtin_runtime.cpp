@@ -29,40 +29,52 @@ namespace das
 	};
 
     // core functions
-    
+
     void builtin_throw ( char * text, Context * context ) {
         context->throw_error(text);
     }
-    
+
     void builtin_print ( char * text, Context * context ) {
         context->to_out(text);
     }
-    
+
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * ) {
         context.breakPoint(call->debug.column, call->debug.line);
         return v_zero();
     }
-    
+
     void builtin_stackwalk ( Context * context) {
         context->stackWalk();
     }
-    
+
     void builtin_terminate ( Context * context ) {
         context->stopFlags |= EvalFlags::stopForTerminate;
     }
-    
+
     int builtin_table_size ( const Table * arr ) {
         return arr->size;
     }
-    
+
     int builtin_table_capacity ( const Table * arr ) {
         return arr->capacity;
     }
-    
+
     void builtin_table_clear ( Table * arr, Context * context ) {
         table_clear(*context, *arr);
     }
-    
+
+    bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
+      const uint32_t strLen = stringLengthSafe ( *context, str );
+      const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
+      return (cmpLen > strLen) ? false : memcmp(&str[strLen - cmpLen], cmp, cmpLen) == 0;
+    }
+
+    bool builtin_string_startswith ( const char * str, const char * cmp, Context * context ) {
+      const uint32_t strLen = stringLengthSafe ( *context, str );
+      const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
+      return (cmpLen > strLen) ? false : memcmp(str, cmp, cmpLen) == 0;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
 		// function annotations
 		addAnnotation(make_shared<ExportFunctionAnnotation>());
@@ -90,5 +102,8 @@ namespace das
         addCall<ExprInvoke>("invoke");
         // profile
         addExtern<decltype(builtin_profile),builtin_profile>(*this,lib,"profile");
+        // string
+        addExtern<decltype(builtin_string_endswith), builtin_string_endswith>(*this, lib, "endswith", false);
+        addExtern<decltype(builtin_string_startswith), builtin_string_startswith>(*this, lib, "startswith", false);
     }
 }
