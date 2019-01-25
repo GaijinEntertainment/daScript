@@ -104,7 +104,7 @@ namespace das {
         }
         
         __forceinline bool isHeapPtr ( const char * ptr ) const {
-            return (ptr - linearAllocatorBase) < linearAllocatorSize;
+            return uintptr_t(ptr - linearAllocatorBase) < uintptr_t(linearAllocatorSize);
         }
 
 	protected:
