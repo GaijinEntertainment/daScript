@@ -7,6 +7,7 @@ namespace das {
     public:
         Module_BuiltIn();
     protected:
+        void addString(ModuleLibrary & lib);
         void addRuntime(ModuleLibrary & lib);
         void addVectorTypes(ModuleLibrary & lib);
         void addMatrixTypes(ModuleLibrary & lib);
