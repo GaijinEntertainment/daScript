@@ -14,4 +14,8 @@ def test:bool
     assert(strip_right(strip_left(s2)) == s)
     assert(strip_left(s2) == "hello, world!   ")
     assert(strip_right(s2) == "   hello, world!")
+    assert(slice(s, 7) == "world!")
+    assert(slice(s, -6) == "world!")
+    assert(slice(s, 6, -6) == " ")
+    assert(slice(s, 6, 7) == " ")
     return true
