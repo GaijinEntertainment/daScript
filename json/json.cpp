@@ -384,12 +384,17 @@ namespace das {
 
     };
 
-    JsValue * readJson ( char * str ) {
-        auto pDoc = new rapidjson::Document();
-        if ( pDoc->Parse(str).HasParseError() ) {
-            return nullptr;
+    void readJson ( char * str, Block block, Context * context ) {
+        rapidjson::Document doc;
+        vec4f args[2];
+        if ( doc.Parse(str).HasParseError() ) {
+            args[0] = v_zero();
+            args[1] = cast<int32_t>::from ( int32_t(doc.GetParseError()) );
+        } else {
+            args[0] = cast<char *>::from((char *)&doc);
+            args[1] = v_zero();
         }
-        return pDoc;
+        context->invoke(block, args, nullptr);
     }
     
     void json_set_i ( JsValue * rv, int32_t iv, Context * context ) {
@@ -412,7 +417,8 @@ namespace das {
         auto len = stringLength(*context, sv);
         rv->SetString(sv, len);
     }
-
+    
+    #include "json.das.inc"
 
     class Module_RapidJson : public Module {
     public:
@@ -423,11 +429,13 @@ namespace das {
             // JsValue type
             addAnnotation(make_shared<JsValueTypeAnnotation>());
             // functionality
-            addExtern<decltype(readJson),readJson>(*this,lib,"readJson");
+            addExtern<decltype(readJson),readJson>(*this,lib,"_builtin_parse_json");
             addExtern<decltype(json_set_i),json_set_i>(*this,lib,"set");
             addExtern<decltype(json_set_f),json_set_f>(*this,lib,"set");
             addExtern<decltype(json_set_b),json_set_b>(*this,lib,"set");
             addExtern<decltype(json_set_s),json_set_s>(*this,lib,"set");
+            // and builtin module
+            compileBuiltinModule(json_das, json_das_len);
         }
     };
 }

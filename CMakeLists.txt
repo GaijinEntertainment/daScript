@@ -150,7 +150,10 @@ add_dependencies(libDaScript daScriptGenDir)
 
 SET(JSON_MAIN
 json/json.cpp
+json/json.das.inc
+json/json.das
 )
+XXD(json/json.das)
 
 ADD_LIBRARY(libDaScriptJson ${JSON_MAIN})
 SETUP_CPP11(libDaScriptJson)

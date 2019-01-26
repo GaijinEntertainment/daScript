@@ -5,6 +5,7 @@ cmake_temp/
 tmtags
 
 src/builtin/builtin.das.inc
+json/json.das.inc
 
 
 
