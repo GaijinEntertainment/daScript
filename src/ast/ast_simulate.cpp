@@ -334,7 +334,7 @@ namespace das
             uint32_t stride = subexpr->type->firstType->getSizeOf();
             result = context.code.makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
         } else if ( subexpr->type->isHandle() ) {
-            result = subexpr->type->annotation->simulateGetAt(context, at, prv, pidx);
+            result = subexpr->type->annotation->simulateGetAt(context, at, index->type, prv, pidx);
         } else {
             uint32_t stride = subexpr->type->getStride();
             uint32_t range = subexpr->type->dim.back();

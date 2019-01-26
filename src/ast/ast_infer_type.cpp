@@ -1033,7 +1033,7 @@ namespace das {
             if ( valT->firstType->structType ) {
                 expr->field = valT->firstType->structType->findField(expr->name);
                 if ( !expr->field ) {
-                    error("can't get field " + expr->name, expr->at, CompilationError::cant_get_field);
+                    error("can't safe get field " + expr->name, expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
                 expr->type = make_shared<TypeDecl>(*expr->field->type);
@@ -1041,7 +1041,7 @@ namespace das {
                 expr->annotation = valT->firstType->annotation;
                 expr->type = expr->annotation->makeSafeFieldType(expr->name);
                 if ( !expr->type ) {
-                    error("can't get field " + expr->name, expr->at, CompilationError::cant_get_field);
+                    error("can't safe get field " + expr->name, expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
             } else {

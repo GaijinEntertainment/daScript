@@ -285,6 +285,7 @@ namespace das
 #define DAS_PTR_NODE    DAS_NODE(Ptr,char *)
 #define DAS_BOOL_NODE   DAS_NODE(Bool,bool)
 #define DAS_INT_NODE    DAS_NODE(Int,int32_t)
+#define DAS_FLOAT_NODE  DAS_NODE(Float,float)
     
     template <typename TT>
     struct EvalTT { static __forceinline TT eval ( Context & context, SimNode * node ) {
