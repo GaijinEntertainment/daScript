@@ -472,6 +472,43 @@ namespace das
 #pragma warning(push)
 #pragma warning(disable:4611)
 #endif
+    
+    vec4f Context::evalWithCatch ( SimNode * node ) {
+        auto aa = abiArg; auto acm = abiCMRES;
+        char * EP, * SP;
+        stack.watermark(EP,SP);
+#if DAS_ENABLE_EXCEPTIONS
+        try {
+            return node->eval(*this);
+        } catch ( const dasException & ) {
+            /*
+             to_err("\nunhandled exception\n");
+             if ( exception ) {
+             to_err(exception);
+             to_err("\n");
+             }
+             stackWalk();
+             */
+            abiArg = aa; abiCMRES = acm;
+            stack.pop(EP,SP);
+            return v_zero();
+        }
+#else
+        jmp_buf ev;
+        jmp_buf * JB = throwBuf;
+        throwBuf = &ev;
+        if ( !setjmp(ev) ) {
+            return node->eval(*this);
+        } else {
+            abiArg = aa;
+            abiCMRES = acm;
+            stack.pop(EP,SP);
+            throwBuf = JB;
+            return v_zero();
+        }
+        throwBuf = JB;
+#endif
+    }
 
     vec4f Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
         auto aa = abiArg; auto acm = abiCMRES;

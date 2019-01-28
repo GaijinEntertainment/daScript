@@ -33,11 +33,10 @@ def test:bool
     assert(uint("11") == 11U)
     assert(float("-12") == -12.)
     assert(float("1e1") == 10.)
-    //try
-    //    debug(int("11abc"), "=")
-    //    assert(false, "can't convert non int string without exception")
-    //catch
-    //    print("can't convert non int string without exception")
+    try
+        debug(int("11abc"), "=")
+        assert(false, "can't convert non int string without exception")
+    catch {}
     assert(to_int("11abc") == 11)
     assert(to_float("11.1abc") == 11.1)
     return true

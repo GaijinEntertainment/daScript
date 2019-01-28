@@ -125,6 +125,7 @@ namespace das
         void fakeCall ( FuncInfo * info, int line, vec4f * args, char * & EP, char * & SP );
 
         vec4f evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
+        vec4f evalWithCatch ( SimNode * node );
 
         void throw_error ( const char * message );
 

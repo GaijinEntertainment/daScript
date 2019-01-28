@@ -114,38 +114,51 @@ namespace das {
         Context         ctx;
         ProgramPtr      program;
     protected:
-        vec4f eval ( Expression * expr ) {
+        vec4f eval ( Expression * expr, bool & failed ) {
             ctx.simEnd();
             ctx.restart();
             auto node = expr->simulate(ctx);
             ctx.simEnd();
             ctx.restart();
-            vec4f result = node->eval(ctx);
+            vec4f result = ctx.evalWithCatch(node);
             if ( ctx.getException() ) {
-                program->error("internal error, failed to fold constant", expr->at );
+                failed = true;
                 return v_zero();
+            } else {
+                failed = false;
+                return result;
             }
-            return result;
         }
         ExpressionPtr evalAndFold ( Expression * expr ) {
             if ( expr->rtti_isConstant() ) return expr->shared_from_this();
-            auto sim = Program::makeConst(expr->at, expr->type, eval(expr));
-            sim->type = make_shared<TypeDecl>(*expr->type);
-            sim->constexpression = true;
-            reportFolding();
-            return sim;
+            bool failed;
+            vec4f value = eval(expr, failed);
+            if ( !failed ) {
+                auto sim = Program::makeConst(expr->at, expr->type, value);
+                sim->type = make_shared<TypeDecl>(*expr->type);
+                sim->constexpression = true;
+                reportFolding();
+                return sim;
+            } else {
+                return expr->shared_from_this();
+            }
         }
         ExpressionPtr evalAndFoldString ( Expression * expr ) {
             if ( expr->rtti_isStringConstant() ) return expr->shared_from_this();
-            vec4f value = eval(expr);
-            DebugInfoHelper helper(ctx.debugInfo);
-            auto pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
-            auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
-            auto sim = make_shared<ExprConstString>(expr->at, res);
-            sim->type = make_shared<TypeDecl>(Type::tString);
-            sim->constexpression = true;
-            reportFolding();
-            return sim;
+            bool failed;
+            vec4f value = eval(expr, failed);
+            if ( !failed ) {
+                DebugInfoHelper helper(ctx.debugInfo);
+                auto pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
+                auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
+                auto sim = make_shared<ExprConstString>(expr->at, res);
+                sim->type = make_shared<TypeDecl>(Type::tString);
+                sim->constexpression = true;
+                reportFolding();
+                return sim;
+            } else {
+                return expr->shared_from_this();
+            }
         }
         bool isSameFoldValue ( const TypeDeclPtr & t, vec4f a, vec4f b ) const {
             return memcmp(&a,&b,t->getSizeOf()) == 0;
@@ -234,14 +247,20 @@ namespace das {
             if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression ) {
                 return evalAndFold(expr);
             } else if ( expr->type->isFoldable() && expr->subexpr->noSideEffects && expr->left->constexpression && expr->right->constexpression ) {
-                vec4f left = eval(expr->left.get());
-                vec4f right = eval(expr->right.get());
+                bool failed;
+                vec4f left = eval(expr->left.get(), failed);
+                if ( failed ) return Visitor::visit(expr);
+                vec4f right = eval(expr->right.get(), failed);
+                if ( failed ) return Visitor::visit(expr);
                 if ( isSameFoldValue(expr->type, left, right) ) {
                     reportFolding();
                     return expr->left->clone();
                 }
             } else if ( expr->subexpr->constexpression ) {
-                bool res = cast<bool>::to(eval(expr->subexpr.get()));
+                bool failed;
+                vec4f resB = eval(expr->subexpr.get(), failed);
+                if ( failed ) return Visitor::visit(expr);
+                bool res = cast<bool>::to(resB);
                 reportFolding();
                 return res ? expr->left : expr->right;
             }
@@ -250,7 +269,10 @@ namespace das {
     // ExprIfThenElse
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             if ( expr->cond->constexpression ) {
-                bool res = cast<bool>::to(eval(expr->cond.get()));
+                bool failed;
+                vec4f resB = eval(expr->cond.get(), failed);
+                if ( failed ) return Visitor::visit(expr);
+                bool res = cast<bool>::to(resB);
                 reportFolding();
                 return res ? expr->if_true : expr->if_false;
             }
@@ -306,7 +328,10 @@ namespace das {
     // assert
         virtual ExpressionPtr visit ( ExprAssert * expr ) override {
             if ( expr->arguments[0]->constexpression ) {
-                bool res = cast<bool>::to(eval(expr->arguments[0].get()));
+                bool failed;
+                vec4f resB = eval(expr->arguments[0].get(), failed);
+                if ( failed ) return Visitor::visit(expr);
+                bool res = cast<bool>::to(resB);
                 if ( res ) {
                     reportFolding();
                     return nullptr;
@@ -434,14 +459,26 @@ namespace das {
 			}
 			bool result = false;
 			if (cond->constexpression) {
-				result = cast<bool>::to(eval(cond.get()));
+                bool failed;
+                vec4f resB = eval(cond.get(), failed);
+                if ( failed ) {
+                    program->error("exception while computing static assert condition", expr->at);
+                }
+				result = cast<bool>::to(resB);
 			} else {
 				result = ((ExprConstBool *)cond.get())->getValue();
 			}
             if ( !result ) {
                 string message;
                 if ( expr->arguments.size()==2 ) {
-                    message = cast<char *>::to(eval(expr->arguments[1].get()));
+                    bool failed;
+                    vec4f resM = eval(expr->arguments[1].get(), failed);
+                    if ( failed ) {
+                        program->error("exception while computing static assert message", expr->at);
+                        message = "";
+                    } else {
+                        message = cast<char *>::to(resM);
+                    }
                 } else {
                     message = "static assert failed";
                 }
