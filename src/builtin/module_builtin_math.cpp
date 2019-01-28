@@ -1,10 +1,12 @@
-#include <dag_noise/dag_uint_noise.h>
+
 #include "daScript/misc/platform.h"
 
 #include "module_builtin.h"
 
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
+
+#include <dag_noise/dag_uint_noise.h>
 
 namespace das {
 
