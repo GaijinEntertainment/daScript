@@ -32,7 +32,9 @@
     int nested_curly_braces = 0;
     int nested_sb = 0;
     int yycolumn = 1;
+    int c_style_depth = 0;
     bool need_oxford_comma = true;
+    bool in_normal = false;
     
     #define YY_USER_ACTION \
         yylloc.first_line = yylloc.last_line = yylineno; \
@@ -51,9 +53,27 @@
 
 %x indent
 %x strb
+%x c_comment
 %s normal
 
 %%
+
+<indent>"*/"                        yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<indent>"/*"                        BEGIN(c_comment); c_style_depth = 1; in_normal = false;
+<normal>"*/"                        yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<normal>"/*"                        BEGIN(c_comment); c_style_depth = 1; in_normal = true;
+<c_comment>"/*"                     c_style_depth ++;
+<c_comment>"*/" {
+    c_style_depth --;
+    if ( c_style_depth==0 ) {
+        if ( in_normal ) {
+            BEGIN(normal);
+        } else {
+            BEGIN(indent);
+        }
+    }
+}
+<c_comment>.                        /* skipping comment body */
 
 <strb>\"                {
     // assert(nested_sb==0);
@@ -294,6 +314,7 @@ void yybegin(const char * str)
     nested_curly_braces = 0;
     nested_sb = 0;
     need_oxford_comma = true;
+    c_style_depth = 0;
     
     BEGIN(normal);
     yy_scan_string(str);

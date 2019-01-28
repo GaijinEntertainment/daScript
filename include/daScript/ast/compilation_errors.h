@@ -12,6 +12,7 @@ namespace das
     ,   mismatching_curly_bracers               =   10002
     ,   string_constant_exceeds_file            =   10003
     ,   string_constant_exceeds_line            =   10004
+    ,   unexpected_close_comment                =   10005       //  */ out of the bule
 
 // parser errors
 
