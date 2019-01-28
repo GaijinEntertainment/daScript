@@ -1,5 +1,6 @@
 #pragma once
 
+#include <setjmp.h>
 #include "daScript/misc/vectypes.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/simulate/cast.h"
