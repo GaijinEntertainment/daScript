@@ -44,8 +44,8 @@ namespace das
     DEFINE_OP2_BOOL_NUMERIC(GtEqu);
     DEFINE_OP2_BOOL_NUMERIC(Less);
     DEFINE_OP2_BOOL_NUMERIC(Gt);
-	DEFINE_OP2_FUNCTION_NUMERIC(Min);
-	DEFINE_OP2_FUNCTION_NUMERIC(Max);
+    DEFINE_OP2_FUNCTION_NUMERIC(Min);
+    DEFINE_OP2_FUNCTION_NUMERIC(Max);
     DEFINE_OP2_BASIC_POLICY(Bool,bool);
     DEFINE_OP2_BASIC_POLICY(Ptr,void *);
     // binary and, or, xor
@@ -91,7 +91,7 @@ namespace das
         addFunctionNumericWithMod<int32_t>(*this,lib);
         addFunctionIncDec<int32_t>(*this,lib);
         addFunctionOrdered<int32_t>(*this,lib);
-		addFunctionMinMax<int32_t>(*this,lib);
+        addFunctionMinMax<int32_t>(*this,lib);
         addFunctionBit<int32_t>(*this,lib);
         ADD_NUMERIC_CASTS(int, int32_t);
         // uint32
@@ -99,7 +99,7 @@ namespace das
         addFunctionNumericWithMod<uint32_t>(*this,lib);
         addFunctionIncDec<uint32_t>(*this,lib);
         addFunctionOrdered<uint32_t>(*this,lib);
-		addFunctionMinMax<uint32_t>(*this,lib);
+        addFunctionMinMax<uint32_t>(*this,lib);
         addFunctionBit<uint32_t>(*this,lib);
         ADD_NUMERIC_CASTS(uint, uint32_t);
         // int64
@@ -107,7 +107,7 @@ namespace das
         addFunctionNumericWithMod<int64_t>(*this,lib);
         addFunctionIncDec<int64_t>(*this,lib);
         addFunctionOrdered<int64_t>(*this,lib);
-		addFunctionMinMax<int64_t>(*this,lib);
+        addFunctionMinMax<int64_t>(*this,lib);
         addFunctionBit<int64_t>(*this,lib);
         ADD_NUMERIC_CASTS(int64, int64_t);
         // uint64
@@ -115,7 +115,7 @@ namespace das
         addFunctionNumericWithMod<uint64_t>(*this,lib);
         addFunctionIncDec<uint64_t>(*this,lib);
         addFunctionOrdered<uint64_t>(*this,lib);
-		addFunctionMinMax<uint64_t>(*this,lib);
+        addFunctionMinMax<uint64_t>(*this,lib);
         addFunctionBit<uint64_t>(*this,lib);
         ADD_NUMERIC_CASTS(uint64, uint64_t);
         // float
@@ -123,7 +123,7 @@ namespace das
         addFunctionNumeric<float>(*this,lib);
         addFunctionIncDec<float>(*this,lib);
         addFunctionOrdered<float>(*this,lib);
-		addFunctionMinMax<float>(*this,lib);
+        addFunctionMinMax<float>(*this,lib);
         ADD_NUMERIC_CASTS(float, float)
         // string
         addFunctionBasic<char *>(*this,lib);
@@ -143,8 +143,8 @@ namespace das
         addRuntime(lib);
         // TIME
         addTime(lib);
-		// NOW, for the builtin module
-		appendCompiledFunctions();
+        // NOW, for the builtin module
+        appendCompiledFunctions();
     }
 }
 

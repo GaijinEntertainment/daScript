@@ -27,35 +27,35 @@ namespace das {
             stackTop += (size + 0xf) & ~0xf;
             return result;
         }
-	// global variable init
-		virtual void preVisitGlobalLet ( const VariablePtr & ) override {
-			stackTop = 0;
-		}
-		virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
-			program->globalInitStackSize = max(program->globalInitStackSize, stackTop);
-			return Visitor::visitGlobalLet(var);
-		}
+    // global variable init
+        virtual void preVisitGlobalLet ( const VariablePtr & ) override {
+            stackTop = 0;
+        }
+        virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
+            program->globalInitStackSize = max(program->globalInitStackSize, stackTop);
+            return Visitor::visitGlobalLet(var);
+        }
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
             func = f->shared_from_this();
             func->totalStackSize = stackTop = sizeof(Prologue);
             if ( log ) {
-				if (!func->used) logs << "unused ";
+                if (!func->used) logs << "unused ";
                 logs << func->describe() << "\n";
             }
         }
         virtual FunctionPtr visit ( Function * that ) override {
             func->totalStackSize = max(func->totalStackSize, stackTop);
-			// detecting fastcall
-			if (!func->exports && func->result->isWorkhorseType() && func->totalStackSize == sizeof(Prologue)) {
-				if (func->body->rtti_isBlock()) {
-					auto block = static_pointer_cast<ExprBlock>(func->body);
-					if (block->list.size() == 1 && block->list.back()->rtti_isReturn()) {
-						func->fastCall = true;
-					}
-				}
-			}
+            // detecting fastcall
+            if (!func->exports && func->result->isWorkhorseType() && func->totalStackSize == sizeof(Prologue)) {
+                if (func->body->rtti_isBlock()) {
+                    auto block = static_pointer_cast<ExprBlock>(func->body);
+                    if (block->list.size() == 1 && block->list.back()->rtti_isReturn()) {
+                        func->fastCall = true;
+                    }
+                }
+            }
             if ( log ) {
                 logs << func->totalStackSize << "\ttotal" << (func->fastCall ? ", fastcall" : "") << "\n";
             }
@@ -168,29 +168,29 @@ namespace das {
     void Program::allocateStack(ostream & logs) {
         AllocateStack context(shared_from_this(), logs);
         visit(context);
-		// allocate used variables and functions indices
-		totalVariables = 0;
-		totalFunctions = 0;
-		for (auto & pm : library.modules) {
-			for (auto & pv : pm->globals) {
-				auto & var = pv.second;
-				if (var->used) {
-					var->index = totalVariables++;
-				}
-				else {
-					var->index = -2;
-				}
-			}
-			for (auto & pf : pm->functions) {
-				auto & func = pf.second;
-				if (func->used) {
-					func->index = totalFunctions++;
-				}
-				else {
-					func->index = -2;
-				}
-			}
-		}
+        // allocate used variables and functions indices
+        totalVariables = 0;
+        totalFunctions = 0;
+        for (auto & pm : library.modules) {
+            for (auto & pv : pm->globals) {
+                auto & var = pv.second;
+                if (var->used) {
+                    var->index = totalVariables++;
+                }
+                else {
+                    var->index = -2;
+                }
+            }
+            for (auto & pf : pm->functions) {
+                auto & func = pf.second;
+                if (func->used) {
+                    func->index = totalFunctions++;
+                }
+                else {
+                    func->index = -2;
+                }
+            }
+        }
     }
 }
 

@@ -142,7 +142,7 @@ namespace das
     struct SimNode_InteropFuncCall : SimNode_CallBase {
         SimNode_InteropFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual vec4f eval ( Context & context ) override {
-			vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
+            vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);
             auto res = fn(context,this,args);
             return res;

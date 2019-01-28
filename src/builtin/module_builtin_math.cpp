@@ -15,10 +15,10 @@ namespace das {
         static __forceinline float Ceil  ( float a, Context & )          { return v_extract_x(v_ceil(v_splats(a))); }
         static __forceinline float Sqrt  ( float a, Context & )          { return v_extract_x(v_sqrt_x(v_splats(a))); }
 
-		static __forceinline int Trunci ( float a, Context & )          { return v_extract_xi(v_cvt_vec4i(v_splats(a))); }
-		static __forceinline int Roundi ( float a, Context & )          { return v_extract_xi(v_cvt_roundi(v_splats(a))); }
-		static __forceinline int Floori ( float a, Context & )          { return v_extract_xi(v_cvt_floori(v_splats(a))); }
-		static __forceinline int Ceili  ( float a, Context & )          { return v_extract_xi(v_cvt_ceili(v_splats(a))); }
+        static __forceinline int Trunci ( float a, Context & )          { return v_extract_xi(v_cvt_vec4i(v_splats(a))); }
+        static __forceinline int Roundi ( float a, Context & )          { return v_extract_xi(v_cvt_roundi(v_splats(a))); }
+        static __forceinline int Floori ( float a, Context & )          { return v_extract_xi(v_cvt_floori(v_splats(a))); }
+        static __forceinline int Ceili  ( float a, Context & )          { return v_extract_xi(v_cvt_ceili(v_splats(a))); }
 
         static __forceinline float Exp   ( float a, Context & )          { return v_extract_x(v_exp(v_splats(a))); }
         static __forceinline float Log   ( float a, Context & )          { return v_extract_x(v_log(v_splats(a))); }
@@ -42,10 +42,10 @@ namespace das {
         static __forceinline vec4f Ceil  ( vec4f a, Context & )          { return v_ceil(a); }
         static __forceinline vec4f Sqrt  ( vec4f a, Context & )          { return v_sqrt4(a); }
 
-		static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
-		static __forceinline vec4f Roundi ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_roundi(a)); }
-		static __forceinline vec4f Floori ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_floori(a)); }
-		static __forceinline vec4f Ceili  ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_ceili(a)); }
+        static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
+        static __forceinline vec4f Roundi ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_roundi(a)); }
+        static __forceinline vec4f Floori ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_floori(a)); }
+        static __forceinline vec4f Ceili  ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_ceili(a)); }
 
         static __forceinline vec4f Exp   ( vec4f a, Context & )          { return v_exp(a); }
         static __forceinline vec4f Log   ( vec4f a, Context & )          { return v_log(a); }
@@ -95,10 +95,10 @@ namespace das {
     MATH_FUN_OP1(Ceil)
     MATH_FUN_OP1(Sqrt)
 
-	MATH_FUN_OP1_INT(Trunci)
-	MATH_FUN_OP1_INT(Floori)
-	MATH_FUN_OP1_INT(Ceili)
-	MATH_FUN_OP1_INT(Roundi)
+    MATH_FUN_OP1_INT(Trunci)
+    MATH_FUN_OP1_INT(Floori)
+    MATH_FUN_OP1_INT(Ceili)
+    MATH_FUN_OP1_INT(Roundi)
 
     //exp
     MATH_FUN_OP1(Exp)
@@ -142,7 +142,7 @@ namespace das {
     }
     template <typename Ret, typename TT>
     void addFunctionCommonConversion(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy			ret    arg1 arg2     name
+        //                                     policy            ret    arg1 arg2     name
         mod.addFunction( make_shared<BuiltInFn<Sim_Floori<TT>, Ret,   TT>   >("floori",  lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Ceili <TT>, Ret,   TT>   >("ceili",   lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Roundi<TT>, Ret,   TT>   >("roundi",  lib) );
@@ -197,8 +197,8 @@ namespace das {
 
             addFunctionCommonConversion<int, float>(*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);
-			addFunctionCommonConversion<int3, float3>(*this,lib);
-			addFunctionCommonConversion<int4, float4>(*this,lib);
+            addFunctionCommonConversion<int3, float3>(*this,lib);
+            addFunctionCommonConversion<int4, float4>(*this,lib);
         }
     };
 }

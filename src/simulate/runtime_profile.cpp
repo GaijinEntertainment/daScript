@@ -61,7 +61,7 @@ namespace das
         for ( int32_t i = 0; i != count; ++i ) {
             uint64_t t0 = profileGetTime();
             context->invoke(block, nullptr, nullptr);
-			if (context->stopFlags & EvalFlags::stopForThrow) return 0.0f;
+            if (context->stopFlags & EvalFlags::stopForThrow) return 0.0f;
             uint64_t t1 = profileGetTime();
             minT = min(t1-t0, minT);
         }

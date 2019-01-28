@@ -8,42 +8,42 @@
 
 namespace das
 {
-	// this is here to occasionally investigate untyped evaluation paths
-	#define WARN_SLOW_CAST(TYPE)
-	// #define WARN_SLOW_CAST(TYPE)	assert(0 && "internal perofrmance issue, casting eval to eval##TYPE" );
+    // this is here to occasionally investigate untyped evaluation paths
+    #define WARN_SLOW_CAST(TYPE)
+    // #define WARN_SLOW_CAST(TYPE)    assert(0 && "internal perofrmance issue, casting eval to eval##TYPE" );
 
     bool SimNode::evalBool ( Context & context ) {
-		WARN_SLOW_CAST(Bool);
+        WARN_SLOW_CAST(Bool);
         return cast<bool>::to(eval(context));
     }
 
     float SimNode::evalFloat ( Context & context ) {
-		WARN_SLOW_CAST(Float);
+        WARN_SLOW_CAST(Float);
         return cast<float>::to(eval(context));
     }
 
     int32_t SimNode::evalInt ( Context & context ) {
-		WARN_SLOW_CAST(Int);
+        WARN_SLOW_CAST(Int);
         return cast<int32_t>::to(eval(context));
     }
 
     uint32_t SimNode::evalUInt ( Context & context ) {
-		WARN_SLOW_CAST(UInt);
+        WARN_SLOW_CAST(UInt);
         return cast<uint32_t>::to(eval(context));
     }
 
     int64_t SimNode::evalInt64 ( Context & context ) {
-		WARN_SLOW_CAST(Int64);
+        WARN_SLOW_CAST(Int64);
         return cast<int64_t>::to(eval(context));
     }
 
     uint64_t SimNode::evalUInt64 ( Context & context ) {
-		WARN_SLOW_CAST(UInt64);
+        WARN_SLOW_CAST(UInt64);
         return cast<uint64_t>::to(eval(context));
     }
 
     char * SimNode::evalPtr ( Context & context ) {
-		WARN_SLOW_CAST(Ptr);
+        WARN_SLOW_CAST(Ptr);
         return cast<char *>::to(eval(context));
     }
 
@@ -221,11 +221,11 @@ namespace das
         return v_zero();
     }
 
-	vec4f SimNode_ReturnConst::eval ( Context & context ) {
-		context.abiResult() = value;
-		context.stopFlags |= EvalFlags::stopForReturn;
-		return v_zero();
-	}
+    vec4f SimNode_ReturnConst::eval ( Context & context ) {
+        context.abiResult() = value;
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return v_zero();
+    }
 
     vec4f SimNode_ReturnAndCopy::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
@@ -301,10 +301,10 @@ namespace das
 
     Context::Context(const string * lines, uint32_t heapSize)
         :   heap(heapSize)
-		,   code(64*1024)
-		,   debugInfo(64*1024)
+        ,   code(64*1024)
+        ,   debugInfo(64*1024)
         ,   stack(16*1024)
-	{
+    {
         debugInput = lines;
     }
 
@@ -314,8 +314,8 @@ namespace das
 #pragma warning(disable:4701)
 #endif
     vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when) {
-		char * EP, *SP;
-		stack.invoke(block.stackOffset,EP,SP);
+        char * EP, *SP;
+        stack.invoke(block.stackOffset,EP,SP);
         BlockArguments * ba = nullptr;
         BlockArguments saveArguments;
         if ( block.argumentsOffset ) {
@@ -328,7 +328,7 @@ namespace das
         if ( ba ) {
             *ba = saveArguments;
         }
-		stack.pop(EP,SP);
+        stack.pop(EP,SP);
         return result;
     }
 #ifdef _MSC_VER
@@ -337,8 +337,8 @@ namespace das
 
     vec4f Context::callEx(SimFunction * fn, vec4f *args, void * cmres, int line, function<void (SimNode *)> && when) {
         // PUSH
-		char * EP, *SP;
-		if(!stack.push(fn->stackSize,EP,SP)) {
+        char * EP, *SP;
+        if(!stack.push(fn->stackSize,EP,SP)) {
             throw_error("stack overflow");
             return v_zero();
         }
@@ -356,16 +356,16 @@ namespace das
         stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
         // POP
         abiArg = aa; abiCMRES = acm;
-		stack.pop(EP,SP);
+        stack.pop(EP,SP);
         return result;
     }
 
     void Context::runInitScript ( void ) {
-		char * EP, *SP;
-		if(!stack.push(globalInitStackSize,EP,SP)) {
-			throw_error("stack overflow");
-			return;
-		}
+        char * EP, *SP;
+        if(!stack.push(globalInitStackSize,EP,SP)) {
+            throw_error("stack overflow");
+            return;
+        }
         for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
             auto & pv = globalVariables[i];
             if ( pv.init ) {
@@ -374,7 +374,7 @@ namespace das
                 memset ( cast<char *>::to(pv.value), 0, pv.size );
             }
         }
-		stack.pop(EP,SP);
+        stack.pop(EP,SP);
     }
 
     SimFunction * Context::findFunction ( const char * name ) const {
@@ -430,7 +430,7 @@ namespace das
 
     void Context::breakPoint(int, int ) const {
 #ifdef _MSC_VER
-		__debugbreak();
+        __debugbreak();
 #else
         raise(SIGTRAP);
 #endif

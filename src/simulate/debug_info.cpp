@@ -265,7 +265,7 @@ namespace das
         int keySize = getTypeSize(info->firstType);
         int valueSize = getTypeSize(info->secondType);
         for ( uint32_t i=0; i!=tab.capacity; ++i ) {
-			if ( tab.hashes[i] > HASH_KILLED32 ) {
+            if ( tab.hashes[i] > HASH_KILLED32 ) {
                 if ( !first ) ss << " "; first = false;
                 ss << "("; // ss << "(@ " << i << " ";
                 debug_value ( ss, tab.keys + i*keySize, info->firstType, flags );

@@ -1,15 +1,15 @@
 #pragma once
 
 #ifdef _MSC_VER
-#pragma warning(disable:4005)	// macro redifinition (in flex file)
-#pragma warning(disable:4146)	// unsigned unary minus
-#pragma warning(disable:4996)	// swap ranges
-#pragma warning(disable:4201)	// nonstandard extension used : nameless struct / union
-#pragma warning(disable:4324)	// structure was padded due to alignment specifier
-#pragma warning(disable:4067)	// unexpected tokens following preprocessor directive - expected a newline
-#pragma warning(disable:4800)	// forcing value to bool 'true' or 'false' (performance warning)
-#pragma warning(disable:4127)	// conditional expression is constant
-#pragma warning(disable:4702)	// unreachable code (due to exceptions)
+#pragma warning(disable:4005)    // macro redifinition (in flex file)
+#pragma warning(disable:4146)    // unsigned unary minus
+#pragma warning(disable:4996)    // swap ranges
+#pragma warning(disable:4201)    // nonstandard extension used : nameless struct / union
+#pragma warning(disable:4324)    // structure was padded due to alignment specifier
+#pragma warning(disable:4067)    // unexpected tokens following preprocessor directive - expected a newline
+#pragma warning(disable:4800)    // forcing value to bool 'true' or 'false' (performance warning)
+#pragma warning(disable:4127)    // conditional expression is constant
+#pragma warning(disable:4702)    // unreachable code (due to exceptions)
 #endif
 
 #ifdef __APPLE__
@@ -41,22 +41,22 @@
 #include <algorithm>
 
 #ifdef _MSC_VER
-	#define NOMINMAX
+    #define NOMINMAX
 #else
-	#define __forceinline inline __attribute__((always_inline))
+    #define __forceinline inline __attribute__((always_inline))
 #endif
 
 #ifndef _MSC_VER
-#define __noinline	__attribute__((noinline))
+#define __noinline    __attribute__((noinline))
 #else
-#define __noinline	__declspec(noinline)
+#define __noinline    __declspec(noinline)
 #endif
 
 #ifdef _MSC_VER
 __forceinline uint32_t __builtin_clz(uint32_t x) {
-	unsigned long r = 0;
-	_BitScanReverse(&r, x);
-	return (31 - r);
+    unsigned long r = 0;
+    _BitScanReverse(&r, x);
+    return (31 - r);
 }
 #endif
 

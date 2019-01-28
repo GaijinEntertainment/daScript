@@ -58,9 +58,9 @@ struct IntFields {
 };
 
 struct IntFieldsAnnotation : StructureTypeAnnotation {
-    
+
     // NOTE - SafeGetFieldPtr is not necessary, since its Int always
-    
+
     // FIELD .
     struct SimNode_IntFieldDeref : SimNode {
         DAS_PTR_NODE;
@@ -83,7 +83,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         SimNode *   value;
         char *      name;
     };
-    
+
     struct SimNode_IntFieldDerefR2V : SimNode_IntFieldDeref {
         DAS_INT_NODE;
         SimNode_IntFieldDerefR2V ( const LineInfo & at, SimNode * rv, char * n )
@@ -106,7 +106,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         SimNode *   value;
         char *      name;
     };
-    
+
     // FIELD ?.
     struct SimNode_SafeIntFieldDeref : SimNode_IntFieldDeref {
         DAS_PTR_NODE;
@@ -125,7 +125,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
             }
         }
     };
-    
+
     IntFieldsAnnotation() : StructureTypeAnnotation("IntFields") {}
     virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
         shared_ptr<IntFieldsAnnotation> cp =  p ? static_pointer_cast<IntFieldsAnnotation>(p) : make_shared<IntFieldsAnnotation>();
@@ -183,10 +183,10 @@ void testFields ( Context * ctx ) {
     int32_t t = 0;
     IntFields x;
     auto fx = ctx->findFunction("testFields");
-	if (!fx) {
-		ctx->throw_error("function testFields not found");
-		return;
-	}
+    if (!fx) {
+        ctx->throw_error("function testFields not found");
+        return;
+    }
     vec4f args[1] = { cast<IntFields *>::from(&x) };
     x.fields["a"] = 1;
     t = cast<int32_t>::to ( ctx->eval(fx, args) );

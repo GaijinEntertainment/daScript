@@ -133,7 +133,7 @@ public:
         return Key(str.data(), SizeType(str.size()));
     }
 #endif
-	
+    
     bool EndObject(SizeType memberCount = 0) {
         (void)memberCount;
         RAPIDJSON_ASSERT(Base::level_stack_.GetSize() >= sizeof(typename Base::Level)); // not inside an Object

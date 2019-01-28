@@ -230,76 +230,76 @@ namespace das {
             return result;
         }
 
-		bool isMatchingArgument(const FunctionPtr & pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock) const {
-			if (!passType) {
-				return false;
-			}
+        bool isMatchingArgument(const FunctionPtr & pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock) const {
+            if (!passType) {
+                return false;
+            }
             if ( argType->baseType==Type::anyArgument ) {
                 return true;
             }
-			if (inferAuto) {
-				// if it's an alias, we de'alias it, and see if it matches at all
-				if (argType->isAlias()) {
-					argType = inferAlias(argType, pFn);
-					if ( !argType ) {
-						return false;
-					}
-				}
-				// match auto argument
-				if (argType->isAuto()) {
+            if (inferAuto) {
+                // if it's an alias, we de'alias it, and see if it matches at all
+                if (argType->isAlias()) {
+                    argType = inferAlias(argType, pFn);
+                    if ( !argType ) {
+                        return false;
+                    }
+                }
+                // match auto argument
+                if (argType->isAuto()) {
                     return TypeDecl::inferAutoType(argType, passType) != nullptr;
-				}
-			}
-			// match inferable block
-			if (inferBlock && passType->isAuto() && passType->isGoodBlockType()) {
-				return TypeDecl::inferAutoType(passType, argType) != nullptr;
-			}
-			// compare types which don't need inference
-			if (passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false))) {
-				return false;
-			}
-			// ref types can only add constness
-			if (argType->isRef() && !argType->constant && passType->constant) {
-				return false;
-			}
-			// pointer types can only add constant
-			if (argType->isPointer() && !argType->constant && passType->constant) {
-				return false;
-			}
-			// all good
-			return true;
-		}
+                }
+            }
+            // match inferable block
+            if (inferBlock && passType->isAuto() && passType->isGoodBlockType()) {
+                return TypeDecl::inferAutoType(passType, argType) != nullptr;
+            }
+            // compare types which don't need inference
+            if (passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false))) {
+                return false;
+            }
+            // ref types can only add constness
+            if (argType->isRef() && !argType->constant && passType->constant) {
+                return false;
+            }
+            // pointer types can only add constant
+            if (argType->isPointer() && !argType->constant && passType->constant) {
+                return false;
+            }
+            // all good
+            return true;
+        }
 
         bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock ) const {
             if ( pFn->arguments.size() < types.size() ) {
                 return false;
             }
             for ( size_t ai = 0; ai != types.size(); ++ai ) {
-				if (!isMatchingArgument(pFn, pFn->arguments[ai]->type, types[ai],inferAuto,inferBlock)) {
-					return false;
-				}
+                if (!isMatchingArgument(pFn, pFn->arguments[ai]->type, types[ai],inferAuto,inferBlock)) {
+                    return false;
+                }
             }
             for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
                 if ( !pFn->arguments[ti]->init ) {
-					return false;
+                    return false;
                 }
             }
-			return true;
+            return true;
         }
 
-		string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
-			stringstream ss;
+        string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
+            stringstream ss;
             size_t tot = min ( types.size(), pFn->arguments.size() );
             for (size_t ai = 0; ai != tot; ++ai) {
-				auto & arg = pFn->arguments[ai];
-				auto & passType = types[ai];
+                auto & arg = pFn->arguments[ai];
+                auto & passType = types[ai];
                 if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
                     ss << "\ninvalid argument " << arg->name << ", expecting ("
                         << arg->type->describe() << ") passing (" << passType->describe() << ")";
                 }
-			}
-			return ss.str();
-		}
+            }
+            return ss.str();
+        }
 
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false ) const {
             string moduleName, funcName;
@@ -339,19 +339,19 @@ namespace das {
             return result;
         }
 
-		void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
-			const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks ) {
-			if (candidateFunctions.size() == 1) {
-				auto missFn = candidateFunctions.back();
-				auto problems = describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
-				error(extra + "\ncandidate function:\n\t"
-					+ missFn->describe() + problems, at, CompilationError::function_not_found);
-			}
-			else {
-				string candidates = program->describeCandidates(candidateFunctions);
-				error(extra + "\n" + candidates, at, CompilationError::function_not_found);
-			}
-		}
+        void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
+            const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks ) {
+            if (candidateFunctions.size() == 1) {
+                auto missFn = candidateFunctions.back();
+                auto problems = describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
+                error(extra + "\ncandidate function:\n\t"
+                    + missFn->describe() + problems, at, CompilationError::function_not_found);
+            }
+            else {
+                string candidates = program->describeCandidates(candidateFunctions);
+                error(extra + "\n" + candidates, at, CompilationError::function_not_found);
+            }
+        }
 
         bool hasUserConstructor ( const string & sna ) const {
             vector<TypeDeclPtr> argDummy;
@@ -1539,13 +1539,13 @@ namespace das {
                     if ( program->addFunction(clone) ) {
                         reportGenericInfer();
                     } else {
-						auto realFn = program->findFunction(clone->getMangledName());
-						vector<FunctionPtr> candidates = { realFn };
-						reportFunctionNotFound("no matching generic function " + expr->describe(),
+                        auto realFn = program->findFunction(clone->getMangledName());
+                        vector<FunctionPtr> candidates = { realFn };
+                        reportFunctionNotFound("no matching generic function " + expr->describe(),
                                 expr->at, candidates, types, true, true);
                     }
                 } else if ( generics.size()>0 ) {
-					reportFunctionNotFound("too many matching generic functions " + expr->describe(),
+                    reportFunctionNotFound("too many matching generic functions " + expr->describe(),
                         expr->at, findGenericCandidates(expr->name, types), types, true, true);
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
@@ -1554,7 +1554,7 @@ namespace das {
                             reportGenericInfer();
                         }
                     } else {
-						reportFunctionNotFound("no matching function " + expr->describe(),
+                        reportFunctionNotFound("no matching function " + expr->describe(),
                             expr->at, findCandidates(expr->name, types), types, false, true);
                     }
                 }
@@ -1742,10 +1742,10 @@ namespace das {
 
     void Program::inferTypes(ostream & logs) {
         const bool log = options.getOption("logInferPasses",false);
-		int pass = 0, maxPasses = 50;
-		if (auto maxP = options.find("maxInferPasses", Type::tInt)) {
-			maxPasses = maxP->iValue;
-		}
+        int pass = 0, maxPasses = 50;
+        if (auto maxP = options.find("maxInferPasses", Type::tInt)) {
+            maxPasses = maxP->iValue;
+        }
         for ( pass = 0; pass < maxPasses; ++pass ) {
             failToCompile = false;
             errors.clear();
@@ -1756,19 +1756,19 @@ namespace das {
             }
             if ( log ) {
                 logs << "PASS " << pass << ":\n" << *this;
-				sort(errors.begin(), errors.end());
-				for (auto & err : errors) {
-					logs << reportError(nullptr, err.at.line, err.at.column, err.what, err.cerr);
-				}
+                sort(errors.begin(), errors.end());
+                for (auto & err : errors) {
+                    logs << reportError(nullptr, err.at.line, err.at.column, err.what, err.cerr);
+                }
                 logs.flush();
             }
             if ( context.finished() )
                 break;
         }
-		if (pass == maxPasses) {
-			error("type inference exceeded maximum allowed number of passes ("+std::to_string(maxPasses)+")\n"
-					"this is likely due to a loop in the type system", LineInfo(), CompilationError::too_many_infer_passes);
-		}
+        if (pass == maxPasses) {
+            error("type inference exceeded maximum allowed number of passes ("+std::to_string(maxPasses)+")\n"
+                    "this is likely due to a loop in the type system", LineInfo(), CompilationError::too_many_infer_passes);
+        }
     }
 }
 

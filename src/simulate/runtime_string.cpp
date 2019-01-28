@@ -27,7 +27,7 @@ namespace das
     }
 
     void SimPolicy_String::SetAdd ( char * a, vec4f b, Context & context ) {
-		char ** pA = (char **)a;
+        char ** pA = (char **)a;
         const char *  sA = *pA ? *pA : rts_null;
         auto la = stringLength(context, sA);
         const char *  sB = to_rts(b);

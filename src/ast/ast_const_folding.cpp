@@ -452,23 +452,23 @@ namespace das {
             func.reset();
             return Visitor::visit(that);
         }
-		virtual ExpressionPtr visit(ExprStaticAssert * expr) override {
-			auto cond = expr->arguments[0];
-			if (!cond->constexpression && !cond->rtti_isConstant()) {
-				program->error("static assert condition is not constexpr or const", expr->at);
-				return nullptr;
-			}
-			bool result = false;
-			if (cond->constexpression) {
+        virtual ExpressionPtr visit(ExprStaticAssert * expr) override {
+            auto cond = expr->arguments[0];
+            if (!cond->constexpression && !cond->rtti_isConstant()) {
+                program->error("static assert condition is not constexpr or const", expr->at);
+                return nullptr;
+            }
+            bool result = false;
+            if (cond->constexpression) {
                 bool failed;
                 vec4f resB = eval(cond.get(), failed);
                 if ( failed ) {
                     program->error("exception while computing static assert condition", expr->at);
                 }
-				result = cast<bool>::to(resB);
-			} else {
-				result = ((ExprConstBool *)cond.get())->getValue();
-			}
+                result = cast<bool>::to(resB);
+            } else {
+                result = ((ExprConstBool *)cond.get())->getValue();
+            }
             if ( !result ) {
                 string message;
                 if ( expr->arguments.size()==2 ) {

@@ -505,7 +505,7 @@ namespace das
     uint32_t ExprBlock::getEvalFlags() const {
         uint32_t flg = 0;
         for ( const auto & ex : list ) {
-			flg |= ex->getEvalFlags();
+            flg |= ex->getEvalFlags();
         }
         return flg;
     }
@@ -929,9 +929,9 @@ namespace das
                 stream << *arg->type;
             else
                 stream << "???";
-			if (arg != arguments.back()) {
-				stream << ", ";
-			}
+            if (arg != arguments.back()) {
+                stream << ", ";
+            }
         }
         stream << " )";
         return stream.str();
@@ -1063,9 +1063,9 @@ namespace das
         return thisModule->addStructure(st);
     }
 
-	FunctionPtr Program::findFunction(const string & mangledName) const {
-		return thisModule->findFunction(mangledName);
-	}
+    FunctionPtr Program::findFunction(const string & mangledName) const {
+        return thisModule->findFunction(mangledName);
+    }
 
     bool Program::addFunction ( const FunctionPtr & fn ) {
         return thisModule->addFunction(fn);
@@ -1231,9 +1231,9 @@ namespace das
             if ( log ) logs << "REF FOLDING: " << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationConstFolding();  if ( failed() ) break;  any |= last;
             if ( log ) logs << "CONST FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
-			last = optimizationCondFolding();  if ( failed() ) break;  any |= last;
-			if ( log ) logs << "COND FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
-			last = optimizationBlockFolding();  if ( failed() ) break;  any |= last;
+            last = optimizationCondFolding();  if ( failed() ) break;  any |= last;
+            if ( log ) logs << "COND FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
+            last = optimizationBlockFolding();  if ( failed() ) break;  any |= last;
             if ( log ) logs << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationUnused();        if ( failed() ) break;  any |= last;
             if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
@@ -1258,27 +1258,27 @@ namespace das
         } else {
             program->inferTypes(logs);
             if ( !program->failed() ) {
-				if (program->options.getOption("optimize", true)) {
-					program->optimize(logs);
-				}
+                if (program->options.getOption("optimize", true)) {
+                    program->optimize(logs);
+                }
                 if (!program->failed())
-					program->staticAsserts();
-				if (!program->failed())
-					program->finalizeAnnotations();
-				if (!program->failed())
-					program->markOrRemoveUnusedSymbols();
-				if (!program->failed())
+                    program->staticAsserts();
+                if (!program->failed())
+                    program->finalizeAnnotations();
+                if (!program->failed())
+                    program->markOrRemoveUnusedSymbols();
+                if (!program->failed())
                     program->allocateStack(logs);
             }
-			if (!program->failed()) {
-				if (program->options.getOption("log")) {
-					logs << *program;
-				}
-				if (program->options.getOption("plot")) {
+            if (!program->failed()) {
+                if (program->options.getOption("log")) {
+                    logs << *program;
+                }
+                if (program->options.getOption("plot")) {
                     logs << "\n" << program->dotGraph() << "\n";
-				}
-			}
-			sort(program->errors.begin(), program->errors.end());
+                }
+            }
+            sort(program->errors.begin(), program->errors.end());
             return program;
         }
     }

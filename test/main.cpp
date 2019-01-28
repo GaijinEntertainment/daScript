@@ -4,9 +4,9 @@
 #include <iostream>
 
 #ifdef _MSC_VER
-	#include <io.h>
+    #include <io.h>
 #else
-	#include <dirent.h>
+    #include <dirent.h>
 #endif
 
 using namespace std;
@@ -159,17 +159,17 @@ bool exception_test ( const string & fn ) {
 
 bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
 #ifdef _MSC_VER
-	bool ok = true;
-	_finddata_t c_file;
-	intptr_t hFile;
-	string findPath = path + "/*.das";
-	if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
-		do {
-			ok = test_fn(path + "/" + c_file.name) && ok;
-		} while (_findnext(hFile, &c_file) == 0);
-	}
-	_findclose(hFile);
-	return ok;
+    bool ok = true;
+    _finddata_t c_file;
+    intptr_t hFile;
+    string findPath = path + "/*.das";
+    if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
+        do {
+            ok = test_fn(path + "/" + c_file.name) && ok;
+        } while (_findnext(hFile, &c_file) == 0);
+    }
+    _findclose(hFile);
+    return ok;
 #else
     bool ok = true;
     DIR *dir;
@@ -200,9 +200,9 @@ bool run_exception_tests( const string & path ) {
 
 int main() {
 #ifdef _MSC_VER
-	#define	TEST_PATH "../"
+    #define    TEST_PATH "../"
 #else
-	#define TEST_PATH "../../"
+    #define TEST_PATH "../../"
 #endif
     // register modules
     NEED_MODULE(Module_BuiltIn);

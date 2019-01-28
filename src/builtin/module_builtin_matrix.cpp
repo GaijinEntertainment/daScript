@@ -170,14 +170,14 @@ namespace das {
         matrix_identity<4,3>((float*)&mat);
     }
 
-	float4x4 float_4x4_translation(float3 xyz) {
-		float4x4 mat;
-		matrix_identity<4,4>((float*)&mat);
-		mat.m[3].x = xyz.x;
-		mat.m[3].y = xyz.y;
-		mat.m[3].z = xyz.z;
-		return mat;
-	}
+    float4x4 float_4x4_translation(float3 xyz) {
+        float4x4 mat;
+        matrix_identity<4,4>((float*)&mat);
+        mat.m[3].x = xyz.x;
+        mat.m[3].y = xyz.y;
+        mat.m[3].z = xyz.z;
+        return mat;
+    }
 
     void Module_BuiltIn::addMatrixTypes(ModuleLibrary & lib) {
         // structure annotations
@@ -188,7 +188,7 @@ namespace das {
         addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
         // 4x4
         addExtern<DAS_BIND_FUN(float4x4_identity)>(*this, lib, "identity");
-		addExtern<DAS_BIND_FUN(float_4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation");
+        addExtern<DAS_BIND_FUN(float_4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation");
         // 3x4
         addExtern<DAS_BIND_FUN(float3x4_identity)>(*this, lib, "identity");
     }

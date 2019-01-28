@@ -1,7 +1,7 @@
 #include "daScript/daScript.h"
 
 #include "rapidjson/document.h"
-#include "rapidjson/prettywriter.h" 
+#include "rapidjson/prettywriter.h"
 
 namespace das {
 
@@ -36,7 +36,7 @@ namespace das {
         }
         SimNode * subexpr;
     };
-    
+
     template <typename Fun, Fun BOOL_PROP>
     struct SimNode_SafeAs : SimNode {
         DAS_PTR_NODE;
@@ -48,7 +48,7 @@ namespace das {
         }
         SimNode * subexpr;
     };
-    
+
     struct SimNode_AsBool : SimNode {
         DAS_BOOL_NODE;
         SimNode_AsBool(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
@@ -60,7 +60,7 @@ namespace das {
         }
         SimNode * subexpr;
     };
-    
+
     struct SimNode_AsInt : SimNode {
         DAS_INT_NODE;
         SimNode_AsInt(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
@@ -84,7 +84,7 @@ namespace das {
         }
         SimNode * subexpr;
     };
-    
+
     struct SimNode_AsString : SimNode {
         DAS_PTR_NODE;
         SimNode_AsString(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
@@ -98,7 +98,7 @@ namespace das {
         }
         SimNode * subexpr;
     };
-    
+
     struct SimNode_GetJsonArraySize : SimNode {
         DAS_INT_NODE;
         SimNode_GetJsonArraySize(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
@@ -162,7 +162,7 @@ namespace das {
         }
         SimNode * subexpr, * index;
     };
-    
+
     struct SimNode_GetJsonAt : SimNode {
         DAS_PTR_NODE;
         SimNode_GetJsonAt(const LineInfo & a, SimNode * se, SimNode * i)
@@ -191,7 +191,7 @@ namespace das {
     struct JsValueTypeAnnotation : TypeAnnotation {
 
         JsValueTypeAnnotation() : TypeAnnotation ("JsValue") {}
-        
+
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
@@ -199,7 +199,7 @@ namespace das {
         virtual bool isRefType() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(JsValue); }
         virtual size_t getAlignOf() const override { return alignof(JsValue); }
-        
+
         TypeDeclPtr makeJsValuePtr() const {
             auto pT = make_shared<TypeDecl>(Type::tPointer);
             pT->firstType = make_shared<TypeDecl>(Type::tHandle);
@@ -207,14 +207,14 @@ namespace das {
             pT->firstType->annotation = static_pointer_cast<TypeAnnotation>(THAT->shared_from_this());
             return pT;
         }
-        
+
         virtual bool isIndexable ( const TypeDeclPtr & idt ) const override {
             if ( idt->isSimpleType(Type::tString) || idt->isIndex() ) {
                 return true;
             }
             return false;
         }
-        
+
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override {
             return makeJsValuePtr();
         }
@@ -356,7 +356,7 @@ namespace das {
             }
             return nullptr;
         }
-        
+
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr & td,
                                          SimNode * val, SimNode * idx ) const override {
             if ( td->isSimpleType(Type::tString) ) {
@@ -396,28 +396,28 @@ namespace das {
         }
         context->invoke(block, args, nullptr);
     }
-    
+
     void json_set_i ( JsValue * rv, int32_t iv, Context * context ) {
         if ( !rv->IsInt() ) { context->throw_error("JSON, not an integer"); return; }
         rv->SetInt(iv);
     }
-    
+
     void json_set_f ( JsValue * rv, float fv, Context * context ) {
         if ( !rv->IsFloat() ) { context->throw_error("JSON, not an float"); return; }
         rv->SetFloat(fv);
     }
-    
+
     void json_set_b ( JsValue * rv, bool bv, Context * context ) {
         if ( !rv->IsBool() ) { context->throw_error("JSON, not an boolean"); return; }
         rv->SetBool(bv);
     }
-    
+
     void json_set_s ( JsValue * rv, char * sv, Context * context ) {
         if ( !rv->IsString() ) { context->throw_error("JSON, not an string"); return; }
         auto len = stringLength(*context, sv);
         rv->SetString(sv, len);
     }
-    
+
     #include "json.das.inc"
 
     class Module_RapidJson : public Module {

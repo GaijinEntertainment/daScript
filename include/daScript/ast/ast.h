@@ -185,12 +185,12 @@ namespace das
         return typeFactory<TT>::make(ctx);
     }
 
-#define MAKE_TYPE_FACTORY(TYPE,CTYPE)										\
-    template <>																\
-    struct das::typeFactory<CTYPE> {										\
-        static das::TypeDeclPtr make(const das::ModuleLibrary & library ) {	\
-            return library.makeHandleType(#TYPE);							\
-        }																	\
+#define MAKE_TYPE_FACTORY(TYPE,CTYPE)                                        \
+    template <>                                                                \
+    struct das::typeFactory<CTYPE> {                                        \
+        static das::TypeDeclPtr make(const das::ModuleLibrary & library ) {    \
+            return library.makeHandleType(#TYPE);                            \
+        }                                                                    \
     };
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
@@ -215,7 +215,7 @@ namespace das
 
     struct AnnotationArgumentList {
         const AnnotationArgument * find ( const string & name, Type type ) const;
-		bool getOption(const string & name, bool def = false) const;
+        bool getOption(const string & name, bool def = false) const;
         vector<AnnotationArgument>  arguments;
     };
 
@@ -240,14 +240,14 @@ namespace das
 
     class Structure : public enable_shared_from_this<Structure> {
     public:
-		struct FieldDeclaration {
-			string          name;
-			TypeDeclPtr     type;
+        struct FieldDeclaration {
+            string          name;
+            TypeDeclPtr     type;
             ExpressionPtr   init;
-			LineInfo        at;
-			int             offset = 0;
-			FieldDeclaration() = default;
-			FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i, const LineInfo & a )
+            LineInfo        at;
+            int             offset = 0;
+            FieldDeclaration() = default;
+            FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i, const LineInfo & a )
                 : name(n), type(t), init(i), at(a) {}
         };
     public:
@@ -284,7 +284,7 @@ namespace das
         union {
             struct {
                 bool    move_to_init : 1;
-				bool	used : 1;
+                bool    used : 1;
             };
             uint32_t flags = 0;
         };
@@ -379,7 +379,7 @@ namespace das
         virtual bool rtti_isConstant() const { return false; }
         virtual bool rtti_isStringConstant() const { return false; }
         virtual bool rtti_isCall() const { return false; }
-		virtual bool rtti_isLet() const { return false; }
+        virtual bool rtti_isLet() const { return false; }
         virtual bool rtti_isReturn() const { return false; }
         virtual bool rtti_isBreak() const { return false; }
         virtual bool rtti_isBlock() const { return false; }
@@ -394,7 +394,7 @@ namespace das
         virtual bool rtti_isNullCoalescing() const { return false; }
         virtual bool rtti_isValues() const { return false; }
         virtual bool rtti_isMakeBlock() const { return false; }
-		virtual bool rtti_isIfThenElse() const { return false; }
+        virtual bool rtti_isIfThenElse() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
@@ -709,8 +709,8 @@ namespace das
         ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) {}
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isConstant() const override { return true; }
-		Type    baseType;
-		vec4f  value;
+        Type    baseType;
+        vec4f  value;
       };
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -730,10 +730,10 @@ namespace das
         TT getValue() const { return cast<TT>::to(value); }
     };
 
-	struct ExprFakeContext : ExprConstT<void *, ExprFakeContext> {
-		ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) {}
-		ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) {}
-	};
+    struct ExprFakeContext : ExprConstT<void *, ExprFakeContext> {
+        ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) {}
+        ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) {}
+    };
 
     struct ExprConstPtr : ExprConstT<void *,ExprConstPtr> {
         ExprConstPtr(void * ptr = nullptr) : ExprConstT(ptr,Type::tPointer) {}
@@ -843,9 +843,9 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode * simulateInit(Context & context, const VariablePtr & var, bool local);
-		static vector<SimNode *> simulateInit(Context & context, const ExprLet * pLet);
+        static vector<SimNode *> simulateInit(Context & context, const ExprLet * pLet);
         virtual uint32_t getEvalFlags() const override;
-		virtual bool rtti_isLet() const override { return true; }
+        virtual bool rtti_isLet() const override { return true; }
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
         bool                    scoped = true;
@@ -1042,7 +1042,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-		virtual bool rtti_isIfThenElse() const override { return true; }
+        virtual bool rtti_isIfThenElse() const override { return true; }
         ExpressionPtr   cond, if_true, if_false;
     };
 
@@ -1121,8 +1121,8 @@ namespace das
         uint32_t            totalStackSize = 0;
         LineInfo            at;
         Module *            module = nullptr;
-		set<FunctionPtr>	useFunctions;
-		set<VariablePtr>	useGlobalVariables;
+        set<FunctionPtr>    useFunctions;
+        set<VariablePtr>    useGlobalVariables;
         union {
             struct {
                 bool    builtIn : 1;
@@ -1130,8 +1130,8 @@ namespace das
                 bool    hasReturn: 1;
                 bool    copyOnReturn : 1;
                 bool    moveOnReturn : 1;
-				bool	exports : 1;
-				bool	used : 1;
+                bool    exports : 1;
+                bool    used : 1;
                 bool    fastCall : 1;
             };
             uint32_t flags = 0;
@@ -1255,7 +1255,7 @@ namespace das
         bool addStructure ( const StructurePtr & st );
         bool addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg );
         bool addFunction ( const FunctionPtr & fn );
-		FunctionPtr findFunction(const string & mangledName) const;
+        FunctionPtr findFunction(const string & mangledName) const;
         bool addGeneric ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void finalizeAnnotations();
@@ -1263,13 +1263,13 @@ namespace das
         bool optimizationRefFolding();
         bool optimizationConstFolding();
         bool optimizationBlockFolding();
-		bool optimizationCondFolding();
+        bool optimizationCondFolding();
         bool optimizationUnused();
         bool staticAsserts();
         void optimize(ostream & logs);
-		void markOrRemoveUnusedSymbols();
+        void markOrRemoveUnusedSymbols();
         void allocateStack(ostream & logs);
-		string dotGraph();
+        string dotGraph();
         bool simulate ( Context & context, ostream & logs );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
@@ -1295,23 +1295,23 @@ namespace das
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
         int                         totalFunctions = 0;
-		int							totalVariables = 0;
+        int                            totalVariables = 0;
         vector<Error>               errors;
         bool                        failToCompile = false;
-		uint32_t					globalInitStackSize = 0;
+        uint32_t                    globalInitStackSize = 0;
     public:
         map<CompilationError,int>   expectErrors;
-	public:
-		AnnotationArgumentList		options;
+    public:
+        AnnotationArgumentList        options;
     };
 
     ProgramPtr parseDaScript ( const char * script, ostream & logs );
 
-	// NOTE: parameters here are unreferenced for a reason
-	//			the idea is you copy the function defintion, and paste to your code
+    // NOTE: parameters here are unreferenced for a reason
+    //            the idea is you copy the function defintion, and paste to your code
 #if defined(_MSC_VER)
 #pragma warning(push)
-#pragma warning(disable:4100)	// unreferenced formal parameter
+#pragma warning(disable:4100)    // unreferenced formal parameter
 #elif defined(__APPLE__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -1437,7 +1437,7 @@ namespace das
         VISIT_EXPR(ExprReturn)
         VISIT_EXPR(ExprBreak)
         VISIT_EXPR(ExprConst)
-		VISIT_EXPR(ExprFakeContext)
+        VISIT_EXPR(ExprFakeContext)
         VISIT_EXPR(ExprConstPtr)
         VISIT_EXPR(ExprConstInt64)
         VISIT_EXPR(ExprConstInt)

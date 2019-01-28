@@ -13,10 +13,10 @@ namespace das
         return it==arguments.end() ? nullptr : &*it;
     }
 
-	bool AnnotationArgumentList::getOption(const string & name, bool def) const {
-		auto arg = find(name, Type::tBool);
-		return arg ? arg->bValue : def;
-	}
+    bool AnnotationArgumentList::getOption(const string & name, bool def) const {
+        auto arg = find(name, Type::tBool);
+        return arg ? arg->bValue : def;
+    }
 
     // MODULE
 

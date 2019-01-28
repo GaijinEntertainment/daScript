@@ -292,10 +292,10 @@ namespace das {
             return Visitor::visit(c);
         }
     // const
-		virtual ExpressionPtr visit(ExprFakeContext * c) override {
-			ss << "__context__";
-			return Visitor::visit(c);
-		}
+        virtual ExpressionPtr visit(ExprFakeContext * c) override {
+            ss << "__context__";
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
             if ( c->getValue() ) {
                 ss << "*0x" << hex << intptr_t(c->getValue()) << dec;
@@ -587,7 +587,7 @@ namespace das {
     ostream& operator<< (ostream& stream, const Program & program) {
         bool logGenerics = program.options.getOption("logGenerics");
         SetPrinterFlags flags;
-		const_cast<Program&>(program).visit(flags, logGenerics);
+        const_cast<Program&>(program).visit(flags, logGenerics);
         Printer log(&program);
         const_cast<Program&>(program).visit(log, logGenerics);
         stream << log.str();

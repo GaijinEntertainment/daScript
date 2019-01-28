@@ -24,7 +24,7 @@ namespace das
 
     struct Table : Array {
         char *      keys;
-		uint32_t *  hashes;
+        uint32_t *  hashes;
         uint32_t    maxLookups;
     };
 }

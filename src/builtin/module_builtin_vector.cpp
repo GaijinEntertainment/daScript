@@ -15,10 +15,10 @@ namespace das
         }
         // basic
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
-			return (v_signmask(v_cmp_eq(a,b)) & mask) == mask;
+            return (v_signmask(v_cmp_eq(a,b)) & mask) == mask;
         }
         static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) {
-			return (v_signmask(v_cmp_eq(a, b)) & mask) != mask;
+            return (v_signmask(v_cmp_eq(a, b)) & mask) != mask;
         }
         // numeric
         static __forceinline vec4f Unp ( vec4f x, Context & ) {
@@ -47,15 +47,15 @@ namespace das
             *pa = cast<TT>::to ( v_add(cast<TT>::from(*pa), b));
         }
         static __forceinline void SetSub  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to ( v_sub(cast<TT>::from(*pa), b));
         }
         static __forceinline void SetDiv  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to ( v_div(cast<TT>::from(*pa), b));
         }
         static __forceinline void SetMul  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to ( v_mul(cast<TT>::from(*pa), b));
         }
         static __forceinline void SetMod  ( char * a, vec4f b, Context & ) {
@@ -76,11 +76,11 @@ namespace das
             return v_mul(v_splat_x(a),b);
         }
         static __forceinline void SetDivScal  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to ( v_div(cast<TT>::from(*pa), v_splat_x(b)));
         }
         static __forceinline void SetMulScal  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to ( v_mul(cast<TT>::from(*pa), v_splat_x(b)));
         }
     };
@@ -121,19 +121,19 @@ namespace das
             return v_cast_vec4f(v_muli(v_cast_vec4i(a),v_cast_vec4i(b)));
         }
         static __forceinline void SetAdd  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_addi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
         }
         static __forceinline void SetSub  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_subi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
         }
         static __forceinline void SetDiv  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_divi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
         }
         static __forceinline void SetMul  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_muli(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
         }
         static __forceinline void SetMod  ( char * a, vec4f b, Context & ) {
@@ -154,12 +154,12 @@ namespace das
             return v_cast_vec4f(v_muli(v_splat_xi(v_cast_vec4i(a)),v_cast_vec4i(b)));
         }
         static __forceinline void SetDivScal ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_divi(v_cast_vec4i(cast<TT>::from(*pa)),
                                                             v_splat_xi(v_cast_vec4i(b)))));
         }
         static __forceinline void SetMulScal ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_muli(v_cast_vec4i(cast<TT>::from(*pa)),
                                                             v_splat_xi(v_cast_vec4i(b)))));
         }
@@ -178,11 +178,11 @@ namespace das
             return v_cast_vec4f(v_modu(v_cast_vec4i(a),v_cast_vec4i(b)));
         }
         static __forceinline void SetDiv  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_divu(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
         }
         static __forceinline void SetMul  ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_mulu(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
         }
         static __forceinline void SetMod  ( char * a, vec4f b, Context & ) {
@@ -203,12 +203,12 @@ namespace das
             return v_cast_vec4f(v_mulu(v_splat_xi(v_cast_vec4i(a)), v_cast_vec4i(b)));
         }
         static __forceinline void SetDivScal ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_divu(v_cast_vec4i(cast<TT>::from(*pa)),
                                                             v_splat_xi(v_cast_vec4i(b)))));
         }
         static __forceinline void SetMulScal ( char * a, vec4f b, Context & ) {
-			TT * pa = (TT *)a;
+            TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_mulu(v_cast_vec4i(cast<TT>::from(*pa)),
                                                             v_splat_xi(v_cast_vec4i(b)))));
         }

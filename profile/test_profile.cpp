@@ -19,11 +19,11 @@ void updateTest ( ObjectArray & objects ) {
 
 void update10000 ( ObjectArray & objects, Context * context ) {
     auto updateFn = context->findFunction("update");
-	if (!updateFn) {
-		context->throw_error("update not exported");
-		return;
-	}
-	for ( auto & obj : objects ) {
+    if (!updateFn) {
+        context->throw_error("update not exported");
+        return;
+    }
+    for ( auto & obj : objects ) {
         vec4f args[1] = { cast<Object &>::from(obj) };
         context->eval(updateFn,  args);
     }
@@ -31,10 +31,10 @@ void update10000 ( ObjectArray & objects, Context * context ) {
 
 void update10000ks ( ObjectArray & objects, Context * context ) {
     auto ksUpdateFn = context->findFunction("ks_update");
-	if (!ksUpdateFn) {
-		context->throw_error("ks_update not exported");
-		return;
-	}
+    if (!ksUpdateFn) {
+        context->throw_error("ks_update not exported");
+        return;
+    }
     for ( auto & obj : objects ) {
         vec4f args[2] = { cast<float3 &>::from(obj.pos), cast<float3>::from(obj.vel) };
         context->eval(ksUpdateFn,  args);
@@ -61,7 +61,7 @@ struct EsAttribute {
     EsAttribute() = default;
     EsAttribute ( const string & n, uint32_t sz, bool rf, vec4f d )
         : def(d), name(n), size(sz), ref(rf) {}
-	vec4f       def = v_zero();
+    vec4f       def = v_zero();
     string      name;
     uint32_t    size = 0;
     bool        ref;
@@ -84,9 +84,9 @@ struct EsComponent {
     uint32_t    stride = 0;
     bool        boxed = false;
 
-	EsComponent() = default;
-	EsComponent(const string & n, void * d, size_t sz, size_t st, bool bx) :
-		name(n), data(d), size(uint32_t(sz)), stride(uint32_t(st)), boxed(bx) {}
+    EsComponent() = default;
+    EsComponent(const string & n, void * d, size_t sz, size_t st, bool bx) :
+        name(n), data(d), size(uint32_t(sz)), stride(uint32_t(st)), boxed(bx) {}
 };
 
 vector<EsPassAttributeTable>    g_esPassTable;
@@ -128,7 +128,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             err = "function needs arguments";
             return false;
         }
-		func->exports = true;
+        func->exports = true;
         return true;
     };
     virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
@@ -149,18 +149,18 @@ struct EsFunctionAnnotation : FunctionAnnotation {
 bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
     if ( table.functionPtr==nullptr )
         table.functionPtr = context.findFunction(table.functionName.c_str());
-	if (!table.functionPtr) {
-		context.throw_error("function not found");
-		return false;
-	}
-	vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
+    if (!table.functionPtr) {
+        context.throw_error("function not found");
+        return false;
+    }
+    vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
     context.callEx(table.functionPtr, _args, nullptr, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
         vec4f * args = _args;
-		char **		data	= (char **) alloca(nAttr * sizeof(char *));
-		uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(uint32_t));
+        char **        data    = (char **) alloca(nAttr * sizeof(char *));
+        uint32_t *    stride    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
         uint32_t *  size    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
-		bool *		boxed	= (bool *) alloca(nAttr * sizeof(bool));
+        bool *        boxed    = (bool *) alloca(nAttr * sizeof(bool));
         bool *      ref     = (bool *) alloca(nAttr * sizeof(bool));
         for ( uint32_t a=0; a!=nAttr; ++a ) {
             auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
@@ -217,10 +217,10 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
     vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
     context.invokeEx(block, _args, nullptr, [&](SimNode * code){
         vec4f * args = _args;
-        char **		data	= (char **) alloca(nAttr * sizeof(char *));
-        uint32_t *	stride	= (uint32_t *) alloca(nAttr * sizeof(uint32_t));
+        char **        data    = (char **) alloca(nAttr * sizeof(char *));
+        uint32_t *    stride    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
         uint32_t *  size    = (uint32_t *) alloca(nAttr * sizeof(uint32_t));
-        bool *		boxed	= (bool *) alloca(nAttr * sizeof(bool));
+        bool *        boxed    = (bool *) alloca(nAttr * sizeof(bool));
         bool *      ref     = (bool *) alloca(nAttr * sizeof(bool));
         for ( uint32_t a=0; a!=nAttr; ++a ) {
             auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
@@ -282,13 +282,13 @@ void initEsComponents() {
 }
 
 void verifyEsComponents() {
-	float t = 1.0f;
-	float f = 1.0f;
-	for (int i = 0; i != g_total; ++i) {
-		float3 apos = { f++, f + 1, f + 2 };
-		float3 avel = { 1.0f, 2.0f, 3.0f };
-		float3 npos;
-		npos.x = apos.x + avel.x * t;
+    float t = 1.0f;
+    float f = 1.0f;
+    for (int i = 0; i != g_total; ++i) {
+        float3 apos = { f++, f + 1, f + 2 };
+        float3 avel = { 1.0f, 2.0f, 3.0f };
+        float3 npos;
+        npos.x = apos.x + avel.x * t;
         npos.y = apos.y + avel.y * t;
         npos.z = apos.z + avel.z * t;
         assert(g_pos[i].x==npos.x && g_pos[i].y==npos.y &&g_pos[i].z==npos.z );
@@ -314,106 +314,106 @@ __noinline int testDict(Array * arr) {
     char ** data = (char **) arr->data;
     int maxOcc = 0;
     for ( uint32_t t = 0; t !=arr->size; ++t ) {
-		maxOcc = max(++tab[data[t]], maxOcc);
+        maxOcc = max(++tab[data[t]], maxOcc);
     }
     return maxOcc;
 }
 
 __noinline bool isprime(int n) {
-	for (int i = 2; i != n; ++i) {
-		if (n % i == 0) {
-			return false;
-		}
-	}
-	return true;
+    for (int i = 2; i != n; ++i) {
+        if (n % i == 0) {
+            return false;
+        }
+    }
+    return true;
 }
 
 __noinline int testPrimes(int n) {
-	int count = 0;
-	for (int i = 2; i != n + 1; ++i) {
-		if (isprime(i)) {
-			++count;
-		}
-	}
-	return count;
+    int count = 0;
+    for (int i = 2; i != n + 1; ++i) {
+        if (isprime(i)) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 __noinline int testFibR(int n) {
-	if (n < 2) {
-		return n;
-	}
-	else {
-		return testFibR(n - 1) + testFibR(n - 2);
-	}
+    if (n < 2) {
+        return n;
+    }
+    else {
+        return testFibR(n - 1) + testFibR(n - 2);
+    }
 }
 
 __noinline int testFibI(int n) {
-	int last = 0;
-	int cur = 1;
-	for (int i = 0; i != n - 1; ++i) {
-		int tmp = cur;
-		cur += last;
-		last = tmp;
-	}
-	return cur;
+    int last = 0;
+    int cur = 1;
+    for (int i = 0; i != n - 1; ++i) {
+        int tmp = cur;
+        cur += last;
+        last = tmp;
+    }
+    return cur;
 }
 
 __noinline void particles(ObjectArray & objects, int count) {
-	for (int i = 0; i != count; ++i) {
-		for (auto & obj : objects) {
-			updateObject(obj);
-		}
-	}
+    for (int i = 0; i != count; ++i) {
+        for (auto & obj : objects) {
+            updateObject(obj);
+        }
+    }
 }
 
 __noinline void particlesI(ObjectArray & objects, int count) {
-	for (int i = 0; i != count; ++i) {
-		for (auto & obj : objects) {
-			obj.pos.x += obj.vel.x;
-			obj.pos.y += obj.vel.y;
-			obj.pos.z += obj.vel.z;
-		}
-	}
+    for (int i = 0; i != count; ++i) {
+        for (auto & obj : objects) {
+            obj.pos.x += obj.vel.x;
+            obj.pos.y += obj.vel.y;
+            obj.pos.z += obj.vel.z;
+        }
+    }
 }
 
 __noinline void testParticles(int count) {
-	ObjectArray objects;
-	objects.resize(50000);
-	particles(objects, count);
+    ObjectArray objects;
+    objects.resize(50000);
+    particles(objects, count);
 }
 
 __noinline void testParticlesI(int count) {
-	ObjectArray objects;
-	objects.resize(50000);
-	particlesI(objects, count);
+    ObjectArray objects;
+    objects.resize(50000);
+    particlesI(objects, count);
 }
 
 __noinline void testTryCatch(Context * context) {
-	int arr[1000];
-	int cnt = 0;
-	for (int j = 0; j != 100; ++j) {
-		int fail = 0;
-		for (int i = 0; i != 2000; ++i) {
-			try {
-				if (i < 0 || i>=1000) throw runtime_error("range check error");
-				cnt += arr[i];
-			}
-			catch (...) {
-				fail++;
-			}
-		}
-		if (fail != 1000) {
-			context->throw_error("test optimized out");
-			return;
-		}
-	}
+    int arr[1000];
+    int cnt = 0;
+    for (int j = 0; j != 100; ++j) {
+        int fail = 0;
+        for (int i = 0; i != 2000; ++i) {
+            try {
+                if (i < 0 || i>=1000) throw runtime_error("range check error");
+                cnt += arr[i];
+            }
+            catch (...) {
+                fail++;
+            }
+        }
+        if (fail != 1000) {
+            context->throw_error("test optimized out");
+            return;
+        }
+    }
 }
 
 __noinline float testExpLoop(int count) {
-	float ret = 0;
+    float ret = 0;
     for (int i = 0; i < count; ++i)
         ret += expf(1.f/(1.f+i));
-	return ret;
+    return ret;
 }
 
 class Module_TestProfile : public Module {
@@ -439,14 +439,14 @@ public:
         addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents");
         addExtern<DAS_BIND_FUN(verifyEsComponents)>(*this, lib, "verifyEsComponents");
         // C++ copy of all tests
-		addExtern<DAS_BIND_FUN(testPrimes)>(*this, lib, "testPrimes");
+        addExtern<DAS_BIND_FUN(testPrimes)>(*this, lib, "testPrimes");
         addExtern<DAS_BIND_FUN(testDict)>(*this, lib, "testDict");
-		addExtern<DAS_BIND_FUN(testFibR)>(*this, lib, "testFibR");
-		addExtern<DAS_BIND_FUN(testFibI)>(*this, lib, "testFibI");
-		addExtern<DAS_BIND_FUN(testParticles)>(*this, lib, "testParticles");
-		addExtern<DAS_BIND_FUN(testParticlesI)>(*this, lib, "testParticlesI");
-		addExtern<DAS_BIND_FUN(testTryCatch)>(*this, lib, "testTryCatch");
-		addExtern<DAS_BIND_FUN(testExpLoop)>(*this, lib, "testExpLoop");
+        addExtern<DAS_BIND_FUN(testFibR)>(*this, lib, "testFibR");
+        addExtern<DAS_BIND_FUN(testFibI)>(*this, lib, "testFibI");
+        addExtern<DAS_BIND_FUN(testParticles)>(*this, lib, "testParticles");
+        addExtern<DAS_BIND_FUN(testParticlesI)>(*this, lib, "testParticlesI");
+        addExtern<DAS_BIND_FUN(testTryCatch)>(*this, lib, "testTryCatch");
+        addExtern<DAS_BIND_FUN(testExpLoop)>(*this, lib, "testExpLoop");
     }
 };
 

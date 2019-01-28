@@ -9,7 +9,7 @@ namespace das
             context.throw_error("clearing locked table");
             return;
         }
-		memset(arr.hashes, 0, arr.capacity * sizeof(uint32_t));
+        memset(arr.hashes, 0, arr.capacity * sizeof(uint32_t));
         arr.size = 0;
     }
 
@@ -30,9 +30,9 @@ namespace das
     // TableIterator
 
     size_t TableIterator::nextValid ( Table * tab, size_t index ) const {
-		for (; index < tab->capacity; index++)
-			if (tab->hashes[index] > HASH_KILLED32)
-				break;
+        for (; index < tab->capacity; index++)
+            if (tab->hashes[index] > HASH_KILLED32)
+                break;
         return index;
     }
 

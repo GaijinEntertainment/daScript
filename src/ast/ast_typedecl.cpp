@@ -204,14 +204,14 @@ namespace das
     }
 
     const TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) const {
-		if (baseType == Type::alias) {
-			return nullptr; // if it is another alias, can't find it
+        if (baseType == Type::alias) {
+            return nullptr; // if it is another alias, can't find it
         } else if (baseType == Type::autoinfer && !allowAuto) {
-			return nullptr; // if it has not been infered yet, can't find it
-		}
-		else if (alias == name) {
-			return this;
-		}
+            return nullptr; // if it has not been infered yet, can't find it
+        }
+        else if (alias == name) {
+            return this;
+        }
         if ( baseType==Type::tPointer ) {
             return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
         } else if ( baseType==Type::tArray ) {
@@ -231,7 +231,7 @@ namespace das
             }
             return firstType->findAlias(name,allowAuto);
         } else {
-			return nullptr;
+            return nullptr;
         }
     }
 
@@ -268,11 +268,11 @@ namespace das
         if ( constant ) {
             ss << "#const";
         }
-		if (baseType == Type::autoinfer) {
-			ss << "#auto";
-		} else if (baseType == Type::alias) {
-			ss << "#alias#" << alias;
-		} else if ( baseType==Type::tHandle ) {
+        if (baseType == Type::autoinfer) {
+            ss << "#auto";
+        } else if (baseType == Type::alias) {
+            ss << "#alias#" << alias;
+        } else if ( baseType==Type::tHandle ) {
             ss << "#handle#" << annotation->name;
         } else if ( baseType==Type::tArray ) {
             ss << "#array";

@@ -98,9 +98,9 @@ bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
 
 int main(int argc, const char * argv[]) {
 #ifdef _MSC_VER
-	#define	TEST_PATH "../"
+    #define    TEST_PATH "../"
 #else
-	#define TEST_PATH "../../"
+    #define TEST_PATH "../../"
 #endif
     // register modules
     NEED_MODULE(Module_BuiltIn);

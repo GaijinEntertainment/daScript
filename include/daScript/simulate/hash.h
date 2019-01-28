@@ -6,8 +6,8 @@ namespace das
 {
     using namespace std;
 
-	#define HASH_EMPTY32	0
-	#define HASH_KILLED32	1
+    #define HASH_EMPTY32    0
+    #define HASH_KILLED32    1
 
     // ideas from http://isthe.com/chongo/tech/comp/fnv/
 
@@ -17,17 +17,17 @@ namespace das
         uint32_t offset_basis = fnv_bias;
         for ( ; size >=4; size-=4 ) {
             offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
-			offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
-			offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
-			offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
         }
-		if (size & 2u) {
-			offset_basis = (offset_basis ^ *block++) * fnv_prime;
-			offset_basis = (offset_basis ^ *block++) * fnv_prime;
-		}
-		if (size & 1u) {
-			offset_basis = (offset_basis ^ *block++) * fnv_prime;
-		}
+        if (size & 2u) {
+            offset_basis = (offset_basis ^ *block++) * fnv_prime;
+            offset_basis = (offset_basis ^ *block++) * fnv_prime;
+        }
+        if (size & 1u) {
+            offset_basis = (offset_basis ^ *block++) * fnv_prime;
+        }
         if (offset_basis <= HASH_KILLED32) {
             return fnv_prime;
         }
@@ -48,7 +48,7 @@ namespace das
     }
 
     __forceinline uint32_t hash_function ( Context &, const void * x, size_t size ) {
-		return hash_block32((uint8_t *)x, uint32_t(size));
+        return hash_block32((uint8_t *)x, uint32_t(size));
     }
 
     __forceinline uint32_t stringLength ( Context & ctx, const char * str ) {//should be non-null
@@ -72,10 +72,10 @@ namespace das
     template <typename TT>
     __forceinline uint32_t hash_function ( Context &, TT x ) {
         uint32_t res = (uint32_t) hash<TT>()(x);
-		if (res <= HASH_KILLED32) {
-			return 16777619;
-		}
-		return res;
+        if (res <= HASH_KILLED32) {
+            return 16777619;
+        }
+        return res;
     }
 
     template <>
@@ -87,7 +87,7 @@ namespace das
     __forceinline uint32_t hash_function ( Context & ctx, char * str ) {
         if ( ctx.heap.isHeapPtr(str) ) {
             auto header = (StringHeader *) ( str - sizeof(StringHeader) );
-			auto hh = header->hash;
+            auto hh = header->hash;
             if ( !hh ) {
                 header->hash = hh = hash_block32((uint8_t *)str, header->length);
             }

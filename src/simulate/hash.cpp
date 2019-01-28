@@ -11,13 +11,13 @@ namespace das
     }
 #endif // __GNUC__
 
-	uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
+    uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
 
-	uint32_t hash_structure ( Context & ctx, char * ps, StructInfo * info, int size, bool isPod ) {
+    uint32_t hash_structure ( Context & ctx, char * ps, StructInfo * info, int size, bool isPod ) {
         if ( isPod ) {
             return hash_function(ctx, ps, size);
         } else {
-			uint32_t hash = 0;
+            uint32_t hash = 0;
             char * pf = ps;
             for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
                 VarInfo * vi = info->fields[i];
@@ -28,11 +28,11 @@ namespace das
         }
     }
 
-	uint32_t hash_array_value ( Context & ctx, void * pX, int stride, int count, TypeInfo * info ) {
+    uint32_t hash_array_value ( Context & ctx, void * pX, int stride, int count, TypeInfo * info ) {
         if ( info->isPod ) {
             return hash_function(ctx, pX, stride * count);
         } else {
-			uint32_t hash = 0;
+            uint32_t hash = 0;
             char * pA = (char *) pX;
             for ( int i=0; i!=count; ++i ) {
                 hash = _rotl(hash,2) ^ hash_value(ctx, pA, info);
@@ -42,7 +42,7 @@ namespace das
         }
     }
 
-	uint32_t hash_dim_value ( Context & ctx, void * pX, TypeInfo * info ) {
+    uint32_t hash_dim_value ( Context & ctx, void * pX, TypeInfo * info ) {
         TypeInfo copyInfo = *info;
         assert(copyInfo.dimSize);
         copyInfo.dimSize --;
@@ -51,7 +51,7 @@ namespace das
         return hash_array_value(ctx, pX, stride, count, &copyInfo);
     }
 
-	uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info ) {
+    uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info ) {
         if ( info->ref ) {
             TypeInfo ti = *info;
             ti.ref = false;
@@ -89,7 +89,7 @@ namespace das
         }
     }
 
-	uint32_t hash_function ( Context & ctx, void * data, TypeInfo * type ) {
+    uint32_t hash_function ( Context & ctx, void * data, TypeInfo * type ) {
         return hash_value(ctx, data, type);
     }
 }

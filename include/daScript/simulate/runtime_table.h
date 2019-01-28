@@ -45,13 +45,13 @@ namespace das
             return std::max(minLookups, desired * 6);
         }
 
-		__forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {
-			uint32_t mask = tab.capacity - 1;
+        __forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {
+            uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
-			uint32_t lastI = (index+tab.maxLookups) & mask;
+            uint32_t lastI = (index+tab.maxLookups) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-			while ( index != lastI ) {
+            while ( index != lastI ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY32 ) {
                     return -1;
@@ -63,11 +63,11 @@ namespace das
             return -1;
         }
 
-		__forceinline int insertNew ( Table & tab, uint32_t hash ) const {
-			// TODO: take key under account and be less agressive?
-			uint32_t mask = tab.capacity - 1;
+        __forceinline int insertNew ( Table & tab, uint32_t hash ) const {
+            // TODO: take key under account and be less agressive?
+            uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
-			uint32_t lastI = (index+tab.maxLookups) & mask;
+            uint32_t lastI = (index+tab.maxLookups) & mask;
             auto pHashes = tab.hashes;
             while ( index != lastI ) {
                 auto kh = pHashes[index];
@@ -81,23 +81,23 @@ namespace das
 
         __forceinline int reserve ( Table & tab, KeyType key, uint32_t hash ) {
             for ( ;; ) {
-				uint32_t mask = tab.capacity - 1;
+                uint32_t mask = tab.capacity - 1;
                 uint32_t index = hash & mask;
                 uint32_t lastI = (index+tab.maxLookups) & mask;
                 auto pKeys = (KeyType *) tab.keys;
                 auto pHashes = tab.hashes;
-				while ( index != lastI ) {
-					auto kh = pHashes[index];
-					if (kh <= HASH_KILLED32) {
-						pHashes[index] = hash;
-						pKeys[index] = key;
-						tab.size++;
-						return (int)index;
-					} else if (kh == hash && KeyCompare<KeyType>()(pKeys[index], key)) {
-						return (int)index;
-					}
-					index = (index + 1) & mask;
-				}
+                while ( index != lastI ) {
+                    auto kh = pHashes[index];
+                    if (kh <= HASH_KILLED32) {
+                        pHashes[index] = hash;
+                        pKeys[index] = key;
+                        tab.size++;
+                        return (int)index;
+                    } else if (kh == hash && KeyCompare<KeyType>()(pKeys[index], key)) {
+                        return (int)index;
+                    }
+                    index = (index + 1) & mask;
+                }
                 if ( !grow(tab) ) {
                     return -1;
                 }
@@ -105,17 +105,17 @@ namespace das
         }
 
         __forceinline int erase ( Table & tab, KeyType key, uint32_t hash ) {
-			uint32_t mask = tab.capacity - 1;
+            uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
-			uint32_t lastI = (index+tab.maxLookups) & mask;
+            uint32_t lastI = (index+tab.maxLookups) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-			while ( index != lastI ) {
+            while ( index != lastI ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY32 ) {
                     return -1;
                 } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
-					tab.size--;
+                    tab.size--;
                     pHashes[index] = HASH_KILLED32;
                     memset(tab.data + index*valueTypeSize, 0, valueTypeSize);
                     return (int) index;
@@ -143,7 +143,7 @@ namespace das
             newTab.maxLookups = computeMaxLookups(newCapacity);
             memset(newTab.data, 0, newCapacity*valueTypeSize);
             auto pHashes = newTab.hashes;
-			memset(pHashes, 0, newCapacity * sizeof(uint32_t));
+            memset(pHashes, 0, newCapacity * sizeof(uint32_t));
             if ( tab.size ) {
                 auto pKeys = (KeyType *) newTab.keys;
                 auto pOldValues = tab.data;
@@ -158,14 +158,14 @@ namespace das
                              newCapacity *= 2;
                             goto repeatIt;
                         } else {
-							pHashes[index] = hash;
+                            pHashes[index] = hash;
                             pKeys[index] = pOldKeys[i];
                             memcpy ( pValues + index*valueTypeSize, pOldValues + i*valueTypeSize, valueTypeSize );
                         }
                     }
                 }
             }
-			swap ( newTab, tab );
+            swap ( newTab, tab );
             return true;
         }
     };
@@ -189,14 +189,14 @@ namespace das
 
     template <typename KeyType>
     struct SimNode_TableIndex : SimNode_Table {
-		DAS_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-		__forceinline char * compute ( Context & context ) {
-			Table * tab = (Table *) tabExpr->evalPtr(context);
-			vec4f xkey = keyExpr->eval(context);
+        __forceinline char * compute ( Context & context ) {
+            Table * tab = (Table *) tabExpr->evalPtr(context);
+            vec4f xkey = keyExpr->eval(context);
             KeyType key = cast<KeyType>::to(xkey);
             TableHash<KeyType> thh(&context,valueTypeSize);
-			auto hfn = hash_function(context, key);
+            auto hfn = hash_function(context, key);
             int index = thh.reserve(*tab, key, hfn);    // if index==-1, it was a through, so safe to do
             return tab->data + index * valueTypeSize;
         }
@@ -204,13 +204,13 @@ namespace das
 
     template <typename KeyType>
     struct SimNode_TableErase : SimNode_Table {
-		DAS_BOOL_NODE;
+        DAS_BOOL_NODE;
         SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
         __forceinline bool compute ( Context & context ) {
-			Table * tab = (Table *) tabExpr->evalPtr(context);
-			vec4f xkey = keyExpr->eval(context);
+            Table * tab = (Table *) tabExpr->evalPtr(context);
+            vec4f xkey = keyExpr->eval(context);
             KeyType key = cast<KeyType>::to(xkey);
-			auto hfn = hash_function(context, key);
+            auto hfn = hash_function(context, key);
             TableHash<KeyType> thh(&context,valueTypeSize);
             return thh.erase(*tab, key, hfn) != -1;
         }
@@ -218,17 +218,17 @@ namespace das
 
     template <typename KeyType>
     struct SimNode_TableFind : SimNode_Table {
-		DAS_PTR_NODE;
+        DAS_PTR_NODE;
         SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
-		__forceinline char * compute(Context & context) {
-			Table * tab = (Table *)tabExpr->evalPtr(context);
-			vec4f xkey = keyExpr->eval(context);
-			KeyType key = cast<KeyType>::to(xkey);
+        __forceinline char * compute(Context & context) {
+            Table * tab = (Table *)tabExpr->evalPtr(context);
+            vec4f xkey = keyExpr->eval(context);
+            KeyType key = cast<KeyType>::to(xkey);
             auto hfn = hash_function(context, key);
             TableHash<KeyType> thh(&context,valueTypeSize);
             int index = thh.find(*tab, key, hfn);
             return index!=-1 ? tab->data + index * valueTypeSize : nullptr;
-		}
+        }
     };
 
     struct TableIterator : Iterator {
