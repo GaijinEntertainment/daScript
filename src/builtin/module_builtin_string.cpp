@@ -69,6 +69,22 @@ namespace das
         return (v < minv) ? minv : (v > maxv) ? maxv : v;
     }
 
+    inline int builtin_string_find1 ( const char *str, const char *substr, int start, Context * context )
+    {
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if (!strLen)
+            return -1;
+        const char *ret = strstr(&str[clamp_int(start, 0, strLen)], substr);
+        return ret ? int(ret-str) : -1;
+    }
+    inline int builtin_string_find2 (const char *str, const char *substr)
+    {
+        if (!str)
+            return -1;
+        const char *ret = strstr(str, substr);
+        return ret ? int(ret-str) : -1;
+    }
+
     inline char* builtin_string_slice1 ( const char *str, int start, int end, Context * context )
     {
         const uint32_t strLen = stringLengthSafe ( *context, str );
@@ -134,6 +150,8 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left", false);
         addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice", false);
         addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice", false);
+        addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", false);
+        addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", false);
         addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", false);
         addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", false);
         addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", false);

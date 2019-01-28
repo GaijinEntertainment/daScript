@@ -3,6 +3,12 @@
 [export]
 def test:bool
     let s:string = "hello, world!"
+    assert(find(s, "world!") == 7)
+    assert(find(s, "world!", 4) == 7)
+    assert(find(s, "o") == 4)
+    assert(find(s, "o", 5) == 8)
+    assert(find(s, "o", 9) == -1)
+    assert(find(s, "??") == -1)
     assert(endswith(s, "world!"))
     assert(startswith(s, "hello"))
     assert(startswith(s, ""))
