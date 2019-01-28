@@ -12,7 +12,7 @@
 #pragma warning(disable:4702)    // unreachable code (due to exceptions)
 #endif
 
-#ifdef __clang
+#ifdef __clang__
 #pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
 #pragma clang diagnostic ignored "-Wnested-anon-types"
 #pragma clang diagnostic ignored "-Wmissing-braces"
