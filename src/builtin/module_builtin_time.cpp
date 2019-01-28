@@ -62,7 +62,7 @@ namespace das {
             return cast<float>::from((float)dt);
         }
     };
-    
+
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,Time);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,Time);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(GtEqu,Time);
@@ -70,13 +70,13 @@ namespace das {
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Gt,Time);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Less,Time);
     IMPLEMENT_OP2_EVAL_POLICY(Sub, Time);
-    
+
     Time builtin_clock() {
         Time t;
         t.time = time(nullptr);
         return t;
     }
-    
+
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
         addAnnotation(make_shared<TimeAnnotation>());
         addFunctionBasic<Time>(*this,lib);

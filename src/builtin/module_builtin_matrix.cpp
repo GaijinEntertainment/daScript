@@ -6,7 +6,7 @@
 #include "daScript/ast/ast_policy_types.h"
 
 namespace das {
-    
+
     template <typename VecT, int rowC>
     struct Matrix {
         VecT    m[rowC];
@@ -165,11 +165,11 @@ namespace das {
     void float4x4_identity ( float4x4 & mat ) {
         matrix_identity<4,4>((float*)&mat);
     }
-    
+
     void float3x4_identity ( float3x4 & mat ) {
         matrix_identity<4,3>((float*)&mat);
     }
-    
+
 	float4x4 float_4x4_translation(float3 xyz) {
 		float4x4 mat;
 		matrix_identity<4,4>((float*)&mat);

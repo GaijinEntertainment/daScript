@@ -84,7 +84,7 @@ namespace das
             *pa = cast<TT>::to ( v_mul(cast<TT>::from(*pa), v_splat_x(b)));
         }
     };
-    
+
     template <typename TT, int mask>
     struct SimPolicy_iVec {
         // setXYZW
@@ -164,7 +164,7 @@ namespace das
                                                             v_splat_xi(v_cast_vec4i(b)))));
         }
     };
-    
+
     template <typename TT, int mask>
     struct SimPolicy_uVec : SimPolicy_iVec<TT,mask> {
         // swapping some numeric operations
@@ -213,10 +213,10 @@ namespace das
                                                             v_splat_xi(v_cast_vec4i(b)))));
         }
     };
-    
+
     struct SimPolicy_Range : SimPolicy_iVec<range,3> {};
     struct SimPolicy_URange : SimPolicy_uVec<urange,3> {};
-    
+
     template <> struct SimPolicy<float2> : SimPolicy_Vec<float2,1+2> {};
     template <> struct SimPolicy<float3> : SimPolicy_Vec<float3,1+2+4> {};
     template <> struct SimPolicy<float4> : SimPolicy_Vec<float4,1+2+4+8> {};
@@ -226,7 +226,7 @@ namespace das
     template <> struct SimPolicy<uint2> : SimPolicy_uVec<uint2,1+2> {};
     template <> struct SimPolicy<uint3> : SimPolicy_uVec<uint3,1+2+4> {};
     template <> struct SimPolicy<uint4> : SimPolicy_uVec<uint4,1+2+4+8> {};
-    
+
     template <> struct SimPolicy<range> : SimPolicy_Range {};
     template <> struct SimPolicy<urange> : SimPolicy_URange {};
 
@@ -239,14 +239,14 @@ namespace das
     DEFINE_VECTOR_POLICY(uint2);
     DEFINE_VECTOR_POLICY(uint3);
     DEFINE_VECTOR_POLICY(uint4);
-    
+
     DEFINE_OP2_EVAL_BASIC_POLICY(range);
     DEFINE_OP2_EVAL_BASIC_POLICY(urange);
-    
+
     // VECTOR C-TOR
     template <typename TT, typename Policy, int vecS>
     struct SimNode_VecCtor;
-    
+
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable:4244)
@@ -262,7 +262,7 @@ namespace das
             return Policy::setXYZW(X, X, X, X);
         }
     };
-    
+
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,2> : SimNode_CallBase {
         SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
@@ -275,7 +275,7 @@ namespace das
                                    0);
         }
     };
-    
+
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,3> : SimNode_CallBase {
         SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
@@ -288,7 +288,7 @@ namespace das
                                    0);
         }
     };
-    
+
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,4> : SimNode_CallBase {
         SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
@@ -301,7 +301,7 @@ namespace das
                                    cast<TT>::to(argValues[3]));
         }
     };
-    
+
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
@@ -313,28 +313,28 @@ addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,1>
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,1>,VTYPE,uint32_t>>(#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,1>,VTYPE,int64_t>> (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,1>,VTYPE,uint64_t>>(#VTYPE,lib) );
-    
+
 #define ADD_VEC_CTOR_2(VTYPE) \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,2>,VTYPE,float,float>>      (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,2>,VTYPE,int32_t,int32_t>>  (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,2>,VTYPE,uint32_t,uint32_t>>(#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,2>,VTYPE,int64_t,int64_t>>  (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,2>,VTYPE,uint64_t,uint64_t>>(#VTYPE,lib) );
-    
+
 #define ADD_VEC_CTOR_3(VTYPE) \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,3>,VTYPE,float,float,float>>         (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,3>,VTYPE,int32_t,int32_t,int32_t>>   (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,3>,VTYPE,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,3>,VTYPE,int64_t,int64_t,int64_t>>   (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,3>,VTYPE,uint64_t,uint64_t,uint64_t>>(#VTYPE,lib) );
-    
+
 #define ADD_VEC_CTOR_4(VTYPE) \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,4>,VTYPE,float,float,float,float>>            (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,4>,VTYPE,int32_t,int32_t,int32_t,int32_t>>    (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,VTYPE,uint32_t,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,4>,VTYPE,int64_t,int64_t,int64_t,int64_t>>    (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>,VTYPE,uint64_t,uint64_t,uint64_t,uint64_t>>(#VTYPE,lib) );
-    
+
     void Module_BuiltIn::addVectorTypes(ModuleLibrary & lib) {
         // float2
         addFunctionBasic<float2>(*this,lib);

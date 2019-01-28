@@ -14,7 +14,7 @@ namespace das
     template <> struct SimPolicy<uint64_t> : SimPolicy_Bin<uint64_t> {};
     template <> struct SimPolicy<float> : SimPolicy_Float {};
     template <> struct SimPolicy<void *> : SimPolicy_Pointer {};
-    
+
     // unary
     DEFINE_OP1_NUMERIC(Unp);
     DEFINE_OP1_NUMERIC(Unm);
@@ -72,7 +72,7 @@ namespace das
     Module_BuiltIn::Module_BuiltIn() : Module("$") {
         ModuleLibrary lib;
         lib.addModule(this);
-        
+
 #define ADD_NUMERIC_CASTS(TYPE,CTYPE)                                                                   \
     addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib) );                              \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,float>,CTYPE,float>>(#TYPE,lib) );           \
@@ -80,7 +80,7 @@ namespace das
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib) );     \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int64_t>,CTYPE,int64_t>>(#TYPE,lib) );       \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint64_t>,CTYPE,uint64_t>>(#TYPE,lib) );
-        
+
         // boolean
         addFunctionBasic<bool>(*this,lib);
         addFunctionBoolean<bool>(*this,lib);

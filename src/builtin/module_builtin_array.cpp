@@ -8,23 +8,23 @@
 #include "daScript/simulate/runtime_array.h"
 
 namespace das {
-    
+
     int builtin_array_size ( const Array * arr ) {
         return arr->size;
     }
-    
+
     int builtin_array_capacity ( const Array * arr ) {
         return arr->capacity;
     }
-    
+
     void builtin_array_resize ( Array * pArray, int newSize, int stride, Context * context ) {
         array_resize ( *context, *pArray, newSize, stride, true );
     }
-    
+
     void builtin_array_reserve ( Array * pArray, int newSize, int stride, Context * context ) {
         array_reserve( *context, *pArray, newSize, stride );
     }
-    
+
     int builtin_array_push ( Array * pArray, int index, int stride, Context * context ) {
         uint32_t idx = pArray->size;
         array_resize(*context, *pArray, idx + 1, stride, false);
@@ -50,11 +50,11 @@ namespace das {
         memmove ( pArray->data+index*stride, pArray->data+(index+1)*stride, (pArray->size-index-1)*stride );
         array_resize(*context, *pArray, pArray->size-1, stride, false);
     }
-    
+
     void builtin_array_clear ( Array * pArray, Context * context ) {
         array_clear(*context, *pArray);
     }
-    
+
     void Module_BuiltIn::addArrayTypes(ModuleLibrary & lib) {
         // array functions
         addExtern<DAS_BIND_FUN(builtin_array_clear)>(*this, lib, "clear", true);
