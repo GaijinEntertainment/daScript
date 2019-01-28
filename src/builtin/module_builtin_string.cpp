@@ -107,6 +107,18 @@ namespace das
         return strLen > uint32_t(start) ? context->heap.allocateString(str + start, uint32_t(strLen-start)) : nullptr;
     }
 
+    inline char* builtin_string_reverse ( const char *str, Context * context )
+    {
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if (!strLen)
+            return nullptr;
+        char * ret = context->heap.allocateString(str, strLen);
+        str += strLen-1;
+        for (char *d = ret, *end = ret + strLen; d != end; --str, ++d)
+          *d = *str;
+        return ret;
+    }
+
     inline unsigned string_to_uint ( const char *str, Context * context )
     {
         char *endptr;
@@ -157,6 +169,7 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", false);
         addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", false);
         addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", false);
+        addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", false);
         addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", false);
         addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", false);
         addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", false);
