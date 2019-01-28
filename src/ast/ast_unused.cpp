@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
-    
+
     /*
      TODO:
         cond ? a : b
@@ -11,7 +11,7 @@ namespace das {
         ?.
         ->
      */
-    
+
     // here we propagate r2cr flag
     //  a.@b    ->  $a.@b
     //  a@[b]   ->  $a@[b]
@@ -166,7 +166,7 @@ namespace das {
             }
         }
     };
-    
+
     class TrackVariableFlags : public Visitor {
     protected:
     // global let
@@ -227,7 +227,7 @@ namespace das {
             }
         }
     };
-    
+
     class RemoveUnusedLocalVariables : public OptVisitor {
     protected:
     // ExprLet
@@ -290,9 +290,9 @@ namespace das {
             return Visitor::visit(expr);
         }
     };
-    
+
     // program
-    
+
     bool Program::optimizationUnused() {
         TrackFieldAndAtFlags faf;
         visit(faf);

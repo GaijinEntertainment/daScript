@@ -12,7 +12,7 @@ namespace das
 #endif // __GNUC__
 
 	uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
-    
+
 	uint32_t hash_structure ( Context & ctx, char * ps, StructInfo * info, int size, bool isPod ) {
         if ( isPod ) {
             return hash_function(ctx, ps, size);
@@ -27,7 +27,7 @@ namespace das
             return hash;
         }
     }
-    
+
 	uint32_t hash_array_value ( Context & ctx, void * pX, int stride, int count, TypeInfo * info ) {
         if ( info->isPod ) {
             return hash_function(ctx, pX, stride * count);
@@ -41,7 +41,7 @@ namespace das
             return hash;
         }
     }
-    
+
 	uint32_t hash_dim_value ( Context & ctx, void * pX, TypeInfo * info ) {
         TypeInfo copyInfo = *info;
         assert(copyInfo.dimSize);
@@ -50,7 +50,7 @@ namespace das
         int count = getDimSize(info);
         return hash_array_value(ctx, pX, stride, count, &copyInfo);
     }
-    
+
 	uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info ) {
         if ( info->ref ) {
             TypeInfo ti = *info;
@@ -88,7 +88,7 @@ namespace das
             }
         }
     }
-    
+
 	uint32_t hash_function ( Context & ctx, void * data, TypeInfo * type ) {
         return hash_value(ctx, data, type);
     }

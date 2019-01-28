@@ -44,7 +44,7 @@ namespace das {
             needRestart = true;
         }
     protected:
-        
+
         void verifyType ( const TypeDeclPtr & decl ) const {
             if ( decl->dim.size() && decl->ref ) {
                 error("can't declare an array of references",decl->at,CompilationError::invalid_type);
@@ -104,7 +104,7 @@ namespace das {
                 }
             }
         }
-        
+
         // find type alias name, and resolve it to type
         // without one generic function
         const TypeDecl * findFuncAlias ( const FunctionPtr & fptr, const string & name ) const {
@@ -121,7 +121,7 @@ namespace das {
             }
             return nullptr;
         }
-        
+
         // find type alias name, and resolve it to type
         // within current context
         const TypeDecl * findAlias ( const string & name ) const {
@@ -146,7 +146,7 @@ namespace das {
             }
             return nullptr;
         }
-        
+
         // infer alias type
         TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr ) const {
             if ( decl->baseType==Type::autoinfer ) {    // until alias is fully resolved, can't infer
@@ -199,7 +199,7 @@ namespace das {
             }
             return resT;
         }
-        
+
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -214,7 +214,7 @@ namespace das {
             },moduleName);
             return result;
         }
-        
+
         vector<FunctionPtr> findGenericCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -269,7 +269,7 @@ namespace das {
 			// all good
 			return true;
 		}
-        
+
         bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock ) const {
             if ( pFn->arguments.size() < types.size() ) {
                 return false;
@@ -300,7 +300,7 @@ namespace das {
 			}
 			return ss.str();
 		}
-        
+
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -319,7 +319,7 @@ namespace das {
             },moduleName);
             return result;
         }
-        
+
         vector<FunctionPtr> findMatchingGenerics ( const string & name, const vector<TypeDeclPtr> & types ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -339,7 +339,7 @@ namespace das {
             return result;
         }
 
-		void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions, 
+		void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
 			const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks ) {
 			if (candidateFunctions.size() == 1) {
 				auto missFn = candidateFunctions.back();
@@ -352,7 +352,7 @@ namespace das {
 				error(extra + "\n" + candidates, at, CompilationError::function_not_found);
 			}
 		}
-        
+
         bool hasUserConstructor ( const string & sna ) const {
             vector<TypeDeclPtr> argDummy;
             auto fnlist = findMatchingFunctions(sna, argDummy);
@@ -367,7 +367,7 @@ namespace das {
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
-            
+
             if ( decl.type->isAuto() ) {
                 error("structure field type can't be declared auto",decl.at,CompilationError::invalid_structure_field_type);
             } else if ( decl.type->isVoid() ) {
@@ -1737,9 +1737,9 @@ namespace das {
             return Visitor::visit(expr);
         }
     };
-     
+
     // program
-    
+
     void Program::inferTypes(ostream & logs) {
         const bool log = options.getOption("logInferPasses",false);
 		int pass = 0, maxPasses = 50;

@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
-    
+
     class SetPrinterFlags : public Visitor {
     // ExprBlock
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
@@ -573,7 +573,7 @@ namespace das {
         ostream::pos_type   lastNewLine = -1;
         int                 tab = 0;
     };
-    
+
     template <typename TT>
     __forceinline ostream&  print ( ostream& stream, const TT & value ) {
         SetPrinterFlags flags;
@@ -583,7 +583,7 @@ namespace das {
         stream << log.str();
         return stream;
     }
-    
+
     ostream& operator<< (ostream& stream, const Program & program) {
         bool logGenerics = program.options.getOption("logGenerics");
         SetPrinterFlags flags;
@@ -593,11 +593,11 @@ namespace das {
         stream << log.str();
         return stream;
     }
-    
+
     ostream& operator<< (ostream& stream, const Expression & expr) {
         return print(stream,expr);
     }
-    
+
     ostream& operator<< (ostream& stream, const Function & func) {
         return print(stream,func);
     }

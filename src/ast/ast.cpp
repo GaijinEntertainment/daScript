@@ -9,14 +9,14 @@ int yylex_destroy();
 namespace das
 {
     // structure
-    
+
     bool Structure::hasAnyInitializers() const {
         for ( const auto & fd : fields ) {
             if ( fd.init ) return true;
         }
         return false;
     }
-    
+
     bool Structure::canCopy() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->canCopy() )
@@ -24,7 +24,7 @@ namespace das
         }
         return true;
     }
-    
+
     bool Structure::isPod() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->isPod() )
@@ -32,7 +32,7 @@ namespace das
         }
         return true;
     }
-    
+
     int Structure::getSizeOf() const {
         int size = 0;
         for ( const auto & fd : fields ) {
@@ -44,7 +44,7 @@ namespace das
         size = (size + al) & ~al;
         return size;
     }
-    
+
     int Structure::getAlignOf() const {
         int align = 1;
         for ( const auto & fd : fields ) {
@@ -52,7 +52,7 @@ namespace das
         }
         return align;
     }
-    
+
     const Structure::FieldDeclaration * Structure::findField ( const string & na ) const {
         for ( const auto & fd : fields ) {
             if ( fd.name==na ) {
@@ -61,7 +61,7 @@ namespace das
         }
         return nullptr;
     }
-    
+
     ostream& operator<< (ostream& stream, const Structure & structure) {
         stream << "(struct " << structure.name << "\n";
         for ( auto & decl : structure.fields ) {
@@ -70,18 +70,18 @@ namespace das
         stream << ")";
         return stream;
     }
-    
+
     string Structure::getMangledName() const {
         return module ? module->name+"::"+name : name;
     }
 
     // variable
-    
+
     ostream& operator<< (ostream& stream, const Variable & var) {
         stream << *var.type << " " << var.name;
         return stream;
     }
-    
+
     VariablePtr Variable::clone() const {
         auto pVar = make_shared<Variable>();
         pVar->name = name;
@@ -94,14 +94,14 @@ namespace das
         pVar->flags = flags;
         return pVar;
     }
-    
+
     string Variable::getMangledName() const {
         string mn = module ? module->name+"::"+name : name;
         return mn + " " + type->getMangledName();
     }
-    
+
     // function
-    
+
     FunctionPtr Function::clone() const {
         auto cfun = make_shared<Function>();
         cfun->name = name;
@@ -119,7 +119,7 @@ namespace das
         cfun->inferStack = inferStack;
         return cfun;
     }
-    
+
     string Function::getLocationExtra() const {
         if ( !inferStack.size() ) {
             return "";
@@ -131,7 +131,7 @@ namespace das
         }
         return ss.str();
     }
-    
+
     string Function::describe() const {
         stringstream ss;
         if ( !isalpha(name[0]) && name[0]!='_' ) {
@@ -149,7 +149,7 @@ namespace das
         ss << " : " << result->describe();
         return ss.str();
     }
-    
+
     string Function::getMangledName() const {
         stringstream ss;
         // TODO: module name?
@@ -159,7 +159,7 @@ namespace das
         }
         return ss.str();
     }
-    
+
     VariablePtr Function::findArgument(const string & na) {
         for ( auto & arg : arguments ) {
             if ( arg->name==na ) {
@@ -168,7 +168,7 @@ namespace das
         }
         return nullptr;
     }
-    
+
     FunctionPtr Function::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto & arg : arguments ) {
@@ -187,7 +187,7 @@ namespace das
         body = vis.visitFunctionBody(this, body.get());
         return vis.visit(this);
     }
-    
+
     bool Function::isGeneric() const {
         for ( auto & arg : arguments ) {
             if ( arg->type->isAuto() ) {
@@ -196,26 +196,26 @@ namespace das
         }
         return false;
     }
-    
+
     // built-in function
-    
+
     BuiltInFunction::BuiltInFunction ( const string & fn ) {
         builtIn = true;
         name = fn;
     }
-    
+
     // type annotation
-    
+
     void debugType ( TypeAnnotation * ta, stringstream & ss , void * data, PrintFlags flags ) {
         ta->debug(ss, data, flags);
     }
-    
+
     void debugType ( TypeAnnotation * ta, stringstream & ss , vec4f data, PrintFlags flags ) {
         ta->debug(ss, data, flags);
     }
-    
+
     // expression
-    
+
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
             assert(0 && "unsupported expression");
@@ -225,7 +225,7 @@ namespace das
         expr->type = type ? make_shared<TypeDecl>(*type) : nullptr;
         return expr;
     }
-    
+
     ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr ) {
         if ( expr->type && expr->type->isRef() && !expr->type->isRefType() ) {
             auto ar2l = make_shared<ExprRef2Value>();
@@ -238,22 +238,22 @@ namespace das
             return expr;
         }
     }
-    
+
     // ExprRef2Value
-    
+
     ExpressionPtr ExprRef2Value::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprRef2Value::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprRef2Value>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
-    
+
     SimNode * ExprRef2Value::GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {
         if ( type->isHandle() ) {
             return type->annotation->simulateRef2Value(context, at, expr);
@@ -265,15 +265,15 @@ namespace das
             }
         }
     }
-    
+
     // ExprPtr2Ref
-    
+
     ExpressionPtr ExprPtr2Ref::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprPtr2Ref::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprPtr2Ref>(expr);
         Expression::clone(cexpr);
@@ -282,7 +282,7 @@ namespace das
     }
 
     // ExprNullCoalescing
-    
+
     ExpressionPtr ExprNullCoalescing::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
@@ -290,16 +290,16 @@ namespace das
         defaultValue = defaultValue->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprNullCoalescing::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprNullCoalescing>(expr);
         ExprPtr2Ref::clone(cexpr);
         cexpr->defaultValue = defaultValue->clone();
         return cexpr;
     }
-    
+
     // Const
-    
+
     ExpressionPtr ExprConstString::visit(Visitor & vis) {
         vis.preVisit((ExprConst *)this);
         vis.preVisit(this);
@@ -308,7 +308,7 @@ namespace das
             return res;
         return vis.visit((ExprConst *)this);
     }
-    
+
     ExpressionPtr ExprConstString::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprConstString>(expr);
         Expression::clone(cexpr);
@@ -318,23 +318,23 @@ namespace das
     }
 
     // ExprStaticAssert
-    
+
     ExpressionPtr ExprStaticAssert::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprStaticAssert>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
-    
+
     // ExprAssert
-    
+
     ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprAssert>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
-    
+
     // ExprDebug
-    
+
     ExpressionPtr ExprDebug::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprDebug>(expr);
         ExprLooksLikeCall::clone(cexpr);
@@ -342,27 +342,27 @@ namespace das
     }
 
     // ExprMakeBlock
-    
+
     ExpressionPtr ExprMakeBlock::visit(Visitor & vis) {
         vis.preVisit(this);
         block = block->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprMakeBlock::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeBlock>(expr);
         cexpr->block = block->clone();
         return cexpr;
     }
-    
+
     // ExprInvoke
-    
+
     ExpressionPtr ExprInvoke::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprInvoke>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
-    
+
     // ExprHash
 
     ExpressionPtr ExprHash::clone( const ExpressionPtr & expr ) const {
@@ -370,17 +370,17 @@ namespace das
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
-    
+
     // ExprErase
-    
+
     ExpressionPtr ExprErase::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprErase>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
-    
+
     // ExprFind
-    
+
     ExpressionPtr ExprFind::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprFind>(expr);
         ExprLooksLikeCall::clone(cexpr);
@@ -388,7 +388,7 @@ namespace das
     }
 
     // ExprSizeOf
-    
+
     ExpressionPtr ExprSizeOf::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( subexpr ) {
@@ -396,7 +396,7 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprSizeOf::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprSizeOf>(expr);
         Expression::clone(cexpr);
@@ -406,9 +406,9 @@ namespace das
             cexpr->typeexpr = typeexpr;
         return cexpr;
     }
-    
+
     // ExprTypeName
-    
+
     ExpressionPtr ExprTypeName::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( subexpr ) {
@@ -416,7 +416,7 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprTypeName::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprTypeName>(expr);
         Expression::clone(cexpr);
@@ -426,14 +426,14 @@ namespace das
             cexpr->typeexpr = typeexpr;
         return cexpr;
     }
-    
+
     // ExprNew
-    
+
     ExpressionPtr ExprNew::visit(Visitor & vis) {
         vis.preVisit(this);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprNew>(expr);
         Expression::clone(cexpr);
@@ -442,7 +442,7 @@ namespace das
     }
 
     // ExprAt
-    
+
     ExpressionPtr ExprAt::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
@@ -450,7 +450,7 @@ namespace das
         index = index->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprAt::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprAt>(expr);
         Expression::clone(cexpr);
@@ -460,7 +460,7 @@ namespace das
     }
 
     // ExprBlock
-    
+
     ExpressionPtr ExprBlock::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto it = arguments.begin(); it != arguments.end(); ) {
@@ -486,7 +486,7 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprBlock::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprBlock>(expr);
         Expression::clone(cexpr);
@@ -501,7 +501,7 @@ namespace das
         }
         return cexpr;
     }
-    
+
     uint32_t ExprBlock::getEvalFlags() const {
         uint32_t flg = 0;
         for ( const auto & ex : list ) {
@@ -509,7 +509,7 @@ namespace das
         }
         return flg;
     }
-    
+
     VariablePtr ExprBlock::findArgument(const string & name) {
         for ( auto & arg : arguments ) {
             if ( arg->name==name ) {
@@ -518,15 +518,15 @@ namespace das
         }
         return nullptr;
     }
-    
+
     // ExprSwizzle
-    
+
     ExpressionPtr ExprSwizzle::visit(Visitor & vis) {
         vis.preVisit(this);
         value = value->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprSwizzle::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprSwizzle>(expr);
         Expression::clone(cexpr);
@@ -534,15 +534,15 @@ namespace das
         cexpr->value = value->clone();
         return cexpr;
     }
-    
+
     // ExprField
-    
+
     ExpressionPtr ExprField::visit(Visitor & vis) {
         vis.preVisit(this);
         value = value->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprField>(expr);
         Expression::clone(cexpr);
@@ -551,23 +551,23 @@ namespace das
         cexpr->field = field;
         return cexpr;
     }
-    
+
     // ExprSafeField
-    
+
     ExpressionPtr ExprSafeField::visit(Visitor & vis) {
         vis.preVisit(this);
         value = value->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprSafeField::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprSafeField>(expr);
         ExprField::clone(cexpr);
         return cexpr;
     }
-    
+
     // ExprStringBuilder
-    
+
     ExpressionPtr ExprStringBuilder::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto it = elements.begin(); it!=elements.end(); ) {
@@ -579,7 +579,7 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprStringBuilder::clone( const ExpressionPtr & expr  ) const {
         auto cexpr = clonePtr<ExprStringBuilder>(expr);
         Expression::clone(cexpr);
@@ -589,14 +589,14 @@ namespace das
         }
         return cexpr;
     }
-    
+
     // ExprVar
-    
+
     ExpressionPtr ExprVar::visit(Visitor & vis) {
         vis.preVisit(this);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprVar::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprVar>(expr);
         Expression::clone(cexpr);
@@ -611,7 +611,7 @@ namespace das
     }
 
     // ExprOp
-    
+
     ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
             assert(0 && "can't clone ExprOp");
@@ -623,24 +623,24 @@ namespace das
         cexpr->at = at;
         return cexpr;
     }
-    
+
     // ExprOp1
-    
+
     ExpressionPtr ExprOp1::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprOp1::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprOp1>(expr);
         ExprOp::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
-    
+
     // ExprOp2
-    
+
     ExpressionPtr ExprOp2::visit(Visitor & vis) {
         vis.preVisit(this);
         left = left->visit(vis);
@@ -648,7 +648,7 @@ namespace das
         right = right->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprOp2::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprOp2>(expr);
         ExprOp::clone(cexpr);
@@ -658,7 +658,7 @@ namespace das
     }
 
     // ExprOp3
-    
+
     ExpressionPtr ExprOp3::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
@@ -668,7 +668,7 @@ namespace das
         right = right->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprOp3::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprOp3>(expr);
         ExprOp::clone(cexpr);
@@ -677,9 +677,9 @@ namespace das
         cexpr->right = right->clone();
         return cexpr;
     }
-    
+
     // ExprMove
-    
+
     ExpressionPtr ExprMove::visit(Visitor & vis) {
         vis.preVisit(this);
         left = left->visit(vis);
@@ -687,15 +687,15 @@ namespace das
         right = right->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprMove::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMove>(expr);
         ExprOp2::clone(cexpr);
         return cexpr;
     }
-    
+
     // ExprCopy
-    
+
     ExpressionPtr ExprCopy::visit(Visitor & vis) {
         vis.preVisit(this);
         left = left->visit(vis);
@@ -703,15 +703,15 @@ namespace das
         right = right->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprCopy::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprCopy>(expr);
         ExprOp2::clone(cexpr);
         return cexpr;
     }
-    
+
     // ExprTryCatch
-    
+
     ExpressionPtr ExprTryCatch::visit(Visitor & vis) {
         vis.preVisit(this);
         try_block = try_block->visit(vis);
@@ -719,7 +719,7 @@ namespace das
         catch_block = catch_block->visit(vis);
         return vis.visit(this);
     }
-    
+
     uint32_t ExprTryCatch::getEvalFlags() const {
         return (try_block->getEvalFlags() | catch_block->getEvalFlags()) & ~EvalFlags::stopForThrow;
     }
@@ -731,9 +731,9 @@ namespace das
         cexpr->catch_block = catch_block->clone();
         return cexpr;
     }
-    
+
     // ExprReturn
-    
+
     ExpressionPtr ExprReturn::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( subexpr ) {
@@ -741,7 +741,7 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprReturn::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprReturn>(expr);
         Expression::clone(cexpr);
@@ -750,14 +750,14 @@ namespace das
         cexpr->moveSemantics = moveSemantics;
         return cexpr;
     }
-    
+
     // ExprBreak
-    
+
     ExpressionPtr ExprBreak::visit(Visitor & vis) {
         vis.preVisit(this);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprBreak::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprBreak>(expr);
         Expression::clone(cexpr);
@@ -765,7 +765,7 @@ namespace das
     }
 
     // ExprIfThenElse
-    
+
     ExpressionPtr ExprIfThenElse::visit(Visitor & vis) {
         vis.preVisit(this);
         cond = cond->visit(vis);
@@ -777,7 +777,7 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprIfThenElse::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprIfThenElse>(expr);
         Expression::clone(cexpr);
@@ -789,7 +789,7 @@ namespace das
     }
 
     // ExprWhile
-    
+
     ExpressionPtr ExprWhile::visit(Visitor & vis) {
         vis.preVisit(this);
         cond = cond->visit(vis);
@@ -797,7 +797,7 @@ namespace das
         body = body->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprWhile::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprWhile>(expr);
         Expression::clone(cexpr);
@@ -805,11 +805,11 @@ namespace das
         cexpr->body = body->clone();
         return cexpr;
     }
-    
+
     uint32_t ExprWhile::getEvalFlags() const {
         return body->getEvalFlags() & ~EvalFlags::stopForBreak;
     }
-    
+
     // ExprFor
 
     ExpressionPtr ExprFor::visit(Visitor & vis) {
@@ -828,7 +828,7 @@ namespace das
         subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprFor::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprFor>(expr);
         Expression::clone(cexpr);
@@ -840,7 +840,7 @@ namespace das
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
-    
+
     Variable * ExprFor::findIterator(const string & name) const {
         for ( auto & v : iteratorVariables ) {
             if ( v->name==name ) {
@@ -849,13 +849,13 @@ namespace das
         }
         return nullptr;
     }
-    
+
     uint32_t ExprFor::getEvalFlags() const {
         return subexpr->getEvalFlags() & ~EvalFlags::stopForBreak;
     }
-    
+
     // ExprLet
-    
+
     ExpressionPtr ExprLet::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto it = variables.begin(); it!=variables.end(); ) {
@@ -874,7 +874,7 @@ namespace das
             subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprLet>(expr);
         Expression::clone(cexpr);
@@ -894,13 +894,13 @@ namespace das
         }
         return nullptr;
     }
-    
+
     uint32_t ExprLet::getEvalFlags() const {
         return subexpr ? subexpr->getEvalFlags() : 0;
     }
-    
+
     // ExprLooksLikeCall
-    
+
     ExpressionPtr ExprLooksLikeCall::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto & arg : arguments ) {
@@ -910,7 +910,7 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprLooksLikeCall::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprLooksLikeCall>(expr);
         Expression::clone(cexpr);
@@ -920,7 +920,7 @@ namespace das
         }
         return cexpr;
     }
-    
+
     string ExprLooksLikeCall::describe() const {
         stringstream stream;
         stream << name << " ( ";
@@ -936,15 +936,15 @@ namespace das
         stream << " )";
         return stream.str();
     }
-    
+
     void ExprLooksLikeCall::autoDereference() {
         for ( size_t iA = 0; iA != arguments.size(); ++iA ) {
             arguments[iA] = Expression::autoDereference(arguments[iA]);
         }
     }
-    
+
     // ExprCall
-    
+
     ExpressionPtr ExprCall::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto & arg : arguments ) {
@@ -954,7 +954,7 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprCall>(expr);
         ExprLooksLikeCall::clone(cexpr);
@@ -963,7 +963,7 @@ namespace das
     }
 
     // make structure
-    
+
     ExpressionPtr ExprMakeStructure::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeStructure>(expr);
         Expression::clone(cexpr);
@@ -983,7 +983,7 @@ namespace das
         cexpr->makeType = make_shared<TypeDecl>(*makeType);
         return cexpr;
     }
-    
+
     ExpressionPtr ExprMakeStructure::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( int index=0; index != int(structs.size()); ++index ) {
@@ -1002,9 +1002,9 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     // make structure
-    
+
     ExpressionPtr ExprMakeArray::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeArray>(expr);
         Expression::clone(cexpr);
@@ -1015,7 +1015,7 @@ namespace das
         cexpr->makeType = make_shared<TypeDecl>(*makeType);
         return cexpr;
     }
-    
+
     ExpressionPtr ExprMakeArray::visit(Visitor & vis) {
         vis.preVisit(this);
         int index = 0;
@@ -1031,34 +1031,34 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     // program
-    
+
     vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {
         return library.findAnnotation(name);
     }
-    
+
     vector<StructurePtr> Program::findStructure ( const string & name ) const {
         return library.findStructure(name);
     }
-    
+
     VariablePtr Program::findVariable ( const string & name ) const {
         return thisModule->findVariable(name);
     }
-    
+
     void Program::error ( const string & str, const LineInfo & at, CompilationError cerr ) {
         errors.emplace_back(str,at,cerr);
         failToCompile = true;
     }
-    
+
     void Program::addModule ( Module * pm ) {
         library.addModule(pm);
     }
-    
+
     bool Program::addVariable ( const VariablePtr & var ) {
         return thisModule->addVariable(var);
     }
-    
+
     bool Program::addStructure ( const StructurePtr & st ) {
         return thisModule->addStructure(st);
     }
@@ -1066,15 +1066,15 @@ namespace das
 	FunctionPtr Program::findFunction(const string & mangledName) const {
 		return thisModule->findFunction(mangledName);
 	}
-    
+
     bool Program::addFunction ( const FunctionPtr & fn ) {
         return thisModule->addFunction(fn);
     }
-    
+
     bool Program::addGeneric ( const FunctionPtr & fn ) {
         return thisModule->addGeneric(fn);
     }
-    
+
     bool Program::addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg ) {
         if ( ann->rtti_isStructureAnnotation() ) {
             auto annotation = static_pointer_cast<StructureTypeAnnotation>(ann->clone());
@@ -1092,13 +1092,13 @@ namespace das
             return false;
         }
     }
-    
+
     Program::Program() {
         thisModule = make_unique<Module>();
         library.addBuiltInModule();
         library.addModule(thisModule.get());
     }
-    
+
     TypeDecl * Program::makeTypeDeclaration(const LineInfo &at, const string &name) {
         auto structs = findStructure(name);
         auto handles = findAnnotation(name);
@@ -1139,7 +1139,7 @@ namespace das
             return tt;
         }
     }
-    
+
     ExprLooksLikeCall * Program::makeCall ( const LineInfo & at, const string & name ) {
         vector<ExprCallFactory *> ptr;
         string moduleName, funcName;
@@ -1158,7 +1158,7 @@ namespace das
             return new ExprCall(at,name);
         }
     }
-    
+
     ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value ) {
         if ( type->dim.size() || type->ref ) return nullptr;
         switch ( type->baseType ) {
@@ -1180,7 +1180,7 @@ namespace das
             default:                assert(0 && "we should not even be here"); return nullptr;
         }
     }
-    
+
     void Program::visit(Visitor & vis, bool visitGenerics ) {
         // structures
         for ( auto & ist : thisModule->structures ) {
@@ -1216,7 +1216,7 @@ namespace das
             }
         }
     }
-    
+
     void Program::optimize(ostream & logs) {
         const bool log = options.getOption("logOptimizationPasses",false);
         bool any, last;
@@ -1242,9 +1242,9 @@ namespace das
     }
 
     // PARSER
-    
+
     ProgramPtr g_Program;
-    
+
     ProgramPtr parseDaScript ( const char * script, ostream & logs ) {
         int err;
         auto program = g_Program = make_shared<Program>();
@@ -1265,7 +1265,7 @@ namespace das
 					program->staticAsserts();
 				if (!program->failed())
 					program->finalizeAnnotations();
-				if (!program->failed()) 
+				if (!program->failed())
 					program->markOrRemoveUnusedSymbols();
 				if (!program->failed())
                     program->allocateStack(logs);

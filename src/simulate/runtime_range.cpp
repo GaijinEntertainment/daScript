@@ -11,7 +11,7 @@ namespace das
         itc.range_to = r.to;
         return (r.from!=r.to);
     }
-    
+
     bool RangeIterator::next  ( Context &, IteratorContext & itc ) {
         int32_t nextValue = cast<int32_t>::to(itc.value) + 1;
         itc.value = cast<int32_t>::from(nextValue);
@@ -20,11 +20,11 @@ namespace das
 
     void RangeIterator::close ( Context &, IteratorContext & ) {
     }
-    
+
     vec4f SimNode_RangeIterator::eval ( Context & ) {
         return cast<Iterator *>::from(static_cast<RangeIterator *>(this));
     }
-    
+
     vec4f SimNode_ForRange::eval ( Context & context ) {
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);

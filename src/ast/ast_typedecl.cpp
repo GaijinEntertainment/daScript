@@ -5,7 +5,7 @@
 namespace das
 {
     // auto or generic type conversion
-    
+
     void TypeDecl::applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef;
@@ -26,7 +26,7 @@ namespace das
             }
         }
     }
-    
+
     TypeDeclPtr TypeDecl::inferAutoType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
         // can't infer from the type, which is already 'auto'
         if ( initT->isAuto() )
@@ -96,9 +96,9 @@ namespace das
         return TT;
     }
 
-    
+
     // TypeDecl
-    
+
     string TypeDecl::describe ( bool extra ) const {
         stringstream stream;
         if ( baseType==Type::alias ) {
@@ -185,7 +185,7 @@ namespace das
         stream << decl.describe();
         return stream;
     }
-    
+
     TypeDecl::TypeDecl(const TypeDecl & decl) {
         baseType = decl.baseType;
         structType = decl.structType;
@@ -202,7 +202,7 @@ namespace das
             argTypes.push_back(make_shared<TypeDecl>(*arg) );
         }
     }
-    
+
     const TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) const {
 		if (baseType == Type::alias) {
 			return nullptr; // if it is another alias, can't find it
@@ -234,7 +234,7 @@ namespace das
 			return nullptr;
         }
     }
-    
+
     bool TypeDecl::canMove() const {
         if ( baseType==Type::tHandle )
             return annotation->canMove();
@@ -242,7 +242,7 @@ namespace das
             return false;
         return true;
     }
-    
+
     bool TypeDecl::canCopy() const {
         if ( baseType==Type::tHandle )
             return annotation->canCopy();
@@ -252,7 +252,7 @@ namespace das
             return structType->canCopy();
         return true;
     }
-    
+
     bool TypeDecl::isPod() const {
         if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString || baseType==Type::tBlock )
             return false;
@@ -262,7 +262,7 @@ namespace das
             return annotation->isPod();
         return true;
     }
-    
+
     string TypeDecl::getMangledName() const {
         stringstream ss;
         if ( constant ) {
@@ -324,7 +324,7 @@ namespace das
         }
         return ss.str();
     }
-    
+
     bool TypeDecl::isConst() const
     {
         if ( constant )
@@ -334,7 +334,7 @@ namespace das
                 return true;
         return false;
     }
-    
+
     bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters, bool constMatters ) const {
         if ( baseType!=decl.baseType )
             return false;
@@ -387,9 +387,9 @@ namespace das
                 return false;
         return true;
     }
-    
+
     // validate swizzle mask and build mask type
-    
+
     bool TypeDecl::isSequencialMask ( vector<uint8_t> & fields ) {
         for ( size_t i=1; i<fields.size(); ++i ) {
             if ( (fields[i-1]+1)!=fields[i] ) {
@@ -398,7 +398,7 @@ namespace das
         }
         return true;
     }
-    
+
     int TypeDecl::getMaskFieldIndex ( char ch ) {
         switch ( ch ) {
             case 'x':
@@ -417,7 +417,7 @@ namespace das
                 return -1;
         }
     }
-    
+
     bool TypeDecl::buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields ) {
         fields.clear();
         for ( auto ch : mask ) {
@@ -429,7 +429,7 @@ namespace das
         }
         return fields.size()>=1 && fields.size()<=4;
     }
-    
+
     bool TypeDecl::isVectorType() const {
         if ( dim.size() ) return false;
         switch (baseType) {
@@ -449,7 +449,7 @@ namespace das
                 return false;
         }
     }
-    
+
     int TypeDecl::getVectorDim() const {
         switch (baseType) {
             case tInt2:
@@ -471,7 +471,7 @@ namespace das
                 return 0;
         }
     }
-    
+
     Type TypeDecl::getVectorBaseType() const {
         switch (baseType) {
             case tInt2:
@@ -490,7 +490,7 @@ namespace das
                 return Type::none;
         }
     }
-    
+
     Type TypeDecl::getVectorType ( Type bt, int dim ) {
         if ( dim==1 ) return bt;
         if ( bt==Type::tFloat ) {
@@ -519,23 +519,23 @@ namespace das
             return Type::none;
         }
     }
-    
+
     bool TypeDecl::isGoodIteratorType() const {
         return baseType==Type::tIterator && dim.size()==0 && firstType;
     }
-    
+
     bool TypeDecl::isGoodBlockType() const {
         return baseType==Type::tBlock && dim.size()==0;
     }
-    
+
     bool TypeDecl::isGoodArrayType() const {
         return baseType==Type::tArray && dim.size()==0 && firstType;
     }
-    
+
     bool TypeDecl::isGoodTableType() const {
         return baseType==Type::tTable && dim.size()==0 && firstType && secondType;
     }
-    
+
     bool TypeDecl::isIteratorType ( const TypeDecl & decl ) const {
         if ( baseType!=decl.baseType )
             return false;
@@ -547,11 +547,11 @@ namespace das
             return false;
         return true;
     }
-    
+
     bool TypeDecl::isVoid() const {
         return (baseType==Type::tVoid) && (dim.size()==0);
     }
-    
+
     bool TypeDecl::isPointer() const {
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
@@ -583,7 +583,7 @@ namespace das
         }
         return false;
     }
-    
+
     bool TypeDecl::isAuto() const {
         // auto is auto.... or auto....?
         if ( baseType==Type::autoinfer ) {
@@ -611,7 +611,7 @@ namespace das
         }
         return false;
     }
-    
+
     bool TypeDecl::isFoldable() const {
         if ( dim.size() || ref )
             return false;
@@ -636,11 +636,11 @@ namespace das
                 return false;
         }
     }
-    
+
     bool TypeDecl::isHandle() const {
         return (baseType==Type::tHandle) && (dim.size()==0);
     }
-    
+
     bool TypeDecl::isSimpleType() const {
         if (    baseType==Type::none
             ||  baseType==Type::tVoid
@@ -651,7 +651,7 @@ namespace das
             return false;
         return true;
     }
-    
+
     bool TypeDecl::isCtorType() const {
         if ( dim.size() )
             return false;
@@ -680,7 +680,7 @@ namespace das
                 return false;
         }
     }
-    
+
     bool TypeDecl::isWorkhorseType() const {
         if ( dim.size() )
             return false;
@@ -709,14 +709,14 @@ namespace das
                 return false;
         }
     }
-    
+
     bool TypeDecl::isReturnType() const {
         if ( isGoodBlockType() ) {
             return false;
         }
         return true;
     }
-    
+
     Type TypeDecl::getRangeBaseType() const
     {
         switch ( baseType ) {
@@ -727,56 +727,56 @@ namespace das
                 return Type::none;
         }
     }
-    
+
     bool TypeDecl::isRange() const
     {
         return (baseType==Type::tRange || baseType==Type::tURange) && dim.size()==0;
     }
-    
+
     bool TypeDecl::isSimpleType(Type typ) const {
         return baseType==typ && isSimpleType();
     }
-    
+
     bool TypeDecl::isArray() const {
         return (bool) dim.size();
     }
-    
+
     bool TypeDecl::isRef() const {
         return ref || isRefType();
     }
-    
+
     bool TypeDecl::isRefType() const {
         if ( baseType==Type::tHandle ) {
             return annotation->isRefType();
         }
         return baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || dim.size();
     }
-    
+
     bool TypeDecl::isIndex() const {
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
     }
-    
+
     int TypeDecl::getBaseSizeOf() const {
         if ( baseType==Type::tHandle ) {
             return int(annotation->getSizeOf());
         }
         return baseType==Type::tStructure ? structType->getSizeOf() : getTypeBaseSize(baseType);
     }
-    
+
     int TypeDecl::getAlignOf() const {
         if ( baseType==Type::tHandle ) {
             return int(annotation->getAlignOf());
         }
         return baseType==Type::tStructure ? structType->getAlignOf() : getTypeBaseAlign(baseType);
     }
-    
+
     int TypeDecl::getSizeOf() const {
         int size = 1;
         for ( auto i : dim )
             size *= i;
         return getBaseSizeOf() * size;
     }
-    
+
     int TypeDecl::getStride() const {
         int size = 1;
         if ( dim.size() > 1 ) {

@@ -5,24 +5,24 @@
 namespace das
 {
     // ANNOTATION
-    
+
     const AnnotationArgument * AnnotationArgumentList::find ( const string & name, Type type ) const {
         auto it = find_if(arguments.begin(), arguments.end(), [&](const AnnotationArgument & arg){
             return (arg.name==name) && (type==Type::tVoid || type==arg.type);
         });
         return it==arguments.end() ? nullptr : &*it;
     }
-    
+
 	bool AnnotationArgumentList::getOption(const string & name, bool def) const {
 		auto arg = find(name, Type::tBool);
 		return arg ? arg->bValue : def;
 	}
 
     // MODULE
-    
+
     intptr_t Module::Karma = 0;
     Module * Module::modules = nullptr;
-    
+
     void Module::Shutdown() {
         auto m = modules;
         while ( m ) {
@@ -31,7 +31,7 @@ namespace das
             delete pM;
         }
     }
-    
+
     Module * Module::require ( const string & name ) {
         for ( auto m = modules; m != nullptr; m = m->next ) {
             if ( m->name == name ) {
@@ -40,14 +40,14 @@ namespace das
         }
         return nullptr;
     }
-    
+
     Module::Module ( const string & n ) : name(n) {
         if ( !name.empty() ) {
             next = modules;
             modules = this;
         }
     }
-    
+
     Module::~Module() {
         if ( !name.empty() ) {
             Module ** p = &modules;
@@ -60,7 +60,7 @@ namespace das
             assert(0 && "failed to unlink");
         }
     }
-    
+
     bool Module::addAnnotation ( const AnnotationPtr & ptr ) {
         if ( handleTypes.insert(make_pair(ptr->name, move(ptr))).second ) {
             ptr->module = this;
@@ -69,7 +69,7 @@ namespace das
             return false;
         }
     }
-    
+
     bool Module::addVariable ( const VariablePtr & var ) {
         if ( globals.insert(make_pair(var->name, var)).second ) {
             var->module = this;
@@ -78,7 +78,7 @@ namespace das
             return false;
         }
     }
-    
+
     bool Module::addStructure ( const StructurePtr & st ) {
         if ( structures.insert(make_pair(st->name, st)).second ) {
             st->module = this;
@@ -87,7 +87,7 @@ namespace das
             return false;
         }
     }
-    
+
     bool Module::addFunction ( const FunctionPtr & fn ) {
         auto mangledName = fn->getMangledName();
         if ( functions.insert(make_pair(mangledName, fn)).second ) {
@@ -99,7 +99,7 @@ namespace das
             return false;
         }
     }
-    
+
     bool Module::addGeneric ( const FunctionPtr & fn ) {
         auto mangledName = fn->getMangledName();
         if ( generics.insert(make_pair(mangledName, fn)).second ) {
@@ -111,32 +111,32 @@ namespace das
             return false;
         }
     }
-    
+
     VariablePtr Module::findVariable ( const string & na ) const {
         auto it = globals.find(na);
         return it != globals.end() ? it->second : VariablePtr();
     }
-    
+
     FunctionPtr Module::findFunction ( const string & mangledName ) const {
         auto it = functions.find(mangledName);
         return it != functions.end() ? it->second : FunctionPtr();
     }
-    
+
     StructurePtr Module::findStructure ( const string & na ) const {
         auto it = structures.find(na);
         return it != structures.end() ? it->second : StructurePtr();
     }
-    
+
     AnnotationPtr Module::findAnnotation ( const string & na ) const {
         auto it = handleTypes.find(na);
         return it != handleTypes.end() ? it->second : nullptr;
     }
-    
+
     ExprCallFactory * Module::findCall ( const string & na ) const {
         auto it = callThis.find(na);
         return it != callThis.end() ? &it->second : nullptr;
     }
-    
+
     bool Module::compileBuiltinModule ( unsigned char * str, unsigned int str_len ) {
         stringstream issues;
         string src_str ( (const char *) str, str_len );
@@ -167,10 +167,10 @@ namespace das
             return false;
         }
     }
-    
-    
+
+
     // MODULE LIBRARY
-    
+
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
         auto at = name.find("::");
         if ( at!=string::npos ) {
@@ -183,11 +183,11 @@ namespace das
             return false;
         }
     }
-    
+
     void ModuleLibrary::addBuiltInModule () {
         addModule(Module::require("$"));
     }
-    
+
     void ModuleLibrary::addModule ( Module * module ) {
         assert(module && "module not found?");
         modules.push_back(module);
@@ -200,7 +200,7 @@ namespace das
             if ( !func(pm) ) break;
         }
     }
-    
+
     vector<AnnotationPtr> ModuleLibrary::findAnnotation ( const string & name ) const {
         vector<AnnotationPtr> ptr;
         string moduleName, annName;
@@ -212,7 +212,7 @@ namespace das
         }, moduleName);
         return ptr;
     }
-    
+
     vector<StructurePtr> ModuleLibrary::findStructure ( const string & name ) const {
         vector<StructurePtr> ptr;
         string moduleName, funcName;
@@ -224,7 +224,7 @@ namespace das
         }, moduleName);
         return ptr;
     }
-    
+
     TypeDeclPtr ModuleLibrary::makeStructureType ( const string & name ) const {
         auto t = make_shared<TypeDecl>(Type::tStructure);
         auto structs = findStructure(name);
@@ -235,7 +235,7 @@ namespace das
         }
         return t;
     }
-    
+
     TypeDeclPtr ModuleLibrary::makeHandleType ( const string & name ) const {
         auto t = make_shared<TypeDecl>(Type::tHandle);
         auto handles = findAnnotation(name);

@@ -3,7 +3,7 @@
 #include "daScript/ast/ast_match.h"
 
 namespace das {
-    
+
     // recognize a==0, a!=0, 0==a, 0!=a
     bool matchEquNequZero ( const ExpressionPtr & expr, ExpressionPtr & zeroCond, bool & condIfZero ) {
         if ( expr->rtti_isOp2() ) {
@@ -21,11 +21,11 @@ namespace das {
         }
         return false;
     }
-    
+
     bool isZeroConst ( const ExpressionPtr & expr ) {
         return isFloatConst(expr, 0.0f) || isIntOrUIntConst(expr, 0);
     }
-    
+
     bool isFloatConst ( const ExpressionPtr & expr, float value ) {
         if ( !expr->rtti_isConstant() ) return false;
         auto ce = static_pointer_cast<ExprConst>(expr);
@@ -34,7 +34,7 @@ namespace das {
             default:                return false;
         }
     }
-    
+
     bool isIntOrUIntConst ( const ExpressionPtr & expr, int64_t value ) {
         if ( !expr->rtti_isConstant() ) return false;
         auto ce = static_pointer_cast<ExprConst>(expr);
@@ -46,7 +46,7 @@ namespace das {
             default:                return false;
         }
     }
-    
+
     bool isIntConst ( const ExpressionPtr & expr, int64_t value ) {
         if ( !expr->rtti_isConstant() ) return false;
         auto ce = static_pointer_cast<ExprConst>(expr);
@@ -56,7 +56,7 @@ namespace das {
             default:                return false;
         }
     }
-    
+
     bool isUIntConst ( const ExpressionPtr & expr, uint64_t value ) {
         if ( !expr->rtti_isConstant() ) return false;
         auto ce = static_pointer_cast<ExprConst>(expr);
@@ -66,5 +66,5 @@ namespace das {
             default:                return false;
         }
     }
-    
+
 }

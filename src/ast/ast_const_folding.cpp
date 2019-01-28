@@ -3,11 +3,11 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
-    
+
     void OptVisitor::reportFolding() {
         anyFolding = true;
     }
-    
+
     class SetSideEffectVisitor : public Visitor {
         // any expression
         virtual void preVisitExpression ( Expression * expr ) override {
@@ -15,7 +15,7 @@ namespace das {
             expr->noSideEffects = false;
         }
     };
-    
+
     class NoSideEffectVisitor : public Visitor {
     protected:
     // const
@@ -104,7 +104,7 @@ namespace das {
             return Visitor::visit(expr);
         }
     };
-    
+
     class FoldingVisitor : public OptVisitor {
     public:
         FoldingVisitor( const ProgramPtr & prog ) : ctx(nullptr) {
@@ -151,7 +151,7 @@ namespace das {
             return memcmp(&a,&b,t->getSizeOf()) == 0;
         }
     };
-    
+
     /*
         op1 constexpr = op1(constexpr)
         op2 constexpr,constexpr = op2(constexpr,constexpr)
@@ -409,7 +409,7 @@ namespace das {
             }
         }
     };
-    
+
     //  turn static-assert into nop
     //  fail if condition is not there
     class StaticAssertFolding : public FoldingVisitor {
@@ -453,9 +453,9 @@ namespace das {
             return cond->constexpression ? nullptr : Visitor::visit(expr);
         }
     };
-    
+
     // program
-    
+
     bool Program::optimizationConstFolding() {
         SetSideEffectVisitor sse;
         visit(sse);
@@ -465,7 +465,7 @@ namespace das {
         visit(context);
         return context.didAnything();
     }
-    
+
     bool Program::staticAsserts() {
         StaticAssertFolding context(shared_from_this());
         visit(context);

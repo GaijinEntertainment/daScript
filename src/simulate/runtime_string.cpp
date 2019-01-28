@@ -7,7 +7,7 @@
 namespace das
 {
     // string operations
-    
+
     vec4f SimPolicy_String::Add ( vec4f a, vec4f b, Context & context ) {
         const char *  sA = to_rts(a);
         auto la = stringLength(context, sA);
@@ -25,7 +25,7 @@ namespace das
             return v_zero();
         }
     }
-  
+
     void SimPolicy_String::SetAdd ( char * a, vec4f b, Context & context ) {
 		char ** pA = (char **)a;
         const char *  sA = *pA ? *pA : rts_null;
@@ -44,11 +44,11 @@ namespace das
             context.throw_error("can't add two strings, out of heap");
         }
     }
-    
+
     // helper functions
-    
+
     const char * rts_null = "";
-    
+
     string unescapeString ( const string & input ) {
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
@@ -74,7 +74,7 @@ namespace das
         }
         return result;
     }
-    
+
     string escapeString ( const string & input ) {
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
@@ -93,7 +93,7 @@ namespace das
         }
         return result;
     }
-    
+
     string getFewLines ( const string & st, int ROW, int COL ) {
         stringstream text;
         int col=1, row=1;
@@ -111,7 +111,7 @@ namespace das
 //            text << *it++;
         return text.str();
     }
-    
+
     string to_string_ex ( double dnum ) {
         stringstream ss;
         ss << dnum;
@@ -119,7 +119,7 @@ namespace das
             ss << ".";
         return ss.str();
     }
-    
+
     string reportError ( const string * st, int row, int col, const string & message, CompilationError erc ) {
         stringstream ssw;
         if ( row && col ) {

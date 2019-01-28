@@ -33,7 +33,7 @@ namespace das
             }
         }
     };
-    
+
     void Program::finalizeAnnotations() {
         FinAnnotationVisitor fin(shared_from_this());
         visit(fin);

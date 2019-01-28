@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
-    
+
     FuncInfo * DebugInfoHelper::makeFunctionDebugInfo ( const Function & fn ) {
         string mangledName = fn.getMangledName();
         auto it = fmn2f.find(mangledName);
@@ -19,7 +19,7 @@ namespace das {
         fmn2f[mangledName] = fni;
         return fni;
     }
-    
+
     StructInfo * DebugInfoHelper::makeStructureDebugInfo ( const Structure & st ) {
         string mangledName = st.getMangledName();
         auto it = smn2s.find(mangledName);
@@ -40,7 +40,7 @@ namespace das {
         smn2s[mangledName] = sti;
         return sti;
     }
-    
+
     TypeInfo * DebugInfoHelper::makeTypeInfo ( TypeInfo * info, const TypeDeclPtr & type ) {
         if ( info==nullptr ) {
             string mangledName = type->getMangledName();
@@ -78,7 +78,7 @@ namespace das {
         }
         return info;
     }
-    
+
     VarInfo * DebugInfoHelper::makeVariableDebugInfo ( const Variable & var ) {
         string mangledName = var.getMangledName();
         auto it = vmn2v.find(mangledName);
@@ -90,5 +90,5 @@ namespace das {
         vmn2v[mangledName] = vi;
         return vi;
     }
-    
+
 }

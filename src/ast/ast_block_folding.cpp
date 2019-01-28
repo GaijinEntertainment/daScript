@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
-    
+
     // this folds the following, by setting r2v flag on expressions
     //  r2v(var)            = @var
     //  r2v(expr.field)     = expr.@field
@@ -59,7 +59,7 @@ namespace das {
             }
         }
     };
-    
+
     class BlockFolding : public OptVisitor {
     protected:
         void collect ( vector<ExpressionPtr> & list, ExprBlock * block ) {
@@ -188,9 +188,9 @@ namespace das {
 			return Visitor::visit(block);
 		}
 	};
-    
+
     // program
-    
+
     bool Program::optimizationRefFolding() {
         bool any = false, anything = false;
         do {
@@ -201,7 +201,7 @@ namespace das {
         } while ( any );
         return anything;
     }
-    
+
     bool Program::optimizationBlockFolding() {
         BlockFolding context;
         visit(context);

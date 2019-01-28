@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
-    
+
     class AllocateStack : public Visitor {
     public:
         AllocateStack( const ProgramPtr & prog, ostream & ls ) : logs(ls) {
@@ -31,9 +31,9 @@ namespace das {
 		virtual void preVisitGlobalLet ( const VariablePtr & ) override {
 			stackTop = 0;
 		}
-		virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override { 
+		virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
 			program->globalInitStackSize = max(program->globalInitStackSize, stackTop);
-			return Visitor::visitGlobalLet(var); 
+			return Visitor::visitGlobalLet(var);
 		}
     // function
         virtual void preVisit ( Function * f ) override {
@@ -162,9 +162,9 @@ namespace das {
             return Visitor::visit(expr);
         }
     };
-    
+
     // program
-    
+
     void Program::allocateStack(ostream & logs) {
         AllocateStack context(shared_from_this(), logs);
         visit(context);

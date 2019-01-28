@@ -9,44 +9,44 @@
 namespace das
 {
 	// this is here to occasionally investigate untyped evaluation paths
-	#define WARN_SLOW_CAST(TYPE)	
+	#define WARN_SLOW_CAST(TYPE)
 	// #define WARN_SLOW_CAST(TYPE)	assert(0 && "internal perofrmance issue, casting eval to eval##TYPE" );
 
     bool SimNode::evalBool ( Context & context ) {
 		WARN_SLOW_CAST(Bool);
         return cast<bool>::to(eval(context));
     }
-    
+
     float SimNode::evalFloat ( Context & context ) {
 		WARN_SLOW_CAST(Float);
         return cast<float>::to(eval(context));
     }
-    
+
     int32_t SimNode::evalInt ( Context & context ) {
 		WARN_SLOW_CAST(Int);
         return cast<int32_t>::to(eval(context));
     }
-    
+
     uint32_t SimNode::evalUInt ( Context & context ) {
 		WARN_SLOW_CAST(UInt);
         return cast<uint32_t>::to(eval(context));
     }
-    
+
     int64_t SimNode::evalInt64 ( Context & context ) {
 		WARN_SLOW_CAST(Int64);
         return cast<int64_t>::to(eval(context));
     }
-    
+
     uint64_t SimNode::evalUInt64 ( Context & context ) {
 		WARN_SLOW_CAST(UInt64);
         return cast<uint64_t>::to(eval(context));
     }
-    
+
     char * SimNode::evalPtr ( Context & context ) {
 		WARN_SLOW_CAST(Ptr);
         return cast<char *>::to(eval(context));
     }
-    
+
     vec4f SimNode_Swizzle::eval ( Context & context ) {
         union {
             vec4f   res;
@@ -59,9 +59,9 @@ namespace das
         R.val[3] = S.val[fields[3]];
         return R.res;
     }
-    
+
     // SimNode_MakeBlock
-    
+
     vec4f SimNode_MakeBlock::eval ( Context & context )  {
         Block block;
         block.stackOffset = context.stack.spi();
@@ -69,9 +69,9 @@ namespace das
         block.body = subexpr;
         return cast<Block>::from(block);
     }
-    
+
     // SimNode_Debug
-    
+
     vec4f SimNode_Debug::eval ( Context & context ) {
         vec4f res = subexpr->eval(context);
         stringstream ssw;
@@ -81,9 +81,9 @@ namespace das
         context.to_out(ssw.str().c_str());
         return res;
     }
-    
+
     // SimNode_Assert
-    
+
     vec4f SimNode_Assert::eval ( Context & context ) {
         if ( !subexpr->evalBool(context) ) {
             string error_message = "assert failed";
@@ -96,9 +96,9 @@ namespace das
         }
         return v_zero();
     }
-    
+
     // SimNode_TryCatch
-    
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4611)
@@ -140,9 +140,9 @@ namespace das
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-    
+
     // SimNode_New
-    
+
     vec4f SimNode_New::eval ( Context & context ) {
         if ( void * ptr = context.heap.allocate(bytes) ) {
             memset ( ptr, 0, bytes );
@@ -152,18 +152,18 @@ namespace das
             return v_zero();
         }
     }
-    
+
     // SimNode_CopyRefValue
-    
+
     vec4f SimNode_CopyRefValue::eval ( Context & context ) {
         auto pl = l->evalPtr(context);
         auto pr = r->evalPtr(context);
         memcpy ( pl, pr, size );
         return v_zero();
     }
-    
+
     // SimNode_MoveRefValue
-    
+
     vec4f SimNode_MoveRefValue::eval ( Context & context ) {
         auto pl = l->evalPtr(context);
         auto pr = r->evalPtr(context);
@@ -171,16 +171,16 @@ namespace das
         memset ( pr, 0, size );
         return v_zero();
     }
-    
+
     // SimNode_Block
-    
+
     vec4f SimNode_Block::eval ( Context & context ) {
         for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
             list[i++]->eval(context);
         }
         return v_zero();
     }
-    
+
     vec4f SimNode_ClosureBlock::eval ( Context & context ) {
         for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
             list[i++]->eval(context);
@@ -193,18 +193,18 @@ namespace das
             return v_zero();
         }
     }
-    
+
     // SimNode_Let
-    
+
     vec4f SimNode_Let::eval ( Context & context ) {
         for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
             list[i++]->eval(context);
         }
         return subexpr ? subexpr->eval(context) : v_zero();
     }
-    
+
     // SimNode_While
-    
+
     vec4f SimNode_While::eval ( Context & context ) {
         while ( cond->evalBool(context) && !context.stopFlags ) {
             body->eval(context);
@@ -212,9 +212,9 @@ namespace das
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
-    
+
     // Return
-    
+
     vec4f SimNode_Return::eval ( Context & context ) {
         if ( subexpr ) context.abiResult() = subexpr->eval(context);
         context.stopFlags |= EvalFlags::stopForReturn;
@@ -235,7 +235,7 @@ namespace das
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
-    
+
     vec4f SimNode_ReturnAndMove::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
         auto pl = context.abiCopyOrMoveResult();
@@ -264,7 +264,7 @@ namespace das
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
-    
+
     vec4f SimNode_ReturnAndCopyFromBlock::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
         auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
@@ -274,7 +274,7 @@ namespace das
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
-    
+
     vec4f SimNode_ReturnAndMoveFromBlock::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
         auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
@@ -285,7 +285,7 @@ namespace das
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
-    
+
     vec4f SimNode_ReturnReferenceFromBlock::eval ( Context & context ) {
         char * ref = subexpr->evalPtr(context);
         if ( context.stack.bottom()<=ref && ref<context.stack.ap() ) {
@@ -296,9 +296,9 @@ namespace das
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
-    
+
     // Context
-    
+
     Context::Context(const string * lines, uint32_t heapSize)
         :   heap(heapSize)
 		,   code(64*1024)
@@ -307,7 +307,7 @@ namespace das
 	{
         debugInput = lines;
     }
-    
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4324)
@@ -376,7 +376,7 @@ namespace das
         }
 		stack.pop(EP,SP);
     }
-    
+
     SimFunction * Context::findFunction ( const char * name ) const {
         for ( int fni = 0; fni != totalFunctions; ++fni ) {
             if ( strcmp(functions[fni].name, name)==0 ) {
@@ -385,7 +385,7 @@ namespace das
         }
         return nullptr;
     }
-    
+
     int Context::findVariable ( const char * name ) const {
         for ( int vni = 0; vni != totalVariables; ++vni ) {
             if ( strcmp(globalVariables[vni].name, name)==0 ) {
@@ -394,12 +394,12 @@ namespace das
         }
         return -1;
     }
-    
+
     void Context::stackWalk() {
         auto str = getStackWalk();
         to_out(str.c_str());
     }
-    
+
     string Context::getStackWalk( bool args ) {
         stringstream ssw;
     #if DAS_ENABLE_STACK_WALK
@@ -427,7 +427,7 @@ namespace das
     #endif
         return ssw.str();
     }
-    
+
     void Context::breakPoint(int, int ) const {
 #ifdef _MSC_VER
 		__debugbreak();
@@ -435,15 +435,15 @@ namespace das
         raise(SIGTRAP);
 #endif
     }
-    
+
     void Context::to_out ( const char * message ) {
         if ( message ) cout << message;
     }
-    
+
     void Context::to_err ( const char * message ) {
         if ( message ) cerr << message;
     }
-    
+
     void Context::throw_error ( const char * message ) {
         exception = message;
         stopFlags |= EvalFlags::stopForThrow;
@@ -467,7 +467,7 @@ namespace das
         }
 #endif
     }
-    
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4611)
@@ -513,7 +513,7 @@ namespace das
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-    
+
     void Context::fakeCall ( FuncInfo * info, int line, vec4f * args, char * & EP, char * & SP ) {
 #if DAS_ENABLE_STACK_WALK
         if (!stack.push(sizeof(Prologue), EP, SP)) {

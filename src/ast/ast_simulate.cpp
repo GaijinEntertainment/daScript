@@ -11,7 +11,7 @@
 namespace das
 {
         // common for move and copy
-    
+
     SimNode * makeLocalCopy(const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
         assert ( rightType.canCopy() && "should check above" );
@@ -55,7 +55,7 @@ namespace das
             return context.code.makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
     }
-    
+
     SimNode * makeCopy(const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
         assert ( rightType.canCopy() && "should check above" );
@@ -101,7 +101,7 @@ namespace das
             return context.code.makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
     }
-    
+
     SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
         if ( rightType.isRef() ) {
             return context.code.makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
@@ -110,7 +110,7 @@ namespace das
             return nullptr;
         }
     }
-    
+
     SimNode * Function::simulate (Context & context) const {
         if ( builtIn ) {
             assert(0 && "can only simulate non built-in function");
@@ -130,7 +130,7 @@ namespace das
             return body->simulate(context);
         }
     }
-    
+
     SimNode * ExprMakeStructure::simulate (Context & context) const {
         vector<SimNode *> simlist;
         // init with 0
@@ -156,7 +156,7 @@ namespace das
             block->list[i] = simlist[i];
         return block;
     }
-    
+
     SimNode * ExprMakeArray::simulate (Context & context) const {
         vector<SimNode *> simlist;
         // init with 0
@@ -178,15 +178,15 @@ namespace das
             block->list[i] = simlist[i];
         return block;
     }
-    
+
     SimNode * ExprRef2Value::simulate (Context & context) const {
         return GetR2V(context, at, type, subexpr->simulate(context));
     }
-    
+
     SimNode * ExprPtr2Ref::simulate (Context & context) const {
         return context.code.makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
-    
+
     SimNode * ExprNullCoalescing::simulate (Context & context) const {
         if ( type->ref ) {
             return context.code.makeNode<SimNode_NullCoalescingRef>(at,subexpr->simulate(context),defaultValue->simulate(context));
@@ -194,16 +194,16 @@ namespace das
             return context.code.makeValueNode<SimNode_NullCoalescing>(type->baseType,at,subexpr->simulate(context),defaultValue->simulate(context));
         }
     }
-    
+
     SimNode * ExprConst::simulate (Context & context) const {
         return context.code.makeNode<SimNode_ConstValue>(at,value);
     }
-    
+
     SimNode * ExprConstString::simulate (Context & context) const {
         char * str = context.code.allocateString(text);
         return context.code.makeNode<SimNode_ConstValue>(at,cast<char *>::from(str));
     }
-    
+
     SimNode * ExprStaticAssert::simulate (Context &) const {
         return nullptr;
     }
@@ -214,7 +214,7 @@ namespace das
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
         return context.code.makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.code.allocateString(message));
     }
-    
+
     SimNode * ExprDebug::simulate (Context & context) const {
         TypeInfo * pTypeInfo = context.thisHelper->makeTypeInfo(nullptr, arguments[0]->type);
         string message;
@@ -225,12 +225,12 @@ namespace das
                                                pTypeInfo,
                                                context.code.allocateString(message));
     }
-    
+
     SimNode * ExprMakeBlock::simulate (Context & context) const {
         uint32_t argSp = static_pointer_cast<ExprBlock>(block)->stackTop;
         return context.code.makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp);
     }
-    
+
     SimNode * ExprInvoke::simulate (Context & context) const {
         auto blockT = arguments[0]->type;
         SimNode_CallBase * pInvoke;
@@ -253,7 +253,7 @@ namespace das
         }
         return pInvoke;
     }
-    
+
     SimNode * ExprHash::simulate (Context & context) const {
         auto val = arguments[0]->simulate(context);
         if ( !arguments[0]->type->isRef() ) {
@@ -265,7 +265,7 @@ namespace das
             return context.code.makeNode<SimNode_HashOfMixedType>(at, val, typeInfo);
         }
     }
-    
+
     SimNode * ExprErase::simulate (Context & context) const {
         auto cont = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
@@ -277,7 +277,7 @@ namespace das
             return nullptr;
         }
     }
-    
+
     SimNode * ExprFind::simulate (Context & context) const {
         auto cont = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
@@ -289,17 +289,17 @@ namespace das
             return nullptr;
         }
     }
-    
+
     SimNode * ExprSizeOf::simulate (Context & context) const {
         uint32_t size = typeexpr->getSizeOf();
         return context.code.makeNode<SimNode_ConstValue>(at,cast<uint32_t>::from(size));
     }
-    
+
     SimNode * ExprTypeName::simulate (Context & context) const {
         auto pName = context.code.allocateString(typeexpr->describe(false));
         return context.code.makeNode<SimNode_ConstValue>(at,cast<char *>::from(pName));
     }
-    
+
     SimNode * ExprNew::simulate (Context & context) const {
         if ( typeexpr->isHandle() ) {
             return typeexpr->annotation->simulateGetNew(context, at);
@@ -346,7 +346,7 @@ namespace das
             return result;
         }
     }
-    
+
     SimNode * ExprBlock::simulate (Context & context) const {
         vector<SimNode *> simlist;
         for ( auto & node : list ) {
@@ -375,7 +375,7 @@ namespace das
             return simlist[0];
         }
     }
-    
+
     SimNode * ExprSwizzle::simulate (Context & context) const {
         uint32_t offset = fields[0] * sizeof(float);
         auto simV = value->simulate(context);
@@ -400,7 +400,7 @@ namespace das
             }
         }
     }
-    
+
     SimNode * ExprField::simulate (Context & context) const {
         auto simV = value->simulate(context);
         if ( !field ) {
@@ -423,7 +423,7 @@ namespace das
 			}
         }
     }
-    
+
     SimNode * ExprSafeField::simulate (Context & context) const {
         if ( skipQQ ) {
             if ( annotation ) {
@@ -439,7 +439,7 @@ namespace das
             }
         }
     }
-    
+
     SimNode * ExprStringBuilder::simulate (Context & context) const {
         SimNode_StringBuilder * pSB = context.code.makeNode<SimNode_StringBuilder>(at);
         if ( int nArg = (int) elements.size() ) {
@@ -457,7 +457,7 @@ namespace das
         }
         return pSB;
     }
-    
+
     SimNode * ExprVar::simulate (Context & context) const {
         if ( block ) {
             auto blk = pBlock.lock();
@@ -513,7 +513,7 @@ namespace das
             }
         }
     }
-    
+
     SimNode * ExprOp1::simulate (Context & context) const {
         if ( func->builtIn ) {
             auto pSimOp1 = static_cast<SimNode_Op1 *>(func->makeSimNode(context));
@@ -529,7 +529,7 @@ namespace das
             return pCall;
         }
     }
-    
+
     SimNode * ExprOp2::simulate (Context & context) const {
         if ( func->builtIn ) {
             auto pSimOp2 = static_cast<SimNode_Op2 *>(func->makeSimNode(context));
@@ -547,7 +547,7 @@ namespace das
             return pCall;
         }
     }
-    
+
     SimNode * ExprOp3::simulate (Context & context) const {
         return context.code.makeNode<SimNode_IfThenElse>(at,
                                                     subexpr->simulate(context),
@@ -562,7 +562,7 @@ namespace das
                         left->simulate(context),
                         right->simulate(context));
     }
-    
+
     SimNode * ExprCopy::simulate (Context & context) const {
         return makeCopy(at, context, left, right);
     }
@@ -609,11 +609,11 @@ namespace das
             return context.code.makeNode<SimNode_Return>(at, simSubE);
         }
     }
-    
+
     SimNode * ExprBreak::simulate (Context & context) const {
         return context.code.makeNode<SimNode_Break>(at);
     }
-    
+
     SimNode * ExprIfThenElse::simulate (Context & context) const {
         ExpressionPtr zeroCond;
         bool condIfZero = false;
@@ -623,7 +623,7 @@ namespace das
                     return context.code.makeNumericValueNode<SimNode_IfZeroThenElse>(zeroCond->type->baseType,
                                     at, zeroCond->simulate(context), if_true->simulate(context),
                                             if_false->simulate(context));
-                
+
                 } else {
                     return context.code.makeNumericValueNode<SimNode_IfZeroThen>(zeroCond->type->baseType,
                                     at, zeroCond->simulate(context), if_true->simulate(context));
@@ -633,7 +633,7 @@ namespace das
                     return context.code.makeNumericValueNode<SimNode_IfNotZeroThenElse>(zeroCond->type->baseType,
                                     at, zeroCond->simulate(context), if_true->simulate(context),
                                             if_false->simulate(context));
-                
+
                 } else {
                     return context.code.makeNumericValueNode<SimNode_IfNotZeroThen>(zeroCond->type->baseType,
                                     at, zeroCond->simulate(context), if_true->simulate(context));
@@ -654,7 +654,7 @@ namespace das
     SimNode * ExprWhile::simulate (Context & context) const {
         return context.code.makeNode<SimNode_While>(at, cond->simulate(context),body->simulate(context));
     }
-    
+
     SimNode * ExprFor::simulate (Context & context) const {
         // determine iteration types
         bool nativeIterators = false;
@@ -743,7 +743,7 @@ namespace das
             return result;
         }
     }
-    
+
 	vector<SimNode *> ExprLet::simulateInit(Context & context, const ExprLet * pLet) {
 		vector<SimNode *> simlist;
 		simlist.reserve(pLet->variables.size());
@@ -783,7 +783,7 @@ namespace das
             return nullptr;
         }
     }
-    
+
     SimNode * ExprLet::simulate (Context & context) const {
         auto let = context.code.makeNode<SimNode_Let>(at);
         let->total = (uint32_t) variables.size();
@@ -793,7 +793,7 @@ namespace das
         let->subexpr = subexpr ? subexpr->simulate(context) : nullptr;
         return let;
     }
-    
+
     SimNode * ExprCall::simulate (Context & context) const {
         auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
         pCall->debug = at;

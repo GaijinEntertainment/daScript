@@ -11,21 +11,21 @@ namespace das
         }
         arr.size = 0;
     }
-    
+
     void array_lock ( Context & context, Array & arr ) {
         arr.lock ++;
         if ( arr.lock==0 ) {
             context.throw_error("array lock overflow");
         }
     }
-    
+
     void array_unlock ( Context & context, Array & arr ) {
         if ( arr.lock==0 ) {
             context.throw_error("array lock underflow");
         }
         arr.lock --;
     }
-    
+
     void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride ) {
         if ( arr.lock ) {
             context.throw_error("changing capacity of a locked array");
@@ -41,7 +41,7 @@ namespace das
         }
         arr.capacity = newCapacity;
     }
-    
+
     void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero ) {
         if ( arr.lock ) {
             context.throw_error("resizing locked array");
@@ -61,7 +61,7 @@ namespace das
     }
 
     // GoodArrayIterator
-    
+
     bool GoodArrayIterator::first ( Context & context, IteratorContext & itc )  {
         vec4f ll = source->eval(context);
         auto pArray = cast<Array *>::to(ll);
@@ -88,9 +88,9 @@ namespace das
     vec4f SimNode_GoodArrayIterator::eval ( Context & ) {
         return cast<Iterator *>::from(static_cast<GoodArrayIterator *>(this));
     }
-    
+
     // FixedArrayIterator
-    
+
     bool FixedArrayIterator::first ( Context & context, IteratorContext & itc )  {
         vec4f ll = source->eval(context);
         char * data = cast<char *>::to(ll);

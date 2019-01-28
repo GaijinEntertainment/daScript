@@ -38,15 +38,15 @@ namespace das
         {   Type::tRange,       "range" },
         {   Type::tURange,      "urange"}
     };
-    
+
     string to_string ( Type t ) {
         return g_typeTable.find(t);
     }
-    
+
     Type nameToBasicType(const string & name) {
         return g_typeTable.find(name, Type::none);
     }
-    
+
     int getTypeBaseSize ( Type type ) {
         switch ( type ) {
             case tPointer:      return sizeof(void *);
@@ -80,7 +80,7 @@ namespace das
                 return 0;
         }
     }
-    
+
     int getTypeBaseAlign ( Type type ) {
         switch ( type ) {
             case tPointer:      return alignof(void *);
@@ -114,7 +114,7 @@ namespace das
                 return 0;
         }
     }
-    
+
     int getStructAlign ( StructInfo * info ) {
         int al = 0;
         for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
@@ -122,7 +122,7 @@ namespace das
         }
         return al;
     }
-    
+
     int getStructSize ( StructInfo * info ) {
         int size = 0;
         for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
@@ -134,15 +134,15 @@ namespace das
         size = (size + al) & ~al;
         return size;
     }
-    
+
     int getTypeBaseSize ( TypeInfo * info ) {
         return info->type!=Type::tStructure ? getTypeBaseSize(info->type) : getStructSize(info->structType);
     }
-    
+
     int getTypeBaseAlign ( TypeInfo * info ) {
         return info->type!=Type::tStructure ? getTypeBaseAlign(info->type) : getStructAlign(info->structType);
     }
-    
+
     int getDimSize ( TypeInfo * info ) {
         int size = 1;
         if ( info->dimSize ) {
@@ -152,20 +152,20 @@ namespace das
         }
         return size;
     }
-    
+
     int getTypeSize ( TypeInfo * info ) {
         return getDimSize(info) * getTypeBaseSize(info);
     }
-    
+
     int getTypeAlign ( TypeInfo * info ) {
         return getTypeBaseAlign(info);
     }
-    
+
     void debugType ( TypeAnnotation *, stringstream & , void *, PrintFlags );
     void debugType ( TypeAnnotation *, stringstream &, vec4f, PrintFlags );
     void debug_structure ( stringstream & ss, char * ps, StructInfo * info, PrintFlags flags );
     void debug_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags );
-    
+
     void debug_structure ( stringstream & ss, char * ps, StructInfo * info, PrintFlags flags ) {
         ss << "(";
         for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
@@ -179,7 +179,7 @@ namespace das
         }
         ss << ")";
     }
-    
+
     void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info, PrintFlags flags ) {
         char * pA = (char *) pX;
         ss << "(";
@@ -193,7 +193,7 @@ namespace das
         }
         ss << ")";
     }
-    
+
     void debug_dim_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags ) {
         TypeInfo copyInfo = *info;
         assert(copyInfo.dimSize);
@@ -202,7 +202,7 @@ namespace das
         int count = getDimSize(info);
         debug_array_value(ss, pX, stride, count, &copyInfo, flags);
     }
-    
+
     void debug_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags ) {
         if ( pX == nullptr ) {
             ss << "null";
@@ -276,7 +276,7 @@ namespace das
         }
         ss << ")";
     }
-    
+
     void debug_value ( stringstream & ss, vec4f x, TypeInfo * info, PrintFlags flags ) {
         if ( info->ref ) {
             TypeInfo ti = *info;
@@ -333,19 +333,19 @@ namespace das
             }
         }
     }
-    
+
     string debug_value ( vec4f x, TypeInfo * info, PrintFlags flags ) {
         stringstream ss;
         debug_value(ss, x, info, flags);
         return ss.str();
     }
-    
+
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {
         stringstream ss;
         debug_value(ss, pX, info, flags);
         return ss.str();
     }
-    
+
     string debug_type ( TypeInfo * info ) {
         stringstream stream;
         if ( info->type==Type::tHandle ) {
@@ -370,7 +370,7 @@ namespace das
             stream << " &";
         return stream.str();
     }
-    
+
     string LineInfo::describe() const {
         stringstream ss;
         ss << "line " << line << " column " << column;
