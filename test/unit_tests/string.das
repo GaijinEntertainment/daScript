@@ -3,6 +3,8 @@
 [export]
 def test:bool
     let s:string = "hello, world!"
+    assert(toupper(s) == "HELLO, WORLD!")
+    assert(tolower(toupper(s)) == s)
     assert(reverse(s) == "!dlrow ,olleh")
     assert(length(s) == 13)
     assert(find(s, "world!") == 7)
