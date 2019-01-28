@@ -1,6 +1,6 @@
 %{
-    #include <inttypes.h>
     #include "daScript/misc/platform.h"
+    #include <inttypes.h>
     #include "daScript/ast/ast.h"
     #include "ds_parser.hpp"
     
