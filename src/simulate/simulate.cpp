@@ -472,7 +472,7 @@ namespace das
 #pragma warning(push)
 #pragma warning(disable:4611)
 #endif
-    
+
     vec4f Context::evalWithCatch ( SimNode * node ) {
         auto aa = abiArg; auto acm = abiCMRES;
         char * EP, * SP;
