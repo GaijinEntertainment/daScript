@@ -327,7 +327,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_neg(vec4f a) { return v_sub(v_zero(), a); }
 VECMATH_FINLINE vec4i VECTORCALL v_negi(vec4i a){ return v_subi(v_cast_vec4i(v_zero()), a); }
 VECMATH_FINLINE vec4f VECTORCALL v_abs(vec4f a)
 {
-  #if defined(__clang)
+  #if defined(__clang__)
     return v_max(v_neg(a), a);
   #else
     //for this code clang creates one instruction, but uses memory for it.
