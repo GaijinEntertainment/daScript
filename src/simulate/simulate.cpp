@@ -5,6 +5,8 @@
 
 // this is here for the default implementation of to_out and to_err
 #include <iostream>
+#include <signal.h>
+#include <setjmp.h>
 
 namespace das
 {
