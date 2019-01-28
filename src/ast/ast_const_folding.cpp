@@ -130,6 +130,7 @@ namespace das {
             }
         }
         ExpressionPtr evalAndFold ( Expression * expr ) {
+            if ( expr->type->baseType == Type::tString ) return evalAndFoldString(expr);
             if ( expr->rtti_isConstant() ) return expr->shared_from_this();
             bool failed;
             vec4f value = eval(expr, failed);
@@ -236,8 +237,6 @@ namespace das {
             if ( expr->left->constexpression && expr->right->constexpression ) {
                 if ( expr->type->isFoldable() ) {
                     return evalAndFold(expr);
-                } else if ( expr->type->isSimpleType(Type::tString) ) {
-                    return evalAndFoldString(expr);
                 }
             }
             return Visitor::visit(expr);
@@ -364,7 +363,8 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             bool allNoSideEffects = true;
             for ( auto & arg : expr->arguments ) {
-                allNoSideEffects &= arg->noSideEffects;
+                if ( arg->type->baseType!=Type::fakeContext )
+                    allNoSideEffects &= arg->noSideEffects;
             }
             if ( allNoSideEffects ) {
                 if ( isNop(expr->func) ) {
@@ -379,7 +379,8 @@ namespace das {
             if ( expr->func->result->isFoldable() && expr->func->noSideEffects ) {
                 auto allConst = true;
                 for ( auto & arg : expr->arguments ) {
-                    allConst &= arg->constexpression;
+                    if ( arg->type->baseType!=Type::fakeContext )
+                        allConst &= arg->constexpression;
                 }
                 if ( allConst ) {
                     if ( expr->func->builtIn ) {

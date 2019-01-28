@@ -631,6 +631,7 @@ namespace das
             case Type::tFloat2:
             case Type::tFloat3:
             case Type::tFloat4:
+            case Type::tString:
                 return true;
             default:
                 return false;
