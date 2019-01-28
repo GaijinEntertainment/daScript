@@ -46,7 +46,7 @@ namespace das
             return v_zero();
         }
     };
-    
+
     template <typename Result, typename CType>
     struct ImplCallStaticFunctionImm {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
@@ -56,7 +56,7 @@ namespace das
             return CType();
         }
     };
-    
+
     template <typename Result>
     struct ImplCallStaticFunctionImm<Result,Result> {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
@@ -93,7 +93,7 @@ namespace das
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-    
+
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCall : SimNode_CallBase {
         SimNode_ExtFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
@@ -119,7 +119,7 @@ namespace das
         DAS_EVAL_NODE
 #undef  EVAL_NODE
     };
-    
+
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCallAndCopyOrMove : SimNode_CallBase {
         SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at ) : SimNode_CallBase(at) {}

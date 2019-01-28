@@ -6,7 +6,7 @@
 
 namespace das
 {
-    
+
     // TODO:
     //  -   return correct insert index of original value? is this at all possible?
     //  -   throw runtime error in the context, when grow inside locked table (recover well)
@@ -28,7 +28,7 @@ namespace das
             return strcmp(a,b)==0;
         }
     };
-    
+
     template <typename KeyType>
     class TableHash {
         Context *   context = nullptr;
@@ -39,12 +39,12 @@ namespace das
         TableHash () = delete;
         TableHash ( const TableHash & ) = delete;
         TableHash ( Context * ctx, uint32_t vs ) : context(ctx), valueTypeSize(vs) {}
-        
+
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
             uint32_t desired = 32 - __builtin_clz(capacity-1);
             return std::max(minLookups, desired * 6);
         }
-        
+
 		__forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {
 			uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
@@ -62,7 +62,7 @@ namespace das
             }
             return -1;
         }
-        
+
 		__forceinline int insertNew ( Table & tab, uint32_t hash ) const {
 			// TODO: take key under account and be less agressive?
 			uint32_t mask = tab.capacity - 1;
@@ -78,7 +78,7 @@ namespace das
             }
             return -1;
         }
-        
+
         __forceinline int reserve ( Table & tab, KeyType key, uint32_t hash ) {
             for ( ;; ) {
 				uint32_t mask = tab.capacity - 1;
@@ -103,7 +103,7 @@ namespace das
                 }
             }
         }
-        
+
         __forceinline int erase ( Table & tab, KeyType key, uint32_t hash ) {
 			uint32_t mask = tab.capacity - 1;
             uint32_t index = hash & mask;
@@ -124,7 +124,7 @@ namespace das
             }
             return -1;
         }
-        
+
         bool grow ( Table & tab ) {
             uint32_t newCapacity = max(minCapacity, tab.capacity*2);
         repeatIt:;

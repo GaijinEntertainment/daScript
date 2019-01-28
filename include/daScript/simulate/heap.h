@@ -1,7 +1,7 @@
 #pragma once
 
 namespace das {
-    
+
     struct StringHeader {
         uint32_t    hash;
         uint32_t    length;
@@ -81,7 +81,7 @@ namespace das {
 			}
 			return nullptr;
 		}
-        
+
         __forceinline char * allocateString ( const char * text, uint32_t length ) {
             if ( length==0 ) {
                 return nullptr;
@@ -99,11 +99,11 @@ namespace das {
                 return nullptr;
             }
         }
-        
+
         __forceinline char * allocateString ( const string & str ) {
             return allocateString ( str.c_str(), uint32_t(str.length()) );
         }
-        
+
         __forceinline bool isHeapPtr ( const char * ptr ) const {
             return uintptr_t(ptr - linearAllocatorBase) < uintptr_t(linearAllocatorSize);
         }
@@ -147,7 +147,7 @@ namespace das {
 			evalTop = stackTop;
 			return true;
 		}
-        
+
         __forceinline void watermark ( char * & EP, char * & SP ) {
             EP = evalTop;
             SP = stackTop;
@@ -199,7 +199,7 @@ namespace das {
 		__forceinline TT * makeNode(Params... args) {
 			return new (allocate(sizeof(TT))) TT(args...);
 		}
-        
+
         template < template <typename TT> class NodeType, typename... Params>
         SimNode * makeNumericValueNode(Type baseType, Params... args) {
             switch (baseType) {

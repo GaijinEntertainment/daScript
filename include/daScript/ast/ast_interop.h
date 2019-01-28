@@ -6,7 +6,7 @@
 namespace das
 {
     using namespace std;
-    
+
     template  <typename FuncT, FuncT fn, typename SimNodeT>
     class ExternalFn : public BuiltInFunction {
 
@@ -57,7 +57,7 @@ namespace das
             return context.code.makeNode<SimNodeT>(at);
         }
     };
-    
+
     template  <typename RetT, typename ...Args>
     class InteropFnBase : public BuiltInFunction {
     public:
@@ -76,7 +76,7 @@ namespace das
             this->totalStackSize = sizeof(Prologue);
         }
     };
-    
+
     template  <InteropFunction func, typename RetT, typename ...Args>
     class InteropFn : public InteropFnBase<RetT,Args...> {
     public:
@@ -85,12 +85,12 @@ namespace das
             return context.code.makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at);
         }
     };
-    
+
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> typename SimNodeT = SimNode_ExtFuncCall>
     __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, bool hasSideEffects = true ) {
         mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>>>(name,lib)->sideEffects(hasSideEffects));
     }
-    
+
     template <InteropFunction func, typename RetT, typename ...Args>
     __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, bool hasSideEffects = true ) {
         mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib)->sideEffects(hasSideEffects));

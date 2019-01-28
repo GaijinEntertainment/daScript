@@ -92,7 +92,7 @@ namespace das
             return v_zero();
         }
     };
-    
+
     template <>
     struct SimNode_ForGoodArray<0> : public SimNode_ForBase {
         SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
@@ -125,7 +125,7 @@ namespace das
             return v_zero();
         }
     };
-    
+
     template <>
     struct SimNode_ForFixedArray<0> : SimNode_ForBase {
         SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}

@@ -83,7 +83,7 @@ namespace das
     ,   stopForThrow        = 1 << 2
     ,   stopForTerminate    = 1 << 3
     };
-    
+
 #if DAS_ENABLE_EXCEPTIONS
     class dasException : public runtime_error {
     public:
@@ -121,13 +121,13 @@ namespace das
         __forceinline vec4f eval ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
             return callWithCopyOnReturn(fnPtr, args, res, 0);
         }
-        
+
         void fakeCall ( FuncInfo * info, int line, vec4f * args, char * & EP, char * & SP );
-        
+
         vec4f evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
 
         void throw_error ( const char * message );
-        
+
         __forceinline SimFunction * getFunction ( int index ) const {
             return (index>=0 && index<totalFunctions) ? functions + index : nullptr;
         }
@@ -178,7 +178,7 @@ namespace das
 			stack.pop(EP, SP);
             return result;
         }
-        
+
         __forceinline vec4f callWithCopyOnReturn(SimFunction * fn, vec4f * args, void * cmres, int line) {
             // PUSH
             char * EP, *SP;
@@ -286,7 +286,7 @@ namespace das
 #define DAS_BOOL_NODE   DAS_NODE(Bool,bool)
 #define DAS_INT_NODE    DAS_NODE(Int,int32_t)
 #define DAS_FLOAT_NODE  DAS_NODE(Float,float)
-    
+
     template <typename TT>
     struct EvalTT { static __forceinline TT eval ( Context & context, SimNode * node ) {
         return cast<TT>::to(node->eval(context)); }};
@@ -308,7 +308,7 @@ namespace das
     template <>
     struct EvalTT<bool> { static __forceinline bool eval ( Context & context, SimNode * node ) {
         return node->evalBool(context); }};
-    
+
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
         SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a )
@@ -526,7 +526,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         int32_t  nArguments;
         uint32_t stackTop;
     };
-    
+
     // FUNCTION CALL via FASTCALL convention
     template <int argCount>
     struct SimNode_FastCall : SimNode_CallBase {
@@ -534,12 +534,12 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-			auto aa = context.abiArg;                                                       
-			context.abiArg = argValues;                                                     
-			auto res = fnPtr->code->eval(context);                           
-			context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);     
-			context.abiArg = aa;                                                            
-			return res;             
+			auto aa = context.abiArg;
+			context.abiArg = argValues;
+			auto res = fnPtr->code->eval(context);
+			context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+			context.abiArg = aa;
+			return res;
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
@@ -1140,7 +1140,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         bool needResult = false;
         void * annotationData = nullptr;
     };
-    
+
     struct SimNode_MakeLocal : SimNode_Block {
         DAS_PTR_NODE;
         SimNode_MakeLocal ( const LineInfo & at, uint32_t sp )
@@ -1186,7 +1186,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
         SimNode * cond, * if_true, * if_false;
     };
-    
+
     template <typename TT>
     struct SimNode_IfZeroThenElse : SimNode {
         SimNode_IfZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
@@ -1212,7 +1212,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
         SimNode * cond, * if_true, * if_false;
     };
-    
+
     template <typename TT>
     struct SimNode_IfNotZeroThenElse : SimNode {
         SimNode_IfNotZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
@@ -1238,7 +1238,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
         SimNode * cond, * if_true, * if_false;
     };
-    
+
     // IF-THEN
     struct SimNode_IfThen : SimNode {
         SimNode_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
@@ -1253,7 +1253,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         SimNode * cond, * if_true;
     };
-    
+
     template <typename TT>
     struct SimNode_IfZeroThen : SimNode {
         SimNode_IfZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
@@ -1268,7 +1268,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         SimNode * cond, * if_true;
     };
-    
+
     template <typename TT>
     struct SimNode_IfNotZeroThen : SimNode {
         SimNode_IfNotZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
@@ -1283,8 +1283,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         SimNode * cond, * if_true;
     };
-    
-    
+
+
     // WHILE
     struct SimNode_While : SimNode {
         SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b ) : SimNode(at), cond(c), body(b) {}
@@ -1376,7 +1376,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return v_zero();
         }
     };
-    
+
     template <>
     struct SimNode_ForWithIterator<0> : SimNode_ForWithIteratorBase {
         SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
@@ -1480,7 +1480,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return SimPolicy<ACTYPE>::CALL(val,context);					\
         }																	\
     };
-    
+
 #define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
@@ -1501,7 +1501,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
     };
-    
+
 #define IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(CALL,CTYPE)                  \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
@@ -1591,7 +1591,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
-    
+
 #define IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(CALL,CTYPE)                  \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
@@ -1710,7 +1710,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_OP2_EVAL_BASIC_POLICY(CTYPE);        \
     DEFINE_OP2_EVAL_NUMERIC_POLICY(CTYPE);      \
     DEFINE_OP2_EVAL_VECNUMERIC_POLICY(CTYPE);
-    
+
     // unary
     DEFINE_POLICY(Unp);
     DEFINE_POLICY(Unm);

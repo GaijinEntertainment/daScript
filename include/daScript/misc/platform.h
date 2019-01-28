@@ -47,7 +47,7 @@
 #endif
 
 #ifndef _MSC_VER
-#define __noinline	__attribute__((noinline)) 
+#define __noinline	__attribute__((noinline))
 #else
 #define __noinline	__declspec(noinline)
 #endif

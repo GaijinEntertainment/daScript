@@ -10,7 +10,7 @@ namespace das
 	#define HASH_KILLED32	1
 
     // ideas from http://isthe.com/chongo/tech/comp/fnv/
-    
+
     __forceinline uint32_t hash_block32(uint8_t * block, uint32_t size) {
         const uint32_t fnv_prime = 16777619;
         const uint32_t fnv_bias = 2166136261;
@@ -33,7 +33,7 @@ namespace das
         }
         return offset_basis;
     }
-    
+
     __forceinline uint32_t hash_blockz32(uint8_t * block) {
         const uint32_t fnv_prime = 16777619;
         const uint32_t fnv_bias = 2166136261;
@@ -50,7 +50,7 @@ namespace das
     __forceinline uint32_t hash_function ( Context &, const void * x, size_t size ) {
 		return hash_block32((uint8_t *)x, uint32_t(size));
     }
-    
+
     __forceinline uint32_t stringLength ( Context & ctx, const char * str ) {//should be non-null
         if ( ctx.heap.isHeapPtr(str) ) {
             auto header = (StringHeader *) ( str - sizeof(StringHeader) );

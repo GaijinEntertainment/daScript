@@ -73,7 +73,7 @@ namespace  das {
     struct SimPolicy_UInt : SimPolicy_Bin<uint32_t> {};
     struct SimPolicy_Int64 : SimPolicy_Bin<int64_t> {};
     struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t> {};
-    
+
     struct SimPolicy_Float : SimPolicy_Type<float> {
         static __forceinline float Mod ( float a, float b, Context & ) { return fmod(a,b); }
         static __forceinline float & SetMod ( float & a, float b, Context & ) { return a = fmod(a,b); }
