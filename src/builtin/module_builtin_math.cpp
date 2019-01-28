@@ -1,3 +1,4 @@
+#include <dag_noise/dag_uint_noise.h>
 #include "daScript/misc/platform.h"
 
 #include "module_builtin.h"
@@ -158,6 +159,15 @@ namespace das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Pow<TT>,  TT,   TT,   TT> >("pow",   lib) );
     }
 
+    __forceinline unsigned int uint_noise2D_int2(das::int2 pos, unsigned int seed)
+    {
+      return uint_noise2D(pos.x, pos.y, seed);
+    }
+    __forceinline unsigned int uint_noise3D_int3(das::int3 pos, unsigned int seed)
+    {
+      return uint_noise3D(pos.x, pos.y, pos.z, seed);
+    }
+
     class Module_Math : public Module {
     public:
         Module_Math() : Module("math") {
@@ -179,6 +189,10 @@ namespace das {
             addFunctionCommon<float2>(*this,lib);
             addFunctionCommon<float3>(*this,lib);
             addFunctionCommon<float4>(*this,lib);
+            addExtern<DAS_BIND_FUN(uint32_hash)>(*this, lib, "uint32_hash", false);
+            addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise1D", false);
+            addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise2D", false);
+            addExtern<DAS_BIND_FUN(uint_noise3D_int3)>(*this, lib, "uint_noise3D", false);
 
             addFunctionCommonConversion<int, float>(*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);

@@ -4,6 +4,12 @@ options optimize=false
 
 [export]
 def test
+    assert(uint32_hash(1U) != 1U)
+    let seed:uint = 1U
+    let position:int = 1
+    assert(uint_noise1D(position, seed) != seed)
+    assert(uint_noise2D(int2(100,100), seed) != seed)
+    assert(uint_noise3D(int3(100,100,100), seed) != seed)
     assert(sin(0.)==0.)
     assert(cos(0.)==1.)
     assert(tan(0.)==0.)
