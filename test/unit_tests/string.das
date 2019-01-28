@@ -3,6 +3,7 @@
 [export]
 def test:bool
     let s:string = "hello, world!"
+    assert(length(s) == 13)
     assert(find(s, "world!") == 7)
     assert(find(s, "world!", 4) == 7)
     assert(find(s, "o") == 4)

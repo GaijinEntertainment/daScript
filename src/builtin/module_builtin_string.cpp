@@ -84,6 +84,10 @@ namespace das
         const char *ret = strstr(str, substr);
         return ret ? int(ret-str) : -1;
     }
+    inline int builtin_string_length ( const char *str, Context * context )
+    {
+        return stringLengthSafe ( *context, str );
+    }
 
     inline char* builtin_string_slice1 ( const char *str, int start, int end, Context * context )
     {
@@ -152,6 +156,7 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice", false);
         addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", false);
         addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", false);
+        addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", false);
         addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", false);
         addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", false);
         addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", false);
