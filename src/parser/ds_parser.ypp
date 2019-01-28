@@ -255,6 +255,15 @@ options_declaration
 		} else {
 			swap ( g_Program->options, *$list );
 		}
+		auto opt = g_Program->options.find("indenting", tInt);
+		extern int tab_size, def_tab_size;
+		if (opt)
+		{
+			if (opt->iValue != 0 && opt->iValue != 2 && opt->iValue != 4 && opt->iValue != 8)//this is error
+				tab_size = def_tab_size;
+			else
+				tab_size = opt->iValue ? opt->iValue : def_tab_size;//0 is default
+		}
 		delete $list;
 	}
 	;

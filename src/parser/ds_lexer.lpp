@@ -26,7 +26,8 @@
     
     int current_line_indent = 0;
     int indent_level = 0;
-    int tab_size = 4;   // only 2,4 or 8
+    int def_tab_size = 4;
+    int tab_size = def_tab_size;   // only 2,4 or 8
     int nested_parentheses = 0;
     int nested_curly_braces = 0;
     int nested_sb = 0;
