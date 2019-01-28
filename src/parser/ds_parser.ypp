@@ -95,12 +95,12 @@
 %token  _REQUIRE    _OPERATOR
 
 /* basic types */
-%token  _BOOL       _VOID       _STRING     _AUTO
-%token  _INT        _INT2       _INT3       _INT4
-%token  _UINT       _UINT2      _UINT3      _UINT4
-%token  _FLOAT      _FLOAT2     _FLOAT3     _FLOAT4
-%token  _RANGE      _URANGE     _BLOCK      _INT64
-%token  _UINT64     _TYPENAME
+%token  _TBOOL       _TVOID       _TSTRING     _TAUTO
+%token  _TINT        _TINT2       _TINT3       _TINT4
+%token  _TUINT       _TUINT2      _TUINT3      _TUINT4
+%token  _TFLOAT      _TFLOAT2     _TFLOAT3     _TFLOAT4
+%token  _TRANGE      _TURANGE     _TBLOCK      _TINT64
+%token  _TUINT64     _TYPENAME
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -990,25 +990,25 @@ variable_name_list
     ;
 
 basic_type_declaration
-    :   _BOOL       { $$ = Type::tBool; }
-    |   _STRING     { $$ = Type::tString; }
-    |   _INT        { $$ = Type::tInt; }
-    |   _INT64      { $$ = Type::tInt64; }
-    |   _INT2       { $$ = Type::tInt2; }
-    |   _INT3       { $$ = Type::tInt3; }
-    |   _INT4       { $$ = Type::tInt4; }
-    |   _UINT       { $$ = Type::tUInt; }
-    |   _UINT64     { $$ = Type::tUInt64; }
-    |   _UINT2      { $$ = Type::tUInt2; }
-    |   _UINT3      { $$ = Type::tUInt3; }
-    |   _UINT4      { $$ = Type::tUInt4; }
-    |   _FLOAT      { $$ = Type::tFloat; }
-    |   _FLOAT2     { $$ = Type::tFloat2; }
-    |   _FLOAT3     { $$ = Type::tFloat3; }
-    |   _FLOAT4     { $$ = Type::tFloat4; }
-    |   _VOID       { $$ = Type::tVoid; }
-    |   _RANGE      { $$ = Type::tRange; }
-    |   _URANGE     { $$ = Type::tURange; }
+    :   _TBOOL       { $$ = Type::tBool; }
+    |   _TSTRING     { $$ = Type::tString; }
+    |   _TINT        { $$ = Type::tInt; }
+    |   _TINT64      { $$ = Type::tInt64; }
+    |   _TINT2       { $$ = Type::tInt2; }
+    |   _TINT3       { $$ = Type::tInt3; }
+    |   _TINT4       { $$ = Type::tInt4; }
+    |   _TUINT       { $$ = Type::tUInt; }
+    |   _TUINT64     { $$ = Type::tUInt64; }
+    |   _TUINT2      { $$ = Type::tUInt2; }
+    |   _TUINT3      { $$ = Type::tUInt3; }
+    |   _TUINT4      { $$ = Type::tUInt4; }
+    |   _TFLOAT      { $$ = Type::tFloat; }
+    |   _TFLOAT2     { $$ = Type::tFloat2; }
+    |   _TFLOAT3     { $$ = Type::tFloat3; }
+    |   _TFLOAT4     { $$ = Type::tFloat4; }
+    |   _TVOID       { $$ = Type::tVoid; }
+    |   _TRANGE      { $$ = Type::tRange; }
+    |   _TURANGE     { $$ = Type::tURange; }
     ;
 
 structure_type_declaration
@@ -1022,11 +1022,11 @@ structure_type_declaration
     ;
 
 auto_type_declaration
-    :   _AUTO[loc] {
+    :   _TAUTO[loc] {
         $$ = new TypeDecl(Type::autoinfer);
         $$->at = tokAt(@loc);
     }
-    |   _AUTO[loc] '(' NAME[alias] ')'  {
+    |   _TAUTO[loc] '(' NAME[alias] ')'  {
         $$ = new TypeDecl(Type::autoinfer);
         $$->at = tokAt(@loc);
         $$->alias = *$alias;
@@ -1077,16 +1077,16 @@ type_declaration
         $$->firstType = TypeDeclPtr($keyTypeDecl);
         $$->secondType = TypeDeclPtr($valueTypeDecl);
     }
-    |   _BLOCK[loc] {
+    |   _TBLOCK[loc] {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
     }
-    |   _BLOCK[loc] '<' type_declaration[blockType] '>' {
+    |   _TBLOCK[loc] '<' type_declaration[blockType] '>' {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   _BLOCK[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+    |   _TBLOCK[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
