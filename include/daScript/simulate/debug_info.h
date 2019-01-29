@@ -59,9 +59,15 @@ namespace das
         TypeInfo *          secondType;     // map  to
         uint32_t            dimSize;
         uint32_t *          dim;
-        bool                ref;
-        bool                canCopy;
-        bool                isPod;
+        union {
+            struct {
+                bool        ref : 1;
+                bool        refType : 1;
+                bool        canCopy : 1;
+                bool        isPod : 1;
+            };
+            uint32_t flags = 0;
+        };
     };
 
     struct VarInfo : TypeInfo {
@@ -94,12 +100,14 @@ namespace das
     int getTypeAlign ( TypeInfo * info );
 
     enum class PrintFlags : uint32_t {
-        none         = 0
-    ,   escapeString =  (1<<0)
+        none =                  0
+    ,   escapeString =          (1<<0)
+    ,   namesAndDimensions =    (1<<1)
+    ,   typeQualifiers =        (1<<2)
 
     ,   string_builder  =   PrintFlags::none
-    ,   debugger        =   PrintFlags::escapeString
-    ,   stackwalker     =   PrintFlags::escapeString
+    ,   debugger        =   PrintFlags::escapeString | PrintFlags::namesAndDimensions | PrintFlags::typeQualifiers
+    ,   stackwalker     =   PrintFlags::escapeString | PrintFlags::namesAndDimensions | PrintFlags::typeQualifiers
     };
 
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags );

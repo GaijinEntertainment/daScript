@@ -134,9 +134,6 @@ namespace das {
                 ss << pM->m[i];
             }
         }
-        virtual void debug ( stringstream & ss, vec4f pV, PrintFlags flags ) const override {
-            debug(ss,cast<void *>::to(pV),flags);
-        }
     };
 
     typedef MatrixAnnotation<float4,4> float4x4_ann;

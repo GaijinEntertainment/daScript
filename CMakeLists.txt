@@ -129,6 +129,8 @@ include/daScript/simulate/runtime_range.h
 include/daScript/simulate/runtime_profile.h
 include/daScript/simulate/simulate.h
 include/daScript/simulate/sim_policy.h
+src/simulate/data_walker.cpp
+include/daScript/simulate/data_walker.h
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)

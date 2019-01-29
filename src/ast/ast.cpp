@@ -210,10 +210,6 @@ namespace das
         ta->debug(ss, data, flags);
     }
 
-    void debugType ( TypeAnnotation * ta, stringstream & ss , vec4f data, PrintFlags flags ) {
-        ta->debug(ss, data, flags);
-    }
-
     // expression
 
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {

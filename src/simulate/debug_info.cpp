@@ -8,6 +8,8 @@
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/misc/arraytype.h"
 
+#include "daScript/simulate/data_walker.h"
+
 namespace das
 {
     Enum<Type> g_typeTable = {
@@ -160,192 +162,189 @@ namespace das
     int getTypeAlign ( TypeInfo * info ) {
         return getTypeBaseAlign(info);
     }
-
+    
     void debugType ( TypeAnnotation *, stringstream & , void *, PrintFlags );
-    void debugType ( TypeAnnotation *, stringstream &, vec4f, PrintFlags );
-    void debug_structure ( stringstream & ss, char * ps, StructInfo * info, PrintFlags flags );
-    void debug_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags );
 
-    void debug_structure ( stringstream & ss, char * ps, StructInfo * info, PrintFlags flags ) {
-        ss << "(";
-        for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
-            VarInfo * vi = info->fields[i];
-            char * pf = ps + vi->offset;
-            if ( i ) ss << " ";
-            ss << "(" << vi->name;
+    struct DebugDataWalker : DataWalker {
+        stringstream & ss;
+        PrintFlags flags;
+        DebugDataWalker() = delete;
+        DebugDataWalker ( stringstream & sss, PrintFlags f ) : ss(sss), flags(f) {}
+        
+        // data structures
+        virtual void beforeStructure ( char *, StructInfo * info ) override {
+            ss << "[[";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << info->name;
+            }
+        }
+        virtual void afterStructure ( char *, StructInfo * ) override {
+            ss << "]]";
+        }
+        virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
             ss << " ";
-            debug_value(ss, pf, vi, flags);
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << vi->name << " = ";
+            }
+        }
+        virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool last ) override {
+            if ( !last )
+                ss << ";";
+        }
+        virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
+            ss << " ";
+        }
+        virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool last ) override {
+            if ( !last )
+                ss << ";";
+        }
+        virtual void beforeDim ( char *, TypeInfo * ti ) override {
+            ss << "[[";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << debug_type(ti);
+            }
+        }
+        virtual void afterDim ( char *, TypeInfo * ) override {
+            ss << "]]";
+        }
+        virtual void beforeArray ( Array *, TypeInfo * ti ) override {
+            ss << "[[";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << debug_type(ti);
+            }
+        }
+        virtual void afterArray ( Array *, TypeInfo * ) override {
+            ss << "]]";
+        }
+        virtual void beforeTable ( Table *, TypeInfo * ti ) override {
+            ss << "[[";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << debug_type(ti);
+            }
+        }
+        virtual void afterTable ( Table *, TypeInfo * ) override {
+            ss << "]]";
+        }
+        virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
+            ss << "(";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << debug_type(ti) << " ";
+            }
+            ss << "0x" << hex << intptr_t(pa) << dec << " ref = ";
+        }
+        virtual void afterRef ( char *, TypeInfo * ) override {
             ss << ")";
         }
-        ss << ")";
-    }
-
-    void debug_array_value ( stringstream & ss, void * pX, int stride, int count, TypeInfo * info, PrintFlags flags ) {
-        char * pA = (char *) pX;
-        ss << "(";
-        if ( int(flags) & int(PrintFlags::debugger) ) {
-            ss << "[size=" << count << ",stride=" << stride << "] ";
+        virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
+            ss << "(";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << debug_type(ti) << " ";
+            }
+            ss << "0x" << hex << intptr_t(pa) << dec << " ptr = ";
         }
-        for ( int i=0; i!=count; ++i ) {
-            if ( i ) ss << " ";
-            debug_value(ss, pA, info, flags);
-            pA += stride;
+        virtual void afterPtr ( char *, TypeInfo * ) override {
+            ss << ")";
         }
-        ss << ")";
-    }
-
-    void debug_dim_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags ) {
-        TypeInfo copyInfo = *info;
-        assert(copyInfo.dimSize);
-        copyInfo.dimSize --;
-        int stride = getTypeBaseSize(info);
-        int count = getDimSize(info);
-        debug_array_value(ss, pX, stride, count, &copyInfo, flags);
-    }
-
-    void debug_value ( stringstream & ss, void * pX, TypeInfo * info, PrintFlags flags ) {
-        if ( pX == nullptr ) {
+        // types
+        virtual void null ( TypeInfo * ) override {
             ss << "null";
-            return;
         }
-        if ( info->ref ) {
-            TypeInfo ti = *info;
-            ti.ref = false;
-            debug_value(ss, *(void **)pX, &ti, flags);
-        } else if ( info->dimSize ) {
-            debug_dim_value(ss, pX, info, flags);
-        } else if ( info->type==Type::tArray ) {
-            auto arr = (Array *) pX;
-            debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType, flags);
-        } else {
-            switch ( info->type ) {
-                case Type::tBool:       ss << (*((bool *)pX) ? "true" : "false"); break;
-                case Type::tInt64:      ss << *((int64_t *)pX); break;
-                case Type::tUInt64:     ss << "0x" << hex << *((uint64_t *)pX) << dec; break;
-                case Type::tString:
-                    if ( int(flags) & int(PrintFlags::escapeString) ) {
-                        ss << "\"" << escapeString(safe_str(pX)) << "\"";
-                    } else {
-                        ss << safe_str(pX);
-                    }
-                    break;
-                case Type::tInt:        ss << *((int32_t *)pX); break;
-                case Type::tInt2:       ss << *((int2 *)pX); break;
-                case Type::tInt3:       ss << *((int3 *)pX); break;
-                case Type::tInt4:       ss << *((int4 *)pX); break;
-                case Type::tUInt:       ss << *((uint32_t *)pX); break;
-                case Type::tUInt2:      ss << *((uint2 *)pX); break;
-                case Type::tUInt3:      ss << *((uint3 *)pX); break;
-                case Type::tUInt4:      ss << *((uint4 *)pX); break;
-                case Type::tFloat:      ss << *((float *)pX); break;
-                case Type::tFloat2:     ss << *((float2 *)pX); break;
-                case Type::tFloat3:     ss << *((float3 *)pX); break;
-                case Type::tFloat4:     ss << *((float4 *)pX);; break;
-                case Type::tRange:      ss << *((range *)pX); break;
-                case Type::tURange:     ss << *((urange *)pX); break;
-                case Type::tIterator:   ss << "iterator"; break;
-                case Type::tPointer:    ss << "*" << hex << intptr_t(pX) << dec;
-                                        if ( info->firstType ) {
-                                            ss << " -> (";
-                                            debug_value(ss, *(void**)pX, info->firstType, flags);
-                                            ss << ")";
-                                        }
-                                        break;
-                case Type::tStructure:  debug_structure(ss, (char *)pX, info->structType, flags); break;
-                case Type::tBlock:      ss << "block " << hex << intptr_t(((Block *)pX)->body) << dec;
-                case Type::tHandle:     debugType(info->annotation, ss, pX, flags); break;
-                default:                assert(0 && "unsupported print type"); break;
+        virtual void Bool ( bool & b ) override {
+            ss << (b ? "true" : "false");
+        }
+        virtual void Int64 ( int64_t & i ) override {
+            ss << i;
+            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                ss << "l";
             }
         }
-    }
-
-    void debug_table_value (  stringstream & ss, Table & tab, TypeInfo * info, PrintFlags flags ) {
-        ss << "([" << tab.size << " of " << tab.capacity << "] ";
-        bool first = true;
-        int keySize = getTypeSize(info->firstType);
-        int valueSize = getTypeSize(info->secondType);
-        for ( uint32_t i=0; i!=tab.capacity; ++i ) {
-            if ( tab.hashes[i] > HASH_KILLED32 ) {
-                if ( !first ) ss << " "; first = false;
-                ss << "("; // ss << "(@ " << i << " ";
-                debug_value ( ss, tab.keys + i*keySize, info->firstType, flags );
-                ss << " -> ";
-                debug_value ( ss, tab.data + i*valueSize, info->secondType, flags );
-                ss << ")";
+        virtual void UInt64 ( uint64_t & ui ) override {
+            ss << "0x" << hex << ui << dec;
+            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                ss << "ul";
             }
         }
-        ss << ")";
-    }
-
-    void debug_value ( stringstream & ss, vec4f x, TypeInfo * info, PrintFlags flags ) {
-        if ( info->ref ) {
-            TypeInfo ti = *info;
-            ti.ref = false;
-            debug_value(ss, cast<void *>::to(x), &ti, flags);
-        } else if ( info->dimSize ) {
-            debug_dim_value(ss, cast<void *>::to(x), info, flags);
-        } else if ( info->type==Type::tArray ) {
-            auto arr = cast<Array *>::to(x);
-            debug_array_value(ss, arr->data, getTypeSize(info->firstType), arr->size, info->firstType, flags);
-        } else if ( info->type==Type::tTable ) {
-            auto tab = cast<Table *>::to(x);
-            debug_table_value(ss, *tab, info, flags);
-        } else {
-            switch ( info->type ) {
-                case Type::tBool:       ss << (cast<bool>::to(x) ? "true" : "false"); break;
-                case Type::tInt64:      ss << cast<int64_t>::to(x); break;
-                case Type::tUInt64:     ss << "0x" << hex << cast<uint64_t>::to(x) << dec; break;
-                case Type::tString:
-                    if ( int(flags) & int(PrintFlags::escapeString) ) {
-                        ss << "\"" << escapeString(to_rts(x)) << "\"";
-                    } else {
-                        ss << to_rts(x);
-                    }
-                    break;
-                case Type::tInt:        ss << cast<int32_t>::to(x); break;
-                case Type::tInt2:       ss << cast<int2>::to(x); break;
-                case Type::tInt3:       ss << cast<int3>::to(x); break;
-                case Type::tInt4:       ss << cast<int4>::to(x); break;
-                case Type::tUInt:       ss << cast<uint32_t>::to(x); break;
-                case Type::tUInt2:      ss << cast<uint2>::to(x); break;
-                case Type::tUInt3:      ss << cast<uint3>::to(x); break;
-                case Type::tUInt4:      ss << cast<uint4>::to(x); break;
-                case Type::tFloat:      ss << cast<float>::to(x); break;
-                case Type::tFloat2:     ss << cast<float2>::to(x); break;
-                case Type::tFloat3:     ss << cast<float3>::to(x); break;
-                case Type::tFloat4:     ss << cast<float4>::to(x); break;
-                case Type::tRange:      ss << cast<range>::to(x); break;
-                case Type::tURange:     ss << cast<urange>::to(x); break;
-                case Type::tIterator:   ss << "iterator"; break;
-                case Type::tPointer:    ss << "*" << hex << intptr_t(cast<void *>::to(x)) << dec << " ";
-                                        if ( info->firstType ) {
-                                            ss << " -> (";
-                                            debug_value(ss, cast<void *>::to(x), info->firstType, flags);
-                                            ss << ")";
-                                        }
-                                        break;
-                case Type::tStructure:  debug_structure(ss, cast<char *>::to(x), info->structType, flags); break;
-                case Type::tVoid:       ss << "void"; break;
-                case Type::tBlock:      ss << "block"; break;
-                case Type::tHandle:     debugType(info->annotation, ss, x, flags); break;
-                case Type::fakeContext: ss << "__context__"; break;
-                default:                assert(0 && "unsupported print type"); break;
+        virtual void String ( char * & str ) override {
+            string text = str ? str : "";
+            if ( int(flags) & int(PrintFlags::escapeString) ) {
+                ss << "\"" << escapeString(text) << "\"";
+            } else {
+                ss << text;
             }
         }
-    }
-
-    string debug_value ( vec4f x, TypeInfo * info, PrintFlags flags ) {
-        stringstream ss;
-        debug_value(ss, x, info, flags);
-        return ss.str();
-    }
+        virtual void Float ( float & f ) override {
+            ss << f;
+            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                ss << "f";
+            }
+        }
+        virtual void Int ( int32_t & i ) override {
+            ss << i;
+        }
+        virtual void UInt ( uint32_t & ui ) override {
+            ss << "0x" << hex << ui << dec;
+            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                ss << "u";
+            }
+        }
+        virtual void Int2 ( int2 & i ) override {
+            ss << i;
+        }
+        virtual void Int3 ( int3 & i ) override {
+            ss << i;
+        }
+        virtual void Int4 ( int4 & i ) override {
+            ss << i;
+        }
+        virtual void UInt2 ( uint2 & ui ) override {
+            ss << ui;
+        }
+        virtual void UInt3 ( uint3 & ui ) override {
+            ss << ui;
+        }
+        virtual void UInt4 ( uint4 & ui ) override {
+            ss << ui;
+        }
+        virtual void Float2 ( float2 & fv ) override {
+            ss << fv;
+        }
+        virtual void Float3 ( float3 & fv ) override {
+            ss << fv;
+        }
+        virtual void Float4 ( float4 & fv ) override {
+            ss << fv;
+        }
+        virtual void Range ( range & ra ) override {
+            ss << ra;
+        }
+        virtual void URange ( urange & ra ) override {
+            ss << ra;
+        }
+        virtual void WalkIterator ( struct Iterator * ) override {
+            ss << "iterator";
+        }
+        virtual void WalkBlock ( struct Block * pa ) override {
+            ss << "block 0x" << hex << intptr_t(pa->body) << dec;
+        }
+        virtual void Handle ( char * pa, TypeAnnotation * annotation ) override {
+            debugType(annotation, ss, pa, flags);
+        }
+    };
 
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {
         stringstream ss;
-        debug_value(ss, pX, info, flags);
+        DebugDataWalker walker(ss,flags);
+        walker.walk((char*)pX,info);
         return ss.str();
     }
-
+    
+    string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags ) {
+        stringstream ss;
+        DebugDataWalker walker(ss,flags);
+        walker.walk(value,info);
+        return ss.str();
+    }
+    
     string debug_type ( TypeInfo * info ) {
         stringstream stream;
         if ( info->type==Type::tHandle ) {
@@ -355,16 +354,16 @@ namespace das
         } else if ( info->type==Type::tPointer ) {
             stream << debug_type(info->firstType) << " *";
         } else if ( info->type==Type::tArray ) {
-            stream << "array <" << debug_type(info->firstType) << ">";
+            stream << "Array<" << debug_type(info->firstType) << ">";
         } else if ( info->type==Type::tTable ) {
-            stream << "table <" << debug_type(info->firstType) << "," << debug_type(info->secondType) << ">";
+            stream << "Table<" << debug_type(info->firstType) << "," << debug_type(info->secondType) << ">";
         } else if ( info->type==Type::tIterator ) {
-            stream << "iterator <" << debug_type(info->firstType) << ">";
+            stream << "Iterator<" << debug_type(info->firstType) << ">";
         } else {
             stream << to_string(info->type);
         }
         for ( uint32_t i=0; i!=info->dimSize; ++i ) {
-            stream << " " << info->dim[i];
+            stream << "[" << info->dim[i] << "]";
         }
         if ( info->ref )
             stream << " &";

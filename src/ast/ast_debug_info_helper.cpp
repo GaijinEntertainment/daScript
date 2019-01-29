@@ -62,6 +62,7 @@ namespace das {
             info->structType = makeStructureDebugInfo(*type->structType);
         }
         info->ref = type->ref;
+        info->refType = type->isRefType();
         if ( type->isRefType() )
             info->ref = false;
         info->canCopy = type->canCopy();

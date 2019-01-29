@@ -177,9 +177,6 @@ namespace das
         virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
             ss << (* (OT*)data);
         }
-        virtual void debug ( stringstream & ss, vec4f data, PrintFlags ) const override {
-            ss << cast<OT>::to(data);
-        }
     };
 }
 
