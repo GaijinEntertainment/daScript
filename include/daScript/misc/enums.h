@@ -2,8 +2,6 @@
 
 namespace das
 {
-    using namespace std;
-
     template <typename EE>
     class Enum {
     public:

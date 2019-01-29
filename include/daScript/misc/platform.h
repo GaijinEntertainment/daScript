@@ -36,6 +36,7 @@
 #include <initializer_list>
 #include <functional>
 #include <algorithm>
+namespace das {using namespace std;}
 
 #ifdef _MSC_VER
     #define NOMINMAX

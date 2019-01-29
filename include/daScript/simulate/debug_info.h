@@ -2,8 +2,6 @@
 
 namespace das
 {
-    using namespace std;
-
     enum Type : uint8_t {
         none,
         autoinfer,

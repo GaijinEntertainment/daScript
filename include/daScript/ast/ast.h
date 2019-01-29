@@ -15,8 +15,6 @@
 
 namespace das
 {
-    using namespace std;
-
     class Structure;
     typedef shared_ptr<Structure> StructurePtr;
 

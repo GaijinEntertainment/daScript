@@ -6,8 +6,6 @@
 
 namespace das
 {
-    using namespace std;
-
     template <typename TT>
     struct cast;
 

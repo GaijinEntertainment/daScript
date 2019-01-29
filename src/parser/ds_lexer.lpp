@@ -17,7 +17,6 @@
       #define SCNx64       "llx"
     #endif
     
-    using namespace std;
     using namespace das;
     
     #define YY_NO_INPUT

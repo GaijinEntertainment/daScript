@@ -4,8 +4,6 @@
 
 namespace das
 {
-    using namespace std;
-
     template <typename OT>
     struct ManagedStructureAnnotation  : TypeAnnotation {
         struct StructureField {

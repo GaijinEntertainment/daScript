@@ -25,8 +25,6 @@ namespace das
 
     #define MAX_FOR_ITERATORS   16
 
-    using namespace std;
-
     class Context;
     struct SimNode;
     struct Block;

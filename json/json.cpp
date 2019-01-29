@@ -5,8 +5,6 @@
 
 namespace das {
 
-    using namespace std;
-
     typedef rapidjson::Value JsValue;
 
     template <>

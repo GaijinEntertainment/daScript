@@ -3,7 +3,6 @@
 	#include "daScript/ast/ast.h"
     
     using namespace das;
-    using namespace std;
     
     namespace das { extern ProgramPtr g_Program; }
     

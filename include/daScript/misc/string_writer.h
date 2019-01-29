@@ -2,8 +2,6 @@
 
 namespace das {
 
-	using namespace std;
-
 	class VectorAllocationPolicy {
 	public:
 		string str() const {			// todo: replace via stringview

@@ -4,8 +4,6 @@
 
 namespace das
 {
-    using namespace std;
-
     template <typename TT>
     struct vec2 {
         TT   x, y;

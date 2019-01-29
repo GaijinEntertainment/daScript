@@ -4,8 +4,6 @@
 
 namespace das
 {
-    using namespace std;
-
     #define HASH_EMPTY32    0
     #define HASH_KILLED32    1
 

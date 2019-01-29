@@ -5,8 +5,6 @@
 
 namespace das
 {
-    using namespace std;
-
     template  <typename FuncT, FuncT fn, typename SimNodeT>
     class ExternalFn : public BuiltInFunction {
 
