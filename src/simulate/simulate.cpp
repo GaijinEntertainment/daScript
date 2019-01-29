@@ -5,8 +5,9 @@
 
 // this is here for the default implementation of to_out and to_err
 #include <iostream>
-#include <signal.h>
 #include <setjmp.h>
+
+extern void os_debug_break();
 
 namespace das
 {
@@ -431,11 +432,7 @@ namespace das
     }
 
     void Context::breakPoint(int, int ) const {
-#ifdef _MSC_VER
-        __debugbreak();
-#else
-        raise(SIGTRAP);
-#endif
+        os_debug_break();
     }
 
     void Context::to_out ( const char * message ) {
@@ -461,11 +458,7 @@ namespace das
                 to_err("\n");
             }
             stackWalk();
-#ifdef _MSC_VER
-            __debugbreak();
-#else
-            raise(SIGTRAP);
-#endif
+            os_debug_break();
         }
 #endif
     }

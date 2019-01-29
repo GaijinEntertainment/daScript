@@ -110,6 +110,8 @@ list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
 
 SET(SIMULATE_SRC
+src/hal/performance_time.cpp
+src/hal/debug_break.cpp
 src/simulate/hash.cpp
 src/simulate/debug_info.cpp
 src/simulate/runtime_string.cpp
@@ -117,7 +119,6 @@ src/simulate/runtime_array.cpp
 src/simulate/runtime_table.cpp
 src/simulate/runtime_range.cpp
 src/simulate/runtime_profile.cpp
-src/hal/performance_time.cpp
 src/simulate/simulate.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
