@@ -117,6 +117,7 @@ src/simulate/runtime_array.cpp
 src/simulate/runtime_table.cpp
 src/simulate/runtime_range.cpp
 src/simulate/runtime_profile.cpp
+src/hal/performance_time.cpp
 src/simulate/simulate.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
