@@ -789,7 +789,7 @@ namespace das
         let->total = (uint32_t) variables.size();
         let->list = (SimNode **) context.code.allocate(let->total * sizeof(SimNode*));
         auto simList = ExprLet::simulateInit(context, this);
-        std::copy(simList.data(), simList.data() + simList.size(), let->list);
+        copy(simList.data(), simList.data() + simList.size(), let->list);
         let->subexpr = subexpr ? subexpr->simulate(context) : nullptr;
         return let;
     }

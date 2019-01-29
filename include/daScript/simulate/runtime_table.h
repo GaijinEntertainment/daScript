@@ -42,7 +42,7 @@ namespace das
 
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
             uint32_t desired = 32 - __builtin_clz(capacity-1);
-            return std::max(minLookups, desired * 6);
+            return max(minLookups, desired * 6);
         }
 
         __forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {

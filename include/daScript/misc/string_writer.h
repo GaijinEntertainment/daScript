@@ -46,13 +46,13 @@ namespace das {
 			output();
 			return *this;
 		}
-		StringWriter & write(const char * st) {
-			auto len = strlen(st);
+		StringWriter & write(const char * st, size_t len) {
 			append(st, int(len));
 			output();
 			return *this;
 		}
-		StringWriter & operator << (const StringWriterTag & v ) { 
+		StringWriter & write(const char * st) {return write(st, strlen(st));}
+		StringWriter & operator << (const StringWriterTag & v ) {
 			if (&v == &HEX) hex = true;
 			else if (&v == &DEC) hex = false;
 			return *this;
@@ -71,7 +71,7 @@ namespace das {
 		StringWriter & operator << (long double v)			{ return write("%Lf", v); }
 		StringWriter & operator << (char * v)				{ return write(v); }
 		StringWriter & operator << (const char * v)			{ return write(v); }
-		StringWriter & operator << (const string & v)		{ return write(v.c_str()); }
+		StringWriter & operator << (const string & v)		{ return write(v.c_str(), v.length()); }
 	protected:
 		bool hex = false;
 	};

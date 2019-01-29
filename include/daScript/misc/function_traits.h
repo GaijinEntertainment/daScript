@@ -6,8 +6,8 @@ namespace das
     template<typename T>
     struct tuple_tail;
     template<typename Head, typename... Tail>
-    struct tuple_tail<std::tuple<Head, Tail...>> {
-        using type = std::tuple<Tail... >;
+    struct tuple_tail<tuple<Head, Tail...>> {
+        using type = tuple<Tail... >;
     };
 
     // function traits
@@ -16,7 +16,7 @@ namespace das
     template<typename R, typename ...Args>
     struct function_traits<R (Args...)> {
         using return_type = R;
-        using arguments = std::tuple<Args...>;
+        using arguments = tuple<Args...>;
     };
     template<typename R, typename ...Args>
     struct function_traits<R (*)(Args...)> : function_traits<R (Args...)> {};       // function pointer
@@ -31,8 +31,8 @@ namespace das
     template<typename C, typename R>
     struct function_traits<R (C::*)> : function_traits<R (C&)> {};      // member object pointer
     template<typename F>
-    struct function_traits {    // function object, std::function, lambda
-        static_assert(!std::is_bind_expression<F>::value, "std::bind result is not supported yet");
+    struct function_traits {    // function object, function, lambda
+        static_assert(!is_bind_expression<F>::value, "bind result is not supported yet");
     private:
         using callable_traits = function_traits<decltype(&F::operator())>;
     public:

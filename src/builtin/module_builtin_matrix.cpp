@@ -41,7 +41,7 @@ namespace das {
         }
     public:
         MatrixAnnotation()
-            : TypeAnnotation( "float" + std::to_string(ColC) + "x" + std::to_string(RowC) ),
+            : TypeAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC) ),
                 debugInfo(256), helpA(debugInfo) {
                     matrixTypeInfo = debugInfo.makeNode<TypeInfo>();
                     auto bt = ToBasicType<VecT>::type;
