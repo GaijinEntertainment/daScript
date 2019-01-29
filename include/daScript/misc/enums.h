@@ -9,7 +9,7 @@ namespace das
             EE          value;
             string      name;
         };
-        Enum ( initializer_list<InitEnum> ie ) {
+        Enum ( std::initializer_list<InitEnum> ie ) {
             for ( const auto & e : ie ) {
                 name2enum[e.name] = e.value;
                 enum2name[e.value] = e.name;
