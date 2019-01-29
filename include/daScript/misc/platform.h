@@ -26,7 +26,7 @@
 
 #include <stdint.h>
 
-#include <cmath>
+#ifndef DAS_USE_EASTL
 #include <set>
 #include <map>
 #include <string>
@@ -37,6 +37,20 @@
 #include <functional>
 #include <algorithm>
 namespace das {using namespace std;}
+#else
+#include <EASTL/sort.h>
+#include <EASTL/shared_ptr.h>
+#include <EASTL/set.h>
+#include <EASTL/map.h>
+#include <EASTL/string.h>
+#include <EASTL/memory.h>
+#include <EASTL/vector.h>
+#include <EASTL/type_traits.h>
+#include <EASTL/initializer_list.h>
+#include <EASTL/functional.h>
+#include <EASTL/algorithm.h>
+namespace das {using namespace eastl;}
+#endif
 
 #ifdef _MSC_VER
     #define NOMINMAX
