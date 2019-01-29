@@ -8,16 +8,8 @@
 #include <ctime>
 
 namespace das {
-
     struct Time {
         time_t time;
-        friend ostream& operator<< (ostream& stream, const Time & t) {
-            char mbstr[100];
-            if ( strftime(mbstr, sizeof(mbstr), "%c", localtime(&t.time)) ) {
-                stream << mbstr;
-            }
-            return stream;
-        }
     };
 }
 
@@ -26,6 +18,18 @@ MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. So
 namespace das {
     struct TimeAnnotation : ManagedValueAnnotation<Time> {
         TimeAnnotation() : ManagedValueAnnotation<Time>("clock") {}
+        virtual void walk ( DataWalker & walker, void * data ) override {
+            if ( walker.reading ) {
+                // there shuld be a way to read time from the stream here
+            } else {
+                Time * t = (Time *) data;
+                char mbstr[100];
+                if ( strftime(mbstr, sizeof(mbstr), "%c", localtime(&t->time)) ) {
+                    char * str = mbstr;
+                    walker.String(str);
+                }
+            }
+        }
     };
 
     template <>

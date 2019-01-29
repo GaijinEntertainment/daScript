@@ -20,10 +20,6 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
     TestObjectFooAnnotation() : ManagedStructureAnnotation ("TestObjectFoo") {
         addField("fooData", offsetof(TestObjectFoo,fooData),make_shared<TypeDecl>(Type::tInt));
     }
-    virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
-        TestObjectFoo * of = (TestObjectFoo *) data;
-        ss << "{fooData=" << of->fooData << "}";
-    }
 };
 
 struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
@@ -32,16 +28,6 @@ struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
         fooPtr->firstType = lib.makeHandleType("TestObjectFoo");
         addField("fooPtr", offsetof(TestObjectBar,fooPtr),fooPtr);
         addField("barData", offsetof(TestObjectBar,barData),make_shared<TypeDecl>(Type::tFloat));
-    }
-    virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
-        TestObjectBar * ob = (TestObjectBar *) data;
-        ss << "{";
-        if ( ob->fooPtr ) {
-            ss << "fooPtr.fooData=" << ob->fooPtr->fooData;
-        } else {
-            ss << "fooPtr=null";
-        }
-        ss << ",barData=" << ob->barData << "}";
     }
 };
 
@@ -163,17 +149,6 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     }
     virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
         return context.code.makeNode<SimNode_SafeIntFieldDeref>(at,rv,context.code.allocateName(na));
-    }
-    virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
-        IntFields * prv = (IntFields *) data;
-        if ( !prv ) {
-            ss << "null";
-            return;
-        }
-        ss << "{";
-        for ( auto & f : prv->fields )
-            ss << " " << f.first << ":" << f.second;
-        ss << " }";
     }
     virtual size_t getSizeOf() const override { return sizeof(IntFields); }
     virtual size_t getAlignOf() const override { return alignof(IntFields); }

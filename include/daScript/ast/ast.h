@@ -6,6 +6,7 @@
 #include "daScript/misc/rangetype.h"
 #include "daScript/misc/function_traits.h"
 #include "daScript/simulate/interop.h"
+#include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_info.h"
 #include "daScript/ast/compilation_errors.h"
 #include "daScript/simulate/runtime_table.h"
@@ -340,7 +341,7 @@ namespace das
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, const TypeDeclPtr &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
-        virtual void debug ( stringstream & ss, void *, PrintFlags ) const { ss << "handle<" << name << ">"; }
+        virtual void walk ( DataWalker &, void * ) { }
     };
 
     // annotated structure

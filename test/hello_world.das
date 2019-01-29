@@ -16,7 +16,12 @@ def Bar
     let b : Bar
     b.i = 13
     b.j = [[int 1;2;3]]
-
+    resize(b.t,3)
+    b.t[0] = 1f
+    b.t[1] = 2f
+    b.t[2] = 3f
+    b.k["a"] = 1
+    b.k["b"] = 2
     return <- b
 
 [export]
@@ -27,4 +32,6 @@ def test
     let b <- Bar()
     assert(b.i==13)
     debug(b)
+    let m : float4x4
+    debug(m)
     return true

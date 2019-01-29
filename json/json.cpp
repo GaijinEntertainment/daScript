@@ -375,13 +375,18 @@ namespace das {
             ss << sb.GetString();
         }
 
-        virtual void debug ( stringstream & ss, void * ptr, PrintFlags ) const override {
-            print(ss, *((JsValue *)ptr));
+        virtual void walk ( DataWalker & walker, void * ptr ) override {
+            auto pjs = (JsValue *) ptr;
+            if ( walker.reading ) {
+                assert(0 && "todo: implement reading json here");
+            } else {
+                rapidjson::StringBuffer sb;
+                rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(sb);
+                pjs->Accept(writer);    // Accept() traverses the DOM and generates Handler events.
+                char * ss = (char *) sb.GetString();
+                walker.String(ss);
+            }
         }
-        virtual void debug ( stringstream & ss, vec4f vptr, PrintFlags ) const override {
-            print(ss, *cast<JsValue *>::to(vptr));
-        }
-
     };
 
     void readJson ( char * str, Block block, Context * context ) {

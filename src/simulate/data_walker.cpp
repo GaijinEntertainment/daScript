@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/data_walker.h"
+#include "daScript/ast/ast.h"
 #include "daScript/simulate/hash.h"
 
 namespace das {
@@ -53,19 +54,27 @@ namespace das {
     void DataWalker::walk_table ( Table * tab, TypeInfo * info ) {
         int keySize = getTypeSize(info->firstType);
         int valueSize = getTypeSize(info->secondType);
+        uint32_t count = 0;
         for ( uint32_t i=0; i!=tab->capacity; ++i ) {
             if ( tab->hashes[i] > HASH_KILLED32 ) {
+                bool last = (++count == tab->size);
                 // key
-                walk ( tab->keys + i*keySize, info->firstType );
+                char * key = tab->keys + i*keySize;
+                beforeTableKey(tab, info, key, info->firstType, last);
+                walk ( key, info->firstType );
+                afterTableKey(tab, info, key, info->firstType, last);
                 // value
-                walk ( tab->data + i*valueSize, info->secondType );
+                char * value = tab->data + i*valueSize;
+                beforeTableValue(tab, info, value, info->secondType, last);
+                walk ( value, info->secondType );
+                afterTableValue(tab, info, value, info->secondType, last);
             }
         }
     }
     
     void DataWalker::walk ( char * pa, TypeInfo * info ) {
         if ( pa == nullptr ) {
-            null(info);
+            Null(info);
         } else if ( info->ref ) {
             beforeRef(pa,info);
             TypeInfo ti = *info;
@@ -114,7 +123,11 @@ namespace das {
                     break;
                 case Type::tStructure:  walk_struct(pa, info->structType); break;
                 case Type::tBlock:      WalkBlock((Block *)pa); break;
-                case Type::tHandle:     Handle(pa, info->annotation); break;
+                case Type::tHandle:
+                    beforeHandle(pa, info);
+                    info->annotation->walk(*this, pa);
+                    afterHandle(pa, info);
+                    break;
                 default:                assert(0 && "unsupported print type"); break;
             }
         }

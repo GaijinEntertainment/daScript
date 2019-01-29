@@ -1,4 +1,4 @@
-options log = true
+// options log = true
 
 require RapidJson
 
@@ -8,7 +8,7 @@ def test
 
     readJson(json_text) <| $ ( root, error )
         // general navigation
-        debug(root)
+        print("{root}\n")
         assert(root.is_object)
         let r_n = root.n
         assert(r_n.is_null)

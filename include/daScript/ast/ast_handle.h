@@ -13,7 +13,8 @@ namespace das
             TypeDeclPtr decl;
             uint32_t    offset;
         };
-        ManagedStructureAnnotation (const string & n) : TypeAnnotation(n) {}
+        ManagedStructureAnnotation (const string & n)
+            : TypeAnnotation(n), debugInfo(2048), helpA(debugInfo) {}
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }
         virtual size_t getAlignOf() const override { return alignof(OT); }
@@ -73,7 +74,30 @@ namespace das
             field.offset = offset;
             field.decl = pT;
         }
+        virtual void walk ( DataWalker & walker, void * data ) override {
+            if ( !sti ) {
+                debugInfo.reset();
+                sti = debugInfo.makeNode<StructInfo>();
+                sti->name = debugInfo.allocateName(name);
+                sti->fieldsSize = (uint32_t) fields.size();
+                sti->size = getSizeOf();
+                sti->fields = (VarInfo **) debugInfo.allocate( sizeof(VarInfo *) * sti->fieldsSize );
+                int i = 0;
+                for ( auto & fi : fields ) {
+                    auto & var = fi.second;
+                    VarInfo * vi = debugInfo.makeNode<VarInfo>();
+                    helpA.makeTypeInfo(vi, var.decl);
+                    vi->name = debugInfo.allocateName(fi.first);
+                    vi->offset = var.offset;
+                    sti->fields[i++] = vi;
+                }
+            }
+            walker.walk_struct((char *)data, sti);
+        }
         map<string,StructureField> fields;
+        NodeAllocator              debugInfo;
+        DebugInfoHelper            helpA;
+        StructInfo *               sti = nullptr;
     };
 
     template <typename OT>
@@ -173,9 +197,6 @@ namespace das
         }
         virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const override {
             return context.code.makeNode<SimNode_Ref2Value<OT>>(at, l);
-        }
-        virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
-            ss << (* (OT*)data);
         }
     };
 }

@@ -27,6 +27,10 @@ namespace das {
         typedef MatrixAnnotation<VecT,RowC> ThisAnnotation;
         typedef Matrix<VecT,RowC> ThisMatrix;
     protected:
+        NodeAllocator              debugInfo;
+        DebugInfoHelper            helpA;
+        TypeInfo *                 matrixTypeInfo;
+    protected:
         int GetField ( const string & na ) const {
             if ( na.length()!=1 )
                 return -1;
@@ -37,7 +41,14 @@ namespace das {
         }
     public:
         MatrixAnnotation()
-            : TypeAnnotation( "float" + std::to_string(ColC) + "x" + std::to_string(RowC) ) {}
+            : TypeAnnotation( "float" + std::to_string(ColC) + "x" + std::to_string(RowC) ),
+                debugInfo(256), helpA(debugInfo) {
+                    matrixTypeInfo = debugInfo.makeNode<TypeInfo>();
+                    auto bt = ToBasicType<VecT>::type;
+                    auto tt = make_shared<TypeDecl>(Type(bt));
+                    tt->dim.push_back(RowC);
+                    helpA.makeTypeInfo(matrixTypeInfo, tt);
+                }
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
             shared_ptr<ThisAnnotation> cp =  p ? static_pointer_cast<ThisAnnotation>(p) : make_shared<ThisAnnotation>();
             return TypeAnnotation::clone(cp);
@@ -127,12 +138,8 @@ namespace das {
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &, SimNode * rv, SimNode * idx ) const override {
             return context.code.makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), RowC);
         }
-        virtual void debug ( stringstream & ss, void * data, PrintFlags ) const override {
-            auto pM = (ThisMatrix *) data;
-            for ( int i=0; i!=RowC; ++i ) {
-                if ( i ) ss << ", ";
-                ss << pM->m[i];
-            }
+        virtual void walk ( DataWalker & walker, void * data ) override {
+            walker.walk((char *)data, matrixTypeInfo);
         }
     };
 

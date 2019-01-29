@@ -1,14 +1,13 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/debug_info.h"
-
+#include "daScript/ast/ast.h"
+#include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/misc/enums.h"
 #include "daScript/simulate/cast.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/misc/arraytype.h"
-
-#include "daScript/simulate/data_walker.h"
 
 namespace das
 {
@@ -162,8 +161,6 @@ namespace das
     int getTypeAlign ( TypeInfo * info ) {
         return getTypeBaseAlign(info);
     }
-    
-    void debugType ( TypeAnnotation *, stringstream & , void *, PrintFlags );
 
     struct DebugDataWalker : DataWalker {
         stringstream & ss;
@@ -198,6 +195,16 @@ namespace das
             if ( !last )
                 ss << ";";
         }
+        virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, bool ) override {
+            ss << " ";
+        }
+        virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, bool ) override {
+            ss << " : ";
+        }
+        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, bool last ) override {
+            if ( !last )
+                ss << ";";
+        }
         virtual void beforeDim ( char *, TypeInfo * ti ) override {
             ss << "[[";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
@@ -226,27 +233,37 @@ namespace das
             ss << "]]";
         }
         virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
-            ss << "(";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << debug_type(ti) << " ";
+                ss << "(" << debug_type(ti) << " 0x" << hex << intptr_t(pa) << dec << " ref = ";
             }
-            ss << "0x" << hex << intptr_t(pa) << dec << " ref = ";
         }
         virtual void afterRef ( char *, TypeInfo * ) override {
-            ss << ")";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << ")";
+            }
         }
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
-            ss << "(";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << debug_type(ti) << " ";
+                ss << "(" << debug_type(ti) << " 0x" << hex << intptr_t(pa) << dec << " ptr = ";
             }
-            ss << "0x" << hex << intptr_t(pa) << dec << " ptr = ";
         }
         virtual void afterPtr ( char *, TypeInfo * ) override {
-            ss << ")";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << ")";
+            }
+        }
+        virtual void beforeHandle ( char *, TypeInfo * ti ) override {
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << "[[" << debug_type(ti) << " ";
+            }
+        }
+        virtual void afterHandle ( char *, TypeInfo * ) override {
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << "]]";
+            }
         }
         // types
-        virtual void null ( TypeInfo * ) override {
+        virtual void Null ( TypeInfo * ) override {
             ss << "null";
         }
         virtual void Bool ( bool & b ) override {
@@ -326,9 +343,6 @@ namespace das
         virtual void WalkBlock ( struct Block * pa ) override {
             ss << "block 0x" << hex << intptr_t(pa->body) << dec;
         }
-        virtual void Handle ( char * pa, TypeAnnotation * annotation ) override {
-            debugType(annotation, ss, pa, flags);
-        }
     };
 
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {
@@ -348,7 +362,7 @@ namespace das
     string debug_type ( TypeInfo * info ) {
         stringstream stream;
         if ( info->type==Type::tHandle ) {
-            stream << "handle"; // TODO: << info->annotation->name << ">";
+            stream << info->annotation->name;
         } else if ( info->type==Type::tStructure ) {
             stream << info->structType->name;
         } else if ( info->type==Type::tPointer ) {

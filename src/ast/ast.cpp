@@ -204,12 +204,6 @@ namespace das
         name = fn;
     }
 
-    // type annotation
-
-    void debugType ( TypeAnnotation * ta, stringstream & ss , void * data, PrintFlags flags ) {
-        ta->debug(ss, data, flags);
-    }
-
     // expression
 
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {

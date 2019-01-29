@@ -19,6 +19,9 @@ namespace das {
 #endif
     
     struct DataWalker {
+    // we doing what?
+        class Context * context = nullptr;
+        bool reading = false;
     // data structures
         virtual void beforeStructure ( char * ps, StructInfo * si ) {}
         virtual void afterStructure ( char * ps, StructInfo * si ) {}
@@ -33,13 +36,19 @@ namespace das {
         virtual void beforeArray ( Array * pa, TypeInfo * ti ) {}
         virtual void afterArray ( Array * pa, TypeInfo * ti ) {}
         virtual void beforeTable ( Table * pa, TypeInfo * ti ) {}
+        virtual void beforeTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, bool last ) {}
+        virtual void afterTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, bool last ) {}
+        virtual void beforeTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, bool last ) {}
+        virtual void afterTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, bool last ) {}
         virtual void afterTable ( Table * pa, TypeInfo * ti ) {}
         virtual void beforeRef ( char * pa, TypeInfo * ti ) {}
         virtual void afterRef ( char * pa, TypeInfo * ti ) {}
         virtual void beforePtr ( char * pa, TypeInfo * ti ) {}
         virtual void afterPtr ( char * pa, TypeInfo * ti ) {}
+        virtual void beforeHandle ( char * pa, TypeInfo * ti ) {}
+        virtual void afterHandle ( char * pa, TypeInfo * ti ) {}
     // types
-        virtual void null ( TypeInfo * ti ) {}
+        virtual void Null ( TypeInfo * ti ) {}
         virtual void Bool ( bool & ) {}
         virtual void Int64 ( int64_t & ) {}
         virtual void UInt64 ( uint64_t & ) {}
