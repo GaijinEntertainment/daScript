@@ -40,7 +40,7 @@ namespace das
         {   Type::tURange,      "urange"}
     };
 
-    string to_string ( Type t ) {
+    string das_to_string ( Type t ) {
         return g_typeTable.find(t);
     }
 
@@ -374,7 +374,7 @@ namespace das
         } else if ( info->type==Type::tIterator ) {
             stream << "Iterator<" << debug_type(info->firstType) << ">";
         } else {
-            stream << to_string(info->type);
+            stream << das_to_string(info->type);
         }
         for ( uint32_t i=0; i!=info->dimSize; ++i ) {
             stream << "[" << info->dim[i] << "]";

@@ -89,7 +89,7 @@ namespace das
         uint32_t    stackSize;
     };
 
-    string to_string ( Type t );
+    string das_to_string ( Type t );
     Type nameToBasicType(const string & name);
 
     int getTypeBaseSize ( Type type );

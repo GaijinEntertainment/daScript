@@ -12,15 +12,13 @@
 #pragma warning(disable:4702)    // unreachable code (due to exceptions)
 #endif
 
-#ifdef __APPLE__
+#ifdef __clang__
 #pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
 #pragma clang diagnostic ignored "-Wnested-anon-types"
 #pragma clang diagnostic ignored "-Wmissing-braces"
 #endif
 
-#include <signal.h>
 #include <assert.h>
-#include <setjmp.h>
 
 #ifdef _MSC_VER
 #include <intsafe.h>
@@ -44,12 +42,6 @@
     #define NOMINMAX
 #else
     #define __forceinline inline __attribute__((always_inline))
-#endif
-
-#ifndef _MSC_VER
-#define __noinline    __attribute__((noinline))
-#else
-#define __noinline    __declspec(noinline)
 #endif
 
 #ifdef _MSC_VER

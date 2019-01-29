@@ -5,6 +5,9 @@
 
 // this is here for the default implementation of to_out and to_err
 #include <iostream>
+#include <setjmp.h>
+
+extern void os_debug_break();
 
 namespace das
 {
@@ -429,11 +432,7 @@ namespace das
     }
 
     void Context::breakPoint(int, int ) const {
-#ifdef _MSC_VER
-        __debugbreak();
-#else
-        raise(SIGTRAP);
-#endif
+        os_debug_break();
     }
 
     void Context::to_out ( const char * message ) {
@@ -459,11 +458,7 @@ namespace das
                 to_err("\n");
             }
             stackWalk();
-#ifdef _MSC_VER
-            __debugbreak();
-#else
-            raise(SIGTRAP);
-#endif
+            os_debug_break();
         }
 #endif
     }
@@ -472,7 +467,7 @@ namespace das
 #pragma warning(push)
 #pragma warning(disable:4611)
 #endif
-    
+
     vec4f Context::evalWithCatch ( SimNode * node ) {
         auto aa = abiArg; auto acm = abiCMRES;
         char * EP, * SP;

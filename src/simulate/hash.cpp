@@ -5,7 +5,7 @@
 
 namespace das
 {
-#if !defined(__GNUC__) || defined(__APPLE__)
+#if !defined(__GNUC__) || defined(__clang__)
     __forceinline uint32_t _rotl ( uint32_t value, int shift ) {
         return (value<<shift) | (value>>(32-shift));
     }

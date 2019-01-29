@@ -160,7 +160,7 @@ namespace das
             }
             stream << ">";
         } else {
-            stream << to_string(baseType);
+            stream << das_to_string(baseType);
         }
         if ( extra && baseType!=Type::autoinfer && baseType!=Type::alias && !alias.empty() ) {
             stream << " aka " << alias;

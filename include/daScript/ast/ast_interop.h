@@ -32,7 +32,7 @@ namespace das
             auto args = makeArgs<Arguments>(lib, Indices());
             for ( int argi=0; argi!=nargs; ++argi ) {
                 auto arg = make_shared<Variable>();
-                arg->name = "arg" + std::to_string(argi);
+                arg->name = "arg" + to_string(argi);
                 arg->type = args[argi];
                 if ( arg->type->baseType==Type::fakeContext ) {
                     arg->init = make_shared<ExprFakeContext>(at);
@@ -65,7 +65,7 @@ namespace das
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
             for ( size_t argi=0; argi!=args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
-                arg->name = "arg" + std::to_string(argi);
+                arg->name = "arg" + to_string(argi);
                 arg->type = args[argi];
                 if ( arg->type->baseType==Type::fakeContext ) {
                     arg->init = make_shared<ExprConstPtr>(at);
@@ -86,7 +86,7 @@ namespace das
         }
     };
 
-    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> typename SimNodeT = SimNode_ExtFuncCall>
+    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
     __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, bool hasSideEffects = true ) {
         mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>>>(name,lib)->sideEffects(hasSideEffects));
     }

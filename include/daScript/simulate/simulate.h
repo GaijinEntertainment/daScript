@@ -1,5 +1,6 @@
 #pragma once
 
+#include <setjmp.h>
 #include "daScript/misc/vectypes.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/simulate/cast.h"
@@ -674,7 +675,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_LexicalCast ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual vec4f eval ( Context & context ) override {
             vec4f res = arguments[0]->eval(context);
-            auto str = std::to_string ( cast<CastFrom>::to(res) );
+            auto str = to_string ( cast<CastFrom>::to(res) );
             auto cpy = context.heap.allocateString(str);
             if ( !cpy ) {
                 context.throw_error("can't cast to string, out of heap");
