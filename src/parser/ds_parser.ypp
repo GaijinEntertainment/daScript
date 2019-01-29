@@ -2,9 +2,8 @@
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
     
-    using namespace das;
-    
     namespace das { extern ProgramPtr g_Program; }
+    using namespace das;
     
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
@@ -37,8 +36,10 @@
 	#pragma warning(disable:4702)
 	#endif
     
-    void yyerror (const std::string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
-    void yyerror (const std::string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
+    using namespace das;
+    
+    void yyerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
+    void yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
     int yylex();
     void yybegin(const char * str);
 %}
