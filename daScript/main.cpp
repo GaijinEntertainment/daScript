@@ -1,49 +1,50 @@
 #include "daScript/daScript.h"
 
-#include <iostream>
 #include <fstream>
 
 using namespace std;
 using namespace das;
 
+TextPrinter tout;
+
 void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
-        cout << "can't open " << endl;
+		tout << "can't open\n";
         return;
     }
     t.seekg(0, ios::end);
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), cout) ) {
+    if ( auto program = parseDaScript(str.c_str(), tout) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
-                cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+				tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
             }
         } else {
             if ( outputProgramCode )
-                cout << *program << "\n";
+				tout << *program << "\n";
             Context ctx(&str);
-            program->simulate(ctx, cout);
+            program->simulate(ctx, tout);
             if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
                 ctx.restart();
                 ctx.eval(fnTest, nullptr);
             } else {
-                cout << "function '"  << mainFnName << " ' not found\n";
+				tout << "function '"  << mainFnName << " ' not found\n";
             }
         }
     }
 }
 
 void print_help() {
-    cout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
+	tout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
 }
 
 int main(int argc, const char * argv[]) {
     if ( argc<=1 ) {
-        cout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
+		tout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
         return -1;
     }
     vector<string> files;

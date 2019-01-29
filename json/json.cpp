@@ -368,7 +368,7 @@ namespace das {
             }
         }
 
-        void print(stringstream & ss, const JsValue & value) const {
+        void print(TextWriter & ss, const JsValue & value) const {
             rapidjson::StringBuffer sb;
             rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(sb);
             value.Accept(writer);    // Accept() traverses the DOM and generates Handler events.

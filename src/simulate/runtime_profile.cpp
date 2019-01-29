@@ -18,8 +18,8 @@ namespace das
         }
         double tSec = minT/1000000.;
         if ( category ) {
-            stringstream ss;
-            ss << "\"" << category << "\", " << fixed << tSec << ", " << count << "\n";
+            TextWriter ss;
+            ss << "\"" << category << "\", " << FIXED << tSec << ", " << count << "\n";
             context->to_out(ss.str().c_str());
         }
         return (float) tSec;

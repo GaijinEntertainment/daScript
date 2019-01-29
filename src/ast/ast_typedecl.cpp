@@ -100,7 +100,7 @@ namespace das
     // TypeDecl
 
     string TypeDecl::describe ( bool extra ) const {
-        stringstream stream;
+        TextWriter stream;
         if ( baseType==Type::alias ) {
             stream << alias;
         } else if ( baseType==Type::autoinfer ) {
@@ -181,7 +181,7 @@ namespace das
         return stream.str();
     }
 
-    ostream& operator<< (ostream& stream, const TypeDecl & decl) {
+    TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl) {
         stream << decl.describe();
         return stream;
     }
@@ -264,7 +264,7 @@ namespace das
     }
 
     string TypeDecl::getMangledName() const {
-        stringstream ss;
+        TextWriter ss;
         if ( constant ) {
             ss << "#const";
         }

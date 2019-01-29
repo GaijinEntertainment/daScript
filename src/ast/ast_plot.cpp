@@ -35,8 +35,8 @@ namespace das {
     public:
         bool                plotReadWrite = false;
     protected:
-        stringstream        sgraph;
-        stringstream        psgraph;
+        TextWriter        sgraph;
+        TextWriter        psgraph;
     protected:
         template <typename TT>
         string id(TT * p) const { return "id_" + to_string(intptr_t(p)); }
@@ -298,8 +298,8 @@ namespace das {
         }
         virtual ExpressionPtr visit(ExprConstPtr * c) override {
             if (c->getValue()) {
-                stringstream ss;
-                ss << "*0x" << hex << intptr_t(c->getValue()) << dec;
+                TextWriter ss;
+                ss << "*0x" << HEX << intptr_t(c->getValue()) << DEC;
                 label(c, ss.str());
             }
             else {
@@ -316,14 +316,14 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstUInt64 * c) override {
-            stringstream ss;
-            ss << "0x" << hex << intptr_t(c->getValue()) << dec;
+            TextWriter ss;
+            ss << "0x" << HEX << intptr_t(c->getValue()) << DEC;
             label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstUInt * c) override {
-            stringstream ss;
-            ss << "0x" << hex << intptr_t(c->getValue()) << dec;
+            TextWriter ss;
+            ss << "0x" << HEX << intptr_t(c->getValue()) << DEC;
             label(c, ss.str());
             return Visitor::visit(c);
         }
@@ -341,63 +341,63 @@ namespace das {
         }
         virtual ExpressionPtr visit(ExprConstInt2 * c) override {
             auto val = c->getValue();
-            stringstream ss;
+            TextWriter ss;
             ss << "int2(" << val.x << "," << val.y << ")";
             label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstInt3 * c) override {
             auto val = c->getValue();
-            stringstream ss;
+            TextWriter ss;
             ss << "int3(" << val.x << "," << val.y << "," << val.z << ")";
             label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstInt4 * c) override {
             auto val = c->getValue();
-            stringstream ss;
+            TextWriter ss;
             ss << "int4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
             label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstUInt2 * c) override {
             auto val = c->getValue();
-            stringstream ss;
+            TextWriter ss;
             ss << "uint2(" << val.x << "," << val.y << ")";
             label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstUInt3 * c) override {
             auto val = c->getValue();
-            stringstream ss;
+            TextWriter ss;
             ss << "uint3(" << val.x << "," << val.y << "," << val.z << ")";
             label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstUInt4 * c) override {
             auto val = c->getValue();
-            stringstream ss;
+            TextWriter ss;
             ss << "uint4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
             label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstFloat2 * c) override {
             auto val = c->getValue();
-            stringstream ss;
+            TextWriter ss;
             ss << "float2(" << val.x << "," << val.y << ")";
             label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstFloat3 * c) override {
             auto val = c->getValue();
-            stringstream ss;
+            TextWriter ss;
             ss << "float3(" << val.x << "," << val.y << "," << val.z << ")";
             label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstFloat4 * c) override {
             auto val = c->getValue();
-            stringstream ss;
+            TextWriter ss;
             ss << "float4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
             label(c, ss.str());
             return Visitor::visit(c);

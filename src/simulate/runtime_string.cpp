@@ -95,7 +95,7 @@ namespace das
     }
 
     string getFewLines ( const string & st, int ROW, int COL ) {
-        stringstream text;
+        TextWriter text;
         int col=1, row=1;
         auto it = st.begin();
         for ( ; ROW>=row && it!=st.end(); ++it, ++col ) {
@@ -113,7 +113,7 @@ namespace das
     }
 
     string to_string_ex ( double dnum ) {
-        stringstream ss;
+        TextWriter ss;
         ss << dnum;
         if ( ss.str().find_first_of(".e")==string::npos )
             ss << ".";
@@ -121,7 +121,7 @@ namespace das
     }
 
     string reportError ( const string * st, int row, int col, const string & message, CompilationError erc ) {
-        stringstream ssw;
+        TextWriter ssw;
         if ( row && col ) {
             auto text = st ? getFewLines(*st, row, col ) : "";
             ssw << "error at line " << row << " column " << col << "\n" << text;
@@ -137,7 +137,7 @@ namespace das
     vec4f SimNode_StringBuilder::eval ( Context & context ) {
         vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
-        stringstream ssw;
+        TextWriter ssw;
         for ( int32_t i = 0; i!=nArguments; ++i ) {
             // TODO: different output for strings?
             ssw << debug_value(argValues[i], types[i], PrintFlags::string_builder);

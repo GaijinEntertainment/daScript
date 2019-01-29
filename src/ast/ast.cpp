@@ -62,7 +62,8 @@ namespace das
         return nullptr;
     }
 
-    ostream& operator<< (ostream& stream, const Structure & structure) {
+	/*
+    TextWriter& operator<< (TextWriter& stream, const Structure & structure) {
         stream << "(struct " << structure.name << "\n";
         for ( auto & decl : structure.fields ) {
             stream << "\t(" << *decl.type << " " << decl.name << ")\n";
@@ -70,6 +71,7 @@ namespace das
         stream << ")";
         return stream;
     }
+	*/
 
     string Structure::getMangledName() const {
         return module ? module->name+"::"+name : name;
@@ -77,10 +79,12 @@ namespace das
 
     // variable
 
-    ostream& operator<< (ostream& stream, const Variable & var) {
+	/*
+    TextWriter& operator<< (TextWriter& stream, const Variable & var) {
         stream << *var.type << " " << var.name;
         return stream;
     }
+	*/
 
     VariablePtr Variable::clone() const {
         auto pVar = make_shared<Variable>();
@@ -124,7 +128,7 @@ namespace das
         if ( !inferStack.size() ) {
             return "";
         }
-        stringstream ss;
+        TextWriter ss;
         ss << "\nwhile compiling " << describe() << "\n";
         for ( const auto & ih : inferStack ) {
             ss << "instanced from " << ih.func->describe() << " at " << ih.at.describe() << "\n";
@@ -133,7 +137,7 @@ namespace das
     }
 
     string Function::describe() const {
-        stringstream ss;
+        TextWriter ss;
         if ( !isalpha(name[0]) && name[0]!='_' ) {
             ss << "operator ";
         }
@@ -151,7 +155,7 @@ namespace das
     }
 
     string Function::getMangledName() const {
-        stringstream ss;
+        TextWriter ss;
         // TODO: module name?
         ss << name;
         for ( auto & arg : arguments ) {
@@ -912,7 +916,7 @@ namespace das
     }
 
     string ExprLooksLikeCall::describe() const {
-        stringstream stream;
+        TextWriter stream;
         stream << name << " ( ";
         for ( auto & arg : arguments ) {
             if ( arg->type )
@@ -1207,12 +1211,11 @@ namespace das
         }
     }
 
-    void Program::optimize(ostream & logs) {
+    void Program::optimize(TextWriter & logs) {
         const bool log = options.getOption("logOptimizationPasses",false);
         bool any, last;
         if (log) {
             logs << *this << "\n";
-            logs.flush();
         }
         do {
             if ( log ) logs << "OPTIMIZE:\n" << *this;
@@ -1227,7 +1230,6 @@ namespace das
             if ( log ) logs << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationUnused();        if ( failed() ) break;  any |= last;
             if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
-            if ( log ) logs.flush();
         } while ( any );
     }
 
@@ -1235,7 +1237,7 @@ namespace das
 
     ProgramPtr g_Program;
 
-    ProgramPtr parseDaScript ( const char * script, ostream & logs ) {
+    ProgramPtr parseDaScript ( const char * script, TextWriter & logs ) {
         int err;
         auto program = g_Program = make_shared<Program>();
         yybegin(script);

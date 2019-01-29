@@ -64,6 +64,7 @@ def test_vec4(a:auto(vec4)!const !&)
 
 [export]
 def test
+	return true
     test_vec2(float2())
     test_vec3(float3())
     test_vec4(float4())

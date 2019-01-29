@@ -1,7 +1,6 @@
 #include "daScript/daScript.h"
 
 #include <fstream>
-#include <iostream>
 
 #ifdef _MSC_VER
     #include <io.h>
@@ -14,26 +13,28 @@ using namespace das;
 
 bool g_reportCompilationFailErrors = false;
 
+TextPrinter tout;
+
 bool compilation_fail_test ( const string & fn ) {
-    cout << fn << " ";
+	tout << fn << " ";
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
-        cout << "not found\n";
+		tout << "not found\n";
         return false;
     }
     t.seekg(0, ios::end);
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), cout) ) {
+    if ( auto program = parseDaScript(str.c_str(), tout) ) {
         if ( program->failed() ) {
             bool failed = false;
             auto errors = program->expectErrors;
             for ( auto err : program->errors ) {
                 int count = -- errors[err.cerr];
                 if ( g_reportCompilationFailErrors || count<0 ) {
-                    cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+					tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
                 }
                 if ( count <0 ) {
                     failed = true;
@@ -47,67 +48,67 @@ bool compilation_fail_test ( const string & fn ) {
                 }
             }
             if ( any_errors || failed ) {
-                cout << "failed";
+				tout << "failed";
                 if ( any_errors ) {
-                    cout << ", expecting errors";
+					tout << ", expecting errors";
                     for ( auto terr : errors  ) {
                         if (terr.second > 0 ) {
-                            cout << " " << int(terr.first) << ":" << terr.second;
+							tout << " " << int(terr.first) << ":" << terr.second;
                         }
                     }
                 }
-                cout << "\n";
+				tout << "\n";
                 return false;
             }
-            cout << "ok\n";
+			tout << "ok\n";
             return true;
         } else {
-            cout << "failed, compiled without errors\n";
+			tout << "failed, compiled without errors\n";
             return false;
         }
     } else {
-        cout << "failed, not expected to compile\n";
+		tout << "failed, not expected to compile\n";
         return false;
     }
 }
 
 bool unit_test ( const string & fn ) {
-    cout << fn << " ";
+	tout << fn << " ";
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
-        cout << "not found\n";
+		tout << "not found\n";
         return false;
     }
     t.seekg(0, ios::end);
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), cout) ) {
+    if ( auto program = parseDaScript(str.c_str(), tout) ) {
         if ( program->failed() ) {
-            cout << "failed to compile\n";
+			tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+				tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
             Context ctx(&str);
-            program->simulate(ctx, cout);
+            program->simulate(ctx, tout);
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
                 if ( auto ex = ctx.getException() ) {
-                    cout << "exception: " << ex << "\n";
+                    tout << "exception: " << ex << "\n";
                     return false;
                 }
                 if ( !result ) {
-                    cout << "failed\n";
+					tout << "failed\n";
                     return false;
                 }
-                cout << "ok\n";
+				tout << "ok\n";
                 return true;
             } else {
-                cout << "function 'test' not found\n";
+				tout << "function 'test' not found\n";
                 return false;
             }
         }
@@ -117,38 +118,38 @@ bool unit_test ( const string & fn ) {
 }
 
 bool exception_test ( const string & fn ) {
-    cout << fn << " ";
+	tout << fn << " ";
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
-        cout << "not found\n";
+        tout << "not found\n";
         return false;
     }
     t.seekg(0, ios::end);
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), cout) ) {
+    if ( auto program = parseDaScript(str.c_str(), tout) ) {
         if ( program->failed() ) {
-            cout << "failed to compile\n";
+			tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+				tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
             Context ctx(&str);
-            program->simulate(ctx, cout);
+            program->simulate(ctx, tout);
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 ctx.evalWithCatch(fnTest, nullptr);
                 if ( auto ex = ctx.getException() ) {
-                    cout << "ok\n";
+					tout << "ok\n";
                     return true;
                 }
-                cout << "failed, finished without exception\n";
+				tout << "failed, finished without exception\n";
                 return false;
             } else {
-                cout << "function 'test' not found\n";
+				tout << "function 'test' not found\n";
                 return false;
             }
         }
@@ -223,7 +224,7 @@ int main() {
     ok = run_unit_tests(TEST_PATH "test/unit_tests") && ok;
     ok = run_unit_tests(TEST_PATH "test/optimizations") && ok;
     ok = run_exception_tests(TEST_PATH "test/runtime_errors") && ok;
-    cout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
+	tout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown
     Module::Shutdown();
     return ok ? 0 : -1;

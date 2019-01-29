@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/misc/string_writer.h"
 #include "daScript/misc/vectypes.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/misc/rangetype.h"
@@ -55,7 +56,7 @@ namespace das
         TypeDecl & operator = (const TypeDecl & decl) = delete;
         TypeDecl(Type tt) : baseType(tt) {}
         TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp) {}
-        friend ostream& operator<< (ostream& stream, const TypeDecl & decl);
+        friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
         string getMangledName() const;
         bool isSameType ( const TypeDecl & decl, bool refMatters = true, bool constMatters = true ) const;
         bool isIteratorType ( const TypeDecl & decl ) const;
@@ -254,7 +255,7 @@ namespace das
     public:
         Structure ( const string & n ) : name(n) {}
         const FieldDeclaration * findField ( const string & name ) const;
-        friend ostream& operator<< (ostream& stream, const Structure & structure);
+        friend TextWriter& operator<< (TextWriter& stream, const Structure & structure);
         int getSizeOf() const;
         int getAlignOf() const;
         bool canCopy() const;
@@ -271,7 +272,7 @@ namespace das
     };
 
     struct Variable : public enable_shared_from_this<Variable> {
-        friend ostream& operator<< (ostream& stream, const Variable & var);
+        friend TextWriter& operator<< (TextWriter& stream, const Variable & var);
         VariablePtr clone() const;
         string getMangledName() const;
         string          name;
@@ -370,7 +371,7 @@ namespace das
         Expression() = default;
         Expression(const LineInfo & a) : at(a) {}
         virtual ~Expression() {}
-        friend ostream& operator<< (ostream& stream, const Expression & func);
+        friend TextWriter& operator<< (TextWriter& stream, const Expression & func);
         virtual ExpressionPtr visit(Visitor & vis) = 0;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
@@ -1092,7 +1093,7 @@ namespace das
     class Function : public enable_shared_from_this<Function> {
     public:
         virtual ~Function() {}
-        friend ostream& operator<< (ostream& stream, const Function & func);
+        friend TextWriter& operator<< (TextWriter& stream, const Function & func);
         string getMangledName() const;
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
@@ -1247,7 +1248,7 @@ namespace das
     class Program : public enable_shared_from_this<Program> {
     public:
         Program();
-        friend ostream& operator<< (ostream& stream, const Program & program);
+        friend TextWriter& operator<< (TextWriter& stream, const Program & program);
         VariablePtr findVariable ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
@@ -1259,18 +1260,18 @@ namespace das
         bool addGeneric ( const FunctionPtr & fn );
         void addModule ( Module * pm );
         void finalizeAnnotations();
-        void inferTypes(ostream & logs);
+        void inferTypes(TextWriter & logs);
         bool optimizationRefFolding();
         bool optimizationConstFolding();
         bool optimizationBlockFolding();
         bool optimizationCondFolding();
         bool optimizationUnused();
         bool staticAsserts();
-        void optimize(ostream & logs);
+        void optimize(TextWriter & logs);
         void markOrRemoveUnusedSymbols();
-        void allocateStack(ostream & logs);
+        void allocateStack(TextWriter & logs);
         string dotGraph();
-        bool simulate ( Context & context, ostream & logs );
+        bool simulate ( Context & context, TextWriter & logs );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
@@ -1281,7 +1282,7 @@ namespace das
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {
             if ( !result.size() ) return "";
-            stringstream ss;
+            TextWriter ss;
             if ( needHeader ) ss << "candidates are:";
             for ( auto & fn : result ) {
                 ss << "\n\t";
@@ -1305,7 +1306,7 @@ namespace das
         AnnotationArgumentList        options;
     };
 
-    ProgramPtr parseDaScript ( const char * script, ostream & logs );
+    ProgramPtr parseDaScript ( const char * script, TextWriter & logs );
 
     // NOTE: parameters here are unreferenced for a reason
     //            the idea is you copy the function defintion, and paste to your code

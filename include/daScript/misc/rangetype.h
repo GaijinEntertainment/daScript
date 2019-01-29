@@ -6,7 +6,7 @@ namespace das
     struct RangeType {
         TT  from;   //  [from,to) range
         TT  to;
-        __forceinline friend ostream& operator<< (ostream& stream, const RangeType<TT> & vec) {
+        __forceinline friend TextWriter& operator<< (TextWriter& stream, const RangeType<TT> & vec) {
             stream << vec.from << "," << vec.to;
             return stream;
         }

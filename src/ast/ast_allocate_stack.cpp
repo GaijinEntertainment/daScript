@@ -6,7 +6,7 @@ namespace das {
 
     class AllocateStack : public Visitor {
     public:
-        AllocateStack( const ProgramPtr & prog, ostream & ls ) : logs(ls) {
+        AllocateStack( const ProgramPtr & prog, TextWriter & ls ) : logs(ls) {
             program = prog;
             log = prog->options.getOption("logStack");
             if( log ) {
@@ -20,7 +20,7 @@ namespace das {
         vector<uint32_t>        stackTopStack;
         vector<ExprBlock *>     blocks;
         bool                    log = false;
-        ostream &               logs;
+        TextWriter &               logs;
     protected:
         uint32_t allocateStack ( uint32_t size ) {
             auto result = stackTop;
@@ -165,7 +165,7 @@ namespace das {
 
     // program
 
-    void Program::allocateStack(ostream & logs) {
+    void Program::allocateStack(TextWriter & logs) {
         AllocateStack context(shared_from_this(), logs);
         visit(context);
         // allocate used variables and functions indices

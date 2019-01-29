@@ -7,9 +7,7 @@ def if_to_cond(cond)		// folds to cond ? 1 : 2
 		return 2
 
 def if_in_block(cond)		// folds to if - else
-	print("1")
 	if cond
-		print("2")
 		return 3
 	assert(false)
 	return 5

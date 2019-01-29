@@ -813,7 +813,7 @@ namespace das
         return pCall;
     }
 
-    bool Program::simulate ( Context & context, ostream & logs ) {
+    bool Program::simulate ( Context & context, TextWriter & logs ) {
         context.thisProgram = this;
         DebugInfoHelper helper(context.debugInfo);
         context.thisHelper = &helper;

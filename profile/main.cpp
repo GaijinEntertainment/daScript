@@ -3,7 +3,6 @@
 #include "test_profile.h"
 
 #include <fstream>
-#include <iostream>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -14,28 +13,30 @@
 using namespace std;
 using namespace das;
 
+TextPrinter tout;
+
 bool unit_test ( const string & fn ) {
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
-        cout << fn << " not found "<<fn<<"\n";
+        tout << fn << " not found "<<fn<<"\n";
         return false;
     }
     t.seekg(0, ios::end);
     str.reserve(t.tellg());
     t.seekg(0, ios::beg);
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(),cout) ) {
+    if ( auto program = parseDaScript(str.c_str(),tout) ) {
         if ( program->failed() ) {
-            cout << fn << " failed to compile\n";
+			tout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {
-                cout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+				tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
-            // cout << *program << "\n";
+            // tout << *program << "\n";
             Context ctx(&str, 64<<20);
-            program->simulate(ctx, cout);
+            program->simulate(ctx, tout);
             // vector of 10000 objects
             vector<Object> objects;
             objects.resize(10000);
@@ -45,17 +46,17 @@ bool unit_test ( const string & fn ) {
                 vec4f args[1] = { cast<vector<Object> *>::from(&objects) };
                 bool result = cast<bool>::to(ctx.eval(fnTest, args));
                 if ( auto ex = ctx.getException() ) {
-                    cout << fn << ", exception: " << ex << "\n";
+					tout << fn << ", exception: " << ex << "\n";
                     return false;
                 }
                 if ( !result ) {
-                    cout << fn << ", failed\n";
+					tout << fn << ", failed\n";
                     return false;
                 }
-                // cout << "ok\n";
+                // tout << "ok\n";
                 return true;
             } else {
-                cout << fn << ", function 'test' not found\n";
+				tout << fn << ", function 'test' not found\n";
                 return false;
             }
         }

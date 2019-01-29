@@ -80,7 +80,7 @@ namespace das
                 sti = debugInfo.makeNode<StructInfo>();
                 sti->name = debugInfo.allocateName(name);
                 sti->fieldsSize = (uint32_t) fields.size();
-                sti->size = getSizeOf();
+                sti->size = (uint32_t) getSizeOf();
                 sti->fields = (VarInfo **) debugInfo.allocate( sizeof(VarInfo *) * sti->fieldsSize );
                 int i = 0;
                 for ( auto & fi : fields ) {

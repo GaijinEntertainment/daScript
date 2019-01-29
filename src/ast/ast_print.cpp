@@ -298,7 +298,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
             if ( c->getValue() ) {
-                ss << "*0x" << hex << intptr_t(c->getValue()) << dec;
+                ss << "*0x" << HEX << intptr_t(c->getValue()) << DEC;
             } else {
                 ss << "null";
             }
@@ -313,11 +313,11 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt64 * c ) override {
-            ss << "0x" << hex << c->getValue() << dec;
+            ss << "0x" << HEX << c->getValue() << DEC;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt * c ) override {
-            ss << "0x" << hex << c->getValue() << dec;
+            ss << "0x" << HEX << c->getValue() << DEC;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstBool * c ) override {
@@ -569,13 +569,13 @@ namespace das {
             return Visitor::visit(expr);
         }
     protected:
-        stringstream        ss;
-        ostream::pos_type   lastNewLine = -1;
+        TextWriter			ss;
+        int					lastNewLine = -1;
         int                 tab = 0;
     };
 
     template <typename TT>
-    __forceinline ostream&  print ( ostream& stream, const TT & value ) {
+    __forceinline TextWriter&  print ( TextWriter& stream, const TT & value ) {
         SetPrinterFlags flags;
         const_cast<TT&>(value).visit(flags);
         Printer log(nullptr);
@@ -584,7 +584,7 @@ namespace das {
         return stream;
     }
 
-    ostream& operator<< (ostream& stream, const Program & program) {
+    TextWriter& operator<< (TextWriter& stream, const Program & program) {
         bool logGenerics = program.options.getOption("logGenerics");
         SetPrinterFlags flags;
         const_cast<Program&>(program).visit(flags, logGenerics);
@@ -594,11 +594,11 @@ namespace das {
         return stream;
     }
 
-    ostream& operator<< (ostream& stream, const Expression & expr) {
+    TextWriter& operator<< (TextWriter& stream, const Expression & expr) {
         return print(stream,expr);
     }
 
-    ostream& operator<< (ostream& stream, const Function & func) {
+    TextWriter& operator<< (TextWriter& stream, const Function & func) {
         return print(stream,func);
     }
 }

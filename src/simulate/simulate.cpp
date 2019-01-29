@@ -4,7 +4,6 @@
 #include "daScript/simulate/runtime_string.h"
 
 // this is here for the default implementation of to_out and to_err
-#include <iostream>
 #include <setjmp.h>
 
 extern void os_debug_break();
@@ -77,7 +76,7 @@ namespace das
 
     vec4f SimNode_Debug::eval ( Context & context ) {
         vec4f res = subexpr->eval(context);
-        stringstream ssw;
+        TextWriter ssw;
         if ( message ) ssw << message << " ";
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger)
             << " at " << debug.describe() << "\n";
@@ -404,7 +403,7 @@ namespace das
     }
 
     string Context::getStackWalk( bool args ) {
-        stringstream ssw;
+        TextWriter ssw;
     #if DAS_ENABLE_STACK_WALK
         ssw << "\nCALL STACK (sp=" << (stack.top() - stack.sp()) << "):\n";
         char * sp = stack.sp();
@@ -436,11 +435,17 @@ namespace das
     }
 
     void Context::to_out ( const char * message ) {
-        if ( message ) cout << message;
+		if (message) {
+			fprintf(stdout, "%s", message);
+			fflush(stdout);
+		}
     }
 
     void Context::to_err ( const char * message ) {
-        if ( message ) cerr << message;
+		if (message) {
+			fprintf(stderr, "%s", message);
+			fflush(stderr);
+		}
     }
 
     void Context::throw_error ( const char * message ) {

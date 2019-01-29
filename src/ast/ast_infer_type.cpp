@@ -288,7 +288,7 @@ namespace das {
         }
 
         string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
-            stringstream ss;
+            TextWriter ss;
             size_t tot = min ( types.size(), pFn->arguments.size() );
             for (size_t ai = 0; ai != tot; ++ai) {
                 auto & arg = pFn->arguments[ai];
@@ -1740,7 +1740,7 @@ namespace das {
 
     // program
 
-    void Program::inferTypes(ostream & logs) {
+    void Program::inferTypes(TextWriter & logs) {
         const bool log = options.getOption("logInferPasses",false);
         int pass = 0, maxPasses = 50;
         if (auto maxP = options.find("maxInferPasses", Type::tInt)) {
@@ -1760,7 +1760,6 @@ namespace das {
                 for (auto & err : errors) {
                     logs << reportError(nullptr, err.at.line, err.at.column, err.what, err.cerr);
                 }
-                logs.flush();
             }
             if ( context.finished() )
                 break;

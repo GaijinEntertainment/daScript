@@ -1,5 +1,7 @@
 #pragma once
 
+#include "daScript/misc/string_writer.h"
+
 namespace das
 {
     using namespace std;
@@ -7,7 +9,7 @@ namespace das
     template <typename TT>
     struct vec2 {
         TT   x, y;
-        __forceinline friend ostream& operator<< (ostream& stream, const vec2<TT> & vec) {
+        __forceinline friend TextWriter& operator<< (TextWriter& stream, const vec2<TT> & vec) {
             stream << vec.x << "," << vec.y;
             return stream;
         }
@@ -19,7 +21,7 @@ namespace das
     template <typename TT>
     struct vec3 {
         TT   x, y, z;
-        __forceinline friend ostream& operator<< (ostream& stream, const vec3<TT> & vec) {
+        __forceinline friend TextWriter& operator<< (TextWriter& stream, const vec3<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z;
             return stream;
         }
@@ -31,7 +33,7 @@ namespace das
     template <typename TT>
     struct vec4 {
         TT  x, y, z, w;
-        __forceinline friend ostream& operator<< (ostream& stream, const vec4<TT> & vec) {
+        __forceinline friend TextWriter& operator<< (TextWriter& stream, const vec4<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z << "," << vec.w;
             return stream;
         }

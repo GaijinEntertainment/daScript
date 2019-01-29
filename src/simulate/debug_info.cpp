@@ -163,10 +163,10 @@ namespace das
     }
 
     struct DebugDataWalker : DataWalker {
-        stringstream & ss;
+        TextWriter & ss;
         PrintFlags flags;
         DebugDataWalker() = delete;
-        DebugDataWalker ( stringstream & sss, PrintFlags f ) : ss(sss), flags(f) {}
+        DebugDataWalker ( TextWriter & sss, PrintFlags f ) : ss(sss), flags(f) {}
         
         // data structures
         virtual void beforeStructure ( char *, StructInfo * info ) override {
@@ -234,7 +234,7 @@ namespace das
         }
         virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "(" << debug_type(ti) << " 0x" << hex << intptr_t(pa) << dec << " ref = ";
+                ss << "(" << debug_type(ti) << " 0x" << HEX << intptr_t(pa) << DEC << " ref = ";
             }
         }
         virtual void afterRef ( char *, TypeInfo * ) override {
@@ -244,7 +244,7 @@ namespace das
         }
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "(" << debug_type(ti) << " 0x" << hex << intptr_t(pa) << dec << " ptr = ";
+                ss << "(" << debug_type(ti) << " 0x" << HEX << intptr_t(pa) << DEC << " ptr = ";
             }
         }
         virtual void afterPtr ( char *, TypeInfo * ) override {
@@ -276,7 +276,7 @@ namespace das
             }
         }
         virtual void UInt64 ( uint64_t & ui ) override {
-            ss << "0x" << hex << ui << dec;
+            ss << "0x" << HEX << ui << DEC;
             if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
                 ss << "ul";
             }
@@ -299,7 +299,7 @@ namespace das
             ss << i;
         }
         virtual void UInt ( uint32_t & ui ) override {
-            ss << "0x" << hex << ui << dec;
+            ss << "0x" << HEX << ui << DEC;
             if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
                 ss << "u";
             }
@@ -341,26 +341,26 @@ namespace das
             ss << "iterator";
         }
         virtual void WalkBlock ( struct Block * pa ) override {
-            ss << "block 0x" << hex << intptr_t(pa->body) << dec;
+            ss << "block 0x" << HEX << intptr_t(pa->body) << DEC;
         }
     };
 
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {
-        stringstream ss;
+        TextWriter ss;
         DebugDataWalker walker(ss,flags);
         walker.walk((char*)pX,info);
         return ss.str();
     }
     
     string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags ) {
-        stringstream ss;
+        TextWriter ss;
         DebugDataWalker walker(ss,flags);
         walker.walk(value,info);
         return ss.str();
     }
     
     string debug_type ( TypeInfo * info ) {
-        stringstream stream;
+        TextWriter stream;
         if ( info->type==Type::tHandle ) {
             stream << info->annotation->name;
         } else if ( info->type==Type::tStructure ) {
@@ -385,7 +385,7 @@ namespace das
     }
 
     string LineInfo::describe() const {
-        stringstream ss;
+        TextWriter ss;
         ss << "line " << line << " column " << column;
         return ss.str();
     }

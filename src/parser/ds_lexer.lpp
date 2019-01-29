@@ -5,7 +5,7 @@
     #include "ds_parser.hpp"
     
     #ifdef FLEX_DEBUG
-    #include <iostream>
+    #include <iTextWriter>
     #endif
     #ifndef SCNi64
       #define SCNi64       "lli"

@@ -138,7 +138,7 @@ namespace das
     }
 
     bool Module::compileBuiltinModule ( unsigned char * str, unsigned int str_len ) {
-        stringstream issues;
+        TextWriter issues;
         string src_str ( (const char *) str, str_len );
         if (auto program = parseDaScript(src_str.c_str(), issues)) {
             if (program->failed()) {

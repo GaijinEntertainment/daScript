@@ -4,30 +4,35 @@ namespace das {
 
 	using namespace std;
 
-	struct VectorAllocationPolicy {
-		vector<char> data;
+	class VectorAllocationPolicy {
+	public:
 		string str() const {			// todo: replace via stringview
-			return data.data();
+			return string(data.data(), data.size());
 		}
+		int tellp() const {
+			return int(data.size());
+		}
+	protected:
 		void append(const char * s, int l) {
-			data.reserve(data.size() + l + 1);
-			data.insert(data.end(), s, s + l + 1);
+			data.reserve(data.size() + l);
+			data.insert(data.end(), s, s + l);
 		}
-		char * alloocate (int l) {
-			data.reserve(data.size() + l + 1);
-			char * at = data.data();
-			data.resize(data.size() + l + 1);
-			return at;
+		char * allocate (int l) {
+			data.resize(data.size() + l);
+			return data.data() + data.size() - l;
 		}
 		void adjust(int l, int realL) {
 			data.resize(data.size() - l + realL);
 		}
+		virtual void output() {}
+		vector<char> data;
 	};
 
 	// todo: support hex
 	struct StringWriterTag {};
 	extern StringWriterTag HEX;
 	extern StringWriterTag DEC;
+	extern StringWriterTag FIXED;	// TODO: support
 
 	template <typename AllocationPolicy>
 	class StringWriter : public AllocationPolicy {
@@ -36,18 +41,20 @@ namespace das {
 		StringWriter & write(const char * format, TT value) {
 			const int size = 100;
 			auto at = allocate(size);
-			int realL = _snprintf(at, size, format, TT);
+			int realL = _snprintf(at, size, format, value);
 			adjust(size, realL);
+			output();
 			return *this;
 		}
 		StringWriter & write(const char * st) {
 			auto len = strlen(st);
-			append(st, len);
+			append(st, int(len));
+			output();
 			return *this;
 		}
 		StringWriter & operator << (const StringWriterTag & v ) { 
-			if (v == HEX) hex = true;
-			else if (v == DEC) hex = false;
+			if (&v == &HEX) hex = true;
+			else if (&v == &DEC) hex = false;
 			return *this;
 		}
 		StringWriter & operator << (char v)					{ return write("%c", v); }
@@ -64,10 +71,24 @@ namespace das {
 		StringWriter & operator << (long double v)			{ return write("%Lf", v); }
 		StringWriter & operator << (char * v)				{ return write(v); }
 		StringWriter & operator << (const char * v)			{ return write(v); }
-		StringWriter & operator << (const string & v)		{ return write(v, v.length()); }
+		StringWriter & operator << (const string & v)		{ return write(v.c_str()); }
 	protected:
 		bool hex = false;
 	};
 
 	typedef StringWriter<VectorAllocationPolicy> TextWriter;
+
+	class TextPrinter : public TextWriter {
+	public:
+		virtual void output() {
+			int newPos = tellp();
+			if (newPos != pos) {
+				string st(data.data() + pos, newPos - pos);
+				printf("%s", st.c_str());
+				pos = newPos;
+			}
+		}
+	protected:
+		int pos = 0;
+	};
 }
