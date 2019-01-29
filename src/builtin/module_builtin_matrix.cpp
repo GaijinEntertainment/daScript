@@ -37,7 +37,7 @@ namespace das {
         }
     public:
         MatrixAnnotation()
-            : TypeAnnotation( "float" + std::to_string(ColC) + "x" + std::to_string(RowC) ) {}
+            : TypeAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC) ) {}
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
             shared_ptr<ThisAnnotation> cp =  p ? static_pointer_cast<ThisAnnotation>(p) : make_shared<ThisAnnotation>();
             return TypeAnnotation::clone(cp);

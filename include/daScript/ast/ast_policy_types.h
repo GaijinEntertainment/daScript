@@ -12,7 +12,7 @@ namespace  das {
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
             for ( size_t argi=0; argi != args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
-                arg->name = "arg" + std::to_string(argi);
+                arg->name = "arg" + to_string(argi);
                 arg->type = args[argi];
                 this->arguments.push_back(arg);
             }

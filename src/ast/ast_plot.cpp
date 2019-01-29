@@ -39,9 +39,9 @@ namespace das {
         stringstream        psgraph;
     protected:
         template <typename TT>
-        string id(TT * p) const { return "id_" + std::to_string(intptr_t(p)); }
+        string id(TT * p) const { return "id_" + to_string(intptr_t(p)); }
         template <typename TT>
-        string id(const shared_ptr<TT> & value) const { return "id_" + std::to_string(intptr_t(value.get())); }
+        string id(const shared_ptr<TT> & value) const { return "id_" + to_string(intptr_t(value.get())); }
     protected:
         template <typename TF, typename TT>
         void connect(TF a, TT b, const string & extra = "") {
@@ -308,11 +308,11 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstInt * c) override {
-            label(c, std::to_string(c->getValue()));
+            label(c, to_string(c->getValue()));
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstInt64 * c) override {
-            label(c, std::to_string(c->getValue()));
+            label(c, to_string(c->getValue()));
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstUInt64 * c) override {
@@ -332,7 +332,7 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstFloat * c) override {
-            label(c, std::to_string(c->getValue()));
+            label(c, to_string(c->getValue()));
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstString * c) override {

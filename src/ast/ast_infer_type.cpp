@@ -903,7 +903,7 @@ namespace das {
             for ( auto & lv : local ) {
                 if ( lv->name==var->name ) {
                     error("block argument " + var->name +" is shadowed by local variable "
-                          + lv->name + " : " + lv->type->describe() + " at line " + std::to_string(lv->at.line),
+                          + lv->name + " : " + lv->type->describe() + " at line " + to_string(lv->at.line),
                               var->at, CompilationError::variable_not_found);
                     break;
                 }
@@ -1659,7 +1659,7 @@ namespace das {
                 error("[[" + expr->makeType->describe() + "]] can only initialize single dimension arrays", expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=expr->structs.size() ) {
                 error("[[" + expr->makeType->describe() + "]] dimension mismatch, provided " +
-                      std::to_string(expr->structs.size()) + " elements", expr->at,
+                      to_string(expr->structs.size()) + " elements", expr->at,
                           CompilationError::invalid_type);
             } else if ( expr->makeType->ref ) {
                 error("[[" + expr->makeType->describe() + "]] can't be reference", expr->at, CompilationError::invalid_type);
@@ -1704,7 +1704,7 @@ namespace das {
                       expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=expr->values.size() ) {
                 error("[[" + expr->makeType->describe() + "]] dimension mismatch, provided " +
-                      std::to_string(expr->values.size()) + " elements", expr->at,
+                      to_string(expr->values.size()) + " elements", expr->at,
                       CompilationError::invalid_type);
             } else if ( expr->makeType->ref ) {
                 error("[[" + expr->makeType->describe() + "]] can't be reference", expr->at, CompilationError::invalid_type);
@@ -1717,7 +1717,7 @@ namespace das {
                 return Visitor::visitMakeArrayIndex(expr,index,init,last);
             }
             if ( !expr->recordType->isSameType(*init->type,false,false) ) {
-                error("can't initialize array element, " + std::to_string(index) + " expecting ("
+                error("can't initialize array element, " + to_string(index) + " expecting ("
                       +expr->recordType->describe()+"), passing ("+init->type->describe()+")",
                         init->at, CompilationError::invalid_type );
             }
@@ -1766,7 +1766,7 @@ namespace das {
                 break;
         }
         if (pass == maxPasses) {
-            error("type inference exceeded maximum allowed number of passes ("+std::to_string(maxPasses)+")\n"
+            error("type inference exceeded maximum allowed number of passes ("+to_string(maxPasses)+")\n"
                     "this is likely due to a loop in the type system", LineInfo(), CompilationError::too_many_infer_passes);
         }
     }
