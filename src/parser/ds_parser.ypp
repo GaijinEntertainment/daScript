@@ -808,7 +808,7 @@ expr
         $$ = g_Program->makeCall(tokAt(@type),das_to_string($type));
     }
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
-            $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),to_string($type)),$arguments);
+            $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),das_to_string($type)),$arguments);
         }
     |   expr[subexpr] RARROW[loc]               { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   expr[subexpr] QQ[loc] expr[dval]        { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }

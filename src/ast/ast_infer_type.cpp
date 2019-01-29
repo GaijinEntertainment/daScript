@@ -1550,7 +1550,7 @@ namespace das {
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
-                            expr->name = to_string(aliasT->baseType);
+                            expr->name = das_to_string(aliasT->baseType);
                             reportGenericInfer();
                         }
                     } else {
