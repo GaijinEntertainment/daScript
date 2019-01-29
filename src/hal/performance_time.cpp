@@ -3,13 +3,13 @@
 
 #include <windows.h>
 
-int64_t ref_time_ticks () {
+extern "C" int64_t ref_time_ticks () {
     LARGE_INTEGER  t0;
     QueryPerformanceCounter(&t0);
     return t0.QuadPart;
 }
 
-int get_time_usec ( int64_t reft ) {
+extern "C" int get_time_usec ( int64_t reft ) {
     int64_t t0 = ref_time_ticks();
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
@@ -20,7 +20,7 @@ int get_time_usec ( int64_t reft ) {
 
 const uint64_t NSEC_IN_SEC = 1000000000LL;
 
-int64_t ref_time_ticks () {
+extern "C" int64_t ref_time_ticks () {
     timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         assert(false);
@@ -30,7 +30,7 @@ int64_t ref_time_ticks () {
     return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
 }
 
-int get_time_usec ( int64_t reft ) {
+extern "C" int get_time_usec ( int64_t reft ) {
     return (int) ((ref_time_ticks() - reft) / (NSEC_IN_SEC/1000000));
 }
 
@@ -39,11 +39,11 @@ int get_time_usec ( int64_t reft ) {
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 
-int64_t ref_time_ticks() {
+extern "C" int64_t ref_time_ticks() {
     return mach_absolute_time();
 }
 
-int get_time_usec ( int64_t reft ) {
+extern "C" int get_time_usec ( int64_t reft ) {
     int64_t relt = ref_time_ticks() - reft;
     mach_timebase_info_data_t s_timebase_info;
     mach_timebase_info(&s_timebase_info);

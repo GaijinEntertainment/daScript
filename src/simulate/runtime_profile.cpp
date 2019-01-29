@@ -2,8 +2,8 @@
 
 #include "daScript/simulate/runtime_range.h"
 
-extern int64_t ref_time_ticks ();
-extern int get_time_usec (int64_t reft);
+extern "C" int64_t ref_time_ticks ();
+extern "C" int get_time_usec (int64_t reft);
 
 namespace das
 {
