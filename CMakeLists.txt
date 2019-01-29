@@ -104,6 +104,8 @@ include/daScript/misc/platform.h
 include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
 include/daScript/misc/rangetype.h
+include/daScript/misc/string_writer.h
+src/misc/string_writer.das
 )
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
