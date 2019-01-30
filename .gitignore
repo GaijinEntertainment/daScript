@@ -4,13 +4,5 @@ cmake_temp/
 .DS_Store
 tmtags
 
-src/builtin/builtin.das.inc
-json/json.das.inc
-
-
-
+examples/src/builtin/builtin.das.inc
 examples/json/json.das.inc
-src/parser/generated/ds_parser.output
-src/parser/generated/ds_lexer.cpp
-src/parser/generated/ds_parser.hpp
-src/parser/generated/ds_parser.cpp
