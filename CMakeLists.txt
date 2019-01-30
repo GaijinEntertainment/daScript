@@ -33,10 +33,10 @@ SOURCE_GROUP_FILES("parser" PARSER_SRC)
 SOURCE_GROUP_FILES("parser/generated" PARSER_GENERATED_SRC)
 
 IF(MSVC)
-	# Don't use precompiled headers with flex/bison generated files
-	FOREACH(file ${PARSER_GENERATED_SRC})
-		SET_SOURCE_FILES_PROPERTIES(${file} PROPERTIES COMPILE_FLAGS "/Y-" )
-	ENDFOREACH()
+    # Don't use precompiled headers with flex/bison generated files
+    FOREACH(file ${PARSER_GENERATED_SRC})
+        SET_SOURCE_FILES_PROPERTIES(${file} PROPERTIES COMPILE_FLAGS "/Y-" )
+    ENDFOREACH()
 ENDIF()
 
 SET(VECMATH_SRC
@@ -148,7 +148,7 @@ SOURCE_GROUP_FILES("main" MAIN_SRC)
 
 include_directories(include ".")
 ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} 
-	${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
+    ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
 
 add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
@@ -157,11 +157,11 @@ add_dependencies(libDaScript daScriptGenDir)
 # JSON
 
 SET(JSON_MAIN
-json/json.cpp
-json/json.das.inc
-json/json.das
+examples/json/json.cpp
+examples/json/json.das.inc
+examples/json/json.das
 )
-XXD(json/json.das)
+XXD(examples/json/json.das)
 
 ADD_LIBRARY(libDaScriptJson ${JSON_MAIN})
 SETUP_CPP11(libDaScriptJson)
@@ -170,8 +170,8 @@ ADD_DEPENDENCIES(libDaScriptJson libDaScript)
 # JSON Example
 
 SET(JSON_MAIN_SRC
-json/main.cpp
-json/test.das
+examples/json/main.cpp
+examples/json/test.das
 )
 
 include_directories(include json)
@@ -183,7 +183,7 @@ SETUP_CPP11(jsonTest)
 # Stand alone command line compiler
 
 SET(DASCRIPT_MAIN_SRC
-daScript/main.cpp
+examples/daScript/main.cpp
 )
 
 include_directories(include lexer test)
@@ -195,38 +195,38 @@ SETUP_CPP11(daScript)
 # Test
 
 file(GLOB UNIT_TEST_SRC
-"test/unit_tests/*.das"
+"examples/test/unit_tests/*.das"
 )
 list(SORT UNIT_TEST_SRC)
-SOURCE_GROUP_FILES("test/unit" UNIT_TEST_SRC)
+SOURCE_GROUP_FILES("examples/test/unit" UNIT_TEST_SRC)
 
 file(GLOB COMPILATION_FAIL_TEST_SRC
 "test/compilation_fail_tests/*.das"
 )
 list(SORT COMPILATION_FAIL_TEST_SRC)
-SOURCE_GROUP_FILES("test/compilation fail" COMPILATION_FAIL_TEST_SRC)
+SOURCE_GROUP_FILES("examples/test/compilation fail" COMPILATION_FAIL_TEST_SRC)
 
 file(GLOB OPTIMIZATION_SRC
-"test/optimizations/*.das"
+"examples/test/optimizations/*.das"
 )
 list(SORT OPTIMIZATION_SRC)
 SOURCE_GROUP_FILES("test/optimizations" OPTIMIZATION_SRC)
 
 file(GLOB RUNTIME_ERRORS_SRC
-"test/runtime_errors/*.das"
+"examples/test/runtime_errors/*.das"
 )
 list(SORT RUNTIME_ERRORS_SRC)
 SOURCE_GROUP_FILES("test/runtime_errors" RUNTIME_ERRORS_SRC)
 
 file(GLOB MIX_TEST_SRC
-"test/*.das"
+"examples/test/*.das"
 )
 list(SORT MIX_TEST_SRC)
-SOURCE_GROUP_FILES("test/mix" MIX_TEST_SRC)
+SOURCE_GROUP_FILES("examples/test/mix" MIX_TEST_SRC)
 
 SET(TEST_MAIN_SRC
-test/main.cpp
-test/test_handles.cpp
+examples/test/main.cpp
+examples/test/test_handles.cpp
 )
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)
@@ -247,9 +247,9 @@ list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
-profile/main.cpp
-profile/test_profile.cpp
-profile/test_profile.h
+examples/profile/main.cpp
+examples/profile/test_profile.cpp
+examples/profile/test_profile.h
 )
 list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)
