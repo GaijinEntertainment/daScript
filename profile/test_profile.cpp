@@ -1,5 +1,6 @@
 #include "daScript/daScript.h"
 
+using namespace das;
 #include "test_profile.h"
 
 #ifndef _MSC_VER
@@ -8,8 +9,6 @@
 #define __noinline    __declspec(noinline)
 #endif
 
-using namespace std;
-using namespace das;
 
 __noinline void updateObject ( Object & obj ) {
     obj.pos.x += obj.vel.x;

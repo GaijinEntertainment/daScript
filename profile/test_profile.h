@@ -7,4 +7,4 @@ struct Object {
     das::float3   vel;
 };
 
-typedef std::vector<Object> ObjectArray;
+typedef vector<Object> ObjectArray;

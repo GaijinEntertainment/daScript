@@ -1,5 +1,6 @@
 #include "daScript/daScript.h"
 
+using namespace das;
 #include "test_profile.h"
 
 #include <fstream>
@@ -10,32 +11,31 @@
 #include <dirent.h>
 #endif
 
-using namespace std;
-using namespace das;
 
 TextPrinter tout;
 
 bool unit_test ( const string & fn ) {
-    string str;
-    ifstream t(fn);
+    std::string str;
+    std::ifstream t(fn);
     if ( !t.is_open() ) {
         tout << fn << " not found "<<fn<<"\n";
         return false;
     }
-    t.seekg(0, ios::end);
+    t.seekg(0, std::ios::end);
     str.reserve(t.tellg());
-    t.seekg(0, ios::beg);
-    str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
+    t.seekg(0, std::ios::beg);
+    str.assign((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
     if ( auto program = parseDaScript(str.c_str(),tout) ) {
         if ( program->failed() ) {
-			tout << fn << " failed to compile\n";
+            tout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {
-				tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
             // tout << *program << "\n";
-            Context ctx(&str, 64<<20);
+            string str2;
+            Context ctx(&str2, 64<<20);
             program->simulate(ctx, tout);
             // vector of 10000 objects
             vector<Object> objects;
@@ -46,17 +46,17 @@ bool unit_test ( const string & fn ) {
                 vec4f args[1] = { cast<vector<Object> *>::from(&objects) };
                 bool result = cast<bool>::to(ctx.eval(fnTest, args));
                 if ( auto ex = ctx.getException() ) {
-					tout << fn << ", exception: " << ex << "\n";
+                    tout << fn << ", exception: " << ex << "\n";
                     return false;
                 }
                 if ( !result ) {
-					tout << fn << ", failed\n";
+                    tout << fn << ", failed\n";
                     return false;
                 }
                 // tout << "ok\n";
                 return true;
             } else {
-				tout << fn << ", function 'test' not found\n";
+                tout << fn << ", function 'test' not found\n";
                 return false;
             }
         }
