@@ -21,7 +21,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     if ( auto program = parseDaScript(str.c_str(), tout) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
-				tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+				tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
             }
         } else {
             if ( outputProgramCode )

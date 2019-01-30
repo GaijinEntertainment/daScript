@@ -23,7 +23,7 @@ bool unit_test ( const string & fn ) {
         if ( program->failed() ) {
 			tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-				tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+				tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {

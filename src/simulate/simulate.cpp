@@ -91,7 +91,7 @@ namespace das
             string error_message = "assert failed";
             if ( message )
                 error_message = error_message + ", " + message;
-            string error = reportError(context.debugInput, debug.line, debug.column, error_message );
+            string error = reportError(context.debugInput ? context.debugInput->c_str() : nullptr, debug.line, debug.column, error_message );
             error = context.getStackWalk(false) + error;
             context.to_err(error.c_str());
             context.throw_error("assert failed");

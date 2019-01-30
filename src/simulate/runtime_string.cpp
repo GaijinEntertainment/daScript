@@ -94,11 +94,11 @@ namespace das
         return result;
     }
 
-    string getFewLines ( const string & st, int ROW, int COL ) {
+    string getFewLines ( const char* st, int ROW, int COL ) {
         TextWriter text;
         int col=1, row=1;
-        auto it = st.begin();
-        for ( ; ROW>=row && it!=st.end(); ++it, ++col ) {
+        auto it = st;
+        for ( ; ROW>=row && *it; ++it, ++col ) {
             if ( row==ROW /* || row==ROW-1 */ )
                 text << *it;
             if ( *it=='\n' ) {
@@ -120,10 +120,10 @@ namespace das
         return ss.str();
     }
 
-    string reportError ( const string * st, int row, int col, const string & message, CompilationError erc ) {
+    string reportError ( const char * st, int row, int col, const string & message, CompilationError erc ) {
         TextWriter ssw;
         if ( row && col ) {
-            auto text = st ? getFewLines(*st, row, col ) : "";
+            auto text = st ? getFewLines(st, row, col ) : "";
             ssw << "error at line " << row << " column " << col << "\n" << text;
             if ( erc != CompilationError::unspecified ) ssw << int(erc) << ": ";
             ssw << message << "\n";

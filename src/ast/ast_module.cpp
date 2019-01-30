@@ -137,14 +137,14 @@ namespace das
         return it != callThis.end() ? &it->second : nullptr;
     }
 
-    bool Module::compileBuiltinModule ( unsigned char * str, unsigned int str_len ) {
+    bool Module::compileBuiltinModule ( const unsigned char * str, unsigned int str_len ) {
         TextWriter issues;
-        string src_str ( (const char *) str, str_len );
-        if (auto program = parseDaScript(src_str.c_str(), issues)) {
+        (void)str_len;
+        if (auto program = parseDaScript((const char*)str, issues)) {
             if (program->failed()) {
 #if 1
                 for (auto & err : program->errors) {
-                    issues << reportError(&src_str, err.at.line, err.at.column, err.what, err.cerr);
+                    issues << reportError((const char*)str, err.at.line, err.at.column, err.what, err.cerr);
                 }
                 printf("%s\n", issues.str().c_str());
 #endif

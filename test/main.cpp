@@ -34,7 +34,7 @@ bool compilation_fail_test ( const string & fn ) {
             for ( auto err : program->errors ) {
                 int count = -- errors[err.cerr];
                 if ( g_reportCompilationFailErrors || count<0 ) {
-					tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+					tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
                 }
                 if ( count <0 ) {
                     failed = true;
@@ -88,7 +88,7 @@ bool unit_test ( const string & fn ) {
         if ( program->failed() ) {
 			tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-				tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+				tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
@@ -133,7 +133,7 @@ bool exception_test ( const string & fn ) {
         if ( program->failed() ) {
 			tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-				tout << reportError(&str, err.at.line, err.at.column, err.what, err.cerr );
+				tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
