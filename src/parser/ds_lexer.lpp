@@ -73,6 +73,7 @@
     }
 }
 <c_comment>.                        /* skipping comment body */
+<c_comment>[\r\n]                   /* skipping comment eol */
 
 <strb>\"                {
     // assert(nested_sb==0);
