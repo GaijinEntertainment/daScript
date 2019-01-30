@@ -439,12 +439,13 @@ namespace das {
         }
         // data structures
         virtual void beforeStructure ( char *, StructInfo * ) override {
-            top = &top->SetObject();
+            top->SetObject();
         }
         virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
             push();
             rapidjson::Document::StringRefType name (vi->name);
-            top = &top->AddMember(name, false, root->GetAllocator());
+            top->AddMember(name, false, root->GetAllocator());
+            top = &top->FindMember(name)->value;
         }
         virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool ) override {
             pop();
@@ -472,7 +473,8 @@ namespace das {
             top->PushBack(false, root->GetAllocator());
             top = &(*top)[index];
             top->SetObject();
-            top = &top->AddMember("key",false,root->GetAllocator());
+            top->AddMember("key",false,root->GetAllocator());
+            top = &top->FindMember("key")->value;
         }
         virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             pop();
@@ -480,7 +482,8 @@ namespace das {
         virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t index, bool ) override {
             push();
             top = &(*top)[index];
-            top = &top->AddMember("value",false,root->GetAllocator());
+            top->AddMember("value",false,root->GetAllocator());
+            top = &top->FindMember("value")->value;
         }
         virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             pop();
@@ -505,7 +508,11 @@ namespace das {
             top->SetUint64(u);
         }
         virtual void String ( char * & st ) override {
-            top->SetString(st, stringLength(*context, st));
+            if ( st ) {
+                top->SetString(st, stringLength(*context, st));
+            } else {
+                top->SetString("",0);
+            }
         }
         virtual void Float ( float & f ) override {
             top->SetFloat(f);

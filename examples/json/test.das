@@ -8,7 +8,7 @@ struct Foo
     i : int = 5
     f : float = 6.0
     s : string = "hello"
-    n : int64
+    n : int64 = 100500100500l
 
 struct Bar
     i : int
@@ -18,7 +18,12 @@ struct Bar
     f : Foo
 
 def test_write
-    let t = Foo()
+    let t <- Bar()
+    t.f = Foo()
+    push(t.t,1.2)
+    push(t.t,1.3)
+    t.k["foo"] = 1
+    t.k["bar"] = 2
     writeJson(t) <| $ ( root )
         print("{root}\n")
     return true
@@ -27,8 +32,10 @@ def test_write
 [export]
 def test
     test_write()
+    test_parse()
     return true
-/*
+
+def test_parse
     let json_text = "\{ \"hello\": \"world\", \"t\": true , \"f\": false, \"n\": null, \"i\": 123, \"pi\": 3.1416, \"a\": [1, 2, 3, 4] \}"
 
     readJson(json_text) <| $ ( root, error )
@@ -69,4 +76,3 @@ def test
         set(root.pi, 1.23)
         assert(root.pi.as_float==1.23)
 	return true
-*/
