@@ -16,7 +16,7 @@ TextPrinter tout;
 
 bool unit_test ( const string & fn ) {
     std::string str;
-    std::ifstream t(fn);
+    std::ifstream t(fn.c_str());
     if ( !t.is_open() ) {
         tout << fn << " not found "<<fn<<"\n";
         return false;

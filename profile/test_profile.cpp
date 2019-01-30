@@ -311,8 +311,11 @@ void testEsUpdate ( char * pass, Context * ctx ) {
 void queryEs (Block block, Context * context) {
     EsRunBlock(*context, block, g_components, g_total);
 }
-
+#if DAS_USE_EASTL
+#include <EASTL/unordered_map.h>
+#else
 #include <unordered_map>
+#endif
 
 __noinline int testDict(Array * arr) {
     unordered_map<string,int> tab;
@@ -400,7 +403,7 @@ __noinline void testTryCatch(Context * context) {
         int fail = 0;
         for (int i = 0; i != 2000; ++i) {
             try {
-                if (i < 0 || i>=1000) throw runtime_error("range check error");
+                if (i < 0 || i>=1000) throw std::runtime_error("range check error");
                 cnt += arr[i];
             }
             catch (...) {
