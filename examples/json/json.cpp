@@ -421,6 +421,177 @@ namespace das {
         rv->SetString(sv, len);
     }
 
+    
+    struct JsonWriter : DataWalker {
+        rapidjson::Document * root;
+        JsValue * top;
+        vector<JsValue *> stack;
+        void push() {
+            stack.push_back(top);
+        }
+        void pop() {
+            top = stack.back();
+            stack.pop_back();
+        }
+        JsonWriter ( Context & ctx, rapidjson::Document * r ) {
+            context = &ctx;
+            reading = false;
+            top = root = r;
+        }
+        // data structures
+        virtual void beforeStructure ( char *, StructInfo * ) override {
+            top->SetObject();
+        }
+        virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
+            push();
+            rapidjson::Document::StringRefType name (vi->name);
+            top = &top->AddMember(name, false, root->GetAllocator());
+        }
+        virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool ) override {
+            pop();
+        }
+        virtual void beforeArrayData ( char *, uint32_t, uint32_t count, TypeInfo * ) override {
+            top->SetArray();
+            top->Clear();
+            top->Reserve(count, root->GetAllocator());
+        }
+        virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t index, bool ) override {
+            push();
+            top->PushBack(false, root->GetAllocator());
+            top = &(*top)[index];
+        }
+        virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
+            pop();
+        }
+        virtual void beforeTable ( Table * tab, TypeInfo * ) override {
+            top->SetArray();
+            top->Clear();
+            top->Reserve(tab->size, root->GetAllocator());
+        }
+        virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t index, bool ) override {
+            push();
+            top->PushBack(false, root->GetAllocator());
+            top = &(*top)[index];
+            top->SetObject();
+            top = &top->AddMember("key",false,root->GetAllocator());
+        }
+        virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
+            pop();
+        }
+        virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t index, bool ) override {
+            push();
+            top = &(*top)[index];
+            top = &top->AddMember("value",false,root->GetAllocator());
+        }
+        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
+            pop();
+        }
+        virtual void beforePtr ( char *, TypeInfo * ) override {
+            context->throw_error("can't serialize pointer");
+        }
+        virtual void beforeHandle ( char *, TypeInfo * ) override {
+            // nothing, right?
+        }
+        // types
+        virtual void Null ( TypeInfo * ) override {
+            top->SetNull();
+        }
+        virtual void Bool ( bool & b ) override {
+            top->SetBool(b);
+        }
+        virtual void Int64 ( int64_t & i ) override {
+            top->SetInt64(i);
+        }
+        virtual void UInt64 ( uint64_t & u ) override {
+            top->SetUint64(u);
+        }
+        virtual void String ( char * & st ) override {
+            top->SetString(st, stringLength(*context, st));
+        }
+        virtual void Float ( float & f ) override {
+            top->SetFloat(f);
+        }
+        virtual void Int ( int32_t & i ) override {
+            top->SetInt(i);
+        }
+        virtual void UInt ( uint32_t & u ) override {
+            top->SetUint(u);
+        }
+        virtual void Int2 ( int2 & v ) override {
+            top->SetObject();
+            top->AddMember("x", v.x, root->GetAllocator());
+            top->AddMember("y", v.x, root->GetAllocator());
+        }
+        virtual void Int3 ( int3 & v ) override {
+            top->SetObject();
+            top->AddMember("x", v.x, root->GetAllocator());
+            top->AddMember("y", v.x, root->GetAllocator());
+            top->AddMember("z", v.x, root->GetAllocator());
+        }
+        virtual void Int4 ( int4 & v ) override {
+            top->SetObject();
+            top->AddMember("x", v.x, root->GetAllocator());
+            top->AddMember("y", v.x, root->GetAllocator());
+            top->AddMember("z", v.x, root->GetAllocator());
+            top->AddMember("w", v.x, root->GetAllocator());
+        }
+        virtual void UInt2 ( uint2 & v ) override {
+            top->SetObject();
+            top->AddMember("x", v.x, root->GetAllocator());
+            top->AddMember("y", v.x, root->GetAllocator());
+        }
+        virtual void UInt3 ( uint3 & v ) override {
+            top->SetObject();
+            top->AddMember("x", v.x, root->GetAllocator());
+            top->AddMember("y", v.x, root->GetAllocator());
+            top->AddMember("z", v.x, root->GetAllocator());
+        }
+        virtual void UInt4 ( uint4 & v ) override {
+            top->SetObject();
+            top->AddMember("x", v.x, root->GetAllocator());
+            top->AddMember("y", v.x, root->GetAllocator());
+            top->AddMember("z", v.x, root->GetAllocator());
+            top->AddMember("w", v.x, root->GetAllocator());
+        }
+        virtual void Float2 ( float2 & v ) override {
+            top->SetObject();
+            top->AddMember("x", v.x, root->GetAllocator());
+            top->AddMember("y", v.x, root->GetAllocator());
+        }
+        virtual void Float3 ( float3 & v ) override {
+            top->SetObject();
+            top->AddMember("x", v.x, root->GetAllocator());
+            top->AddMember("y", v.x, root->GetAllocator());
+            top->AddMember("z", v.x, root->GetAllocator());
+        }
+        virtual void Float4 ( float4 & v ) override {
+            top->SetObject();
+            top->AddMember("x", v.x, root->GetAllocator());
+            top->AddMember("y", v.x, root->GetAllocator());
+            top->AddMember("z", v.x, root->GetAllocator());
+            top->AddMember("w", v.x, root->GetAllocator());
+        }
+        virtual void Range ( range & v ) override {
+            top->SetObject();
+            top->AddMember("from", v.from, root->GetAllocator());
+            top->AddMember("to", v.to, root->GetAllocator());
+        }
+        virtual void URange ( urange & v ) override {
+            top->SetObject();
+            top->AddMember("from", v.from, root->GetAllocator());
+            top->AddMember("to", v.to, root->GetAllocator());
+        }
+        virtual void WalkIterator ( struct Iterator * ) override {
+            context->throw_error("can't serialize iterator");
+        }
+        virtual void WalkBlock ( Block * ) override {
+            context->throw_error("can't serialize block");
+        }
+        virtual void Handle ( char *, TypeAnnotation * ) override {
+            context->throw_error("can't serialize handle");
+        }
+    };
+    
     #include "json.das.inc"
 
     class Module_RapidJson : public Module {

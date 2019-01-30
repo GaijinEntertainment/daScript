@@ -60,13 +60,13 @@ namespace das {
             if ( !last )
                 ss << ";";
         }
-        virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, bool ) override {
+        virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             ss << " ";
         }
-        virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, bool ) override {
+        virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             ss << " : ";
         }
-        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, bool last ) override {
+        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool last ) override {
             if ( !last )
                 ss << ";";
         }

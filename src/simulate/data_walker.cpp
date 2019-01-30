@@ -57,17 +57,19 @@ namespace das {
         uint32_t count = 0;
         for ( uint32_t i=0; i!=tab->capacity; ++i ) {
             if ( tab->hashes[i] > HASH_KILLED32 ) {
-                bool last = (++count == tab->size);
+                bool last = (count == (tab->size-1));
                 // key
                 char * key = tab->keys + i*keySize;
-                beforeTableKey(tab, info, key, info->firstType, last);
+                beforeTableKey(tab, info, key, info->firstType, count, last);
                 walk ( key, info->firstType );
-                afterTableKey(tab, info, key, info->firstType, last);
+                afterTableKey(tab, info, key, info->firstType, count, last);
                 // value
                 char * value = tab->data + i*valueSize;
-                beforeTableValue(tab, info, value, info->secondType, last);
+                beforeTableValue(tab, info, value, info->secondType, count, last);
                 walk ( value, info->secondType );
-                afterTableValue(tab, info, value, info->secondType, last);
+                afterTableValue(tab, info, value, info->secondType, count, last);
+                // next
+                count ++;
             }
         }
     }

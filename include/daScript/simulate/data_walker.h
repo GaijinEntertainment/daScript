@@ -36,10 +36,10 @@ namespace das {
         virtual void beforeArray ( Array * pa, TypeInfo * ti ) {}
         virtual void afterArray ( Array * pa, TypeInfo * ti ) {}
         virtual void beforeTable ( Table * pa, TypeInfo * ti ) {}
-        virtual void beforeTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, bool last ) {}
-        virtual void afterTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, bool last ) {}
-        virtual void beforeTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, bool last ) {}
-        virtual void afterTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, bool last ) {}
+        virtual void beforeTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, uint32_t index, bool last ) {}
+        virtual void afterTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, uint32_t index, bool last ) {}
+        virtual void beforeTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, uint32_t index, bool last ) {}
+        virtual void afterTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, uint32_t index, bool last ) {}
         virtual void afterTable ( Table * pa, TypeInfo * ti ) {}
         virtual void beforeRef ( char * pa, TypeInfo * ti ) {}
         virtual void afterRef ( char * pa, TypeInfo * ti ) {}
