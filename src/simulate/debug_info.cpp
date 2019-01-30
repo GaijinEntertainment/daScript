@@ -235,7 +235,7 @@ namespace das
         PrintFlags flags;
         DebugDataWalker() = delete;
         DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f) {}
-        
+
         // data structures
         virtual void beforeStructure ( char *, StructInfo * info ) override {
             ss << "[[";
@@ -428,14 +428,14 @@ namespace das
         walker.walk((char*)pX,info);
         return ss.str();
     }
-    
+
     string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags ) {
         TextWriter ss;
         DebugDataWalker<TextWriter> walker(ss,flags);
         walker.walk(value,info);
         return ss.str();
     }
-    
+
     string debug_type ( TypeInfo * info ) {
         TextWriter stream;
         if ( info->type==Type::tHandle ) {

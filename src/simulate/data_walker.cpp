@@ -5,7 +5,7 @@
 #include "daScript/simulate/hash.h"
 
 namespace das {
-    
+
     void DataWalker::walk ( vec4f x, TypeInfo * info ) {
         if ( info->refType ) {
             walk(cast<char *>::to(x), info );
@@ -13,7 +13,7 @@ namespace das {
             walk((char *)&x, info );
         }
     }
-    
+
     void DataWalker::walk_struct ( char * ps, StructInfo * si ) {
         beforeStructure(ps, si);
         for ( uint32_t i=0; i!=si->fieldsSize; ++i ) {
@@ -26,7 +26,7 @@ namespace das {
         }
         afterStructure(ps, si);
     }
-    
+
     void DataWalker::walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {
         char * pe = pa;
         beforeArrayData(pa, stride, count, ti);
@@ -39,7 +39,7 @@ namespace das {
         }
         afterArrayData(pa, stride, count, ti);
     }
-    
+
     void DataWalker::walk_dim ( char * pa, TypeInfo * ti ) {
         beforeDim(pa, ti);
         TypeInfo copyInfo = *ti;
@@ -50,7 +50,7 @@ namespace das {
         walk_array(pa, stride, count, &copyInfo);
         afterDim(pa, ti);
     }
-    
+
     void DataWalker::walk_table ( Table * tab, TypeInfo * info ) {
         int keySize = getTypeSize(info->firstType);
         int valueSize = getTypeSize(info->secondType);
@@ -71,7 +71,7 @@ namespace das {
             }
         }
     }
-    
+
     void DataWalker::walk ( char * pa, TypeInfo * info ) {
         if ( pa == nullptr ) {
             Null(info);
