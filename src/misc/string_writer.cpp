@@ -6,4 +6,5 @@ namespace das {
 	StringWriterTag HEX;
 	StringWriterTag DEC;
 	StringWriterTag FIXED;
+    StringWriterTag SCIENTIFIC;
 }

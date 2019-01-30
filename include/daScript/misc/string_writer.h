@@ -30,7 +30,8 @@ namespace das {
 	struct StringWriterTag {};
 	extern StringWriterTag HEX;
 	extern StringWriterTag DEC;
-	extern StringWriterTag FIXED;	// TODO: support
+    extern StringWriterTag FIXED;
+    extern StringWriterTag SCIENTIFIC;
 
 	template <typename AllocationPolicy>
 	class StringWriter : public AllocationPolicy {
@@ -38,21 +39,23 @@ namespace das {
 		template <typename TT>
 		StringWriter & write(const char * format, TT value) {
 			const int size = 100;
-			auto at = allocate(size);
-			int realL = _snprintf(at, size, format, value);
-			adjust(size, realL);
-			output();
+			auto at = this->allocate(size);
+			int realL = snprintf(at, size, format, value);
+			this->adjust(size, realL);
+			this->output();
 			return *this;
 		}
 		StringWriter & write(const char * st, size_t len) {
-			append(st, int(len));
-			output();
+			this->append(st, int(len));
+			this->output();
 			return *this;
 		}
 		StringWriter & write(const char * st) {return write(st, strlen(st));}
 		StringWriter & operator << (const StringWriterTag & v ) {
 			if (&v == &HEX) hex = true;
 			else if (&v == &DEC) hex = false;
+            else if (&v == &FIXED) fixed = true;
+            else if (&v == &SCIENTIFIC) fixed = false;
 			return *this;
 		}
 		StringWriter & operator << (char v)					{ return write("%c", v); }
@@ -64,14 +67,14 @@ namespace das {
 		StringWriter & operator << (unsigned v)				{ return write(hex ? "%x" : "%u", v); }
 		StringWriter & operator << (unsigned long v)		{ return write(hex ? "%lx" : "%lu", v); }
 		StringWriter & operator << (unsigned long long v)	{ return write(hex ? "%llx" : "%llu", v); }
-		StringWriter & operator << (float v)				{ return write("%f", v); }
-		StringWriter & operator << (double v)				{ return write("%f", v); }
-		StringWriter & operator << (long double v)			{ return write("%Lf", v); }
+        StringWriter & operator << (float v)				{ return write(fixed ? "%.9f" : "%g", v); }
+        StringWriter & operator << (double v)				{ return write(fixed ? "%.17f" : "%g", v); }
 		StringWriter & operator << (char * v)				{ return write(v); }
 		StringWriter & operator << (const char * v)			{ return write(v); }
 		StringWriter & operator << (const string & v)		{ return write(v.c_str(), v.length()); }
 	protected:
 		bool hex = false;
+        bool fixed = false;
 	};
 
 	typedef StringWriter<VectorAllocationPolicy> TextWriter;
