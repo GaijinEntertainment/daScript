@@ -114,7 +114,7 @@ int main(int argc, const char * argv[]) {
 #endif
     // run tests
     if (argc == 1)
-        run_tests(TEST_PATH "profile/tests", unit_test);
+        run_tests(TEST_PATH "examples/profile/tests", unit_test);
     for ( int i=1; i!=argc; ++i ) {
         string path=argv[i];
         unit_test(path);
