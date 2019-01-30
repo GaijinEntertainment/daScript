@@ -221,10 +221,10 @@ int main() {
     return 0;
 #endif
     bool ok = true;
-    ok = run_compilation_fail_tests(TEST_PATH "test/compilation_fail_tests") && ok;
-    ok = run_unit_tests(TEST_PATH "test/unit_tests") && ok;
-    ok = run_unit_tests(TEST_PATH "test/optimizations") && ok;
-    ok = run_exception_tests(TEST_PATH "test/runtime_errors") && ok;
+    ok = run_compilation_fail_tests(TEST_PATH "examples/test/compilation_fail_tests") && ok;
+    ok = run_unit_tests(TEST_PATH "examples/test/unit_tests") && ok;
+    ok = run_unit_tests(TEST_PATH "examples/test/optimizations") && ok;
+    ok = run_exception_tests(TEST_PATH "examples/test/runtime_errors") && ok;
     tout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown
     Module::Shutdown();
