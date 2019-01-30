@@ -1171,7 +1171,7 @@ namespace das
         StructurePtr findStructure ( const string & name ) const;
         AnnotationPtr findAnnotation ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
-        bool compileBuiltinModule ( const unsigned char * str, unsigned int str_len );
+        bool compileBuiltinModule ( unsigned char * str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
         static void Shutdown();
     public:

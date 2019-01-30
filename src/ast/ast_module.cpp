@@ -137,9 +137,9 @@ namespace das
         return it != callThis.end() ? &it->second : nullptr;
     }
 
-    bool Module::compileBuiltinModule ( const unsigned char * str, unsigned int str_len ) {
+    bool Module::compileBuiltinModule ( unsigned char * str, unsigned int str_len ) {
         TextWriter issues;
-        (void)str_len;
+        str[str_len-1] = 0;//replace last symbol with null terminating. fixme: This is sloppy, and assumes there is something to replace!
         if (auto program = parseDaScript((const char*)str, issues)) {
             if (program->failed()) {
 #if 1
