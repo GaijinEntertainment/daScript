@@ -10,3 +10,7 @@ json/json.das.inc
 
 
 examples/json/json.das.inc
+src/parser/generated/ds_parser.output
+src/parser/generated/ds_lexer.cpp
+src/parser/generated/ds_parser.hpp
+src/parser/generated/ds_parser.cpp

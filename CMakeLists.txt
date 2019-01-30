@@ -14,7 +14,7 @@ FIND_XXD()
 
 SETUP_COMPILER()
 
-set(GEN_FILE_DIR ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR})
+set(GEN_FILE_DIR ${PROJECT_SOURCE_DIR}/src/parser/generated)
 BISON_TARGET(DSParser src/parser/ds_parser.ypp ${GEN_FILE_DIR}/ds_parser.cpp)
 FLEX_TARGET(DSScanner src/parser/ds_lexer.lpp  ${GEN_FILE_DIR}/ds_lexer.cpp)
 ADD_FLEX_BISON_DEPENDENCY(DSScanner DSParser)
