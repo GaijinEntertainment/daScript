@@ -19,7 +19,7 @@ namespace das
         double tSec = minT/1000000.;
         if ( category ) {
             TextWriter ss;
-            ss << "\"" << category << "\", " << FIXED << tSec << ", " << count << "\n";
+            ss << "\"" << category << "\", " << tSec << ", " << count << "\n";
             context->to_out(ss.str().c_str());
         }
         return (float) tSec;

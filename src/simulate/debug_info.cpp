@@ -162,11 +162,79 @@ namespace das
         return getTypeBaseAlign(info);
     }
 
+    class HeapAllocationPolicy {
+    public:
+        char * c_str() {
+            if (!data) return nullptr;
+            auto sh = ((StringHeader *)data) - 1;
+            data[dataSize] = 0;
+            sh->hash = 0;
+            sh->length = dataSize;
+            return data;
+        }
+        int tellp() const {
+            return int(dataSize);
+        }
+    protected:
+        void reserve(int newSize) {
+            if (newSize > dataCapacity) {
+                int newCapacity = max(dataCapacity * 2, newSize);
+                if (data) {
+                    char * oldDataBase = data - sizeof(StringHeader);
+                    char * newDataBase = (char *)heap->reallocate(oldDataBase, dataCapacity + sizeof(StringHeader) + 1, newCapacity + sizeof(StringHeader) + 1);
+                    if (newDataBase == nullptr) {
+                        data = nullptr;
+                        dataSize = 0;
+                        return;
+                    } else if (oldDataBase != newDataBase) {
+                        data = newDataBase + sizeof(StringHeader);
+                        memcpy(data, oldDataBase + sizeof(StringHeader), dataSize);
+                    }
+                }
+                else {
+                    data = (char *) heap->allocate(newCapacity + sizeof(StringHeader) + 1);
+                    if (!data) {
+                        dataSize = 0;
+                        return;
+                    }
+                    data += sizeof(StringHeader);
+                }
+                dataCapacity = newCapacity;
+            }
+        }
+        void append(const char * s, int l) {
+            int newSize = dataSize + l;
+            reserve(newSize);
+            if (data) {
+                memcpy(data + dataSize, s, l);
+                dataSize += l;
+            }
+        }
+        char * allocate (int l) {
+            reserve(dataSize + l);
+            if (!data) return nullptr;
+            dataSize += l;
+            return data + dataSize - l;
+        }
+        virtual void output() {}
+    protected:
+        LinearAllocator * heap = nullptr;
+        char *  data = nullptr;
+        int     dataSize = 0;
+        int     dataCapacity = 0;
+    };
+
+    class StringBuilderWriter : public StringWriter<HeapAllocationPolicy> {
+    public:
+        StringBuilderWriter(LinearAllocator & h) { heap = &h; }
+    };
+
+    template <typename Writer>
     struct DebugDataWalker : DataWalker {
-        TextWriter & ss;
+        Writer & ss;
         PrintFlags flags;
         DebugDataWalker() = delete;
-        DebugDataWalker ( TextWriter & sss, PrintFlags f ) : ss(sss), flags(f) {}
+        DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f) {}
         
         // data structures
         virtual void beforeStructure ( char *, StructInfo * info ) override {
@@ -345,16 +413,25 @@ namespace das
         }
     };
 
+    char * build_string(Context & context, vec4f * values, TypeInfo ** infos, int nArguments, PrintFlags flags) {
+        StringBuilderWriter writer(context.heap);
+        DebugDataWalker<StringBuilderWriter> walker(writer, flags);
+        for ( int i = 0; i!=nArguments; ++i ) {
+            walker.walk(values[i], infos[i]);
+        }
+        return writer.c_str();
+    }
+
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {
         TextWriter ss;
-        DebugDataWalker walker(ss,flags);
+        DebugDataWalker<TextWriter> walker(ss,flags);
         walker.walk((char*)pX,info);
         return ss.str();
     }
     
     string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags ) {
         TextWriter ss;
-        DebugDataWalker walker(ss,flags);
+        DebugDataWalker<TextWriter> walker(ss,flags);
         walker.walk(value,info);
         return ss.str();
     }

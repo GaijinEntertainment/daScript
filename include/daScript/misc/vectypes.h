@@ -7,7 +7,8 @@ namespace das
     template <typename TT>
     struct vec2 {
         TT   x, y;
-        __forceinline friend TextWriter& operator<< (TextWriter& stream, const vec2<TT> & vec) {
+        template <typename AP>
+        __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const vec2<TT> & vec) {
             stream << vec.x << "," << vec.y;
             return stream;
         }
@@ -19,7 +20,8 @@ namespace das
     template <typename TT>
     struct vec3 {
         TT   x, y, z;
-        __forceinline friend TextWriter& operator<< (TextWriter& stream, const vec3<TT> & vec) {
+        template <typename AP>
+        __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const vec3<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z;
             return stream;
         }
@@ -31,7 +33,8 @@ namespace das
     template <typename TT>
     struct vec4 {
         TT  x, y, z, w;
-        __forceinline friend TextWriter& operator<< (TextWriter& stream, const vec4<TT> & vec) {
+        template <typename AP>
+        __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const vec4<TT> & vec) {
             stream << vec.x << "," << vec.y << "," << vec.z << "," << vec.w;
             return stream;
         }

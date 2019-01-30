@@ -19,9 +19,6 @@ namespace das {
 			data.resize(data.size() + l);
 			return data.data() + data.size() - l;
 		}
-		void adjust(int l, int realL) {
-			data.resize(data.size() - l + realL);
-		}
 		virtual void output() {}
 		vector<char> data;
 	};
@@ -38,11 +35,12 @@ namespace das {
 	public:
 		template <typename TT>
 		StringWriter & write(const char * format, TT value) {
-			const int size = 100;
-			auto at = this->allocate(size);
-			int realL = snprintf(at, size, format, value);
-			this->adjust(size, realL);
-			this->output();
+            char buf[128];
+            int realL = snprintf(buf, 128, format, value);
+			if ( auto at = this->allocate(realL) ) {
+                memcpy(at, buf, realL);
+                this->output();
+            }
 			return *this;
 		}
 		StringWriter & write(const char * st, size_t len) {
@@ -50,7 +48,9 @@ namespace das {
 			this->output();
 			return *this;
 		}
-		StringWriter & write(const char * st) {return write(st, strlen(st));}
+		StringWriter & write(const char * st) {
+            return write(st, strlen(st));
+        }
 		StringWriter & operator << (const StringWriterTag & v ) {
 			if (&v == &HEX) hex = true;
 			else if (&v == &DEC) hex = false;

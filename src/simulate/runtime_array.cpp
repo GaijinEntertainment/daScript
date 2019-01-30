@@ -26,18 +26,22 @@ namespace das
         arr.lock --;
     }
 
-    void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride ) {
-        if ( arr.lock ) {
+    void array_reserve(Context & context, Array & arr, uint32_t newCapacity, uint32_t stride) {
+        if (arr.lock) {
             context.throw_error("changing capacity of a locked array");
             return;
         }
-        if ( arr.capacity >= newCapacity ) {
+        if (arr.capacity >= newCapacity) {
             return;
         }
-        arr.data = (char *) context.heap.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
-        if ( !arr.data ) {
+        auto newData = (char *)context.heap.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
+        if (!newData) {
             context.throw_error("out of linear allocator memory");
             return;
+        }
+        if (newData != arr.data) {
+            memcpy(newData, arr.data, arr.capacity);
+            arr.data = newData;
         }
         arr.capacity = newCapacity;
     }
