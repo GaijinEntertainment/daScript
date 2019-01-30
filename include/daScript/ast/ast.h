@@ -219,14 +219,13 @@ namespace das
         vector<AnnotationArgument>  arguments;
     };
 
-    struct Annotation : enable_shared_from_this<Annotation> {
-        Annotation ( const string & n ) : name(n) {}
+    struct Annotation : BasicAnnotation, enable_shared_from_this<Annotation> {
+        Annotation ( const string & n ) : BasicAnnotation(n) {}
         virtual ~Annotation() {}
         virtual bool rtti_isHandledTypeAnnotation() const { return false; }
         virtual bool rtti_isStructureAnnotation() const { return false; }
         virtual bool rtti_isFunctionAnnotation() const { return false; }
         string describe() const { return name; }
-        string      name;
         Module *    module = nullptr;
     };
 

@@ -63,7 +63,7 @@ int main() {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_RapidJson);
-    unit_test(TEST_PATH "json/test.das");
+    unit_test(TEST_PATH "examples/json/test.das");
     Module::Shutdown();
     return 0;
 }

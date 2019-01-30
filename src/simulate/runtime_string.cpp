@@ -3,6 +3,7 @@
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/hash.h"
+#include "daScript/simulate/debug_print.h"
 
 namespace das
 {
@@ -134,12 +135,15 @@ namespace das
         return ssw.str();
     }
 
-    char * build_string(Context & context, vec4f * values, TypeInfo ** infos, int nArguments, PrintFlags flags);
-
     vec4f SimNode_StringBuilder::eval ( Context & context ) {
         vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
-        auto pStr = build_string(context, argValues, types, nArguments, PrintFlags::string_builder);
+        StringBuilderWriter writer(context.heap);
+        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
+        for ( int i = 0; i!=nArguments; ++i ) {
+            walker.walk(argValues[i], types[i]);
+        }
+        auto pStr = writer.c_str();
         if ( !pStr ) {
             context.throw_error("can't allocate string builder result, out of heap");
         }

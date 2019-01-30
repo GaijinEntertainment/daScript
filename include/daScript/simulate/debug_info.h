@@ -39,6 +39,11 @@ namespace das
     struct StructInfo;
     struct TypeAnnotation;
 
+    struct BasicAnnotation {
+        BasicAnnotation ( const string & n ) : name(n) {}
+        string      name;
+    };
+    
     struct LineInfo {
         LineInfo() = default;
         LineInfo(int c, int l) : column(uint32_t(c)), line(uint32_t(l)) {}
@@ -108,8 +113,6 @@ namespace das
     ,   stackwalker     =   PrintFlags::escapeString | PrintFlags::namesAndDimensions | PrintFlags::typeQualifiers
     };
 
-    string debug_value ( void * pX, TypeInfo * info, PrintFlags flags );
-    string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags );
     string debug_type ( TypeInfo * info );
 }
 
