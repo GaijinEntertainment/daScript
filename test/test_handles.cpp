@@ -1,6 +1,5 @@
 #include "daScript/daScript.h"
 
-using namespace std;
 using namespace das;
 
 struct TestObjectFoo {

@@ -8,7 +8,6 @@
     #include <dirent.h>
 #endif
 
-using namespace std;
 using namespace das;
 
 bool g_reportCompilationFailErrors = false;
@@ -16,17 +15,17 @@ bool g_reportCompilationFailErrors = false;
 TextPrinter tout;
 
 bool compilation_fail_test ( const string & fn ) {
-	tout << fn << " ";
-    string str;
-    ifstream t(fn);
+    tout << fn << " ";
+    std::string str;
+    std::ifstream t(fn);
     if ( !t.is_open() ) {
-		tout << "not found\n";
+        tout << "not found\n";
         return false;
     }
-    t.seekg(0, ios::end);
+    t.seekg(0, std::ios::end);
     str.reserve(t.tellg());
-    t.seekg(0, ios::beg);
-    str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
+    t.seekg(0, std::ios::beg);
+    str.assign((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
     if ( auto program = parseDaScript(str.c_str(), tout) ) {
         if ( program->failed() ) {
             bool failed = false;
@@ -34,7 +33,7 @@ bool compilation_fail_test ( const string & fn ) {
             for ( auto err : program->errors ) {
                 int count = -- errors[err.cerr];
                 if ( g_reportCompilationFailErrors || count<0 ) {
-					tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                    tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
                 }
                 if ( count <0 ) {
                     failed = true;
@@ -48,36 +47,36 @@ bool compilation_fail_test ( const string & fn ) {
                 }
             }
             if ( any_errors || failed ) {
-				tout << "failed";
+                tout << "failed";
                 if ( any_errors ) {
-					tout << ", expecting errors";
+                    tout << ", expecting errors";
                     for ( auto terr : errors  ) {
                         if (terr.second > 0 ) {
-							tout << " " << int(terr.first) << ":" << terr.second;
+                            tout << " " << int(terr.first) << ":" << terr.second;
                         }
                     }
                 }
-				tout << "\n";
+                tout << "\n";
                 return false;
             }
-			tout << "ok\n";
+            tout << "ok\n";
             return true;
         } else {
-			tout << "failed, compiled without errors\n";
+            tout << "failed, compiled without errors\n";
             return false;
         }
     } else {
-		tout << "failed, not expected to compile\n";
+        tout << "failed, not expected to compile\n";
         return false;
     }
 }
 
 bool unit_test ( const string & fn ) {
-	tout << fn << " ";
+    tout << fn << " ";
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
-		tout << "not found\n";
+        tout << "not found\n";
         return false;
     }
     t.seekg(0, ios::end);
@@ -86,9 +85,9 @@ bool unit_test ( const string & fn ) {
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
     if ( auto program = parseDaScript(str.c_str(), tout) ) {
         if ( program->failed() ) {
-			tout << "failed to compile\n";
+            tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-				tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
@@ -102,13 +101,13 @@ bool unit_test ( const string & fn ) {
                     return false;
                 }
                 if ( !result ) {
-					tout << "failed\n";
+                    tout << "failed\n";
                     return false;
                 }
-				tout << "ok\n";
+                tout << "ok\n";
                 return true;
             } else {
-				tout << "function 'test' not found\n";
+                tout << "function 'test' not found\n";
                 return false;
             }
         }
@@ -118,7 +117,7 @@ bool unit_test ( const string & fn ) {
 }
 
 bool exception_test ( const string & fn ) {
-	tout << fn << " ";
+    tout << fn << " ";
     string str;
     ifstream t(fn);
     if ( !t.is_open() ) {
@@ -131,9 +130,9 @@ bool exception_test ( const string & fn ) {
     str.assign((istreambuf_iterator<char>(t)), istreambuf_iterator<char>());
     if ( auto program = parseDaScript(str.c_str(), tout) ) {
         if ( program->failed() ) {
-			tout << "failed to compile\n";
+            tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-				tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
@@ -143,13 +142,13 @@ bool exception_test ( const string & fn ) {
                 ctx.restart();
                 ctx.evalWithCatch(fnTest, nullptr);
                 if ( auto ex = ctx.getException() ) {
-					tout << "ok\n";
+                    tout << "ok\n";
                     return true;
                 }
-				tout << "failed, finished without exception\n";
+                tout << "failed, finished without exception\n";
                 return false;
             } else {
-				tout << "function 'test' not found\n";
+                tout << "function 'test' not found\n";
                 return false;
             }
         }
@@ -224,7 +223,7 @@ int main() {
     ok = run_unit_tests(TEST_PATH "test/unit_tests") && ok;
     ok = run_unit_tests(TEST_PATH "test/optimizations") && ok;
     ok = run_exception_tests(TEST_PATH "test/runtime_errors") && ok;
-	tout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
+    tout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown
     Module::Shutdown();
     return ok ? 0 : -1;
