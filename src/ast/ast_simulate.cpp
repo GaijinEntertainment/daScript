@@ -796,15 +796,32 @@ namespace das
 
     SimNode * ExprCall::simulate (Context & context) const {
         auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
+        bool needTypeInfo = false;
+        for ( auto & arg : func->arguments ) {
+            if ( arg->type->baseType==Type::anyArgument )
+                needTypeInfo = true;
+        }
         pCall->debug = at;
         assert((func->builtIn || func->index>=0) && "calling function which is not used. how?");
         pCall->fnPtr = context.getFunction(func->index);
         pCall->stackTop = stackTop;
         if ( int nArg = (int) arguments.size() ) {
             pCall->arguments = (SimNode **) context.code.allocate(nArg * sizeof(SimNode *));
+            if ( needTypeInfo ) {
+                pCall->types = (TypeInfo **) context.code.allocate(nArg * sizeof(TypeInfo *));
+            } else {
+                pCall->types = nullptr;
+            }
             pCall->nArguments = nArg;
             for ( int a=0; a!=nArg; ++a ) {
                 pCall->arguments[a] = arguments[a]->simulate(context);
+                if ( pCall->types ) {
+                    if ( func->arguments[a]->type->baseType==Type::anyArgument ) {
+                        pCall->types[a] = context.thisHelper->makeTypeInfo(nullptr, arguments[a]->type);
+                    } else {
+                        pCall->types[a] = nullptr;
+                    }
+                }
             }
         } else {
             pCall->arguments = nullptr;

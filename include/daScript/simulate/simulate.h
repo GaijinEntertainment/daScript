@@ -522,6 +522,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_EVAL_NODE
 #undef  EVAL_NODE
         SimNode ** arguments;
+        TypeInfo ** types;
         SimFunction * fnPtr;
         int32_t  nArguments;
         uint32_t stackTop;

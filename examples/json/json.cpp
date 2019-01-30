@@ -420,7 +420,6 @@ namespace das {
         auto len = stringLength(*context, sv);
         rv->SetString(sv, len);
     }
-
     
     struct JsonWriter : DataWalker {
         rapidjson::Document * root;
@@ -440,7 +439,7 @@ namespace das {
         }
         // data structures
         virtual void beforeStructure ( char *, StructInfo * ) override {
-            top->SetObject();
+            top = &top->SetObject();
         }
         virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
             push();
@@ -592,6 +591,19 @@ namespace das {
         }
     };
     
+    vec4f _builtin_save_json ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        rapidjson::Document document;
+        JsonWriter writer(context, &document);
+        // args
+        Block block = cast<Block>::to(args[1]);
+        auto info = call->types[0];
+        writer.walk(args[0], info);
+        vec4f bargs[1];
+        bargs[0] = cast<void *>::from(&document);
+        context.invoke(block, bargs, nullptr);
+        return v_zero();
+    }
+    
     #include "json.das.inc"
 
     class Module_RapidJson : public Module {
@@ -604,6 +616,7 @@ namespace das {
             addAnnotation(make_shared<JsValueTypeAnnotation>());
             // functionality
             addExtern<decltype(readJson),readJson>(*this,lib,"_builtin_parse_json");
+            addInterop<_builtin_save_json,void,vec4f,Block>(*this, lib, "_builtin_save_json");
             addExtern<decltype(json_set_i),json_set_i>(*this,lib,"set");
             addExtern<decltype(json_set_f),json_set_f>(*this,lib,"set");
             addExtern<decltype(json_set_b),json_set_b>(*this,lib,"set");

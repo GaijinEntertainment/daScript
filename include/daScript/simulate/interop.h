@@ -135,9 +135,9 @@ namespace das
             return cast<Result *>::from(cmres);
         }
     };
-
+    
     typedef vec4f ( InteropFunction ) ( Context & context, SimNode_CallBase * node, vec4f * args );
-
+    
     template <InteropFunction fn>
     struct SimNode_InteropFuncCall : SimNode_CallBase {
         SimNode_InteropFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}

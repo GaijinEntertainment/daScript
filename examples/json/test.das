@@ -2,8 +2,33 @@
 
 require RapidJson
 
+// options log=true, logInferPasses=false, optimize=true
+
+struct Foo
+    i : int = 5
+    f : float = 6.0
+    s : string = "hello"
+    n : int64
+
+struct Bar
+    i : int
+    j : int[3] = [[int 1;2;3]]
+    t : array<float>
+    k : table<string,int>
+    f : Foo
+
+def test_write
+    let t = Foo()
+    writeJson(t) <| $ ( root )
+        print("{root}\n")
+    return true
+
+
 [export]
 def test
+    test_write()
+    return true
+/*
     let json_text = "\{ \"hello\": \"world\", \"t\": true , \"f\": false, \"n\": null, \"i\": 123, \"pi\": 3.1416, \"a\": [1, 2, 3, 4] \}"
 
     readJson(json_text) <| $ ( root, error )
@@ -44,3 +69,4 @@ def test
         set(root.pi, 1.23)
         assert(root.pi.as_float==1.23)
 	return true
+*/
