@@ -142,6 +142,7 @@ SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
 SET(MAIN_SRC
 include/daScript/daScript.h
+include/daScript/das_config.h
 )
 SOURCE_GROUP_FILES("main" MAIN_SRC)
 
