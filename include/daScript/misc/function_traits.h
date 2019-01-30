@@ -32,7 +32,7 @@ namespace das
     struct function_traits<R (C::*)> : function_traits<R (C&)> {};      // member object pointer
     template<typename F>
     struct function_traits {    // function object, function, lambda
-    #ifndef DAS_USE_EASTL
+    #if DAS_STD_HAS_BIND
         static_assert(!is_bind_expression<F>::value, "bind result is not supported yet");
     #endif
     private:
