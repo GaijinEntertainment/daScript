@@ -43,7 +43,7 @@ namespace das
         BasicAnnotation ( const string & n ) : name(n) {}
         string      name;
     };
-    
+
     struct LineInfo {
         LineInfo() = default;
         LineInfo(int c, int l) : column(uint32_t(c)), line(uint32_t(l)) {}
