@@ -16,13 +16,17 @@ namespace das {
 
     void DataWalker::walk_struct ( char * ps, StructInfo * si ) {
         beforeStructure(ps, si);
+        if ( cancel ) return;
         for ( uint32_t i=0; i!=si->fieldsSize; ++i ) {
             bool last = i==(si->fieldsSize-1);
             VarInfo * vi = si->fields[i];
             char * pf = ps + vi->offset;
             beforeStructureField(ps, si, pf, vi, last);
+            if ( cancel ) return;
             walk(pf, vi);
+            if ( cancel ) return;
             afterStructureField(ps, si, pf, vi, last);
+            if ( cancel ) return;
         }
         afterStructure(ps, si);
     }
@@ -30,11 +34,15 @@ namespace das {
     void DataWalker::walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {
         char * pe = pa;
         beforeArrayData(pa, stride, count, ti);
+        if ( cancel ) return;
         for ( uint32_t i=0; i!=count; ++i ) {
             bool last = i==count-1;
             beforeArrayElement(pa, ti, pe, i, last);
+            if ( cancel ) return;
             walk(pe, ti);
+            if ( cancel ) return;
             afterArrayElement(pa, ti, pe, i, last);
+            if ( cancel ) return;
             pe += stride;
         }
         afterArrayData(pa, stride, count, ti);
@@ -42,12 +50,14 @@ namespace das {
 
     void DataWalker::walk_dim ( char * pa, TypeInfo * ti ) {
         beforeDim(pa, ti);
+        if ( cancel ) return;
         TypeInfo copyInfo = *ti;
         assert(copyInfo.dimSize);
         copyInfo.dimSize --;
         uint32_t stride = getTypeBaseSize(ti);
         uint32_t count = getDimSize(ti);
         walk_array(pa, stride, count, &copyInfo);
+        if ( cancel ) return;
         afterDim(pa, ti);
     }
 
@@ -61,13 +71,19 @@ namespace das {
                 // key
                 char * key = tab->keys + i*keySize;
                 beforeTableKey(tab, info, key, info->firstType, count, last);
+                if ( cancel ) return;
                 walk ( key, info->firstType );
+                if ( cancel ) return;
                 afterTableKey(tab, info, key, info->firstType, count, last);
+                if ( cancel ) return;
                 // value
                 char * value = tab->data + i*valueSize;
                 beforeTableValue(tab, info, value, info->secondType, count, last);
+                if ( cancel ) return;
                 walk ( value, info->secondType );
+                if ( cancel ) return;
                 afterTableValue(tab, info, value, info->secondType, count, last);
+                if ( cancel ) return;
                 // next
                 count ++;
             }
@@ -79,21 +95,27 @@ namespace das {
             Null(info);
         } else if ( info->ref ) {
             beforeRef(pa,info);
+            if ( cancel ) return;
             TypeInfo ti = *info;
             ti.ref = false;
             walk(*(char **)pa, &ti);
+            if ( cancel ) return;
             afterRef(pa,info);
         } else if ( info->dimSize ) {
             walk_dim(pa, info);
         } else if ( info->type==Type::tArray ) {
             auto arr = (Array *) pa;
             beforeArray(arr, info);
+            if ( cancel ) return;
             walk_array(arr->data, getTypeSize(info->firstType), arr->size, info->firstType);
+            if ( cancel ) return;
             afterArray(arr, info);
         } else if ( info->type==Type::tTable ) {
             auto tab = (Table *) pa;
             beforeTable(tab, info);
+            if ( cancel ) return;
             walk_table(tab, info);
+            if ( cancel ) return;
             afterTable(tab, info);
         } else {
             switch ( info->type ) {
@@ -118,8 +140,10 @@ namespace das {
                 case Type::tIterator:   WalkIterator((Iterator *)pa); break;     // TODO: verify
                 case Type::tPointer:
                     beforePtr(pa, info);
+                    if ( cancel ) return;
                     if ( info->firstType ) {
                         walk(*(char**)pa, info->firstType);
+                        if ( cancel ) return;
                     }
                     afterPtr(pa, info);
                     break;
@@ -127,7 +151,9 @@ namespace das {
                 case Type::tBlock:      WalkBlock((Block *)pa); break;
                 case Type::tHandle:
                     beforeHandle(pa, info);
+                    if ( cancel ) return;
                     info->annotation->walk(*this, pa);
+                    if ( cancel ) return;
                     afterHandle(pa, info);
                     break;
                 default:                assert(0 && "unsupported print type"); break;

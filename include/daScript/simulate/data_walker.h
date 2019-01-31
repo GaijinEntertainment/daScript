@@ -22,6 +22,7 @@ namespace das {
     // we doing what?
         class Context * context = nullptr;
         bool reading = false;
+        bool cancel = false;
     // data structures
         virtual void beforeStructure ( char * ps, StructInfo * si ) {}
         virtual void afterStructure ( char * ps, StructInfo * si ) {}

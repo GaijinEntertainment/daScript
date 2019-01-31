@@ -16,6 +16,7 @@ struct Bar
     t : array<float>
     k : table<string,int>
     f : Foo
+    m : float4x4
 
 def test_write
     let t <- Bar()
@@ -24,14 +25,19 @@ def test_write
     push(t.t,1.3)
     t.k["foo"] = 1
     t.k["bar"] = 2
-    writeJson(t) <| $ ( root )
-        print("{root}\n")
+    t.m[1][1] = 1.
+    writeToJson(t) <| $ ( root )
+        print("writeToJson = {root}\n")
+        let q : Bar
+        readFromJson(q, root)
+        print("readFromJson = {q}\n")
     return true
 
 
 [export]
 def test
     test_write()
+    return true
     test_parse()
     return true
 

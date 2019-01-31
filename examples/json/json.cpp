@@ -421,10 +421,22 @@ namespace das {
         rv->SetString(sv, len);
     }
     
-    struct JsonWriter : DataWalker {
+    // note: more efficient implementation would have two separate classes
+    //          this, however, allows us to keep reader next to writer
+    //          its likely that that "reading" should be a template
+    struct JsonWalker : DataWalker {
         rapidjson::Document * root;
         JsValue * top;
         vector<JsValue *> stack;
+        JsonWalker ( Context & ctx, rapidjson::Document * r, bool weRead ) {
+            context = &ctx;
+            reading = weRead;
+            top = root = r;
+        }
+        void error ( const char * message ) {
+            context->throw_error(message);
+            cancel = true;
+        }
         void push() {
             stack.push_back(top);
         }
@@ -432,58 +444,159 @@ namespace das {
             top = stack.back();
             stack.pop_back();
         }
-        JsonWriter ( Context & ctx, rapidjson::Document * r ) {
-            context = &ctx;
-            reading = false;
-            top = root = r;
-        }
         // data structures
         virtual void beforeStructure ( char *, StructInfo * ) override {
-            top->SetObject();
+            if ( reading ) {
+                if ( !top->IsObject() ) {
+                    error("JSON, expecing object");
+                    return;
+                }
+            } else {
+                top->SetObject();
+            }
         }
         virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
             push();
             rapidjson::Document::StringRefType name (vi->name);
-            top->AddMember(name, false, root->GetAllocator());
-            top = &top->FindMember(name)->value;
+            if ( !reading ) {
+                top->AddMember(name, false, root->GetAllocator());
+                top = &top->FindMember(name)->value;
+            } else if ( top ) {
+                auto member = top->FindMember(name);
+                if ( member != top->MemberEnd() ) {
+                    top = &member->value;
+                } else {
+                    top = nullptr;
+                }
+            }
         }
         virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool ) override {
             pop();
         }
+        virtual void beforeArray ( Array * pa, TypeInfo * ti ) override {
+            if ( reading ) {
+                if ( top && top->IsArray() ) {
+                    uint32_t capacity = top->Capacity();
+                    uint32_t stride = getTypeSize(ti->firstType);
+                    array_resize ( *context, *pa, capacity, stride, true );
+                }
+            }
+        }
         virtual void beforeArrayData ( char *, uint32_t, uint32_t count, TypeInfo * ) override {
-            top->SetArray();
-            top->Clear();
-            top->Reserve(count, root->GetAllocator());
+            if ( reading ) {
+                if ( top ) {
+                    if ( !top->IsArray() ) {
+                        error("JSON, expecting array");
+                        return;
+                    } else if ( top->Capacity()!=count ) {
+                        error("JSON, mismatching array capacity");
+                        return;
+                    }
+                }
+            } else {
+                top->SetArray();
+                top->Clear();
+                top->Reserve(count, root->GetAllocator());
+            }
         }
         virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t index, bool ) override {
             push();
-            top->PushBack(false, root->GetAllocator());
-            top = &(*top)[index];
+            if ( reading ) {
+                if ( top ) {
+                    top = &(*top)[index];
+                }
+            } else {
+                top->PushBack(false, root->GetAllocator());
+                top = &(*top)[index];
+            }
         }
         virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
             pop();
         }
-        virtual void beforeTable ( Table * tab, TypeInfo * ) override {
-            top->SetArray();
-            top->Clear();
-            top->Reserve(tab->size, root->GetAllocator());
+        virtual void beforeTable ( Table * tab, TypeInfo * info ) override {
+            if ( reading ) {
+                if ( top ) {
+                    if ( !top->IsArray() ) {
+                        error("JSON, expecting array");
+                        return;
+                    }
+                    table_clear(*context, *tab);
+                    auto stride = getTypeSize(info->secondType);
+                    for ( auto it = top->Begin(); it != top->End(); ++it ) {
+                        auto mKey = it->FindMember("key");
+                        if ( mKey != it->MemberEnd() ) {
+                            switch ( info->firstType->type ) {
+                                case Type::tString:
+                                    if ( mKey->value.IsString() ) {
+                                        auto key = (char *) mKey->value.GetString();
+                                        TableHash<char *> thh(context, stride);
+                                        auto hfn = hash_function(*context, key);
+                                        thh.reserve(*tab, key, hfn);
+                                    } else {
+                                        error("JSON, key type must be string");
+                                    }
+                                    break;
+                                case Type::tInt:
+                                case Type::tUInt:
+                                    assert(0 && "TODO: implment for all workhorse types");
+                                default:
+                                    error("JSON, unexpected key type");
+                                    return;
+                            }
+                        } else {
+                            error("JSON, expecting key");
+                            return;
+                        }
+                    }
+                }
+            } else {
+                top->SetArray();
+                top->Clear();
+                top->Reserve(tab->size, root->GetAllocator());
+            }
         }
         virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t index, bool ) override {
             push();
-            top->PushBack(false, root->GetAllocator());
-            top = &(*top)[index];
-            top->SetObject();
-            top->AddMember("key",false,root->GetAllocator());
-            top = &top->FindMember("key")->value;
+            if ( reading ) {
+                if ( top ) {
+                    top = &(*top)[index];
+                    auto member = top->FindMember("key");
+                    if ( member != top->MemberEnd() ) {
+                        top = &member->value;
+                    } else {
+                        error("JSON, expecting key");
+                        return;
+                    }
+                }
+            } else {
+                top->PushBack(false, root->GetAllocator());
+                top = &(*top)[index];
+                top->SetObject();
+                top->AddMember("key",false,root->GetAllocator());
+                top = &top->FindMember("key")->value;
+            }
         }
         virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             pop();
         }
         virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t index, bool ) override {
             push();
-            top = &(*top)[index];
-            top->AddMember("value",false,root->GetAllocator());
-            top = &top->FindMember("value")->value;
+            if ( reading ) {
+                if ( top ) {
+                    top = &(*top)[index];
+                    auto member = top->FindMember("value");
+                    if ( member != top->MemberEnd() ) {
+                        top = &member->value;
+                    } else {
+                        error("JSON, expecting value");
+                        return;
+                    }
+                }
+            } else {
+                top = &(*top)[index];
+                top->AddMember("value",false,root->GetAllocator());
+                top = &top->FindMember("value")->value;
+            }
         }
         virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             pop();
@@ -496,111 +609,173 @@ namespace das {
         }
         // types
         virtual void Null ( TypeInfo * ) override {
-            top->SetNull();
-        }
-        virtual void Bool ( bool & b ) override {
-            top->SetBool(b);
-        }
-        virtual void Int64 ( int64_t & i ) override {
-            top->SetInt64(i);
-        }
-        virtual void UInt64 ( uint64_t & u ) override {
-            top->SetUint64(u);
-        }
-        virtual void String ( char * & st ) override {
-            if ( st ) {
-                top->SetString(st, stringLength(*context, st));
+            if ( reading ) {
+                if ( top && !top->IsNull() ) {
+                    error("JSON, expecting NULL");
+                    return;
+                }
             } else {
-                top->SetString("",0);
+                top->SetNull();
             }
         }
-        virtual void Float ( float & f ) override {
-            top->SetFloat(f);
+        
+        virtual void String ( char * & st ) override {
+            if ( reading ) {
+                if ( top ) {
+                    if ( !top->IsString() ) {
+                        error("JSON, type mismatch, expecting string");
+                        return;
+                    }
+                    auto str = top->GetString();
+                    auto strl = top->GetStringLength();
+                    st = context->heap.allocateString(str, strl);
+                }
+            } else {
+                if ( st ) {
+                    top->SetString(st, stringLength(*context, st));
+                } else {
+                    top->SetString("",0);
+                }
+            }
         }
-        virtual void Int ( int32_t & i ) override {
-            top->SetInt(i);
+
+#define WALK_PROPERTY(TYPE,CTYPE,JSTYPE) \
+        virtual void TYPE ( CTYPE & b ) override { \
+            if ( reading ) { \
+                if ( top ) { \
+                    if ( !top->Is##JSTYPE() ) { \
+                        error("JSON, type mismatch"); \
+                        return; \
+                    } \
+                    b = top->Get##JSTYPE(); \
+                } \
+            } else { \
+                top->Set##JSTYPE(b); \
+            } \
         }
-        virtual void UInt ( uint32_t & u ) override {
-            top->SetUint(u);
+        
+        WALK_PROPERTY(Bool,bool,Bool);
+        WALK_PROPERTY(Int64,int64_t,Int64);
+        WALK_PROPERTY(UInt64,uint64_t,Uint64);
+        WALK_PROPERTY(Float,float,Float);
+        WALK_PROPERTY(Int,int32_t,Int);
+        WALK_PROPERTY(UInt,uint32_t,Uint);
+
+#define WALK_PROPERTY_VEC2(TYPE,CTYPE,JSTYPE) \
+        virtual void TYPE ( CTYPE & v ) override { \
+            if ( reading ) { \
+                if ( top ) { \
+                    if ( !top->IsObject() ) { \
+                        error("JSON, type mismatch, expecting object with x and y"); \
+                        return; \
+                    } \
+                    auto mX = top->FindMember("x"); \
+                    auto mY = top->FindMember("y"); \
+                    if ( mX != top->MemberEnd() ) v.x = mX->value.Get##JSTYPE(); \
+                    if ( mY != top->MemberEnd() ) v.y = mY->value.Get##JSTYPE(); \
+                } \
+            } else { \
+                top->SetObject(); \
+                top->AddMember("x", v.x, root->GetAllocator()); \
+                top->AddMember("y", v.y, root->GetAllocator()); \
+            } \
         }
-        virtual void Int2 ( int2 & v ) override {
-            top->SetObject();
-            top->AddMember("x", v.x, root->GetAllocator());
-            top->AddMember("y", v.x, root->GetAllocator());
+        
+        WALK_PROPERTY_VEC2(Int2,int2,Int);
+        WALK_PROPERTY_VEC2(UInt2,uint2,Uint);
+        WALK_PROPERTY_VEC2(Float2,float2,Float);
+ 
+#define WALK_PROPERTY_VEC3(TYPE,CTYPE,JSTYPE) \
+        virtual void TYPE ( CTYPE & v ) override { \
+            if ( reading ) { \
+                if ( top ) { \
+                    if ( !top->IsObject() ) { \
+                        error("JSON, type mismatch, expecting object with x and y"); \
+                        return; \
+                    } \
+                    auto mX = top->FindMember("x"); \
+                    auto mY = top->FindMember("y"); \
+                    auto mZ = top->FindMember("z"); \
+                    if ( mX != top->MemberEnd() ) v.x = mX->value.Get##JSTYPE(); \
+                    if ( mY != top->MemberEnd() ) v.y = mY->value.Get##JSTYPE(); \
+                    if ( mZ != top->MemberEnd() ) v.z = mZ->value.Get##JSTYPE(); \
+                } \
+            } else { \
+                top->SetObject(); \
+                top->AddMember("x", v.x, root->GetAllocator()); \
+                top->AddMember("y", v.y, root->GetAllocator()); \
+                top->AddMember("z", v.z, root->GetAllocator()); \
+            } \
         }
-        virtual void Int3 ( int3 & v ) override {
-            top->SetObject();
-            top->AddMember("x", v.x, root->GetAllocator());
-            top->AddMember("y", v.x, root->GetAllocator());
-            top->AddMember("z", v.x, root->GetAllocator());
+        
+        WALK_PROPERTY_VEC3(Int3,int3,Int);
+        WALK_PROPERTY_VEC3(UInt3,uint3,Uint);
+        WALK_PROPERTY_VEC3(Float3,float3,Float);
+        
+#define WALK_PROPERTY_VEC4(TYPE,CTYPE,JSTYPE) \
+        virtual void TYPE ( CTYPE & v ) override { \
+            if ( reading ) { \
+                if ( top ) { \
+                    if ( !top->IsObject() ) { \
+                        error("JSON, type mismatch, expecting object with x and y"); \
+                        return; \
+                    } \
+                    auto mX = top->FindMember("x"); \
+                    auto mY = top->FindMember("y"); \
+                    auto mZ = top->FindMember("z"); \
+                    if ( mX != top->MemberEnd() ) v.x = mX->value.Get##JSTYPE(); \
+                    if ( mY != top->MemberEnd() ) v.y = mY->value.Get##JSTYPE(); \
+                    if ( mZ != top->MemberEnd() ) v.z = mZ->value.Get##JSTYPE(); \
+                } \
+            } else { \
+                top->SetObject(); \
+                top->AddMember("x", v.x, root->GetAllocator()); \
+                top->AddMember("y", v.y, root->GetAllocator()); \
+                top->AddMember("z", v.z, root->GetAllocator()); \
+            } \
         }
-        virtual void Int4 ( int4 & v ) override {
-            top->SetObject();
-            top->AddMember("x", v.x, root->GetAllocator());
-            top->AddMember("y", v.x, root->GetAllocator());
-            top->AddMember("z", v.x, root->GetAllocator());
-            top->AddMember("w", v.x, root->GetAllocator());
+        
+        WALK_PROPERTY_VEC4(Int4,int4,Int);
+        WALK_PROPERTY_VEC4(UInt4,uint4,Uint);
+        WALK_PROPERTY_VEC4(Float4,float4,Float);
+        
+#define WALK_PROPERTY_RANGE(TYPE,CTYPE,JSTYPE) \
+        virtual void TYPE ( CTYPE & v ) override { \
+            if ( reading ) { \
+                if ( top ) { \
+                    if ( !top->IsObject() ) { \
+                        error("JSON, type mismatch, expecting object with x and y"); \
+                        return; \
+                    } \
+                    auto mX = top->FindMember("from"); \
+                    auto mY = top->FindMember("to"); \
+                    if ( mX != top->MemberEnd() ) v.from = mX->value.Get##JSTYPE(); \
+                    if ( mY != top->MemberEnd() ) v.to = mY->value.Get##JSTYPE(); \
+                } \
+            } else { \
+                top->SetObject(); \
+                top->AddMember("from", v.from, root->GetAllocator()); \
+                top->AddMember("to", v.to, root->GetAllocator()); \
+            } \
         }
-        virtual void UInt2 ( uint2 & v ) override {
-            top->SetObject();
-            top->AddMember("x", v.x, root->GetAllocator());
-            top->AddMember("y", v.x, root->GetAllocator());
-        }
-        virtual void UInt3 ( uint3 & v ) override {
-            top->SetObject();
-            top->AddMember("x", v.x, root->GetAllocator());
-            top->AddMember("y", v.x, root->GetAllocator());
-            top->AddMember("z", v.x, root->GetAllocator());
-        }
-        virtual void UInt4 ( uint4 & v ) override {
-            top->SetObject();
-            top->AddMember("x", v.x, root->GetAllocator());
-            top->AddMember("y", v.x, root->GetAllocator());
-            top->AddMember("z", v.x, root->GetAllocator());
-            top->AddMember("w", v.x, root->GetAllocator());
-        }
-        virtual void Float2 ( float2 & v ) override {
-            top->SetObject();
-            top->AddMember("x", v.x, root->GetAllocator());
-            top->AddMember("y", v.x, root->GetAllocator());
-        }
-        virtual void Float3 ( float3 & v ) override {
-            top->SetObject();
-            top->AddMember("x", v.x, root->GetAllocator());
-            top->AddMember("y", v.x, root->GetAllocator());
-            top->AddMember("z", v.x, root->GetAllocator());
-        }
-        virtual void Float4 ( float4 & v ) override {
-            top->SetObject();
-            top->AddMember("x", v.x, root->GetAllocator());
-            top->AddMember("y", v.x, root->GetAllocator());
-            top->AddMember("z", v.x, root->GetAllocator());
-            top->AddMember("w", v.x, root->GetAllocator());
-        }
-        virtual void Range ( range & v ) override {
-            top->SetObject();
-            top->AddMember("from", v.from, root->GetAllocator());
-            top->AddMember("to", v.to, root->GetAllocator());
-        }
-        virtual void URange ( urange & v ) override {
-            top->SetObject();
-            top->AddMember("from", v.from, root->GetAllocator());
-            top->AddMember("to", v.to, root->GetAllocator());
-        }
+        
+        WALK_PROPERTY_RANGE(Range,range,Int);
+        WALK_PROPERTY_RANGE(URange,urange,Uint);
+        
         virtual void WalkIterator ( struct Iterator * ) override {
-            context->throw_error("can't serialize iterator");
+            error("can't serialize iterator");
         }
         virtual void WalkBlock ( Block * ) override {
-            context->throw_error("can't serialize block");
+            error("can't serialize block");
         }
         virtual void Handle ( char *, TypeAnnotation * ) override {
-            context->throw_error("can't serialize handle");
+            error("can't serialize handle");
         }
     };
     
     vec4f _builtin_save_json ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         rapidjson::Document document;
-        JsonWriter writer(context, &document);
+        JsonWalker writer(context, &document, false);
         // args
         Block block = cast<Block>::to(args[1]);
         auto info = call->types[0];
@@ -608,6 +783,14 @@ namespace das {
         vec4f bargs[1];
         bargs[0] = cast<void *>::from(&document);
         context.invoke(block, bargs, nullptr);
+        return v_zero();
+    }
+    
+    vec4f _builtin_load_json ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        rapidjson::Document * document = cast<rapidjson::Document *>::to(args[1]);
+        auto info = call->types[0];
+        JsonWalker writer(context, document, true);
+        writer.walk(args[0], info);
         return v_zero();
     }
     
@@ -624,6 +807,7 @@ namespace das {
             // functionality
             addExtern<decltype(readJson),readJson>(*this,lib,"_builtin_parse_json");
             addInterop<_builtin_save_json,void,vec4f,Block>(*this, lib, "_builtin_save_json");
+            addInterop<_builtin_load_json,void,vec4f,JsValue*>(*this, lib, "readFromJson");
             addExtern<decltype(json_set_i),json_set_i>(*this,lib,"set");
             addExtern<decltype(json_set_f),json_set_f>(*this,lib,"set");
             addExtern<decltype(json_set_b),json_set_b>(*this,lib,"set");
