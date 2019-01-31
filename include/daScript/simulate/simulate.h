@@ -1353,6 +1353,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 sources[t] = cast<Iterator *>::to(ll);
             }
             IteratorContext ph[total];
+            SimNode * __restrict pbody = body;
             bool needLoop = true;
             for ( int t=0; t!=total; ++t ) {
                 needLoop = sources[t]->first(context, ph[t]) && needLoop;
@@ -1363,7 +1364,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 for ( int t=0; t!=total; ++t ){
                     *pi[t] = ph[t].value;
                 }
-                body->eval(context);
+                pbody->eval(context);
                 for ( int t=0; t!=total; ++t ){
                     if ( !sources[t]->next(context, ph[t]) ) goto loopend;
                     if ( context.stopFlags ) goto loopend;
@@ -1396,12 +1397,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             sources = cast<Iterator *>::to(ll);
             IteratorContext ph;
             bool needLoop = true;
+            SimNode * __restrict pbody = body;
             needLoop = sources->first(context, ph) && needLoop;
             if ( context.stopFlags ) goto loopend;
-            if ( !needLoop ) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
                 *pi = ph.value;
-                body->eval(context);
+                pbody->eval(context);
                 if ( !sources->next(context, ph) ) goto loopend;
                 if ( context.stopFlags ) goto loopend;
             }

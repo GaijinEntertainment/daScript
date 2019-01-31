@@ -209,8 +209,9 @@ namespace das
     // SimNode_While
 
     vec4f SimNode_While::eval ( Context & context ) {
+        SimNode * __restrict pbody = body;
         while ( cond->evalBool(context) && !context.stopFlags ) {
-            body->eval(context);
+            pbody->eval(context);
         }
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();

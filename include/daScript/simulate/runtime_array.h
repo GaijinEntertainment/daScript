@@ -78,12 +78,13 @@ namespace das
                 pi[t] = (char **)(context.stack.sp() + stackTop[t]);
                 szz = min(szz, int(pha[t]->size));
             }
+            SimNode * __restrict pbody = body;
             for (int i = 0; i!=szz && !context.stopFlags; ++i) {
                 for (int t = 0; t != total; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
-                body->eval(context);
+                pbody->eval(context);
             }
             for ( int t=0; t!=total; ++t ) {
                 array_unlock(context, *pha[t]);
@@ -114,10 +115,11 @@ namespace das
             int szz = int(pha->size);
             pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
+            SimNode * __restrict pbody = body;
             for (int i = 0; i!=szz && !context.stopFlags; ++i) {
                 *pi = ph;
                 ph += stride;
-                body->eval(context);
+                pbody->eval(context);
             }
             array_unlock(context, *pha);
             context.stopFlags &= ~EvalFlags::stopForBreak;
@@ -138,12 +140,13 @@ namespace das
             for ( int t=0; t!=total; ++t ) {
                 pi[t] = (char **)(context.stack.sp() + stackTop[t]);
             }
+            SimNode * __restrict pbody = body;
             for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
                 for (int t = 0; t != total; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
-                body->eval(context);
+                pbody->eval(context);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
@@ -165,10 +168,11 @@ namespace das
             char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
             char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
+            SimNode * __restrict pbody = body;
             for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
                 *pi = ph;
                 ph += stride;
-                body->eval(context);
+                pbody->eval(context);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
