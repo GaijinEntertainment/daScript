@@ -1041,6 +1041,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isIfThenElse() const override { return true; }
+        virtual uint32_t getEvalFlags() const override;
         ExpressionPtr   cond, if_true, if_false;
     };
 

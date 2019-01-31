@@ -717,6 +717,8 @@ namespace das
             result->body = subexpr->simulate(context);
             return result;
         } else {
+            auto flagsE = subexpr->getEvalFlags();
+            bool NF = flagsE == 0;
             SimNode_ForBase * result;
             if ( dynamicArrays ) {
                 result = (SimNode_ForBase *) context.code.makeNodeUnroll<SimNode_ForGoodArray>(total, at);
@@ -724,7 +726,11 @@ namespace das
                 result = (SimNode_ForBase *) context.code.makeNodeUnroll<SimNode_ForFixedArray>(total, at);
             } else if ( rangeBase ) {
                 assert(total==1 && "simple range on 1 loop only");
-                result = context.code.makeNode<SimNode_ForRange>(at);
+                if ( NF ) {
+                    result = context.code.makeNode<SimNode_ForRangeNF>(at);
+                } else {
+                    result = context.code.makeNode<SimNode_ForRange>(at);
+                }
             } else {
                 assert(0 && "we should not be here yet");
                 return nullptr;

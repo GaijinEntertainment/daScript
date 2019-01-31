@@ -243,7 +243,7 @@ SETUP_CPP11(daScriptTest)
 # Profile
 
 file(GLOB PROFILE_SRC
-"profile/tests/*.das"
+"examples/profile/tests/*.das"
 )
 list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)

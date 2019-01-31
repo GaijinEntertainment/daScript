@@ -782,6 +782,12 @@ namespace das
         return cexpr;
     }
 
+    uint32_t ExprIfThenElse::getEvalFlags() const {
+        auto flagsE = cond->getEvalFlags() | if_true->getEvalFlags();
+        if (if_false) flagsE |= if_false->getEvalFlags();
+        return flagsE;
+    }
+
     // ExprWhile
 
     ExpressionPtr ExprWhile::visit(Visitor & vis) {

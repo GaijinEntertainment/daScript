@@ -22,5 +22,11 @@ namespace das
             : SimNode_ForBase(at) {}
         virtual vec4f eval ( Context & context ) override;
     };
+
+    struct SimNode_ForRangeNF : SimNode_ForBase  {
+        SimNode_ForRangeNF ( const LineInfo & at )
+            : SimNode_ForBase(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
 }
 
