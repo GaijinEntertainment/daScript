@@ -32,15 +32,15 @@ namespace das
         int32_t count = r.to - r.from; // [0,3] 0,1,2
         *pi = r.from;
         while ( count>=4 ) {
-            body->eval(context); if ( context.stopFlags ) goto done; *(pi)++;
-            body->eval(context); if ( context.stopFlags ) goto done; *(pi)++;
-            body->eval(context); if ( context.stopFlags ) goto done; *(pi)++;
-            body->eval(context); if ( context.stopFlags ) goto done; *(pi)++;
+            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
+            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
+            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
+            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
             count -= 4;
         }
         if ( count & 2 ) {
-            body->eval(context); if ( context.stopFlags ) goto done; *(pi)++;
-            body->eval(context); if ( context.stopFlags ) goto done; *(pi)++;
+            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
+            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
         }
         if ( count & 1 ) {
             body->eval(context); if ( context.stopFlags ) goto done;
