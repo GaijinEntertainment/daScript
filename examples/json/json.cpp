@@ -520,6 +520,8 @@ namespace das {
                         error("JSON, expecting array");
                         return;
                     }
+                    // here we clear the table, and reserve spots for all keys
+                    // that way we can iterate though table elements, and read values
                     table_clear(*context, *tab);
                     auto stride = getTypeSize(info->secondType);
                     for ( auto it = top->Begin(); it != top->End(); ++it ) {
@@ -538,6 +540,8 @@ namespace das {
                                     break;
                                 case Type::tInt:
                                 case Type::tUInt:
+                                    // code similar to that above for the string needs to be written
+                                    // for each workhorse type
                                     assert(0 && "TODO: implment for all workhorse types");
                                 default:
                                     error("JSON, unexpected key type");
@@ -558,16 +562,7 @@ namespace das {
         virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t index, bool ) override {
             push();
             if ( reading ) {
-                if ( top ) {
-                    top = &(*top)[index];
-                    auto member = top->FindMember("key");
-                    if ( member != top->MemberEnd() ) {
-                        top = &member->value;
-                    } else {
-                        error("JSON, expecting key");
-                        return;
-                    }
-                }
+                top = nullptr;  // we already created key in beforeTable
             } else {
                 top->PushBack(false, root->GetAllocator());
                 top = &(*top)[index];
