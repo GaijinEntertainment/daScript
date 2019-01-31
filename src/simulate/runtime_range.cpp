@@ -30,20 +30,20 @@ namespace das
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t count = r.to - r.from; // [0,3] 0,1,2
-        *pi = r.from;
+        auto i = r.from;
         while ( count>=4 ) {
-            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
-            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
-            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
-            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
+            *pi=i++; body->eval(context); if ( context.stopFlags ) goto done;
+            *pi=i++; body->eval(context); if ( context.stopFlags ) goto done;
+            *pi=i++; body->eval(context); if ( context.stopFlags ) goto done;
+            *pi=i++; body->eval(context); if ( context.stopFlags ) goto done;
             count -= 4;
         }
         if ( count & 2 ) {
-            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
-            body->eval(context); if ( context.stopFlags ) goto done; (*pi)++;
+            *pi=i++; body->eval(context); if ( context.stopFlags ) goto done;
+            *pi=i++; body->eval(context); if ( context.stopFlags ) goto done;
         }
         if ( count & 1 ) {
-            body->eval(context); if ( context.stopFlags ) goto done;
+            *pi=i++; body->eval(context); if ( context.stopFlags ) goto done;
         }
     done:;
         context.stopFlags &= ~EvalFlags::stopForBreak;
@@ -55,20 +55,20 @@ namespace das
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t count = r.to - r.from; // [0,3] 0,1,2
-        *pi = r.from;
+        auto i = r.from;
         while ( count>=4 ) {
-            body->eval(context); (*pi)++;
-            body->eval(context); (*pi)++;
-            body->eval(context); (*pi)++;
-            body->eval(context); (*pi)++;
+            *pi=i++; body->eval(context);
+            *pi=i++; body->eval(context);
+            *pi=i++; body->eval(context);
+            *pi=i++; body->eval(context);
             count -= 4; 
         }
         if ( count & 2 ) {
-            body->eval(context); (*pi)++;
-            body->eval(context); (*pi)++;
+            *pi=i++; body->eval(context);
+            *pi=i++; body->eval(context);
         }
         if ( count & 1 ) {
-            body->eval(context); 
+            *pi=i++; body->eval(context);
         }
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
