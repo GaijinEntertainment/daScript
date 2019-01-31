@@ -101,6 +101,30 @@ namespace das
         }
     };
 
+    template <>
+    struct SimNode_ForGoodArray<1> : public SimNode_ForBase {
+        SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            Array * __restrict pha;
+            char * __restrict ph;
+            pha = cast<Array *>::to(sources[0]->eval(context));
+            array_lock(context, *pha);
+            ph = pha->data;
+            char ** __restrict pi;
+            int szz = int(pha->size);
+            pi = (char **)(context.stack.sp() + stackTop[0]);
+            auto stride = strides[0];
+            for (int i = 0; i!=szz && !context.stopFlags; ++i) {
+                *pi = ph;
+                ph += stride;
+                body->eval(context);
+            }
+            array_unlock(context, *pha);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
     // FOR
     template <int total>
     struct SimNode_ForFixedArray : SimNode_ForBase {
@@ -130,6 +154,23 @@ namespace das
     struct SimNode_ForFixedArray<0> : SimNode_ForBase {
         SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
         virtual vec4f eval ( Context & ) override {
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_ForFixedArray<1> : SimNode_ForBase {
+        SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
+            char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
+            auto stride = strides[0];
+            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
+                *pi = ph;
+                ph += stride;
+                body->eval(context);
+            }
+            context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
     };
