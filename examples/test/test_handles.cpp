@@ -2,6 +2,15 @@
 
 using namespace das;
 
+//sample of your-engine-float3-type to be aliased as float3 in daScript.
+struct Point3 { float x, y, z; };
+template<> struct ToBasicType<Point3>        { enum { type = das::Type::tFloat3 }; };
+template<> struct cast <Point3>  : cast_fVec<Point3> {};
+
+Point3 getSamplePoint3() {return Point3{0,1,2};}
+Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y, a.z + a.z }; }
+
+//sample of your engine annotated struct
 struct TestObjectFoo {
     int fooData;
 };
@@ -199,6 +208,9 @@ public:
         addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo");
         addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd");
         addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields");
+
+        addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3");
+        addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3");
     }
 };
 

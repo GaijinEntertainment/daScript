@@ -66,18 +66,6 @@ namespace das
     };
 
     template <>
-    struct cast <range> {
-        static __forceinline range to ( vec4f x )              { return *((range *)&x); }
-        static __forceinline vec4f from ( range x )            { vec4f a; *((range *)&a) = x; return a; }
-    };
-
-    template <>
-    struct cast <urange> {
-        static __forceinline urange to ( vec4f x )             { return *((urange *)&x); }
-        static __forceinline vec4f from ( urange x )           { vec4f a; *((urange *)&a) = x; return a; }
-    };
-
-    template <>
     struct cast <Block> {
         static __forceinline Block to ( vec4f x )             { return *((Block *)&x); }
         static __forceinline vec4f from ( Block x )           { vec4f a; *((Block *)&a) = x; return a; }
@@ -93,7 +81,17 @@ namespace das
         }
     };
 
-    template <> struct cast <float2>  : cast_fVec<float2> {};
+    template <typename TT>
+    struct cast_fVec_half {
+        static __forceinline TT to ( vec4f x ) {
+            return *((TT *)&x);
+        }
+        static __forceinline vec4f from ( const TT & x )       {
+            return v_ldu_half(&x.x);
+        }
+    };
+
+    template <> struct cast <float2>  : cast_fVec_half<float2> {};
     template <> struct cast <float3>  : cast_fVec<float3> {};
     template <> struct cast <float4>  : cast_fVec<float4> {};
 
@@ -103,15 +101,29 @@ namespace das
             return *((TT *)&x);
         }
         static __forceinline vec4f from ( const TT & x ) {
-            return  v_cast_vec4f(v_ldu_w((const int*)&x.x));
+            return  v_cast_vec4f(v_ldu_w((const int*)&x));
         }
     };
 
-    template <> struct cast <int2>  : cast_iVec<int2> {};
+    template <typename TT>
+    struct cast_iVec_half {
+        static __forceinline TT to ( vec4f x ) {
+            return *((TT *)&x);
+        }
+        static __forceinline vec4f from ( const TT & x ) {
+            return  v_cast_vec4f(v_ldu_half_w((const int*)&x));
+        }
+    };
+
+    template <> struct cast <int2>  : cast_iVec_half<int2> {};
     template <> struct cast <int3>  : cast_iVec<int3> {};
     template <> struct cast <int4>  : cast_iVec<int4> {};
 
-    template <> struct cast <uint2>  : cast_iVec<uint2> {};
+    template <> struct cast <uint2>  : cast_iVec_half<uint2> {};
     template <> struct cast <uint3>  : cast_iVec<uint3> {};
     template <> struct cast <uint4>  : cast_iVec<uint4> {};
+
+    template <> struct cast <range> : cast_iVec_half<range> {};
+    template <> struct cast <urange> : cast_iVec_half<urange> {};
+
 }
