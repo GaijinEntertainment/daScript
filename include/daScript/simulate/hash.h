@@ -66,19 +66,13 @@ namespace das
         }
     }
 
-
     template <typename TT>
     __forceinline uint32_t hash_function ( Context &, TT x ) {
-        uint32_t res = (uint32_t) hash<TT>()(x);
+        uint32_t res = hash_block32((uint8_t *)&x, sizeof(x));
         if (res <= HASH_KILLED32) {
             return 16777619;
         }
         return res;
-    }
-
-    template <>
-    __forceinline uint32_t hash_function ( Context & ctx,Block b ) {
-        return hash_function(ctx, &b, sizeof(b));
     }
 
     template <>
@@ -95,26 +89,9 @@ namespace das
         }
     }
 
-    template <typename QQ>
-    __forceinline uint32_t hash_function ( Context & ctx, const vec2<QQ> & x) {
-        return hash_function(ctx, &x, sizeof(vec2<QQ>));
-    }
-
-    template <typename QQ>
-    __forceinline uint32_t hash_function ( Context & ctx, const vec3<QQ> & x) {
-        return hash_function(ctx, &x, sizeof(vec3<QQ>));
-    }
-
-    template <typename QQ>
-    __forceinline uint32_t hash_function ( Context & ctx, const vec4<QQ> & x) {
-        return hash_function(ctx, &x, sizeof(vec4<QQ>));
-    }
-
-    template <typename QQ>
-    __forceinline uint32_t hash_function ( Context & ctx, const RangeType<QQ> & x) {
-        return hash_function(ctx, &x, sizeof(RangeType<QQ>));
-    }
-
+    uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
+    uint32_t hash_value ( Context & ctx, vec4f value, TypeInfo * info );
+    
     uint32_t hash_function ( Context & ctx, void * data, TypeInfo * type );
 
     template <typename TT>

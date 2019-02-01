@@ -5,6 +5,13 @@
 #include "daScript/simulate/hash.h"
 
 namespace das {
+    
+    void DataWalker::error ( const char * message ) {
+        if ( context ) {
+            context->throw_error(message);
+        }
+        cancel = true;
+    }
 
     void DataWalker::walk ( vec4f x, TypeInfo * info ) {
         if ( info->refType ) {

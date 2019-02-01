@@ -23,6 +23,8 @@ namespace das {
         class Context * context = nullptr;
         bool reading = false;
         bool cancel = false;
+    // helpers
+        void error ( const char * message );
     // data structures
         virtual void beforeStructure ( char * ps, StructInfo * si ) {}
         virtual void afterStructure ( char * ps, StructInfo * si ) {}
@@ -70,7 +72,6 @@ namespace das {
         virtual void URange ( urange & ) {}
         virtual void WalkIterator ( struct Iterator * ) {}
         virtual void WalkBlock ( Block * ) {}
-        virtual void Handle ( char * pa, TypeAnnotation * ) {}
     // walk
         virtual void walk ( char * pf, TypeInfo * ti );
         virtual void walk ( vec4f f, TypeInfo * ti );

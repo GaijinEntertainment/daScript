@@ -433,10 +433,6 @@ namespace das {
             reading = weRead;
             top = root = r;
         }
-        void error ( const char * message ) {
-            context->throw_error(message);
-            cancel = true;
-        }
         void push() {
             stack.push_back(top);
         }

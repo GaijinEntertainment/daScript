@@ -7,43 +7,38 @@
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/runtime_profile.h"
+#include "daScript/simulate/hash.h"
 
 namespace das
 {
-    struct ExportFunctionAnnotation : FunctionAnnotation {
-        ExportFunctionAnnotation() : FunctionAnnotation("export") { }
+    struct MarkFunctionAnnotation : FunctionAnnotation {
+        MarkFunctionAnnotation(const string & na) : FunctionAnnotation(na) { }
         virtual bool apply(ExprBlock *, const AnnotationArgumentList &, string & err) override {
-            err = "can't export block";
+            err = "not supported for block";
             return false;
         }
         virtual bool finalize(ExprBlock *, const AnnotationArgumentList &, string &) override {
             return true;
         }
-        virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
-            func->exports = true;
-            return true;
-        };
         virtual bool finalize(const FunctionPtr &, const AnnotationArgumentList &, string &) override {
             return true;
         }
     };
     
-    struct SideEffectsFunctionAnnotation : FunctionAnnotation {
-        SideEffectsFunctionAnnotation() : FunctionAnnotation("sideeffects") { }
-        virtual bool apply(ExprBlock *, const AnnotationArgumentList &, string & err) override {
-            err = "can't have side-effects of a block";
-            return false;
-        }
-        virtual bool finalize(ExprBlock *, const AnnotationArgumentList &, string &) override {
+    struct ExportFunctionAnnotation : MarkFunctionAnnotation {
+        ExportFunctionAnnotation() : MarkFunctionAnnotation("export") { }
+        virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
+            func->exports = true;
             return true;
-        }
+        };
+    };
+    
+    struct SideEffectsFunctionAnnotation : MarkFunctionAnnotation {
+        SideEffectsFunctionAnnotation() : MarkFunctionAnnotation("sideeffects") { }
         virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
             func->ownSideEffects = true;
             return true;
         };
-        virtual bool finalize(const FunctionPtr &, const AnnotationArgumentList &, string &) override {
-            return true;
-        }
     };
 
     // core functions
@@ -81,6 +76,11 @@ namespace das
         table_clear(*context, *arr);
     }
 
+    vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        auto uhash = hash_value(context, args[0], call->types[0]);
+        return cast<uint32_t>::from(uhash);
+    }
+    
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<ExportFunctionAnnotation>());
@@ -95,7 +95,8 @@ namespace das
         addCall<ExprAssert>         ("assert");
         addCall<ExprStaticAssert>   ("static_assert");
         addCall<ExprDebug>          ("debug");
-        addCall<ExprHash>           ("hash");
+        // hash
+        addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash");
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", true);
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", false);
