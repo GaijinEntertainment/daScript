@@ -1,4 +1,4 @@
-options log=true // , logInferPasses=true // , logOptimizationPasses=true
+// options log=true // , logInferPasses=true // , logOptimizationPasses=true
 
 def strcat(a,b)
 	let c = a
@@ -9,7 +9,7 @@ def make_name(x)
     return strcat("hello_",x)
 
 def make_another_name(x)
-	print("{x}\n")			// this will prevent folding
+	// print("{x}\n")			// this will prevent folding
 	return x + "_ok"
 
 struct Foo
@@ -19,17 +19,17 @@ struct Foo
 def up_foo(a)
 	a.a ++
 
-def name_foo()
+def name_foo(itt)
 	let t = Foo()
 	up_foo(t)
-	return "{t}"		// this will fold
+	return "{t}{itt}"		// this will fold
 
 [export]
 def test
     let t = make_name("world")
-    print("\n{t}\n")
+	assert(t=="hello_world")
 	let q = make_another_name("modify_arg")
-	print("\n{q}\n")
-	let w = name_foo()
-	print("\n{w}\n")
+	assert(q=="modify_arg_ok")
+	let w = name_foo("**")
+	assert(w=="[[ 20; 20]]**")
     return true

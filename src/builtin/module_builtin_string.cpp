@@ -181,23 +181,23 @@ namespace das
     inline int fast_to_int ( const char *str ){return str ? atoi(str) : 0;}
 
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
-        addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", false);
-        addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", false);
-        addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", false);
-        addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right", false);
-        addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left", false);
-        addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice", false);
-        addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice", false);
-        addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", false);
-        addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", false);
-        addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", false);
-        addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", false);
-        addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "toupper", false);
-        addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "tolower", false);
-        addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", false);
-        addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", false);
-        addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", false);
-        addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int", false);
-        addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float", false);
+        addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "toupper", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "tolower", SideEffects::none);
+        addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none);
+        addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none);
+        addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none);
+        addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int", SideEffects::none);
+        addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float", SideEffects::none);
     }
 }

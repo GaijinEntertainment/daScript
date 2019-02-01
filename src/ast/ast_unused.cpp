@@ -127,12 +127,14 @@ namespace das {
     // Op1
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
-            if ( !expr->func->noSideEffects ) propagateWrite(expr->subexpr.get());
+            if (expr->func->sideEffectFlags) {
+                propagateWrite(expr->subexpr.get());
+            }
         }
     // Op2
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
-            if ( !expr->func->noSideEffects ) {
+            if ( expr->func->sideEffectFlags ) {
                 propagateWrite(expr->left.get());
             }
         }
@@ -146,7 +148,7 @@ namespace das {
     // Call
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
-            if ( !expr->func->noSideEffects ) {
+            if ( expr->func->sideEffectFlags & uint32_t(SideEffects::modifyArgument) ) {
                 for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                     const auto & argT = expr->func->arguments[ai]->type;
                     if ( argT->isRef() && !argT->isConst() ) {

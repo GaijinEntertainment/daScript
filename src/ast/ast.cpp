@@ -120,6 +120,7 @@ namespace das
         cfun->at = at;
         cfun->module = nullptr;
         cfun->flags = flags;
+        cfun->sideEffectFlags = sideEffectFlags;
         cfun->inferStack = inferStack;
         return cfun;
     }
@@ -221,7 +222,7 @@ namespace das
     }
 
     ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr ) {
-        if ( expr->type && expr->type->isRef() && !expr->type->isRefType() ) {
+        if ( expr->type && !expr->type->isAuto() && expr->type->isRef() && !expr->type->isRefType() ) {
             auto ar2l = make_shared<ExprRef2Value>();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;

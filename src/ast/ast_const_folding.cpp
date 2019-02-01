@@ -81,12 +81,12 @@ namespace das {
         }
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
-            expr->noSideEffects = expr->subexpr->noSideEffects && expr->func->noSideEffects;
+            expr->noSideEffects = expr->subexpr->noSideEffects && (expr->func->sideEffectFlags==0);
             return Visitor::visit(expr);
         }
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
-            expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && expr->func->noSideEffects;
+            expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && (expr->func->sideEffectFlags==0);
             return Visitor::visit(expr);
         }
     // op3
@@ -96,7 +96,7 @@ namespace das {
         }
     // call
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
-            expr->noSideEffects = expr->func->noSideEffects;
+            expr->noSideEffects = (expr->func->sideEffectFlags==0);
             if ( expr->noSideEffects ) {
                 for ( auto & arg : expr->arguments ) {
                     expr->noSideEffects &= arg->noSideEffects;
@@ -380,7 +380,7 @@ namespace das {
                     return sc;
                 }
             }
-            if ( expr->func->result->isFoldable() && expr->func->noSideEffects ) {
+            if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) ) {
                 auto allConst = true;
                 for ( auto & arg : expr->arguments ) {
                     if ( arg->type->baseType!=Type::fakeContext )
@@ -514,7 +514,7 @@ namespace das {
                 if ( arg->type->baseType!=Type::fakeContext )
                     allNoSideEffects &= arg->noSideEffects;
             }
-            if ( expr->func->result->isFoldable() && expr->func->noSideEffects && !expr->func->builtIn ) {
+            if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) && !expr->func->builtIn ) {
                 auto allConst = true;
                 for ( auto & arg : expr->arguments ) {
                     if ( arg->type->baseType!=Type::fakeContext )

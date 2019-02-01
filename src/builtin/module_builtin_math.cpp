@@ -204,25 +204,25 @@ namespace das {
             addFunctionCommon<float2>(*this,lib);
             addFunctionCommon<float3>(*this,lib);
             addFunctionCommon<float4>(*this,lib);
-            addExtern<DAS_BIND_FUN(uint32_hash)>(*this, lib, "uint32_hash", false);
-            addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise1D", false);
-            addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise2D", false);
-            addExtern<DAS_BIND_FUN(uint_noise3D_int3)>(*this, lib, "uint_noise3D", false);
+            addExtern<DAS_BIND_FUN(uint32_hash)>(*this, lib, "uint32_hash", SideEffects::none);
+            addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise1D", SideEffects::none);
+            addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise2D", SideEffects::none);
+            addExtern<DAS_BIND_FUN(uint_noise3D_int3)>(*this, lib, "uint_noise3D", SideEffects::none);
 
-            addExtern<DAS_BIND_FUN(dot2)>(*this, lib, "dot", false);
-            addExtern<DAS_BIND_FUN(dot3)>(*this, lib, "dot", false);
-            addExtern<DAS_BIND_FUN(dot4)>(*this, lib, "dot", false);
+            addExtern<DAS_BIND_FUN(dot2)>(*this, lib, "dot", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dot3)>(*this, lib, "dot", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dot4)>(*this, lib, "dot", SideEffects::none);
 
-            addExtern<DAS_BIND_FUN(cross3)>(*this, lib, "cross", false);
+            addExtern<DAS_BIND_FUN(cross3)>(*this, lib, "cross", SideEffects::none);
 
-            addExtern<DAS_BIND_FUN(length2)>(*this, lib, "length", false);
-            addExtern<DAS_BIND_FUN(length3)>(*this, lib, "length", false);
-            addExtern<DAS_BIND_FUN(length4)>(*this, lib, "length", false);
-            addExtern<DAS_BIND_FUN(lengthSq2)>(*this, lib, "lengthSq", false);
-            addExtern<DAS_BIND_FUN(lengthSq3)>(*this, lib, "lengthSq", false);
-            addExtern<DAS_BIND_FUN(lengthSq4)>(*this, lib, "lengthSq", false);
-            addExtern<DAS_BIND_FUN(distance3)>(*this, lib, "distance", false);
-            addExtern<DAS_BIND_FUN(distanceSq3)>(*this, lib, "distanceSq", false);
+            addExtern<DAS_BIND_FUN(length2)>(*this, lib, "length", SideEffects::none);
+            addExtern<DAS_BIND_FUN(length3)>(*this, lib, "length", SideEffects::none);
+            addExtern<DAS_BIND_FUN(length4)>(*this, lib, "length", SideEffects::none);
+            addExtern<DAS_BIND_FUN(lengthSq2)>(*this, lib, "lengthSq", SideEffects::none);
+            addExtern<DAS_BIND_FUN(lengthSq3)>(*this, lib, "lengthSq", SideEffects::none);
+            addExtern<DAS_BIND_FUN(lengthSq4)>(*this, lib, "lengthSq", SideEffects::none);
+            addExtern<DAS_BIND_FUN(distance3)>(*this, lib, "distance", SideEffects::none);
+            addExtern<DAS_BIND_FUN(distanceSq3)>(*this, lib, "distanceSq", SideEffects::none);
 
             addFunctionCommonConversion<int, float>(*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);
