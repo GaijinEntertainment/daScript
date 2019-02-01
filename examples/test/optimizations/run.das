@@ -19,10 +19,10 @@ struct Foo
 def up_foo(a)
 	a.a ++
 
-def name_foo()
+def name_foo(itt)
 	let t = Foo()
 	up_foo(t)
-	return "{t}"		// this will fold
+	return "{t}{itt}"		// this will fold
 
 [export]
 def test
@@ -30,6 +30,6 @@ def test
 	assert(t=="hello_world")
 	let q = make_another_name("modify_arg")
 	assert(q=="modify_arg_ok")
-	let w = name_foo()
-	assert(w=="[[ 20; 20]]")
+	let w = name_foo("**")
+	assert(w=="[[ 20; 20]]**")
     return true
