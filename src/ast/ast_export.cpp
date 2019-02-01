@@ -54,22 +54,22 @@ namespace das {
                 }
             }
         }
-        bool hasSideEffects ( const FunctionPtr & func, set<const Function *> & asked ) {
-            if ( func->builtIn ) {
-                return !func->noSideEffects;
-            } else if ( func->hasInvoke || func->ownSideEffects || func->useGlobalVariables.size() ) {
+        bool hasSideEffects ( const FunctionPtr & fnc, set<const Function *> & asked ) {
+            if ( fnc->builtIn ) {
+                return !fnc->noSideEffects;
+            } else if ( fnc->hasInvoke || fnc->ownSideEffects || fnc->useGlobalVariables.size() ) {
                 return true;
-            } else if ( asked.find(func.get())!=asked.end() ) {
+            } else if ( asked.find(fnc.get())!=asked.end() ) {
                 return false;
             }
             // it has side effects, if it writes to its arguments
-            for ( auto & arg : func->arguments ) {
+            for ( auto & arg : fnc->arguments ) {
                 if ( arg->access_ref ) {
                     return true;
                 }
             }
-            asked.insert(func.get());
-            for ( auto & dep : func->useFunctions ) {
+            asked.insert(fnc.get());
+            for ( auto & dep : fnc->useFunctions ) {
                 if ( hasSideEffects(dep, asked) ) {
                     return true;
                 }
