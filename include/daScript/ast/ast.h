@@ -1212,7 +1212,7 @@ namespace das
 
     #define NEED_MODULE(ClassName) \
         extern das::Module * register_##ClassName (); \
-        Module::Karma += intptr_t(register_##ClassName());
+        das::Module::Karma += intptr_t(register_##ClassName());
 
     class ModuleLibrary {
         friend class Module;

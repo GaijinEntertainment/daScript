@@ -10,6 +10,18 @@ def test
     assert(uint_noise1D(position, seed) != seed)
     assert(uint_noise2D(int2(100,100), seed) != seed)
     assert(uint_noise3D(int3(100,100,100), seed) != seed)
+    assert(dot(float2(0,1), float2(1,0))==0.)
+    assert(dot(float3(0,1,0), float3(1,0,1))==0.)
+    assert(dot(float4(0,1,0,0), float4(1,0,1,1))==0.)
+
+    assert(length(float2(0,1))==1.)
+    assert(length(float3(0,1,0))==1.)
+    assert(length(float4(0,0,0,1))==1.)
+    assert(lengthSq(float2(0,1))==1.)
+    assert(lengthSq(float3(1,0,0))==1.)
+    assert(lengthSq(float4(0,1,0,0))==1.)
+    assert(cross(float3(0,1,0), float3(0,0,1))==float3(1,0,0))
+
     assert(sin(0.)==0.)
     assert(cos(0.)==1.)
     assert(tan(0.)==0.)
