@@ -292,12 +292,16 @@ namespace das {
     };
 
     // program
-
-    bool Program::optimizationUnused() {
+    
+    void Program::markUseFlags() {
         TrackFieldAndAtFlags faf;
         visit(faf);
         TrackVariableFlags vaf;
         visit(vaf);
+    }
+
+    bool Program::optimizationUnused() {
+        markUseFlags();
         RemoveUnusedLocalVariables context;
         visit(context);
         return context.didAnything();

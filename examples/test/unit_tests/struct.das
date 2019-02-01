@@ -1,3 +1,5 @@
+// options log=true
+
 struct Ball
     position:float3
     radius:float

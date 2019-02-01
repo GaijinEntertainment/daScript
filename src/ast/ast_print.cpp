@@ -117,9 +117,9 @@ namespace das {
     // function
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
-            if ( fn->noSideEffects ) {
-                ss << "[nosideeffects]\n";
-            }
+            if ( fn->noSideEffects ) { ss << "[nosideeffects]\n"; }
+            if ( fn->fastCall ) { ss << "[fastcall]\n"; }
+            if ( fn->exports ) { ss << "[export]\n"; }
             ss << "def " << fn->name;
             if ( fn->arguments.size() ) ss << " ( ";
         }

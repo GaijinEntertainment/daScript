@@ -186,6 +186,9 @@ namespace das {
     class ConstFolding : public FoldingVisitor {
     public:
         ConstFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
+        bool needRun() const { return runMe; }
+    protected:
+        bool runMe = false;
     protected:
         // function which is fully a nop
         bool isNop ( const FunctionPtr & func ) {
@@ -387,8 +390,7 @@ namespace das {
                     if ( expr->func->builtIn ) {
                         return evalAndFold(expr);
                     } else {
-                        // HERE we'll need to compile and run entire program to fold
-                        //  should we consider?
+                        runMe = true;
                     }
                 }
             }
@@ -492,6 +494,40 @@ namespace das {
             return cond->constexpression ? nullptr : Visitor::visit(expr);
         }
     };
+    
+    class RunFolding : public FoldingVisitor {
+    public:
+        RunFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {
+            TextWriter dummy;
+            program->markOrRemoveUnusedSymbols(true);
+            assert ( !program->failed() && "internal error while folding (remove unused)?" );
+            program->allocateStack(dummy);
+            assert ( !program->failed() && "internal error while folding (allocate stack)?" );
+            program->simulate(ctx, dummy);
+            assert ( !program->failed() && "internal error while folding (simulate)?" );
+        }
+    protected:
+        // ExprCall
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            bool allNoSideEffects = true;
+            for ( auto & arg : expr->arguments ) {
+                if ( arg->type->baseType!=Type::fakeContext )
+                    allNoSideEffects &= arg->noSideEffects;
+            }
+            if ( expr->func->result->isFoldable() && expr->func->noSideEffects && !expr->func->builtIn ) {
+                auto allConst = true;
+                for ( auto & arg : expr->arguments ) {
+                    if ( arg->type->baseType!=Type::fakeContext )
+                        allConst &= arg->constexpression;
+                }
+                if ( allConst ) {
+                    assert ( expr->func->index!=-1 );
+                    return evalAndFold(expr);
+                }
+            }
+            return Visitor::visit(expr);
+        }
+    };
 
     // program
 
@@ -500,9 +536,15 @@ namespace das {
         visit(sse);
         NoSideEffectVisitor nse;
         visit(nse);
-        ConstFolding context(shared_from_this());
-        visit(context);
-        return context.didAnything();
+        ConstFolding cfe(shared_from_this());
+        visit(cfe);
+        bool any = cfe.didAnything();
+        if ( cfe.needRun() ) {
+            RunFolding rfe(shared_from_this());
+            visit(rfe);
+            any |= rfe.didAnything();
+        }
+        return any;
     }
 
     bool Program::staticAsserts() {

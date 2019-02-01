@@ -29,10 +29,10 @@ namespace das {
                 propagateFunctionUse(it);
             }
         }
-        void markUsedFunctions( Module & thisModule ){
+        void markUsedFunctions( Module & thisModule, bool forceAll ){
             for (const auto & it : thisModule.functions) {
                 auto fn = it.second;
-                if (fn->exports) {
+                if (forceAll || fn->exports) {
                     propagateFunctionUse(fn);
                 }
             }
@@ -57,10 +57,16 @@ namespace das {
         bool hasSideEffects ( const FunctionPtr & func, set<const Function *> & asked ) {
             if ( func->builtIn ) {
                 return !func->noSideEffects;
-            } else if ( func->useGlobalVariables.size() ) {
+            } else if ( func->hasInvoke || func->ownSideEffects || func->useGlobalVariables.size() ) {
                 return true;
             } else if ( asked.find(func.get())!=asked.end() ) {
                 return false;
+            }
+            // it has side effects, if it writes to its arguments
+            for ( auto & arg : func->arguments ) {
+                if ( arg->access_ref ) {
+                    return true;
+                }
             }
             asked.insert(func.get());
             for ( auto & dep : func->useFunctions ) {
@@ -103,6 +109,8 @@ namespace das {
             func = f->shared_from_this();
             func->useFunctions.clear();
             func->useGlobalVariables.clear();
+            func->used = false;
+            func->hasInvoke = false;
         }
         virtual FunctionPtr visit(Function * that) override {
             func.reset();
@@ -155,7 +163,7 @@ namespace das {
         // Op3
         virtual void preVisit(ExprOp3 * expr) override {
             Visitor::preVisit(expr);
-            if (builtInDependencies || (expr->func && !expr->func->builtIn)) {
+            if (expr->func && (builtInDependencies || !expr->func->builtIn)) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -163,18 +171,26 @@ namespace das {
                 }
             }
         }
+        // Invoke
+        virtual void preVisit(ExprInvoke * expr) override{
+            Visitor::preVisit(expr);
+            if ( func ) {
+                func->hasInvoke = true;
+            }
+        }
     };
 
-    void Program::markOrRemoveUnusedSymbols() {
+    void Program::markOrRemoveUnusedSymbols(bool forceAll) {
         MarkSymbolUse vis(false);
         visit(vis);
-        vis.markUsedFunctions(*thisModule);
+        vis.markUsedFunctions(*thisModule, forceAll);
         if ( options.getOption("removeUnusedSymbols",true) ) {
             vis.RemoveUnusedSymbols(*thisModule);
         }
     }
     
     void Program::markSideEffects() {
+        markUseFlags();
         MarkSymbolUse vis(true);
         visit(vis);
         vis.MarkSideEffects(*thisModule);

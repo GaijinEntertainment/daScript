@@ -19,11 +19,29 @@ namespace das
         virtual bool finalize(ExprBlock *, const AnnotationArgumentList &, string &) override {
             return true;
         }
-        virtual bool apply(const FunctionPtr &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
+            func->exports = true;
             return true;
         };
-        virtual bool finalize(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
-            func->exports = true;
+        virtual bool finalize(const FunctionPtr &, const AnnotationArgumentList &, string &) override {
+            return true;
+        }
+    };
+    
+    struct SideEffectsFunctionAnnotation : FunctionAnnotation {
+        SideEffectsFunctionAnnotation() : FunctionAnnotation("sideeffects") { }
+        virtual bool apply(ExprBlock *, const AnnotationArgumentList &, string & err) override {
+            err = "can't have side-effects of a block";
+            return false;
+        }
+        virtual bool finalize(ExprBlock *, const AnnotationArgumentList &, string &) override {
+            return true;
+        }
+        virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
+            func->ownSideEffects = true;
+            return true;
+        };
+        virtual bool finalize(const FunctionPtr &, const AnnotationArgumentList &, string &) override {
             return true;
         }
     };
@@ -66,6 +84,7 @@ namespace das
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<ExportFunctionAnnotation>());
+        addAnnotation(make_shared<SideEffectsFunctionAnnotation>());
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print");
