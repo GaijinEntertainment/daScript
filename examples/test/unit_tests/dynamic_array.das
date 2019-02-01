@@ -1,3 +1,5 @@
+// options log=true
+
 def pass_array ( arr )
     push(arr,4)
 

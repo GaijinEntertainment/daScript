@@ -800,13 +800,13 @@ namespace das {
             // JsValue type
             addAnnotation(make_shared<JsValueTypeAnnotation>());
             // functionality
-            addExtern<decltype(readJson),readJson>(*this,lib,"_builtin_parse_json");
-            addInterop<_builtin_save_json,void,vec4f,Block>(*this, lib, "_builtin_save_json");
-            addInterop<_builtin_load_json,void,vec4f,JsValue*>(*this, lib, "readFromJson");
-            addExtern<decltype(json_set_i),json_set_i>(*this,lib,"set");
-            addExtern<decltype(json_set_f),json_set_f>(*this,lib,"set");
-            addExtern<decltype(json_set_b),json_set_b>(*this,lib,"set");
-            addExtern<decltype(json_set_s),json_set_s>(*this,lib,"set");
+            addExtern<decltype(readJson),readJson>(*this,lib,"_builtin_parse_json",SideEffects::modifyExternal);
+            addInterop<_builtin_save_json,void,vec4f,Block>(*this, lib, "_builtin_save_json",SideEffects::modifyExternal);
+            addInterop<_builtin_load_json,void,vec4f,JsValue*>(*this, lib, "readFromJson",SideEffects::modifyExternal);
+            addExtern<decltype(json_set_i),json_set_i>(*this,lib,"set",SideEffects::modifyExternal);
+            addExtern<decltype(json_set_f),json_set_f>(*this,lib,"set",SideEffects::modifyExternal);
+            addExtern<decltype(json_set_b),json_set_b>(*this,lib,"set",SideEffects::modifyExternal);
+            addExtern<decltype(json_set_s),json_set_s>(*this,lib,"set",SideEffects::modifyExternal);
             // and builtin module
             compileBuiltinModule(json_das, json_das_len);
         }

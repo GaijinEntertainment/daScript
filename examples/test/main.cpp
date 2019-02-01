@@ -215,8 +215,8 @@ int main() {
     Module::Shutdown();
     return 0;
 #endif
-#if 1 // Debug this one test
-    unit_test(TEST_PATH "examples/test/hello_world.das");
+#if 0 // Debug this one test
+    unit_test(TEST_PATH "examples/test/unit_tests/dynamic_array.das");
     Module::Shutdown();
     return 0;
 #endif

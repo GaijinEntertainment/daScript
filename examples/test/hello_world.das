@@ -1,4 +1,4 @@
-options log=true // , logOptimizationPasses=true
+options log=true // , logInferPasses=true // , logOptimizationPasses=true
 
 def strcat(a,b)
 	let c = a
@@ -13,13 +13,16 @@ def make_another_name(x)
 	return x + "_ok"
 
 struct Foo
-	a : int = 5
-	b : float = 6.
+	a : int = 19
+	b : float = 20.
+
+def up_foo(a)
+	a.a ++
 
 def name_foo()
 	let t = Foo()
-	debug(t,"t=")
-	return "blah"
+	up_foo(t)
+	return "{t}"		// this will fold
 
 [export]
 def test

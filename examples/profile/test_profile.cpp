@@ -436,25 +436,25 @@ public:
         addAnnotation(make_shared<ObjectStructureTypeAnnotation>());
         addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
         // register functions
-        addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",false);
-        addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate");
-        addExtern<DAS_BIND_FUN(updateTest)>(*this,lib,"interopUpdateTest");
-        addExtern<DAS_BIND_FUN(update10000)>(*this,lib,"update10000");
-        addExtern<DAS_BIND_FUN(update10000ks)>(*this,lib,"update10000ks");
+        addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none);
+        addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(updateTest)>(*this,lib,"interopUpdateTest",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(update10000)>(*this,lib,"update10000",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(update10000ks)>(*this,lib,"update10000ks",SideEffects::modifyExternal);
         // es
-        addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs");
-        addExtern<DAS_BIND_FUN(testEsUpdate)>(*this, lib, "testEsUpdate");
-        addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents");
-        addExtern<DAS_BIND_FUN(verifyEsComponents)>(*this, lib, "verifyEsComponents");
+        addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testEsUpdate)>(*this, lib, "testEsUpdate",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(verifyEsComponents)>(*this, lib, "verifyEsComponents",SideEffects::modifyExternal);
         // C++ copy of all tests
-        addExtern<DAS_BIND_FUN(testPrimes)>(*this, lib, "testPrimes");
-        addExtern<DAS_BIND_FUN(testDict)>(*this, lib, "testDict");
-        addExtern<DAS_BIND_FUN(testFibR)>(*this, lib, "testFibR");
-        addExtern<DAS_BIND_FUN(testFibI)>(*this, lib, "testFibI");
-        addExtern<DAS_BIND_FUN(testParticles)>(*this, lib, "testParticles");
-        addExtern<DAS_BIND_FUN(testParticlesI)>(*this, lib, "testParticlesI");
-        addExtern<DAS_BIND_FUN(testTryCatch)>(*this, lib, "testTryCatch");
-        addExtern<DAS_BIND_FUN(testExpLoop)>(*this, lib, "testExpLoop");
+        addExtern<DAS_BIND_FUN(testPrimes)>(*this, lib, "testPrimes",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testDict)>(*this, lib, "testDict",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testFibR)>(*this, lib, "testFibR",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testFibI)>(*this, lib, "testFibI",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testParticles)>(*this, lib, "testParticles",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testParticlesI)>(*this, lib, "testParticlesI",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testTryCatch)>(*this, lib, "testTryCatch",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testExpLoop)>(*this, lib, "testExpLoop",SideEffects::modifyExternal);
     }
 };
 
