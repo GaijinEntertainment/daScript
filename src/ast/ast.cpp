@@ -1226,6 +1226,7 @@ namespace das
         do {
             if ( log ) logs << "OPTIMIZE:\n" << *this;
             any = false;
+            markSideEffects();  // note, this can change due to sections being optimized out
             last = optimizationRefFolding();    if ( failed() ) break;  any |= last;
             if ( log ) logs << "REF FOLDING: " << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationConstFolding();  if ( failed() ) break;  any |= last;

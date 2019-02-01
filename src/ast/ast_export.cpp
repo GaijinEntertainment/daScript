@@ -6,6 +6,8 @@ namespace das {
 
     class MarkSymbolUse : public Visitor {
     public:
+        MarkSymbolUse ( bool bid ) : builtInDependencies(bid) {
+        }
         void propageteVarUse(const VariablePtr & var) {
             if (var->used) return;
             var->used = true;
@@ -52,12 +54,38 @@ namespace das {
                 }
             }
         }
+        bool hasSideEffects ( const FunctionPtr & func, set<const Function *> & asked ) {
+            if ( func->builtIn ) {
+                return !func->noSideEffects;
+            } else if ( func->useGlobalVariables.size() ) {
+                return true;
+            } else if ( asked.find(func.get())!=asked.end() ) {
+                return false;
+            }
+            asked.insert(func.get());
+            for ( auto & dep : func->useFunctions ) {
+                if ( hasSideEffects(dep, asked) ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        void MarkSideEffects ( Module & mod ) {
+            for ( auto & fnI : mod.functions ) {
+                auto & fn = fnI.second;
+                if ( !fn->builtIn ) {
+                    set<const Function *> asked;
+                    fn->noSideEffects = !hasSideEffects(fn, asked);
+                }
+            }
+        }
     protected:
         ProgramPtr                                program;
-        FunctionPtr                                func;
-        map<string, vector<FunctionPtr>>        gVarFuncUse;
-        map<string, vector<VariablePtr>>        gVarVarUse;
+        FunctionPtr                               func;
+        map<string, vector<FunctionPtr>>          gVarFuncUse;
+        map<string, vector<VariablePtr>>          gVarVarUse;
         string                                    gVar;
+        bool                                      builtInDependencies;
     protected:
         // global variable declaration
         virtual void preVisitGlobalLet(const VariablePtr & var) override {
@@ -94,7 +122,7 @@ namespace das {
         // function call
         virtual void preVisit(ExprCall * call) override {
             Visitor::preVisit(call);
-            if (!call->func->builtIn) {
+            if (builtInDependencies || !call->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(call->func);
                 } else {
@@ -105,7 +133,7 @@ namespace das {
         // Op1
         virtual void preVisit(ExprOp1 * expr) override {
             Visitor::preVisit(expr);
-            if (!expr->func->builtIn) {
+            if (builtInDependencies || !expr->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -116,7 +144,7 @@ namespace das {
         // Op2
         virtual void preVisit(ExprOp2 * expr) override {
             Visitor::preVisit(expr);
-            if (!expr->func->builtIn) {
+            if (builtInDependencies || !expr->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -127,7 +155,7 @@ namespace das {
         // Op3
         virtual void preVisit(ExprOp3 * expr) override {
             Visitor::preVisit(expr);
-            if (expr->func && !expr->func->builtIn) {
+            if (builtInDependencies || (expr->func && !expr->func->builtIn)) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -138,11 +166,17 @@ namespace das {
     };
 
     void Program::markOrRemoveUnusedSymbols() {
-        MarkSymbolUse vis;
+        MarkSymbolUse vis(false);
         visit(vis);
         vis.markUsedFunctions(*thisModule);
         if ( options.getOption("removeUnusedSymbols",true) ) {
             vis.RemoveUnusedSymbols(*thisModule);
         }
+    }
+    
+    void Program::markSideEffects() {
+        MarkSymbolUse vis(true);
+        visit(vis);
+        vis.MarkSideEffects(*thisModule);
     }
 }

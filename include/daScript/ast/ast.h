@@ -1267,6 +1267,7 @@ namespace das
         bool staticAsserts();
         void optimize(TextWriter & logs);
         void markOrRemoveUnusedSymbols();
+        void markSideEffects();
         void allocateStack(TextWriter & logs);
         string dotGraph();
         bool simulate ( Context & context, TextWriter & logs );
