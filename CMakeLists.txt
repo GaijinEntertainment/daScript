@@ -212,13 +212,13 @@ file(GLOB OPTIMIZATION_SRC
 "examples/test/optimizations/*.das"
 )
 list(SORT OPTIMIZATION_SRC)
-SOURCE_GROUP_FILES("test/optimizations" OPTIMIZATION_SRC)
+SOURCE_GROUP_FILES("examples/test/optimizations" OPTIMIZATION_SRC)
 
 file(GLOB RUNTIME_ERRORS_SRC
 "examples/test/runtime_errors/*.das"
 )
 list(SORT RUNTIME_ERRORS_SRC)
-SOURCE_GROUP_FILES("test/runtime_errors" RUNTIME_ERRORS_SRC)
+SOURCE_GROUP_FILES("examples/test/runtime_errors" RUNTIME_ERRORS_SRC)
 
 file(GLOB MIX_TEST_SRC
 "examples/test/*.das"
