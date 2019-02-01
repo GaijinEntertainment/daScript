@@ -38,7 +38,7 @@ namespace das
             return true;
         }
         virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
-            func->ownSideEffects = true;
+            func->sideEffectFlags |= uint32_t(SideEffects::userScenario);
             return true;
         };
         virtual bool finalize(const FunctionPtr &, const AnnotationArgumentList &, string &) override {
@@ -86,20 +86,20 @@ namespace das
         addAnnotation(make_shared<ExportFunctionAnnotation>());
         addAnnotation(make_shared<SideEffectsFunctionAnnotation>());
         // functions
-        addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "throw");
-        addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print");
-        addExtern<DAS_BIND_FUN(builtin_terminate)> (*this, lib, "terminate");
-        addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk");
-        addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint");
+        addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "throw", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(builtin_terminate)> (*this, lib, "terminate", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk", SideEffects::modifyExternal);
+        addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal);
         // function-like expresions
         addCall<ExprAssert>         ("assert");
         addCall<ExprStaticAssert>   ("static_assert");
         addCall<ExprDebug>          ("debug");
         addCall<ExprHash>           ("hash");
         // table functions
-        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", true);
-        addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", false);
-        addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", false);
+        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument);
+        addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", SideEffects::none);
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprFind>("__builtin_table_find");
@@ -108,7 +108,7 @@ namespace das
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile
-        addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile");
+        addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal);
         addString(lib);
     }
 }

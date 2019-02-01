@@ -85,13 +85,13 @@ namespace das
     };
 
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
-    __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, bool hasSideEffects = true ) {
-        mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>>>(name,lib)->sideEffects(hasSideEffects));
+    __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags ) {
+        mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>>>(name,lib)->setSideEffects(seFlags));
     }
 
     template <InteropFunction func, typename RetT, typename ...Args>
-    __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, bool hasSideEffects = true ) {
-        mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib)->sideEffects(hasSideEffects));
+    __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags ) {
+        mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib)->setSideEffects(seFlags));
     }
 }
 

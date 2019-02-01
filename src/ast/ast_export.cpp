@@ -54,34 +54,37 @@ namespace das {
                 }
             }
         }
-        bool hasSideEffects ( const FunctionPtr & fnc, set<const Function *> & asked ) {
+        uint32_t getSideEffects ( const FunctionPtr & fnc, set<const Function *> & asked ) {
             if ( fnc->builtIn ) {
-                return !fnc->noSideEffects;
-            } else if ( fnc->hasInvoke || fnc->ownSideEffects || fnc->useGlobalVariables.size() ) {
-                return true;
-            } else if ( asked.find(fnc.get())!=asked.end() ) {
-                return false;
+                return fnc->sideEffectFlags;
+            } 
+            if ( asked.find(fnc.get())!=asked.end() ) {
+                return 0;
+            }
+            uint32_t flags = fnc->sideEffectFlags;
+            if (fnc->useGlobalVariables.size()) {
+                flags |= uint32_t(SideEffects::accessGlobal);
             }
             // it has side effects, if it writes to its arguments
             for ( auto & arg : fnc->arguments ) {
                 if ( arg->access_ref ) {
-                    return true;
+                    flags |= uint32_t(SideEffects::modifyArgument);
                 }
             }
             asked.insert(fnc.get());
             for ( auto & dep : fnc->useFunctions ) {
-                if ( hasSideEffects(dep, asked) ) {
-                    return true;
-                }
+                uint32_t depFlags = getSideEffects(dep, asked);
+                depFlags &= ~uint32_t(SideEffects::modifyArgument);
+                flags |= depFlags;
             }
-            return false;
+            return flags;
         }
         void MarkSideEffects ( Module & mod ) {
-            for ( auto & fnI : mod.functions ) {
+            for (auto & fnI : mod.functions) {
                 auto & fn = fnI.second;
-                if ( !fn->builtIn ) {
+                if (!fn->builtIn) {
                     set<const Function *> asked;
-                    fn->noSideEffects = !hasSideEffects(fn, asked);
+                    fn->sideEffectFlags = getSideEffects(fn, asked);
                 }
             }
         }
@@ -110,7 +113,8 @@ namespace das {
             func->useFunctions.clear();
             func->useGlobalVariables.clear();
             func->used = false;
-            func->hasInvoke = false;
+            func->sideEffectFlags &= ~uint32_t(SideEffects::inferedSideEffects);    // clear non-infered side-effect flags
+            assert(!func->builtIn);
         }
         virtual FunctionPtr visit(Function * that) override {
             func.reset();
@@ -141,7 +145,7 @@ namespace das {
         // Op1
         virtual void preVisit(ExprOp1 * expr) override {
             Visitor::preVisit(expr);
-            if ( !expr->func->builtIn) { // no built-in dependency for the built-in operators
+            if (builtInDependencies || !expr->func->builtIn) { 
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -152,7 +156,7 @@ namespace das {
         // Op2
         virtual void preVisit(ExprOp2 * expr) override {
             Visitor::preVisit(expr);
-            if ( !expr->func->builtIn) { // no built-in dependency for the built-in operators
+            if (builtInDependencies || !expr->func->builtIn) { 
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -163,7 +167,7 @@ namespace das {
         // Op3
         virtual void preVisit(ExprOp3 * expr) override {
             Visitor::preVisit(expr);
-            if ( expr->func && (builtInDependencies || !expr->func->builtIn) ) { // this may be something else. what?
+            if ( expr->func && (builtInDependencies || !expr->func->builtIn) ) { 
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -175,7 +179,14 @@ namespace das {
         virtual void preVisit(ExprInvoke * expr) override{
             Visitor::preVisit(expr);
             if ( func ) {
-                func->hasInvoke = true;
+                func->sideEffectFlags |= uint32_t(SideEffects::invokeBloke);
+            }
+        }
+        // Debug
+        virtual void preVisit(ExprDebug * expr) override {
+            Visitor::preVisit(expr);
+            if (func) {
+                func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             }
         }
     };

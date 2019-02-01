@@ -6,7 +6,6 @@ namespace  das {
     class BuiltInFn : public BuiltInFunction {
     public:
         BuiltInFn(const string & fn, const ModuleLibrary & lib) : BuiltInFunction(fn) {
-            noSideEffects = true;
             this->result = makeType<RetT>(lib);
             this->totalStackSize = sizeof(Prologue);
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
@@ -50,9 +49,9 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolAnd,         TT,   TT,  TT>  >("&",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolOr,          TT,   TT,  TT>  >("|",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BoolXor<TT>,     TT,   TT,  TT>  >("^",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolAnd<TT>,  void, TT&, TT>  >("&=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolOr<TT>,   void, TT&, TT>  >("|=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolXor<TT>,  void, TT&, TT>  >("^=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolAnd<TT>,  void, TT&, TT>  >("&=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolOr<TT>,   void, TT&, TT>  >("|=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBoolXor<TT>,  void, TT&, TT>  >("^=",     lib)->setSideEffects(SideEffects::modifyArgument) );
     }
 
     // ordered types
@@ -78,7 +77,7 @@ namespace  das {
     void addFunctionConcat(Module & mod, const ModuleLibrary & lib) {
         //                                     policy              ret   arg1 arg2    name
         mod.addFunction( make_shared<BuiltInFn<Sim_Add<TT>,        TT,   TT,  TT>  >("+",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetAdd<TT>,     void, TT&, TT>  >("+=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetAdd<TT>,     void, TT&, TT>  >("+=",     lib)->setSideEffects(SideEffects::modifyArgument) );
     }
 
     // group by add
@@ -89,7 +88,7 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Unp<TT>,        TT,   TT>       >("+",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Unm<TT>,        TT,   TT>       >("-",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Sub<TT>,        TT,   TT,  TT>  >("-",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<TT>,     void, TT&, TT>  >("-=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<TT>,     void, TT&, TT>  >("-=",     lib)->setSideEffects(SideEffects::modifyArgument) );
     }
 
     // numeric types
@@ -102,9 +101,9 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Sub<TT>,     TT,   TT,  TT>  >("-",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Mul<TT>,     TT,   TT,  TT>  >("*",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Div<TT>,     TT,   TT,  TT>  >("/",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<TT>,  void, TT&, TT>  >("-=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetMul<TT>,  void, TT&, TT>  >("*=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetDiv<TT>,  void, TT&, TT>  >("/=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<TT>,  void, TT&, TT>  >("-=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetMul<TT>,  void, TT&, TT>  >("*=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetDiv<TT>,  void, TT&, TT>  >("/=",     lib)->setSideEffects(SideEffects::modifyArgument) );
     }
 
     // numeric types
@@ -123,18 +122,18 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_DivScalVec<TT>,  TT,   TTS, TT>  >("/",    lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_MulVecScal<TT>,  TT,   TT,  TTS> >("*",    lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_DivVecScal<TT>,  TT,   TT,  TTS> >("/",    lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<TT>,  void, TT&, TT>  >("*=",   lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<TT>,  void, TT&, TT>  >("/=",   lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<TT>,  void, TT&, TT>  >("*=",   lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<TT>,  void, TT&, TT>  >("/=",   lib)->setSideEffects(SideEffects::modifyArgument) );
     }
 
     // inc-dec
     template <typename TT>
     void addFunctionIncDec(Module & mod, const ModuleLibrary & lib) {
         //                                     policy              ret   arg1         name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Inc<TT>,        TT,   TT&>      >("++",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Dec<TT>,        TT,   TT&>      >("--",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_IncPost<TT>,    TT,   TT&>      >("+++",    lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_DecPost<TT>,    TT,   TT&>      >("---",    lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Inc<TT>,        TT,   TT&>      >("++",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Dec<TT>,        TT,   TT&>      >("--",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_IncPost<TT>,    TT,   TT&>      >("+++",    lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_DecPost<TT>,    TT,   TT&>      >("---",    lib)->setSideEffects(SideEffects::modifyArgument) );
     }
 
     // built-in numeric types
@@ -145,8 +144,8 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_BinAnd<TT>,     TT,   TT,  TT>  >("&",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BinOr<TT>,      TT,   TT,  TT>  >("|",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BinXor<TT>,     TT,   TT,  TT>  >("^",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinAnd<TT>,  void, TT,  TT&> >("&=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinOr<TT>,   void, TT,  TT&> >("|=",     lib)->sideEffects(true) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinXor<TT>,  void, TT,  TT&> >("^=",     lib)->sideEffects(true) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinAnd<TT>,  void, TT,  TT&> >("&=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinOr<TT>,   void, TT,  TT&> >("|=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinXor<TT>,  void, TT,  TT&> >("^=",     lib)->setSideEffects(SideEffects::modifyArgument) );
     }
 }

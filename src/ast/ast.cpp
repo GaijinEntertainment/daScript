@@ -120,6 +120,7 @@ namespace das
         cfun->at = at;
         cfun->module = nullptr;
         cfun->flags = flags;
+        cfun->sideEffectFlags = sideEffectFlags;
         cfun->inferStack = inferStack;
         return cfun;
     }

@@ -1088,6 +1088,17 @@ namespace das
         uint32_t                    stackTop = 0;
     };
 
+    enum class SideEffects : uint32_t {
+        none =              0
+    ,   userScenario =      (1<<0)
+    ,   modifyExternal =    (1<<1)
+    ,   modifyArgument =    (1<<2)
+    ,   accessGlobal =      (1<<3)
+    ,   invokeBloke =       (1<<4)
+
+    ,   inferedSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invokeBloke)
+    };
+
     class Function : public enable_shared_from_this<Function> {
     public:
         virtual ~Function() {}
@@ -1106,7 +1117,7 @@ namespace das
         }
         string describe() const;
         virtual FunctionPtr visit(Visitor & vis);
-        FunctionPtr sideEffects ( bool hasSideEffects ) { noSideEffects = !hasSideEffects; return shared_from_this(); }
+        FunctionPtr setSideEffects ( SideEffects seFlags ) { sideEffectFlags = (uint32_t) seFlags; return shared_from_this(); }
         bool isGeneric() const;
         FunctionPtr clone() const;
         string getLocationExtra() const;
@@ -1125,18 +1136,16 @@ namespace das
         union {
             struct {
                 bool    builtIn : 1;
-                bool    noSideEffects : 1;
                 bool    hasReturn: 1;
                 bool    copyOnReturn : 1;
                 bool    moveOnReturn : 1;
                 bool    exports : 1;
                 bool    used : 1;
                 bool    fastCall : 1;
-                bool    hasInvoke : 1;
-                bool    ownSideEffects : 1;
             };
             uint32_t flags = 0;
         };
+        uint32_t    sideEffectFlags = 0;
         struct InferHistory {
             LineInfo    at;
             FunctionPtr func;
