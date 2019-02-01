@@ -1,3 +1,5 @@
+// options log=true
+
 require testProfile
 
 [es (pass="ks")]

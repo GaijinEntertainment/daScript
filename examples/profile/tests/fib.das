@@ -1,12 +1,14 @@
-// options logStack=true, log=true
+// options log=true, logStack=true
 
 require testProfile
 
+[sideeffects]
 def fibR(n)
     if (n < 2)
         return n
 	return fibR(n - 1) + fibR(n - 2)
 
+[sideeffects]
 def fibI(n)
     let last = 0
     let cur = 1
@@ -16,6 +18,7 @@ def fibI(n)
         last = tmp
     return cur
 
+[sideeffects]
 def fibIU(n)
     let last = 0
     let cur = 1

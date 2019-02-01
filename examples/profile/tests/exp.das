@@ -1,12 +1,16 @@
+// options log=true
+
 require math
 require testProfile
 
+[sideeffects]
 def expLoop(n)
     let sum = 0.
     for i in range(0, n)
         sum += exp(1./(1. + float(i)))
     return sum
 
+[sideeffects]
 def expLoopU(n)
     let sum = 0.
     for i in range(0, n/4)

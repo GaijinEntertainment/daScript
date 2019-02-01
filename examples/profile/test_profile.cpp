@@ -436,7 +436,7 @@ public:
         addAnnotation(make_shared<ObjectStructureTypeAnnotation>());
         addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
         // register functions
-        addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne");
+        addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",false);
         addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate");
         addExtern<DAS_BIND_FUN(updateTest)>(*this,lib,"interopUpdateTest");
         addExtern<DAS_BIND_FUN(update10000)>(*this,lib,"update10000");

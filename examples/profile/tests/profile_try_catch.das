@@ -1,5 +1,6 @@
 require testProfile
 
+[sideeffects]
 def tryCatch()
 	let arr:int[1000]
 	let cnt = 0

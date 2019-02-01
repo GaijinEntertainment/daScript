@@ -1,5 +1,8 @@
+// options log=true
+
 require testProfile
 
+[sideeffects]
 def testAdds()
     let count = 0
     for i in range(0, 10000000)

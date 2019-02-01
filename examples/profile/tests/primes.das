@@ -1,3 +1,5 @@
+// voptions log=true
+
 require testProfile
 
 def isprime(n)
@@ -6,6 +8,7 @@ def isprime(n)
             return false
     return true
 
+[sideeffects]
 def primes(n)
     let count = 0
     for i in range(2, n+1)
@@ -13,6 +16,7 @@ def primes(n)
             ++count
     return count
 
+[sideeffects]
 def primesI(n)
     let count = 0
     for i in range(2, n+1)
