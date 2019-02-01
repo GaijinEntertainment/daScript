@@ -91,38 +91,5 @@ namespace das
 
     uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
     uint32_t hash_value ( Context & ctx, vec4f value, TypeInfo * info );
-    
-    uint32_t hash_function ( Context & ctx, void * data, TypeInfo * type );
-
-    template <typename TT>
-    struct SimNode_HashOfValue : SimNode {
-        SimNode_HashOfValue ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
-        virtual vec4f eval ( Context & context ) override {
-            // note, exception point not nessaray. wrong value is still ok to cast
-            TT res = cast<TT>::to(subexpr->eval(context));
-            return cast<uint32_t>::from ( hash_function(context, res) );
-        }
-        SimNode * subexpr;
-    };
-
-    struct SimNode_HashOfRef : SimNode {
-        SimNode_HashOfRef ( const LineInfo & at, SimNode * s, uint32_t sz ) : SimNode(at), subexpr(s), size(sz) {}
-        virtual vec4f eval ( Context & context ) override {
-            char * data = cast<char *>::to(subexpr->eval(context));
-            return cast<uint32_t>::from ( hash_function(context,data,size) );
-        }
-        SimNode *   subexpr;
-        uint32_t    size;
-    };
-
-    struct SimNode_HashOfMixedType : SimNode {
-        SimNode_HashOfMixedType ( const LineInfo & at, SimNode * s, TypeInfo *t ) : SimNode(at), subexpr(s), typeInfo(t) {}
-        virtual vec4f eval ( Context & context ) override {
-            char * data = cast<char *>::to(subexpr->eval(context));
-            return cast<uint32_t>::from ( hash_function(context,data,typeInfo) );
-        }
-        SimNode *   subexpr;
-        TypeInfo *  typeInfo;
-    };
 }
 

@@ -759,9 +759,6 @@ namespace das {
         virtual void WalkBlock ( Block * ) override {
             error("can't serialize block");
         }
-        virtual void Handle ( char *, TypeAnnotation * ) override {
-            error("can't serialize handle");
-        }
     };
     
     vec4f _builtin_save_json ( Context & context, SimNode_CallBase * call, vec4f * args ) {

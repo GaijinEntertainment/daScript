@@ -926,13 +926,6 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
     };
 
-    struct ExprHash : ExprLikeCall<ExprHash> {
-        ExprHash () = default;
-        ExprHash ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprHash>(a, name) {}
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-    };
-
     template <typename It, typename SimNodeT, bool first>
     struct ExprTableKeysOrValues : ExprLooksLikeCall {
         ExprTableKeysOrValues() = default;
@@ -1428,7 +1421,6 @@ namespace das
         VISIT_EXPR(ExprStaticAssert)
         VISIT_EXPR(ExprDebug)
         VISIT_EXPR(ExprInvoke)
-        VISIT_EXPR(ExprHash)
         VISIT_EXPR(ExprKeys)
         VISIT_EXPR(ExprValues)
         VISIT_EXPR(ExprErase)

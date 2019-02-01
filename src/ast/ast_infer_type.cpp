@@ -679,18 +679,6 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
-    // ExprHash
-        virtual ExpressionPtr visit ( ExprHash * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
-            if ( expr->arguments.size()!=1 ) {
-                error("hash(expr)", expr->at, CompilationError::invalid_argument_count);
-                return Visitor::visit(expr);
-            }
-            // infer
-            expr->arguments[0]->type->constant = true;
-            expr->type = make_shared<TypeDecl>(Type::tUInt);
-            return Visitor::visit(expr);
-        }
     // ExprErase
         virtual ExpressionPtr visit ( ExprErase * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);

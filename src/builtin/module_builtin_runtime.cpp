@@ -11,6 +11,11 @@
 
 namespace das
 {
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Woverloaded-virtual"
+#endif
+    
     struct MarkFunctionAnnotation : FunctionAnnotation {
         MarkFunctionAnnotation(const string & na) : FunctionAnnotation(na) { }
         virtual bool apply(ExprBlock *, const AnnotationArgumentList &, string & err) override {
@@ -40,6 +45,10 @@ namespace das
             return true;
         };
     };
+    
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
     // core functions
 
@@ -96,7 +105,7 @@ namespace das
         addCall<ExprStaticAssert>   ("static_assert");
         addCall<ExprDebug>          ("debug");
         // hash
-        addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash");
+        addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none);
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none);

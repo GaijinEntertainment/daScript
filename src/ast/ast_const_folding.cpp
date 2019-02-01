@@ -39,11 +39,6 @@ namespace das {
             Visitor::preVisit(expr);
             expr->noSideEffects = true;
         }
-    // hash
-        virtual void preVisit ( ExprHash * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true;
-        }
     // keys
         virtual void preVisit ( ExprKeys * expr ) override {
             Visitor::preVisit(expr);
@@ -339,13 +334,6 @@ namespace das {
                     reportFolding();
                     return nullptr;
                 }
-            }
-            return Visitor::visit(expr);
-        }
-    // hash
-        virtual ExpressionPtr visit ( ExprHash * expr ) override {
-            if ( expr->arguments[0]->constexpression ) {
-                return evalAndFold(expr);
             }
             return Visitor::visit(expr);
         }

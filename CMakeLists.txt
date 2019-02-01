@@ -203,7 +203,7 @@ list(SORT UNIT_TEST_SRC)
 SOURCE_GROUP_FILES("examples/test/unit" UNIT_TEST_SRC)
 
 file(GLOB COMPILATION_FAIL_TEST_SRC
-"test/compilation_fail_tests/*.das"
+"examples/test/compilation_fail_tests/*.das"
 )
 list(SORT COMPILATION_FAIL_TEST_SRC)
 SOURCE_GROUP_FILES("examples/test/compilation fail" COMPILATION_FAIL_TEST_SRC)

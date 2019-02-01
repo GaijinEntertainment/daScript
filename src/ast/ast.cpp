@@ -358,14 +358,6 @@ namespace das
         return cexpr;
     }
 
-    // ExprHash
-
-    ExpressionPtr ExprHash::clone( const ExpressionPtr & expr ) const {
-        auto cexpr = clonePtr<ExprHash>(expr);
-        ExprLooksLikeCall::clone(cexpr);
-        return cexpr;
-    }
-
     // ExprErase
 
     ExpressionPtr ExprErase::clone( const ExpressionPtr & expr ) const {

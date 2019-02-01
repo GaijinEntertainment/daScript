@@ -254,18 +254,6 @@ namespace das
         return pInvoke;
     }
 
-    SimNode * ExprHash::simulate (Context & context) const {
-        auto val = arguments[0]->simulate(context);
-        if ( !arguments[0]->type->isRef() ) {
-            return context.code.makeValueNode<SimNode_HashOfValue>(arguments[0]->type->baseType, at, val);
-        } else if ( arguments[0]->type->isPod() ) {
-            return context.code.makeNode<SimNode_HashOfRef>(at, val, arguments[0]->type->getSizeOf());
-        } else {
-            auto typeInfo = context.thisHelper->makeTypeInfo(nullptr, arguments[0]->type);
-            return context.code.makeNode<SimNode_HashOfMixedType>(at, val, typeInfo);
-        }
-    }
-
     SimNode * ExprErase::simulate (Context & context) const {
         auto cont = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
