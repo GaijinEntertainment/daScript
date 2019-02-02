@@ -19,6 +19,7 @@ namespace das
         {   Type::tUInt64,      "uint64"  },
         {   Type::tString,      "string" },
         {   Type::tPointer,     "pointer" },
+        {   Type::tEnumeration, "enumeration" },
         {   Type::tIterator,    "iterator" },
         {   Type::tArray,       "array" },
         {   Type::tTable,       "table" },
@@ -55,6 +56,7 @@ namespace das
             case tBool:         return sizeof(bool);            static_assert(sizeof(bool)==1,"4 byte bool");
             case tInt64:        return sizeof(int64_t);
             case tUInt64:       return sizeof(uint64_t);
+            case tEnumeration:  return sizeof(int32_t);
             case tInt:          return sizeof(int);
             case tInt2:         return sizeof(int2);
             case tInt3:         return sizeof(int3);
@@ -89,6 +91,7 @@ namespace das
             case tBool:         return alignof(bool);            static_assert(alignof(bool)==1,"4 byte bool");
             case tInt64:        return alignof(int64_t);
             case tUInt64:       return alignof(uint64_t);
+            case tEnumeration:  return alignof(int32_t);
             case tInt:          return alignof(int32_t);
             case tInt2:         return alignof(int2);
             case tInt3:         return alignof(int3);
@@ -168,6 +171,8 @@ namespace das
             stream << info->structType->name;
         } else if ( info->type==Type::tPointer ) {
             stream << debug_type(info->firstType) << " *";
+        } else if ( info->type==Type::tEnumeration ) {
+            stream << info->enumType->name;
         } else if ( info->type==Type::tArray ) {
             stream << "Array<" << debug_type(info->firstType) << ">";
         } else if ( info->type==Type::tTable ) {

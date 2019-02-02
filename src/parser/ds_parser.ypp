@@ -68,7 +68,7 @@
     AnnotationDeclaration *         fa;
     AnnotationList *                faList;
     MakeStruct *                    pMakeStruct;
-    
+    Enumeration *                   pEnum;
 }
 
 %destructor { delete $$; } <s>
@@ -82,6 +82,7 @@
 %destructor { delete $$; } <fa>
 %destructor { delete $$; } <faList>
 %destructor { delete $$; } <pMakeStruct>
+%destructor { delete $$; } <pEnum>
 
 %token  LEXER_ERROR
 
@@ -92,7 +93,7 @@
 %token  _TYPE       _IN         _ELIF       _ARRAY
 %token  _RETURN     _NULL       _BREAK      _TRY
 %token  _OPTIONS    _TABLE      _EXPECT     _CONST
-%token  _REQUIRE    _OPERATOR
+%token  _REQUIRE    _OPERATOR   _ENUM
 
 /* basic types */
 %token  _TBOOL       _TVOID       _TSTRING     _TAUTO
@@ -143,6 +144,8 @@
 %type <faList>          optional_annotation_list
 
 %type <b>               copy_or_move
+
+%type <pEnum>           enum_list
 
 %type <pExpression>     expr
 %type <pExpression>     expr_assign
@@ -198,6 +201,7 @@
 program
     :
     |   program structure_declaration
+    |   program enum_declaration
     |   program global_let
     |   program function_declaration
     |   program expect_declaration
@@ -839,6 +843,32 @@ expr
             $$ = $fncall;
         }
     }
+    | name_in_namespace[ena] NAME[eni] {
+        $$ = nullptr;
+        auto enums = g_Program->findEnum(*$ena);
+        if ( enums.size()!=1 ) {
+            if ( enums.size() ) {
+                string candidates = g_Program->describeCandidates(enums);
+                yyerror("enumeraiton not found " + *$ena + "\n" + candidates, tokAt(@ena),
+                    CompilationError::enumeration_not_found);
+            } else {
+                yyerror("enumeraiton not found " + *$ena, tokAt(@ena),
+                    CompilationError::enumeration_not_found);
+            }
+        } else {
+            auto pEnum = enums.back();
+            auto ff = pEnum->find(*$eni);
+            if ( ff.second ) {
+                auto td = make_shared<TypeDecl>(pEnum);
+                $$ = new ExprConstEnumeration(tokAt(@eni), ff.first, td);
+            } else {
+                yyerror("enumeraiton value not found " + *$ena + " " + *$eni, tokAt(@eni),
+                    CompilationError::enumeration_not_found);
+            }
+        }
+        delete $ena;
+        delete $eni;
+    }
     ;
 
 struct_variable_declaration_list
@@ -929,6 +959,40 @@ global_let
             }
         }
         deleteVariableDeclarationList($list);
+    }
+    ;
+
+enum_list
+    :   {
+        $$ = new Enumeration();
+    }
+    |   enum_list[pE] NAME[name] ';' {
+        if ( !$pE->add(*$name) ) {
+            yyerror("enumeration alread declared " + *$name, tokAt(@name),
+                CompilationError::enumeration_value_already_declared);
+        }
+        delete $name;
+        $$ = $pE;
+    }
+    |   enum_list[pE] NAME[name] '=' INTEGER[value] ';' {
+        if ( !$pE->add(*$name,$value) ) {
+            yyerror("enumeration value alread declared " + *$name, tokAt(@name),
+                CompilationError::enumeration_value_already_declared);
+        }
+        delete $name;
+        $$ = $pE;
+    }
+    ;
+
+enum_declaration
+    :   _ENUM[loc] NAME[name] '{' enum_list[pE] '}' {
+        auto pEnum = EnumerationPtr($pE);
+        pEnum->at = tokAt(@loc);
+        pEnum->name = *$name; delete $name;
+        if ( !g_Program->addEnumeration(pEnum) ) {
+            yyerror("enumeration is alredy defined "+*$name,tokAt(@pE),
+                CompilationError::enumeration_already_declared);
+        }
     }
     ;
 
@@ -1223,7 +1287,7 @@ Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
         return nullptr;
     } else {
         string candidates = g_Program->describeCandidates(ann);
-        yyerror("too many options for annotation " + name, at, CompilationError::annotation_not_found );
+        yyerror("too many options for annotation " + name + "\n" + candidates, at, CompilationError::annotation_not_found );
         return nullptr;
     }
 }

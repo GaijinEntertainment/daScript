@@ -29,6 +29,7 @@ namespace das
         tString,
         tStructure,
         tHandle,
+        tEnumeration,
         tPointer,
         tIterator,
         tArray,
@@ -38,6 +39,7 @@ namespace das
 
     struct StructInfo;
     struct TypeAnnotation;
+    struct EnumInfo;
 
     struct BasicAnnotation {
         BasicAnnotation ( const string & n ) : name(n) {}
@@ -57,6 +59,7 @@ namespace das
     struct TypeInfo {
         Type                type;
         StructInfo *        structType;
+        EnumInfo *          enumType;
         TypeAnnotation *    annotation;
         TypeInfo *          firstType;      // map  from, or array
         TypeInfo *          secondType;     // map  to
@@ -83,6 +86,17 @@ namespace das
         VarInfo **  fields;
         uint32_t    fieldsSize;
         uint32_t    size;
+    };
+    
+    struct EnumValueInfo {
+        char *      name;
+        int32_t     value;
+    };
+    
+    struct EnumInfo {
+        char *              name;
+        EnumValueInfo **    values;
+        uint32_t            totalValues;
     };
 
     struct FuncInfo {

@@ -145,6 +145,9 @@ namespace das {
                 case Type::tRange:      Range(*((range *)pa)); break;
                 case Type::tURange:     URange(*((urange *)pa)); break;
                 case Type::tIterator:   WalkIterator((Iterator *)pa); break;     // TODO: verify
+                case Type::tEnumeration:
+                    WalkEnumeration(*((int32_t *)pa), info->enumType);
+                    break;
                 case Type::tPointer:
                     beforePtr(pa, info);
                     if ( cancel ) return;

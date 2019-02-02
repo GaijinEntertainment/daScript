@@ -4,6 +4,25 @@
 
 namespace das {
 
+    EnumInfo * DebugInfoHelper::makeEnumDebugInfo ( const Enumeration & en ) {
+        auto mangledName = en.getMangledName();
+        auto it = emn2e.find(mangledName);
+        if ( it!=emn2e.end() ) return it->second;
+        EnumInfo * eni = debugInfo.makeNode<EnumInfo>();
+        eni->name = debugInfo.allocateName(en.name);
+        eni->totalValues = uint32_t(en.list.size());
+        eni->values = (EnumValueInfo **) debugInfo.allocate(sizeof(EnumValueInfo *) * eni->totalValues);
+        uint32_t i = 0;
+        for ( auto & ev : en.list ) {
+            eni->values[i] = (EnumValueInfo *) debugInfo.allocate(sizeof(EnumValueInfo));
+            eni->values[i]->name = debugInfo.allocateName(ev.first);
+            eni->values[i]->value = ev.second;
+            i ++;
+        }
+        emn2e[mangledName] = eni;
+        return eni;
+    }
+    
     FuncInfo * DebugInfoHelper::makeFunctionDebugInfo ( const Function & fn ) {
         string mangledName = fn.getMangledName();
         auto it = fmn2f.find(mangledName);
@@ -60,6 +79,13 @@ namespace das {
         }
         if ( type->baseType==Type::tStructure  ) {
             info->structType = makeStructureDebugInfo(*type->structType);
+        } else {
+            info->structType = nullptr;
+        }
+        if ( type->baseType==Type::tEnumeration ) {
+            info->enumType = makeEnumDebugInfo(*type->enumType);
+        } else {
+            info->enumType = nullptr;
         }
         info->ref = type->ref;
         info->refType = type->isRefType();

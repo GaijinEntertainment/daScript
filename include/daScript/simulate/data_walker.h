@@ -72,6 +72,7 @@ namespace das {
         virtual void URange ( urange & ) {}
         virtual void WalkIterator ( struct Iterator * ) {}
         virtual void WalkBlock ( Block * ) {}
+        virtual void WalkEnumeration ( int32_t &, EnumInfo * ) {}
     // walk
         virtual void walk ( char * pf, TypeInfo * ti );
         virtual void walk ( vec4f f, TypeInfo * ti );

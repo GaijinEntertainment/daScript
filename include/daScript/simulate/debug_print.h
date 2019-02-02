@@ -208,6 +208,15 @@ namespace das {
         virtual void WalkBlock ( struct Block * pa ) override {
             ss << "block 0x" << HEX << intptr_t(pa->body) << DEC;
         }
+        virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) override {
+            for ( uint32_t t=0; t!=info->totalValues; ++t ) {
+                if ( value == info->values[t]->value ) {
+                    ss << info->values[t]->name;
+                    return;
+                }
+            }
+            ss << "enum " << value;
+        }
     };
     
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags );

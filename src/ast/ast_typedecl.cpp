@@ -126,13 +126,19 @@ namespace das
             if ( structType ) {
                 stream << structType->name;
             } else {
-                stream << "unspecified";
+                stream << "unspecified structure";
             }
         } else if ( baseType==Type::tPointer ) {
             if ( firstType ) {
                 stream << firstType->describe(extra) << "?";
             } else {
                 stream << "void ?";
+            }
+        } else if ( baseType==Type::tEnumeration ) {
+            if ( enumType ) {
+                stream << enumType->describe();
+            } else {
+                stream << "unspecified enumeration";
             }
         } else if ( baseType==Type::tIterator ) {
             if ( firstType ) {
@@ -189,6 +195,7 @@ namespace das
     TypeDecl::TypeDecl(const TypeDecl & decl) {
         baseType = decl.baseType;
         structType = decl.structType;
+        enumType = decl.enumType;
         annotation = decl.annotation;
         dim = decl.dim;
         flags = decl.flags;
@@ -292,6 +299,11 @@ namespace das
             if ( firstType ) {
                 ss << "#" << firstType->getMangledName();
             }
+        } else if ( baseType==Type::tEnumeration ) {
+            ss << "#enum";
+            if ( firstType ) {
+                ss << "#" << enumType->getMangledName();
+            }
         } else if ( baseType==Type::tIterator ) {
             ss << "#iterator";
             if ( firstType ) {
@@ -336,18 +348,24 @@ namespace das
     }
 
     bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters, bool constMatters ) const {
-        if ( baseType!=decl.baseType )
+        if ( baseType!=decl.baseType ) {
             return false;
-        if ( baseType==Type::tHandle && annotation!=decl.annotation )
+        }
+        if ( baseType==Type::tHandle && annotation!=decl.annotation ) {
             return false;
-        if ( baseType==Type::tStructure && structType!=decl.structType )
+        }
+        if ( baseType==Type::tStructure && structType!=decl.structType ) {
             return false;
+        }
         if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
             if ( (firstType && !firstType->isVoid())
                 && (decl.firstType && !decl.firstType->isVoid())
                 && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
+        }
+        if ( baseType==Type::tEnumeration && enumType!=decl.enumType ) {
+            return false;
         }
         if ( baseType==Type::tArray ) {
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
@@ -379,14 +397,19 @@ namespace das
                 }
             }
         }
-        if ( dim!=decl.dim )
+        if ( dim!=decl.dim ) {
             return false;
-        if ( refMatters )
-            if ( ref!=decl.ref )
+        }
+        if ( refMatters ) {
+            if ( ref!=decl.ref ) {
                 return false;
-        if ( constMatters )
-            if ( constant!=decl.constant )
+            }
+        }
+        if ( constMatters ) {
+            if ( constant!=decl.constant ) {
                 return false;
+            }
+        }
         return true;
     }
 
@@ -557,6 +580,10 @@ namespace das
     bool TypeDecl::isPointer() const {
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
+    
+    bool TypeDecl::isEnum() const {
+        return (baseType==Type::tEnumeration) && (dim.size()==0);
+    }
 
     bool TypeDecl::isAlias() const {
         // auto is auto.... or auto....?
@@ -634,6 +661,7 @@ namespace das
             case Type::tFloat3:
             case Type::tFloat4:
             case Type::tString:
+            case Type::tEnumeration:
                 return true;
             default:
                 return false;
@@ -648,7 +676,8 @@ namespace das
         if (    baseType==Type::none
             ||  baseType==Type::tVoid
             ||  baseType==Type::tStructure
-            ||  baseType==Type::tPointer)
+            ||  baseType==Type::tPointer
+            ||  baseType==Type::tEnumeration )
             return false;
         if ( dim.size() )
             return false;
@@ -691,6 +720,7 @@ namespace das
             case Type::tBool:
             case Type::tInt64:
             case Type::tUInt64:
+            case Type::tEnumeration:
             case Type::tInt:
             case Type::tInt2:
             case Type::tInt3:

@@ -217,26 +217,27 @@ namespace das {
         template < template <typename TT> class NodeType, typename... Params>
         SimNode * makeValueNode(Type baseType, Params... args) {
             switch (baseType) {
-            case Type::tBool:       return makeNode<NodeType<bool>>(args...);
-            case Type::tInt64:      return makeNode<NodeType<int64_t>>(args...);
-            case Type::tUInt64:     return makeNode<NodeType<uint64_t>>(args...);
-            case Type::tInt:        return makeNode<NodeType<int32_t>>(args...);
-            case Type::tInt2:       return makeNode<NodeType<int2>>(args...);
-            case Type::tInt3:       return makeNode<NodeType<int3>>(args...);
-            case Type::tInt4:       return makeNode<NodeType<int4>>(args...);
-            case Type::tUInt:       return makeNode<NodeType<uint32_t>>(args...);
-            case Type::tUInt2:      return makeNode<NodeType<uint2>>(args...);
-            case Type::tUInt3:      return makeNode<NodeType<uint3>>(args...);
-            case Type::tUInt4:      return makeNode<NodeType<uint4>>(args...);
-            case Type::tFloat:      return makeNode<NodeType<float>>(args...);
-            case Type::tFloat2:     return makeNode<NodeType<float2>>(args...);
-            case Type::tFloat3:     return makeNode<NodeType<float3>>(args...);
-            case Type::tFloat4:     return makeNode<NodeType<float4>>(args...);
-            case Type::tRange:      return makeNode<NodeType<range>>(args...);
-            case Type::tURange:     return makeNode<NodeType<urange>>(args...);
-            case Type::tString:     return makeNode<NodeType<char *>>(args...);
-            case Type::tPointer:    return makeNode<NodeType<void *>>(args...);
-            case Type::tBlock:      return makeNode<NodeType<Block>>(args...);
+            case Type::tBool:           return makeNode<NodeType<bool>>(args...);
+            case Type::tInt64:          return makeNode<NodeType<int64_t>>(args...);
+            case Type::tUInt64:         return makeNode<NodeType<uint64_t>>(args...);
+            case Type::tEnumeration:    return makeNode<NodeType<int32_t>>(args...);
+            case Type::tInt:            return makeNode<NodeType<int32_t>>(args...);
+            case Type::tInt2:           return makeNode<NodeType<int2>>(args...);
+            case Type::tInt3:           return makeNode<NodeType<int3>>(args...);
+            case Type::tInt4:           return makeNode<NodeType<int4>>(args...);
+            case Type::tUInt:           return makeNode<NodeType<uint32_t>>(args...);
+            case Type::tUInt2:          return makeNode<NodeType<uint2>>(args...);
+            case Type::tUInt3:          return makeNode<NodeType<uint3>>(args...);
+            case Type::tUInt4:          return makeNode<NodeType<uint4>>(args...);
+            case Type::tFloat:          return makeNode<NodeType<float>>(args...);
+            case Type::tFloat2:         return makeNode<NodeType<float2>>(args...);
+            case Type::tFloat3:         return makeNode<NodeType<float3>>(args...);
+            case Type::tFloat4:         return makeNode<NodeType<float4>>(args...);
+            case Type::tRange:          return makeNode<NodeType<range>>(args...);
+            case Type::tURange:         return makeNode<NodeType<urange>>(args...);
+            case Type::tString:         return makeNode<NodeType<char *>>(args...);
+            case Type::tPointer:        return makeNode<NodeType<void *>>(args...);
+            case Type::tBlock:          return makeNode<NodeType<Block>>(args...);
             default:
                 assert(0 && "we should not even be here");
                 return nullptr;

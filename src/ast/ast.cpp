@@ -8,6 +8,43 @@ int yylex_destroy();
 
 namespace das
 {
+    // enumeration
+    
+    string Enumeration::getMangledName() const {
+        return module ? module->name+"::"+name : name;
+    }
+    
+    pair<int,bool> Enumeration::find ( const string & na ) const {
+        auto it = list.find(na);
+        return it!=list.end() ? pair<int,bool>(it->second,true) : pair<int,bool>(0,false);
+    }
+    
+    int Enumeration::find ( const string & na, int def ) const {
+        auto it = list.find(na);
+        return it!=list.end() ? it->second : def;
+    }
+    
+    string Enumeration::find ( int va, const string & def ) const {
+        auto it = listI.find(va);
+        return it!=listI.end() ? it->second : def;
+    }
+    
+    bool Enumeration::add ( const string & f ) {
+        return add(f, lastOne);
+    }
+    
+    bool Enumeration::add ( const string & f, int v ) {
+        auto it = list.find(f);
+        if ( it == list.end() ) {
+            list[f] = v;
+            listI[v] = f;
+            lastOne = v + 1;
+            return true;
+        } else {
+            return false;
+        }
+    }
+    
     // structure
 
     bool Structure::hasAnyInitializers() const {
@@ -62,29 +99,11 @@ namespace das
         return nullptr;
     }
 
-	/*
-    TextWriter& operator<< (TextWriter& stream, const Structure & structure) {
-        stream << "(struct " << structure.name << "\n";
-        for ( auto & decl : structure.fields ) {
-            stream << "\t(" << *decl.type << " " << decl.name << ")\n";
-        }
-        stream << ")";
-        return stream;
-    }
-	*/
-
     string Structure::getMangledName() const {
         return module ? module->name+"::"+name : name;
     }
 
     // variable
-
-	/*
-    TextWriter& operator<< (TextWriter& stream, const Variable & var) {
-        stream << *var.type << " " << var.name;
-        return stream;
-    }
-	*/
 
     VariablePtr Variable::clone() const {
         auto pVar = make_shared<Variable>();
@@ -1027,6 +1046,10 @@ namespace das
 
     // program
 
+    vector<EnumerationPtr> Program::findEnum ( const string & name ) const {
+        return library.findEnum(name);
+    }
+    
     vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {
         return library.findAnnotation(name);
     }
@@ -1054,6 +1077,10 @@ namespace das
 
     bool Program::addStructure ( const StructurePtr & st ) {
         return thisModule->addStructure(st);
+    }
+    
+    bool Program::addEnumeration ( const EnumerationPtr & st ) {
+        return thisModule->addEnumeration(st);
     }
 
     FunctionPtr Program::findFunction(const string & mangledName) const {
@@ -1095,9 +1122,11 @@ namespace das
     TypeDecl * Program::makeTypeDeclaration(const LineInfo &at, const string &name) {
         auto structs = findStructure(name);
         auto handles = findAnnotation(name);
-        if ( structs.size() && handles.size() ) {
+        auto enums = findEnum(name);
+        if ( ((structs.size()!=0) + (handles.size()!=0)  + (enums.size()!=0)) > 1 ) {
             string candidates = describeCandidates(structs);
             candidates += describeCandidates(handles, false);
+            candidates += describeCandidates(enums, false);
             error("undefined type "+name + "\n" + candidates,at,CompilationError::type_not_found);
             return nullptr;
         } else if ( structs.size() ) {
@@ -1124,6 +1153,17 @@ namespace das
             } else {
                 string candidates = describeCandidates(handles);
                 error("too many options for "+name + "\n" + candidates,at,CompilationError::handle_not_found);
+                return nullptr;
+            }
+        } else if ( enums.size() ) {
+            if ( enums.size()==1 ) {
+                auto pTD = new TypeDecl(enums.back());
+                pTD->enumType = enums.back();
+                pTD->at = at;
+                return pTD;
+            } else {
+                string candidates = describeCandidates(enums);
+                error("too many options for "+name + "\n" + candidates,at,CompilationError::enumeration_not_found);
                 return nullptr;
             }
         } else {
@@ -1155,33 +1195,46 @@ namespace das
     ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value ) {
         if ( type->dim.size() || type->ref ) return nullptr;
         switch ( type->baseType ) {
-            case Type::tBool:       return make_shared<ExprConstBool>(at, cast<bool>::to(value));
-            case Type::tInt64:      return make_shared<ExprConstInt64>(at, cast<int64_t>::to(value));
-            case Type::tInt:        return make_shared<ExprConstInt>(at, cast<int32_t>::to(value));
-            case Type::tInt2:       return make_shared<ExprConstInt2>(at, cast<int2>::to(value));
-            case Type::tInt3:       return make_shared<ExprConstInt3>(at, cast<int3>::to(value));
-            case Type::tInt4:       return make_shared<ExprConstInt4>(at, cast<int4>::to(value));
-            case Type::tUInt64:     return make_shared<ExprConstUInt64>(at, cast<uint64_t>::to(value));
-            case Type::tUInt:       return make_shared<ExprConstUInt>(at, cast<uint32_t>::to(value));
-            case Type::tUInt2:      return make_shared<ExprConstUInt2>(at, cast<uint2>::to(value));
-            case Type::tUInt3:      return make_shared<ExprConstUInt3>(at, cast<uint3>::to(value));
-            case Type::tUInt4:      return make_shared<ExprConstUInt4>(at, cast<uint4>::to(value));
-            case Type::tFloat:      return make_shared<ExprConstFloat>(at, cast<float>::to(value));
-            case Type::tFloat2:     return make_shared<ExprConstFloat2>(at, cast<float2>::to(value));
-            case Type::tFloat3:     return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
-            case Type::tFloat4:     return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
-            default:                assert(0 && "we should not even be here"); return nullptr;
+            case Type::tBool:           return make_shared<ExprConstBool>(at, cast<bool>::to(value));
+            case Type::tInt64:          return make_shared<ExprConstInt64>(at, cast<int64_t>::to(value));
+            case Type::tEnumeration:    return make_shared<ExprConstEnumeration>(at, cast<int32_t>::to(value), type);
+            case Type::tInt:            return make_shared<ExprConstInt>(at, cast<int32_t>::to(value));
+            case Type::tInt2:           return make_shared<ExprConstInt2>(at, cast<int2>::to(value));
+            case Type::tInt3:           return make_shared<ExprConstInt3>(at, cast<int3>::to(value));
+            case Type::tInt4:           return make_shared<ExprConstInt4>(at, cast<int4>::to(value));
+            case Type::tUInt64:         return make_shared<ExprConstUInt64>(at, cast<uint64_t>::to(value));
+            case Type::tUInt:           return make_shared<ExprConstUInt>(at, cast<uint32_t>::to(value));
+            case Type::tUInt2:          return make_shared<ExprConstUInt2>(at, cast<uint2>::to(value));
+            case Type::tUInt3:          return make_shared<ExprConstUInt3>(at, cast<uint3>::to(value));
+            case Type::tUInt4:          return make_shared<ExprConstUInt4>(at, cast<uint4>::to(value));
+            case Type::tFloat:          return make_shared<ExprConstFloat>(at, cast<float>::to(value));
+            case Type::tFloat2:         return make_shared<ExprConstFloat2>(at, cast<float2>::to(value));
+            case Type::tFloat3:         return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
+            case Type::tFloat4:         return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
+            default:                    assert(0 && "we should not even be here"); return nullptr;
         }
     }
 
     void Program::visit(Visitor & vis, bool visitGenerics ) {
+        // enumerations
+        for ( auto & ite : thisModule->enumerations ) {
+            auto penum = ite.second.get();
+            vis.preVisit(penum);
+            size_t count = 0;
+            size_t total = penum->list.size();
+            for ( auto & itf : penum->list ) {
+                vis.preVisitEnumerationValue(penum, itf.first, itf.second, count++==total);
+            }
+            ite.second = vis.visit(penum);
+        }
         // structures
         for ( auto & ist : thisModule->structures ) {
-            vis.preVisit(ist.second.get());
-            for ( auto & fi : ist.second->fields ) {
-                vis.preVisitStructureField(ist.second.get(), fi, &fi==&ist.second->fields.back());
+            auto pst = ist.second.get();
+            vis.preVisit(pst);
+            for ( auto & fi : pst->fields ) {
+                vis.preVisitStructureField(pst, fi, &fi==&pst->fields.back());
             }
-            ist.second = vis.visit(ist.second.get());
+            ist.second = vis.visit(pst);
         }
         // globals
         for ( auto & it : thisModule->globals ) {

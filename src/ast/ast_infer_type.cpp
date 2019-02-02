@@ -511,6 +511,13 @@ namespace das {
     // const
         virtual ExpressionPtr visit ( ExprConst * c ) override {
             c->type = make_shared<TypeDecl>(c->baseType);
+            if ( c->baseType == Type::tEnumeration ) {
+                auto cE = static_cast<ExprConstEnumeration *>(c);
+                c->type->enumType = cE->enumType;
+                if ( !c->type->enumType ) {
+                    error("unknown enumeration", c->at);
+                }
+            }
             return Visitor::visit(c);
         }
     // ExprRef2Value
@@ -519,7 +526,7 @@ namespace das {
             // infer
             if ( !expr->subexpr->type->isRef() ) {
                 error("can only dereference a reference", expr->at);
-            } else if ( !expr->subexpr->type->isSimpleType() && !expr->subexpr->type->isPointer() ) {
+            } else if ( !expr->subexpr->type->isSimpleType() && !expr->subexpr->type->isPointer() && !expr->subexpr->type->isEnum() ) {
                 error("can only dereference a simple type, not a " + expr->subexpr->type->describe(), expr->at);
             } else {
                 expr->type = make_shared<TypeDecl>(*expr->subexpr->type);

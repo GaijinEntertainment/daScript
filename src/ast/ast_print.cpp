@@ -89,6 +89,15 @@ namespace das {
         __forceinline static bool noBracket ( Expression * expr ) {
             return expr->topLevel || expr->bottomLevel || expr->argLevel;
         }
+    // enumeration
+        virtual void preVisit ( Enumeration * enu ) override {
+            Visitor::preVisit(enu);
+            ss << "enum " << enu->name << "\n";
+        }
+        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) override {
+            Visitor::preVisitEnumerationValue(enu, name, value, last);
+            ss << "\t" << name << " = " << value << "\n";
+        }
     // strcuture
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
@@ -330,6 +339,11 @@ namespace das {
             } else {
                 ss << "null";
             }
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstEnumeration * c ) override {
+            auto value = c->getValue();
+            ss << c->enumType->name << " " << c->enumType->find(value,to_string(value));
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {

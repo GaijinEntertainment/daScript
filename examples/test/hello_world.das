@@ -1,9 +1,15 @@
-require UnitTest
+// options log = true, logInferPasses = true, logOptimizationPasses = true
+
+enum Numbers
+    zero
+    one
+    two
+    ten = 10
 
 [export]
 def test
-    let t : TestObjectFoo
-    t.fooData = 7
-    let q = t.propAdd13
-    print("t = {t}, q = {q}\n")
+    let t : Numbers
+    print("t={t}\n")
+    let q = Numbers one
+    print("q={q}\n")
     return true

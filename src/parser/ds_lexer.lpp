@@ -163,6 +163,7 @@
 <normal>"let"[ \t\r]*\(                                 need_oxford_comma = false; unput('(');  return _LET;
 <normal>"let"                                           return _LET;
 <normal>"struct"                                        need_oxford_comma = false; return _STRUCT;
+<normal>"enum"                                          need_oxford_comma = false; return _ENUM;
 <normal>"try"                                           need_oxford_comma = false; return _TRY;
 <normal>"catch"                                         need_oxford_comma = false; return _CATCH;
 <normal>"options"                                       return _OPTIONS;

@@ -40,6 +40,8 @@ namespace das
     ,   structure_field_already_declared        =   30205       //  struct ... x ... x
     ,   structure_already_declared              =   30206       //  ... struct x ... struct x ...
     ,   structure_already_has_initializer       =   30207       //  struct Foo x = 5; def Foo() ...
+    ,   enumeration_already_declared            =   30208       //  enum A; enumA
+    ,   enumeration_value_already_declared      =   30209       //  enum A { x; x }
 
     ,   type_not_found                          =   30301       //  a:wtf
     ,   structure_not_found                     =   30302       //  new wtf
@@ -48,6 +50,8 @@ namespace das
     ,   variable_not_found                      =   30305       //  wtf
     ,   handle_not_found                        =   30306       //  external type has colliding name
     ,   annotation_not_found                    =   30307       //  [wtf] struct or [wtf] function
+    ,   enumeration_not_found                   =   30308       //  WTF WTF enum
+    ,   enumeration_value_not_found             =   30309       //  enumt WTF
 
     ,   cant_initialize                         =   30401       //  block type declaration, default values
 

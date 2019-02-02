@@ -17,6 +17,9 @@ namespace das
 {
     class Structure;
     typedef shared_ptr<Structure> StructurePtr;
+    
+    class Enumeration;
+    typedef shared_ptr<Enumeration> EnumerationPtr;
 
     class Function;
     typedef shared_ptr<Function> FunctionPtr;
@@ -54,6 +57,7 @@ namespace das
         TypeDecl & operator = (const TypeDecl & decl) = delete;
         TypeDecl(Type tt) : baseType(tt) {}
         TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp) {}
+        TypeDecl(const EnumerationPtr & ep) : baseType(Type::tEnumeration), enumType(ep) {}
         friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
         string getMangledName() const;
         bool isSameType ( const TypeDecl & decl, bool refMatters = true, bool constMatters = true ) const;
@@ -70,6 +74,7 @@ namespace das
         bool isRefType() const;
         bool isIndex() const;
         bool isPointer() const;
+        bool isEnum() const;
         bool isHandle() const;
         int getSizeOf() const;
         int getAlignOf() const;
@@ -100,6 +105,7 @@ namespace das
         const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
         Type                baseType = Type::tVoid;
         StructurePtr        structType;
+        EnumerationPtr      enumType;
         TypeAnnotationPtr   annotation;
         TypeDeclPtr         firstType;      // map.first or array, or pointer
         TypeDeclPtr         secondType;     // map.second
@@ -305,6 +311,26 @@ namespace das
     typedef shared_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
 
     typedef vector<AnnotationDeclarationPtr> AnnotationList;
+    
+    class Enumeration : public enable_shared_from_this<Enumeration> {
+    public:
+        Enumeration() = default;
+        Enumeration( const string & na ) : name(na) {}
+        bool add ( const string & f );
+        bool add ( const string & f, int v );
+        string describe() const { return name; }
+        string getMangledName() const;
+        int find ( const string & na, int def ) const;
+        string find ( int va, const string & def ) const;
+        pair<int,bool> find ( const string & f ) const;
+    public:
+        string          name;
+        LineInfo        at;
+        map<string,int> list;
+        map<int,string> listI;
+        int             lastOne = 0;
+        Module *        module = nullptr;
+    };
 
     class Structure : public enable_shared_from_this<Structure> {
     public:
@@ -321,7 +347,6 @@ namespace das
     public:
         Structure ( const string & n ) : name(n) {}
         const FieldDeclaration * findField ( const string & name ) const;
-        friend TextWriter& operator<< (TextWriter& stream, const Structure & structure);
         int getSizeOf() const;
         int getAlignOf() const;
         bool canCopy() const;
@@ -338,7 +363,6 @@ namespace das
     };
 
     struct Variable : public enable_shared_from_this<Variable> {
-        friend TextWriter& operator<< (TextWriter& stream, const Variable & var);
         VariablePtr clone() const;
         string getMangledName() const;
         string          name;
@@ -812,6 +836,26 @@ namespace das
         ExprConstInt(int32_t i = 0)  : ExprConstT(i,Type::tInt) {}
         ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConstT(a,i,Type::tInt) {}
     };
+    
+    struct ExprConstEnumeration : ExprConstT<int32_t,ExprConstEnumeration> {
+        ExprConstEnumeration(int32_t i = 0, const TypeDeclPtr & td = nullptr)
+            : ExprConstT(i,Type::tEnumeration) {
+                if ( td ) {
+                    enumType = td->enumType;
+                }
+        }
+        ExprConstEnumeration(const LineInfo & a, int32_t i, const TypeDeclPtr & td)
+            : ExprConstT(a,i,Type::tEnumeration) {
+            enumType = td->enumType;
+        }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
+            auto cexpr = clonePtr<ExprConstEnumeration>(expr);
+            ExprConstT<int32_t,ExprConstEnumeration> ::clone(cexpr);
+            cexpr->enumType = enumType;
+            return cexpr;
+        }
+        EnumerationPtr enumType;
+    };
 
     struct ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
         ExprConstInt64(int64_t i = 0)  : ExprConstT(i,Type::tInt64) {}
@@ -1238,6 +1282,7 @@ namespace das
         virtual ~Module();
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
+        bool addEnumeration ( const EnumerationPtr & st );
         bool addFunction ( const FunctionPtr & fn );
         bool addGeneric ( const FunctionPtr & fn );
         bool addAnnotation ( const AnnotationPtr & ptr );
@@ -1245,6 +1290,7 @@ namespace das
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
         AnnotationPtr findAnnotation ( const string & name ) const;
+        EnumerationPtr findEnum ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
         bool compileBuiltinModule ( unsigned char * str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
@@ -1257,6 +1303,7 @@ namespace das
     public:
         map<string, AnnotationPtr>              handleTypes;
         map<string, StructurePtr>               structures;
+        map<string, EnumerationPtr>             enumerations;
         map<string, VariablePtr>                globals;
         map<string, FunctionPtr>                functions;          // mangled name 2 function name
         map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
@@ -1295,6 +1342,7 @@ namespace das
         void addModule ( Module * module );
         void foreach ( function<bool (Module * module)> && func, const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
+        vector<EnumerationPtr> findEnum ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
@@ -1310,12 +1358,14 @@ namespace das
         VarInfo * makeVariableDebugInfo ( const Variable & var );
         StructInfo * makeStructureDebugInfo ( const Structure & st );
         FuncInfo * makeFunctionDebugInfo ( const Function & fn );
+        EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
     protected:
         NodeAllocator &             debugInfo;
         map<string,StructInfo *>    smn2s;
         map<string,TypeInfo *>      tmn2t;
         map<string,VarInfo *>       vmn2v;
         map<string,FuncInfo *>      fmn2f;
+        map<string,EnumInfo *>      emn2e;
     };
 
     class Program : public enable_shared_from_this<Program> {
@@ -1325,8 +1375,10 @@ namespace das
         VariablePtr findVariable ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
+        vector<EnumerationPtr> findEnum ( const string & name ) const;
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
+        bool addEnumeration ( const EnumerationPtr & st );
         bool addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg );
         bool addFunction ( const FunctionPtr & fn );
         FunctionPtr findFunction(const string & mangledName) const;
@@ -1396,6 +1448,10 @@ namespace das
       virtual ~Visitor() {}
 
     public:
+        // ENUMERATOIN
+        virtual void preVisit ( Enumeration * enu ) { }
+        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) { }
+        virtual EnumerationPtr visit ( Enumeration * enu ) { return enu->shared_from_this(); }
         // STRUCTURE
         virtual void preVisit ( Structure * var ) { }
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
@@ -1513,6 +1569,7 @@ namespace das
         VISIT_EXPR(ExprConst)
         VISIT_EXPR(ExprFakeContext)
         VISIT_EXPR(ExprConstPtr)
+        VISIT_EXPR(ExprConstEnumeration)
         VISIT_EXPR(ExprConstInt64)
         VISIT_EXPR(ExprConstInt)
         VISIT_EXPR(ExprConstInt2)

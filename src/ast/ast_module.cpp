@@ -78,6 +78,15 @@ namespace das
             return false;
         }
     }
+    
+    bool Module::addEnumeration ( const EnumerationPtr & en ) {
+        if ( enumerations.insert(make_pair(en->name, en)).second ) {
+            en->module = this;
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     bool Module::addStructure ( const StructurePtr & st ) {
         if ( structures.insert(make_pair(st->name, st)).second ) {
@@ -130,6 +139,11 @@ namespace das
     AnnotationPtr Module::findAnnotation ( const string & na ) const {
         auto it = handleTypes.find(na);
         return it != handleTypes.end() ? it->second : nullptr;
+    }
+    
+    EnumerationPtr Module::findEnum ( const string & na ) const {
+        auto it = enumerations.find(na);
+        return it != enumerations.end() ? it->second : nullptr;
     }
 
     ExprCallFactory * Module::findCall ( const string & na ) const {
@@ -219,6 +233,18 @@ namespace das
         splitTypeName(name, moduleName, funcName);
         foreach([&](Module * pm) -> bool {
             if ( auto pp = pm->findStructure(funcName) )
+                ptr.push_back(pp);
+            return true;
+        }, moduleName);
+        return ptr;
+    }
+    
+    vector<EnumerationPtr> ModuleLibrary::findEnum ( const string & name ) const {
+        vector<EnumerationPtr> ptr;
+        string moduleName, enumName;
+        splitTypeName(name, moduleName, enumName);
+        foreach([&](Module * pm) -> bool {
+            if ( auto pp = pm->findEnum(enumName) )
                 ptr.push_back(pp);
             return true;
         }, moduleName);
