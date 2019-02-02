@@ -312,7 +312,7 @@ namespace das
                 ss << "structue?";
             }
         } else {
-            ss << to_string(baseType);
+            ss << das_to_string(baseType);
         }
         if ( ref ) {
             ss << "#ref";
