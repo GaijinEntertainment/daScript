@@ -1,4 +1,4 @@
-options printRef = true, printVarAccess = true, log = true, disableRun=false // logOptimizationPasses = true
+options printRef = true, printVarAccess = true, log = true, logOptimizationPasses = true
 
 def strcat(a,b)
 	let c = a
@@ -11,6 +11,12 @@ def make_name(x)
 def make_another_name(x)
 	print("{x}\n")			// this will prevent folding
 	return x + "_ok"
+
+let
+    g_name = "_global_ok"
+
+def make_g_name(x)
+    return x + g_name
 
 struct Foo
 	a : int = 19
@@ -32,4 +38,7 @@ def test
 	print("\n{q}\n")
 	let w = name_foo()
 	print("\n{w}\n")
+    let g = make_g_name("touch_global")
+    print("\n{g}\n")
+    g_name = "gaa"   // this says, global changes
     return true
