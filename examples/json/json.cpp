@@ -14,27 +14,6 @@ namespace das {
         }
     };
 
-    template <>
-    struct das::typeFactory<JsValue *> {
-        static das::TypeDeclPtr make(const das::ModuleLibrary & library ) {
-            auto pt = make_shared<TypeDecl>(Type::tPointer);
-            pt->firstType = library.makeHandleType("JsValue");
-            return pt;
-        }
-    };
-
-    template <typename Fun, Fun BOOL_PROP>
-    struct SimNode_GetBoolProperty : SimNode {
-        DAS_BOOL_NODE;
-        SimNode_GetBoolProperty(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
-        __forceinline bool compute(Context & context) {
-            auto pv = (JsValue *) subexpr->evalPtr(context);
-            if ( !pv ) return false;
-            return (pv->*BOOL_PROP)();
-        }
-        SimNode * subexpr;
-    };
-
     template <typename Fun, Fun BOOL_PROP>
     struct SimNode_SafeAs : SimNode {
         DAS_PTR_NODE;
@@ -260,31 +239,32 @@ namespace das {
             return nullptr;
         }
 
+        template <bool SAFE>
         SimNode * simulateIsField ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr ) const {
             if (fn == "is_object") {
-                return context.code.makeNode<SimNode_GetBoolProperty<
-                decltype(&JsValue::IsObject),&JsValue::IsObject>>(at, subexpr);
+                return context.code.makeNode<SimNode_Property<
+                JsValue,decltype(&JsValue::IsObject),&JsValue::IsObject,SAFE>>(at, subexpr);
             } else if (fn == "is_array") {
-                return context.code.makeNode<SimNode_GetBoolProperty<
-                decltype(&JsValue::IsArray),&JsValue::IsArray>>(at, subexpr);
+                return context.code.makeNode<SimNode_Property<
+                JsValue,decltype(&JsValue::IsArray),&JsValue::IsArray,SAFE>>(at, subexpr);
             } else if (fn == "is_string") {
-                return context.code.makeNode<SimNode_GetBoolProperty<
-                decltype(&JsValue::IsString),&JsValue::IsString>>(at, subexpr);
+                return context.code.makeNode<SimNode_Property<
+                JsValue,decltype(&JsValue::IsString),&JsValue::IsString,SAFE>>(at, subexpr);
             } else if (fn == "is_null") {
-                return context.code.makeNode<SimNode_GetBoolProperty<
-                decltype(&JsValue::IsNull),&JsValue::IsNull>>(at, subexpr);
+                return context.code.makeNode<SimNode_Property<
+                JsValue,decltype(&JsValue::IsNull),&JsValue::IsNull,SAFE>>(at, subexpr);
             } else if (fn == "is_bool") {
-                return context.code.makeNode<SimNode_GetBoolProperty<
-                decltype(&JsValue::IsBool),&JsValue::IsBool>>(at, subexpr);
+                return context.code.makeNode<SimNode_Property<
+                JsValue,decltype(&JsValue::IsBool),&JsValue::IsBool,SAFE>>(at, subexpr);
             } else if (fn == "is_int") {
-                return context.code.makeNode<SimNode_GetBoolProperty<
-                decltype(&JsValue::IsInt),&JsValue::IsInt>>(at, subexpr);
+                return context.code.makeNode<SimNode_Property<
+                JsValue,decltype(&JsValue::IsInt),&JsValue::IsInt,SAFE>>(at, subexpr);
             } else if (fn == "is_float") {
-                return context.code.makeNode<SimNode_GetBoolProperty<
-                decltype(&JsValue::IsDouble),&JsValue::IsDouble>>(at, subexpr);
+                return context.code.makeNode<SimNode_Property<
+                JsValue,decltype(&JsValue::IsDouble),&JsValue::IsDouble,SAFE>>(at, subexpr);
             } else if (fn == "is_number") {
-                return context.code.makeNode<SimNode_GetBoolProperty<
-                decltype(&JsValue::IsNumber),&JsValue::IsNumber>>(at, subexpr);
+                return context.code.makeNode<SimNode_Property<
+                JsValue,decltype(&JsValue::IsNumber),&JsValue::IsNumber,SAFE>>(at, subexpr);
             } else {
                 return nullptr;
             }
@@ -292,7 +272,7 @@ namespace das {
 
         virtual SimNode * simulateGetField ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr ) const override {
             // IS XXX
-            auto isField = simulateIsField(fn, context, at, subexpr);
+            auto isField = simulateIsField<false>(fn, context, at, subexpr);
             if ( isField ) {
                 return isField;
             }
@@ -324,7 +304,7 @@ namespace das {
 
         virtual SimNode * simulateSafeGetField ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr ) const override {
             // IS XXX
-            auto isField = simulateIsField(fn, context, at, subexpr);
+            auto isField = simulateIsField<true>(fn, context, at, subexpr);
             if ( isField ) {
                 return isField;
             }

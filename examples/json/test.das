@@ -37,7 +37,6 @@ def test_write
 [export]
 def test
     test_write()
-    return true
     test_parse()
     return true
 

@@ -1,7 +1,9 @@
+require UnitTest
 
 [export]
 def test
-    let t : int?
-    if t != null
-        print("not null\n")
+    let t : TestObjectFoo
+    t.fooData = 7
+    let q = t.propAdd13
+    print("t = {t}, q = {q}\n")
     return true

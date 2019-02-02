@@ -4,16 +4,23 @@
 
 namespace das
 {
-    
     #define DAS_BIND_MANAGED_FIELD(FIELDNAME)   DAS_BIND_FIELD(ManagedType,FIELDNAME)
+    #define DAS_BIND_MANAGED_PROP(FIELDNAME)    DAS_BIND_PROP(ManagedType,FIELDNAME)
     
     template <typename OT>
     struct ManagedStructureAnnotation  : TypeAnnotation {
         typedef OT ManagedType;
+        enum class FactoryNodeType {
+            getField
+        ,   getFieldR2V
+        ,   safeGetField
+        ,   safeGetFieldPtr
+        };
         struct StructureField {
             string      name;
             TypeDeclPtr decl;
             uint32_t    offset;
+            function<SimNode * (FactoryNodeType,Context &,const LineInfo &, SimNode *)>   factory;
         };
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml )
             : TypeAnnotation(n), debugInfo(2048), helpA(debugInfo), mlib(&ml) {}
@@ -28,8 +35,12 @@ namespace das
         virtual bool isNewable() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
-            if ( auto t = makeSafeFieldType(na) ) {
-                t->ref = true;
+            auto it = fields.find(na);
+            if ( it!=fields.end() ) {
+                auto t = make_shared<TypeDecl>(*it->second.decl);
+                if ( it->second.offset != -1U ) {
+                    t->ref = true;
+                }
                 return t;
             } else {
                 return nullptr;
@@ -37,12 +48,16 @@ namespace das
         }
         virtual TypeDeclPtr makeSafeFieldType ( const string & na ) const override {
             auto it = fields.find(na);
-            return it!=fields.end() ? make_shared<TypeDecl>(*it->second.decl) : nullptr;
+            if ( it!=fields.end() && it->second.offset!=-1U ) {
+                return make_shared<TypeDecl>(*it->second.decl);
+            } else {
+                return nullptr;
+            }
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
-                return context.code.makeNode<SimNode_FieldDeref>(at,value,it->second.offset);
+                return it->second.factory(FactoryNodeType::getField,context,at,value);
             } else {
                 return nullptr;
             }
@@ -51,7 +66,7 @@ namespace das
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
                 auto itT = it->second.decl;
-                return context.code.makeValueNode<SimNode_FieldDerefR2V>(itT->baseType,at,value,it->second.offset);
+                return it->second.factory(FactoryNodeType::getFieldR2V,context,at,value);
             } else {
                 return nullptr;
             }
@@ -62,7 +77,7 @@ namespace das
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
-                return context.code.makeNode<SimNode_SafeFieldDeref>(at,value,it->second.offset);
+                return it->second.factory(FactoryNodeType::safeGetField,context,at,value);
             } else {
                 return nullptr;
             }
@@ -70,37 +85,80 @@ namespace das
         virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
-                return context.code.makeNode<SimNode_SafeFieldDerefPtr>(at,value,it->second.offset);
+                return it->second.factory(FactoryNodeType::safeGetFieldPtr,context,at,value);
             } else {
                 return nullptr;
             }
         };
+        template <typename FunT, FunT PROP>
+        void addProperty ( const string & na ) {
+            auto & field = fields[na]; assert(!field.decl && "field already exist");
+            using resultType = decltype((((ManagedType *)0)->*PROP)());
+            field.decl = makeType<resultType>(*mlib);
+            field.offset = -1U;
+            field.factory = [](FactoryNodeType nt,Context & context,const LineInfo & at, SimNode * value) -> SimNode * {
+                switch ( nt ) {
+                    case FactoryNodeType::getField:
+                        return context.code.makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value);
+                    case FactoryNodeType::safeGetField:
+                    case FactoryNodeType::safeGetFieldPtr:
+                    case FactoryNodeType::getFieldR2V:
+                        assert(0 && "we should not be here");
+                    default:
+                        return nullptr;
+                }
+            };
+        }
         void addFieldEx ( const string & na, off_t offset, TypeDeclPtr pT ) {
             auto & field = fields[na]; assert(!field.decl && "field already exist");
-            field.offset = offset;
             field.decl = pT;
+            field.offset = offset;
+            auto baseType = field.decl->baseType;
+            field.factory = [offset,baseType](FactoryNodeType nt,Context & context,const LineInfo & at, SimNode * value) -> SimNode * {
+                switch ( nt ) {
+                    case FactoryNodeType::getField:
+                        return context.code.makeNode<SimNode_FieldDeref>(at,value,offset);
+                    case FactoryNodeType::getFieldR2V:
+                        return context.code.makeValueNode<SimNode_FieldDerefR2V>(baseType,at,value,offset);
+                    case FactoryNodeType::safeGetField:
+                        return context.code.makeNode<SimNode_SafeFieldDeref>(at,value,offset);
+                    case FactoryNodeType::safeGetFieldPtr:
+                        return context.code.makeNode<SimNode_SafeFieldDerefPtr>(at,value,offset);
+                    default:
+                        return nullptr;
+                }
+            };
         }
         template <typename TT, off_t off>
         __forceinline void addField ( const string & na ) {
             addFieldEx ( na, off, makeType<TT>(*mlib) );
         }
-        
         virtual void walk ( DataWalker & walker, void * data ) override {
             if ( !sti ) {
                 debugInfo.reset();
                 sti = debugInfo.makeNode<StructInfo>();
                 sti->name = debugInfo.allocateName(name);
-                sti->fieldsSize = (uint32_t) fields.size();
+                // count fields
+                sti->fieldsSize = 0;
+                for ( auto & fi : fields ) {
+                    auto & var = fi.second;
+                    if ( var.offset != -1U ) {
+                        sti->fieldsSize ++;
+                    }
+                }
+                // and allocate
                 sti->size = (uint32_t) getSizeOf();
                 sti->fields = (VarInfo **) debugInfo.allocate( sizeof(VarInfo *) * sti->fieldsSize );
                 int i = 0;
                 for ( auto & fi : fields ) {
                     auto & var = fi.second;
-                    VarInfo * vi = debugInfo.makeNode<VarInfo>();
-                    helpA.makeTypeInfo(vi, var.decl);
-                    vi->name = debugInfo.allocateName(fi.first);
-                    vi->offset = var.offset;
-                    sti->fields[i++] = vi;
+                    if ( var.offset != -1U ) {
+                        VarInfo * vi = debugInfo.makeNode<VarInfo>();
+                        helpA.makeTypeInfo(vi, var.decl);
+                        vi->name = debugInfo.allocateName(fi.first);
+                        vi->offset = var.offset;
+                        sti->fields[i++] = vi;
+                    }
                 }
             }
             walker.walk_struct((char *)data, sti);

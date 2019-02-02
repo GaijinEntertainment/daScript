@@ -43,4 +43,6 @@ def test:bool
         b.fooPtr = a
         b?.fooPtr?.fooData ?? idummy = 4
         assert(b.fooPtr.fooData==4 & idummy==3)
+        a.fooData = 7
+        assert(a.propAdd13==20)
     return true

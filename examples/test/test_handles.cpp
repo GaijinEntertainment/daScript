@@ -13,6 +13,9 @@ Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y
 //sample of your engine annotated struct
 struct TestObjectFoo {
     int fooData;
+    int propAdd13() {
+        return fooData + 13;
+    }
 };
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 
@@ -25,6 +28,7 @@ MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
     TestObjectFooAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectFoo", ml) {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
+        addProperty<DAS_BIND_MANAGED_PROP(propAdd13)>("propAdd13");
     }
 };
 
