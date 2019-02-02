@@ -528,9 +528,11 @@ namespace das {
         visit(cfe);
         bool any = cfe.didAnything();
         if ( cfe.needRun() ) {
-            RunFolding rfe(shared_from_this());
-            visit(rfe);
-            any |= rfe.didAnything();
+            if ( !options.getOption("disableRun",false) ) {
+                RunFolding rfe(shared_from_this());
+                visit(rfe);
+                any |= rfe.didAnything();
+            }
         }
         return any;
     }
