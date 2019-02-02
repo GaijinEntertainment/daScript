@@ -117,7 +117,29 @@ namespace das {
     // function
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
-            if ( !fn->sideEffectFlags ) { ss << "[nosideeffects]\n"; }
+            if ( fn->knownSideEffects ) {
+                if ( !fn->sideEffectFlags ) {
+                ss << "[nosideeffects]\n";
+                } else {
+                    ss << "// ";
+                    if ( fn->sideEffectFlags & uint32_t(SideEffects::userScenario) ) {
+                        ss << "[user_scenario]";
+                    }
+                    if ( fn->sideEffectFlags & uint32_t(SideEffects::modifyExternal) ) {
+                        ss << "[modify_external]";
+                    }
+                    if ( fn->sideEffectFlags & uint32_t(SideEffects::modifyArgument) ) {
+                        ss << "[modify_arugment]";
+                    }
+                    if ( fn->sideEffectFlags & uint32_t(SideEffects::accessGlobal) ) {
+                        ss << "[access_global]";
+                    }
+                    if ( fn->sideEffectFlags & uint32_t(SideEffects::invokeBloke) ) {
+                        ss << "[invoke_block]";
+                    }
+                    ss << "\n";
+                }
+            }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }
             ss << "def " << fn->name;

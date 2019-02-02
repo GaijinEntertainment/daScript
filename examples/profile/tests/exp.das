@@ -1,4 +1,4 @@
-// options log=true
+// options log=true, printVarAccess=true, printRef=true
 
 require math
 require testProfile

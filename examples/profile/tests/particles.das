@@ -1,3 +1,5 @@
+// options log = true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
+
 require testProfile
 
 struct NObject

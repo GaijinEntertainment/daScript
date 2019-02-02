@@ -1135,6 +1135,7 @@ namespace das
                 bool    exports : 1;
                 bool    used : 1;
                 bool    fastCall : 1;
+                bool    knownSideEffects : 1;
             };
             uint32_t flags = 0;
         };
@@ -1267,12 +1268,11 @@ namespace das
         bool optimizationConstFolding();
         bool optimizationBlockFolding();
         bool optimizationCondFolding();
-        bool optimizationUnused();
+        bool optimizationUnused(TextWriter & logs);
         bool staticAsserts();
         void optimize(TextWriter & logs);
-        void markUseFlags();
+        void markSymbolUse(bool builtInSym);
         void markOrRemoveUnusedSymbols(bool forceAll = false);
-        void markSideEffects();
         void allocateStack(TextWriter & logs);
         string dotGraph();
         bool simulate ( Context & context, TextWriter & logs );

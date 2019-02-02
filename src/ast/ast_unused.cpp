@@ -4,6 +4,68 @@
 
 namespace das {
 
+    
+    class TrackVariableFlags : public Visitor {
+    protected:
+        // global let
+        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
+            Visitor::preVisitGlobalLet(var);
+            var->access_extern = false;
+            var->access_init = false;
+            var->access_get = false;
+            var->access_ref = false;
+        }
+        virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
+            Visitor::preVisitGlobalLetInit(var, init);
+            var->access_init = true;
+        }
+        // let
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(let, var, last);
+            var->access_extern = false;
+            var->access_init = false;
+            var->access_get = false;
+            var->access_ref = false;
+        }
+        virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) override {
+            Visitor::preVisitLetInit(let, var, init);
+            var->access_init = true;
+        }
+        // function arguments
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitArgument(fn, var, lastArg);
+            var->access_extern = true;
+            var->access_init = false;
+            var->access_get = false;
+            var->access_ref = false;
+        }
+        virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & var, Expression * init ) override {
+            Visitor::preVisitArgumentInit(fn, var, init);
+            var->access_init = true;
+        }
+        // block
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitBlockArgument(block, var, lastArg);
+            var->access_extern = true;
+            var->access_init = false;
+            var->access_get = false;
+            var->access_ref = false;
+        }
+        // for loop sources
+        virtual void preVisitFor ( ExprFor *, const VariablePtr & var, bool ) override {
+            var->access_init = true;
+        }
+        // var
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->write ) {
+                expr->variable->access_ref = true;
+            } else {
+                expr->variable->access_get = true;
+            }
+        }
+    };
+    
     /*
      TODO:
         cond ? a : b
@@ -20,6 +82,29 @@ namespace das {
     //  a.b = 5 ->  #a#.b=5
     //  a[b]=3  ->  #a#[b]=3
     class TrackFieldAndAtFlags : public Visitor {
+        TextWriter &            logs;
+        set<const Function *>   asked;
+        FunctionPtr             func;
+    public:
+        TrackFieldAndAtFlags ( TextWriter & l ) : logs(l) {
+        }
+        void MarkSideEffects ( Module & mod ) {
+            for (auto & fnI : mod.functions) {
+                auto & fn = fnI.second;
+                if (!fn->builtIn) {
+                    fn->knownSideEffects = false;
+                    fn->sideEffectFlags &= ~uint32_t(SideEffects::inferedSideEffects); 
+                }
+            }
+            for (auto & fnI : mod.functions) {
+                auto & fn = fnI.second;
+                if (!fn->builtIn && !fn->knownSideEffects) {
+                    asked.clear();
+                    getSideEffects(fn);
+                }
+            }
+        }
+    protected:
         void propagateRead ( Expression * expr ) {
             if ( expr->rtti_isVar() ) {
                 auto var = (ExprVar *) expr;
@@ -90,6 +175,45 @@ namespace das {
             //  propagate write to call or expr-like-call???
             //  do we need to?
         }
+        uint32_t getSideEffects ( const FunctionPtr & fnc ) {
+            if ( fnc->builtIn || fnc->knownSideEffects ) {
+                return fnc->sideEffectFlags;
+            }
+            if ( asked.find(fnc.get())!=asked.end() ) {
+                if ( func != fnc ) {
+                    logs << "optimization warning, assuming " << fnc->name << " has no side effects during the infer loop\n";
+                }
+                return 0;
+            }
+            asked.insert(fnc.get());
+            auto sfn = func;
+            func = fnc;
+            fnc->visit(*this);
+            TrackVariableFlags vaf;
+            fnc->visit(vaf);
+            func = sfn;
+            // now, for the side-effects
+            uint32_t flags = fnc->sideEffectFlags;
+            if (fnc->useGlobalVariables.size()) {
+                flags |= uint32_t(SideEffects::accessGlobal);
+            }
+            // it has side effects, if it writes to its arguments
+            for ( auto & arg : fnc->arguments ) {
+                if ( arg->access_ref ) {
+                    flags |= uint32_t(SideEffects::modifyArgument);
+                }
+            }
+            for ( auto & dep : fnc->useFunctions ) {
+                if ( dep != fnc ) {
+                    uint32_t depFlags = getSideEffects(dep);
+                    depFlags &= ~uint32_t(SideEffects::modifyArgument);
+                    flags |= depFlags;
+                }
+            }
+            fnc->knownSideEffects = true;
+            fnc->sideEffectFlags |= flags;
+            return flags;
+        }
     protected:
     // Variable initializatoin
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) override {
@@ -127,15 +251,43 @@ namespace das {
     // Op1
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
-            if (expr->func->sideEffectFlags) {
+            auto sef = getSideEffects(expr->func);
+            if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 propagateWrite(expr->subexpr.get());
             }
         }
     // Op2
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->func->sideEffectFlags ) {
-                propagateWrite(expr->left.get());
+            auto sef = getSideEffects(expr->func);
+            if ( sef & uint32_t(SideEffects::modifyArgument) ) {
+                auto leftT = expr->left->type;
+                if ( leftT->isRef() && !leftT->isConst() ) {
+                    propagateWrite(expr->left.get());
+                }
+                auto rightT = expr->right->type;
+                if ( rightT->isRef() && !rightT->isConst() ) {
+                    propagateWrite(expr->right.get());
+                }
+            }
+        }
+    // Op3
+        virtual void preVisit ( ExprOp3 * expr ) override {
+            Visitor::preVisit(expr);
+            auto sef = expr->func ? getSideEffects(expr->func) : 0;
+            if ( sef & uint32_t(SideEffects::modifyArgument) ) {
+                auto condT = expr->subexpr->type;
+                if ( condT->isRef() && !condT->isConst() ) {
+                    propagateWrite(expr->subexpr.get());
+                }
+                auto leftT = expr->left->type;
+                if ( leftT->isRef() && !leftT->isConst() ) {
+                    propagateWrite(expr->left.get());
+                }
+                auto rightT = expr->right->type;
+                if ( rightT->isRef() && !rightT->isConst() ) {
+                    propagateWrite(expr->right.get());
+                }
             }
         }
     // Return
@@ -148,7 +300,8 @@ namespace das {
     // Call
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->func->sideEffectFlags & uint32_t(SideEffects::modifyArgument) ) {
+            auto sef = getSideEffects(expr->func);
+            if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                     const auto & argT = expr->func->arguments[ai]->type;
                     if ( argT->isRef() && !argT->isConst() ) {
@@ -167,68 +320,22 @@ namespace das {
                 }
             }
         }
-    };
-
-    class TrackVariableFlags : public Visitor {
-    protected:
-    // global let
-        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
-            Visitor::preVisitGlobalLet(var);
-            var->access_extern = false;
-            var->access_init = false;
-            var->access_get = false;
-            var->access_ref = false;
-        }
-        virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
-            Visitor::preVisitGlobalLetInit(var, init);
-            var->access_init = true;
-        }
-    // let
-        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-            Visitor::preVisitLet(let, var, last);
-            var->access_extern = false;
-            var->access_init = false;
-            var->access_get = false;
-            var->access_ref = false;
-        }
-        virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) override {
-            Visitor::preVisitLetInit(let, var, init);
-            var->access_init = true;
-        }
-    // function arguments
-        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
-            Visitor::preVisitArgument(fn, var, lastArg);
-            var->access_extern = true;
-            var->access_init = false;
-            var->access_get = false;
-            var->access_ref = false;
-        }
-        virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & var, Expression * init ) override {
-            Visitor::preVisitArgumentInit(fn, var, init);
-            var->access_init = true;
-        }
-    // block
-        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
-            Visitor::preVisitBlockArgument(block, var, lastArg);
-            var->access_extern = true;
-            var->access_init = false;
-            var->access_get = false;
-            var->access_ref = false;
-        }
-    // for loop sources
-        virtual void preVisitFor ( ExprFor *, const VariablePtr & var, bool ) override {
-            var->access_init = true;
-        }
-    // var
-        virtual void preVisit ( ExprVar * expr ) override {
+        // Invoke
+        virtual void preVisit(ExprInvoke * expr) override{
             Visitor::preVisit(expr);
-            if ( expr->write ) {
-                expr->variable->access_ref = true;
-            } else {
-                expr->variable->access_get = true;
+            if ( func ) {
+                func->sideEffectFlags |= uint32_t(SideEffects::invokeBloke);
+            }
+        }
+        // Debug
+        virtual void preVisit(ExprDebug * expr) override {
+            Visitor::preVisit(expr);
+            if (func) {
+                func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             }
         }
     };
+
 
     class RemoveUnusedLocalVariables : public OptVisitor {
     protected:
@@ -295,15 +402,12 @@ namespace das {
 
     // program
     
-    void Program::markUseFlags() {
-        TrackFieldAndAtFlags faf;
-        visit(faf);
-        TrackVariableFlags vaf;
-        visit(vaf);
-    }
-
-    bool Program::optimizationUnused() {
-        markUseFlags();
+    bool Program::optimizationUnused(TextWriter & logs) {
+        markSymbolUse(true);
+        // determine function side-effects
+        TrackFieldAndAtFlags faf(logs);
+        faf.MarkSideEffects(*thisModule);
+        // remove itselft
         RemoveUnusedLocalVariables context;
         visit(context);
         return context.didAnything();

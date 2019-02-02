@@ -21,6 +21,7 @@ namespace das {
         }
         void propagateFunctionUse(const FunctionPtr & fn) {
             if (fn->used) return;
+            if (fn->builtIn) return;
             fn->used = true;
             for (const auto & gv : fn->useGlobalVariables) {
                 propageteVarUse(gv);
@@ -54,40 +55,6 @@ namespace das {
                 }
             }
         }
-        uint32_t getSideEffects ( const FunctionPtr & fnc, set<const Function *> & asked ) {
-            if ( fnc->builtIn ) {
-                return fnc->sideEffectFlags;
-            } 
-            if ( asked.find(fnc.get())!=asked.end() ) {
-                return 0;
-            }
-            uint32_t flags = fnc->sideEffectFlags;
-            if (fnc->useGlobalVariables.size()) {
-                flags |= uint32_t(SideEffects::accessGlobal);
-            }
-            // it has side effects, if it writes to its arguments
-            for ( auto & arg : fnc->arguments ) {
-                if ( arg->access_ref ) {
-                    flags |= uint32_t(SideEffects::modifyArgument);
-                }
-            }
-            asked.insert(fnc.get());
-            for ( auto & dep : fnc->useFunctions ) {
-                uint32_t depFlags = getSideEffects(dep, asked);
-                depFlags &= ~uint32_t(SideEffects::modifyArgument);
-                flags |= depFlags;
-            }
-            return flags;
-        }
-        void MarkSideEffects ( Module & mod ) {
-            for (auto & fnI : mod.functions) {
-                auto & fn = fnI.second;
-                if (!fn->builtIn) {
-                    set<const Function *> asked;
-                    fn->sideEffectFlags = getSideEffects(fn, asked);
-                }
-            }
-        }
     protected:
         ProgramPtr                                program;
         FunctionPtr                               func;
@@ -113,7 +80,6 @@ namespace das {
             func->useFunctions.clear();
             func->useGlobalVariables.clear();
             func->used = false;
-            func->sideEffectFlags &= ~uint32_t(SideEffects::inferedSideEffects);    // clear non-infered side-effect flags
             assert(!func->builtIn);
         }
         virtual FunctionPtr visit(Function * that) override {
@@ -175,22 +141,14 @@ namespace das {
                 }
             }
         }
-        // Invoke
-        virtual void preVisit(ExprInvoke * expr) override{
-            Visitor::preVisit(expr);
-            if ( func ) {
-                func->sideEffectFlags |= uint32_t(SideEffects::invokeBloke);
-            }
-        }
-        // Debug
-        virtual void preVisit(ExprDebug * expr) override {
-            Visitor::preVisit(expr);
-            if (func) {
-                func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
-            }
-        }
     };
 
+    void Program::markSymbolUse(bool builtInSym) {
+        MarkSymbolUse vis(builtInSym);
+        visit(vis);
+        vis.markUsedFunctions(*thisModule, false);
+    }
+    
     void Program::markOrRemoveUnusedSymbols(bool forceAll) {
         MarkSymbolUse vis(false);
         visit(vis);
@@ -198,12 +156,5 @@ namespace das {
         if ( options.getOption("removeUnusedSymbols",true) ) {
             vis.RemoveUnusedSymbols(*thisModule);
         }
-    }
-    
-    void Program::markSideEffects() {
-        markUseFlags();
-        MarkSymbolUse vis(true);
-        visit(vis);
-        vis.MarkSideEffects(*thisModule);
     }
 }

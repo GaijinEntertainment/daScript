@@ -1,4 +1,4 @@
-// options log=true, logStack=true
+// options log=true, printVarAccess=true, printRef=true
 
 require testProfile
 

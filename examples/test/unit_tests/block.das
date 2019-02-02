@@ -1,5 +1,5 @@
 // options plot=true,plotFile="../../test.dot",plotReadWrite=true
-// options log=true, logOptimizationPasses=false
+// options log=true, logOptimizationPasses=true, printRef = true, printVarAccess = true
 
 def twice(b:block)
     invoke(b)
@@ -11,6 +11,7 @@ def twice_good(b:block<int>):int
         t += invoke(b)
         return t
 
+[sideeffects]
 def crapOnStack
     let(a:int[20])
         for b in a

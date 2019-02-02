@@ -1219,17 +1219,16 @@ namespace das
         do {
             if ( log ) logs << "OPTIMIZE:\n" << *this;
             any = false;
-            markSideEffects();  // note, this can change due to sections being optimized out
             last = optimizationRefFolding();    if ( failed() ) break;  any |= last;
             if ( log ) logs << "REF FOLDING: " << (last ? "optimized" : "nothing") << "\n" << *this;
+            last = optimizationUnused(logs);    if ( failed() ) break;  any |= last;
+            if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationConstFolding();  if ( failed() ) break;  any |= last;
             if ( log ) logs << "CONST FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationCondFolding();  if ( failed() ) break;  any |= last;
             if ( log ) logs << "COND FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationBlockFolding();  if ( failed() ) break;  any |= last;
             if ( log ) logs << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
-            last = optimizationUnused();        if ( failed() ) break;  any |= last;
-            if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
         } while ( any );
     }
 
