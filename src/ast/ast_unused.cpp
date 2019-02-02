@@ -305,7 +305,13 @@ namespace das {
                 for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                     const auto & argT = expr->func->arguments[ai]->type;
                     if ( argT->isRef() && !argT->isConst() ) {
-                        propagateWrite(expr->arguments[ai].get());
+                        if ( expr->func->knownSideEffects && !expr->func->builtIn ) {
+                            if ( expr->func->arguments[ai]->access_ref ) {
+                                propagateWrite(expr->arguments[ai].get());
+                            }
+                        } else {
+                            propagateWrite(expr->arguments[ai].get());
+                        }
                     }
                 }
             }
