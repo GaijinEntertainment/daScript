@@ -1,4 +1,4 @@
-options printRef = true, printVarAccess = true, log = true// , logOptimizationPasses = true
+// options printRef = true, printVarAccess = true, log = true// , logOptimizationPasses = true
 
 def strcat(a,b)
 	let c = a
