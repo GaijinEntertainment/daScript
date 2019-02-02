@@ -1,4 +1,4 @@
-// options log=true // , logInferPasses=true // , logOptimizationPasses=true
+options printRef = true, printVarAccess = true, log = true// , logOptimizationPasses = true
 
 def strcat(a,b)
 	let c = a
@@ -8,9 +8,20 @@ def strcat(a,b)
 def make_name(x)
     return strcat("hello_",x)
 
+let
+    g_cond = true
+
 def make_another_name(x)
-	// print("{x}\n")			// this will prevent folding
+	assert(x=="modify_arg")
+    if g_cond
+        print("{x}")// this will prevent folding
 	return x + "_ok"
+
+let
+    g_name = "_global_ok"
+
+def make_g_name(x)
+    return x + g_name
 
 struct Foo
 	a : int = 19
@@ -19,17 +30,31 @@ struct Foo
 def up_foo(a)
 	a.a ++
 
-def name_foo(itt)
+def name_foo()
 	let t = Foo()
 	up_foo(t)
-	return "{t}{itt}"		// this will fold
+	return "{t}"		// this will fold
+
+def stil_not_writing(a:string&;b:string&)
+    assert(a=="blah")
+    assert(b=="_global_ok")
+    a = "it"
 
 [export]
 def test
+    g_cond = false
     let t = make_name("world")
-	assert(t=="hello_world")
+    assert("{t}"=="hello_world")
 	let q = make_another_name("modify_arg")
-	assert(q=="modify_arg_ok")
-	let w = name_foo("**")
-	assert(w=="[[ 20; 20]]**")
+	assert("{q}"=="modify_arg_ok")
+	let w = name_foo()
+	assert("{w}"=="[[ 20; 20]]")
+    let g = make_g_name("touch_global")
+    assert("{g}"=="touch_global_global_ok")
+    let t = "blah"
+    stil_not_writing(t,g_name)
+    assert(t=="it")
+    let tt = "_global_ok"
+    t = "blah"
+    stil_not_writing(t,tt)
     return true

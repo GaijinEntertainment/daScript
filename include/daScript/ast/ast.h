@@ -293,6 +293,7 @@ namespace das
                 bool    access_get : 1;
                 bool    access_ref : 1;
                 bool    access_init : 1;
+                bool    access_pass : 1;
             };
             uint32_t access_flags = 0;
         };

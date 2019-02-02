@@ -14,6 +14,7 @@ namespace das {
             var->access_init = false;
             var->access_get = false;
             var->access_ref = false;
+            var->access_pass = false;
         }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
             Visitor::preVisitGlobalLetInit(var, init);
@@ -26,6 +27,7 @@ namespace das {
             var->access_init = false;
             var->access_get = false;
             var->access_ref = false;
+            var->access_pass = false;
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) override {
             Visitor::preVisitLetInit(let, var, init);
@@ -38,6 +40,7 @@ namespace das {
             var->access_init = false;
             var->access_get = false;
             var->access_ref = false;
+            var->access_pass = false;
         }
         virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & var, Expression * init ) override {
             Visitor::preVisitArgumentInit(fn, var, init);
@@ -50,6 +53,7 @@ namespace das {
             var->access_init = false;
             var->access_get = false;
             var->access_ref = false;
+            var->access_pass = false;
         }
         // for loop sources
         virtual void preVisitFor ( ExprFor *, const VariablePtr & var, bool ) override {
@@ -61,6 +65,9 @@ namespace das {
             if ( expr->write ) {
                 expr->variable->access_ref = true;
             } else {
+                if ( !expr->r2v ) {
+                    expr->variable->access_pass = true;
+                }
                 expr->variable->access_get = true;
             }
         }
@@ -347,20 +354,20 @@ namespace das {
     protected:
     // ExprLet
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-            if ( !var->access_get && !var->access_ref && !var->access_init ) {
+            if ( !var->access_get && !var->access_ref && !var->access_init && !var->access_pass ) {
                 reportFolding();
                 return nullptr;
             }
-            if ( !var->access_ref && var->init && var->init->constexpression ) {
+            if ( !var->access_ref && !var->access_pass && var->init && var->init->constexpression ) {
                 reportFolding();
                 return nullptr;
             }
-            if ( !var->access_ref && !var->init && var->type->isFoldable() ) {
+            if ( !var->access_ref && !var->access_pass && !var->init && var->type->isFoldable() ) {
                 // uninitialized read-only foldable var is const 0
                 reportFolding();
                 return nullptr;
             }
-            if ( !var->access_ref && !var->access_get && var->init->noSideEffects ) {
+            if ( !var->access_ref && !var->access_pass && !var->access_get && var->init->noSideEffects ) {
                 reportFolding();
                 return nullptr;
             }
@@ -369,15 +376,17 @@ namespace das {
     // ExprVar
         virtual ExpressionPtr visit ( ExprVar * expr ) override {
             if ( !expr->variable->access_ref && !expr->variable->access_extern ) {
-                if ( expr->variable->init ) {
-                    if ( expr->variable->init->constexpression ) {
-                        reportFolding();
-                        return expr->variable->init->clone();
-                    }
-                } else {
-                    if ( expr->type->isFoldable() && !expr->variable->access_init ) {
-                        reportFolding();
-                        return Program::makeConst(expr->at, expr->type, v_zero());
+                if ( expr->r2v ) {
+                    if ( expr->variable->init ) {
+                        if ( expr->variable->init->constexpression ) {
+                            reportFolding();
+                            return expr->variable->init->clone();
+                        }
+                    } else {
+                        if ( expr->type->isFoldable() && !expr->variable->access_init ) {
+                            reportFolding();
+                            return Program::makeConst(expr->at, expr->type, v_zero());
+                        }
                     }
                 }
             }

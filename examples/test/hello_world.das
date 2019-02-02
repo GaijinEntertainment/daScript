@@ -1,4 +1,4 @@
-options printRef = true, printVarAccess = true, log = true, logOptimizationPasses = true
+options printRef = true, printVarAccess = true, log = true// , logOptimizationPasses = true
 
 def strcat(a,b)
 	let c = a
@@ -30,6 +30,10 @@ def name_foo()
 	up_foo(t)
 	return "{t}"		// this will fold
 
+def stil_not_writing(a:string&;b:string&)
+    print("a={a} b={b}\n")
+    a = "it"
+
 [export]
 def test
     let t = make_name("world")
@@ -40,5 +44,9 @@ def test
 	print("\n{w}\n")
     let g = make_g_name("touch_global")
     print("\n{g}\n")
-    g_name = "gaa"   // this says, global changes
+    // g_name = "gaa"   // this says, global changes
+    let t = "blah"
+    stil_not_writing(t,g_name)
+    let tt = "blah-blah"
+    stil_not_writing(t,tt)
     return true

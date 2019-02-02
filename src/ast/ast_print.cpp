@@ -104,6 +104,7 @@ namespace das {
             Visitor::preVisitGlobalLet(var);
             ss << "let\n\t";
             if ( printVarAccess && !var->access_ref ) ss << "$";
+            if ( printVarAccess && !var->access_pass ) ss << "%";
             ss << var->name << " : " << var->type->describe();
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
@@ -154,6 +155,7 @@ namespace das {
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
             if ( printVarAccess && !arg->access_ref ) ss << "$";
+            if ( printVarAccess && !arg->access_pass ) ss << "%";
             ss << arg->name << ":" << arg->type->describe();
         }
         virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & arg, Expression * expr ) override {
@@ -230,6 +232,7 @@ namespace das {
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
             if ( printVarAccess && !var->access_ref ) ss << "$";
+            if ( printVarAccess && !var->access_pass ) ss << "%";
             ss << var->name << ":" << var->type->describe();
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
