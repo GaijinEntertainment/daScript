@@ -159,6 +159,64 @@ namespace das
             return t;
         }
     };
+    
+    template <>
+    struct typeFactory<char *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tString);
+            return t;
+        }
+    };
+    
+    template <>
+    struct typeFactory<const char *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tString);
+            t->constant = true;
+            return t;
+        }
+    };
+    
+    template <>
+    struct typeFactory<Array *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tArray);
+            return t;
+        }
+    };
+    
+    template <>
+    struct typeFactory<const Array *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tArray);
+            t->constant = true;
+            return t;
+        }
+    };
+    
+    template <>
+    struct typeFactory<Table *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tTable);
+            return t;
+        }
+    };
+    
+    template <>
+    struct typeFactory<const Table *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tTable);
+            t->constant = true;
+            return t;
+        }
+    };
+    
+    template <>
+    struct typeFactory<Context *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            return make_shared<TypeDecl>(Type::fakeContext);
+        }
+    };
 
     template <typename TT, int dim>
     struct typeFactory<TT[dim]> {
@@ -167,6 +225,17 @@ namespace das
             t->dim.push_back(dim);
             t->ref = false;
             return t;
+        }
+    };
+    
+    template <typename TT>
+    struct typeFactory<TT *> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto pt = make_shared<TypeDecl>(Type::tPointer);
+            if ( !is_void<TT>::value ) {
+                pt->firstType = typeFactory<TT>::make(lib);
+            }
+            return pt;
         }
     };
 
@@ -178,7 +247,6 @@ namespace das
             return t;
         }
     };
-
 
     template <typename TT>
     inline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
@@ -222,6 +290,7 @@ namespace das
     struct Annotation : BasicAnnotation, enable_shared_from_this<Annotation> {
         Annotation ( const string & n ) : BasicAnnotation(n) {}
         virtual ~Annotation() {}
+        virtual void seal( Module * m ) { module = m; }
         virtual bool rtti_isHandledTypeAnnotation() const { return false; }
         virtual bool rtti_isStructureAnnotation() const { return false; }
         virtual bool rtti_isFunctionAnnotation() const { return false; }

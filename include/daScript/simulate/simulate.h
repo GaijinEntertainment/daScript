@@ -12,8 +12,12 @@
 namespace das
 {
     //for ease of binding
-    #define DAS_BIND_FUN(a) decltype(&a), a
-    //
+    #define DAS_BIND_FUN(a)                     decltype(&a), a
+    
+    // structure field binding
+    template <class T, class M> M get_member_type(M T:: *);
+    #define GET_TYPE_OF(mem) decltype(get_member_type(mem))
+    #define DAS_BIND_FIELD(BIGTYPE,FIELDNAME)   GET_TYPE_OF(&BIGTYPE::FIELDNAME),offsetof(BIGTYPE,FIELDNAME)
 
     #ifndef DAS_ENABLE_STACK_WALK
     #define DAS_ENABLE_STACK_WALK   1

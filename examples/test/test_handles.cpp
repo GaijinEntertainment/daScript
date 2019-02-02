@@ -16,26 +16,22 @@ struct TestObjectFoo {
 };
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 
-
 struct TestObjectBar {
     TestObjectFoo * fooPtr;
     float           barData;
 };
 MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 
-
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
-    TestObjectFooAnnotation() : ManagedStructureAnnotation ("TestObjectFoo") {
-        addField("fooData", offsetof(TestObjectFoo,fooData),make_shared<TypeDecl>(Type::tInt));
+    TestObjectFooAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectFoo", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
     }
 };
 
 struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
-    TestObjectBarAnnotation(ModuleLibrary & lib) : ManagedStructureAnnotation ("TestObjectBar") {
-        auto fooPtr = make_shared<TypeDecl>(Type::tPointer);
-        fooPtr->firstType = lib.makeHandleType("TestObjectFoo");
-        addField("fooPtr", offsetof(TestObjectBar,fooPtr),fooPtr);
-        addField("barData", offsetof(TestObjectBar,barData),make_shared<TypeDecl>(Type::tFloat));
+    TestObjectBarAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectBar", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(fooPtr)>("fooPtr");
+        addField<DAS_BIND_MANAGED_FIELD(barData)>("barData");
     }
 };
 
@@ -202,7 +198,7 @@ public:
         // structure annotations
         addAnnotation(make_shared<IntFieldsAnnotation>());
         // register types
-        addAnnotation(make_shared<TestObjectFooAnnotation>());
+        addAnnotation(make_shared<TestObjectFooAnnotation>(lib));
         addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
         // register function
         addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo", SideEffects::modifyExternal);

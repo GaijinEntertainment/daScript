@@ -343,7 +343,9 @@ namespace das
         if ( baseType==Type::tStructure && structType!=decl.structType )
             return false;
         if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
+            if ( (firstType && !firstType->isVoid())
+                && (decl.firstType && !decl.firstType->isVoid())
+                && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
         }

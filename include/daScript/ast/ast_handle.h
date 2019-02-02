@@ -4,18 +4,26 @@
 
 namespace das
 {
+    
+    #define DAS_BIND_MANAGED_FIELD(FIELDNAME)   DAS_BIND_FIELD(ManagedType,FIELDNAME)
+    
     template <typename OT>
     struct ManagedStructureAnnotation  : TypeAnnotation {
+        typedef OT ManagedType;
         struct StructureField {
             string      name;
             TypeDeclPtr decl;
             uint32_t    offset;
         };
-        ManagedStructureAnnotation (const string & n)
-            : TypeAnnotation(n), debugInfo(2048), helpA(debugInfo) {}
+        ManagedStructureAnnotation (const string & n, ModuleLibrary & ml )
+            : TypeAnnotation(n), debugInfo(2048), helpA(debugInfo), mlib(&ml) {}
+        virtual void seal( Module * m ) override {
+            TypeAnnotation::seal(m);
+            mlib = nullptr;
+        }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
-        virtual size_t getSizeOf() const override { return sizeof(OT); }
-        virtual size_t getAlignOf() const override { return alignof(OT); }
+        virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
+        virtual size_t getAlignOf() const override { return alignof(ManagedType); }
         virtual bool isRefType() const override { return true; }
         virtual bool isNewable() const override { return true; }
         virtual bool isLocal() const override { return true; }
@@ -49,7 +57,7 @@ namespace das
             }
         }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.code.makeNode<SimNode_New>(at,int32_t(sizeof(OT)));
+            return context.code.makeNode<SimNode_New>(at,int32_t(sizeof(ManagedType)));
         }
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
@@ -67,11 +75,16 @@ namespace das
                 return nullptr;
             }
         };
-        void addField ( const string & na, off_t offset, TypeDeclPtr pT ) {
+        void addFieldEx ( const string & na, off_t offset, TypeDeclPtr pT ) {
             auto & field = fields[na]; assert(!field.decl && "field already exist");
             field.offset = offset;
             field.decl = pT;
         }
+        template <typename TT, off_t off>
+        __forceinline void addField ( const string & na ) {
+            addFieldEx ( na, off, makeType<TT>(*mlib) );
+        }
+        
         virtual void walk ( DataWalker & walker, void * data ) override {
             if ( !sti ) {
                 debugInfo.reset();
@@ -96,6 +109,7 @@ namespace das
         NodeAllocator              debugInfo;
         DebugInfoHelper            helpA;
         StructInfo *               sti = nullptr;
+        ModuleLibrary *            mlib = nullptr;
     };
 
     template <typename OT>
@@ -153,8 +167,9 @@ namespace das
                 return cast<Iterator *>::from(static_cast<VectorIterator *>(this));
             }
         };
-        ManagedVectorAnnotation(const string & n, const TypeDeclPtr & d)
-            : TypeAnnotation(n), vecType(d) {
+        ManagedVectorAnnotation(const string & n, ModuleLibrary & lib)
+            : TypeAnnotation(n) {
+                vecType = makeType<OT>(lib);
                 vecType->ref = true;
         }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }

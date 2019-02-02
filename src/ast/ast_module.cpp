@@ -63,7 +63,7 @@ namespace das
 
     bool Module::addAnnotation ( const AnnotationPtr & ptr ) {
         if ( handleTypes.insert(make_pair(ptr->name, move(ptr))).second ) {
-            ptr->module = this;
+            ptr->seal(this);
             return true;
         } else {
             return false;

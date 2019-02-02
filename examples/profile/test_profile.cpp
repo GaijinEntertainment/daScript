@@ -47,9 +47,9 @@ void update10000ks ( ObjectArray & objects, Context * context ) {
 }
 
 struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
-    ObjectStructureTypeAnnotation() : ManagedStructureAnnotation ("Object") {
-        addField("position", offsetof(Object,pos),make_shared<TypeDecl>(Type::tFloat3));
-        addField("velocity", offsetof(Object,vel),make_shared<TypeDecl>(Type::tFloat3));
+    ObjectStructureTypeAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Object",ml) {
+        addField<DAS_BIND_MANAGED_FIELD(pos)>("position");
+        addField<DAS_BIND_MANAGED_FIELD(vel)>("velocity");
     }
 };
 
@@ -433,8 +433,8 @@ public:
         // function annotations
         addAnnotation(make_shared<EsFunctionAnnotation>());
         // register types
-        addAnnotation(make_shared<ObjectStructureTypeAnnotation>());
-        addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib.makeHandleType("Object")));
+        addAnnotation(make_shared<ObjectStructureTypeAnnotation>(lib));
+        addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib));
         // register functions
         addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none);
         addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal);
