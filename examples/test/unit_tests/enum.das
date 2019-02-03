@@ -27,5 +27,5 @@ def test
     assert ( int(t)==0 )
     assert ( int(Zen not_zero)==1 )
 	assert ( efn_takeOne_giveTwo(SomeEnum one)==SomeEnum two )
-	assert ( efn_takeOne_giveTwo_98(SomeEnum_98 one)==SomeEnum_98 two )
+	assert ( efn_takeOne_giveTwo_98(SomeEnum98 SomeEnum98_one)==SomeEnum98 SomeEnum98_two )
     return true
