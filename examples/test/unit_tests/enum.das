@@ -26,7 +26,6 @@ def test
     assert ( Zen zero == Zen zero )
     assert ( int(t)==0 )
     assert ( int(Zen not_zero)==1 )
-
-	efn_takeOne_giveTwo(SomeEnum one)
-
+	assert ( efn_takeOne_giveTwo(SomeEnum one)==SomeEnum two )
+	assert ( efn_takeOne_giveTwo_98(SomeEnum_98 one)==SomeEnum_98 two )
     return true

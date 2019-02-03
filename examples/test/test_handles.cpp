@@ -10,6 +10,13 @@ enum class SomeEnum {
 ,   two
 };
 
+SomeEnum efn_takeOne_giveTwo ( SomeEnum two, Context * ctx ) {
+    if (two != SomeEnum::one) {
+        ctx->throw_error("not one");
+    }
+    return SomeEnum::two;
+}
+
 class EnumerationSomeEnum : public Enumeration {
 public:
     EnumerationSomeEnum() : Enumeration("SomeEnum") {
@@ -32,12 +39,50 @@ struct das::typeFactory<SomeEnum> {
     }                                                                    
 };
 
-SomeEnum efn_takeOne_giveTwo ( SomeEnum two, Context * ctx ) {
-    if (two != SomeEnum::one) {
+// sample of weak enumeration
+
+enum SomeEnum98 {
+    SomeEnum98_zero = 0
+,   SomeEnum98_one  = 1
+,   SomeEnum98_two  = 2
+};
+
+SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 two, Context * ctx ) {
+    if (two != SomeEnum98_one) {
         ctx->throw_error("not one");
     }
-    return SomeEnum::two;
+    return SomeEnum98_two;
 }
+
+enum class SomeEnum98_Proxy {
+};
+
+SomeEnum98_Proxy efn_takeOne_giveTwo_98_Proxy ( SomeEnum98_Proxy two, Context * ctx ) {
+    return (SomeEnum98_Proxy) efn_takeOne_giveTwo_98( (SomeEnum98)two, ctx);
+}
+
+class EnumerationSomeEnum98 : public Enumeration {
+public:
+    EnumerationSomeEnum98() : Enumeration("SomeEnum_98") {
+        add("zero", SomeEnum98_zero);
+        add("one", SomeEnum98_one);
+        add("two", SomeEnum98_two);
+    }
+};
+
+template <>
+struct cast <SomeEnum98_Proxy> {
+    static __forceinline SomeEnum98_Proxy to ( vec4f x )            { return (SomeEnum98_Proxy) v_extract_xi(v_cast_vec4i(x)); }
+    static __forceinline vec4f from ( SomeEnum98_Proxy x )          { return v_cast_vec4f(v_splatsi(int32_t(x))); }
+};
+
+template <>                                                                
+struct das::typeFactory<SomeEnum98_Proxy> {                                        
+    static das::TypeDeclPtr make(const das::ModuleLibrary & library ) {    
+        return library.makeEnumType("SomeEnum_98");                            
+    }                                                                    
+};
+
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
 struct Point3 { float x, y, z; };
@@ -239,6 +284,9 @@ public:
         // enum
         addEnumeration(make_shared<EnumerationSomeEnum>());
         addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo)>(*this, lib, "efn_takeOne_giveTwo", SideEffects::none);
+        // enum98 
+        addEnumeration(make_shared<EnumerationSomeEnum98>());
+        addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo_98_Proxy)>(*this, lib, "efn_takeOne_giveTwo_98", SideEffects::none);
         // structure annotations
         addAnnotation(make_shared<IntFieldsAnnotation>());
         // register types
