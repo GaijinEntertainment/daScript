@@ -2,6 +2,43 @@
 
 using namespace das;
 
+// sample of enumeration
+
+enum class SomeEnum {
+    zero
+,   one
+,   two
+};
+
+class EnumerationSomeEnum : public Enumeration {
+public:
+    EnumerationSomeEnum() : Enumeration("SomeEnum") {
+        add("zero", int32_t(SomeEnum::zero));
+        add("one", int32_t(SomeEnum::one));
+        add("two", int32_t(SomeEnum::two));
+    }
+};
+
+template <>
+struct cast <SomeEnum> {
+    static __forceinline SomeEnum to ( vec4f x )            { return (SomeEnum) v_extract_xi(v_cast_vec4i(x)); }
+    static __forceinline vec4f from ( SomeEnum x )          { return v_cast_vec4f(v_splatsi(int32_t(x))); }
+};
+
+template <>                                                                
+struct das::typeFactory<SomeEnum> {                                        
+    static das::TypeDeclPtr make(const das::ModuleLibrary & library ) {    
+        return library.makeEnumType("SomeEnum");                            
+    }                                                                    
+};
+
+SomeEnum efn_takeOne_giveTwo ( SomeEnum two, Context * ctx ) {
+    if (two != SomeEnum::one) {
+        ctx->throw_error("not one");
+    }
+    return SomeEnum::two;
+}
+
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
 struct Point3 { float x, y, z; };
 template<> struct ToBasicType<Point3>        { enum { type = das::Type::tFloat3 }; };
@@ -199,18 +236,21 @@ public:
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();
+        // enum
+        addEnumeration(make_shared<EnumerationSomeEnum>());
+        addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo)>(*this, lib, "efn_takeOne_giveTwo", SideEffects::none);
         // structure annotations
         addAnnotation(make_shared<IntFieldsAnnotation>());
         // register types
         addAnnotation(make_shared<TestObjectFooAnnotation>(lib));
         addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
         // register function
-        addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo", SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo", SideEffects::modifyArgument);
+        addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd", SideEffects::modifyArgument);
         addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields", SideEffects::modifyExternal);
 
-        addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3", SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3", SideEffects::none);
+        addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3", SideEffects::modifyArgument);
     }
 };
 

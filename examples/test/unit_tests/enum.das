@@ -1,3 +1,5 @@
+require UnitTest
+
 enum Numbers
     zero
     one
@@ -24,5 +26,7 @@ def test
     assert ( Zen zero == Zen zero )
     assert ( int(t)==0 )
     assert ( int(Zen not_zero)==1 )
-    return true
 
+	efn_takeOne_giveTwo(SomeEnum one)
+
+    return true

@@ -1347,6 +1347,7 @@ namespace das
         vector<StructurePtr> findStructure ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
+        TypeDeclPtr makeEnumType ( const string & name ) const;
     protected:
         vector<Module *>                modules;
     };

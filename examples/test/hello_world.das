@@ -1,5 +1,7 @@
 // options log = true, optimize = true // , logInferPasses = true, logOptimizationPasses = true
 
+require UnitTest
+
 enum Numbers
     zero
     one
@@ -26,4 +28,7 @@ def test
     assert ( Zen zero == Zen zero )
     assert ( int(t)==0 )
     assert ( int(Zen not_zero)==1 )
+
+	efn_takeOne_giveTwo(SomeEnum one)
+
     return true

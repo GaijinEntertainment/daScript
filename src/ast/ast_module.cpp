@@ -278,5 +278,16 @@ namespace das
         }
         return t;
     }
+
+    TypeDeclPtr ModuleLibrary::makeEnumType ( const string & name ) const {
+        auto t = make_shared<TypeDecl>(Type::tEnumeration);
+        auto enums = findEnum(name);
+        if ( enums.size()==1 ) {
+            t->enumType = enums.back();
+        } else {
+            assert(0 && "can't make enumeration type");
+        }
+        return t;
+    }
 }
 
