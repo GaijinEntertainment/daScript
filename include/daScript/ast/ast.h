@@ -128,6 +128,7 @@ namespace das
     template <typename TT> struct ToBasicType<const TT *> : ToBasicType<TT *> {};
     template <typename TT> struct ToBasicType<TT &> : ToBasicType<TT> {};
     template <typename TT> struct ToBasicType<const TT &> : ToBasicType<TT> {};
+    template<> struct ToBasicType<EnumStub>     { enum { type = Type::tEnumeration }; };
     template<> struct ToBasicType<Iterator *>   { enum { type = Type::tIterator }; };
     template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
     template<> struct ToBasicType<char *>       { enum { type = Type::tString }; };

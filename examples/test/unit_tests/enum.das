@@ -1,5 +1,3 @@
-// options log = true, optimize = true // , logInferPasses = true, logOptimizationPasses = true
-
 enum Numbers
     zero
     one
@@ -27,3 +25,4 @@ def test
     assert ( int(t)==0 )
     assert ( int(Zen not_zero)==1 )
     return true
+

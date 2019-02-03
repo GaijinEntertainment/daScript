@@ -27,4 +27,8 @@ namespace das
         uint32_t *  hashes;
         uint32_t    maxLookups;
     };
+    
+    struct EnumStub {
+        int32_t     value;
+    };
 }

@@ -301,7 +301,7 @@ namespace das
             }
         } else if ( baseType==Type::tEnumeration ) {
             ss << "#enum";
-            if ( firstType ) {
+            if ( enumType ) {
                 ss << "#" << enumType->getMangledName();
             }
         } else if ( baseType==Type::tIterator ) {
@@ -364,8 +364,10 @@ namespace das
                 return false;
             }
         }
-        if ( baseType==Type::tEnumeration && enumType!=decl.enumType ) {
-            return false;
+        if ( baseType==Type::tEnumeration ) {
+            if ( enumType && decl.enumType && enumType!=decl.enumType ) {
+                return false;
+            }
         }
         if ( baseType==Type::tArray ) {
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {

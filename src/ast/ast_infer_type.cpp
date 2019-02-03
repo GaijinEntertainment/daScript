@@ -514,9 +514,6 @@ namespace das {
             if ( c->baseType == Type::tEnumeration ) {
                 auto cE = static_cast<ExprConstEnumeration *>(c);
                 c->type->enumType = cE->enumType;
-                if ( !c->type->enumType ) {
-                    error("unknown enumeration", c->at);
-                }
             }
             return Visitor::visit(c);
         }
@@ -1140,6 +1137,9 @@ namespace das {
             if ( expr->left->type->isPointer() && expr->right->type->isPointer() )
                 if ( !expr->left->type->isSameType(*expr->right->type,false) )
                     error("operations on incompatible pointers are prohibited", expr->at);
+            if ( expr->left->type->isEnum() && expr->right->type->isEnum() )
+                if ( !expr->left->type->isSameType(*expr->right->type,false) )
+                    error("operations on different enumerations are prohibited", expr->at);
             vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
             auto functions = findMatchingFunctions(expr->op, types);
             if ( functions.size()==0 ) {
