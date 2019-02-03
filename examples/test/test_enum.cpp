@@ -55,8 +55,8 @@ public:\
     Enumeration##das_enum_name() : das::Enumeration(#das_enum_name) {\
         enum_name enumArray[] = { DAS_FOR_EACH(helper, enum_name, __VA_ARGS__) };\
         static const char *enumArrayName[] = { DAS_FOR_EACH(DAS_BIND_ENUM_PRINT_HELPER, enum_name, __VA_ARGS__) };\
-        for (uint32_t i = 0; i < sizeof(enumArrayName)/sizeof(enumArrayName[0]); ++i)\
-            add(enumArrayName[i], int32_t(i));\
+        for (uint32_t i = 0; i < sizeof(enumArray)/sizeof(enumArray[0]); ++i)\
+            add(enumArrayName[i], int32_t(enumArray[i]));\
     }\
 };
 
@@ -65,9 +65,9 @@ public:\
   DAS_BASE_BIND_ENUM_CAST(enum_name, #das_enum_name)
 
 #define DAS_BASE_BIND_ENUM_98(enum_name, das_enum_name, ...) \
-  enum class SomeEnum98##_DasProxy {};\
+  enum class das_enum_name##_DasProxy {};\
   DAS_BASE_BIND_ENUM_BOTH(DAS_BIND_ENUM_UNQUALIFIED_HELPER, enum_name, das_enum_name, __VA_ARGS__)\
-  DAS_BASE_BIND_ENUM_CAST(enum_name##_DasProxy, #das_enum_name)
+  DAS_BASE_BIND_ENUM_CAST(das_enum_name##_DasProxy, #das_enum_name)
 
 enum class SomeEnum {
     zero
