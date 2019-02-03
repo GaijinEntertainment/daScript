@@ -844,7 +844,7 @@ expr
         }
     }
     | name_in_namespace[ena] NAME[eni] {
-        $$ = nullptr;
+		ExprConstEnumeration * resEnum = nullptr;
         auto enums = g_Program->findEnum(*$ena);
         if ( enums.size()!=1 ) {
             if ( enums.size() ) {
@@ -859,13 +859,18 @@ expr
             auto pEnum = enums.back();
             auto ff = pEnum->find(*$eni);
             if ( ff.second ) {
-                auto td = make_shared<TypeDecl>(pEnum);
-                $$ = new ExprConstEnumeration(tokAt(@eni), ff.first, td);
+				auto td = make_shared<TypeDecl>(pEnum);
+                resEnum = new ExprConstEnumeration(tokAt(@eni), ff.first, td);
             } else {
                 yyerror("enumeraiton value not found " + *$ena + " " + *$eni, tokAt(@eni),
                     CompilationError::enumeration_not_found);
             }
         }
+		if ( resEnum ) {
+			$$ = resEnum;
+		} else {
+			$$ = new ExprConstInt(0);	// dummy
+		}
         delete $ena;
         delete $eni;
     }
@@ -988,11 +993,12 @@ enum_declaration
     :   _ENUM[loc] NAME[name] '{' enum_list[pE] '}' {
         auto pEnum = EnumerationPtr($pE);
         pEnum->at = tokAt(@loc);
-        pEnum->name = *$name; delete $name;
+        pEnum->name = *$name; 
         if ( !g_Program->addEnumeration(pEnum) ) {
             yyerror("enumeration is alredy defined "+*$name,tokAt(@pE),
                 CompilationError::enumeration_already_declared);
         }
+		delete $name;
     }
     ;
 
