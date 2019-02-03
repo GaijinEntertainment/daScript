@@ -138,6 +138,8 @@ src/simulate/data_walker.cpp
 include/daScript/simulate/data_walker.h
 src/simulate/debug_print.cpp
 include/daScript/simulate/debug_print.h
+include/daScript/simulate/for_each.h
+include/daScript/simulate/bind_enum.h
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
