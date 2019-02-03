@@ -482,7 +482,7 @@ namespace das {
             return cond->constexpression ? nullptr : Visitor::visit(expr);
         }
     };
-    
+
     class RunFolding : public FoldingVisitor {
     public:
         RunFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {

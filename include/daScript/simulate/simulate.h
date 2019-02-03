@@ -13,7 +13,7 @@ namespace das
 {
     #define DAS_BIND_FUN(a)                     decltype(&a), a
     #define DAS_BIND_PROP(BIGTYPE,FIELDNAME)    decltype(&BIGTYPE::FIELDNAME), &BIGTYPE::FIELDNAME
-    
+
     template <class T, class M> M get_member_type(M T:: *);
     #define GET_TYPE_OF(mem) decltype(get_member_type(mem))
     #define DAS_BIND_FIELD(BIGTYPE,FIELDNAME)   GET_TYPE_OF(&BIGTYPE::FIELDNAME),offsetof(BIGTYPE,FIELDNAME)
@@ -1295,7 +1295,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override;
         SimNode * cond, * body;
     };
-    
+
        template <typename OT, typename Fun, Fun PROP, bool SAFE, typename CTYPE>
     struct SimNode_PropertyImpl : SimNode {
         SimNode_PropertyImpl(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
@@ -1312,7 +1312,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         SimNode * subexpr;
     };
-    
+
 #define IMPLEMENT_PROPERTY(TYPE,CTYPE) \
     template <typename OT, typename Fun, Fun PROP, bool SAFE> \
     struct SimNode_PropertyImpl<OT,Fun,PROP,SAFE,CTYPE> : SimNode { \
@@ -1330,7 +1330,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         } \
         SimNode * subexpr; \
     };
-    
+
     IMPLEMENT_PROPERTY(Bool,    bool);
     IMPLEMENT_PROPERTY(Int,     int32_t);
     IMPLEMENT_PROPERTY(UInt,    uint32_t);

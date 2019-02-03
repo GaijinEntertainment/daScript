@@ -15,7 +15,7 @@ namespace das
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Woverloaded-virtual"
 #endif
-    
+
     struct MarkFunctionAnnotation : FunctionAnnotation {
         MarkFunctionAnnotation(const string & na) : FunctionAnnotation(na) { }
         virtual bool apply(ExprBlock *, const AnnotationArgumentList &, string & err) override {
@@ -29,7 +29,7 @@ namespace das
             return true;
         }
     };
-    
+
     struct ExportFunctionAnnotation : MarkFunctionAnnotation {
         ExportFunctionAnnotation() : MarkFunctionAnnotation("export") { }
         virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
@@ -37,7 +37,7 @@ namespace das
             return true;
         };
     };
-    
+
     struct SideEffectsFunctionAnnotation : MarkFunctionAnnotation {
         SideEffectsFunctionAnnotation() : MarkFunctionAnnotation("sideeffects") { }
         virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
@@ -45,7 +45,7 @@ namespace das
             return true;
         };
     };
-    
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -89,7 +89,7 @@ namespace das
         auto uhash = hash_value(context, args[0], call->types[0]);
         return cast<uint32_t>::from(uhash);
     }
-    
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<ExportFunctionAnnotation>());

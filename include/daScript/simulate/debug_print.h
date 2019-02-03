@@ -5,7 +5,7 @@
 #include "daScript/simulate/runtime_string.h"
 
 namespace das {
-    
+
     class HeapWriterPolicy {
     public:
         char * c_str();
@@ -21,12 +21,12 @@ namespace das {
         int     dataSize = 0;
         int     dataCapacity = 0;
     };
-    
+
     class StringBuilderWriter : public StringWriter<HeapWriterPolicy> {
     public:
         StringBuilderWriter(LinearAllocator & h) { heap = &h; }
     };
-    
+
     template <typename Writer>
     struct DebugDataWalker : DataWalker {
         Writer & ss;
@@ -218,7 +218,7 @@ namespace das {
             ss << "enum " << value;
         }
     };
-    
+
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags );
     string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags );
 }

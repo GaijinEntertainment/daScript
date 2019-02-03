@@ -13,13 +13,13 @@ namespace das
     DEFINE_OP2_EVAL_BASIC_POLICY(char *);
     DEFINE_OP2_EVAL_ORDERED_POLICY(char *);
     DEFINE_OP2_EVAL_GROUPBYADD_POLICY(char *);
-    
+
     template <>
     struct cast <EnumStub> {
         static __forceinline EnumStub to ( vec4f x )               { union { struct EnumStub t; vec4f vec; } T; T.vec = x; return T.t; }
         static __forceinline vec4f EnumStub ( EnumStub x )         { union { struct EnumStub t; vec4f vec; } T; T.t = x; return T.vec; }
     };
-    
+
     template<>
     struct SimPolicy<EnumStub> {
         static __forceinline int32_t to_enum ( vec4f val ) {
@@ -32,10 +32,10 @@ namespace das
             return to_enum(a) != to_enum(b);
         }
     };
-    
+
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub);
-    
+
     __forceinline int32_t enum_to_int ( EnumStub stub ) {
         return stub.value;
     }

@@ -6,7 +6,7 @@ namespace das
 {
     #define DAS_BIND_MANAGED_FIELD(FIELDNAME)   DAS_BIND_FIELD(ManagedType,FIELDNAME)
     #define DAS_BIND_MANAGED_PROP(FIELDNAME)    DAS_BIND_PROP(ManagedType,FIELDNAME)
-    
+
     template <typename OT>
     struct ManagedStructureAnnotation  : TypeAnnotation {
         typedef OT ManagedType;

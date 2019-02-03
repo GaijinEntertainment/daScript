@@ -56,13 +56,13 @@ namespace das
         virtual void WalkIterator ( struct Iterator * ) { error("HASH, not expecting iterator"); }
         virtual void WalkBlock ( Block * )              { error("HASH, not expecting block"); }
     };
-    
+
     uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info ) {
         HashDataWalker walker(ctx);
         walker.walk((char*)pX,info);
         return walker.getHash();
     }
-    
+
     uint32_t hash_value ( Context & ctx, vec4f value, TypeInfo * info ) {
         HashDataWalker walker(ctx);
         walker.walk(value,info);

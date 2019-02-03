@@ -4,7 +4,7 @@
 
 namespace das {
 
-    
+
     class TrackVariableFlags : public Visitor {
     protected:
         // global let
@@ -72,7 +72,7 @@ namespace das {
             }
         }
     };
-    
+
     /*
      TODO:
         cond ? a : b
@@ -100,7 +100,7 @@ namespace das {
                 auto & fn = fnI.second;
                 if (!fn->builtIn) {
                     fn->knownSideEffects = false;
-                    fn->sideEffectFlags &= ~uint32_t(SideEffects::inferedSideEffects); 
+                    fn->sideEffectFlags &= ~uint32_t(SideEffects::inferedSideEffects);
                 }
             }
             for (auto & fnI : mod.functions) {
@@ -418,7 +418,7 @@ namespace das {
     };
 
     // program
-    
+
     bool Program::optimizationUnused(TextWriter & logs) {
         markSymbolUse(true);
         // determine function side-effects

@@ -5,7 +5,7 @@
 #include "daScript/simulate/hash.h"
 
 namespace das {
-    
+
     void DataWalker::error ( const char * message ) {
         if ( context ) {
             context->throw_error(message);

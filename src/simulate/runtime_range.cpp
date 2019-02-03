@@ -63,7 +63,7 @@ namespace das
             *pi=i++; pbody->eval(context);
             *pi=i++; pbody->eval(context);
             *pi=i++; pbody->eval(context);
-            count -= 4; 
+            count -= 4;
         }
         if ( count & 2 ) {
             *pi=i++; pbody->eval(context);

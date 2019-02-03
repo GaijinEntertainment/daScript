@@ -229,6 +229,8 @@ SOURCE_GROUP_FILES("examples/test/mix" MIX_TEST_SRC)
 SET(TEST_MAIN_SRC
 examples/test/main.cpp
 examples/test/test_handles.cpp
+examples/test/test_enum.cpp
+examples/test/module_unitTest.h
 )
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)

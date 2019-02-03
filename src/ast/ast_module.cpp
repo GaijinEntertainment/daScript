@@ -78,7 +78,7 @@ namespace das
             return false;
         }
     }
-    
+
     bool Module::addEnumeration ( const EnumerationPtr & en ) {
         if ( enumerations.insert(make_pair(en->name, en)).second ) {
             en->module = this;
@@ -140,7 +140,7 @@ namespace das
         auto it = handleTypes.find(na);
         return it != handleTypes.end() ? it->second : nullptr;
     }
-    
+
     EnumerationPtr Module::findEnum ( const string & na ) const {
         auto it = enumerations.find(na);
         return it != enumerations.end() ? it->second : nullptr;
@@ -238,7 +238,7 @@ namespace das
         }, moduleName);
         return ptr;
     }
-    
+
     vector<EnumerationPtr> ModuleLibrary::findEnum ( const string & name ) const {
         vector<EnumerationPtr> ptr;
         string moduleName, enumName;

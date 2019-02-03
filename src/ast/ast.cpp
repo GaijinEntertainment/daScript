@@ -9,30 +9,30 @@ int yylex_destroy();
 namespace das
 {
     // enumeration
-    
+
     string Enumeration::getMangledName() const {
         return module ? module->name+"::"+name : name;
     }
-    
+
     pair<int,bool> Enumeration::find ( const string & na ) const {
         auto it = list.find(na);
         return it!=list.end() ? pair<int,bool>(it->second,true) : pair<int,bool>(0,false);
     }
-    
+
     int Enumeration::find ( const string & na, int def ) const {
         auto it = list.find(na);
         return it!=list.end() ? it->second : def;
     }
-    
+
     string Enumeration::find ( int va, const string & def ) const {
         auto it = listI.find(va);
         return it!=listI.end() ? it->second : def;
     }
-    
+
     bool Enumeration::add ( const string & f ) {
         return add(f, lastOne);
     }
-    
+
     bool Enumeration::add ( const string & f, int v ) {
         auto it = list.find(f);
         if ( it == list.end() ) {
@@ -44,7 +44,7 @@ namespace das
             return false;
         }
     }
-    
+
     // structure
 
     bool Structure::hasAnyInitializers() const {
@@ -1049,7 +1049,7 @@ namespace das
     vector<EnumerationPtr> Program::findEnum ( const string & name ) const {
         return library.findEnum(name);
     }
-    
+
     vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {
         return library.findAnnotation(name);
     }
@@ -1078,7 +1078,7 @@ namespace das
     bool Program::addStructure ( const StructurePtr & st ) {
         return thisModule->addStructure(st);
     }
-    
+
     bool Program::addEnumeration ( const EnumerationPtr & st ) {
         return thisModule->addEnumeration(st);
     }
