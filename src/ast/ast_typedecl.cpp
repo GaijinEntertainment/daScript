@@ -582,7 +582,7 @@ namespace das
     bool TypeDecl::isPointer() const {
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
-    
+
     bool TypeDecl::isEnum() const {
         return (baseType==Type::tEnumeration) && (dim.size()==0);
     }

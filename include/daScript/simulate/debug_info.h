@@ -87,12 +87,12 @@ namespace das
         uint32_t    fieldsSize;
         uint32_t    size;
     };
-    
+
     struct EnumValueInfo {
         char *      name;
         int32_t     value;
     };
-    
+
     struct EnumInfo {
         char *              name;
         EnumValueInfo **    values;

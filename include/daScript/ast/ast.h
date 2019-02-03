@@ -17,7 +17,7 @@ namespace das
 {
     class Structure;
     typedef shared_ptr<Structure> StructurePtr;
-    
+
     class Enumeration;
     typedef shared_ptr<Enumeration> EnumerationPtr;
 
@@ -166,7 +166,7 @@ namespace das
             return t;
         }
     };
-    
+
     template <>
     struct typeFactory<char *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
@@ -174,7 +174,7 @@ namespace das
             return t;
         }
     };
-    
+
     template <>
     struct typeFactory<const char *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
@@ -183,7 +183,7 @@ namespace das
             return t;
         }
     };
-    
+
     template <>
     struct typeFactory<Array *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
@@ -191,7 +191,7 @@ namespace das
             return t;
         }
     };
-    
+
     template <>
     struct typeFactory<const Array *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
@@ -200,7 +200,7 @@ namespace das
             return t;
         }
     };
-    
+
     template <>
     struct typeFactory<Table *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
@@ -208,7 +208,7 @@ namespace das
             return t;
         }
     };
-    
+
     template <>
     struct typeFactory<const Table *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
@@ -217,7 +217,7 @@ namespace das
             return t;
         }
     };
-    
+
     template <>
     struct typeFactory<Context *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
@@ -234,7 +234,7 @@ namespace das
             return t;
         }
     };
-    
+
     template <typename TT>
     struct typeFactory<TT *> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
@@ -312,7 +312,7 @@ namespace das
     typedef shared_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
 
     typedef vector<AnnotationDeclarationPtr> AnnotationList;
-    
+
     class Enumeration : public enable_shared_from_this<Enumeration> {
     public:
         Enumeration() = default;
@@ -837,7 +837,7 @@ namespace das
         ExprConstInt(int32_t i = 0)  : ExprConstT(i,Type::tInt) {}
         ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConstT(a,i,Type::tInt) {}
     };
-    
+
     struct ExprConstEnumeration : ExprConstT<int32_t,ExprConstEnumeration> {
         ExprConstEnumeration(int32_t i = 0, const TypeDeclPtr & td = nullptr)
             : ExprConstT(i,Type::tEnumeration) {

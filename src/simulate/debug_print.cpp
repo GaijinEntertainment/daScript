@@ -3,7 +3,7 @@
 #include "daScript/simulate/debug_print.h"
 
 namespace das {
-    
+
     char * HeapWriterPolicy::c_str() {
         if (!data) return nullptr;
         auto sh = ((StringHeader *)data) - 1;
@@ -12,11 +12,11 @@ namespace das {
         sh->length = dataSize;
         return data;
     }
-    
+
     int HeapWriterPolicy::tellp() const {
         return int(dataSize);
     }
-    
+
     void HeapWriterPolicy::reserve(int newSize) {
         if (newSize > dataCapacity) {
             int newCapacity = max(dataCapacity * 2, newSize);
@@ -44,7 +44,7 @@ namespace das {
             dataCapacity = newCapacity;
         }
     }
-    
+
     void HeapWriterPolicy::append(const char * s, int l) {
         int newSize = dataSize + l;
         reserve(newSize);
@@ -53,21 +53,21 @@ namespace das {
             dataSize += l;
         }
     }
-    
+
     char * HeapWriterPolicy::allocate (int l) {
         reserve(dataSize + l);
         if (!data) return nullptr;
         dataSize += l;
         return data + dataSize - l;
     }
-    
+
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {
         TextWriter ss;
         DebugDataWalker<TextWriter> walker(ss,flags);
         walker.walk((char*)pX,info);
         return ss.str();
     }
-    
+
     string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags ) {
         TextWriter ss;
         DebugDataWalker<TextWriter> walker(ss,flags);

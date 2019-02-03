@@ -111,7 +111,7 @@ namespace das {
         // Op1
         virtual void preVisit(ExprOp1 * expr) override {
             Visitor::preVisit(expr);
-            if (builtInDependencies || !expr->func->builtIn) { 
+            if (builtInDependencies || !expr->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -122,7 +122,7 @@ namespace das {
         // Op2
         virtual void preVisit(ExprOp2 * expr) override {
             Visitor::preVisit(expr);
-            if (builtInDependencies || !expr->func->builtIn) { 
+            if (builtInDependencies || !expr->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -133,7 +133,7 @@ namespace das {
         // Op3
         virtual void preVisit(ExprOp3 * expr) override {
             Visitor::preVisit(expr);
-            if ( expr->func && (builtInDependencies || !expr->func->builtIn) ) { 
+            if ( expr->func && (builtInDependencies || !expr->func->builtIn) ) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
@@ -148,7 +148,7 @@ namespace das {
         visit(vis);
         vis.markUsedFunctions(*thisModule, false);
     }
-    
+
     void Program::markOrRemoveUnusedSymbols(bool forceAll) {
         MarkSymbolUse vis(false);
         visit(vis);

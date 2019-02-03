@@ -22,7 +22,7 @@ namespace das {
         emn2e[mangledName] = eni;
         return eni;
     }
-    
+
     FuncInfo * DebugInfoHelper::makeFunctionDebugInfo ( const Function & fn ) {
         string mangledName = fn.getMangledName();
         auto it = fmn2f.find(mangledName);
