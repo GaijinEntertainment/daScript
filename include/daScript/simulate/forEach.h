@@ -1,5 +1,8 @@
 #pragma once
 
+// standard allows way simpler implementation
+// but this one is proven to work in MSVC
+
 #define DAS_EXPAND(x) x
 #define  DAS_FOR_EACH_1(WHAT, ARG, X) WHAT(X, ARG)
 #define  DAS_FOR_EACH_2(WHAT, ARG, X, ...) WHAT(X, ARG) DAS_EXPAND(DAS_FOR_EACH_1(WHAT, ARG, __VA_ARGS__))
