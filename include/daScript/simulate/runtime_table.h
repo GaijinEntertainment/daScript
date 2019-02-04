@@ -42,7 +42,7 @@ namespace das
         TableHash ( Context * ctx, uint32_t vs ) : context(ctx), valueTypeSize(vs) {}
 
         __forceinline uint32_t indexFromHash(uint32_t hash, uint32_t shift ) const {
-            return ( 2654435769 * hash) >> shift;    // fibonaccii
+            return hash >> shift; // i don't know why this is faster, but it is
         }
 
         __forceinline uint32_t computeShift(uint32_t capacity) {
