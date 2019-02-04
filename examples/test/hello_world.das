@@ -1,12 +1,14 @@
 // options log = true, optimize = true // , logInferPasses = true, logOptimizationPasses = true
 
+let
+    g = 5
 
-enum Zen
-    zero
-    not_zero
+[run]
+def add13(n)
+    g = n
+    return n + 13
 
 [export]
 def test
-	let t = Zen zoo + 1
-	assert ( Zen zoo == 0 )
+    print("{add13(3)}\n")
     return true

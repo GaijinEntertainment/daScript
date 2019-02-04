@@ -89,7 +89,8 @@ namespace das
 // logic errors
 
     ,   static_assert_failed                    =   40100       // static_assert(false)
+    ,   run_failed                              =   40101       //  [run]def fn; ..... fn(nonconst)
 
-    ,    too_many_infer_passes                    =    41000
+    ,   too_many_infer_passes                   =   41000
     };
 }

@@ -429,9 +429,9 @@ namespace das {
 
     //  turn static-assert into nop
     //  fail if condition is not there
-    class StaticAssertFolding : public FoldingVisitor {
+    class ContractFolding : public FoldingVisitor {
     public:
-        StaticAssertFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
+        ContractFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
     protected:
         FunctionPtr             func;
     protected:
@@ -443,6 +443,7 @@ namespace das {
             func.reset();
             return Visitor::visit(that);
         }
+    // turn static assert into nada or report error
         virtual ExpressionPtr visit(ExprStaticAssert * expr) override {
             auto cond = expr->arguments[0];
             if (!cond->constexpression && !cond->rtti_isConstant()) {
@@ -480,6 +481,19 @@ namespace das {
                 program->error(message, expr->at, CompilationError::static_assert_failed);
             }
             return cond->constexpression ? nullptr : Visitor::visit(expr);
+        }
+    // verify 'run'
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->func && expr->func->hasToRunAtCompileTime ) {
+                if ( expr->func->sideEffectFlags ) {
+                    program->error("function did not run at compilation time because it has side-effects",
+                                   expr->at, CompilationError::run_failed);
+                } else {
+                    program->error("function did not run at compilation time",
+                                   expr->at, CompilationError::run_failed);
+                }
+            }
         }
     };
 
@@ -537,8 +551,8 @@ namespace das {
         return any;
     }
 
-    bool Program::staticAsserts() {
-        StaticAssertFolding context(shared_from_this());
+    bool Program::verifyAndFoldContracts() {
+        ContractFolding context(shared_from_this());
         visit(context);
         return context.didAnything();
     }

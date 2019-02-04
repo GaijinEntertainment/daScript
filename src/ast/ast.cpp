@@ -1306,7 +1306,7 @@ namespace das
                     program->optimize(logs);
                 }
                 if (!program->failed())
-                    program->staticAsserts();
+                    program->verifyAndFoldContracts();
                 if (!program->failed())
                     program->finalizeAnnotations();
                 if (!program->failed())

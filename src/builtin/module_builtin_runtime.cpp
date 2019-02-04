@@ -45,6 +45,14 @@ namespace das
             return true;
         };
     };
+    
+    struct RunAtCompileTimeFunctionAnnotation : MarkFunctionAnnotation {
+        RunAtCompileTimeFunctionAnnotation() : MarkFunctionAnnotation("run") { }
+        virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
+            func->hasToRunAtCompileTime = true;
+            return true;
+        };
+    };
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
@@ -94,6 +102,7 @@ namespace das
         // function annotations
         addAnnotation(make_shared<ExportFunctionAnnotation>());
         addAnnotation(make_shared<SideEffectsFunctionAnnotation>());
+        addAnnotation(make_shared<RunAtCompileTimeFunctionAnnotation>());
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "throw", SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal);

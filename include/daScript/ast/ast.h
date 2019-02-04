@@ -1251,6 +1251,7 @@ namespace das
                 bool    used : 1;
                 bool    fastCall : 1;
                 bool    knownSideEffects : 1;
+                bool    hasToRunAtCompileTime : 1;
             };
             uint32_t flags = 0;
         };
@@ -1393,7 +1394,7 @@ namespace das
         bool optimizationBlockFolding();
         bool optimizationCondFolding();
         bool optimizationUnused(TextWriter & logs);
-        bool staticAsserts();
+        bool verifyAndFoldContracts();
         void optimize(TextWriter & logs);
         void markSymbolUse(bool builtInSym);
         void markOrRemoveUnusedSymbols(bool forceAll = false);
