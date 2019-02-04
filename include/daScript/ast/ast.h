@@ -578,6 +578,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isBlock() const override { return true; }
         VariablePtr findArgument(const string & name);
+        vector<SimNode *> collectExpressions ( Context & context, const vector<ExpressionPtr> & list ) const;
         vector<ExpressionPtr>   list;
         vector<ExpressionPtr>   finalList;
         TypeDeclPtr             returnType;

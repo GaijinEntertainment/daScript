@@ -334,8 +334,8 @@ namespace das
             return result;
         }
     }
-
-    SimNode * ExprBlock::simulate (Context & context) const {
+    
+    vector<SimNode *> ExprBlock::collectExpressions ( Context & context, const vector<ExpressionPtr> & list ) const {
         vector<SimNode *> simlist;
         for ( auto & node : list ) {
             if ( node->rtti_isLet()) {
@@ -350,14 +350,32 @@ namespace das
                 simlist.push_back(simE);
             }
         }
+        return simlist;
+    }
+
+    SimNode * ExprBlock::simulate (Context & context) const {
+        vector<SimNode *> simlist = collectExpressions(context, list);
+        vector<SimNode *> simFList = collectExpressions(context, finalList);
         // TODO: what if list size is 0?
-        if ( simlist.size()!=1 || isClosure ) {
+        if ( simlist.size()!=1 || isClosure || simFList.size() ) {
             auto block = isClosure ? context.code.makeNode<SimNode_ClosureBlock>(at, type!=nullptr && type->baseType!=Type::tVoid, annotationData)
                 : context.code.makeNode<SimNode_Block>(at);
             block->total = int(simlist.size());
-            block->list = (SimNode **) context.code.allocate(sizeof(SimNode *)*block->total);
-            for ( uint32_t i = 0; i != block->total; ++i )
-                block->list[i] = simlist[i];
+            if ( block->total ) {
+                block->list = (SimNode **) context.code.allocate(sizeof(SimNode *)*block->total);
+                for ( uint32_t i = 0; i != block->total; ++i )
+                    block->list[i] = simlist[i];
+            } else {
+                block->list = nullptr;
+            }
+            block->totalFinal = int(simFList.size());
+            if ( block->totalFinal ) {
+                block->finalList = (SimNode **) context.code.allocate(sizeof(SimNode *)*block->totalFinal);
+                for ( uint32_t i = 0; i != block->totalFinal; ++i )
+                    block->finalList[i] = simFList[i];
+            } else {
+                block->finalList = nullptr;
+            }
             return block;
         } else {
             return simlist[0];

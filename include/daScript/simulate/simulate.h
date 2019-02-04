@@ -1134,6 +1134,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override;
         SimNode ** list = nullptr;
         uint32_t total = 0;
+        SimNode ** finalList = nullptr;
+        uint32_t totalFinal = 0;
     };
 
     struct SimNode_ClosureBlock : SimNode_Block {

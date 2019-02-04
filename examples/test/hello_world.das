@@ -8,6 +8,7 @@ def test
         if x==5
             break
     finally
-        print("in block {t}\n")
+        t[9] = 13
+        print("t={t}\n")
     print("t={t}\n")
     return true
