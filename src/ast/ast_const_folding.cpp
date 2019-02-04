@@ -190,7 +190,7 @@ namespace das {
             if ( func->builtIn ) return false;
             if ( func->body->rtti_isBlock() ) {
                 auto block = static_pointer_cast<ExprBlock>(func->body);
-                if ( block->list.size()==0 ) {
+                if ( block->list.size()==0 && block->finalList.size() ) {
                     return true;
                 }
             }
@@ -201,7 +201,7 @@ namespace das {
             if ( func->builtIn ) return nullptr;
             if ( func->body->rtti_isBlock() ) {
                 auto block = static_pointer_cast<ExprBlock>(func->body);
-                if ( block->list.size()==1 ) {
+                if ( block->list.size()==1 && block->finalList.size()==0 ) {
                     if ( block->list.back()->rtti_isReturn() ) {
                         auto ret = static_pointer_cast<ExprReturn>(block->list.back());
                         if ( ret->subexpr && ret->subexpr->rtti_isConstant() ) {
@@ -277,12 +277,12 @@ namespace das {
             if ( expr->cond->noSideEffects ) {
                 if ( expr->if_false ) {
                     auto ifeb = static_pointer_cast<ExprBlock>(expr->if_false);
-                    if ( !ifeb->list.size() ) {
+                    if ( !ifeb->list.size() && !ifeb->finalList.size() ) {
                         expr->if_false = nullptr;
                         reportFolding();
                     }
                     auto ifb = static_pointer_cast<ExprBlock>(expr->if_true);
-                    if ( !ifb->list.size() && !ifeb->list.size() ) {
+                    if ( !ifb->list.size() && !ifeb->list.size() && !ifb->finalList.size() && !ifeb->finalList.size()) {
                         reportFolding();
                         return nullptr;
                     }
@@ -305,7 +305,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             if ( expr->subexpr->rtti_isBlock()) {
                 auto block = static_pointer_cast<ExprBlock>(expr->subexpr);
-                if ( !block->list.size() ) {
+                if ( !block->list.size() && !block->finalList.size() ) {
                     bool noSideEffects = true;
                     for ( auto & src : expr->sources ) {
                         noSideEffects &= src->noSideEffects;

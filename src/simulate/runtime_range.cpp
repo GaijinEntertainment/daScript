@@ -47,6 +47,7 @@ namespace das
             *pi=i++; pbody->eval(context); if ( context.stopFlags ) goto done;
         }
     done:;
+        evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
@@ -72,6 +73,7 @@ namespace das
         if ( count & 1 ) {
             *pi=i++; pbody->eval(context);
         }
+        evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }

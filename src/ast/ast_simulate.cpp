@@ -352,12 +352,21 @@ namespace das
         }
         return simlist;
     }
+    
+    void ExprBlock::simulateFinal ( Context & context, SimNode_Final * block ) const {
+        vector<SimNode *> simFList = collectExpressions(context, finalList);
+        block->totalFinal = int(simFList.size());
+        if ( block->totalFinal ) {
+            block->finalList = (SimNode **) context.code.allocate(sizeof(SimNode *)*block->totalFinal);
+            for ( uint32_t i = 0; i != block->totalFinal; ++i )
+                block->finalList[i] = simFList[i];
+        }
+    }
 
     SimNode * ExprBlock::simulate (Context & context) const {
         vector<SimNode *> simlist = collectExpressions(context, list);
-        vector<SimNode *> simFList = collectExpressions(context, finalList);
         // TODO: what if list size is 0?
-        if ( simlist.size()!=1 || isClosure || simFList.size() ) {
+        if ( simlist.size()!=1 || isClosure || finalList.size() ) {
             auto block = isClosure ? context.code.makeNode<SimNode_ClosureBlock>(at, type!=nullptr && type->baseType!=Type::tVoid, annotationData)
                 : context.code.makeNode<SimNode_Block>(at);
             block->total = int(simlist.size());
@@ -365,16 +374,9 @@ namespace das
                 block->list = (SimNode **) context.code.allocate(sizeof(SimNode *)*block->total);
                 for ( uint32_t i = 0; i != block->total; ++i )
                     block->list[i] = simlist[i];
-            } else {
-                block->list = nullptr;
             }
-            block->totalFinal = int(simFList.size());
-            if ( block->totalFinal ) {
-                block->finalList = (SimNode **) context.code.allocate(sizeof(SimNode *)*block->totalFinal);
-                for ( uint32_t i = 0; i != block->totalFinal; ++i )
-                    block->finalList[i] = simFList[i];
-            } else {
-                block->finalList = nullptr;
+            if ( !inTheLoop ) {
+                simulateFinal(context, block);
             }
             return block;
         } else {
@@ -656,9 +658,18 @@ namespace das
             }
         }
     }
+    
+    void ExprWhile::simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Final * blk ) {
+        if ( bod->rtti_isBlock() ) {
+            auto pBlock = static_pointer_cast<ExprBlock>(bod);
+            pBlock->simulateFinal(context, blk);
+        }
+    }
 
     SimNode * ExprWhile::simulate (Context & context) const {
-        return context.code.makeNode<SimNode_While>(at, cond->simulate(context),body->simulate(context));
+        auto node = context.code.makeNode<SimNode_While>(at, cond->simulate(context),body->simulate(context));
+        simulateFinal(context, body, node);
+        return node;
     }
 
     SimNode * ExprFor::simulate (Context & context) const {
@@ -721,6 +732,7 @@ namespace das
                 result->stackTop[t] = iteratorVariables[t]->stackTop;
             }
             result->body = subexpr->simulate(context);
+            ExprWhile::simulateFinal(context, subexpr, result);
             return result;
         } else {
             auto flagsE = subexpr->getEvalFlags();
@@ -752,6 +764,7 @@ namespace das
             }
             result->size = fixedSize;
             result->body = subexpr->simulate(context);
+            ExprWhile::simulateFinal(context, subexpr, result);
             return result;
         }
     }

@@ -1127,10 +1127,26 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * l, * r;
         uint32_t size;
     };
+    
+    struct SimNode_Final : SimNode {
+        SimNode_Final ( const LineInfo & a ) : SimNode(a) {}
+        __forceinline void evalFinal ( Context & context ) {
+            if ( totalFinal ) {
+                auto SF = context.stopFlags;
+                context.stopFlags = 0;
+                for ( uint32_t i=0; i!=totalFinal; ++i ) {
+                    finalList[i]->eval(context);
+                }
+                context.stopFlags = SF;
+            }
+        }
+        SimNode ** finalList = nullptr;
+        uint32_t totalFinal = 0;
+    };
 
     // BLOCK
-    struct SimNode_Block : SimNode {
-        SimNode_Block ( const LineInfo & at ) : SimNode(at) {}
+    struct SimNode_Block : SimNode_Final {
+        SimNode_Block ( const LineInfo & at ) : SimNode_Final(at) {}
         virtual vec4f eval ( Context & context ) override;
         SimNode ** list = nullptr;
         uint32_t total = 0;
@@ -1291,8 +1307,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 
 
     // WHILE
-    struct SimNode_While : SimNode {
-        SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b ) : SimNode(at), cond(c), body(b) {}
+    struct SimNode_While : SimNode_Final {
+        SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b ) : SimNode_Final(at), cond(c), body(b) {}
         virtual vec4f eval ( Context & context ) override;
         SimNode * cond, * body;
     };
@@ -1378,8 +1394,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual void close ( Context & context, IteratorContext & itc ) = 0;    // can't throw
     };
 
-    struct SimNode_ForBase : SimNode {
-        SimNode_ForBase ( const LineInfo & at ) : SimNode(at) {}
+    struct SimNode_ForBase : SimNode_Final {
+        SimNode_ForBase ( const LineInfo & at ) : SimNode_Final(at) {}
         SimNode *   sources [MAX_FOR_ITERATORS];
         uint32_t    strides [MAX_FOR_ITERATORS];
         uint32_t    stackTop[MAX_FOR_ITERATORS];
@@ -1387,8 +1403,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t    size;
     };
 
-    struct SimNode_ForWithIteratorBase : SimNode {
-        SimNode_ForWithIteratorBase ( const LineInfo & at ) : SimNode(at) {}
+    struct SimNode_ForWithIteratorBase : SimNode_Final {
+        SimNode_ForWithIteratorBase ( const LineInfo & at ) : SimNode_Final(at) {}
         SimNode *   source_iterators[MAX_FOR_ITERATORS];
         SimNode *   body;
         uint32_t    stackTop[MAX_FOR_ITERATORS];
@@ -1426,6 +1442,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 }
             }
         loopend:
+            evalFinal(context);
             for ( int t=0; t!=total; ++t ) {
                 sources[t]->close(context, ph[t]);
             }
@@ -1437,7 +1454,8 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <>
     struct SimNode_ForWithIterator<0> : SimNode_ForWithIteratorBase {
         SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
-        virtual vec4f eval ( Context & ) override {
+        virtual vec4f eval ( Context & context ) override {
+            evalFinal(context);
             return v_zero();
         }
     };
@@ -1462,6 +1480,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
         loopend:
+            evalFinal(context);
             sources->close(context, ph);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();

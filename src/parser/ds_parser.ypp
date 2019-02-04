@@ -334,6 +334,7 @@ expression_for_loop
         delete $iters;
         pFor->sources = sequenceToList($srcs);
         pFor->subexpr = ExpressionPtr($block);
+        ((ExprBlock *)$block)->inTheLoop = true;
         $$ = pFor;
     }
     ;
@@ -343,6 +344,7 @@ expression_while_loop
         auto pWhile = new ExprWhile();
         pWhile->cond = ExpressionPtr($condition);
         pWhile->body = ExpressionPtr($block);
+        ((ExprBlock *)$block)->inTheLoop = true;
         $$ = pWhile;
     }
     ;

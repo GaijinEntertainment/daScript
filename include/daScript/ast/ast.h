@@ -579,6 +579,7 @@ namespace das
         virtual bool rtti_isBlock() const override { return true; }
         VariablePtr findArgument(const string & name);
         vector<SimNode *> collectExpressions ( Context & context, const vector<ExpressionPtr> & list ) const;
+        void simulateFinal ( Context & context, SimNode_Final * sim ) const;
         vector<ExpressionPtr>   list;
         vector<ExpressionPtr>   finalList;
         TypeDeclPtr             returnType;
@@ -592,6 +593,7 @@ namespace das
                 bool            hasReturn : 1;
                 bool            copyOnReturn : 1;
                 bool            moveOnReturn : 1;
+                bool            inTheLoop : 1;
             };
             uint32_t            blockFlags = 0;
         };
@@ -966,7 +968,7 @@ namespace das
         ExpressionPtr           subexpr;
         bool                    scoped = true;
     };
-
+    
     // for a,b in foo,bar where a>b ...
     struct ExprFor : Expression {
         ExprFor () = default;
@@ -980,6 +982,15 @@ namespace das
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
         ExpressionPtr           subexpr;
+    };
+    
+    struct ExprWhile : Expression {
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual uint32_t getEvalFlags() const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        static void simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Final * blk );
+        ExpressionPtr   cond, body;
     };
 
     struct ExprLooksLikeCall : Expression {
@@ -1154,14 +1165,6 @@ namespace das
         virtual bool rtti_isIfThenElse() const override { return true; }
         virtual uint32_t getEvalFlags() const override;
         ExpressionPtr   cond, if_true, if_false;
-    };
-
-    struct ExprWhile : Expression {
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-        virtual uint32_t getEvalFlags() const override;
-        virtual ExpressionPtr visit(Visitor & vis) override;
-        ExpressionPtr   cond, body;
     };
 
     struct MakeFieldDecl : enable_shared_from_this<MakeFieldDecl> {

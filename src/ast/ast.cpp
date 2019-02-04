@@ -507,10 +507,16 @@ namespace das
     ExpressionPtr ExprBlock::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprBlock>(expr);
         Expression::clone(cexpr);
+        cexpr->list.reserve(list.size());
         for ( auto & subexpr : list ) {
             cexpr->list.push_back(subexpr->clone());
         }
+        cexpr->finalList.reserve(finalList.size());
+        for ( auto & subexpr : finalList ) {
+            cexpr->finalList.push_back(subexpr->clone());
+        }
         cexpr->isClosure = isClosure;
+        cexpr->inTheLoop = inTheLoop;
         if ( returnType )
             cexpr->returnType = make_shared<TypeDecl>(*returnType);
         for ( auto & arg : arguments ) {

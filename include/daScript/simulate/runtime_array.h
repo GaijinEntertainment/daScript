@@ -89,6 +89,7 @@ namespace das
             for ( int t=0; t!=total; ++t ) {
                 array_unlock(context, *pha[t]);
             }
+            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -97,7 +98,8 @@ namespace das
     template <>
     struct SimNode_ForGoodArray<0> : public SimNode_ForBase {
         SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
-        virtual vec4f eval ( Context & ) override {
+        virtual vec4f eval ( Context & context ) override {
+            evalFinal(context);
             return v_zero();
         }
     };
@@ -121,6 +123,7 @@ namespace das
                 ph += stride;
                 pbody->eval(context);
             }
+            evalFinal(context);
             array_unlock(context, *pha);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
@@ -148,6 +151,7 @@ namespace das
                 }
                 pbody->eval(context);
             }
+            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -156,7 +160,8 @@ namespace das
     template <>
     struct SimNode_ForFixedArray<0> : SimNode_ForBase {
         SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
-        virtual vec4f eval ( Context & ) override {
+        virtual vec4f eval ( Context & context ) override {
+            evalFinal(context);
             return v_zero();
         }
     };
@@ -174,6 +179,7 @@ namespace das
                 ph += stride;
                 pbody->eval(context);
             }
+            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }

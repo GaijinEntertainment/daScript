@@ -51,7 +51,7 @@ namespace das {
             if (!func->exports && func->result->isWorkhorseType() && func->totalStackSize == sizeof(Prologue)) {
                 if (func->body->rtti_isBlock()) {
                     auto block = static_pointer_cast<ExprBlock>(func->body);
-                    if (block->list.size() == 1 && block->list.back()->rtti_isReturn()) {
+                    if (block->list.size()==1 && block->finalList.size()==0 && block->list.back()->rtti_isReturn()) {
                         func->fastCall = true;
                     }
                 }

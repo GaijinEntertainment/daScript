@@ -182,14 +182,7 @@ namespace das
         for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
             list[i++]->eval(context);
         }
-        if ( totalFinal ) {
-            auto SF = context.stopFlags;
-            context.stopFlags = 0;
-            for ( uint32_t i=0; i!=totalFinal; ++i ) {
-                finalList[i]->eval(context);
-            }
-            context.stopFlags = SF;
-        }
+        evalFinal(context);
         return v_zero();
     }
 
@@ -222,6 +215,7 @@ namespace das
         while ( cond->evalBool(context) && !context.stopFlags ) {
             pbody->eval(context);
         }
+        evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }

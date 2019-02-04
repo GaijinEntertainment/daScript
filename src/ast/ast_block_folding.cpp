@@ -69,7 +69,12 @@ namespace das {
                     break;
                 }
                 if ( expr->rtti_isBlock() ) {
-                    collect(list, static_cast<ExprBlock *>(expr.get()));
+                    auto pBlock = static_pointer_cast<ExprBlock>(expr);
+                    if ( !pBlock->isClosure && !pBlock->finalList.size() ) {
+                        collect(list, static_cast<ExprBlock *>(expr.get()));
+                    } else {
+                        list.push_back(expr);
+                    }
                 } else {
                     list.push_back(expr);
                 }
