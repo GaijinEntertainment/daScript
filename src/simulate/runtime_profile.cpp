@@ -13,7 +13,6 @@ namespace das
         for ( int32_t i = 0; i != count; ++i ) {
             int64_t reft = ref_time_ticks();
             context->invoke(block, nullptr, nullptr);
-            if (context->stopFlags & EvalFlags::stopForThrow) return 0.0f;
             minT = min(get_time_usec(reft), minT);
         }
         double tSec = minT/1000000.;

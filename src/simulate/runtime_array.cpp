@@ -56,9 +56,6 @@ namespace das
             newCapacity = max(newCapacity, 16u);
             array_reserve(context, arr, newCapacity, stride);
         }
-        if ( context.stopFlags & EvalFlags::stopForThrow ) {
-            return;
-        }
         if ( zero && newSize>arr.size )
             memset ( arr.data + arr.size*stride, 0, (newSize-arr.size)*stride );
         arr.size = newSize;

@@ -132,7 +132,8 @@ namespace das
                 context.abiArg = aa;
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
-                context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+                context.exception = nullptr;
                 catch_block->eval(context);
             }
             context.throwBuf = JB;
@@ -452,7 +453,6 @@ namespace das
 
     void Context::throw_error ( const char * message ) {
         exception = message;
-        stopFlags |= EvalFlags::stopForThrow;
 #if DAS_ENABLE_EXCEPTIONS
         throw dasException(message ? message : "");
 #else

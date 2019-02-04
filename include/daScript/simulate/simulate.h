@@ -82,8 +82,6 @@ namespace das
     enum EvalFlags : uint32_t {
         stopForBreak        = 1 << 0
     ,   stopForReturn       = 1 << 1
-    ,   stopForThrow        = 1 << 2
-    ,   stopForTerminate    = 1 << 3
     };
 
 #if DAS_ENABLE_EXCEPTIONS
@@ -116,6 +114,7 @@ namespace das
 
         __forceinline void restart( ) {
             stopFlags = 0;
+            exception = nullptr;
             stack.reset();
             heap.setWatermark(heapWatermark);
         }
@@ -237,7 +236,7 @@ namespace das
         vec4f invokeEx ( const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when );
 
         __forceinline const char * getException() const {
-            return stopFlags & EvalFlags::stopForThrow ? exception : nullptr;
+            return exception;
         }
 
     public:

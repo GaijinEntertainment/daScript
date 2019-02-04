@@ -727,7 +727,7 @@ namespace das
     }
 
     uint32_t ExprTryCatch::getEvalFlags() const {
-        return (try_block->getEvalFlags() | catch_block->getEvalFlags()) & ~EvalFlags::stopForThrow;
+        return try_block->getEvalFlags() | catch_block->getEvalFlags();
     }
 
     ExpressionPtr ExprTryCatch::clone( const ExpressionPtr & expr ) const {

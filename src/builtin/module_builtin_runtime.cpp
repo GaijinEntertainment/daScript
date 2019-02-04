@@ -78,7 +78,7 @@ namespace das
     }
 
     void builtin_terminate ( Context * context ) {
-        context->stopFlags |= EvalFlags::stopForTerminate;
+        context->throw_error("terminate");
     }
 
     int builtin_table_size ( const Table * arr ) {
