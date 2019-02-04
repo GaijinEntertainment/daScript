@@ -1046,16 +1046,24 @@ SIM_NODE_AT_VECTOR(Float, float)
     // CONST-VALUE
     struct SimNode_ConstValue : SimNode {
         SimNode_ConstValue(const LineInfo & at, vec4f c) : SimNode(at), value(c) { }
-        virtual vec4f eval ( Context & ) override {
-            return value;
-        }
-#define EVAL_NODE(TYPE,CTYPE)                                       \
-        virtual CTYPE eval##TYPE ( Context & ) override {            \
-            return cast<CTYPE>::to(value);                          \
-        }
-        DAS_EVAL_NODE
-#undef EVAL_NODE
-        vec4f value;
+        virtual vec4f       eval ( Context & )      override { return value; }
+        virtual char *      evalPtr(Context &)      override { return valuePtr; }
+        virtual int32_t     evalInt(Context &)      override { return valueI; }
+        virtual uint32_t    evalUInt(Context &)     override { return valueU; }
+        virtual int64_t     evalInt64(Context &)    override { return valueI64; }
+        virtual uint64_t    evalUInt64(Context &)   override { return valueU64; }
+        virtual float       evalFloat(Context &)    override { return valueF; }
+        virtual bool        evalBool(Context &)     override { return valueB; }
+        union {
+            vec4f       value;
+            char *      valuePtr;
+            int32_t     valueI;
+            uint32_t    valueU;
+            int64_t     valueI64;
+            uint64_t    valueU64;
+            float       valueF;
+            bool        valueB;
+        };
     };
 
     struct SimNode_Zero : SimNode {
