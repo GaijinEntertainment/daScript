@@ -93,7 +93,7 @@
 %token  _TYPE       _IN         _ELIF       _ARRAY
 %token  _RETURN     _NULL       _BREAK      _TRY
 %token  _OPTIONS    _TABLE      _EXPECT     _CONST
-%token  _REQUIRE    _OPERATOR   _ENUM
+%token  _REQUIRE    _OPERATOR   _ENUM       _FINALLY
 
 /* basic types */
 %token  _TBOOL       _TVOID       _TSTRING     _TAUTO
@@ -522,7 +522,15 @@ function_declaration
     ;
 
 expression_block
-    :   '{' expressions[block] '}'          { $$ = $block; }
+    :   '{' expressions[block] '}' {
+        $$ = $block;
+    }
+    |   '{' expressions[block] '}' _FINALLY '{' expressions[final] '}' {
+        auto pB = (ExprBlock *) $block;
+        auto pF = (ExprBlock *) $final;
+        swap ( pB->finalList, pF->list );
+        $$ = $block;
+    }
     ;
 
 expression_any

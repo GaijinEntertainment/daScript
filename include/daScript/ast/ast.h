@@ -574,10 +574,12 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
+        uint32_t getFinallyEvalFlags() const;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isBlock() const override { return true; }
         VariablePtr findArgument(const string & name);
         vector<ExpressionPtr>   list;
+        vector<ExpressionPtr>   finalList;
         TypeDeclPtr             returnType;
         vector<VariablePtr>     arguments;
         uint32_t                stackTop = 0;
@@ -1478,6 +1480,9 @@ namespace das
         virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * block, const VariablePtr &, Expression * that ) { return that->shared_from_this(); }
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) {}
         virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
+        virtual void preVisitBlockFinal ( ExprBlock * block ) {}
+        virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) {}
+        virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
         // LET
         virtual void preVisitLetStack ( ExprLet * ) {}
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) {}

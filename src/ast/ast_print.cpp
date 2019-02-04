@@ -220,6 +220,22 @@ namespace das {
             if ( block->isClosure ) ss << "}"; else tab --;
             return Visitor::visit(block);
         }
+        virtual void preVisitBlockFinal ( ExprBlock * block ) override {
+            Visitor::preVisitBlockFinal(block);
+            if ( block->isClosure ) {
+                ss << "} finally {";
+            } else {
+                ss << string(tab-1,'\t') << "finally\n";
+            }
+        }
+        virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override {
+            Visitor::preVisitBlockFinalExpression(block, expr);
+            if ( !block->isClosure ) ss << string(tab,'\t');
+        }
+        virtual ExpressionPtr visitBlockFinalExpression ( ExprBlock * block, Expression * that ) override {
+            if ( block->isClosure ) ss << ";"; else newLine();
+            return Visitor::visitBlockFinalExpression(block, that);
+        }
     // string builder
         virtual void preVisit ( ExprStringBuilder * expr ) override {
             Visitor::preVisit(expr);

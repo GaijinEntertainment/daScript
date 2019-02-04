@@ -890,6 +890,16 @@ namespace das {
             }
             pushVarStack();
         }
+        virtual void preVisitBlockFinal ( ExprBlock * block ) override {
+            Visitor::preVisitBlockFinal(block);
+            if ( block->isClosure ) {
+                error("closure can't have finally section", block->at,
+                    CompilationError::closure_with_finally );
+            } else if ( block->getFinallyEvalFlags() ) {
+                error("finally section can't have break or return", block->at,
+                      CompilationError::return_or_break_in_finally );
+            }
+        }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
             for ( auto & lv : local ) {

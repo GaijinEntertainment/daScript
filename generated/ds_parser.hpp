@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.2.2.  */
+/* A Bison parser, made by GNU Bison 3.2.1.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -33,8 +33,8 @@
 /* Undocumented macros, especially those whose name start with YY_,
    are private implementation details.  Do not rely on them.  */
 
-#ifndef YY_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
-# define YY_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+#ifndef YY_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+# define YY_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 1
@@ -43,7 +43,7 @@
 extern int yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 1 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
+#line 1 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
@@ -70,7 +70,7 @@ extern int yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 74 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
+#line 74 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 
 /* Token type.  */
 #ifndef YYTOKENTYPE
@@ -105,67 +105,68 @@ extern int yydebug;
     _REQUIRE = 283,
     _OPERATOR = 284,
     _ENUM = 285,
-    _TBOOL = 286,
-    _TVOID = 287,
-    _TSTRING = 288,
-    _TAUTO = 289,
-    _TINT = 290,
-    _TINT2 = 291,
-    _TINT3 = 292,
-    _TINT4 = 293,
-    _TUINT = 294,
-    _TUINT2 = 295,
-    _TUINT3 = 296,
-    _TUINT4 = 297,
-    _TFLOAT = 298,
-    _TFLOAT2 = 299,
-    _TFLOAT3 = 300,
-    _TFLOAT4 = 301,
-    _TRANGE = 302,
-    _TURANGE = 303,
-    _TBLOCK = 304,
-    _TINT64 = 305,
-    _TUINT64 = 306,
-    _TYPENAME = 307,
-    ADDEQU = 308,
-    SUBEQU = 309,
-    DIVEQU = 310,
-    MULEQU = 311,
-    MODEQU = 312,
-    ANDEQU = 313,
-    OREQU = 314,
-    XOREQU = 315,
-    ADDADD = 316,
-    SUBSUB = 317,
-    LEEQU = 318,
-    GREQU = 319,
-    EQUEQU = 320,
-    NOTEQU = 321,
-    RARROW = 322,
-    LARROW = 323,
-    QQ = 324,
-    QDOT = 325,
-    LPIPE = 326,
-    LBPIPE = 327,
-    RPIPE = 328,
-    INTEGER = 329,
-    LONG_INTEGER = 330,
-    UNSIGNED_INTEGER = 331,
-    UNSIGNED_LONG_INTEGER = 332,
-    DOUBLE = 333,
-    NAME = 334,
-    BEGIN_STRING = 335,
-    STRING_CHARACTER = 336,
-    END_STRING = 337,
-    BEGIN_STRING_EXPR = 338,
-    END_STRING_EXPR = 339,
-    UNARY_MINUS = 340,
-    UNARY_PLUS = 341,
-    PRE_INC = 342,
-    PRE_DEC = 343,
-    POST_INC = 344,
-    POST_DEC = 345,
-    COLCOL = 346
+    _FINALLY = 286,
+    _TBOOL = 287,
+    _TVOID = 288,
+    _TSTRING = 289,
+    _TAUTO = 290,
+    _TINT = 291,
+    _TINT2 = 292,
+    _TINT3 = 293,
+    _TINT4 = 294,
+    _TUINT = 295,
+    _TUINT2 = 296,
+    _TUINT3 = 297,
+    _TUINT4 = 298,
+    _TFLOAT = 299,
+    _TFLOAT2 = 300,
+    _TFLOAT3 = 301,
+    _TFLOAT4 = 302,
+    _TRANGE = 303,
+    _TURANGE = 304,
+    _TBLOCK = 305,
+    _TINT64 = 306,
+    _TUINT64 = 307,
+    _TYPENAME = 308,
+    ADDEQU = 309,
+    SUBEQU = 310,
+    DIVEQU = 311,
+    MULEQU = 312,
+    MODEQU = 313,
+    ANDEQU = 314,
+    OREQU = 315,
+    XOREQU = 316,
+    ADDADD = 317,
+    SUBSUB = 318,
+    LEEQU = 319,
+    GREQU = 320,
+    EQUEQU = 321,
+    NOTEQU = 322,
+    RARROW = 323,
+    LARROW = 324,
+    QQ = 325,
+    QDOT = 326,
+    LPIPE = 327,
+    LBPIPE = 328,
+    RPIPE = 329,
+    INTEGER = 330,
+    LONG_INTEGER = 331,
+    UNSIGNED_INTEGER = 332,
+    UNSIGNED_LONG_INTEGER = 333,
+    DOUBLE = 334,
+    NAME = 335,
+    BEGIN_STRING = 336,
+    STRING_CHARACTER = 337,
+    END_STRING = 338,
+    BEGIN_STRING_EXPR = 339,
+    END_STRING_EXPR = 340,
+    UNARY_MINUS = 341,
+    UNARY_PLUS = 342,
+    PRE_INC = 343,
+    PRE_DEC = 344,
+    POST_INC = 345,
+    POST_DEC = 346,
+    COLCOL = 347
   };
 #endif
 
@@ -174,7 +175,7 @@ extern int yydebug;
 
 union YYSTYPE
 {
-#line 51 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
+#line 51 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
 
     char                            ch;
     bool                            b;
@@ -197,7 +198,7 @@ union YYSTYPE
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
 
-#line 201 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
+#line 202 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 };
 
 typedef union YYSTYPE YYSTYPE;
@@ -224,4 +225,4 @@ extern YYSTYPE yylval;
 extern YYLTYPE yylloc;
 int yyparse (void);
 
-#endif /* !YY_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */
+#endif /* !YY_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */

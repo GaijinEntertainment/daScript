@@ -158,6 +158,7 @@
 <normal>"if"                                            need_oxford_comma = false; return _IF;
 <normal>"elif"                                          need_oxford_comma = false; return _ELIF;
 <normal>"else"                                          need_oxford_comma = false; return _ELSE;
+<normal>"finally"                                       need_oxford_comma = false; return _FINALLY;
 <normal>"def"                                           need_oxford_comma = false; return _DEF;
 <normal>"let"[ \t\r]*\/\/.*\n                           need_oxford_comma = false; unput('\n'); return _LET;
 <normal>"let"[ \t\r]*\(                                 need_oxford_comma = false; unput('(');  return _LET;

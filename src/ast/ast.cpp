@@ -490,6 +490,17 @@ namespace das
                 subexpr = vis.visitBlockExpression(this, subexpr.get());
             if ( subexpr ) ++it; else it = list.erase(it);
         }
+        if ( !finalList.empty() ) {
+            vis.preVisitBlockFinal(this);
+            for ( auto it = finalList.begin(); it!=finalList.end(); ) {
+                auto & subexpr = *it;
+                vis.preVisitBlockFinalExpression(this, subexpr.get());
+                subexpr = subexpr->visit(vis);
+                if ( subexpr )
+                    subexpr = vis.visitBlockFinalExpression(this, subexpr.get());
+                if ( subexpr ) ++it; else it = finalList.erase(it);
+            }
+        }
         return vis.visit(this);
     }
 
@@ -509,8 +520,16 @@ namespace das
     }
 
     uint32_t ExprBlock::getEvalFlags() const {
-        uint32_t flg = 0;
+        uint32_t flg = getFinallyEvalFlags();
         for ( const auto & ex : list ) {
+            flg |= ex->getEvalFlags();
+        }
+        return flg;
+    }
+    
+    uint32_t ExprBlock::getFinallyEvalFlags() const {
+        uint32_t flg = 0;
+        for ( const auto & ex : finalList ) {
             flg |= ex->getEvalFlags();
         }
         return flg;
