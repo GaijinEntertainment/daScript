@@ -26,6 +26,7 @@ namespace das
         char *      keys;
         uint32_t *  hashes;
         uint32_t    maxLookups;
+        uint32_t    shift;
     };
 
     struct EnumStub {

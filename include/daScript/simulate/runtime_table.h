@@ -29,6 +29,7 @@ namespace das
         }
     };
 
+
     template <typename KeyType>
     class TableHash {
         Context *   context = nullptr;
@@ -40,6 +41,14 @@ namespace das
         TableHash ( const TableHash & ) = delete;
         TableHash ( Context * ctx, uint32_t vs ) : context(ctx), valueTypeSize(vs) {}
 
+        __forceinline uint32_t indexFromHash(uint32_t hash, uint32_t shift ) const {
+            return ( 2654435769 * hash) >> shift;    // fibonaccii
+        }
+
+        __forceinline uint32_t computeShift(uint32_t capacity) {
+            return __builtin_clz(capacity-1);
+        }
+
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
             uint32_t desired = 32 - __builtin_clz(capacity-1);
             return max(minLookups, desired * 6);
@@ -47,7 +56,7 @@ namespace das
 
         __forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = hash & mask;
+            uint32_t index = indexFromHash(hash, tab.shift);
             uint32_t lastI = (index+tab.maxLookups) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
@@ -66,7 +75,7 @@ namespace das
         __forceinline int insertNew ( Table & tab, uint32_t hash ) const {
             // TODO: take key under account and be less agressive?
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = hash & mask;
+            uint32_t index = indexFromHash(hash, tab.shift);
             uint32_t lastI = (index+tab.maxLookups) & mask;
             auto pHashes = tab.hashes;
             while ( index != lastI ) {
@@ -82,7 +91,7 @@ namespace das
         __forceinline int reserve ( Table & tab, KeyType key, uint32_t hash ) {
             for ( ;; ) {
                 uint32_t mask = tab.capacity - 1;
-                uint32_t index = hash & mask;
+                uint32_t index = indexFromHash(hash, tab.shift);
                 uint32_t lastI = (index+tab.maxLookups) & mask;
                 auto pKeys = (KeyType *) tab.keys;
                 auto pHashes = tab.hashes;
@@ -106,7 +115,7 @@ namespace das
 
         __forceinline int erase ( Table & tab, KeyType key, uint32_t hash ) {
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = hash & mask;
+            uint32_t index = indexFromHash(hash, tab.shift);
             uint32_t lastI = (index+tab.maxLookups) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
@@ -141,6 +150,7 @@ namespace das
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
             newTab.maxLookups = computeMaxLookups(newCapacity);
+            newTab.shift = computeShift(newCapacity);
             memset(newTab.data, 0, newCapacity*valueTypeSize);
             auto pHashes = newTab.hashes;
             memset(pHashes, 0, newCapacity * sizeof(uint32_t));
