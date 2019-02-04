@@ -184,6 +184,7 @@ namespace das
         }
         if ( totalFinal ) {
             auto SF = context.stopFlags;
+            context.stopFlags = 0;
             for ( uint32_t i=0; i!=totalFinal; ++i ) {
                 finalList[i]->eval(context);
             }
