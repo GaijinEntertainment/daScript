@@ -317,8 +317,29 @@ void queryEs (Block block, Context * context) {
 #include <unordered_map>
 #endif
 
+#include <string.h>
+
+struct dictKeyEqual {
+    __forceinline bool operator()( const char * lhs, const char * rhs ) const {
+        return ( lhs==rhs ) ? true : strcmp(lhs,rhs)==0;
+    }
+};
+
+struct dictKeyHash {
+    __forceinline uint32_t operator () ( const char * str ) const {
+        StringHeader * header = ((StringHeader *)str)-1;
+        auto hh = header->hash;
+        if ( !hh ) {
+            header->hash = hh = hash_block32((uint8_t *)str, header->length);
+        }
+        return hh;
+    }
+};
+
+typedef unordered_map<char *, int32_t, dictKeyHash, dictKeyEqual> dict_hash_map;
+
 __noinline int testDict(Array * arr) {
-    unordered_map<string,int> tab;
+    dict_hash_map tab;
     char ** data = (char **) arr->data;
     int maxOcc = 0;
     for ( uint32_t t = 0; t !=arr->size; ++t ) {
