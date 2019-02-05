@@ -1236,6 +1236,7 @@ namespace das
             case Type::tFloat2:         return make_shared<ExprConstFloat2>(at, cast<float2>::to(value));
             case Type::tFloat3:         return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
             case Type::tFloat4:         return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
+            case Type::tDouble:         return make_shared<ExprConstDouble>(at, cast<double>::to(value));
             default:                    assert(0 && "we should not even be here"); return nullptr;
         }
     }

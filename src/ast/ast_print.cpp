@@ -382,6 +382,10 @@ namespace das {
             ss << (c->getValue() ? "true" : "false");
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit ( ExprConstDouble * c ) override {
+            ss << c->getValue() << "lf";
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
             ss << c->getValue() << "f";
             return Visitor::visit(c);

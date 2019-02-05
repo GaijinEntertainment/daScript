@@ -199,6 +199,7 @@
 <normal>"uint2"                                         return _TUINT2;
 <normal>"uint3"                                         return _TUINT3;
 <normal>"uint4"                                         return _TUINT4;
+<normal>"double"                                        return _TDOUBLE;
 <normal>"float"                                         return _TFLOAT;
 <normal>"float2"                                        return _TFLOAT2;
 <normal>"float3"                                        return _TFLOAT3;

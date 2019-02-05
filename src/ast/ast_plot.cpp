@@ -335,6 +335,10 @@ namespace das {
             label(c, to_string(c->getValue()));
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit(ExprConstDouble * c) override {
+            label(c, to_string(c->getValue()));
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit(ExprConstString * c) override {
             label(c, escapeString(c->text));
             return Visitor::visit(c);

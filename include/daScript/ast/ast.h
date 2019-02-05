@@ -149,6 +149,7 @@ namespace das
     template<> struct ToBasicType<uint2>        { enum { type = Type::tUInt2 }; };
     template<> struct ToBasicType<uint3>        { enum { type = Type::tUInt3 }; };
     template<> struct ToBasicType<uint4>        { enum { type = Type::tUInt4 }; };
+    template<> struct ToBasicType<double>       { enum { type = Type::tDouble }; };
     template<> struct ToBasicType<range>        { enum { type = Type::tRange }; };
     template<> struct ToBasicType<urange>       { enum { type = Type::tURange }; };
     template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
@@ -918,6 +919,11 @@ namespace das
         ExprConstFloat(const LineInfo & a, float i = 0.0f) : ExprConstT(a,i,Type::tFloat) {}
     };
 
+    struct ExprConstDouble : ExprConstT<double,ExprConstDouble> {
+        ExprConstDouble(double i = 0.0) : ExprConstT(i,Type::tDouble) {}
+        ExprConstDouble(const LineInfo & a, double i = 0.0) : ExprConstT(a,i,Type::tDouble) {}
+    };
+
     struct ExprConstFloat2 : ExprConstT<float2,ExprConstFloat2> {
         ExprConstFloat2(float2 i = float2())  : ExprConstT(i,Type::tFloat2) {}
         ExprConstFloat2(const LineInfo & a, float2 i)  : ExprConstT(a,i,Type::tFloat2) {}
@@ -1598,6 +1604,7 @@ namespace das
         VISIT_EXPR(ExprConstFloat3)
         VISIT_EXPR(ExprConstFloat4)
         VISIT_EXPR(ExprConstString)
+        VISIT_EXPR(ExprConstDouble)
         VISIT_EXPR(ExprLet)
         VISIT_EXPR(ExprFor)
         VISIT_EXPR(ExprLooksLikeCall)

@@ -142,6 +142,7 @@ namespace das {
                 case Type::tFloat2:     Float2(*((float2 *)pa)); break;
                 case Type::tFloat3:     Float3(*((float3 *)pa)); break;
                 case Type::tFloat4:     Float4(*((float4 *)pa)); break;
+                case Type::tDouble:     Double(*((double *)pa)); break;
                 case Type::tRange:      Range(*((range *)pa)); break;
                 case Type::tURange:     URange(*((urange *)pa)); break;
                 case Type::tIterator:   WalkIterator((Iterator *)pa); break;     // TODO: verify

@@ -663,6 +663,7 @@ namespace das
             case Type::tFloat3:
             case Type::tFloat4:
             case Type::tString:
+            case Type::tDouble:
             case Type::tEnumeration:
                 return true;
             default:
@@ -708,6 +709,7 @@ namespace das
             case Type::tRange:
             case Type::tURange:
             case Type::tString:
+            case Type::tDouble:
             // case Type::tPointer:
                 return true;
             default:
@@ -739,6 +741,7 @@ namespace das
             case Type::tURange:
             case Type::tString:
             case Type::tPointer:
+            case Type::tDouble:
                 return true;
             default:
                 return false;

@@ -66,6 +66,12 @@ namespace das
     };
 
     template <>
+    struct cast <double> {
+        static __forceinline double to(vec4f x)                { union { vec4f v; double t; } A; A.v = x; return A.t; }
+        static __forceinline vec4f from ( double x )           { union { vec4f v; double t; } A; A.t = x; return A.v; }
+    };
+
+    template <>
     struct cast <Block> {
         static __forceinline Block to ( vec4f x )             { return *((Block *)&x); }
         static __forceinline vec4f from ( Block x )           { vec4f a; *((Block *)&a) = x; return a; }

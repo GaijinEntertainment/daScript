@@ -101,7 +101,7 @@
 %token  _TUINT       _TUINT2      _TUINT3      _TUINT4
 %token  _TFLOAT      _TFLOAT2     _TFLOAT3     _TFLOAT4
 %token  _TRANGE      _TURANGE     _TBLOCK      _TINT64
-%token  _TUINT64     _TYPENAME
+%token  _TUINT64     _TYPENAME	  _TDOUBLE
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
