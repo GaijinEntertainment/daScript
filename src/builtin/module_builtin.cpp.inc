@@ -6,6 +6,7 @@ namespace das
     template <> struct SimPolicy<int64_t> : SimPolicy_Bin<int64_t> {};
     template <> struct SimPolicy<uint64_t> : SimPolicy_Bin<uint64_t> {};
     template <> struct SimPolicy<float> : SimPolicy_Float {};
+	template <> struct SimPolicy<double> : SimPolicy_Double {};
     template <> struct SimPolicy<void *> : SimPolicy_Pointer {};
 
     // unary
@@ -61,6 +62,7 @@ namespace das
 #define ADD_NUMERIC_CASTS(TYPE,CTYPE)                                                                   \
     addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib) );                              \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,float>,CTYPE,float>>(#TYPE,lib) );           \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,double>,CTYPE,double>>(#TYPE,lib) );         \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int32_t>,CTYPE,int32_t>>(#TYPE,lib) );       \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib) );     \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int64_t>,CTYPE,int64_t>>(#TYPE,lib) );       \

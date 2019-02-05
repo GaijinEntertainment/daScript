@@ -25,6 +25,11 @@ namespace das
         return cast<float>::to(eval(context));
     }
 
+    double SimNode::evalDouble(Context & context) {
+        WARN_SLOW_CAST(Double);
+        return cast<double>::to(eval(context));
+    }
+
     int32_t SimNode::evalInt ( Context & context ) {
         WARN_SLOW_CAST(Int);
         return cast<int32_t>::to(eval(context));

@@ -53,6 +53,7 @@ namespace das
         virtual char *      evalPtr ( Context & context );
         virtual bool        evalBool ( Context & context );
         virtual float       evalFloat ( Context & context );
+        virtual double      evalDouble ( Context & context );
         virtual int32_t     evalInt ( Context & context );
         virtual uint32_t    evalUInt ( Context & context );
         virtual int64_t     evalInt64 ( Context & context );
@@ -274,6 +275,7 @@ namespace das
     EVAL_NODE(Int64,int64_t);       \
     EVAL_NODE(UInt64,uint64_t);     \
     EVAL_NODE(Float,float);         \
+    EVAL_NODE(Double,double);       \
     EVAL_NODE(Bool,bool);
 
 #define DAS_NODE(TYPE,CTYPE)                                    \
@@ -307,6 +309,9 @@ namespace das
     template <>
     struct EvalTT<float> { static __forceinline float eval ( Context & context, SimNode * node ) {
         return node->evalFloat(context); }};
+    template <>
+    struct EvalTT<double> { static __forceinline double eval ( Context & context, SimNode * node ) {
+        return node->evalDouble(context); }};
     template <>
     struct EvalTT<bool> { static __forceinline bool eval ( Context & context, SimNode * node ) {
         return node->evalBool(context); }};
@@ -1053,6 +1058,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual int64_t     evalInt64(Context &)    override { return valueI64; }
         virtual uint64_t    evalUInt64(Context &)   override { return valueU64; }
         virtual float       evalFloat(Context &)    override { return valueF; }
+        virtual double      evalDouble(Context &)   override { return valueLF; }
         virtual bool        evalBool(Context &)     override { return valueB; }
         union {
             vec4f       value;
@@ -1062,6 +1068,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             int64_t     valueI64;
             uint64_t    valueU64;
             float       valueF;
+            double      valueLF;
             bool        valueB;
         };
     };
@@ -1604,6 +1611,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
 #define DEFINE_OP1_NUMERIC(CALL);                       \
     DEFINE_OP1_NUMERIC_INTEGER(CALL);                   \
+    IMPLEMENT_OP1_POLICY(CALL,Double,double);           \
     IMPLEMENT_OP1_POLICY(CALL,Float,float);
 
 #define DEFINE_OP1_SET_NUMERIC_INTEGER(CALL)            \
@@ -1614,6 +1622,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
 #define DEFINE_OP1_SET_NUMERIC(CALL);                   \
     DEFINE_OP1_SET_NUMERIC_INTEGER(CALL);               \
+    IMPLEMENT_OP1_SET_POLICY(CALL,Double,double);       \
     IMPLEMENT_OP1_SET_POLICY(CALL,Float,float);
 
 #define IMPLEMENT_OP2_POLICY(CALL,TYPE,CTYPE)                           \
@@ -1719,6 +1728,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
 #define DEFINE_OP2_NUMERIC(CALL);                       \
     DEFINE_OP2_NUMERIC_INTEGER(CALL);                   \
+    IMPLEMENT_OP2_POLICY(CALL,Double,double);           \
     IMPLEMENT_OP2_POLICY(CALL,Float,float);
 
 #define DEFINE_OP2_FUNCTION_NUMERIC_INTEGER(CALL)                \
@@ -1729,6 +1739,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
 #define DEFINE_OP2_FUNCTION_NUMERIC(CALL);                       \
     DEFINE_OP2_FUNCTION_NUMERIC_INTEGER(CALL);                   \
+    IMPLEMENT_OP2_FUNCTION_POLICY(CALL,Double,double);           \
     IMPLEMENT_OP2_FUNCTION_POLICY(CALL,Float,float);
 
 #define DEFINE_OP2_BOOL_NUMERIC_INTEGER(CALL)           \
@@ -1739,6 +1750,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
 #define DEFINE_OP2_BOOL_NUMERIC(CALL);                  \
     DEFINE_OP2_BOOL_NUMERIC_INTEGER(CALL);              \
+    IMPLEMENT_OP2_BOOL_POLICY(CALL,Double,double);      \
     IMPLEMENT_OP2_BOOL_POLICY(CALL,Float,float);
 
 #define DEFINE_OP2_SET_NUMERIC_INTEGER(CALL)            \
@@ -1749,6 +1761,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
 #define DEFINE_OP2_SET_NUMERIC(CALL);                   \
     DEFINE_OP2_SET_NUMERIC_INTEGER(CALL);               \
+    IMPLEMENT_OP2_SET_POLICY(CALL,Double,double);       \
     IMPLEMENT_OP2_SET_POLICY(CALL,Float,float);
 
 #define DEFINE_OP2_BASIC_POLICY(TYPE,CTYPE)             \

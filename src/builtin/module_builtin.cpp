@@ -67,11 +67,9 @@ namespace das
         addFunctionMinMax<uint32_t>(*this,lib);
         addFunctionBit<uint32_t>(*this,lib);
         ADD_NUMERIC_CASTS(uint, uint32_t);
-
         ADD_NUMERIC_CASTS(int64, int64_t);
         ADD_NUMERIC_CASTS(uint64, uint64_t);
         add64bitFunctions(lib);
-
         // float
         addFunctionBasic<float>(*this,lib);
         addFunctionNumeric<float>(*this,lib);
@@ -79,6 +77,13 @@ namespace das
         addFunctionOrdered<float>(*this,lib);
         addFunctionMinMax<float>(*this,lib);
         ADD_NUMERIC_CASTS(float, float)
+        // double
+        addFunctionBasic<double>(*this,lib);
+        addFunctionNumeric<double>(*this,lib);
+        addFunctionIncDec<double>(*this,lib);
+        addFunctionOrdered<double>(*this,lib);
+        addFunctionMinMax<double>(*this,lib);
+        ADD_NUMERIC_CASTS(double, double)
         // string
         addFunctionBasic<char *>(*this,lib);
         addFunctionOrdered<char *>(*this,lib);

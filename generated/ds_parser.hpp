@@ -154,20 +154,21 @@ extern int yydebug;
     LONG_INTEGER = 332,
     UNSIGNED_INTEGER = 333,
     UNSIGNED_LONG_INTEGER = 334,
-    DOUBLE = 335,
-    NAME = 336,
-    BEGIN_STRING = 337,
-    STRING_CHARACTER = 338,
-    END_STRING = 339,
-    BEGIN_STRING_EXPR = 340,
-    END_STRING_EXPR = 341,
-    UNARY_MINUS = 342,
-    UNARY_PLUS = 343,
-    PRE_INC = 344,
-    PRE_DEC = 345,
-    POST_INC = 346,
-    POST_DEC = 347,
-    COLCOL = 348
+    FLOAT = 335,
+    DOUBLE = 336,
+    NAME = 337,
+    BEGIN_STRING = 338,
+    STRING_CHARACTER = 339,
+    END_STRING = 340,
+    BEGIN_STRING_EXPR = 341,
+    END_STRING_EXPR = 342,
+    UNARY_MINUS = 343,
+    UNARY_PLUS = 344,
+    PRE_INC = 345,
+    PRE_DEC = 346,
+    POST_INC = 347,
+    POST_DEC = 348,
+    COLCOL = 349
   };
 #endif
 
@@ -185,6 +186,7 @@ union YYSTYPE
     int64_t                         i64;
     uint64_t                        ui64;
     double                          d;
+	double                          fd;
     string *                        s;
     vector<string> *                pNameList;
     VariableDeclaration *           pVarDecl;
@@ -199,7 +201,7 @@ union YYSTYPE
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
 
-#line 203 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
+#line 205 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
 };
 
 typedef union YYSTYPE YYSTYPE;
