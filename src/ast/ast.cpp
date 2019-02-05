@@ -1308,6 +1308,9 @@ namespace das
             if ( log ) logs << "COND FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
             last = optimizationBlockFolding();  if ( failed() ) break;  any |= last;
             if ( log ) logs << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n" << *this;
+            // this is here again for a reason
+            last = optimizationUnused(logs);    if ( failed() ) break;  any |= last;
+            if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
         } while ( any );
     }
 
