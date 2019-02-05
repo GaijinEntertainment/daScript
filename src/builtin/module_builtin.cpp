@@ -16,7 +16,7 @@ namespace das
 
     template <>
     struct cast <EnumStub> {
-        static __forceinline EnumStub to ( vec4f x )               { union { struct EnumStub t; vec4f vec; } T; T.vec = x; return T.t; }
+        static __forceinline struct EnumStub to ( vec4f x )               { union { struct EnumStub t; vec4f vec; } T; T.vec = x; return T.t; }
         static __forceinline vec4f EnumStub ( EnumStub x )         { union { struct EnumStub t; vec4f vec; } T; T.t = x; return T.vec; }
     };
 
