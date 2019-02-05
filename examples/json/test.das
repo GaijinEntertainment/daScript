@@ -59,6 +59,7 @@ def test_parse
         assert(r_hello.is_string & r_hello.as_string=="world")
         let r_pi = root.pi
         assert(r_pi.is_float & r_pi.as_float==3.1416)
+		assert(r_pi.is_double & r_pi.as_double==3.1416lf)
         let r_a = root.a
         assert(r_a.is_array & r_a.size==4)
         for t in range(0,r_a.size)
