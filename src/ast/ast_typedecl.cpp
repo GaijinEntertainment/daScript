@@ -253,7 +253,7 @@ namespace das
             } else {
                 return false;
             }
-        } else if ( baseType==Type::tArray || baseType==Type::tStructure ) {
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
             return true;
         } else {
             return false;

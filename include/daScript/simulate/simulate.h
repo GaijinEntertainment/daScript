@@ -317,6 +317,14 @@ namespace das
     struct EvalTT<bool> { static __forceinline bool eval ( Context & context, SimNode * node ) {
         return node->evalBool(context); }};
 
+    // Delete
+    struct SimNode_Delete : SimNode {
+        SimNode_Delete ( const LineInfo & a, SimNode * s, uint32_t t )
+        : SimNode(a), subexpr(s), total(t) {}
+        SimNode *   subexpr;
+        uint32_t    total;
+    };
+    
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
         SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a )

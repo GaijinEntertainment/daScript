@@ -74,5 +74,25 @@ namespace das
     char * TableValuesIterator::getData ( Table * tab ) const {
         return tab->data;
     }
+    
+    // delete
+    
+    vec4f SimNode_DeleteTable::eval ( Context & context ) {
+        auto pTable = (Table *) subexpr->evalPtr(context);
+        pTable = pTable + total - 1;
+        for ( uint32_t i=0; i!=total; ++i, pTable-- ) {
+            if ( pTable->data ) {
+                if ( !pTable->lock ) {
+                    uint32_t oldSize = pTable->capacity*(vts_add_kts + sizeof(uint32_t));
+                    context.heap.free(pTable->data, oldSize);
+                } else {
+                    context.throw_error("deleting locked table");
+                    return v_zero();
+                }
+            }
+            memset ( pTable, 0, sizeof(Table) );
+        }
+        return v_zero();
+    }
 }
 

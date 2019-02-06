@@ -185,13 +185,6 @@ namespace das
         }
     };
     
-    struct SimNode_Delete : SimNode {
-        SimNode_Delete ( const LineInfo & a, SimNode * s, uint32_t t )
-            : SimNode(a), subexpr(s), total(t) {}
-        SimNode *   subexpr;
-        uint32_t    total;
-    };
-    
     struct SimNode_DeleteArray : SimNode_Delete {
         SimNode_DeleteArray ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t st )
             : SimNode_Delete(a,s,t), stride(st) {}

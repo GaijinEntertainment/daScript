@@ -120,8 +120,13 @@ namespace das
         pArray = pArray + total - 1;
         for ( uint32_t i=0; i!=total; ++i, pArray-- ) {
             if ( pArray->data ) {
-                uint32_t oldSize = pArray->capacity*stride;
-                context.heap.free(pArray->data, oldSize);
+                if ( !pArray->lock ) {
+                    uint32_t oldSize = pArray->capacity*stride;
+                    context.heap.free(pArray->data, oldSize);
+                } else {
+                    context.throw_error("deleting locked array");
+                    return v_zero();
+                }
             }
             memset ( pArray, 0, sizeof(Array) );
         }

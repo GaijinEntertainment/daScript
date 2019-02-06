@@ -294,6 +294,10 @@ namespace das
         if ( subexpr->type->baseType==Type::tArray ) {
             auto stride = subexpr->type->firstType->getSizeOf();
             return context.code.makeNode<SimNode_DeleteArray>(at, sube, total, stride);
+        } else if ( subexpr->type->baseType==Type::tTable ) {
+            auto vts_add_kts = subexpr->type->firstType->getSizeOf() +
+                subexpr->type->secondType->getSizeOf();
+            return context.code.makeNode<SimNode_DeleteTable>(at, sube, total, vts_add_kts);
         } else {
             assert(0 && "implement");
             return nullptr;
