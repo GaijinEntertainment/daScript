@@ -419,7 +419,7 @@ namespace das
         virtual bool isPod() const { return true; }
         virtual bool isRefType() const { return false; }
         virtual bool isLocal() const { return false; }
-        virtual bool isNewable() const { return false; }
+        virtual bool canNew() const { return false; }
         virtual bool canDelete() const { return false; }
         virtual bool canDeletePtr() const { return false; }
         virtual bool isIndexable ( const TypeDeclPtr & ) const { return false; }
@@ -430,6 +430,8 @@ namespace das
         virtual TypeDeclPtr makeSafeFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const { return nullptr; }
         virtual TypeDeclPtr makeIteratorType () const { return nullptr; }
+        virtual SimNode * simulateDelete ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }
+        virtual SimNode * simulateDeletePtr ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateCopy ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateRef2Value ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetField ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }

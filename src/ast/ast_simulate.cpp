@@ -303,9 +303,14 @@ namespace das
                 auto structSize = subexpr->type->firstType->getSizeOf();
                 return context.code.makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize);
             } else {
-                assert(0 && "implement");
-                return nullptr;
+                auto ann = subexpr->type->firstType->annotation;
+                assert(ann->canDeletePtr() && "has to be able to delete ptr");
+                return ann->simulateDeletePtr(context, at, sube, total);
             }
+        } else if ( subexpr->type->baseType==Type::tHandle ) {
+            auto ann = subexpr->type->annotation;
+            assert(ann->canDelete() && "has to be able to delete");
+            return ann->simulateDelete(context, at, sube, total);
         } else {
             assert(0 && "we should not be here");
             return nullptr;
@@ -314,6 +319,7 @@ namespace das
 
     SimNode * ExprNew::simulate (Context & context) const {
         if ( typeexpr->isHandle() ) {
+            assert(typeexpr->annotation->canNew() && "how???");
             return typeexpr->annotation->simulateGetNew(context, at);
         } else {
             int32_t bytes = typeexpr->getSizeOf();

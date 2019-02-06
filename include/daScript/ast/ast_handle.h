@@ -32,7 +32,8 @@ namespace das
         virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
         virtual size_t getAlignOf() const override { return alignof(ManagedType); }
         virtual bool isRefType() const override { return true; }
-        virtual bool isNewable() const override { return true; }
+        virtual bool canNew() const override { return true; }
+        virtual bool canDeletePtr() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
             auto it = fields.find(na);
@@ -54,6 +55,9 @@ namespace das
                 return nullptr;
             }
         }
+        virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
+            return context.code.makeNode<SimNode_DeleteHandlePtr<ManagedType>>(at,sube,count);
+        }
         virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
@@ -72,7 +76,7 @@ namespace das
             }
         }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.code.makeNode<SimNode_New>(at,int32_t(sizeof(ManagedType)));
+            return context.code.makeNode<SimNode_NewHandle<ManagedType>>(at);
         }
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);

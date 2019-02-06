@@ -304,10 +304,35 @@ namespace das {
             //  at some point we should do better data trackng for this type of aliasing
             if ( expr->returnReference ) propagateWrite(expr->subexpr.get());
         }
+    // New
+        virtual void preVisit ( ExprNew * expr ) override {
+            Visitor::preVisit(expr);
+            bool newExternal = false;
+            auto NT = expr->typeexpr;
+            if ( NT->isHandle() ) {
+                newExternal = true;
+            } else if ( NT->isPointer() && NT->firstType && NT->firstType->isHandle() ) {
+                newExternal = true;
+            }
+            if ( newExternal ) {
+                func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
+            }
+
+        }
     // Delete
         virtual void preVisit ( ExprDelete * expr ) override {
             Visitor::preVisit(expr);
             propagateWrite(expr->subexpr.get());
+            bool deleteExternal = false;
+            auto NT = expr->subexpr->type;
+            if ( NT->isHandle() ) {
+                deleteExternal = true;
+            } else if ( NT->isPointer() && NT->firstType && NT->firstType->isHandle() ) {
+                deleteExternal = true;
+            }
+            if ( deleteExternal ) {
+                func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
+            }
         }
     // Call
         virtual void preVisit ( ExprCall * expr ) override {
@@ -338,14 +363,14 @@ namespace das {
                 }
             }
         }
-        // Invoke
+    // Invoke
         virtual void preVisit(ExprInvoke * expr) override{
             Visitor::preVisit(expr);
             if ( func ) {
                 func->sideEffectFlags |= uint32_t(SideEffects::invokeBloke);
             }
         }
-        // Debug
+    // Debug
         virtual void preVisit(ExprDebug * expr) override {
             Visitor::preVisit(expr);
             if (func) {

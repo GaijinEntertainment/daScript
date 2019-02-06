@@ -332,7 +332,33 @@ namespace das
         virtual vec4f eval ( Context & context ) override;
         uint32_t    structSize;
     };
-
+    
+    // New handle, default
+    template <typename TT>
+    struct SimNode_NewHandle : SimNode {
+        DAS_PTR_NODE;
+        SimNode_NewHandle ( const LineInfo & a ) : SimNode(a) {}
+        __forceinline char * compute ( Context & ) {
+            return (char *) new TT();
+        }
+    };
+    
+    // Delete handle, default
+    template <typename TT>
+    struct SimNode_DeleteHandlePtr : SimNode_Delete {
+        SimNode_DeleteHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t )
+            : SimNode_Delete(a,s,t) {}
+        virtual vec4f eval ( Context & context ) override {
+            auto pH = (TT **) subexpr->evalPtr(context);
+            for ( uint32_t i=0; i!=total; ++i, pH++ ) {
+                if ( *pH ) {
+                    delete * pH;
+                    *pH = nullptr;
+                }
+            }
+            return v_zero();
+        }
+    };
     
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {

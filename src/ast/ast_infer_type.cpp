@@ -797,6 +797,9 @@ namespace das {
             } else if ( !expr->subexpr->type->isRef() ) {
                 error("can only delete reference " + expr->subexpr->type->describe(),
                       expr->at, CompilationError::bad_delete);
+            } else if ( expr->subexpr->type->isConst() ) {
+                error("can't delete constant expression " + expr->subexpr->type->describe(),
+                      expr->at, CompilationError::bad_delete);
             }
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
@@ -820,9 +823,17 @@ namespace das {
                 error("can't new a reference", expr->at, CompilationError::invalid_new_type);
             } else if ( expr->typeexpr->dim.size() ) {
                 error("can only new single object", expr->at, CompilationError::invalid_new_type);
-            } else if ( expr->typeexpr->baseType==Type::tStructure || expr->typeexpr->isHandle() ) {
+            } else if ( expr->typeexpr->baseType==Type::tStructure ) {
                 expr->type = make_shared<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
+            } else if ( expr->typeexpr->isHandle() ) {
+                if ( expr->typeexpr->annotation->canNew() ) {
+                    expr->type = make_shared<TypeDecl>(Type::tPointer);
+                    expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
+                } else {
+                    error("can new this type " + expr->typeexpr->describe(),
+                          expr->at, CompilationError::invalid_new_type);
+                }
             } else {
                 error("can only new structures or handled types", expr->at, CompilationError::invalid_new_type);
             }

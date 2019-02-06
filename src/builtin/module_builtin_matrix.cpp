@@ -62,7 +62,7 @@ namespace das {
         virtual bool isLocal() const override {
             return true;
         }
-        virtual bool isNewable() const override {
+        virtual bool canNew() const override {
             return true;
         }
         virtual bool isIndexable ( const TypeDeclPtr & decl ) const override {
@@ -118,6 +118,10 @@ namespace das {
         }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
             return context.code.makeNode<SimNode_New>(at,int32_t(sizeof(ThisMatrix)));
+        }
+        virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
+            uint32_t ms = uint32_t(sizeof(ThisMatrix));
+            return context.code.makeNode<SimNode_DeleteStructPtr>(at,sube,count,ms);
         }
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);

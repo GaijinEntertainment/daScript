@@ -1,5 +1,3 @@
-options log = true// , optimize = false // , logInferPasses = true, logOptimizationPasses = true
-
 require UnitTest
 
 struct SomethingSmall
@@ -73,3 +71,4 @@ def test
     test_delete_array()
     test_delete_table()
     return true
+
