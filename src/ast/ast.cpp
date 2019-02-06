@@ -433,6 +433,23 @@ namespace das
         return cexpr;
     }
 
+    // ExprDelete
+    
+    ExpressionPtr ExprDelete::visit(Visitor & vis) {
+        vis.preVisit(this);
+        if ( subexpr ) {
+            subexpr = subexpr->visit(vis);
+        }
+        return vis.visit(this);
+    }
+    
+    ExpressionPtr ExprDelete::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprDelete>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
+    
     // ExprNew
 
     ExpressionPtr ExprNew::visit(Visitor & vis) {

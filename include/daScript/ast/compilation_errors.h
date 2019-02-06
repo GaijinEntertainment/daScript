@@ -74,6 +74,7 @@ namespace das
     ,   module_not_found                        =   30901       //  require wtf
 
     ,   cant_new_handle                         =   31001       //  new Handle
+    ,   bad_delete                              =   31002       //  delete ;
 
     ,   cant_infer_generic                      =   31100       // TEMPORARY, REMOVE ONCE GENERICS ARE SUPPORTED
     ,   cant_infer_missing_initializer          =   31101       //  let x = 5

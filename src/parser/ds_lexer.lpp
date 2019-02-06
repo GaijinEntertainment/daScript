@@ -182,6 +182,7 @@
 <normal>"typename"                                      return _TYPENAME;
 <normal>"type"                                          return _TYPE;
 <normal>"new"                                           return _NEWT;
+<normal>"delete"                                        return _DELETE;
 <normal>"sizeof"                                        return _SIZEOF;
 <normal>"true"                                          return _TRUE;
 <normal>"false"                                         return _FALSE;

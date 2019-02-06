@@ -95,6 +95,7 @@
 %token  _RETURN     _NULL       _BREAK      _TRY
 %token  _OPTIONS    _TABLE      _EXPECT     _CONST
 %token  _REQUIRE    _OPERATOR   _ENUM       _FINALLY
+%token  _DELETE
 
 /* basic types */
 %token  _TBOOL       _TVOID       _TSTRING     _TAUTO
@@ -158,6 +159,7 @@
 %type <pExpression>     expression_while_loop
 %type <pExpression>     expression_for_loop
 %type <pExpression>     expression_break
+%type <pExpression>     expression_delete
 %type <pExpression>     expression_return
 %type <pExpression>     expression_else
 %type <pExpression>     expression_if_then_else
@@ -541,6 +543,7 @@ expression_any
     :   ';'                                 { $$ = nullptr; }
     |   expr_pipe[subexpr]                  { $$ = $subexpr; }
     |   expr_assign[subexpr] ';'            { $$ = $subexpr; }
+    |   expression_delete[subexpr] ';'      { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
@@ -586,6 +589,12 @@ name_in_namespace
             $$ = $namespace;
         }
     |   COLCOL NAME[name]                      { *$name = "::" + *$name; $$ = $name; }
+    ;
+
+expression_delete
+    :   _DELETE[loc] expr[subexpr] {
+        $$ = new ExprDelete(tokAt(@loc), ExpressionPtr($subexpr));
+    }
     ;
 
 expr_new

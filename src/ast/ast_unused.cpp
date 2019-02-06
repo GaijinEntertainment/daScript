@@ -304,6 +304,11 @@ namespace das {
             //  at some point we should do better data trackng for this type of aliasing
             if ( expr->returnReference ) propagateWrite(expr->subexpr.get());
         }
+    // Delete
+        virtual void preVisit ( ExprDelete * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->subexpr.get());
+        }
     // Call
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);

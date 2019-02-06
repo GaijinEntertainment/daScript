@@ -788,6 +788,16 @@ namespace das {
             expr->type = make_shared<TypeDecl>(Type::tString);
             return Visitor::visit(expr);
         }
+    // ExprDelete
+        virtual ExpressionPtr visit ( ExprDelete * expr ) override {
+            if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            if ( !expr->subexpr->type->canDelete() ) {
+                error("can't delete " + expr->subexpr->type->describe(),
+                      expr->at, CompilationError::bad_delete);
+            }
+            expr->type = make_shared<TypeDecl>();
+            return Visitor::visit(expr);
+        }
     // ExprNew
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
             // infer

@@ -484,6 +484,11 @@ namespace das {
             ss << "->";
             return Visitor::visit(ptr2ref);
         }
+    // delete
+        virtual void preVisit ( ExprDelete * edel ) override {
+            Visitor::preVisit(edel);
+            ss << "delete ";
+        }
     // new
         virtual ExpressionPtr visit ( ExprNew * enew ) override {
             ss << "new " << enew->typeexpr->describe();

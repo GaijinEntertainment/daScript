@@ -287,6 +287,18 @@ namespace das
         auto pName = context.code.allocateString(typeexpr->describe(false));
         return context.code.makeNode<SimNode_ConstValue>(at,cast<char *>::from(pName));
     }
+    
+    SimNode * ExprDelete::simulate (Context & context) const {
+        uint32_t total = uint32_t(subexpr->type->getCountOf());
+        auto sube = subexpr->simulate(context);
+        if ( subexpr->type->baseType==Type::tArray ) {
+            auto stride = subexpr->type->firstType->getSizeOf();
+            return context.code.makeNode<SimNode_DeleteArray>(at, sube, total, stride);
+        } else {
+            assert(0 && "implement");
+            return nullptr;
+        }
+    }
 
     SimNode * ExprNew::simulate (Context & context) const {
         if ( typeexpr->isHandle() ) {

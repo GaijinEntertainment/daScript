@@ -112,4 +112,19 @@ namespace das
     vec4f SimNode_FixedArrayIterator::eval ( Context & ) {
         return cast<Iterator *>::from(static_cast<FixedArrayIterator *>(this));
     }
+    
+    // delete
+    
+    vec4f SimNode_DeleteArray::eval ( Context & context ) {
+        auto pArray = (Array *) subexpr->evalPtr(context);
+        pArray = pArray + total - 1;
+        for ( uint32_t i=0; i!=total; ++i, pArray-- ) {
+            if ( pArray->data ) {
+                uint32_t oldSize = pArray->capacity*stride;
+                context.heap.free(pArray->data, oldSize);
+            }
+            memset ( pArray, 0, sizeof(Array) );
+        }
+        return v_zero();
+    }
 }

@@ -43,6 +43,13 @@ namespace das {
             assert(watermark >= linearAllocatorBase && watermark < (linearAllocatorBase + linearAllocatorSize));
             linearAllocator = (char *) watermark;
         }
+        
+        __forceinline void free ( void * oldData, uint32_t oldSize ) {
+            oldSize = (oldSize + 0x0f) & ~0x0f;
+            if (oldData && (oldData == linearAllocator - oldSize)) {
+                linearAllocator = (char *) oldData;
+            }
+        }
 
         __forceinline void * reallocate(void * oldData, uint32_t oldSize, uint32_t size) {
             if (size <= oldSize) return oldData;
@@ -110,8 +117,8 @@ namespace das {
 
     protected:
         uint32_t    linearAllocatorSize;
-        char *        linearAllocator = nullptr;
-        char *        linearAllocatorBase = nullptr;
+        char *      linearAllocator = nullptr;
+        char *      linearAllocatorBase = nullptr;
     };
 
     class StackAllocator {

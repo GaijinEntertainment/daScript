@@ -241,6 +241,24 @@ namespace das
             return nullptr;
         }
     }
+    
+    bool TypeDecl::canDelete() const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->canDelete();
+        } else if ( baseType==Type::tPointer ) {
+            if ( firstType && firstType->baseType==Type::tHandle ) {
+                return firstType->annotation->canDeletePtr();
+            } else if ( firstType && firstType->baseType==Type::tStructure ) {
+                return true;
+            } else {
+                return false;
+            }
+        } else if ( baseType==Type::tArray || baseType==Type::tStructure ) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     bool TypeDecl::canMove() const {
         if ( baseType==Type::tHandle )
@@ -808,11 +826,15 @@ namespace das
         return baseType==Type::tStructure ? structType->getAlignOf() : getTypeBaseAlign(baseType);
     }
 
-    int TypeDecl::getSizeOf() const {
+    int TypeDecl::getCountOf() const {
         int size = 1;
         for ( auto i : dim )
             size *= i;
-        return getBaseSizeOf() * size;
+        return size;
+    }
+    
+    int TypeDecl::getSizeOf() const {
+        return getBaseSizeOf() * getCountOf();
     }
 
     int TypeDecl::getStride() const {

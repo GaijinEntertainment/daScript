@@ -77,12 +77,14 @@ namespace das
         bool isEnum() const;
         bool isHandle() const;
         int getSizeOf() const;
+        int getCountOf() const;
         int getAlignOf() const;
         int getBaseSizeOf() const;
         int getStride() const;
         string describe ( bool extra = true ) const;
         bool canCopy() const;
         bool canMove() const;
+        bool canDelete() const;
         bool isPod() const;
         bool isWorkhorseType() const; // we can return this, or pass this
         bool isReturnType() const;
@@ -418,6 +420,8 @@ namespace das
         virtual bool isRefType() const { return false; }
         virtual bool isLocal() const { return false; }
         virtual bool isNewable() const { return false; }
+        virtual bool canDelete() const { return false; }
+        virtual bool canDeletePtr() const { return false; }
         virtual bool isIndexable ( const TypeDeclPtr & ) const { return false; }
         virtual bool isIterable ( ) const { return false; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
@@ -550,6 +554,16 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         TypeDeclPtr     typeexpr;
+    };
+    
+    struct ExprDelete : Expression {
+        ExprDelete() = default;
+        ExprDelete ( const LineInfo & a, const ExpressionPtr & s )
+            : Expression(a), subexpr(s) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        ExpressionPtr subexpr;
     };
 
     struct ExprAt : Expression {
@@ -1570,6 +1584,7 @@ namespace das
         VISIT_EXPR(ExprErase)
         VISIT_EXPR(ExprFind)
         VISIT_EXPR(ExprNew)
+        VISIT_EXPR(ExprDelete)
         VISIT_EXPR(ExprAt)
         VISIT_EXPR(ExprBlock)
         VISIT_EXPR(ExprVar)
