@@ -208,6 +208,7 @@ namespace das {
                 case Type::tInt:        return makeNode<NodeType<int32_t>>(args...);
                 case Type::tUInt:       return makeNode<NodeType<uint32_t>>(args...);
                 case Type::tFloat:      return makeNode<NodeType<float>>(args...);
+                case Type::tDouble:     return makeNode<NodeType<double>>(args...);
                 default:
                     assert(0 && "we should not even be here");
                     return nullptr;
@@ -238,6 +239,7 @@ namespace das {
             case Type::tString:         return makeNode<NodeType<char *>>(args...);
             case Type::tPointer:        return makeNode<NodeType<void *>>(args...);
             case Type::tBlock:          return makeNode<NodeType<Block>>(args...);
+            case Type::tDouble:         return makeNode<NodeType<double>>(args...);
             default:
                 assert(0 && "we should not even be here");
                 return nullptr;

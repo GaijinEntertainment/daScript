@@ -160,6 +160,12 @@ namespace das {
                 ss << "f";
             }
         }
+        virtual void Double ( double & f ) override {
+            ss << f;
+            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                ss << "lf";
+            }
+        }
         virtual void Int ( int32_t & i ) override {
             ss << i;
         }

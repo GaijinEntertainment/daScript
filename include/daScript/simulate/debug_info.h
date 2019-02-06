@@ -24,6 +24,7 @@ namespace das
         tFloat2,
         tFloat3,
         tFloat4,
+        tDouble,
         tRange,
         tURange,
         tString,

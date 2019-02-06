@@ -56,6 +56,7 @@
     int64_t                         i64;
     uint64_t                        ui64;
     double                          d;
+	double                          fd;
     string *                        s;
     vector<string> *                pNameList;
     VariableDeclaration *           pVarDecl;
@@ -101,7 +102,7 @@
 %token  _TUINT       _TUINT2      _TUINT3      _TUINT4
 %token  _TFLOAT      _TFLOAT2     _TFLOAT3     _TFLOAT4
 %token  _TRANGE      _TURANGE     _TBLOCK      _TINT64
-%token  _TUINT64     _TYPENAME
+%token  _TUINT64     _TYPENAME	  _TDOUBLE
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -114,6 +115,7 @@
 %token<i64>     LONG_INTEGER
 %token<ui>      UNSIGNED_INTEGER
 %token<ui64>    UNSIGNED_LONG_INTEGER
+%token<fd>      FLOAT
 %token<d>       DOUBLE
 %token<s>       NAME
 
@@ -352,7 +354,7 @@ expression_while_loop
 annotation_argument
     :   NAME[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value); delete $value; }
     |   NAME[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value);  }
-    |   NAME[name] '=' DOUBLE[value]            { $$ = new AnnotationArgument(*$name,float($value));  }
+    |   NAME[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value));  }
     |   NAME[name] '=' _TRUE                    { $$ = new AnnotationArgument(*$name,true);  }
     |   NAME[name] '=' _FALSE                   { $$ = new AnnotationArgument(*$name,false);  }
     ;
@@ -759,7 +761,8 @@ expr_numeric_const
     |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(@const),(uint32_t)$const); }
     |   LONG_INTEGER[const]                   { $$ = new ExprConstInt64(tokAt(@const),(int64_t)$const); }
     |   UNSIGNED_LONG_INTEGER[const]          { $$ = new ExprConstUInt64(tokAt(@const),(uint64_t)$const); }
-    |   DOUBLE[const]                         { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }
+    |   FLOAT[const]                          { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }
+	|   DOUBLE[const]                         { $$ = new ExprConstDouble(tokAt(@const),(double)$const); }
     ;
 
 expr_assign

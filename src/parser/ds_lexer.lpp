@@ -199,6 +199,7 @@
 <normal>"uint2"                                         return _TUINT2;
 <normal>"uint3"                                         return _TUINT3;
 <normal>"uint4"                                         return _TUINT4;
+<normal>"double"                                        return _TDOUBLE;
 <normal>"float"                                         return _TFLOAT;
 <normal>"float2"                                        return _TFLOAT2;
 <normal>"float3"                                        return _TFLOAT3;
@@ -218,10 +219,15 @@
 <normal>0[xX][0-9a-fA-F]+(u|U)          return sscanf(yytext, "%i",  &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>0[xX][0-9a-fA-F]+               return sscanf(yytext, "%i",  &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 
-<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                    return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                    return sscanf(yytext, "%lf", &yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
+
+<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?lf			return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?lf		return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+lf                                        return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+[eE][+\-]?[0-9]+lf                        return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>\)                                  {
     if ( !nested_parentheses ) {
         yyerror("mismatching parentheses", CompilationError::mismatching_parentheses);

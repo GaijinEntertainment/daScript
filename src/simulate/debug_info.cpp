@@ -35,6 +35,7 @@ namespace das
         {   Type::tFloat2,      "float2"},
         {   Type::tFloat3,      "float3"},
         {   Type::tFloat4,      "float4"},
+        {   Type::tDouble,      "double" },
         {   Type::tRange,       "range" },
         {   Type::tURange,      "urange"}
     };
@@ -69,6 +70,7 @@ namespace das
             case tFloat2:       return sizeof(float2);
             case tFloat3:       return sizeof(float3);
             case tFloat4:       return sizeof(float4);
+            case tDouble:       return sizeof(double);
             case tRange:        return sizeof(range);
             case tURange:       return sizeof(urange);
             case tArray:        return sizeof(Array);
@@ -104,6 +106,7 @@ namespace das
             case tFloat2:       return alignof(float2);
             case tFloat3:       return alignof(float3);
             case tFloat4:       return alignof(float4);
+            case tDouble:       return alignof(double);
             case tRange:        return alignof(range);
             case tURange:       return alignof(urange);
             case tArray:        return alignof(Array);

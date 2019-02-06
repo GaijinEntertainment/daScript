@@ -56,6 +56,7 @@ namespace das {
         virtual void Int64 ( int64_t & ) {}
         virtual void UInt64 ( uint64_t & ) {}
         virtual void String ( char * & ) {}
+        virtual void Double ( double & ) {}
         virtual void Float ( float & ) {}
         virtual void Int ( int32_t & ) {}
         virtual void UInt ( uint32_t & ) {}

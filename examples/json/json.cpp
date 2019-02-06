@@ -57,7 +57,19 @@ namespace das {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return 0.0f; }
             if ( !pv->IsFloat() ) { context.throw_error("JSON not a float"); return 0.0f; }
-            return (float) pv->GetDouble();
+            return pv->GetFloat();
+        }
+        SimNode * subexpr;
+    };
+
+    struct SimNode_AsDouble : SimNode {
+        DAS_DOUBLE_NODE;
+        SimNode_AsDouble(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        __forceinline double compute(Context & context) {
+            auto pv = (JsValue *) subexpr->evalPtr(context);
+            if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return 0.0f; }
+            if ( !pv->IsDouble() ) { context.throw_error("JSON not a double"); return 0.0f; }
+            return pv->GetDouble();
         }
         SimNode * subexpr;
     };
@@ -197,7 +209,7 @@ namespace das {
         }
 
         virtual TypeDeclPtr makeFieldType ( const string & fn ) const override {
-            if ( fn=="is_int" || fn=="is_float" || fn=="is_object" || fn=="is_array" ||
+            if ( fn=="is_int" || fn=="is_float" || fn=="is_double" || fn=="is_object" || fn=="is_array" ||
                 fn=="is_null" || fn=="is_string" || fn=="is_bool" ) {
                 return make_shared<TypeDecl>(Type::tBool);
             } else if ( fn=="as_bool" ) {
@@ -206,7 +218,9 @@ namespace das {
                 return make_shared<TypeDecl>(Type::tInt);
             } else if ( fn=="as_float" ) {
                 return make_shared<TypeDecl>(Type::tFloat);
-            } else if ( fn=="as_string" ) {
+            } else if ( fn=="as_double" ) {
+                return make_shared<TypeDecl>(Type::tDouble);
+            }else if ( fn=="as_string" ) {
                 return make_shared<TypeDecl>(Type::tString);
             } else {
                 return makeJsValuePtr();
@@ -215,7 +229,7 @@ namespace das {
 
         virtual TypeDeclPtr makeSafeFieldType ( const string & fn ) const override {
             Type bt;
-            if ( fn=="is_int" || fn=="is_float" || fn=="is_object" || fn=="is_array" ||
+            if ( fn=="is_int" || fn=="is_float" ||  fn=="is_double" || fn=="is_object" || fn=="is_array" ||
                 fn=="is_null" || fn=="is_string" || fn=="is_bool" ) {
                 return nullptr;
             }
@@ -225,6 +239,8 @@ namespace das {
                 bt = Type::tInt;
             } else if ( fn=="as_float" ) {
                 bt = Type::tFloat;
+            } else if ( fn=="as_double" ) {
+                bt = Type::tDouble;
             } else if ( fn=="as_string" ) {
                 bt = Type::tString;
             } else {
@@ -261,7 +277,10 @@ namespace das {
                 JsValue,decltype(&JsValue::IsInt),&JsValue::IsInt,SAFE>>(at, subexpr);
             } else if (fn == "is_float") {
                 return context.code.makeNode<SimNode_Property<
-                JsValue,decltype(&JsValue::IsDouble),&JsValue::IsDouble,SAFE>>(at, subexpr);
+                JsValue,decltype(&JsValue::IsFloat),&JsValue::IsFloat,SAFE>>(at, subexpr);
+            } else if (fn == "is_double") {
+                return context.code.makeNode<SimNode_Property<
+                    JsValue,decltype(&JsValue::IsDouble),&JsValue::IsDouble,SAFE>>(at, subexpr);
             } else if (fn == "is_number") {
                 return context.code.makeNode<SimNode_Property<
                 JsValue,decltype(&JsValue::IsNumber),&JsValue::IsNumber,SAFE>>(at, subexpr);
@@ -283,7 +302,9 @@ namespace das {
                 return context.code.makeNode<SimNode_AsInt>(at, subexpr);
             } else if (fn == "as_float") {
                 return context.code.makeNode<SimNode_AsFloat>(at, subexpr);
-            } else if (fn == "as_string") {
+            } else if (fn == "as_double") {
+                return context.code.makeNode<SimNode_AsDouble>(at, subexpr);
+            }else if (fn == "as_string") {
                 return context.code.makeNode<SimNode_AsString>(at, subexpr);
             }
             // ARRAY SIZE
@@ -323,6 +344,9 @@ namespace das {
             } else if (fn == "as_float") {
                 return context.code.makeNode<SimNode_SafeAs<
                     decltype(&JsValue::IsFloat),&JsValue::IsFloat>>(at, subexpr);
+            } else if (fn == "as_double") {
+                return context.code.makeNode<SimNode_SafeAs<
+                    decltype(&JsValue::IsDouble),&JsValue::IsDouble>>(at, subexpr);
             } else if (fn == "as_string") {
                 return context.code.makeNode<SimNode_SafeAs<
                     decltype(&JsValue::IsString),&JsValue::IsString>>(at, subexpr);

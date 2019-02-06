@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.2.1.  */
+/* A Bison parser, made by GNU Bison 3.2.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -33,8 +33,8 @@
 /* Undocumented macros, especially those whose name start with YY_,
    are private implementation details.  Do not rely on them.  */
 
-#ifndef YY_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
-# define YY_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+#ifndef YY_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+# define YY_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 1
@@ -43,7 +43,7 @@
 extern int yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 1 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 1 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
@@ -70,7 +70,7 @@ extern int yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 74 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 74 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
 
 /* Token type.  */
 #ifndef YYTOKENTYPE
@@ -128,45 +128,47 @@ extern int yydebug;
     _TINT64 = 306,
     _TUINT64 = 307,
     _TYPENAME = 308,
-    ADDEQU = 309,
-    SUBEQU = 310,
-    DIVEQU = 311,
-    MULEQU = 312,
-    MODEQU = 313,
-    ANDEQU = 314,
-    OREQU = 315,
-    XOREQU = 316,
-    ADDADD = 317,
-    SUBSUB = 318,
-    LEEQU = 319,
-    GREQU = 320,
-    EQUEQU = 321,
-    NOTEQU = 322,
-    RARROW = 323,
-    LARROW = 324,
-    QQ = 325,
-    QDOT = 326,
-    LPIPE = 327,
-    LBPIPE = 328,
-    RPIPE = 329,
-    INTEGER = 330,
-    LONG_INTEGER = 331,
-    UNSIGNED_INTEGER = 332,
-    UNSIGNED_LONG_INTEGER = 333,
-    DOUBLE = 334,
-    NAME = 335,
-    BEGIN_STRING = 336,
-    STRING_CHARACTER = 337,
-    END_STRING = 338,
-    BEGIN_STRING_EXPR = 339,
-    END_STRING_EXPR = 340,
-    UNARY_MINUS = 341,
-    UNARY_PLUS = 342,
-    PRE_INC = 343,
-    PRE_DEC = 344,
-    POST_INC = 345,
-    POST_DEC = 346,
-    COLCOL = 347
+    _TDOUBLE = 309,
+    ADDEQU = 310,
+    SUBEQU = 311,
+    DIVEQU = 312,
+    MULEQU = 313,
+    MODEQU = 314,
+    ANDEQU = 315,
+    OREQU = 316,
+    XOREQU = 317,
+    ADDADD = 318,
+    SUBSUB = 319,
+    LEEQU = 320,
+    GREQU = 321,
+    EQUEQU = 322,
+    NOTEQU = 323,
+    RARROW = 324,
+    LARROW = 325,
+    QQ = 326,
+    QDOT = 327,
+    LPIPE = 328,
+    LBPIPE = 329,
+    RPIPE = 330,
+    INTEGER = 331,
+    LONG_INTEGER = 332,
+    UNSIGNED_INTEGER = 333,
+    UNSIGNED_LONG_INTEGER = 334,
+    FLOAT = 335,
+    DOUBLE = 336,
+    NAME = 337,
+    BEGIN_STRING = 338,
+    STRING_CHARACTER = 339,
+    END_STRING = 340,
+    BEGIN_STRING_EXPR = 341,
+    END_STRING_EXPR = 342,
+    UNARY_MINUS = 343,
+    UNARY_PLUS = 344,
+    PRE_INC = 345,
+    PRE_DEC = 346,
+    POST_INC = 347,
+    POST_DEC = 348,
+    COLCOL = 349
   };
 #endif
 
@@ -175,7 +177,7 @@ extern int yydebug;
 
 union YYSTYPE
 {
-#line 51 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 51 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
 
     char                            ch;
     bool                            b;
@@ -184,6 +186,7 @@ union YYSTYPE
     int64_t                         i64;
     uint64_t                        ui64;
     double                          d;
+	double                          fd;
     string *                        s;
     vector<string> *                pNameList;
     VariableDeclaration *           pVarDecl;
@@ -198,7 +201,7 @@ union YYSTYPE
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
 
-#line 202 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 205 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
 };
 
 typedef union YYSTYPE YYSTYPE;
@@ -225,4 +228,4 @@ extern YYSTYPE yylval;
 extern YYLTYPE yylloc;
 int yyparse (void);
 
-#endif /* !YY_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */
+#endif /* !YY_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */

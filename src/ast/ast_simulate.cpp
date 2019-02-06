@@ -335,9 +335,9 @@ namespace das
         }
     }
     
-    vector<SimNode *> ExprBlock::collectExpressions ( Context & context, const vector<ExpressionPtr> & list ) const {
+    vector<SimNode *> ExprBlock::collectExpressions ( Context & context, const vector<ExpressionPtr> & lis ) const {
         vector<SimNode *> simlist;
-        for ( auto & node : list ) {
+        for ( auto & node : lis ) {
             if ( node->rtti_isLet()) {
                 shared_ptr<ExprLet> pLet = static_pointer_cast<ExprLet>(node);
                 if (!pLet->subexpr) {
