@@ -298,8 +298,16 @@ namespace das
             auto vts_add_kts = subexpr->type->firstType->getSizeOf() +
                 subexpr->type->secondType->getSizeOf();
             return context.code.makeNode<SimNode_DeleteTable>(at, sube, total, vts_add_kts);
+        } else if ( subexpr->type->baseType==Type::tPointer ) {
+            if ( subexpr->type->firstType->baseType==Type::tStructure ) {
+                auto structSize = subexpr->type->firstType->getSizeOf();
+                return context.code.makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize);
+            } else {
+                assert(0 && "implement");
+                return nullptr;
+            }
         } else {
-            assert(0 && "implement");
+            assert(0 && "we should not be here");
             return nullptr;
         }
     }

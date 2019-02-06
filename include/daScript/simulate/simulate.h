@@ -320,10 +320,19 @@ namespace das
     // Delete
     struct SimNode_Delete : SimNode {
         SimNode_Delete ( const LineInfo & a, SimNode * s, uint32_t t )
-        : SimNode(a), subexpr(s), total(t) {}
+            : SimNode(a), subexpr(s), total(t) {}
         SimNode *   subexpr;
         uint32_t    total;
     };
+    
+    // Delete structures
+    struct SimNode_DeleteStructPtr : SimNode_Delete {
+        SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss )
+            : SimNode_Delete(a,s,t), structSize(ss) {}
+        virtual vec4f eval ( Context & context ) override;
+        uint32_t    structSize;
+    };
+
     
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {

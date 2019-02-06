@@ -246,9 +246,13 @@ namespace das
         if ( baseType==Type::tHandle ) {
             return annotation->canDelete();
         } else if ( baseType==Type::tPointer ) {
-            if ( firstType && firstType->baseType==Type::tHandle ) {
+            if ( !firstType ) {
+                return false;
+            } else if ( firstType->dim.size() ) {
+                return false;
+            } else if (firstType->baseType==Type::tHandle ) {
                 return firstType->annotation->canDeletePtr();
-            } else if ( firstType && firstType->baseType==Type::tStructure ) {
+            } else if ( firstType->baseType==Type::tStructure ) {
                 return true;
             } else {
                 return false;

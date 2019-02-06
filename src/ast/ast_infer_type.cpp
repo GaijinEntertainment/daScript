@@ -794,6 +794,9 @@ namespace das {
             if ( !expr->subexpr->type->canDelete() ) {
                 error("can't delete " + expr->subexpr->type->describe(),
                       expr->at, CompilationError::bad_delete);
+            } else if ( !expr->subexpr->type->isRef() ) {
+                error("can only delete reference " + expr->subexpr->type->describe(),
+                      expr->at, CompilationError::bad_delete);
             }
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
