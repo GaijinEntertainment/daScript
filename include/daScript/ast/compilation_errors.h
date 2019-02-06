@@ -69,8 +69,7 @@ namespace das
     ,   cant_pipe                               =   30701       //  wtf <| arg
 
     ,   invalid_block                           =   30801       //  fn({ return; }), fn ({ break; })
-    ,   closure_with_finally                    =   30802       //  $(a) {} finally {}
-    ,   return_or_break_in_finally              =   30803       //  if a {} finally { return blah; }
+    ,   return_or_break_in_finally              =   30802       //  if a {} finally { return blah; }
 
     ,   module_not_found                        =   30901       //  require wtf
 

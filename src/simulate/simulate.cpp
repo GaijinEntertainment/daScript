@@ -190,6 +190,7 @@ namespace das
         for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
             list[i++]->eval(context);
         }
+        evalFinal(context);
         if ( context.stopFlags & EvalFlags::stopForReturn ) {
             context.stopFlags &= ~EvalFlags::stopForReturn;
             return context.abiResult();

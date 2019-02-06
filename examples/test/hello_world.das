@@ -61,8 +61,15 @@ def test_func_finally()
     let t = func_finally()
     assert(t==12 & glob==13 & glob_count==1)
 
+[sideeffects]
+def test_block_finally()
+    let t = 0
+    invoke() <| $() { t=1; } finally { t=2; }
+    assert(t==2)
+
 [export]
 def test
+    test_block_finally()
     test_for_finally()
     test_if_finally()
     test_while_finally()
