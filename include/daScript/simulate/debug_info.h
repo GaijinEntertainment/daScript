@@ -105,6 +105,7 @@ namespace das
         VarInfo **  args;
         uint32_t    argsSize;
         uint32_t    stackSize;
+        TypeInfo *  result;
     };
 
     string das_to_string ( Type t );
