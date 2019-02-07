@@ -1,3 +1,4 @@
+#include "daScript/misc/platform.h"
 
 #include <signal.h>
 

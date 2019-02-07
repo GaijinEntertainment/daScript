@@ -9,7 +9,6 @@ using namespace das;
 #define __noinline    __declspec(noinline)
 #endif
 
-
 __noinline void updateObject ( Object & obj ) {
     obj.pos.x += obj.vel.x;
     obj.pos.y += obj.vel.y;
@@ -314,8 +313,6 @@ void queryEs (Block block, Context * context) {
 #else
 #include <unordered_map>
 #endif
-
-#include <string.h>
 
 struct dictKeyEqual {
     __forceinline bool operator()( const char * lhs, const char * rhs ) const {

@@ -1,4 +1,5 @@
-#include <stdint.h>
+#include "daScript/misc/platform.h"
+
 #ifdef _MSC_VER
 
 #include <windows.h>
@@ -19,7 +20,6 @@ extern "C" int get_time_usec ( int64_t reft ) {
 #elif __linux__
 
 #include <time.h>
-#include <assert.h>
 
 const uint64_t NSEC_IN_SEC = 1000000000LL;
 
