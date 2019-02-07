@@ -556,6 +556,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         TypeDeclPtr     typeexpr;
+        uint32_t        stackTop;
     };
 
     struct ExprDelete : Expression {

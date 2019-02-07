@@ -821,21 +821,24 @@ namespace das {
             }
             if ( expr->typeexpr->ref ) {
                 error("can't new a reference", expr->at, CompilationError::invalid_new_type);
-            } else if ( expr->typeexpr->dim.size() ) {
-                error("can only new single object", expr->at, CompilationError::invalid_new_type);
-            } else if ( expr->typeexpr->baseType==Type::tStructure ) {
+            } if ( expr->typeexpr->baseType==Type::tStructure ) {
                 expr->type = make_shared<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
-            } else if ( expr->typeexpr->isHandle() ) {
+                expr->type->firstType->dim.clear();
+                expr->type->dim = expr->typeexpr->dim;
+            } else if ( expr->typeexpr->baseType==Type::tHandle ) {
                 if ( expr->typeexpr->annotation->canNew() ) {
                     expr->type = make_shared<TypeDecl>(Type::tPointer);
                     expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
+                    expr->type->firstType->dim.clear();
+                    expr->type->dim = expr->typeexpr->dim;
                 } else {
                     error("can new this type " + expr->typeexpr->describe(),
                           expr->at, CompilationError::invalid_new_type);
                 }
             } else {
-                error("can only new structures or handled types", expr->at, CompilationError::invalid_new_type);
+                error("can only new structures or handled types " + expr->typeexpr->describe(),
+                      expr->at, CompilationError::invalid_new_type);
             }
             verifyType(expr->typeexpr);
             return Visitor::visit(expr);

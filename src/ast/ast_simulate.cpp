@@ -318,12 +318,19 @@ namespace das
     }
 
     SimNode * ExprNew::simulate (Context & context) const {
-        if ( typeexpr->isHandle() ) {
+        SimNode * newNode;
+        if ( typeexpr->baseType == Type::tHandle ) {
             assert(typeexpr->annotation->canNew() && "how???");
-            return typeexpr->annotation->simulateGetNew(context, at);
+            newNode = typeexpr->annotation->simulateGetNew(context, at);
         } else {
-            int32_t bytes = typeexpr->getSizeOf();
-            return context.code.makeNode<SimNode_New>(at,bytes);
+            int32_t bytes = type->firstType->getSizeOf();
+            newNode = context.code.makeNode<SimNode_New>(at,bytes);
+        }
+        if ( type->dim.size() ) {
+            uint32_t count = type->getCountOf();
+            return context.code.makeNode<SimNode_NewArray>(at,newNode,stackTop,count);
+        } else {
+            return newNode;
         }
     }
 

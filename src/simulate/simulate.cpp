@@ -162,18 +162,6 @@ namespace das
 #pragma warning(pop)
 #endif
 
-    // SimNode_New
-
-    vec4f SimNode_New::eval ( Context & context ) {
-        if ( void * ptr = context.heap.allocate(bytes) ) {
-            memset ( ptr, 0, bytes );
-            return cast<void *>::from(ptr);
-        } else {
-            context.throw_error("out of heap");
-            return v_zero();
-        }
-    }
-
     // SimNode_CopyRefValue
 
     vec4f SimNode_CopyRefValue::eval ( Context & context ) {

@@ -1087,9 +1087,34 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // NEW
     struct SimNode_New : SimNode {
+        DAS_PTR_NODE;
         SimNode_New ( const LineInfo & at, int32_t b ) : SimNode(at), bytes(b) {}
-        virtual vec4f eval ( Context & context ) override;
+        __forceinline char * compute ( Context & context ) {
+            if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
+                memset ( ptr, 0, bytes );
+                return ptr;
+            } else {
+                context.throw_error("out of heap");
+                return nullptr;
+            }
+        }
         int32_t     bytes;
+    };
+    
+    struct SimNode_NewArray : SimNode {
+        DAS_PTR_NODE;
+        SimNode_NewArray ( const LineInfo & a, SimNode * nn, uint32_t sp, uint32_t c )
+            : SimNode(a), newNode(nn), stackTop(sp), count(c) {}
+        __forceinline char * compute ( Context & context ) {
+            auto nodes = (char **)(context.stack.sp() + stackTop);
+            for ( uint32_t i=0; i!=count; ++i ) {
+                nodes[i] = newNode->evalPtr(context);
+            }
+            return (char *) nodes;
+        }
+        SimNode *   newNode;
+        uint32_t    stackTop;
+        uint32_t    count;
     };
 
     // CONST-VALUE

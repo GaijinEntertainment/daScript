@@ -37,10 +37,8 @@ def test_delete_struct
     assert(a==null)
 
 def test_delete_struct_array
-    let a : SomethingSmall? [10]
     let w0 = heap_bytes_allocated()
-    for pA in a
-        pA = new SomethingSmall
+    let a = new SomethingSmall[10]
     let w1 = heap_bytes_allocated()
     delete a
     let w2 = heap_bytes_allocated()
@@ -55,9 +53,7 @@ def test_delete_handle
     assert(a==null)
 
 def test_delete_handle_array
-    let a : TestObjectFoo? [10]
-    for pA in a
-        pA = new TestObjectFoo
+    let a  = new TestObjectFoo[10]
     delete a
     for pA in a
         assert(pA==null)
@@ -71,4 +67,3 @@ def test
     test_delete_array()
     test_delete_table()
     return true
-

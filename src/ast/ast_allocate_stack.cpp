@@ -161,6 +161,18 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
+    // New
+        virtual ExpressionPtr visit ( ExprNew * expr ) override {
+            if ( expr->type->dim.size() ) {
+                auto sz = expr->type->getCountOf() * sizeof(char *);
+                expr->stackTop = allocateStack(sz);
+                if ( log ) {
+                    logs << "\t" << expr->stackTop << "\t" << sz
+                    << "\tNEW " << expr->typeexpr->describe() << ", line " << expr->at.line << "\n";
+                }
+            }
+            return Visitor::visit(expr);
+        }
     };
 
     // program

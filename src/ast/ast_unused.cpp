@@ -309,11 +309,9 @@ namespace das {
             Visitor::preVisit(expr);
             bool newExternal = false;
             auto NT = expr->typeexpr;
-            if ( NT->isHandle() ) {
+            if ( NT->baseType==Type::tHandle ) {
                 newExternal = true;
-            } else if ( NT->isPointer() && NT->firstType && NT->firstType->isHandle() ) {
-                newExternal = true;
-            }
+            } 
             if ( newExternal ) {
                 func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             }
@@ -325,9 +323,9 @@ namespace das {
             propagateWrite(expr->subexpr.get());
             bool deleteExternal = false;
             auto NT = expr->subexpr->type;
-            if ( NT->isHandle() ) {
+            if ( NT->baseType==Type::tHandle ) {
                 deleteExternal = true;
-            } else if ( NT->isPointer() && NT->firstType && NT->firstType->isHandle() ) {
+            } else if ( NT->baseType==Type::tPointer && NT->firstType && NT->firstType->isHandle() ) {
                 deleteExternal = true;
             }
             if ( deleteExternal ) {

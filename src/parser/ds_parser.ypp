@@ -598,10 +598,8 @@ expression_delete
     ;
 
 expr_new
-    :   _NEWT[loc] name_in_namespace[structName]   {
-        auto pTypeDecl = g_Program->makeTypeDeclaration(tokAt(@loc), *$structName);
-        $$ = new ExprNew(tokAt(@loc),TypeDeclPtr(pTypeDecl));
-        delete $structName;
+    :   _NEWT[loc] type_declaration[typeDecl]   {
+        $$ = new ExprNew(tokAt(@loc),TypeDeclPtr($typeDecl));
     }
     ;
 
