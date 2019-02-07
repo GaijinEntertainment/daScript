@@ -18,6 +18,9 @@ extern "C" int get_time_usec ( int64_t reft ) {
 
 #elif __linux__
 
+#include <time.h>
+#include <assert.h>
+
 const uint64_t NSEC_IN_SEC = 1000000000LL;
 
 extern "C" int64_t ref_time_ticks () {
