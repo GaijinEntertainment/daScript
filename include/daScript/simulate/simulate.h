@@ -324,7 +324,7 @@ namespace das
         SimNode *   subexpr;
         uint32_t    total;
     };
-    
+
     // Delete structures
     struct SimNode_DeleteStructPtr : SimNode_Delete {
         SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss )
@@ -332,7 +332,7 @@ namespace das
         virtual vec4f eval ( Context & context ) override;
         uint32_t    structSize;
     };
-    
+
     // New handle, default
     template <typename TT>
     struct SimNode_NewHandle : SimNode {
@@ -342,7 +342,7 @@ namespace das
             return (char *) new TT();
         }
     };
-    
+
     // Delete handle, default
     template <typename TT>
     struct SimNode_DeleteHandlePtr : SimNode_Delete {
@@ -359,7 +359,7 @@ namespace das
             return v_zero();
         }
     };
-    
+
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
         SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a )
@@ -1186,7 +1186,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * l, * r;
         uint32_t size;
     };
-    
+
     struct SimNode_Final : SimNode {
         SimNode_Final ( const LineInfo & a ) : SimNode(a) {}
         __forceinline void evalFinal ( Context & context ) {

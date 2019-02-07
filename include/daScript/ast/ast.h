@@ -557,7 +557,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         TypeDeclPtr     typeexpr;
     };
-    
+
     struct ExprDelete : Expression {
         ExprDelete() = default;
         ExprDelete ( const LineInfo & a, const ExpressionPtr & s )
@@ -990,7 +990,7 @@ namespace das
         ExpressionPtr           subexpr;
         bool                    scoped = true;
     };
-    
+
     // for a,b in foo,bar where a>b ...
     struct ExprFor : Expression {
         ExprFor () = default;
@@ -1005,7 +1005,7 @@ namespace das
         vector<ExpressionPtr>   sources;
         ExpressionPtr           subexpr;
     };
-    
+
     struct ExprWhile : Expression {
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
