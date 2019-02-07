@@ -78,8 +78,7 @@ struct EsAttributeTable {
 
 struct EsPassAttributeTable  : EsAttributeTable {
     string  pass;
-    string  functionName;
-    SimFunction * functionPtr = nullptr;
+    int32_t functionIndex;
 };
 
 struct EsComponent {
@@ -144,7 +143,11 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             err = "pass is not specified";
             return false;
         }
-        tab.functionName = func->name;
+        tab.functionIndex = (int32_t) func->index;
+        if ( tab.functionIndex<0 ) {
+            err = "function is not there";
+            return false;
+        }
         buildAttributeTable(tab, func->arguments, err);
         g_esPassTable.push_back(tab);
         return err.empty();
@@ -152,14 +155,9 @@ struct EsFunctionAnnotation : FunctionAnnotation {
 };
 
 bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
-    if ( table.functionPtr==nullptr )
-        table.functionPtr = context.findFunction(table.functionName.c_str());
-    if (!table.functionPtr) {
-        context.throw_error("function not found");
-        return false;
-    }
+    auto functionPtr = context.getFunction(table.functionIndex);
     vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
-    context.callEx(table.functionPtr, _args, nullptr, 0, [&](SimNode * code){
+    context.callEx(functionPtr, _args, nullptr, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
         vec4f * args = _args;
         char **        data    = (char **) alloca(nAttr * sizeof(char *));

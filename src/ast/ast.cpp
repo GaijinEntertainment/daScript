@@ -1354,11 +1354,11 @@ namespace das
                 if (!program->failed())
                     program->verifyAndFoldContracts();
                 if (!program->failed())
-                    program->finalizeAnnotations();
-                if (!program->failed())
                     program->markOrRemoveUnusedSymbols();
                 if (!program->failed())
                     program->allocateStack(logs);
+                if (!program->failed())
+                    program->finalizeAnnotations();
             }
             if (!program->failed()) {
                 if (program->options.getOption("log")) {
