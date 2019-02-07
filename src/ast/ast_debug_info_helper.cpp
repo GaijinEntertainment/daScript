@@ -36,6 +36,7 @@ namespace das {
             fni->args[i] = makeVariableDebugInfo(*fn.arguments[i]);
         }
         fmn2f[mangledName] = fni;
+        fni->result = makeTypeInfo(nullptr, fn.result);
         return fni;
     }
 
