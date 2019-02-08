@@ -273,7 +273,7 @@ namespace das
                 return nullptr;
             }
         } else {
-            assert(0 && "can't make handle type");
+            assert(0 && "can't make handle type. You need to explicitly add annotation for it.");
             return nullptr;
         }
         return t;
