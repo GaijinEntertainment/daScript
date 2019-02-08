@@ -7,8 +7,11 @@ namespace das
     #define DAS_BIND_MANAGED_FIELD(FIELDNAME)   DAS_BIND_FIELD(ManagedType,FIELDNAME)
     #define DAS_BIND_MANAGED_PROP(FIELDNAME)    DAS_BIND_PROP(ManagedType,FIELDNAME)
 
+    template <typename OT, bool canNewAndDelete = true>
+    struct ManagedStructureAnnotation ;
+    
     template <typename OT>
-    struct ManagedStructureAnnotation  : TypeAnnotation {
+    struct ManagedStructureAnnotation<OT,false>  : TypeAnnotation {
         typedef OT ManagedType;
         enum class FactoryNodeType {
             getField
@@ -32,8 +35,6 @@ namespace das
         virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
         virtual size_t getAlignOf() const override { return alignof(ManagedType); }
         virtual bool isRefType() const override { return true; }
-        virtual bool canNew() const override { return true; }
-        virtual bool canDeletePtr() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
             auto it = fields.find(na);
@@ -55,9 +56,6 @@ namespace das
                 return nullptr;
             }
         }
-        virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
-            return context.code.makeNode<SimNode_DeleteHandlePtr<ManagedType>>(at,sube,count);
-        }
         virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
@@ -74,9 +72,6 @@ namespace das
             } else {
                 return nullptr;
             }
-        }
-        virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.code.makeNode<SimNode_NewHandle<ManagedType>>(at);
         }
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             auto it = fields.find(na);
@@ -172,6 +167,21 @@ namespace das
         DebugInfoHelper            helpA;
         StructInfo *               sti = nullptr;
         ModuleLibrary *            mlib = nullptr;
+    };
+    
+    template <typename OT>
+    struct ManagedStructureAnnotation<OT,true> : ManagedStructureAnnotation<OT,false> {
+        typedef OT ManagedType;
+        ManagedStructureAnnotation (const string & n, ModuleLibrary & ml )
+            : ManagedStructureAnnotation<OT,false>(n,ml) { }
+        virtual bool canNew() const override { return true; }
+        virtual bool canDeletePtr() const override { return true; }
+        virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
+            return context.code.makeNode<SimNode_NewHandle<ManagedType>>(at);
+        }
+        virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
+            return context.code.makeNode<SimNode_DeleteHandlePtr<ManagedType>>(at,sube,count);
+        }
     };
 
     template <typename OT>
