@@ -990,6 +990,7 @@ namespace das
         vector<VariablePtr>     variables;
         ExpressionPtr           subexpr;
         bool                    scoped = true;
+        bool                    inScope = false;
     };
 
     // for a,b in foo,bar where a>b ...

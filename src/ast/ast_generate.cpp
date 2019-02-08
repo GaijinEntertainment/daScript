@@ -3,6 +3,13 @@
 #include "daScript/ast/ast_generate.h"
 
 namespace das {
+    
+    ExpressionPtr makeDelete ( const VariablePtr & var ) {
+        auto eVar = make_shared<ExprVar>(var->at, var->name);
+        auto del = make_shared<ExprDelete>(var->at, eVar);
+        return del;
+    }
+    
     FunctionPtr makeConstructor ( Structure * str ) {
         auto fn = make_shared<Function>();
         fn->name = str->name;

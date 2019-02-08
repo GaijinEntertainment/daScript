@@ -58,8 +58,23 @@ def test_delete_handle_array
     for pA in a
         assert(pA==null)
 
+[sideeffects]
+def da_inscope(x)
+    let in scope a = new SomethingSmall[10]
+    let in scope b = new SomethingSmall
+    b.a = x
+    for pA in a
+        pA.a = x
+
+def test_delete_struct_array_in_scope
+    let w0 = heap_bytes_allocated()
+    da_inscope(2)
+    let w1 = heap_bytes_allocated()
+    assert(w0==w1)
+
 [export]
 def test
+    test_delete_struct_array_in_scope()
     test_delete_handle()
     test_delete_handle_array()
     test_delete_struct()

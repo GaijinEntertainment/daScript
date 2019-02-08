@@ -252,7 +252,12 @@ namespace das {
     // let
         virtual void preVisit ( ExprLet * let ) override {
             Visitor::preVisit(let);
-            ss << (let->subexpr ? "let (" : "let ");
+            if ( let->subexpr ) {
+                ss << "let (";
+            } else {
+                ss << "let ";
+                if ( let->inScope ) ss << "in scope ";
+            }
         }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);

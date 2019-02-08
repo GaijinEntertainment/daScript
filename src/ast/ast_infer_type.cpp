@@ -19,6 +19,7 @@ namespace das {
         vector<VariablePtr>     local;
         vector<ExpressionPtr>   loop;
         vector<ExprBlock *>     blocks;
+        vector<ExprBlock *>     scopes;
         vector<size_t>          varStack;
         size_t                  fieldOffset = 0;
         bool                    needRestart = false;
@@ -498,6 +499,7 @@ namespace das {
                 func->copyOnReturn = false;
                 func->moveOnReturn = false;
             }
+            assert(scopes.size()==0);
             assert(blocks.size()==0);
             assert(local.size()==0);
             func.reset();
@@ -915,6 +917,7 @@ namespace das {
                 blocks.push_back(block);
                 block->type = make_shared<TypeDecl>(*block->returnType);
             }
+            scopes.push_back(block);
             pushVarStack();
         }
         virtual void preVisitBlockFinal ( ExprBlock * block ) override {
@@ -963,6 +966,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             popVarStack();
+            scopes.pop_back();
             if ( block->isClosure ) {
                 blocks.pop_back();
             }
@@ -1476,6 +1480,11 @@ namespace das {
                 error("can't have local variable of handled type " + var->type->annotation->name ,
                       var->at, CompilationError::invalid_variable_type);
             verifyType(var->type);
+            if ( expr->inScope && var->type->canDelete() ) {
+                auto scope = scopes.back();
+                auto del = makeDelete(var);
+                scope->finalList.insert(scope->finalList.begin(), del);
+            }
             return Visitor::visitLet(expr,var,last);
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
@@ -1511,6 +1520,10 @@ namespace das {
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
             if ( expr->scoped ) {
                 popVarStack();
+            }
+            if ( expr->inScope ) {
+                expr->inScope = false;
+                reportGenericInfer();
             }
             return Visitor::visit(expr);
         }

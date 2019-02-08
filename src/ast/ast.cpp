@@ -937,6 +937,7 @@ namespace das
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
         cexpr->scoped = scoped;
+        cexpr->inScope = inScope;
         return cexpr;
     }
 
