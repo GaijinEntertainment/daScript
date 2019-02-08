@@ -311,7 +311,7 @@ namespace das {
             auto NT = expr->typeexpr;
             if ( NT->baseType==Type::tHandle ) {
                 newExternal = true;
-            } 
+            }
             if ( newExternal ) {
                 func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             }
