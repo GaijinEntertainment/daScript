@@ -27,7 +27,7 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            Context ctx(&str);
+            Context ctx(str.c_str());
             program->simulate(ctx, tout);
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();

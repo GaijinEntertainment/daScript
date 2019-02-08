@@ -34,8 +34,7 @@ bool unit_test ( const string & fn ) {
             return false;
         } else {
             // tout << *program << "\n";
-            string str2;
-            Context ctx(&str2, 64<<20);
+            Context ctx(str.c_str(), 64<<20);
             program->simulate(ctx, tout);
             // vector of 10000 objects
             vector<Object> objects;

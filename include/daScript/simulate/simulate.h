@@ -98,7 +98,7 @@ namespace das
         friend struct SimNode_TryCatch;
         friend class Program;
     public:
-        Context(const string * lines, uint32_t heapSize = 4*1024*1024);
+        Context(const char * lines, uint32_t heapSize = 4*1024*1024);
         Context(const Context &) = delete;
         Context & operator = (const Context &) = delete;
 
@@ -260,7 +260,7 @@ namespace das
         jmp_buf * throwBuf = nullptr;
 #endif
     public:
-        const string * debugInput = nullptr;
+        const char * debugInput = nullptr;
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;
     public:

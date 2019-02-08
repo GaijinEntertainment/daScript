@@ -91,8 +91,7 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            string str2;
-            Context ctx(&str2);
+            Context ctx(str.c_str());
             program->simulate(ctx, tout);
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
@@ -137,8 +136,7 @@ bool exception_test ( const string & fn ) {
             }
             return false;
         } else {
-            string str2;
-            Context ctx(&str2);
+            Context ctx(str.c_str());
             program->simulate(ctx, tout);
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
