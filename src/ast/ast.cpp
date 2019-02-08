@@ -434,7 +434,7 @@ namespace das
     }
 
     // ExprDelete
-    
+
     ExpressionPtr ExprDelete::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( subexpr ) {
@@ -442,14 +442,14 @@ namespace das
         }
         return vis.visit(this);
     }
-    
+
     ExpressionPtr ExprDelete::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprDelete>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
-    
+
     // ExprNew
 
     ExpressionPtr ExprNew::visit(Visitor & vis) {
@@ -549,7 +549,7 @@ namespace das
         }
         return flg;
     }
-    
+
     uint32_t ExprBlock::getFinallyEvalFlags() const {
         uint32_t flg = 0;
         for ( const auto & ex : finalList ) {

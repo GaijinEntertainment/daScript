@@ -11,7 +11,7 @@ namespace das {
         return t
      */
     FunctionPtr makeConstructor ( Structure * str );
-    
+
     /*
         delete var
      */

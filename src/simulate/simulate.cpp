@@ -54,7 +54,7 @@ namespace das
         WARN_SLOW_CAST(Ptr);
         return cast<char *>::to(eval(context));
     }
-    
+
     vec4f SimNode_DeleteStructPtr::eval ( Context & context ) {
         auto pStruct = (char **) subexpr->evalPtr(context);
         pStruct = pStruct + total - 1;

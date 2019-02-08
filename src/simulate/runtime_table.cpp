@@ -74,9 +74,9 @@ namespace das
     char * TableValuesIterator::getData ( Table * tab ) const {
         return tab->data;
     }
-    
+
     // delete
-    
+
     vec4f SimNode_DeleteTable::eval ( Context & context ) {
         auto pTable = (Table *) subexpr->evalPtr(context);
         pTable = pTable + total - 1;

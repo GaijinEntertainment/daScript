@@ -7,7 +7,7 @@
 #include "daScript/misc/rangetype.h"
 
 namespace das {
-    
+
     // NOTE: parameters here are unreferenced for a reason
     //            the idea is you copy the function defintion, and paste to your code
 #if defined(_MSC_VER)
@@ -17,7 +17,7 @@ namespace das {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #endif
-    
+
     struct DataWalker {
     // we doing what?
         class Context * context = nullptr;
@@ -82,7 +82,7 @@ namespace das {
         virtual void walk_dim ( char * pa, TypeInfo * ti );
         virtual void walk_table ( Table * tab, TypeInfo * info );
     };
-    
+
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #elif defined(__APPLE__)

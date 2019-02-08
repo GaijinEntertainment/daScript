@@ -78,7 +78,7 @@ namespace  das {
         static __forceinline float Mod ( float a, float b, Context & ) { return fmod(a,b); }
         static __forceinline float & SetMod ( float & a, float b, Context & ) { return a = fmod(a,b); }
     };
-    
+
     struct SimPolicy_Double : SimPolicy_Type<double> {
         static __forceinline double Mod ( double a, double b, Context & ) { return fmod(a,b); }
         static __forceinline double & SetMod ( double & a, double b, Context & ) { return a = fmod(a,b); }
