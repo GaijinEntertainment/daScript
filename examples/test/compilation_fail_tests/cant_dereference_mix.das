@@ -9,9 +9,9 @@ struct Foo
 
 def test
     let(a:int)          // can't dereference not a pointer
-        debug(a->)
+        debug(deref(a))
     let(a:void?)        // can't dereference void pointer
-        debug(a->)
+        debug(deref(a))
     let(a:int)
         debug(a ?? 0)   // can't dereference non-pointer
     let(a:void?)

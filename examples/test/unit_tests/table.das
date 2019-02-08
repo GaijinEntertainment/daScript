@@ -25,7 +25,7 @@ def test : bool
         while i < total
             let ( pValue:int? = find(tab,string(i)))
                 if pValue!=null
-                    assert(pValue->==i)
+                    assert(deref(pValue)==i)
                 else
                     assert(i%7==0)
             i ++

@@ -23,7 +23,7 @@ def test
         pa.a = 0
         c.a = 0         // can't get field of some random type      (30503)
         a?.a = 0        // can't safe get field of non-pointer      (30503)
-        pa?.a-> = 0
+        deref(pa?.a) = 0
         c?.a = 0        // can't get field of some random type      (30503)
 
 

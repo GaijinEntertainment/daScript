@@ -95,12 +95,12 @@ def test_new
         debug(b,"before")
         b.position = float3(1.0,2.0,3.0)
         b.radius = 5.0
-        verify_default_ball(debug(b,"ball is")->)
+        verify_default_ball(deref(debug(b,"ball is")))
         let ( qb:Ball; qc:Ball* = b; qd:Ball* = new Ball )
             debug(qc,"qc")
-            qb = qc->
+            qb = deref(qc)
             verify_default_ball(qb)
-            verify_default_ball(qc->)
+            verify_default_ball(deref(qc))
             qc = null
             assert(qc==null,"null")
             assert(qd!=null,"not null")

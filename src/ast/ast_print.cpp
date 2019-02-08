@@ -480,8 +480,12 @@ namespace das {
             return Visitor::visit(field);
         }
     // ptr2ref
+        virtual void preVisit ( ExprPtr2Ref * ptr2ref ) override {
+            Visitor::preVisit(ptr2ref);
+            ss << "deref(";
+        }
         virtual ExpressionPtr visit ( ExprPtr2Ref * ptr2ref ) override {
-            ss << "->";
+            ss << ")";
             return Visitor::visit(ptr2ref);
         }
     // delete
