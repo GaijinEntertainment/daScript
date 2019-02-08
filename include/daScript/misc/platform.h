@@ -42,5 +42,9 @@ __forceinline uint32_t __builtin_clz(uint32_t x) {
 
 #include "daScript/misc/hal.h"
 
-
+#ifndef DAS_ALIGNED_ALLOC
+#define DAS_ALIGNED_ALLOC 1
+inline void *das_aligned_alloc16(uint32_t size) {return (char *)(new vec4f[(size+15)/16]); }
+inline void das_aligned_free16(void *ptr) {return delete[] (vec4f*)ptr; }
+#endif
 

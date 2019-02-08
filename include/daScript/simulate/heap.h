@@ -16,11 +16,11 @@ namespace das {
 
         LinearAllocator(uint32_t size) {
             linearAllocatorSize = size;
-            linearAllocator = linearAllocatorBase = (char *)_mm_malloc(linearAllocatorSize, 16);
+            linearAllocator = linearAllocatorBase = (char*)das_aligned_alloc16(linearAllocatorSize);
         }
 
         ~LinearAllocator() {
-            _mm_free(linearAllocatorBase);
+            das_aligned_free16(linearAllocatorBase);
         }
 
         __forceinline uint32_t bytesAllocated() const {
