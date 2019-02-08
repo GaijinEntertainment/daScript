@@ -942,8 +942,6 @@ namespace das
         context.globalInitStackSize = globalInitStackSize;
         context.simEnd();
         context.restart();
-        context.runInitScript();
-        context.restart();
         if (options.getOption("logMem")) {
             logs << "code  " << context.code.bytesAllocated()       << " of " << context.code.bytesTotal() << "\n";
             logs << "debug " << context.debugInfo.bytesAllocated()  << " of " << context.debugInfo.bytesTotal() << "\n";

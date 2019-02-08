@@ -118,6 +118,7 @@ namespace das
             exception = nullptr;
             stack.reset();
             heap.setWatermark(heapWatermark);
+            runInitScript();
         }
 
         __forceinline vec4f eval ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
