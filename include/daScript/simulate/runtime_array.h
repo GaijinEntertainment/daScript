@@ -184,7 +184,7 @@ namespace das
             return v_zero();
         }
     };
-    
+
     struct SimNode_DeleteArray : SimNode_Delete {
         SimNode_DeleteArray ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t st )
             : SimNode_Delete(a,s,t), stride(st) {}

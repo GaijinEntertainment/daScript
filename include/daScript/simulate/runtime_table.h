@@ -268,7 +268,7 @@ namespace das
         }
         IterType   subexpr;
     };
-    
+
     struct SimNode_DeleteTable : SimNode_Delete {
         SimNode_DeleteTable ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t va )
             : SimNode_Delete(a,s,t), vts_add_kts(va) {}

@@ -1100,7 +1100,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         int32_t     bytes;
     };
-    
+
     struct SimNode_NewArray : SimNode {
         DAS_PTR_NODE;
         SimNode_NewArray ( const LineInfo & a, SimNode * nn, uint32_t sp, uint32_t c )

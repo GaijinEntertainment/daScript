@@ -43,7 +43,7 @@ namespace das {
             assert(watermark >= linearAllocatorBase && watermark < (linearAllocatorBase + linearAllocatorSize));
             linearAllocator = (char *) watermark;
         }
-        
+
         __forceinline void free ( void * oldData, uint32_t oldSize ) {
             oldSize = (oldSize + 0x0f) & ~0x0f;
             if (oldData && (oldData == linearAllocator - oldSize)) {
