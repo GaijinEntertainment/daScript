@@ -203,7 +203,7 @@ namespace das
     }
 
     void ModuleLibrary::addModule ( Module * module ) {
-        assert(module && "module not found?");
+        assert(module && "module not found? or you have forgot to NEED_MODULE(Module_BuiltIn) be called first");
         modules.push_back(module);
     }
 
@@ -269,11 +269,11 @@ namespace das
             if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
                 t->annotation = static_pointer_cast<TypeAnnotation>(handles.back());
             } else {
-                assert(0 && "can't make hanlde type");
+                assert(0 && "can't make handle type");
                 return nullptr;
             }
         } else {
-            assert(0 && "can't make hanlde type");
+            assert(0 && "can't make handle type. You need to explicitly add annotation for it.");
             return nullptr;
         }
         return t;
