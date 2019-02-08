@@ -9,7 +9,7 @@ namespace das
 
     template <typename OT, bool canNewAndDelete = true>
     struct ManagedStructureAnnotation ;
-    
+
     template <typename OT>
     struct ManagedStructureAnnotation<OT,false>  : TypeAnnotation {
         typedef OT ManagedType;
@@ -168,7 +168,7 @@ namespace das
         StructInfo *               sti = nullptr;
         ModuleLibrary *            mlib = nullptr;
     };
-    
+
     template <typename OT>
     struct ManagedStructureAnnotation<OT,true> : ManagedStructureAnnotation<OT,false> {
         typedef OT ManagedType;
