@@ -1351,6 +1351,8 @@ namespace das
             if ( !program->failed() ) {
                 if (program->options.getOption("optimize", true)) {
                     program->optimize(logs);
+                } else {
+                    program->buildAccessFlags(logs);
                 }
                 if (!program->failed())
                     program->verifyAndFoldContracts();

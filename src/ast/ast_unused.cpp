@@ -447,11 +447,15 @@ namespace das {
 
     // program
 
-    bool Program::optimizationUnused(TextWriter & logs) {
+    void Program::buildAccessFlags(TextWriter & logs) {
         markSymbolUse(true);
         // determine function side-effects
         TrackFieldAndAtFlags faf(logs);
         faf.MarkSideEffects(*thisModule);
+    }
+
+    bool Program::optimizationUnused(TextWriter & logs) {
+        buildAccessFlags(logs);
         // remove itselft
         RemoveUnusedLocalVariables context;
         visit(context);
