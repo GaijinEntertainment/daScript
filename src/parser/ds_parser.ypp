@@ -95,7 +95,7 @@
 %token  _RETURN     _NULL       _BREAK      _TRY
 %token  _OPTIONS    _TABLE      _EXPECT     _CONST
 %token  _REQUIRE    _OPERATOR   _ENUM       _FINALLY
-%token  _DELETE     _DEREF      _SCOPE
+%token  _DELETE     _DEREF      _SCOPE      _TYPEDEF
 
 /* basic types */
 %token  _TBOOL       _TVOID       _TSTRING     _TAUTO
@@ -213,6 +213,7 @@ program
     |   program expect_declaration
     |   program require_declaration
 	|	program options_declaration
+    |   program alias_declaration
     ;
 
 character_sequence
@@ -1020,6 +1021,17 @@ enum_list
         }
         delete $name;
         $$ = $pE;
+    }
+    ;
+
+alias_declaration
+    :   _TYPEDEF[loc] NAME[name] '=' type_declaration[tdecl] {
+        $tdecl->alias = *$name;
+        if ( !g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
+            yyerror("type alias is alredy defined "+*$name,tokAt(@loc),
+                CompilationError::type_alias_already_declared);
+        }
+        delete $name;
     }
     ;
 

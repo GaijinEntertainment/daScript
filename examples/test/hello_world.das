@@ -1,10 +1,13 @@
-options log = true, printVarAccess=true, printRef=true, optimize=false
+options log = true // , printVarAccess=true, printRef=true, optimize=false
 
-def ch(a,b:int&)
-    a = b
+typedef point2 = float2
+
+def point2(x,y)
+    return float2(x,y)
 
 [export]
 def test
-    let x,y = 5
-    ch(x,y)
+    let t : point2
+    t = point2(1,2)
+    print("t={t}\n")
     return true

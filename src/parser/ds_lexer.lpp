@@ -167,6 +167,7 @@
 <normal>"enum"                                          need_oxford_comma = false; return _ENUM;
 <normal>"try"                                           need_oxford_comma = false; return _TRY;
 <normal>"catch"                                         need_oxford_comma = false; return _CATCH;
+<normal>"typedef"                                       need_oxford_comma = false; return _TYPEDEF;
 <normal>"options"                                       return _OPTIONS;
 <normal>"operator"                                      return _OPERATOR;
 <normal>"require"                                       return _REQUIRE;

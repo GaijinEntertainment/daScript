@@ -42,6 +42,7 @@ namespace das
     ,   structure_already_has_initializer       =   30207       //  struct Foo x = 5; def Foo() ...
     ,   enumeration_already_declared            =   30208       //  enum A; enumA
     ,   enumeration_value_already_declared      =   30209       //  enum A { x; x }
+    ,   type_alias_already_declared             =   30210       //  typdef A = b; typedef A = ...;
 
     ,   type_not_found                          =   30301       //  a:wtf
     ,   structure_not_found                     =   30302       //  new wtf
@@ -52,6 +53,7 @@ namespace das
     ,   annotation_not_found                    =   30307       //  [wtf] struct or [wtf] function
     ,   enumeration_not_found                   =   30308       //  WTF WTF enum
     ,   enumeration_value_not_found             =   30309       //  enumt WTF
+    ,   type_alias_not_found                    =   30310       //  typedef A =; typedef A =; ...
 
     ,   cant_initialize                         =   30401       //  block type declaration, default values
 

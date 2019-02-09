@@ -1089,6 +1089,10 @@ namespace das
 
     // program
 
+    vector<TypeDeclPtr> Program::findAlias ( const string & name ) const {
+        return library.findAlias(name);
+    }
+
     vector<EnumerationPtr> Program::findEnum ( const string & name ) const {
         return library.findEnum(name);
     }
@@ -1112,6 +1116,10 @@ namespace das
 
     void Program::addModule ( Module * pm ) {
         library.addModule(pm);
+    }
+
+    bool Program::addAlias ( const TypeDeclPtr & at ) {
+        return thisModule->addAlias(at);
     }
 
     bool Program::addVariable ( const VariablePtr & var ) {
@@ -1166,10 +1174,12 @@ namespace das
         auto structs = findStructure(name);
         auto handles = findAnnotation(name);
         auto enums = findEnum(name);
-        if ( ((structs.size()!=0) + (handles.size()!=0)  + (enums.size()!=0)) > 1 ) {
+        auto aliases = findAlias(name);
+        if ( ((structs.size()!=0)+(handles.size()!=0)+(enums.size()!=0)+(aliases.size()!=0)) > 1 ) {
             string candidates = describeCandidates(structs);
             candidates += describeCandidates(handles, false);
             candidates += describeCandidates(enums, false);
+            candidates += describeCandidates(aliases, false);
             error("undefined type "+name + "\n" + candidates,at,CompilationError::type_not_found);
             return nullptr;
         } else if ( structs.size() ) {
@@ -1207,6 +1217,15 @@ namespace das
             } else {
                 string candidates = describeCandidates(enums);
                 error("too many options for "+name + "\n" + candidates,at,CompilationError::enumeration_not_found);
+                return nullptr;
+            }
+        } else if ( aliases.size() ) {
+            if ( aliases.size()==1 ) {
+                auto pTD = new TypeDecl(*aliases.back());
+                return pTD;
+            } else {
+                string candidates = describeCandidates(aliases);
+                error("too many options for "+name + "\n" + candidates,at,CompilationError::type_alias_not_found);
                 return nullptr;
             }
         } else {

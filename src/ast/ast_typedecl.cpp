@@ -201,6 +201,7 @@ namespace das
         flags = decl.flags;
         alias = decl.alias;
         at = decl.at;
+        module = decl.module;
         if ( decl.firstType )
             firstType = make_shared<TypeDecl>(*decl.firstType);
         if ( decl.secondType )

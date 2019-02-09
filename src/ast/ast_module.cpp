@@ -61,6 +61,16 @@ namespace das
         }
     }
 
+    bool Module::addAlias ( const TypeDeclPtr & at ) {
+        if ( at->alias.empty() ) return false;
+        if ( aliasTypes.insert(make_pair(at->alias, move(at))).second ) {
+            at->module = this;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     bool Module::addAnnotation ( const AnnotationPtr & ptr ) {
         if ( handleTypes.insert(make_pair(ptr->name, move(ptr))).second ) {
             ptr->seal(this);
@@ -119,6 +129,11 @@ namespace das
             // assert(0 && "can't add function");
             return false;
         }
+    }
+
+    TypeDeclPtr Module::findAlias ( const string & na ) const {
+        auto it = aliasTypes.find(na);
+        return it != aliasTypes.end() ? it->second : TypeDeclPtr();
     }
 
     VariablePtr Module::findVariable ( const string & na ) const {
@@ -213,6 +228,18 @@ namespace das
             if ( !any && pm->name!=moduleName ) continue;
             if ( !func(pm) ) break;
         }
+    }
+
+    vector<TypeDeclPtr> ModuleLibrary::findAlias ( const string & name ) const {
+        vector<TypeDeclPtr> ptr;
+        string moduleName, aliasName;
+        splitTypeName(name, moduleName, aliasName);
+        foreach([&](Module * pm) -> bool {
+            if ( auto pp = pm->findAlias(aliasName) )
+                ptr.push_back(pp);
+            return true;
+        }, moduleName);
+        return ptr;
     }
 
     vector<AnnotationPtr> ModuleLibrary::findAnnotation ( const string & name ) const {

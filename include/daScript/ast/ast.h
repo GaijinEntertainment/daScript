@@ -124,6 +124,7 @@ namespace das
         };
         string              alias;
         LineInfo            at;
+        Module *            module = nullptr;
     };
 
     template <typename TT> struct ToBasicType;
@@ -1314,12 +1315,14 @@ namespace das
     public:
         Module ( const string & n = "" );
         virtual ~Module();
+        bool addAlias ( const TypeDeclPtr & at );
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addEnumeration ( const EnumerationPtr & st );
         bool addFunction ( const FunctionPtr & fn );
         bool addGeneric ( const FunctionPtr & fn );
         bool addAnnotation ( const AnnotationPtr & ptr );
+        TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
@@ -1335,6 +1338,7 @@ namespace das
             callThis[fnName] = [fnName](const LineInfo & at) { return new TT(at, fnName); };
         }
     public:
+        map<string, TypeDeclPtr>                aliasTypes;
         map<string, AnnotationPtr>              handleTypes;
         map<string, StructurePtr>               structures;
         map<string, EnumerationPtr>             enumerations;
@@ -1375,6 +1379,7 @@ namespace das
         void addBuiltInModule ();
         void addModule ( Module * module );
         void foreach ( function<bool (Module * module)> && func, const string & name ) const;
+        vector<TypeDeclPtr> findAlias ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
         vector<EnumerationPtr> findEnum ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
@@ -1408,9 +1413,11 @@ namespace das
         Program();
         friend TextWriter& operator<< (TextWriter& stream, const Program & program);
         VariablePtr findVariable ( const string & name ) const;
+        vector<TypeDeclPtr> findAlias ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
         vector<EnumerationPtr> findEnum ( const string & name ) const;
+        bool addAlias ( const TypeDeclPtr & at );
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );
         bool addEnumeration ( const EnumerationPtr & st );
