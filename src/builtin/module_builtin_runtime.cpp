@@ -22,10 +22,10 @@ namespace das
             err = "not supported for block";
             return false;
         }
-        virtual bool finalize(ExprBlock *, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(ExprBlock *, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
-        virtual bool finalize(const FunctionPtr &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(const FunctionPtr &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
     };

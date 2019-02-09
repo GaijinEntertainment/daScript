@@ -118,7 +118,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         }
         return true;
     }
-    virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList &, string & err ) override {
+    virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList &, const AnnotationArgumentList &, string & err ) override {
         size_t index = g_esBlockTable.size();
         block->annotationData = (void *)(index | 0xbad00000);
         EsAttributeTable tab;
@@ -134,7 +134,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         func->exports = true;
         return true;
     };
-    virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) override {
+    virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, const AnnotationArgumentList &, string & err ) override {
         EsPassAttributeTable tab;
         if ( auto pp = args.find("pass", Type::tString) ) {
             tab.pass = pp->sValue;

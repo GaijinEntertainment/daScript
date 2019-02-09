@@ -402,9 +402,11 @@ namespace das
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isFunctionAnnotation() const override { return true; }
         virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) = 0;
-        virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) = 0;
+        virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args,
+                               const AnnotationArgumentList & progArgs, string & err ) = 0;
         virtual bool apply ( ExprBlock * block, const AnnotationArgumentList & args, string & err ) = 0;
-        virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList & args, string & err ) = 0;
+        virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList & args,
+                               const AnnotationArgumentList & progArgs, string & err ) = 0;
     };
 
     struct TypeAnnotation : Annotation {
