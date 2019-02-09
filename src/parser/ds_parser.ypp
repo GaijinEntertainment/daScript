@@ -139,6 +139,7 @@
 %type <pVarDecl>        variable_declaration
 %type <pVarDecl>        let_variable_declaration
 %type <s>               name_in_namespace
+%type <s>               annotation_declaration_name
 %type <s>               function_name
 %type <aa>              annotation_argument
 %type <aaList>          annotation_argument_list
@@ -376,15 +377,20 @@ annotation_argument_list
     }
     ;
 
+annotation_declaration_name
+    :   name_in_namespace[name]     { $$ = $name; }
+    |   _REQUIRE                    { $$ = new string("require"); }
+    ;
+
 annotation_declaration
-    :   name_in_namespace[name] {
+    :   annotation_declaration_name[name] {
         $$ = new AnnotationDeclaration();
         if ( auto ann = findAnnotation(*$name,tokAt(@name)) ) {
             $$->annotation = ann->shared_from_this();
         }
         delete $name;
     }
-    |   name_in_namespace[name] '(' annotation_argument_list[argL] ')' {
+    |   annotation_declaration_name[name] '(' annotation_argument_list[argL] ')' {
         $$ = new AnnotationDeclaration();
         if ( auto ann = findAnnotation(*$name,tokAt(@name)) ) {
             $$->annotation = ann->shared_from_this();
@@ -1107,6 +1113,7 @@ basic_type_declaration
     |   _TVOID       { $$ = Type::tVoid; }
     |   _TRANGE      { $$ = Type::tRange; }
     |   _TURANGE     { $$ = Type::tURange; }
+    |   _TDOUBLE     { $$ = Type::tDouble; }
     ;
 
 structure_type_declaration
