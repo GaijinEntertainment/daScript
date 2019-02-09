@@ -356,6 +356,7 @@ expression_while_loop
 
 annotation_argument
     :   NAME[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value); delete $value; }
+    |   NAME[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value); delete $value; }
     |   NAME[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value);  }
     |   NAME[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value));  }
     |   NAME[name] '=' _TRUE                    { $$ = new AnnotationArgument(*$name,true);  }
