@@ -210,6 +210,7 @@ namespace das
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4701)
+#pragma warning(disable:4324)
 #endif
         __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
             char * EP, *SP;
@@ -229,12 +230,55 @@ namespace das
             stack.pop(EP, SP);
             return block_result;
         }
+
+        template <typename Fn>
+        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when) {
+            char * EP, *SP;
+            stack.invoke(block.stackOffset,EP,SP);
+            BlockArguments * ba = nullptr;
+            BlockArguments saveArguments;
+            if ( block.argumentsOffset ) {
+                ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
+                saveArguments = *ba;
+                ba->arguments = args;
+                ba->copyOrMoveResult = (char *) cmres;
+            }
+            when(block.body);
+            if ( ba ) {
+                *ba = saveArguments;
+            }
+            stack.pop(EP,SP);
+            return result;
+        }
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
 
-        vec4f callEx ( SimFunction * fn, vec4f * args, void * cmres, int line, function<void (SimNode *)> && when );
-        vec4f invokeEx ( const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when );
+        template <typename Fn>
+        vec4f callEx(SimFunction * fn, vec4f *args, void * cmres, int line, Fn && when) {
+            // PUSH
+            char * EP, *SP;
+            if(!stack.push(fn->stackSize,EP,SP)) {
+                throw_error("stack overflow");
+                return v_zero();
+            }
+            // fill prologue
+            auto aa = abiArg; auto acm = cmres;
+            abiArg = args;  abiCMRES = cmres;
+    #if DAS_ENABLE_STACK_WALK
+            Prologue * pp           = (Prologue *) stack.sp();
+            pp->arguments           = args;
+            pp->info                = fn->debug;
+            pp->line                = line;
+    #endif
+            // CALL
+            when(fn->code);
+            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            // POP
+            abiArg = aa; abiCMRES = acm;
+            stack.pop(EP,SP);
+            return result;
+        }
 
         __forceinline const char * getException() const {
             return exception;

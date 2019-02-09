@@ -321,58 +321,6 @@ namespace das
         debugInput = lines;
     }
 
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4324)
-#pragma warning(disable:4701)
-#endif
-    vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, function<void (SimNode *)> && when) {
-        char * EP, *SP;
-        stack.invoke(block.stackOffset,EP,SP);
-        BlockArguments * ba = nullptr;
-        BlockArguments saveArguments;
-        if ( block.argumentsOffset ) {
-            ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
-            saveArguments = *ba;
-            ba->arguments = args;
-            ba->copyOrMoveResult = (char *) cmres;
-        }
-        when(block.body);
-        if ( ba ) {
-            *ba = saveArguments;
-        }
-        stack.pop(EP,SP);
-        return result;
-    }
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-
-    vec4f Context::callEx(SimFunction * fn, vec4f *args, void * cmres, int line, function<void (SimNode *)> && when) {
-        // PUSH
-        char * EP, *SP;
-        if(!stack.push(fn->stackSize,EP,SP)) {
-            throw_error("stack overflow");
-            return v_zero();
-        }
-        // fill prologue
-        auto aa = abiArg; auto acm = cmres;
-        abiArg = args;  abiCMRES = cmres;
-#if DAS_ENABLE_STACK_WALK
-        Prologue * pp           = (Prologue *) stack.sp();
-        pp->arguments           = args;
-        pp->info                = fn->debug;
-        pp->line                = line;
-#endif
-        // CALL
-        when(fn->code);
-        stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
-        // POP
-        abiArg = aa; abiCMRES = acm;
-        stack.pop(EP,SP);
-        return result;
-    }
-
     void Context::runInitScript ( void ) {
         char * EP, *SP;
         if(!stack.push(globalInitStackSize,EP,SP)) {
