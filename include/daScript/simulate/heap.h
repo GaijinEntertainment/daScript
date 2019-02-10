@@ -66,7 +66,7 @@ namespace das {
 
         StackAllocator(uint32_t size) {
             stackSize = size;
-            stack = (char*)das_aligned_alloc16(stackSize, 16);
+            stack = (char*)das_aligned_alloc16(stackSize);
             reset();
         }
 
