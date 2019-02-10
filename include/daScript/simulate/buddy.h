@@ -25,7 +25,7 @@ protected:
             assert(used <= capacity);
             return capacity - used;
         }
-        Chunk(uint32_t size):capacity(size), data((char*)das_aligned_alloc16(size)){}
+        Chunk(uint32_t size): data((char*)das_aligned_alloc16(size)), capacity(size) {}
         __forceinline bool belongs(const char *__restrict ptr) const {return uintptr_t(ptr - data) < capacity;}
         __forceinline char *__restrict allocate(uint32_t sz)
         {
