@@ -34,7 +34,11 @@ namespace das {
         bytesTotal += size;
         if ( size < bigAllocationThreshold )
         {
+            #if DAS_DISALLOW_EMPTY_BUDDY
+            return buddy.allocateNonEmpty(size);
+            #else
             return buddy.allocate(size);
+            #endif
         } else {
             char * data = (char *) das_aligned_alloc16(size);
             bigAllocations[data] = size;

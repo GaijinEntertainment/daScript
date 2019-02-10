@@ -2,14 +2,13 @@
 namespace das {
 //todo: make aliased structure. if there is only one chunk (which is common case), we can alias this one Chunk data and array of chunks, and avoid one indirection
 
-#define DAS_DISALLOW_EMPTY_BUDDY 1//comment this line if you want to allow BuddyAllocator to be able to allocate in 'empty' state
-
 class BuddyAllocator
 {
 public:
     void        reset(uint32_t initial_size);
     bool        isHeapPtr ( const char * data ) const;
     char *      allocate ( uint32_t size );
+    char *      allocateNonEmpty ( uint32_t size );//if buddy isn't empty
     bool        free ( char * data, uint32_t size );
     bool        reallocate ( char * data, uint32_t size, uint32_t newSize );
     uint32_t    calcUsed() const;
@@ -108,12 +107,8 @@ inline void BuddyAllocator::allocateChunk(uint32_t size)
     chunks.emplace_back(size);
 }
 
-inline char *BuddyAllocator::allocate ( uint32_t size )
+inline char *BuddyAllocator::allocateNonEmpty ( uint32_t size )
 {
-    #if !DAS_DISALLOW_EMPTY_BUDDY
-    if (!chunks.size())
-         allocateChunk(size < 4096 ? 4096 : size );//4096 is small mem page
-    #endif
     if (chunks.back().getFree() < size)
     {
         assert(chunks.size());
@@ -123,6 +118,13 @@ inline char *BuddyAllocator::allocate ( uint32_t size )
     char *__restrict ret = chunks.back().data + chunks.back().used;
     chunks.back().used += size;
     return ret;
+}
+
+inline char *BuddyAllocator::allocate ( uint32_t size )
+{
+    if (!chunks.size())
+         allocateChunk(size < 4096 ? 4096 : size );//4096 is small mem page
+    return allocateNonEmpty(size);
 }
 
 };//namespace
