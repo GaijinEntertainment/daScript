@@ -7,25 +7,16 @@ using namespace das;
 TextPrinter tout;
 
 void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
-    std::string str;
-    std::ifstream t(fn.c_str());
-    if ( !t.is_open() ) {
-        tout << "can't open\n";
-        return;
-    }
-    t.seekg(0, std::ios::end);
-    str.reserve(t.tellg());
-    t.seekg(0, std::ios::beg);
-    str.assign((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), tout) ) {
+    auto access = make_shared<FileAccess>();
+    if ( auto program = parseDaScript(fn, access, tout) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
-                tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                tout << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr );
             }
         } else {
             if ( outputProgramCode )
                 tout << *program << "\n";
-            Context ctx(str.c_str());
+            Context ctx;
             program->simulate(ctx, tout);
             if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
                 ctx.restart();

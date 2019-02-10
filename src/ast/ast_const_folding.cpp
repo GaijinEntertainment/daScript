@@ -103,7 +103,7 @@ namespace das {
 
     class FoldingVisitor : public OptVisitor {
     public:
-        FoldingVisitor( const ProgramPtr & prog ) : ctx(nullptr) {
+        FoldingVisitor( const ProgramPtr & prog ) {
             program = prog;
         }
     protected:

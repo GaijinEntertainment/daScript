@@ -1,7 +1,5 @@
 #include "daScript/daScript.h"
 
-#include <fstream>
-
 #ifdef _MSC_VER
     #include <io.h>
 #else
@@ -16,24 +14,15 @@ TextPrinter tout;
 
 bool compilation_fail_test ( const string & fn ) {
     tout << fn << " ";
-    std::string str;
-    std::ifstream t(fn.c_str());
-    if ( !t.is_open() ) {
-        tout << "not found\n";
-        return false;
-    }
-    t.seekg(0, std::ios::end);
-    str.reserve(t.tellg());
-    t.seekg(0, std::ios::beg);
-    str.assign((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), tout) ) {
+    auto access = make_shared<FileAccess>();
+    if ( auto program = parseDaScript(fn, access, tout) ) {
         if ( program->failed() ) {
             bool failed = false;
             auto errors = program->expectErrors;
             for ( auto err : program->errors ) {
                 int count = -- errors[err.cerr];
                 if ( g_reportCompilationFailErrors || count<0 ) {
-                    tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                    tout << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr );
                 }
                 if ( count <0 ) {
                     failed = true;
@@ -73,29 +62,20 @@ bool compilation_fail_test ( const string & fn ) {
 
 bool unit_test ( const string & fn ) {
     tout << fn << " ";
-    std::string str;
-    std::ifstream t(fn.c_str());
-    if ( !t.is_open() ) {
-        tout << "not found\n";
-        return false;
-    }
-    t.seekg(0, std::ios::end);
-    str.reserve(t.tellg());
-    t.seekg(0, std::ios::beg);
-    str.assign((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), tout) ) {
+    auto access = make_shared<FileAccess>();
+    if ( auto program = parseDaScript(fn, access, tout) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                tout << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
-            Context ctxBase(str.c_str());
+            Context ctxBase;
             if ( !program->simulate(ctxBase, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
-                    tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                    tout << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr );
                 }
                 return false;
             }
@@ -127,25 +107,16 @@ bool unit_test ( const string & fn ) {
 
 bool exception_test ( const string & fn ) {
     tout << fn << " ";
-    std::string str;
-    std::ifstream t(fn.c_str());
-    if ( !t.is_open() ) {
-        tout << "not found\n";
-        return false;
-    }
-    t.seekg(0, std::ios::end);
-    str.reserve(t.tellg());
-    t.seekg(0, std::ios::beg);
-    str.assign((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(), tout) ) {
+    auto access = make_shared<FileAccess>();
+    if ( auto program = parseDaScript(fn, access, tout) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                tout << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
-            Context ctx(str.c_str());
+            Context ctx;
             program->simulate(ctx, tout);
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
@@ -223,7 +194,7 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/unit_tests/new_delete.das");
+    unit_test(TEST_PATH "examples/test/unit_tests/include.das");
     Module::Shutdown();
     return 0;
 #endif

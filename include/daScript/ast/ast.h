@@ -1329,7 +1329,7 @@ namespace das
         AnnotationPtr findAnnotation ( const string & name ) const;
         EnumerationPtr findEnum ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
-        bool compileBuiltinModule ( unsigned char * str, unsigned int str_len );//will replace last symbol to 0
+        bool compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
         static void Shutdown();
     public:
@@ -1467,17 +1467,18 @@ namespace das
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
         int                         totalFunctions = 0;
-        int                            totalVariables = 0;
+        int                         totalVariables = 0;
         vector<Error>               errors;
         bool                        failToCompile = false;
         uint32_t                    globalInitStackSize = 0;
     public:
         map<CompilationError,int>   expectErrors;
+        shared_ptr<FileAccess>      access;
     public:
-        AnnotationArgumentList        options;
+        AnnotationArgumentList      options;
     };
 
-    ProgramPtr parseDaScript ( const char * script, TextWriter & logs );
+    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs );
 
     // NOTE: parameters here are unreferenced for a reason
     //            the idea is you copy the function defintion, and paste to your code

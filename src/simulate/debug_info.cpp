@@ -194,8 +194,79 @@ namespace das
     }
 
     string LineInfo::describe() const {
-        TextWriter ss;
-        ss << "line " << line << " column " << column;
-        return ss.str();
+        if ( fileInfo ) {
+            TextWriter ss;
+            ss << fileInfo->name << ":" << line << ":" << column;
+            return ss.str();
+        } else {
+            return string();
+        }
+    }
+
+    bool LineInfo::operator < ( const LineInfo & info ) const {
+        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) < 0 ) return true;
+        return (line==info.line) ? column<info.column : line<info.line;
+    }
+    bool LineInfo::operator == ( const LineInfo & info ) const {
+        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) != 0 ) return false;
+        return line==info.line && column==info.column;
+    }
+    bool LineInfo::operator != ( const LineInfo & info ) const {
+        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) != 0 ) return true;
+        return line!=info.line || column!=info.column;
+    }
+
+    FileInfo::~FileInfo() {
+        if ( source && !builtIn ) {
+            das_aligned_free16(source);
+        }
+    }
+
+    FileInfo * FileAccess::setFileInfo ( const string & fileName, char * src, uint32_t srcLen, bool builtIn ) {
+        if ( files.find(fileName)!=files.end() ) return nullptr;
+        auto info = make_unique<FileInfo>();
+        info->sourceLength = srcLen;
+        info->source = src;
+        info->builtIn = builtIn;
+        files[fileName] = move(info);
+        auto ins = files.find(fileName);
+        ins->second->name = (char *) ins->first.c_str();
+        return ins->second.get();
+    }
+
+    FileInfo * FileAccess::getFileInfo ( const string & fileName ) {
+        auto it = files.find(fileName);
+        if ( it != files.end() ) {
+            return it->second.get();
+        }
+        if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
+            fseek(ff,0,SEEK_END);
+            auto sourceLength = uint32_t(ftell(ff));
+            fseek(ff,0,SEEK_SET);
+            auto source = (char *) das_aligned_alloc16(sourceLength+1);
+            fread(source, 1, sourceLength, ff);
+            source[sourceLength] = 0;
+            return setFileInfo(fileName, source, sourceLength);
+        }
+        return nullptr;
+    }
+
+    string FileAccess::getIncludeFileName ( const string & fileName, const string & incFileName ) const {
+        auto np = fileName.find_last_of("\\/");
+        if ( np != string::npos ) {
+            return fileName.substr(0,np+1) + incFileName;
+        } else {
+            return incFileName;
+        }
+    }
+
+    void FileAccess::freeSourceMemory() {
+        for ( auto & it : files ) {
+            auto fi = it.second.get();
+            if ( fi->source && !fi->builtIn ) {
+                das_aligned_free16(fi->source);
+                fi->source = nullptr;
+            }
+        }
     }
 }

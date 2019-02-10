@@ -805,7 +805,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(json_set_b)>(*this,lib,"set",SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(json_set_s)>(*this,lib,"set",SideEffects::modifyExternal);
             // and builtin module
-            compileBuiltinModule(json_das, json_das_len);
+            compileBuiltinModule("json.das",json_das, json_das_len);
         }
     };
 }

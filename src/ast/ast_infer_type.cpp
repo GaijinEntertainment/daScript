@@ -1800,7 +1800,7 @@ namespace das {
                 logs << "PASS " << pass << ":\n" << *this;
                 sort(errors.begin(), errors.end());
                 for (auto & err : errors) {
-                    logs << reportError(nullptr, err.at.line, err.at.column, err.what, err.cerr);
+                    logs << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr);
                 }
             }
             if ( context.finished() )

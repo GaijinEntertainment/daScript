@@ -3,8 +3,6 @@
 using namespace das;
 #include "test_profile.h"
 
-#include <fstream>
-
 #ifdef _MSC_VER
 #include <io.h>
 #else
@@ -15,26 +13,17 @@ using namespace das;
 TextPrinter tout;
 
 bool unit_test ( const string & fn ) {
-    std::string str;
-    std::ifstream t(fn.c_str());
-    if ( !t.is_open() ) {
-        tout << fn << " not found "<<fn<<"\n";
-        return false;
-    }
-    t.seekg(0, std::ios::end);
-    str.reserve(t.tellg());
-    t.seekg(0, std::ios::beg);
-    str.assign((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-    if ( auto program = parseDaScript(str.c_str(),tout) ) {
+    auto access = make_shared<FileAccess>();
+    if ( auto program = parseDaScript(fn,access,tout) ) {
         if ( program->failed() ) {
             tout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {
-                tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                tout << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr );
             }
             return false;
         } else {
             // tout << *program << "\n";
-            Context ctx(str.c_str());
+            Context ctx;
             program->simulate(ctx, tout);
             // vector of 10000 objects
             vector<Object> objects;

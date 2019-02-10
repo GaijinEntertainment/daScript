@@ -166,14 +166,16 @@ namespace das
         return it != callThis.end() ? &it->second : nullptr;
     }
 
-    bool Module::compileBuiltinModule ( unsigned char * str, unsigned int str_len ) {
+    bool Module::compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len ) {
         TextWriter issues;
         str[str_len-1] = 0;//replace last symbol with null terminating. fixme: This is sloppy, and assumes there is something to replace!
-        if (auto program = parseDaScript((const char*)str, issues)) {
+        auto access = make_shared<FileAccess>();
+        access->setFileInfo(name, (char *) str, uint32_t(str_len), true );
+        if (auto program = parseDaScript(name, access, issues)) {
             if (program->failed()) {
 #if 1
                 for (auto & err : program->errors) {
-                    issues << reportError((const char*)str, err.at.line, err.at.column, err.what, err.cerr);
+                    issues << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr);
                 }
                 printf("%s\n", issues.str().c_str());
 #endif

@@ -34,6 +34,7 @@
     int c_style_depth = 0;
     bool need_oxford_comma = true;
     bool in_normal = false;
+    vector<int> line_no;
     
     #define YY_USER_ACTION \
         yylloc.first_line = yylloc.last_line = yylineno; \
@@ -53,6 +54,7 @@
 %x indent
 %x strb
 %x c_comment
+%x include
 %s normal
 
 %%
@@ -74,7 +76,6 @@
 }
 <c_comment>.                        /* skipping comment body */
 <c_comment>[\r\n]                   /* skipping comment eol */
-
 <strb>\"                {
     // assert(nested_sb==0);
     BEGIN(normal);
@@ -142,17 +143,43 @@
     }
 }
 <indent><<EOF>>         {
-    if ( indent_level ) {
-        indent_level--;
-        unput('\r');
-        #ifdef FLEX_DEBUG
-        cout << "emit }\n";
-        #endif
-        return '}';
+    if ( g_AccessStack.size()==1 ) {
+        if ( indent_level ) {
+            indent_level--;
+            unput('\r');
+            #ifdef FLEX_DEBUG
+            cout << "emit }\n";
+            #endif
+            return '}';
+        } else {
+            return 0;
+        }
     } else {
-        return 0;
+        yypop_buffer_state();
+        g_AccessStack.pop_back();
+        yylineno = line_no.back();
+        line_no.pop_back();
     }
 }
+
+<include>[ \t]*                        /* eat the whitespace */
+<include>[^ \t\r\n]+                { /* got the include file name */
+    auto cfi = g_AccessStack.back();
+    string incFileName = g_Program->access->getIncludeFileName(cfi->name,yytext);
+    FileInfo * info = g_Program->access->getFileInfo(incFileName);
+    if ( !info ) {
+        yyerror("can't open "+incFileName);
+    } else {
+        g_AccessStack.push_back(info);
+        line_no.push_back(yylineno);
+        yylineno = 1;
+        yypush_buffer_state(YY_CURRENT_BUFFER);
+        yy_scan_bytes(info->source, info->sourceLength);
+    }
+    BEGIN(normal);
+}
+
+<normal>"include"                                       BEGIN(include);
 <normal>"for"                                           need_oxford_comma = false; return _FOR;
 <normal>"while"                                         need_oxford_comma = false; return _WHILE;
 <normal>"if"                                            need_oxford_comma = false; return _IF;
@@ -315,10 +342,10 @@
 
 extern int yydebug;
 
-void yybegin(const char * str)
-{
+void yybegin(const char * str) {
     yydebug = 0;
     yylineno = 1;
+    line_no.clear();
     yycolumn = 1;
     current_line_indent = 0;
     indent_level = 0;
@@ -327,7 +354,8 @@ void yybegin(const char * str)
     nested_sb = 0;
     need_oxford_comma = true;
     c_style_depth = 0;
-    
     BEGIN(normal);
     yy_scan_string(str);
 }
+
+

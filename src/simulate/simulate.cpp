@@ -109,7 +109,7 @@ namespace das
             string error_message = "assert failed";
             if ( message )
                 error_message = error_message + ", " + message;
-            string error = reportError(context.debugInput, debug.line, debug.column, error_message );
+            string error = reportError(debug.fileInfo->source, debug.fileInfo->name, debug.line, debug.column, error_message );
             error = context.getStackWalk(false) + error;
             context.to_err(error.c_str());
             context.throw_error("assert failed");
@@ -312,14 +312,12 @@ namespace das
 
     // Context
 
-    Context::Context(const char * lines) : stack(16*1024) {
-        debugInput = lines;
+    Context::Context() : stack(16*1024) {
         code = make_shared<NodeAllocator>();
         debugInfo = make_shared<NodeAllocator>();
     }
 
     Context::Context(const Context & ctx) : stack(16*1024) {
-        debugInput = ctx.debugInput;
         code = ctx.code;
         debugInfo = ctx.debugInfo;
         thisProgram = ctx.thisProgram;

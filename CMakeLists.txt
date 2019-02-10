@@ -202,30 +202,35 @@ SETUP_CPP11(daScript)
 
 file(GLOB UNIT_TEST_SRC
 "examples/test/unit_tests/*.das"
+"examples/test/unit_tests/*.inc"
 )
 list(SORT UNIT_TEST_SRC)
 SOURCE_GROUP_FILES("examples/test/unit" UNIT_TEST_SRC)
 
 file(GLOB COMPILATION_FAIL_TEST_SRC
 "examples/test/compilation_fail_tests/*.das"
+"examples/test/compilation_fail_tests/*.inc"
 )
 list(SORT COMPILATION_FAIL_TEST_SRC)
 SOURCE_GROUP_FILES("examples/test/compilation fail" COMPILATION_FAIL_TEST_SRC)
 
 file(GLOB OPTIMIZATION_SRC
 "examples/test/optimizations/*.das"
+"examples/test/optimizations/*.inc"
 )
 list(SORT OPTIMIZATION_SRC)
 SOURCE_GROUP_FILES("examples/test/optimizations" OPTIMIZATION_SRC)
 
 file(GLOB RUNTIME_ERRORS_SRC
 "examples/test/runtime_errors/*.das"
+"examples/test/runtime_errors/*.inc"
 )
 list(SORT RUNTIME_ERRORS_SRC)
 SOURCE_GROUP_FILES("examples/test/runtime_errors" RUNTIME_ERRORS_SRC)
 
 file(GLOB MIX_TEST_SRC
 "examples/test/*.das"
+"examples/test/*.inc"
 )
 list(SORT MIX_TEST_SRC)
 SOURCE_GROUP_FILES("examples/test/mix" MIX_TEST_SRC)
@@ -250,6 +255,7 @@ SETUP_CPP11(daScriptTest)
 
 file(GLOB PROFILE_SRC
 "examples/profile/tests/*.das"
+"examples/profile/tests/*.inc"
 )
 list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)

@@ -98,7 +98,7 @@ namespace das
         friend struct SimNode_TryCatch;
         friend class Program;
     public:
-        Context(const char * lines);
+        Context();
         Context(const Context &);
         Context & operator = (const Context &) = delete;
         ~Context();
@@ -305,9 +305,9 @@ namespace das
         int totalVariables = 0;
         int totalFunctions = 0;
     public:
-        const char * debugInput = nullptr;
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;
+        FileAccessPtr access;
     public:
         uint32_t stopFlags = 0;
         vec4f result;
@@ -1185,8 +1185,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         };
     };
 
-    struct SimNode_Zero : SimNode {
-        SimNode_Zero(const LineInfo & at) : SimNode(at) { }
+    struct SimNode_Zero : SimNode_CallBase {
+        SimNode_Zero(const LineInfo & at) : SimNode_CallBase(at) { }
         virtual vec4f eval ( Context & ) override {
             return v_zero();
         }

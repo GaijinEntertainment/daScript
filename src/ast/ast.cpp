@@ -1354,11 +1354,19 @@ namespace das
     // PARSER
 
     ProgramPtr g_Program;
+    vector<FileInfo *>  g_AccessStack;
 
-    ProgramPtr parseDaScript ( const char * script, TextWriter & logs ) {
+    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs ) {
         int err;
         auto program = g_Program = make_shared<Program>();
-        yybegin(script);
+        program->access = access;
+        g_AccessStack.clear();
+        if ( auto fi = g_Program->access->getFileInfo(fileName) ) {
+            g_AccessStack.push_back(fi);
+            yybegin(fi->source);
+        } else {
+            g_Program->error(fileName + " not found", LineInfo());
+        }
         err = yyparse();        // TODO: add mutex or make thread safe?
         yylex_destroy();
         g_Program.reset();

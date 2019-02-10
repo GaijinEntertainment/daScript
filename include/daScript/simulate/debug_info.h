@@ -47,13 +47,39 @@ namespace das
         string      name;
     };
 
+    struct FileInfo {
+        char *          name = nullptr;
+        char *          source = nullptr;
+        uint32_t        sourceLength = 0;
+        union {
+            struct {
+                bool    builtIn : 1;
+            };
+            uint32_t    flags = 0;
+        };
+        ~FileInfo();
+    };
+
+    class FileAccess {
+    public:
+        virtual ~FileAccess() {}
+        virtual FileInfo * getFileInfo ( const string & fileName );
+        FileInfo * setFileInfo ( const string & fileName, char * src, uint32_t srcLen, bool builtIn = false );
+        virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
+        void freeSourceMemory();
+    protected:
+        map<string, unique_ptr<FileInfo>>   files;
+    };
+    typedef shared_ptr<FileAccess> FileAccessPtr;
+
     struct LineInfo {
         LineInfo() = default;
-        LineInfo(int c, int l) : column(uint32_t(c)), line(uint32_t(l)) {}
-        __forceinline bool operator < ( const LineInfo & info ) const { return (line==info.line) ? column<info.column : line<info.line; }
-        __forceinline bool operator == ( const LineInfo & info ) const { return line==info.line && column==info.column; }
-        __forceinline bool operator != ( const LineInfo & info ) const { return line!=info.line || column!=info.column; }
+        LineInfo(FileInfo * fi, int c, int l) : fileInfo(fi), column(uint32_t(c)), line(uint32_t(l)) {}
+        bool operator < ( const LineInfo & info ) const;
+        bool operator == ( const LineInfo & info ) const;
+        bool operator != ( const LineInfo & info ) const;
         string describe() const;
+        FileInfo *  fileInfo;
         uint32_t    column = 0, line = 0;
     };
 

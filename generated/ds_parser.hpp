@@ -48,7 +48,10 @@ extern int yydebug;
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
     
-    namespace das { extern ProgramPtr g_Program; }
+    namespace das {
+        extern ProgramPtr           g_Program;
+        extern vector<FileInfo *>   g_AccessStack;
+    }
     using namespace das;
     
     struct VariableDeclaration {
@@ -70,7 +73,7 @@ extern int yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 74 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 77 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 
 /* Token type.  */
 #ifndef YYTOKENTYPE
@@ -181,7 +184,7 @@ extern int yydebug;
 
 union YYSTYPE
 {
-#line 51 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 54 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
 
     char                            ch;
     bool                            b;
@@ -205,7 +208,7 @@ union YYSTYPE
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
 
-#line 209 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 212 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 };
 
 typedef union YYSTYPE YYSTYPE;

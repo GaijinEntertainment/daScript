@@ -2,7 +2,10 @@
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
     
-    namespace das { extern ProgramPtr g_Program; }
+    namespace das {
+        extern ProgramPtr           g_Program;
+        extern vector<FileInfo *>   g_AccessStack;
+    }
     using namespace das;
     
     struct VariableDeclaration {
@@ -427,7 +430,7 @@ optional_function_argument_list
 optional_function_type
     :   {
         $$ = new TypeDecl(Type::autoinfer);
-        $$->at = LineInfo(yylloc.first_column,yylloc.first_line);
+        $$->at = LineInfo(g_AccessStack.back(), yylloc.first_column,yylloc.first_line);
     }
     |   ':' type_declaration[typeDecl]  {
         $$ = $typeDecl;
@@ -1293,7 +1296,7 @@ void yyerror(const string & error, const LineInfo & at, CompilationError cerr) {
 }
 
 void yyerror(const string & error, CompilationError cerr) {
-    g_Program->error(error,LineInfo(yylloc.first_column,yylloc.first_line),cerr);
+    g_Program->error(error,LineInfo(g_AccessStack.back(),yylloc.first_column,yylloc.first_line),cerr);
 }
 
 vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
@@ -1328,7 +1331,7 @@ void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
 }
 
 LineInfo tokAt ( const struct YYLTYPE & li ) {
-    return LineInfo(li.first_column,li.first_line);
+    return LineInfo(g_AccessStack.back(), li.first_column,li.first_line);
 }
 
 Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
