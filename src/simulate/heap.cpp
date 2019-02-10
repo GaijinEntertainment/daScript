@@ -171,9 +171,7 @@ namespace das {
     bool HeapAllocator::isHeapPtr(const char *data) const {
         if ( !isFastHeapPtr(data) ) {
             for ( auto & it : bigAllocations ) {
-                auto from = it.first;
-                auto to = from + it.second;
-                if ( data >= from && data < to ) {
+                if ( uintptr_t(data - it.first) < uintptr_t(it.second) ) {
                     return true;
                 }
             }
