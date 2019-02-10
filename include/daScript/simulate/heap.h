@@ -1,5 +1,7 @@
 #pragma once
 
+#include "buddy.h"
+
 namespace das {
 
     struct StringHeader {
@@ -7,26 +9,6 @@ namespace das {
         uint32_t    length;
     };
     static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
-
-    class BuddyAllocator {
-    public:
-        BuddyAllocator ( BuddyAllocator * j, uint32_t size );
-        ~BuddyAllocator ();
-        bool        isHeapPtr ( const char * data ) const;
-        char *      allocate ( uint32_t size );
-        bool        free ( char * data, uint32_t size );
-        bool        reallocate ( char * data, uint32_t size, uint32_t newSize );
-        uint32_t    bytesFree() const;
-        uint32_t    bytesTotal() const { return linearAllocatorSize; }
-        int         depth() const;
-    protected:
-        BuddyAllocator * junior = nullptr;
-        uint32_t    juniorBytes = 0;
-        uint32_t    linearAllocatorSize = 0;
-        char *      linearAllocator = nullptr;
-        char *      linearAllocatorBase = nullptr;
-        char *      linearAllocatorEnd = nullptr;
-    };
 
     class HeapAllocator {
     public:
@@ -42,7 +24,6 @@ namespace das {
         char * reallocate ( char * data, uint32_t size, uint32_t newSize );
         void reset();
         uint32_t bytesAllocated() const { return bytesTotal; }
-        uint32_t buddyHighWatermark() const { return bytesBuddyMaximum; }
         char * allocateName ( const string & name );
         char * allocateString ( const char * text, uint32_t length );
         __forceinline char * allocateString ( const string & str ) {
@@ -50,13 +31,10 @@ namespace das {
         }
         int depth() const;
     protected:
+        BuddyAllocator          buddy;
         map<char *,uint32_t>    bigAllocations;
         uint32_t                bigAllocationThreshold = 64*1024;
-        uint32_t                initialBuddySize = 16*1024;
-        BuddyAllocator *        buddy = nullptr;
         uint32_t                bytesTotal = 0;
-        uint32_t                bytesBuddyTotal = 0;
-        uint32_t                bytesBuddyMaximum = 0;
     };
 
     class StackAllocator {

@@ -4,84 +4,12 @@
 #include "daScript/simulate/heap.h"
 
 namespace das {
-
-    BuddyAllocator::BuddyAllocator ( BuddyAllocator * j, uint32_t size ) {
-        linearAllocatorSize = size;
-        linearAllocator = linearAllocatorBase = (char*)das_aligned_alloc16(linearAllocatorSize);
-        linearAllocatorEnd = linearAllocatorBase + linearAllocatorSize;
-        junior = j;
-        if ( junior ) juniorBytes = junior->bytesFree();
-    }
-
-    BuddyAllocator::~BuddyAllocator () {
-        das_aligned_free16(linearAllocatorBase);
-        if ( junior ) delete junior;
-    }
-
-    int BuddyAllocator::depth() const {
-        return junior ? junior->depth()+1 : 1;
-    }
-
-    uint32_t BuddyAllocator::bytesFree() const {
-        uint32_t bf = uint32_t(linearAllocatorSize - (linearAllocator - linearAllocatorBase));
-        if ( junior ) bf += junior->bytesFree();
-        return bf;
-    }
-
-    bool BuddyAllocator::isHeapPtr ( const char * data ) const {
-        if ( data >= linearAllocatorBase && data < linearAllocatorEnd ) {
-            return true;
-        }
-        return junior ? junior->isHeapPtr(data) : false;
-    }
-
-    char * BuddyAllocator::allocate ( uint32_t size ) {
-        if ( junior && juniorBytes >= size ) {
-            if ( char * res = junior->allocate(size) ) {
-                juniorBytes -= size;
-                assert ( juniorBytes == junior->bytesFree() );
-                return res;
-            }
-        }
-        if ( linearAllocator + size <= linearAllocatorEnd ) {
-            char * res = linearAllocator;
-            linearAllocator += size;
-            return res;
-        }
-        return nullptr;
-    }
-
-    bool BuddyAllocator::reallocate ( char * data, uint32_t size, uint32_t newSize ) {
-        if ( data >= linearAllocatorBase && data < linearAllocatorEnd ) {
-            if ( data == linearAllocator - size ) {
-                if ( data + newSize <= linearAllocatorEnd ) {
-                    linearAllocator = data + newSize;
-                    return true;
-                }
-            }
-            return false;
-        }
-        if ( junior && junior->reallocate(data,size,newSize) ) {
-            juniorBytes = juniorBytes - size + newSize;
-            assert ( juniorBytes == junior->bytesFree() );
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    bool BuddyAllocator::free ( char * data, uint32_t size ) {
-        if ( data >= linearAllocatorBase && data < linearAllocatorEnd ) {
-            if ( data == linearAllocator - size ) {
-                linearAllocator = data;
-                return true;
-            }
-            return false;
-        }
-        return junior ? junior->free(data,size) : false;
-    }
+    static const uint32_t min_page_size = 4096;
 
     HeapAllocator::HeapAllocator() {
+      #if DAS_DISALLOW_EMPTY_BUDDY
+        buddy.reset(min_page_size);
+      #endif
     }
 
     HeapAllocator::~HeapAllocator() {
@@ -94,31 +22,23 @@ namespace das {
             das_aligned_free16( ptr );
         }
         bigAllocations.clear();
-        if ( buddy ) {
-            delete buddy;
-            buddy = nullptr;
-        }
+        uint32_t initialBuddySize = buddy.getInitialSize();
+        initialBuddySize = initialBuddySize < min_page_size ? min_page_size : initialBuddySize;//small mem page
+        const uint32_t bytesBuddyMaximum = buddy.calcUsed();
+        buddy.reset(bytesBuddyMaximum ? initialBuddySize * (bytesBuddyMaximum + initialBuddySize-1)/initialBuddySize : 0);
         bytesTotal = 0;
-        bytesBuddyTotal = 0;
-        initialBuddySize = max(initialBuddySize, bytesBuddyMaximum);
     }
 
     char * HeapAllocator::allocate ( uint32_t size ) {
         size = (size + 0x0f) & ~0x0f;
         bytesTotal += size;
-        if ( size >= bigAllocationThreshold ) {
+        if ( size < bigAllocationThreshold )
+        {
+            return buddy.allocate(size);
+        } else {
             char * data = (char *) das_aligned_alloc16(size);
             bigAllocations[data] = size;
             return data;
-        } else {
-            bytesBuddyTotal += size;
-            bytesBuddyMaximum = max(bytesBuddyMaximum, bytesBuddyTotal);
-            for ( ;; ) {
-                char * res = buddy ? buddy->allocate(size) : nullptr;
-                if ( res ) return res;
-                uint32_t newBuddySize = buddy ? buddy->bytesTotal()*2 : initialBuddySize;
-                buddy = new BuddyAllocator(buddy, newBuddySize);
-            }
         }
     }
 
@@ -133,9 +53,8 @@ namespace das {
                 return false;
             }
         } else {
-            if ( buddy && buddy->free(data,size) ) {
+            if ( buddy.free(data, size) ) {
                 bytesTotal -= size;
-                bytesBuddyTotal -= size;
                 return true;
             } else {
                 return false;
@@ -151,11 +70,8 @@ namespace das {
         bytesTotal = bytesTotal - size + newSize;
         // if both are small, and we can actually reallocate
         if ( size < bigAllocationThreshold && newSize < bigAllocationThreshold ) {
-            if ( buddy && buddy->reallocate(data, size, newSize) ) {
-                bytesBuddyTotal = bytesBuddyTotal - size + newSize;
-                bytesBuddyMaximum = max(bytesBuddyMaximum, bytesBuddyTotal);
+            if ( buddy.reallocate(data, size, newSize) )
                 return data;
-            }
         }
         // slow path
         char * newData = allocate(newSize);
@@ -165,7 +81,7 @@ namespace das {
     }
 
     bool HeapAllocator::isFastHeapPtr(const char *data) const {
-        return  buddy && buddy->isHeapPtr(data);
+        return  buddy.isHeapPtr(data);
     }
 
     bool HeapAllocator::isHeapPtr(const char *data) const {
@@ -209,10 +125,7 @@ namespace das {
     }
 
     void HeapAllocator::setInitialSize ( uint32_t size ) {
-        initialBuddySize = size;
-    }
-
-    int HeapAllocator::depth() const {
-        return buddy ? buddy->depth() : 0;
+        if (!buddy.calcUsed())
+            buddy.reset(size);
     }
 }

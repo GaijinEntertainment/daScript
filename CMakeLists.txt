@@ -125,6 +125,7 @@ src/simulate/simulate.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h
+include/daScript/simulate/buddy.h
 src/simulate/heap.cpp
 include/daScript/simulate/debug_info.h
 include/daScript/simulate/interop.h

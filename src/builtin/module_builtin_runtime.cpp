@@ -97,17 +97,9 @@ namespace das
         auto uhash = hash_value(context, args[0], call->types[0]);
         return cast<uint32_t>::from(uhash);
     }
-    
+
     uint32_t heap_bytes_allocated ( Context * context ) {
         return context->heap.bytesAllocated();
-    }
-
-    int32_t heap_high_watermark ( Context * context ) {
-        return (int32_t) context->heap.buddyHighWatermark();
-    }
-
-    int32_t heap_depth ( Context * context ) {
-        return (int32_t) context->heap.depth();
     }
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
@@ -123,8 +115,6 @@ namespace das
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal);
         // heap
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated", SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(heap_high_watermark)>(*this, lib, "heap_high_watermark", SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth", SideEffects::modifyExternal);
         // function-like expresions
         addCall<ExprAssert>         ("assert");
         addCall<ExprStaticAssert>   ("static_assert");
