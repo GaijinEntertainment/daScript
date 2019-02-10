@@ -284,7 +284,7 @@ namespace das
         }
 
     public:
-        LinearAllocator     heap;
+        HeapAllocator       heap;
         char *              globals = nullptr;
         NodeAllocator       code;
         NodeAllocator       debugInfo;

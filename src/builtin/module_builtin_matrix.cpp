@@ -41,7 +41,6 @@ namespace das {
         }
     public:
         MatrixAnnotation() : TypeAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC) ), helpA(debugInfo) {
-            debugInfo.allocateMem(256);
             matrixTypeInfo = debugInfo.makeNode<TypeInfo>();
             auto bt = ToBasicType<VecT>::type;
             auto tt = make_shared<TypeDecl>(Type(bt));

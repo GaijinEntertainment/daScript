@@ -50,7 +50,7 @@ namespace das
     }
 
     __forceinline uint32_t stringLength ( Context & ctx, const char * str ) {//should be non-null
-        if ( ctx.heap.isHeapPtr(str) ) {
+        if ( ctx.heap.isFastHeapPtr(str) ) {
             auto header = (StringHeader *) ( str - sizeof(StringHeader) );
             return header->length;
         } else {

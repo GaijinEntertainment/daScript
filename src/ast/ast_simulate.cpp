@@ -943,9 +943,9 @@ namespace das
         context.runInitScript();
         context.restart();
         if (options.getOption("logMem")) {
-            logs << "code  " << context.code.bytesAllocated()       << " of " << context.code.bytesTotal() << "\n";
-            logs << "debug " << context.debugInfo.bytesAllocated()  << " of " << context.debugInfo.bytesTotal() << "\n";
-            logs << "heap  " << context.heap.bytesAllocated()       << " of " << context.heap.bytesTotal() << "\n";
+            logs << "code  " << context.code.bytesAllocated()       << " of " << context.code.bytesAllocated() << "\n";
+            logs << "debug " << context.debugInfo.bytesAllocated()  << " of " << context.debugInfo.bytesAllocated() << "\n";
+            logs << "heap  " << context.heap.bytesAllocated()       << " of " << context.heap.bytesAllocated() << "\n";
         }
         return errors.size() == 0;
     }

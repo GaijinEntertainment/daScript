@@ -16,7 +16,7 @@ namespace das {
         char * allocate (int l);
         virtual void output() {}
     protected:
-        LinearAllocator * heap = nullptr;
+        HeapAllocator * heap = nullptr;
         char *  data = nullptr;
         int     dataSize = 0;
         int     dataCapacity = 0;
@@ -24,7 +24,7 @@ namespace das {
 
     class StringBuilderWriter : public StringWriter<HeapWriterPolicy> {
     public:
-        StringBuilderWriter(LinearAllocator & h) { heap = &h; }
+        StringBuilderWriter(HeapAllocator & h) { heap = &h; }
     };
 
     template <typename Writer>

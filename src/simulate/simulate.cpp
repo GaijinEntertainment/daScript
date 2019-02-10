@@ -312,12 +312,8 @@ namespace das
 
     // Context
 
-    Context::Context(const char * lines, uint32_t heapSize) : stack(16*1024)
-    {
-        heap.allocateMem(heapSize);
-        code.allocateMem(64*1024);
-        debugInfo.allocateMem(64*1024);
-
+    Context::Context(const char * lines, uint32_t heapSize)
+        : stack(16*1024) {
         debugInput = lines;
     }
 

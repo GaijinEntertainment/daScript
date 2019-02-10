@@ -28,7 +28,6 @@ namespace das
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml )
             : TypeAnnotation(n), helpA(debugInfo), mlib(&ml) {}
         virtual void seal( Module * m ) override {
-            debugInfo.allocateMem(2048);
             TypeAnnotation::seal(m);
             mlib = nullptr;
         }

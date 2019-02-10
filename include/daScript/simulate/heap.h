@@ -8,123 +8,45 @@ namespace das {
     };
     static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
 
-    class LinearAllocator {
+    class BuddyAllocator {
     public:
-        LinearAllocator() = default;
-        LinearAllocator(const LinearAllocator &) = delete;
-        LinearAllocator & operator = (const LinearAllocator &) = delete;
-
-        ~LinearAllocator() {
-            freeMem();
-        }
-
-        void allocateMem ( uint32_t size ) {
-            freeMem();
-            if ( size ) {
-                linearAllocatorSize = size;
-                linearAllocator = linearAllocatorBase = (char*)das_aligned_alloc16(linearAllocatorSize);
-            }
-        }
-
-        void freeMem () {
-            if ( linearAllocatorBase ) {
-                das_aligned_free16(linearAllocatorBase);
-                linearAllocatorBase = linearAllocator = nullptr;
-                linearAllocatorSize = 0;
-            }
-        }
-
-        __forceinline uint32_t bytesAllocated() const {
-            return uint32_t(linearAllocator - linearAllocatorBase);
-        }
-
-        __forceinline uint32_t bytesTotal() const {
-            return linearAllocatorSize;
-        }
-
-        __forceinline void reset() {
-            linearAllocator = linearAllocatorBase;
-        }
-
-        __forceinline void free ( void * oldData, uint32_t oldSize ) {
-            oldSize = (oldSize + 0x0f) & ~0x0f;
-            if (oldData && (oldData == linearAllocator - oldSize)) {
-                linearAllocator = (char *) oldData;
-            }
-        }
-
-        __forceinline void * reallocate(void * oldData, uint32_t oldSize, uint32_t size) {
-            if (size <= oldSize) return oldData;
-            size = (size + 0x0f) & ~0x0f;
-            oldSize = (oldSize + 0x0f) & ~0x0f;
-            if (oldData && (oldData == linearAllocator - oldSize)) {
-                auto extra = size - oldSize;
-                if (linearAllocator - linearAllocatorBase + extra > linearAllocatorSize) {
-                    return nullptr;
-                }
-                linearAllocator += extra;
-                return oldData;
-            }
-            else {
-                return allocate(size);
-            }
-        }
-
-        __forceinline void * allocate(uint32_t size) {
-            size = (size + 0x0f) & ~0x0f;
-            if (linearAllocator - linearAllocatorBase + size > linearAllocatorSize) {
-                return nullptr;
-            }
-            auto res = linearAllocator;
-            linearAllocator += size;
-            return res;
-        }
-
-        __forceinline char * allocateName(const string & name) {
-            if (!name.empty()) {
-                auto size = uint32_t(name.length() + 1);
-                if (auto str = (char *)allocate(size)) {
-                    memcpy(str, name.c_str(), size);
-                    return str;
-                }
-            }
-            return nullptr;
-        }
-
-        __forceinline char * allocateString ( const char * text, uint32_t length ) {
-            if ( length==0 ) {
-                return nullptr;
-            } else if ( char * str = (char *) allocate(1+length+sizeof(StringHeader)) ) {
-                auto header = (StringHeader *) str;
-                header->hash = 0;
-                header->length = length;
-                auto stxt = str + sizeof(StringHeader);
-                if ( text ) {
-                    memcpy ( stxt, text, length );
-                }
-                stxt[length] = 0;
-                return stxt;
-            } else {
-                return nullptr;
-            }
-        }
-
-        __forceinline char * allocateString ( const string & str ) {
-            return allocateString ( str.c_str(), uint32_t(str.length()) );
-        }
-
-        __forceinline bool isHeapPtr ( const char * ptr ) const {
-            return uintptr_t(ptr - linearAllocatorBase) < uintptr_t(linearAllocatorSize);
-        }
-
-        __forceinline char * base () const {
-            return linearAllocatorBase;
-        }
-
+        BuddyAllocator ( BuddyAllocator * j, uint32_t size );
+        ~BuddyAllocator ();
+        bool        isHeapPtr ( const char * data ) const;
+        char *      allocate ( uint32_t size );
+        bool        free ( char * data, uint32_t size );
+        bool        reallocate ( char * data, uint32_t size, uint32_t newSize );
+        uint32_t    bytesFree() const;
     protected:
+        BuddyAllocator * junior = nullptr;
+        uint32_t    juniorBytes = 0;
         uint32_t    linearAllocatorSize = 0;
         char *      linearAllocator = nullptr;
         char *      linearAllocatorBase = nullptr;
+        char *      linearAllocatorEnd = nullptr;
+    };
+
+    class HeapAllocator {
+    public:
+        HeapAllocator();
+        ~HeapAllocator();
+        bool isHeapPtr ( const char * data ) const;
+        bool isFastHeapPtr ( const char * data ) const;
+        char * allocate ( uint32_t size );
+        bool free ( char * data, uint32_t size );
+        char * reallocate ( char * data, uint32_t size, uint32_t newSize );
+        void reset();
+        uint32_t bytesAllocated() const;
+        char * allocateName ( const string & name );
+        char * allocateString ( const char * text, uint32_t length );
+        __forceinline char * allocateString ( const string & str ) {
+            return allocateString ( str.c_str(), uint32_t(str.length()) );
+        }
+    protected:
+        map<char *,uint32_t>    bigAllocations;
+        uint32_t                bigAllocationThreshold = 64*1024;
+        BuddyAllocator *        buddy = nullptr;
+        uint32_t    bytesTotal = 0;
     };
 
     class StackAllocator {
@@ -197,14 +119,13 @@ namespace das {
             return stack + stackSize;
         }
     protected:
-        char *        stack = nullptr;
-        char *        evalTop = nullptr;
-        char *        stackTop = nullptr;
+        char *      stack = nullptr;
+        char *      evalTop = nullptr;
+        char *      stackTop = nullptr;
         uint32_t    stackSize;
     };
 
-
-    class NodeAllocator : public LinearAllocator {
+    class NodeAllocator : public HeapAllocator {
     public:
         NodeAllocator() = default;
 
