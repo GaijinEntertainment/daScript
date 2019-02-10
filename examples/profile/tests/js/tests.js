@@ -133,7 +133,7 @@ function fibI(n) {
 // infrastructure
 
 function timeStamp() {
-    if (Duktape != null)
+    if (typeof Duktape == 'object')
         return Date.now();
 	var timeStampInMs = 
 		window.performance && 
@@ -158,7 +158,7 @@ function profile(tname,cnt,testFn) {
 	}
 	t /= 1000.0;
 	var msg = '"'+tname+'",'+cnt+','+t;
-    if (Duktape != null)
+    if (typeof Duktape == 'object')
     {
         print(msg)
 	} else
