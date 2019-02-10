@@ -13,6 +13,7 @@ public:
     bool        reallocate ( char * data, uint32_t size, uint32_t newSize );
     uint32_t    calcUsed() const;
     uint32_t    getInitialSize() const;
+    uint32_t    getChunksCount() const;
 protected:
     struct Chunk//sizeof(Chunk) == (12) in 32 bit, and (16) in 64 bit.
     {
@@ -106,6 +107,8 @@ inline void BuddyAllocator::allocateChunk(uint32_t size)
 {
     chunks.emplace_back(size);
 }
+
+inline uint32_t BuddyAllocator::getChunksCount() const {return (uint32_t)chunks.size();}
 
 inline char *BuddyAllocator::allocateNonEmpty ( uint32_t size )
 {

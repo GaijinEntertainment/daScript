@@ -29,7 +29,8 @@ namespace das {
         __forceinline char * allocateString ( const string & str ) {
             return allocateString ( str.c_str(), uint32_t(str.length()) );
         }
-        int depth() const;
+        uint32_t buddyHighWatermark() const{return buddy.calcUsed();}
+        uint32_t buddyChunksCount() const{return buddy.getChunksCount();}
     protected:
         BuddyAllocator          buddy;
         map<char *,uint32_t>    bigAllocations;
