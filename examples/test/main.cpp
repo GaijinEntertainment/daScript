@@ -91,8 +91,17 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            Context ctx(str.c_str());
-            program->simulate(ctx, tout);
+            Context ctxBase(str.c_str());
+            if ( !program->simulate(ctxBase, tout) ) {
+                tout << "failed to simulate\n";
+                for ( auto & err : program->errors ) {
+                    tout << reportError(str.c_str(), err.at.line, err.at.column, err.what, err.cerr );
+                }
+                return false;
+            }
+            // note: copy of the context is here for testing purposes only
+            //          that way we test context-copying functionality every time
+            Context ctx(ctxBase);
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));

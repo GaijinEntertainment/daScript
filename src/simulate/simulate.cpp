@@ -318,6 +318,29 @@ namespace das
         debugInfo = make_shared<NodeAllocator>();
     }
 
+    Context::Context(const Context & ctx) : stack(16*1024) {
+        debugInput = ctx.debugInput;
+        code = ctx.code;
+        debugInfo = ctx.debugInfo;
+        thisProgram = ctx.thisProgram;
+        thisHelper = ctx.thisHelper;
+        // globals
+        globalsSize = ctx.globalsSize;
+        globalInitStackSize = ctx.globalInitStackSize;
+        globalVariables = ctx.globalVariables;
+        totalVariables = ctx.totalVariables;
+        if ( ctx.globals ) {
+            globals = (char *) das_aligned_alloc16(globalsSize);
+        }
+        // functoins
+        functions = ctx.functions;
+        totalFunctions = ctx.totalFunctions;
+        // now, make it good to go
+        restart();
+        runInitScript();
+        restart();
+    }
+
     Context::~Context() {
         if ( globals ) {
             das_aligned_free16(globals);

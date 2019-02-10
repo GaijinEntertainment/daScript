@@ -99,7 +99,7 @@ namespace das
         friend class Program;
     public:
         Context(const char * lines);
-        Context(const Context &) = delete;
+        Context(const Context &);
         Context & operator = (const Context &) = delete;
         ~Context();
 

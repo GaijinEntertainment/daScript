@@ -111,10 +111,8 @@ namespace das {
         ProgramPtr      program;
     protected:
         vec4f eval ( Expression * expr, bool & failed ) {
-            ctx.simEnd();
             ctx.restart();
             auto node = expr->simulate(ctx);
-            ctx.simEnd();
             ctx.restart();
             vec4f result = ctx.evalWithCatch(node);
             if ( ctx.getException() ) {
