@@ -7,9 +7,7 @@ namespace das {
     static const uint32_t min_page_size = 4096;
 
     HeapAllocator::HeapAllocator() {
-      #if DAS_DISALLOW_EMPTY_BUDDY
         buddy.reset(min_page_size);
-      #endif
     }
 
     HeapAllocator::~HeapAllocator() {
@@ -34,11 +32,7 @@ namespace das {
         bytesTotal += size;
         if ( size < bigAllocationThreshold )
         {
-            #if DAS_DISALLOW_EMPTY_BUDDY
-            return buddy.allocateNonEmpty(size);
-            #else
-            return buddy.allocate(size);
-            #endif
+            return buddy.allocateNonEmpty(size);//since we allocate one page in constructor
         } else {
             char * data = (char *) das_aligned_alloc16(size);
             bigAllocations[data] = size;
@@ -82,10 +76,6 @@ namespace das {
         memcpy ( newData, data, size );
         free(data, size);
         return newData;
-    }
-
-    bool HeapAllocator::isFastHeapPtr(const char *data) const {
-        return  buddy.isHeapPtr(data);
     }
 
     bool HeapAllocator::isHeapPtr(const char *data) const {

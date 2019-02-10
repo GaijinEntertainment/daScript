@@ -18,14 +18,21 @@ protected:
     struct Chunk//sizeof(Chunk) == (12) in 32 bit, and (16) in 64 bit.
     {
         char* __restrict data = nullptr;//don't use unique_ptr, so we can make restrict
-        uint32_t used = 0;
         uint32_t capacity = 0;
+        uint32_t used = 0;
         uint32_t getFree() const
         {
             assert(used <= capacity);
             return capacity - used;
         }
         Chunk(uint32_t size):capacity(size), data((char*)das_aligned_alloc16(size)){}
+        __forceinline bool belongs(const char *__restrict ptr) const {return uintptr_t(ptr - data) < capacity;}
+        __forceinline char *__restrict allocate(uint32_t sz)
+        {
+          char *__restrict ret = data + used;
+          used += sz;
+          return ret;
+        }
 
         //Rule-of-5
         Chunk(const Chunk&) = delete;//non_copyable
@@ -41,24 +48,27 @@ protected:
         void reset(){if (data)das_aligned_free16(data); data = nullptr; used = capacity = 0;}
         ~Chunk(){reset();}
     };
-    vector<Chunk> chunks;//todo: make aliased structure. if there is only one chunk (which is common case), we can alias this one Chunk data and array of chunks
+    Chunk initial;
+    vector<Chunk> chunks;//todo: we only need Chunk* and count.
 	const Chunk *findBelongingChunk(const char * data) const;
 	void allocateChunk(uint32_t size);
 };
 
-inline const BuddyAllocator::Chunk *BuddyAllocator::findBelongingChunk(const char * data) const
+__forceinline const BuddyAllocator::Chunk *BuddyAllocator::findBelongingChunk(const char * data) const
 {
-    for (auto& c : chunks)
-        if (uintptr_t(data-c.data) < c.capacity)
+    if (initial.belongs(data))
+      return &initial;
+    for (auto &c : chunks)
+        if (c.belongs(data))
              return &c;
     return nullptr;
 }
 
-inline uint32_t BuddyAllocator::getInitialSize() const {return chunks.size() ? chunks.front().capacity : 0;}
+inline uint32_t BuddyAllocator::getInitialSize() const {return initial.capacity;}
 
 inline uint32_t BuddyAllocator::calcUsed() const
 {
-    uint32_t used = 0;
+    uint32_t used = initial.used;
     for (auto& c : chunks)
         used += c.used;
     return used;
@@ -66,20 +76,21 @@ inline uint32_t BuddyAllocator::calcUsed() const
 
 inline void BuddyAllocator::reset(uint32_t initial_size)
 {
-    if (chunks.capacity() != 1 || chunks.size() != 1 || getInitialSize() != initial_size)
-    {
-        chunks.clear();chunks.shrink_to_fit();
-        if (initial_size)
-            allocateChunk(initial_size);
-    } else if (initial_size)//avoid reallocation
-    {
-       chunks.front().used = 0;
-    }
+    chunks.clear();chunks.shrink_to_fit();
+    if (initial_size != initial.capacity)//avoid reallocation
+        initial = Chunk(initial_size);
+    else
+        initial.used = 0;
 }
 
-inline bool BuddyAllocator::isHeapPtr ( const char * data ) const
+__forceinline bool BuddyAllocator::isHeapPtr ( const char * data ) const
 {
-    return findBelongingChunk(data) != nullptr;
+    if (initial.belongs(data))
+      return true;
+    for (auto &c : chunks)
+        if (c.belongs(data))
+          return true;
+    return false;
 }
 
 inline bool BuddyAllocator::reallocate ( char * data, uint32_t size, uint32_t newSize )
@@ -108,25 +119,24 @@ inline void BuddyAllocator::allocateChunk(uint32_t size)
     chunks.emplace_back(size);
 }
 
-inline uint32_t BuddyAllocator::getChunksCount() const {return (uint32_t)chunks.size();}
+inline uint32_t BuddyAllocator::getChunksCount() const {return (uint32_t)chunks.size() + 1;}
 
 inline char *BuddyAllocator::allocateNonEmpty ( uint32_t size )
 {
-    if (chunks.back().getFree() < size)
+    if (initial.getFree() >= size)
+      return initial.allocate(size);
+    if (!chunks.size() || chunks.back().getFree() < size)
     {
-        assert(chunks.size());
-        const uint32_t nextSize = chunks.back().capacity*2;
+        const uint32_t nextSize = (chunks.size() ? chunks.back().capacity : initial.capacity)*2;
         allocateChunk(nextSize < size ? size : nextSize);
     }
-    char *__restrict ret = chunks.back().data + chunks.back().used;
-    chunks.back().used += size;
-    return ret;
+    return chunks.back().allocate(size);
 }
 
 inline char *BuddyAllocator::allocate ( uint32_t size )
 {
-    if (!chunks.size())
-         allocateChunk(size < 4096 ? 4096 : size );//4096 is small mem page
+    if (!initial.capacity)
+         initial = Chunk(size < 4096 ? 4096 : size);//4096 is small mem page
     return allocateNonEmpty(size);
 }
 

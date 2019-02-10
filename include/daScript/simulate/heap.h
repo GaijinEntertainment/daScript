@@ -18,7 +18,7 @@ namespace das {
         HeapAllocator & operator = (const HeapAllocator &) = delete;
         void setInitialSize ( uint32_t size );
         bool isHeapPtr ( const char * data ) const;
-        bool isFastHeapPtr ( const char * data ) const;
+        bool isFastHeapPtr ( const char * data ) const {return buddy.isHeapPtr(data);}
         char * allocate ( uint32_t size );
         bool free ( char * data, uint32_t size );
         char * reallocate ( char * data, uint32_t size, uint32_t newSize );
