@@ -23,7 +23,7 @@ namespace das {
     }
 
     uint32_t BuddyAllocator::bytesFree() const {
-        uint32_t bf = linearAllocatorSize - (linearAllocator - linearAllocatorBase);
+        uint32_t bf = uint32_t(linearAllocatorSize - (linearAllocator - linearAllocatorBase));
         if ( junior ) bf += junior->bytesFree();
         return bf;
     }
