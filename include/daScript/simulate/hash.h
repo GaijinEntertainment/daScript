@@ -58,7 +58,7 @@ namespace das
         }
     }
     __forceinline uint32_t stringLengthSafe ( Context & ctx, const char * str ) {//accepts nullptr
-        if ( ctx.heap.isHeapPtr(str) ) {
+        if ( ctx.heap.isFastHeapPtr(str) ) {
             auto header = (StringHeader *) ( str - sizeof(StringHeader) );
             return header->length;
         } else {
@@ -77,7 +77,7 @@ namespace das
 
     template <>
     __forceinline uint32_t hash_function ( Context & ctx, char * str ) {
-        if ( ctx.heap.isHeapPtr(str) ) {
+        if ( ctx.heap.isFastHeapPtr(str) ) {
             auto header = (StringHeader *) ( str - sizeof(StringHeader) );
             auto hh = header->hash;
             if ( !hh ) {

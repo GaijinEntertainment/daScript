@@ -312,7 +312,7 @@ namespace das
 
     // Context
 
-    Context::Context(const char * lines, uint32_t heapSize)
+    Context::Context(const char * lines)
         : stack(16*1024) {
         debugInput = lines;
     }

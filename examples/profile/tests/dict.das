@@ -1,5 +1,8 @@
 // options log=true, printVarAccess=true, printRef=true
 
+// 8Mb heap
+options heap=8388608
+
 require testProfile
 
 def makeRandomSequence(src:array<string>)
@@ -26,5 +29,6 @@ def test
         dict(tab,src)
     profile(20,"c++ dictionary") <|
         testProfile::testDict(src)
+    assert(heap_depth()==1)
     return true
 

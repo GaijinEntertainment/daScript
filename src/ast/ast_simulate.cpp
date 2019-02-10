@@ -894,6 +894,9 @@ namespace das
 
     bool Program::simulate ( Context & context, TextWriter & logs ) {
         context.thisProgram = this;
+        if ( auto optHeap = options.find("heap",Type::tInt) ) {
+            context.heap.setInitialSize( uint32_t(optHeap->iValue) );
+        }
         DebugInfoHelper helper(context.debugInfo);
         context.thisHelper = &helper;
         context.globalVariables = (GlobalVariable *) context.code.allocate( totalVariables*sizeof(GlobalVariable) );

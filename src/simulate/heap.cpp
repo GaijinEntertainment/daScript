@@ -18,6 +18,10 @@ namespace das {
         if ( junior ) delete junior;
     }
 
+    int BuddyAllocator::depth() const {
+        return junior ? junior->depth()+1 : 1;
+    }
+
     uint32_t BuddyAllocator::bytesFree() const {
         uint32_t bf = linearAllocatorSize - (linearAllocator - linearAllocatorBase);
         if ( junior ) bf += junior->bytesFree();
@@ -95,6 +99,8 @@ namespace das {
             buddy = nullptr;
         }
         bytesTotal = 0;
+        bytesBuddyTotal = 0;
+        initialBuddySize = max(initialBuddySize, bytesBuddyMaximum);
     }
 
     char * HeapAllocator::allocate ( uint32_t size ) {
@@ -105,10 +111,13 @@ namespace das {
             bigAllocations[data] = size;
             return data;
         } else {
+            bytesBuddyTotal += size;
+            bytesBuddyMaximum = max(bytesBuddyMaximum, bytesBuddyTotal);
             for ( ;; ) {
                 char * res = buddy ? buddy->allocate(size) : nullptr;
                 if ( res ) return res;
-                buddy = new BuddyAllocator(buddy, bigAllocationThreshold);
+                uint32_t newBuddySize = buddy ? buddy->bytesTotal()*2 : initialBuddySize;
+                buddy = new BuddyAllocator(buddy, newBuddySize);
             }
         }
     }
@@ -126,6 +135,7 @@ namespace das {
         } else {
             if ( buddy && buddy->free(data,size) ) {
                 bytesTotal -= size;
+                bytesBuddyTotal -= size;
                 return true;
             } else {
                 return false;
@@ -142,6 +152,8 @@ namespace das {
         // if both are small, and we can actually reallocate
         if ( size < bigAllocationThreshold && newSize < bigAllocationThreshold ) {
             if ( buddy && buddy->reallocate(data, size, newSize) ) {
+                bytesBuddyTotal = bytesBuddyTotal - size + newSize;
+                bytesBuddyMaximum = max(bytesBuddyMaximum, bytesBuddyTotal);
                 return data;
             }
         }
@@ -198,7 +210,11 @@ namespace das {
         }
     }
 
-    uint32_t HeapAllocator::bytesAllocated() const {
-        return bytesTotal;
+    void HeapAllocator::setInitialSize ( uint32_t size ) {
+        initialBuddySize = size;
+    }
+
+    int HeapAllocator::depth() const {
+        return buddy ? buddy->depth() : 0;
     }
 }

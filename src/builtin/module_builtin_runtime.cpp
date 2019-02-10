@@ -102,6 +102,13 @@ namespace das
         return context->heap.bytesAllocated();
     }
 
+    int32_t heap_high_watermark ( Context * context ) {
+        return (int32_t) context->heap.buddyHighWatermark();
+    }
+
+    int32_t heap_depth ( Context * context ) {
+        return (int32_t) context->heap.depth();
+    }
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
@@ -116,6 +123,8 @@ namespace das
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal);
         // heap
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(heap_high_watermark)>(*this, lib, "heap_high_watermark", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth", SideEffects::modifyExternal);
         // function-like expresions
         addCall<ExprAssert>         ("assert");
         addCall<ExprStaticAssert>   ("static_assert");

@@ -17,6 +17,8 @@ namespace das {
         bool        free ( char * data, uint32_t size );
         bool        reallocate ( char * data, uint32_t size, uint32_t newSize );
         uint32_t    bytesFree() const;
+        uint32_t    bytesTotal() const { return linearAllocatorSize; }
+        int         depth() const;
     protected:
         BuddyAllocator * junior = nullptr;
         uint32_t    juniorBytes = 0;
@@ -30,23 +32,29 @@ namespace das {
     public:
         HeapAllocator();
         ~HeapAllocator();
+        void setInitialSize ( uint32_t size );
         bool isHeapPtr ( const char * data ) const;
         bool isFastHeapPtr ( const char * data ) const;
         char * allocate ( uint32_t size );
         bool free ( char * data, uint32_t size );
         char * reallocate ( char * data, uint32_t size, uint32_t newSize );
         void reset();
-        uint32_t bytesAllocated() const;
+        uint32_t bytesAllocated() const { return bytesTotal; }
+        uint32_t buddyHighWatermark() const { return bytesBuddyMaximum; }
         char * allocateName ( const string & name );
         char * allocateString ( const char * text, uint32_t length );
         __forceinline char * allocateString ( const string & str ) {
             return allocateString ( str.c_str(), uint32_t(str.length()) );
         }
+        int depth() const;
     protected:
         map<char *,uint32_t>    bigAllocations;
         uint32_t                bigAllocationThreshold = 64*1024;
+        uint32_t                initialBuddySize = 16*1024;
         BuddyAllocator *        buddy = nullptr;
-        uint32_t    bytesTotal = 0;
+        uint32_t                bytesTotal = 0;
+        uint32_t                bytesBuddyTotal = 0;
+        uint32_t                bytesBuddyMaximum = 0;
     };
 
     class StackAllocator {

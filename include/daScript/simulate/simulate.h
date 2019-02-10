@@ -98,7 +98,7 @@ namespace das
         friend struct SimNode_TryCatch;
         friend class Program;
     public:
-        Context(const char * lines, uint32_t heapSize = 4*1024*1024);
+        Context(const char * lines);
         Context(const Context &) = delete;
         Context & operator = (const Context &) = delete;
         ~Context();

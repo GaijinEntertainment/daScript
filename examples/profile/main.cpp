@@ -34,7 +34,7 @@ bool unit_test ( const string & fn ) {
             return false;
         } else {
             // tout << *program << "\n";
-            Context ctx(str.c_str(), 64<<20);
+            Context ctx(str.c_str());
             program->simulate(ctx, tout);
             // vector of 10000 objects
             vector<Object> objects;
@@ -107,7 +107,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
 #if 0
-    unit_test(TEST_PATH "examples/profile/tests/annotation.das");
+    unit_test(TEST_PATH "examples/profile/tests/dict.das");
     Module::Shutdown();
     return 0;
 #endif
