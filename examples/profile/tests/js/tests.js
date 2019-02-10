@@ -1,8 +1,8 @@
 // primes test
 
 function isprime(n) {
-	let m = n - 1;
-	for(let i=2; i!=m; ++i ) {
+	var m = n - 1;
+	for(var i=2; i!=m; ++i ) {
 		if ( n % i ==0 ) {
 			return false;
 		}
@@ -11,8 +11,8 @@ function isprime(n) {
 }
 
 function primes(n) {
-	let count = 0;
-	for ( let i=2; i!=n; ++i ) {
+	var count = 0;
+	for ( var i=2; i!=n; ++i ) {
 		if ( isprime(i) ) {
 			count ++;
 		}
@@ -29,8 +29,8 @@ function update_particle(p) {
 }
 
 function update_particles(particles) {
-	let n = particles.length;
-	for ( let i=0; i!=n; ++i ) {
+	var n = particles.length;
+	for ( var i=0; i!=n; ++i ) {
 		update_particle(particles[i]);
 	}
 }
@@ -43,9 +43,9 @@ function multi_update_particles(particles,count) {
 }
 
 function update_particles_i(particles) {
-	let n = particles.length;
-	for ( let i=0; i!=n; ++i ) {
-		let p = particles[i];
+	var n = particles.length;
+	for ( var i=0; i!=n; ++i ) {
+		var p = particles[i];
 		p.pos.x += p.vel.x;
 		p.pos.y += p.vel.y;
 		p.pos.z += p.vel.z;
@@ -60,10 +60,10 @@ function multi_update_particles_i(particles,count) {
 }
 
 function make_particles() {
-	let particles = []
-	let n = 50000;
-	for ( let i=0; i!=n; ++i ) {
-		let p = {
+	var particles = []
+	var n = 50000;
+	for ( var i=0; i!=n; ++i ) {
+		var p = {
 			pos : {x : i + 0.1, y : i + 0.2, z : i + 0.3},
 			vel : {x : 1.1, y : 2.1,  z : 3.1}
 		};
@@ -75,22 +75,22 @@ function make_particles() {
 // dictionary test
 
 function dict_makeSrc(){
-	let src = [];
-	let n = 500000;
-	let modn = n;
-	for (let i=0; i != n; ++i ) {
-		let num = (271828183 ^ i*119) % modn;
+	var src = [];
+	var n = 500000;
+	var modn = n;
+	for (var i=0; i != n; ++i ) {
+		var num = (271828183 ^ i*119) % modn;
 		src.push('_' + num);
 	}
 	return src;
 }
 
 function dict(src) {
-	let tab = {}
-	let n = src.length;
-	let max = 1
-	for (let i=0; i != n; ++i ) {
-		let l = src[n];
+	var tab = {}
+	var n = src.length;
+	var max = 1
+	for (var i=0; i != n; ++i ) {
+		var l = src[n];
 		if ( tab.hasOwnProperty(l) ) {
 			max = Math.max(++tab[l],max);
 		} else {
@@ -103,8 +103,8 @@ function dict(src) {
 // exponent test
 
 function expLoop(n) {
-	let sum = 0;
-	for ( let i=0; i!=n; ++i ) {
+	var sum = 0;
+	for ( var i=0; i!=n; ++i ) {
 		sum += Math.exp(1.0/(1.0+i));
 	}
 	return sum;
@@ -118,12 +118,12 @@ function fibR(n) {
 }
 
 function fibI(n) {
-	let last = 0
-	let cur = 1
+	var last = 0
+	var cur = 1
 	n = n - 1
 	while ( n>0 ) {
 		n = n - 1
-		let tmp = cur
+		var tmp = cur
 		cur = last + cur
 		last = tmp
 	}
@@ -133,6 +133,8 @@ function fibI(n) {
 // infrastructure
 
 function timeStamp() {
+    if (Duktape != null)
+        return Date.now();
 	var timeStampInMs = 
 		window.performance && 
 		window.performance.now && 
@@ -144,20 +146,27 @@ function timeStamp() {
 
 
 function profile(tname,cnt,testFn) {
-	let t = 100500;
-	let count = cnt
+	var t = 100500;
+	var count = cnt
 	while ( count>0 ) {
-		let t0 = timeStamp();
+		var t0 = timeStamp();
 		testFn();
-		let t1 = timeStamp();
-		let dt = t1 - t0;
+		var t1 = timeStamp();
+		var dt = t1 - t0;
 		t = Math.min(dt, t);
 		count --;
 	}
 	t /= 1000.0;
-	let msg = '"'+tname+'",'+cnt+','+t+'\n';
-	console.log(msg);
-	document.body.innerHTML += msg + "<br>";
+	var msg = '"'+tname+'",'+cnt+','+t;
+    if (Duktape != null)
+    {
+        print(msg)
+	} else
+	{
+	    msg+='\n'
+        console.log(msg);
+      	document.body.innerHTML += msg + "<br>";
+  	}
 }
 
 function performance_tests() {
@@ -174,13 +183,13 @@ function performance_tests() {
 		fibR(31)
 	});	
 	{
-		let src = dict_makeSrc();
+		var src = dict_makeSrc();
 		profile("dictionary",20,function(){
 			dict(src);
 		});	
 	}
 	{
-		let particles = make_particles();
+		var particles = make_particles();
 		profile("particles",20,function(){
 			multi_update_particles(particles,100);
 		});	
@@ -190,6 +199,5 @@ function performance_tests() {
 	}
 	timeStamp();
 }
-
 performance_tests();
 
