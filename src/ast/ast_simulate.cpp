@@ -552,9 +552,9 @@ namespace das
         } else {
             assert(variable->index >= 0 && "using variable which is not used. how?");
             if ( r2v ) {
-                return context.code.makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->index);
+                return context.code.makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->stackTop);
             } else {
-                return context.code.makeNode<SimNode_GetGlobal>(at, variable->index);
+                return context.code.makeNode<SimNode_GetGlobal>(at, variable->stackTop);
             }
         }
     }
@@ -897,6 +897,7 @@ namespace das
         DebugInfoHelper helper(context.debugInfo);
         context.thisHelper = &helper;
         context.globalVariables = (GlobalVariable *) context.code.allocate( totalVariables*sizeof(GlobalVariable) );
+        context.globalsSize = 0;
         for (auto & pm : library.modules ) {
             for (auto & it : pm->globals) {
                 auto pvar = it.second;
@@ -907,14 +908,11 @@ namespace das
                 gvar.name = context.code.allocateName(pvar->name);
                 gvar.size = pvar->type->getSizeOf();
                 gvar.debug = helper.makeVariableDebugInfo(*it.second);
-                auto varData = context.heap.allocate(gvar.size);
-                gvar.value = cast<char *>::from((char *)varData);
-                if ( !varData ) {
-                    context.throw_error("can't allocate variable data, out of heap");
-                    return false;
-                }
+                gvar.offset = pvar->stackTop = context.globalsSize;
+                context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
             }
         }
+        context.globals = (char *) das_aligned_alloc16(context.globalsSize);
         context.totalVariables = totalVariables;
         context.functions = (SimFunction *) context.code.allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;

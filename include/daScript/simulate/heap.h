@@ -10,17 +10,28 @@ namespace das {
 
     class LinearAllocator {
     public:
-        LinearAllocator() = delete;
+        LinearAllocator() = default;
         LinearAllocator(const LinearAllocator &) = delete;
         LinearAllocator & operator = (const LinearAllocator &) = delete;
 
-        LinearAllocator(uint32_t size) {
-            linearAllocatorSize = size;
-            linearAllocator = linearAllocatorBase = (char*)das_aligned_alloc16(linearAllocatorSize);
+        ~LinearAllocator() {
+            freeMem();
         }
 
-        ~LinearAllocator() {
-            das_aligned_free16(linearAllocatorBase);
+        void allocateMem ( uint32_t size ) {
+            freeMem();
+            if ( size ) {
+                linearAllocatorSize = size;
+                linearAllocator = linearAllocatorBase = (char*)das_aligned_alloc16(linearAllocatorSize);
+            }
+        }
+
+        void freeMem () {
+            if ( linearAllocatorBase ) {
+                das_aligned_free16(linearAllocatorBase);
+                linearAllocatorBase = linearAllocator = nullptr;
+                linearAllocatorSize = 0;
+            }
         }
 
         __forceinline uint32_t bytesAllocated() const {
@@ -33,15 +44,6 @@ namespace das {
 
         __forceinline void reset() {
             linearAllocator = linearAllocatorBase;
-        }
-
-        __forceinline void * getWatermark() const {
-            return linearAllocator;
-        }
-
-        __forceinline void setWatermark(void * watermark) {
-            assert(watermark >= linearAllocatorBase && watermark < (linearAllocatorBase + linearAllocatorSize));
-            linearAllocator = (char *) watermark;
         }
 
         __forceinline void free ( void * oldData, uint32_t oldSize ) {
@@ -115,8 +117,12 @@ namespace das {
             return uintptr_t(ptr - linearAllocatorBase) < uintptr_t(linearAllocatorSize);
         }
 
+        __forceinline char * base () const {
+            return linearAllocatorBase;
+        }
+
     protected:
-        uint32_t    linearAllocatorSize;
+        uint32_t    linearAllocatorSize = 0;
         char *      linearAllocator = nullptr;
         char *      linearAllocatorBase = nullptr;
     };
@@ -200,7 +206,7 @@ namespace das {
 
     class NodeAllocator : public LinearAllocator {
     public:
-        NodeAllocator(uint32_t size) : LinearAllocator(size) {}
+        NodeAllocator() = default;
 
         template<typename TT, typename... Params>
         __forceinline TT * makeNode(Params... args) {

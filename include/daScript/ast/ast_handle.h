@@ -26,8 +26,9 @@ namespace das
             function<SimNode * (FactoryNodeType,Context &,const LineInfo &, SimNode *)>   factory;
         };
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml )
-            : TypeAnnotation(n), debugInfo(2048), helpA(debugInfo), mlib(&ml) {}
+            : TypeAnnotation(n), helpA(debugInfo), mlib(&ml) {}
         virtual void seal( Module * m ) override {
+            debugInfo.allocateMem(2048);
             TypeAnnotation::seal(m);
             mlib = nullptr;
         }

@@ -33,11 +33,11 @@ namespace das
     struct Block;
 
     struct GlobalVariable {
-        vec4f            value;
         char *          name;
         VarInfo *       debug;
         SimNode *       init;
         uint32_t        size;
+        uint32_t        offset;
     };
 
     struct SimFunction {
@@ -101,23 +101,22 @@ namespace das
         Context(const char * lines, uint32_t heapSize = 4*1024*1024);
         Context(const Context &) = delete;
         Context & operator = (const Context &) = delete;
+        ~Context();
 
-        __forceinline vec4f getVariable ( int index ) const {
+        __forceinline void * getVariable ( int index ) const {
             assert(index>=0 && index<totalVariables && "variable index out of range");
-            return globalVariables[index].value;
+            return globals + globalVariables[index].offset;
         }
 
         __forceinline void simEnd() {
             thisProgram = nullptr;
             thisHelper = nullptr;
-            heapWatermark = heap.getWatermark();
         }
 
         __forceinline void restart( ) {
             stopFlags = 0;
             exception = nullptr;
             stack.reset();
-            heap.setWatermark(heapWatermark);
         }
 
         __forceinline vec4f eval ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
@@ -285,16 +284,17 @@ namespace das
         }
 
     public:
-        LinearAllocator    heap;
-        NodeAllocator    code;
-        NodeAllocator    debugInfo;
-        StackAllocator    stack;
-        void *            heapWatermark = nullptr;
+        LinearAllocator     heap;
+        char *              globals = nullptr;
+        NodeAllocator       code;
+        NodeAllocator       debugInfo;
+        StackAllocator      stack;
     public:
         vec4f *         abiArg;
         void *          abiCMRES;
     protected:
         GlobalVariable * globalVariables = nullptr;
+        uint32_t globalsSize = 0;
         uint32_t globalInitStackSize = 0;
         SimFunction * functions = nullptr;
         int totalVariables = 0;
@@ -977,26 +977,24 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode {
-        SimNode_GetGlobal ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
-        virtual vec4f eval ( Context & context ) override {
-            return context.globalVariables[index].value;
+        DAS_PTR_NODE;
+        SimNode_GetGlobal ( const LineInfo & at, uint32_t o ) : SimNode(at), offset(o) {}
+        __forceinline char * compute (Context & context) {
+            return context.globals + offset;
         }
-        virtual char * evalPtr(Context & context) override {
-            return cast<char *>::to(context.globalVariables[index].value);
-        }
-        int32_t index;
+        uint32_t    offset;
     };
 
     template <typename TT>
     struct SimNode_GetGlobalR2V : SimNode_GetGlobal {
-        SimNode_GetGlobalR2V ( const LineInfo & at, int32_t i ) : SimNode_GetGlobal(at,i) {}
+        SimNode_GetGlobalR2V ( const LineInfo & at, uint32_t o ) : SimNode_GetGlobal(at,o) {}
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = cast<TT *>::to(context.globalVariables[index].value);
+            TT * pR = (TT *)(context.globals + offset);
             return cast<TT>::from(*pR);
         }
-#define EVAL_NODE(TYPE,CTYPE)                                                   \
-        virtual CTYPE eval##TYPE ( Context & context ) override {               \
-            return *cast<CTYPE *>::to(context.globalVariables[index].value);    \
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)(context.globals + offset);            \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE

@@ -40,15 +40,14 @@ namespace das {
             return field;
         }
     public:
-        MatrixAnnotation()
-            : TypeAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC) ),
-                debugInfo(256), helpA(debugInfo) {
-                    matrixTypeInfo = debugInfo.makeNode<TypeInfo>();
-                    auto bt = ToBasicType<VecT>::type;
-                    auto tt = make_shared<TypeDecl>(Type(bt));
-                    tt->dim.push_back(RowC);
-                    helpA.makeTypeInfo(matrixTypeInfo, tt);
-                }
+        MatrixAnnotation() : TypeAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC) ), helpA(debugInfo) {
+            debugInfo.allocateMem(256);
+            matrixTypeInfo = debugInfo.makeNode<TypeInfo>();
+            auto bt = ToBasicType<VecT>::type;
+            auto tt = make_shared<TypeDecl>(Type(bt));
+            tt->dim.push_back(RowC);
+            helpA.makeTypeInfo(matrixTypeInfo, tt);
+        }
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
             shared_ptr<ThisAnnotation> cp =  p ? static_pointer_cast<ThisAnnotation>(p) : make_shared<ThisAnnotation>();
             return TypeAnnotation::clone(cp);

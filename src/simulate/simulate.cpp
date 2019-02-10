@@ -312,13 +312,19 @@ namespace das
 
     // Context
 
-    Context::Context(const char * lines, uint32_t heapSize)
-        :   heap(heapSize)
-        ,   code(64*1024)
-        ,   debugInfo(64*1024)
-        ,   stack(16*1024)
+    Context::Context(const char * lines, uint32_t heapSize) : stack(16*1024)
     {
+        heap.allocateMem(heapSize);
+        code.allocateMem(64*1024);
+        debugInfo.allocateMem(64*1024);
+
         debugInput = lines;
+    }
+
+    Context::~Context() {
+        if ( globals ) {
+            das_aligned_free16(globals);
+        }
     }
 
     void Context::runInitScript ( void ) {
@@ -332,7 +338,7 @@ namespace das
             if ( pv.init ) {
                 pv.init->eval(*this);
             } else {
-                memset ( cast<char *>::to(pv.value), 0, pv.size );
+                memset ( globals + pv.offset, 0, pv.size );
             }
         }
         stack.pop(EP,SP);
