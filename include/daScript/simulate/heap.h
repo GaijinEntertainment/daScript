@@ -32,6 +32,8 @@ namespace das {
     public:
         HeapAllocator();
         ~HeapAllocator();
+        HeapAllocator(const HeapAllocator &) = delete;
+        HeapAllocator & operator = (const HeapAllocator &) = delete;
         void setInitialSize ( uint32_t size );
         bool isHeapPtr ( const char * data ) const;
         bool isFastHeapPtr ( const char * data ) const;
