@@ -284,14 +284,19 @@ namespace das
         }
 
     public:
-        HeapAllocator       heap;
-        char *              globals = nullptr;
-        NodeAllocator       code;
-        NodeAllocator       debugInfo;
-        StackAllocator      stack;
+        HeapAllocator               heap;
+        char *                      globals = nullptr;
+        shared_ptr<NodeAllocator>   code;
+        shared_ptr<NodeAllocator>   debugInfo;
+        StackAllocator              stack;
     public:
         vec4f *         abiArg;
         void *          abiCMRES;
+    protected:
+        const char *    exception = nullptr;
+#if !DAS_ENABLE_EXCEPTIONS
+        jmp_buf *       throwBuf = nullptr;
+#endif
     protected:
         GlobalVariable * globalVariables = nullptr;
         uint32_t globalsSize = 0;
@@ -299,10 +304,6 @@ namespace das
         SimFunction * functions = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
-        const char * exception = nullptr;
-#if !DAS_ENABLE_EXCEPTIONS
-        jmp_buf * throwBuf = nullptr;
-#endif
     public:
         const char * debugInput = nullptr;
         class Program * thisProgram = nullptr;

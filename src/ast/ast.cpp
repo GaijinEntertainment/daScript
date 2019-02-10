@@ -275,7 +275,7 @@ namespace das
             if ( type->isRefType() ) {
                 return expr;
             } else {
-                return context.code.makeValueNode<SimNode_Ref2Value>(type->baseType, at, expr);
+                return context.code->makeValueNode<SimNode_Ref2Value>(type->baseType, at, expr);
             }
         }
     }

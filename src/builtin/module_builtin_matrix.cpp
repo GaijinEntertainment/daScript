@@ -27,7 +27,6 @@ namespace das {
         typedef MatrixAnnotation<VecT,RowC> ThisAnnotation;
         typedef Matrix<VecT,RowC> ThisMatrix;
     protected:
-        NodeAllocator              debugInfo;
         DebugInfoHelper            helpA;
         TypeInfo *                 matrixTypeInfo;
     protected:
@@ -40,8 +39,8 @@ namespace das {
             return field;
         }
     public:
-        MatrixAnnotation() : TypeAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC) ), helpA(debugInfo) {
-            matrixTypeInfo = debugInfo.makeNode<TypeInfo>();
+        MatrixAnnotation() : TypeAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC) ) {
+            matrixTypeInfo = helpA.debugInfo->makeNode<TypeInfo>();
             auto bt = ToBasicType<VecT>::type;
             auto tt = make_shared<TypeDecl>(Type(bt));
             tt->dim.push_back(RowC);
@@ -95,12 +94,12 @@ namespace das {
             return pt;
         }
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.code.makeNode<SimNode_CopyValue<ThisMatrix>>(at, l, r);
+            return context.code->makeNode<SimNode_CopyValue<ThisMatrix>>(at, l, r);
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.code.makeNode<SimNode_FieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
+                return context.code->makeNode<SimNode_FieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
@@ -109,22 +108,22 @@ namespace das {
             int field = GetField(na);
             if ( field!=-1 ) {
                 auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-                return context.code.makeValueNode<SimNode_FieldDerefR2V>(bt,at,value,uint32_t(field*sizeof(VecT)));
+                return context.code->makeValueNode<SimNode_FieldDerefR2V>(bt,at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
         }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.code.makeNode<SimNode_New>(at,int32_t(sizeof(ThisMatrix)));
+            return context.code->makeNode<SimNode_New>(at,int32_t(sizeof(ThisMatrix)));
         }
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
             uint32_t ms = uint32_t(sizeof(ThisMatrix));
-            return context.code.makeNode<SimNode_DeleteStructPtr>(at,sube,count,ms);
+            return context.code->makeNode<SimNode_DeleteStructPtr>(at,sube,count,ms);
         }
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.code.makeNode<SimNode_SafeFieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
+                return context.code->makeNode<SimNode_SafeFieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
@@ -132,13 +131,13 @@ namespace das {
         virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.code.makeNode<SimNode_SafeFieldDerefPtr>(at,value,uint32_t(field*sizeof(VecT)));
+                return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value,uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
         };
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &, SimNode * rv, SimNode * idx ) const override {
-            return context.code.makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), RowC);
+            return context.code->makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), RowC);
         }
         virtual void walk ( DataWalker & walker, void * data ) override {
             walker.walk((char *)data, matrixTypeInfo);

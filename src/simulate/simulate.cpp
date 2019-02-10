@@ -312,9 +312,10 @@ namespace das
 
     // Context
 
-    Context::Context(const char * lines)
-        : stack(16*1024) {
+    Context::Context(const char * lines) : stack(16*1024) {
         debugInput = lines;
+        code = make_shared<NodeAllocator>();
+        debugInfo = make_shared<NodeAllocator>();
     }
 
     Context::~Context() {

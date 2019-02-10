@@ -1095,7 +1095,7 @@ namespace das
             auto tableType = arguments[0]->type;
             auto iterType = first ? tableType->firstType : tableType->secondType;
             auto stride = iterType->getSizeOf();
-            return context.code.makeNode<SimNodeT>(at,subexpr,stride);
+            return context.code->makeNode<SimNodeT>(at,subexpr,stride);
         }
         virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
@@ -1126,7 +1126,7 @@ namespace das
             auto arr = arguments[0]->simulate(context);
             auto newSize = arguments[1]->simulate(context);
             auto size = arguments[0]->type->firstType->getSizeOf();
-            return context.code.makeNode<SimNodeT>(at,arr,newSize,size);
+            return context.code->makeNode<SimNodeT>(at,arr,newSize,size);
         }
         virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
@@ -1249,11 +1249,11 @@ namespace das
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context ) {
             if ( copyOnReturn || moveOnReturn ) {
-                return context.code.makeNodeUnroll<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
+                return context.code->makeNodeUnroll<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
             } else if ( fastCall ) {
-                return context.code.makeNodeUnroll<SimNode_FastCall>(int(arguments.size()), at);
+                return context.code->makeNodeUnroll<SimNode_FastCall>(int(arguments.size()), at);
             } else {
-                return context.code.makeNodeUnroll<SimNode_Call>(int(arguments.size()), at);
+                return context.code->makeNodeUnroll<SimNode_Call>(int(arguments.size()), at);
             }
         }
         string describe() const;
@@ -1392,15 +1392,17 @@ namespace das
 
     class DebugInfoHelper {
     public:
-        DebugInfoHelper ( NodeAllocator & di ) : debugInfo(di) {}
+        DebugInfoHelper () { debugInfo = make_shared<NodeAllocator>(); }
+        DebugInfoHelper ( const shared_ptr<NodeAllocator> & di ) : debugInfo(di) {}
     public:
         TypeInfo * makeTypeInfo ( TypeInfo * info, const TypeDeclPtr & type );
         VarInfo * makeVariableDebugInfo ( const Variable & var );
         StructInfo * makeStructureDebugInfo ( const Structure & st );
         FuncInfo * makeFunctionDebugInfo ( const Function & fn );
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
+    public:
+        shared_ptr<NodeAllocator>   debugInfo;
     protected:
-        NodeAllocator &             debugInfo;
         map<string,StructInfo *>    smn2s;
         map<string,TypeInfo *>      tmn2t;
         map<string,VarInfo *>       vmn2v;

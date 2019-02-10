@@ -29,7 +29,7 @@ namespace  das {
             }
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
-            return context.code.makeNode<SimT>(at);
+            return context.code->makeNode<SimT>(at);
         }
     };
 

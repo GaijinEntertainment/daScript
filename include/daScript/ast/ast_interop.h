@@ -52,7 +52,7 @@ namespace das
             }
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
-            return context.code.makeNode<SimNodeT>(at);
+            return context.code->makeNode<SimNodeT>(at);
         }
     };
 
@@ -80,7 +80,7 @@ namespace das
     public:
         InteropFn(const string & name, const ModuleLibrary & lib) : InteropFnBase<RetT,Args...>(name,lib) {}
         virtual SimNode * makeSimNode ( Context & context ) override {
-            return context.code.makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at);
+            return context.code->makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at);
         }
     };
 

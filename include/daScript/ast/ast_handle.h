@@ -26,7 +26,7 @@ namespace das
             function<SimNode * (FactoryNodeType,Context &,const LineInfo &, SimNode *)>   factory;
         };
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml )
-            : TypeAnnotation(n), helpA(debugInfo), mlib(&ml) {}
+            : TypeAnnotation(n), mlib(&ml) { }
         virtual void seal( Module * m ) override {
             TypeAnnotation::seal(m);
             mlib = nullptr;
@@ -98,7 +98,7 @@ namespace das
             field.factory = [](FactoryNodeType nt,Context & context,const LineInfo & at, SimNode * value) -> SimNode * {
                 switch ( nt ) {
                     case FactoryNodeType::getField:
-                        return context.code.makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value);
+                        return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value);
                     case FactoryNodeType::safeGetField:
                     case FactoryNodeType::safeGetFieldPtr:
                     case FactoryNodeType::getFieldR2V:
@@ -116,13 +116,13 @@ namespace das
             field.factory = [offset,baseType](FactoryNodeType nt,Context & context,const LineInfo & at, SimNode * value) -> SimNode * {
                 switch ( nt ) {
                     case FactoryNodeType::getField:
-                        return context.code.makeNode<SimNode_FieldDeref>(at,value,offset);
+                        return context.code->makeNode<SimNode_FieldDeref>(at,value,offset);
                     case FactoryNodeType::getFieldR2V:
-                        return context.code.makeValueNode<SimNode_FieldDerefR2V>(baseType,at,value,offset);
+                        return context.code->makeValueNode<SimNode_FieldDerefR2V>(baseType,at,value,offset);
                     case FactoryNodeType::safeGetField:
-                        return context.code.makeNode<SimNode_SafeFieldDeref>(at,value,offset);
+                        return context.code->makeNode<SimNode_SafeFieldDeref>(at,value,offset);
                     case FactoryNodeType::safeGetFieldPtr:
-                        return context.code.makeNode<SimNode_SafeFieldDerefPtr>(at,value,offset);
+                        return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value,offset);
                     default:
                         return nullptr;
                 }
@@ -134,9 +134,10 @@ namespace das
         }
         virtual void walk ( DataWalker & walker, void * data ) override {
             if ( !sti ) {
+                auto debugInfo = helpA.debugInfo;
                 debugInfo.reset();
-                sti = debugInfo.makeNode<StructInfo>();
-                sti->name = debugInfo.allocateName(name);
+                sti = debugInfo->template makeNode<StructInfo>();
+                sti->name = debugInfo->allocateName(name);
                 // count fields
                 sti->fieldsSize = 0;
                 for ( auto & fi : fields ) {
@@ -147,14 +148,14 @@ namespace das
                 }
                 // and allocate
                 sti->size = (uint32_t) getSizeOf();
-                sti->fields = (VarInfo **) debugInfo.allocate( sizeof(VarInfo *) * sti->fieldsSize );
+                sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->fieldsSize );
                 int i = 0;
                 for ( auto & fi : fields ) {
                     auto & var = fi.second;
                     if ( var.offset != -1U ) {
-                        VarInfo * vi = debugInfo.makeNode<VarInfo>();
+                        VarInfo * vi = debugInfo->template makeNode<VarInfo>();
                         helpA.makeTypeInfo(vi, var.decl);
-                        vi->name = debugInfo.allocateName(fi.first);
+                        vi->name = debugInfo->allocateName(fi.first);
                         vi->offset = var.offset;
                         sti->fields[i++] = vi;
                     }
@@ -163,7 +164,6 @@ namespace das
             walker.walk_struct((char *)data, sti);
         }
         map<string,StructureField> fields;
-        NodeAllocator              debugInfo;
         DebugInfoHelper            helpA;
         StructInfo *               sti = nullptr;
         ModuleLibrary *            mlib = nullptr;
@@ -177,10 +177,10 @@ namespace das
         virtual bool canNew() const override { return true; }
         virtual bool canDeletePtr() const override { return true; }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.code.makeNode<SimNode_NewHandle<ManagedType>>(at);
+            return context.code->makeNode<SimNode_NewHandle<ManagedType>>(at);
         }
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
-            return context.code.makeNode<SimNode_DeleteHandlePtr<ManagedType>>(at,sube,count);
+            return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType>>(at,sube,count);
         }
     };
 
@@ -257,13 +257,13 @@ namespace das
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
         virtual TypeDeclPtr makeIteratorType () const override { return make_shared<TypeDecl>(*vecType); }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &, SimNode * rv, SimNode * idx ) const override {
-            return context.code.makeNode<SimNode_AtVector>(at, rv, idx);
+            return context.code->makeNode<SimNode_AtVector>(at, rv, idx);
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
-            return context.code.makeNode<SimNode_VectorIterator>(at, rv);
+            return context.code->makeNode<SimNode_VectorIterator>(at, rv);
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
-            if ( na=="length" ) return context.code.makeNode<SimNode_VectorLength>(at,value);
+            if ( na=="length" ) return context.code->makeNode<SimNode_VectorLength>(at,value);
             return nullptr;
         }
         TypeDeclPtr vecType;
@@ -278,10 +278,10 @@ namespace das
         virtual size_t getSizeOf() const override { return sizeof(OT); }
         virtual bool isRefType() const override { return false; }
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.code.makeNode<SimNode_CopyValue<OT>>(at, l, r);
+            return context.code->makeNode<SimNode_CopyValue<OT>>(at, l, r);
         }
         virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const override {
-            return context.code.makeNode<SimNode_Ref2Value<OT>>(at, l);
+            return context.code->makeNode<SimNode_Ref2Value<OT>>(at, l);
         }
     };
 }
