@@ -128,9 +128,6 @@ namespace das
     };
 
     template <typename TT> struct ToBasicType;
-    template <typename TT> struct ToBasicType<const TT *> : ToBasicType<TT *> {};
-    template <typename TT> struct ToBasicType<TT &> : ToBasicType<TT> {};
-    template <typename TT> struct ToBasicType<const TT &> : ToBasicType<TT> {};
     template<> struct ToBasicType<EnumStub>     { enum { type = Type::tEnumeration }; };
     template<> struct ToBasicType<Iterator *>   { enum { type = Type::tIterator }; };
     template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
@@ -164,7 +161,7 @@ namespace das
     struct typeFactory {
         static TypeDeclPtr make(const ModuleLibrary &) {
             auto t = make_shared<TypeDecl>();
-            t->baseType = Type( ToBasicType<typename remove_const<TT>::type>::type );
+            t->baseType = Type( ToBasicType<TT>::type );
             t->constant = is_const<TT>::value;
             return t;
         }
@@ -254,6 +251,28 @@ namespace das
         static TypeDeclPtr make(const ModuleLibrary & lib) {
             auto t = typeFactory<TT>::make(lib);
             t->ref = true;
+            return t;
+        }
+    };
+
+    template <typename TT>
+    struct typeFactory<const TT *> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto pt = make_shared<TypeDecl>(Type::tPointer);
+            if ( !is_void<TT>::value ) {
+                pt->firstType = typeFactory<TT>::make(lib);
+                pt->constant = true;
+            }
+            return pt;
+        }
+    };
+
+    template <typename TT>
+    struct typeFactory<const TT &> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = typeFactory<TT>::make(lib);
+            t->ref = true;
+            t->constant = true;
             return t;
         }
     };

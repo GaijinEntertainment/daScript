@@ -180,7 +180,28 @@ namespace das
     inline float fast_to_float ( const char *str ){return str ? (float)atof(str) : 0.f;}
     inline int fast_to_int ( const char *str ){return str ? atoi(str) : 0;}
 
+    struct DasStringTypeAnnotation : TypeAnnotation {
+        DasStringTypeAnnotation() : TypeAnnotation("das_string") {}
+        virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
+        virtual bool isRefType() const override { return true; }
+        virtual bool isLocal() const override { return false; }
+    };
+    MAKE_TYPE_FACTORY(das_string, string);
+
+    char * to_das_string(const string & str, Context * ctx) {
+        return ctx->heap.allocateName(str);
+    }
+
+    void set_das_string(string & str, const char * bs) {
+        str = bs;
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
+        // das string binding
+        addAnnotation(make_shared<DasStringTypeAnnotation>());
+        addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none);
+        addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "set", SideEffects::none);
+        // regular string
         addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", SideEffects::none);
         addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", SideEffects::none);
         addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none);
