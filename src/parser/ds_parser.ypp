@@ -611,7 +611,14 @@ expression_delete
 
 expr_new
     :   _NEWT[loc] type_declaration[typeDecl]   {
-        $$ = new ExprNew(tokAt(@loc),TypeDeclPtr($typeDecl));
+        $$ = new ExprNew(tokAt(@loc),TypeDeclPtr($typeDecl),false);
+    }
+    |   _NEWT[loc] type_declaration[typeDecl] '(' ')'   {
+        $$ = new ExprNew(tokAt(@loc),TypeDeclPtr($typeDecl),true);
+    }
+    |   _NEWT[loc] type_declaration[typeDecl] '(' expr_list[arguments] ')'   {
+        auto pNew = new ExprNew(tokAt(@loc),TypeDeclPtr($typeDecl),true);
+        $$ = parseFunctionArguments(pNew,$arguments);
     }
     ;
 

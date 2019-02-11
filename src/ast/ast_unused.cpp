@@ -315,7 +315,24 @@ namespace das {
             if ( newExternal ) {
                 func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             }
-
+            if ( expr->initializer ) {
+                // if modified, modify CALL
+                auto sef = getSideEffects(expr->func);
+                if ( sef & uint32_t(SideEffects::modifyArgument) ) {
+                    for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
+                        const auto & argT = expr->func->arguments[ai]->type;
+                        if ( argT->isRef() && !argT->isConst() ) {
+                            if ( expr->func->knownSideEffects && !expr->func->builtIn ) {
+                                if ( expr->func->arguments[ai]->access_ref ) {
+                                    propagateWrite(expr->arguments[ai].get());
+                                }
+                            } else {
+                                propagateWrite(expr->arguments[ai].get());
+                            }
+                        }
+                    }
+                }
+            }
         }
     // Delete
         virtual void preVisit ( ExprDelete * expr ) override {
@@ -335,6 +352,7 @@ namespace das {
     // Call
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
+            // if modified, modify NEW
             auto sef = getSideEffects(expr->func);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {

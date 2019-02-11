@@ -306,6 +306,7 @@ namespace das
         virtual bool rtti_isStructureAnnotation() const { return false; }
         virtual bool rtti_isFunctionAnnotation() const { return false; }
         string describe() const { return name; }
+        string getMangledName() const;
         Module *    module = nullptr;
     };
 
@@ -550,16 +551,6 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isNullCoalescing() const override { return true; }
         ExpressionPtr   defaultValue;
-    };
-
-    struct ExprNew : Expression {
-        ExprNew() = default;
-        ExprNew ( const LineInfo & a, TypeDeclPtr t ) : Expression(a), typeexpr(t) {}
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
-        virtual ExpressionPtr visit(Visitor & vis) override;
-        TypeDeclPtr     typeexpr;
-        uint32_t        stackTop;
     };
 
     struct ExprDelete : Expression {
@@ -1171,14 +1162,29 @@ namespace das
         TypeDeclPtr     typeexpr;
     };
 
+    struct ExprNew : ExprLooksLikeCall {
+        ExprNew() = default;
+        ExprNew ( const LineInfo & a, TypeDeclPtr t, bool ini )
+            : ExprLooksLikeCall(a,"new"), typeexpr(t), initializer(ini) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        FunctionPtr     func;
+        TypeDeclPtr     typeexpr;
+        uint32_t        stackTop = 0;
+        bool            initializer = false;
+    };
+
     struct ExprCall : ExprLooksLikeCall {
         ExprCall () = default;
         ExprCall ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) { }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        FunctionPtr             func;
-        uint32_t                stackTop = 0;
+        static SimNode_CallBase * simulateCall (const FunctionPtr & func, const ExprLooksLikeCall * expr,
+            Context & context, SimNode_CallBase * pCall);
+        FunctionPtr     func;
+        uint32_t        stackTop = 0;
     };
 
     struct ExprIfThenElse : Expression {
@@ -1540,6 +1546,9 @@ namespace das
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) {}
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) { return expr->shared_from_this(); }
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) { return expr->shared_from_this(); }
+        // NEW
+        virtual void preVisitNewArg ( ExprNew * call, Expression * arg, bool last ) {}
+        virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) { return arg->shared_from_this(); }
         // CALL
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) {}
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) { return arg->shared_from_this(); }

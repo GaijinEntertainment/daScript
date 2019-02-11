@@ -1144,6 +1144,25 @@ SIM_NODE_AT_VECTOR(Float, float)
         int32_t     bytes;
     };
 
+    template <int argCount>
+    struct SimNode_NewWithInitializer : SimNode_CallBase {
+        DAS_PTR_NODE;
+        SimNode_NewWithInitializer ( const LineInfo & at, int32_t b ) : SimNode_CallBase(at), bytes(b) {}
+        __forceinline char * compute ( Context & context ) {
+            if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
+                memset ( ptr, 0, bytes );
+                vec4f argValues[argCount ? argCount : 1];
+                EvalBlock<argCount>::eval(context, arguments, argValues);
+                context.callWithCopyOnReturn(fnPtr, argValues, ptr, debug.line);
+                return ptr;
+            } else {
+                context.throw_error("out of heap");
+                return nullptr;
+            }
+        }
+        int32_t     bytes;
+    };
+
     struct SimNode_NewArray : SimNode {
         DAS_PTR_NODE;
         SimNode_NewArray ( const LineInfo & a, SimNode * nn, uint32_t sp, uint32_t c )

@@ -807,6 +807,14 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprNew
+        virtual void preVisit ( ExprNew * call ) override {
+            Visitor::preVisit(call);
+            call->argumentsFailedToInfer = false;
+        }
+        virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) override {
+            if ( !arg->type ) call->argumentsFailedToInfer = true;
+            return Visitor::visitNewArg(call, arg, last);
+        }
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
             // infer
             if ( expr->typeexpr->isAlias() ) {
@@ -821,6 +829,8 @@ namespace das {
                     return Visitor::visit(expr);
                 }
             }
+            expr->name.clear();
+            expr->func.reset();
             if ( expr->typeexpr->ref ) {
                 error("can't new a reference", expr->at, CompilationError::invalid_new_type);
             } if ( expr->typeexpr->baseType==Type::tStructure ) {
@@ -828,6 +838,7 @@ namespace das {
                 expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
                 expr->type->firstType->dim.clear();
                 expr->type->dim = expr->typeexpr->dim;
+                expr->name = expr->typeexpr->structType->getMangledName();
             } else if ( expr->typeexpr->baseType==Type::tHandle ) {
                 if ( expr->typeexpr->annotation->canNew() ) {
                     expr->type = make_shared<TypeDecl>(Type::tPointer);
@@ -841,6 +852,22 @@ namespace das {
             } else {
                 error("can only new structures or handled types " + expr->typeexpr->describe(),
                       expr->at, CompilationError::invalid_new_type);
+            }
+            if ( expr->initializer && expr->name.empty() ) {
+                error("only native structures can have initializers " + expr->typeexpr->describe(),
+                      expr->at, CompilationError::invalid_new_type);
+            }
+            if ( expr->type && expr->initializer && !expr->name.empty() ) {
+                auto resultType = expr->type;
+                expr->func = inferFunctionCall(expr);
+                if ( func ) {
+                    swap ( resultType, expr->type );
+                    if ( !expr->type->firstType->isSameType(*resultType,true,true) ) {
+                        error("initializer returns (" +resultType->describe() + ") vs "
+                            +  expr->type->firstType->describe() + ")",
+                              expr->at, CompilationError::invalid_new_type);
+                    }
+                }
             }
             verifyType(expr->typeexpr);
             return Visitor::visit(expr);
@@ -1545,13 +1572,13 @@ namespace das {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
             return Visitor::visitCallArg(call, arg, last);
         }
-        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
             vector<TypeDeclPtr> types;
             types.reserve(expr->arguments.size());
             for ( auto & ar : expr->arguments ) {
                 if ( !ar->type ) {
-                    return Visitor::visit(expr);
+                    return nullptr;
                 }
                 types.push_back(ar->type);
             }
@@ -1584,11 +1611,11 @@ namespace das {
                         auto realFn = program->findFunction(clone->getMangledName());
                         vector<FunctionPtr> candidates = { realFn };
                         reportFunctionNotFound("no matching generic function " + expr->describe(),
-                                expr->at, candidates, types, true, true);
+                                               expr->at, candidates, types, true, true);
                     }
                 } else if ( generics.size()>0 ) {
                     reportFunctionNotFound("too many matching generic functions " + expr->describe(),
-                        expr->at, findGenericCandidates(expr->name, types), types, true, true);
+                                           expr->at, findGenericCandidates(expr->name, types), types, true, true);
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
@@ -1597,7 +1624,7 @@ namespace das {
                         }
                     } else {
                         reportFunctionNotFound("no matching function " + expr->describe(),
-                            expr->at, findCandidates(expr->name, types), types, false, true);
+                                               expr->at, findCandidates(expr->name, types), types, false, true);
                     }
                 }
             } else if ( functions.size()>1 ) {
@@ -1605,8 +1632,8 @@ namespace das {
                 error("too many matching functions " + expr->describe() + "\n" + candidates,
                       expr->at, CompilationError::function_not_found);
             } else {
-                expr->func = functions[0];
-                expr->type = make_shared<TypeDecl>(*expr->func->result);
+                auto func = functions[0];
+                expr->type = make_shared<TypeDecl>(*func->result);
                 // infer FORWARD types
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
@@ -1614,9 +1641,9 @@ namespace das {
                         assert ( arg->rtti_isMakeBlock() && "always MakeBlock" );
                         auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                        auto retT = TypeDecl::inferAutoType(mkBlock->type, expr->func->arguments[iF]->type);
+                        auto retT = TypeDecl::inferAutoType(mkBlock->type, func->arguments[iF]->type);
                         assert ( retT && "how? it matched during findMatchingFunctions the same way");
-                        TypeDecl::applyAutoContracts(mkBlock->type, expr->func->arguments[iF]->type);
+                        TypeDecl::applyAutoContracts(mkBlock->type, func->arguments[iF]->type);
                         block->returnType = make_shared<TypeDecl>(*retT->firstType);
                         for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
                             block->arguments[ba]->type = make_shared<TypeDecl>(*retT->argTypes[ba]);
@@ -1626,8 +1653,8 @@ namespace das {
                     }
                 }
                 // append default arguments
-                for ( size_t iT = expr->arguments.size(); iT != expr->func->arguments.size(); ++iT ) {
-                    auto newArg = expr->func->arguments[iT]->init->clone();
+                for ( size_t iT = expr->arguments.size(); iT != func->arguments.size(); ++iT ) {
+                    auto newArg = func->arguments[iT]->init->clone();
                     if ( !newArg->type ) {
                         // recursive resolve???
                         newArg = newArg->visit(*this);
@@ -1636,9 +1663,15 @@ namespace das {
                 }
                 // dereference what needs dereferences
                 for ( size_t iA = 0; iA != expr->arguments.size(); ++iA )
-                    if ( !expr->func->arguments[iA]->type->isRef() )
+                    if ( !func->arguments[iA]->type->isRef() )
                         expr->arguments[iA] = Expression::autoDereference(expr->arguments[iA]);
+                // and all good
+                return func;
             }
+            return nullptr;
+        }
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            expr->func = inferFunctionCall(expr);
             return Visitor::visit(expr);
         }
     // ExprKeys

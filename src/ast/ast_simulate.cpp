@@ -324,7 +324,13 @@ namespace das
             newNode = typeexpr->annotation->simulateGetNew(context, at);
         } else {
             int32_t bytes = type->firstType->getSizeOf();
-            newNode = context.code->makeNode<SimNode_New>(at,bytes);
+            if ( initializer ) {
+                auto pCall = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_NewWithInitializer>(int(arguments.size()),at,bytes);
+                pCall->stackTop = -1;
+                newNode = ExprCall::simulateCall(func, this, context, pCall);
+            } else {
+                newNode = context.code->makeNode<SimNode_New>(at,bytes);
+            }
         }
         if ( type->dim.size() ) {
             uint32_t count = type->getCountOf();
@@ -856,18 +862,19 @@ namespace das
         return let;
     }
 
-    SimNode * ExprCall::simulate (Context & context) const {
-        auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
+    SimNode_CallBase * ExprCall::simulateCall (const FunctionPtr & func,
+                                               const ExprLooksLikeCall * expr,
+                                               Context & context,
+                                               SimNode_CallBase * pCall) {
         bool needTypeInfo = false;
         for ( auto & arg : func->arguments ) {
             if ( arg->type->baseType==Type::anyArgument )
                 needTypeInfo = true;
         }
-        pCall->debug = at;
+        pCall->debug = expr->at;
         assert((func->builtIn || func->index>=0) && "calling function which is not used. how?");
         pCall->fnPtr = context.getFunction(func->index);
-        pCall->stackTop = stackTop;
-        if ( int nArg = (int) arguments.size() ) {
+        if ( int nArg = (int) expr->arguments.size() ) {
             pCall->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
             if ( needTypeInfo ) {
                 pCall->types = (TypeInfo **) context.code->allocate(nArg * sizeof(TypeInfo *));
@@ -876,10 +883,10 @@ namespace das
             }
             pCall->nArguments = nArg;
             for ( int a=0; a!=nArg; ++a ) {
-                pCall->arguments[a] = arguments[a]->simulate(context);
+                pCall->arguments[a] = expr->arguments[a]->simulate(context);
                 if ( pCall->types ) {
                     if ( func->arguments[a]->type->baseType==Type::anyArgument ) {
-                        pCall->types[a] = context.thisHelper->makeTypeInfo(nullptr, arguments[a]->type);
+                        pCall->types[a] = context.thisHelper->makeTypeInfo(nullptr, expr->arguments[a]->type);
                     } else {
                         pCall->types[a] = nullptr;
                     }
@@ -889,6 +896,14 @@ namespace das
             pCall->arguments = nullptr;
             pCall->nArguments = 0;
         }
+        return pCall;
+
+    }
+
+    SimNode * ExprCall::simulate (Context & context) const {
+        auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
+        simulateCall(func, this, context, pCall);
+        pCall->stackTop = stackTop;
         return pCall;
     }
 

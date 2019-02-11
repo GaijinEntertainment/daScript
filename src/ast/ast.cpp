@@ -8,6 +8,12 @@ int yylex_destroy();
 
 namespace das
 {
+    // annotations
+
+    string Annotation::getMangledName() const {
+        return module ? module->name + "::" + name : name;
+    }
+
     // enumeration
 
     string Enumeration::getMangledName() const {
@@ -454,13 +460,19 @@ namespace das
 
     ExpressionPtr ExprNew::visit(Visitor & vis) {
         vis.preVisit(this);
+        for ( auto & arg : arguments ) {
+            vis.preVisitNewArg(this, arg.get(), arg==arguments.back());
+            arg = arg->visit(vis);
+            arg = vis.visitNewArg(this, arg.get(), arg==arguments.back());
+        }
         return vis.visit(this);
     }
 
     ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprNew>(expr);
-        Expression::clone(cexpr);
+        ExprLooksLikeCall::clone(cexpr);
         cexpr->typeexpr = typeexpr;
+        cexpr->initializer = initializer;
         return cexpr;
     }
 

@@ -108,6 +108,19 @@ namespace das {
                 }
             }
         }
+        // new
+        virtual void preVisit(ExprNew * call) override {
+            Visitor::preVisit(call);
+            if ( call->initializer ) {
+                if (builtInDependencies || !call->func->builtIn) {
+                    if (func) {
+                        func->useFunctions.insert(call->func);
+                    } else {
+                        gVarFuncUse[gVar].push_back(call->func);
+                    }
+                }
+            }
+        }
         // Op1
         virtual void preVisit(ExprOp1 * expr) override {
             Visitor::preVisit(expr);

@@ -10,6 +10,11 @@ namespace das {
             Visitor::preVisitBlockExpression(block, expr);
             expr->topLevel = true;
         }
+    // ExprNew
+        virtual void preVisitNewArg ( ExprNew * call, Expression * expr , bool last ) override {
+            Visitor::preVisitNewArg(call,expr,last);
+            expr->argLevel = true;
+        }
     // ExprCall
         virtual void preVisitCallArg ( ExprCall * call, Expression * expr , bool last ) override {
             Visitor::preVisitCallArg(call,expr,last);
@@ -499,8 +504,17 @@ namespace das {
             ss << "delete ";
         }
     // new
-        virtual ExpressionPtr visit ( ExprNew * enew ) override {
+        virtual void preVisit ( ExprNew * enew ) override {
+            Visitor::preVisit(enew);
             ss << "new " << enew->typeexpr->describe();
+            if ( enew->initializer ) ss << "(";
+        }
+        virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg, bool last ) override {
+            if ( !last ) ss << ",";
+            return Visitor::visitNewArg(call, arg, last);
+        }
+        virtual ExpressionPtr visit ( ExprNew * enew ) override {
+            if ( enew->initializer ) ss << ")";
             return Visitor::visit(enew);
         }
     // null coaelescing
