@@ -13,7 +13,7 @@ def test
     assert(dot(float2(0,1), float2(1,0))==0.)
     assert(dot(float3(0,1,0), float3(1,0,1))==0.)
     assert(dot(float4(0,1,0,0), float4(1,0,1,1))==0.)
-
+	//
     assert(length(float2(0,1))==1.)
     assert(length(float3(0,1,0))==1.)
     assert(length(float4(0,0,0,1))==1.)
@@ -21,7 +21,7 @@ def test
     assert(lengthSq(float3(1,0,0))==1.)
     assert(lengthSq(float4(0,1,0,0))==1.)
     assert(cross(float3(0,1,0), float3(0,0,1))==float3(1,0,0))
-
+	//
     assert(sin(0.)==0.)
     assert(cos(0.)==1.)
     assert(tan(0.)==0.)
@@ -30,7 +30,7 @@ def test
     assert(abs(asin(sin(0.5)) - 0.5) < 0.0001)
     assert(abs(acos(cos(0.5)) - 0.5) < 0.0001)
     assert(sin(0.1)*sin(0.1) + cos(0.1)*cos(0.1) == 1.)//cos^2 + sin^2 == 1
-
+	//
     assert(atan2(0.,0.)==0.)
     assert(sqrt(4.)==2.)
     assert(pow(2.,2.)==4.)

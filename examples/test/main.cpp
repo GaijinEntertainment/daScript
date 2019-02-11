@@ -194,7 +194,7 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/unit_tests/include.das");
+    unit_test(TEST_PATH "examples/test/unit_tests/math.das");
     Module::Shutdown();
     return 0;
 #endif

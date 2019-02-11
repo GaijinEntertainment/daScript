@@ -3,10 +3,7 @@
     #include <inttypes.h>
     #include "daScript/ast/ast.h"
     #include "ds_parser.hpp"
-    
-    #ifdef FLEX_DEBUG
-    #include <iTextWriter>
-    #endif
+
     #ifndef SCNi64
       #define SCNi64       "lli"
     #endif
@@ -107,13 +104,13 @@
 <indent>" "             { 
 	current_line_indent++; 
 	#ifdef FLEX_DEBUG
-		cout << "[ ], indent=" << current_line_indent << "\n";
+		printf("[ ], indent=%i\n", current_line_indent);
 	#endif
 }
 <indent>"\t"            { 
 	current_line_indent = (current_line_indent + tab_size) & ~(tab_size-1);  
 	#ifdef FLEX_DEBUG
-		cout << "\\t, cli=" << current_line_indent <<  "\n";
+		printf("\\t, cli=%i\n", current_line_indent);
 	#endif
 }
 <indent>(\/\/.*)*\n     { 
@@ -121,7 +118,7 @@
 	need_oxford_comma = true; 
 	yycolumn = 1; 
 	#ifdef FLEX_DEBUG
-		cout << "new line\n";
+		printf("new line\n");
 	#endif
 }
 <indent>.               {
@@ -129,13 +126,13 @@
     if (current_line_indent > indent_level*tab_size ) {
         indent_level++;
         #ifdef FLEX_DEBUG
-        cout << "emit {, cli=" << current_line_indent << ", indent =" << indent_level <<"\n";
+        printf("emit {, cli=%i, indent =%i\n", current_line_indent, indent_level);
         #endif
         return '{';
     } else if (current_line_indent < indent_level*tab_size ) {
         indent_level--;
         #ifdef FLEX_DEBUG
-         cout << "emit }, cli=" << current_line_indent << ", indent =" << indent_level <<"\n";
+        printf("emit }, cli=%i, indent =%i\n", current_line_indent, indent_level);
         #endif
         yycolumn--;
         return '}';
@@ -149,7 +146,7 @@
             indent_level--;
             unput('\r');
             #ifdef FLEX_DEBUG
-            cout << "emit }\n";
+            printf("emit }\n");
             #endif
             return '}';
         } else {
@@ -163,7 +160,7 @@
     }
 }
 
-<include>[ \t]*                        /* eat the whitespace */
+<include>[ \t]*                     /* eat the whitespace */
 <include>[^ \t\r\n]+                { /* got the include file name */
     auto cfi = g_AccessStack.back();
     string incFileName = g_Program->access->getIncludeFileName(cfi->name,yytext);
@@ -334,7 +331,7 @@
         need_oxford_comma = true;
         BEGIN(indent);
         #ifdef FLEX_DEBUG
-        cout << "emit ;\n";
+        printf("emit ;\n");
         #endif
         if ( ns )
             return ';';

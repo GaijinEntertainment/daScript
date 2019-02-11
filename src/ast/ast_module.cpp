@@ -166,12 +166,12 @@ namespace das
         return it != callThis.end() ? &it->second : nullptr;
     }
 
-    bool Module::compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len ) {
+    bool Module::compileBuiltinModule ( const string & modName, unsigned char * str, unsigned int str_len ) {
         TextWriter issues;
         str[str_len-1] = 0;//replace last symbol with null terminating. fixme: This is sloppy, and assumes there is something to replace!
         auto access = make_shared<FileAccess>();
-        access->setFileInfo(name, (char *) str, uint32_t(str_len), true );
-        if (auto program = parseDaScript(name, access, issues)) {
+        access->setFileInfo(modName, (char *) str, uint32_t(str_len), true );
+        if (auto program = parseDaScript(modName, access, issues)) {
             if (program->failed()) {
 #if 1
                 for (auto & err : program->errors) {
