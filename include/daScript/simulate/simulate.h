@@ -1300,11 +1300,11 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     struct SimNode_ClosureBlock : SimNode_Block {
-        SimNode_ClosureBlock ( const LineInfo & at, bool nr, void * ad )
+        SimNode_ClosureBlock ( const LineInfo & at, bool nr, uint64_t ad )
             : SimNode_Block(at), needResult(nr), annotationData(ad) {}
         virtual vec4f eval ( Context & context ) override;
         bool needResult = false;
-        void * annotationData = nullptr;
+        uint64_t annotationData = 0;
     };
 
     struct SimNode_MakeLocal : SimNode_Block {

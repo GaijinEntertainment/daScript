@@ -616,7 +616,7 @@ namespace das
         vector<VariablePtr>     arguments;
         uint32_t                stackTop = 0;
         AnnotationList          annotations;
-        void *                  annotationData = nullptr;   // to be filled with annotation
+        uint64_t                annotationData = 0;   // to be filled with annotation
         union {
             struct {
                 bool            isClosure : 1;

@@ -120,7 +120,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
     }
     virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList &, const AnnotationArgumentList &, string & err ) override {
         size_t index = g_esBlockTable.size();
-        block->annotationData = (void *)(index | 0xbad00000);
+        block->annotationData = uint64_t(index | 0xbad00000);
         EsAttributeTable tab;
         buildAttributeTable(tab, block->arguments, err);
         g_esBlockTable.push_back(tab);
