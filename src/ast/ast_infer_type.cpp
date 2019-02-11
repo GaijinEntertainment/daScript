@@ -1343,8 +1343,11 @@ namespace das {
             return false;
         }
         virtual ExpressionPtr visit ( ExprReturn * expr ) override {
+            expr->block.reset();
+            expr->func.reset();
             if ( blocks.size() ) {
                 ExprBlock * block = blocks.back();
+                expr->block = static_pointer_cast<ExprBlock>(block->shared_from_this());
                 block->hasReturn = true;
                 if ( expr->subexpr ) {
                     if ( !expr->subexpr->type ) return Visitor::visit(expr);
@@ -1359,14 +1362,13 @@ namespace das {
                     block->returnType = make_shared<TypeDecl>(*block->type);
                     setBlockCopyMoveFlags(block);
                 }
-                expr->copyOnReturn = block->copyOnReturn;
-                expr->moveOnReturn = block->moveOnReturn;
-                if ( expr->moveOnReturn && !expr->moveSemantics ) {
+                if ( block->moveOnReturn && !expr->moveSemantics ) {
                     error("this type can't be copied, use return <- instead",
                           expr->at, CompilationError::invalid_return_semantics );
                 }
             } else {
                 // infer
+                expr->func = func;
                 func->hasReturn = true;
                 if ( expr->subexpr ) {
                     if ( !expr->subexpr->type ) return Visitor::visit(expr);
@@ -1377,9 +1379,7 @@ namespace das {
                     }
                 }
                 inferReturnType(func->result, expr);
-                expr->copyOnReturn = func->copyOnReturn;
-                expr->moveOnReturn = func->moveOnReturn;
-                if ( expr->moveOnReturn && !expr->moveSemantics ) {
+                if ( func->moveOnReturn && !expr->moveSemantics ) {
                     error("this type can't be copied, use return <- instead",
                           expr->at, CompilationError::invalid_return_semantics );
                 }
@@ -1632,8 +1632,8 @@ namespace das {
                 error("too many matching functions " + expr->describe() + "\n" + candidates,
                       expr->at, CompilationError::function_not_found);
             } else {
-                auto func = functions[0];
-                expr->type = make_shared<TypeDecl>(*func->result);
+                auto funcC = functions[0];
+                expr->type = make_shared<TypeDecl>(*funcC->result);
                 // infer FORWARD types
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
@@ -1641,9 +1641,9 @@ namespace das {
                         assert ( arg->rtti_isMakeBlock() && "always MakeBlock" );
                         auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                        auto retT = TypeDecl::inferAutoType(mkBlock->type, func->arguments[iF]->type);
+                        auto retT = TypeDecl::inferAutoType(mkBlock->type, funcC->arguments[iF]->type);
                         assert ( retT && "how? it matched during findMatchingFunctions the same way");
-                        TypeDecl::applyAutoContracts(mkBlock->type, func->arguments[iF]->type);
+                        TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
                         block->returnType = make_shared<TypeDecl>(*retT->firstType);
                         for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
                             block->arguments[ba]->type = make_shared<TypeDecl>(*retT->argTypes[ba]);
@@ -1653,8 +1653,8 @@ namespace das {
                     }
                 }
                 // append default arguments
-                for ( size_t iT = expr->arguments.size(); iT != func->arguments.size(); ++iT ) {
-                    auto newArg = func->arguments[iT]->init->clone();
+                for ( size_t iT = expr->arguments.size(); iT != funcC->arguments.size(); ++iT ) {
+                    auto newArg = funcC->arguments[iT]->init->clone();
                     if ( !newArg->type ) {
                         // recursive resolve???
                         newArg = newArg->visit(*this);
@@ -1663,10 +1663,10 @@ namespace das {
                 }
                 // dereference what needs dereferences
                 for ( size_t iA = 0; iA != expr->arguments.size(); ++iA )
-                    if ( !func->arguments[iA]->type->isRef() )
+                    if ( !funcC->arguments[iA]->type->isRef() )
                         expr->arguments[iA] = Expression::autoDereference(expr->arguments[iA]);
                 // and all good
-                return func;
+                return funcC;
             }
             return nullptr;
         }

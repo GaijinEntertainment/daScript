@@ -1,5 +1,3 @@
-options log = true // , printVarAccess=true, printRef=true, optimize=false
-
 struct Ball
     center : float3 = float3(7,8,9)
     radius : float = 1.234f
@@ -22,3 +20,4 @@ def test
     for b in b3
 		assert(b.center==float3(3,2,1) & b.radius==0.5f)
     return true
+

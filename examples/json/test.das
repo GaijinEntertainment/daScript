@@ -42,7 +42,6 @@ def test
 
 def test_parse
     let json_text = "\{ \"hello\": \"world\", \"t\": true , \"f\": false, \"n\": null, \"i\": 123, \"pi\": 3.1416, \"a\": [1, 2, 3, 4] \}"
-
     readJson(json_text) <| $ ( root, error )
         // general navigation
         print("{root}\n")

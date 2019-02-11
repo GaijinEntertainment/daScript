@@ -326,7 +326,7 @@ namespace das
             int32_t bytes = type->firstType->getSizeOf();
             if ( initializer ) {
                 auto pCall = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_NewWithInitializer>(int(arguments.size()),at,bytes);
-                pCall->stackTop = -1;
+                pCall->stackTop = -1u;
                 newNode = ExprCall::simulateCall(func, this, context, pCall);
             } else {
                 newNode = context.code->makeNode<SimNode_New>(at,bytes);
@@ -642,23 +642,22 @@ namespace das
             } else {
                 return context.code->makeNode<SimNode_ReturnReference>(at, simSubE);
             }
-        } else if ( copyOnReturn ) {
-            if ( returnInBlock ) {
+        } else if ( returnInBlock ) {
+            if ( block->copyOnReturn  ) {
                 return context.code->makeNode<SimNode_ReturnAndCopyFromBlock>(at,
                             simSubE, subexpr->type->getSizeOf(), stackTop);
-            } else {
-                return context.code->makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
-            }
-        } else if ( moveOnReturn ) {
-            if ( returnInBlock ) {
+            } else if ( block->moveOnReturn ) {
                 return context.code->makeNode<SimNode_ReturnAndMoveFromBlock>(at,
-                            simSubE, subexpr->type->getSizeOf(), stackTop);
-            } else {
-                return context.code->makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
+                    simSubE, subexpr->type->getSizeOf(), stackTop);
             }
         } else {
-            return context.code->makeNode<SimNode_Return>(at, simSubE);
+            if ( func->copyOnReturn ) {
+                return context.code->makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
+            } else if ( func->moveOnReturn ) {
+                return context.code->makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
+            }
         }
+        return context.code->makeNode<SimNode_Return>(at, simSubE);
     }
 
     SimNode * ExprBreak::simulate (Context & context) const {

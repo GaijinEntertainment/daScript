@@ -792,12 +792,12 @@ namespace das
                 bool moveSemantics   : 1;
                 bool returnReference : 1;
                 bool returnInBlock   : 1;
-                bool copyOnReturn    : 1;
-                bool moveOnReturn    : 1;
             };
             uint32_t    returnFlags = 0;
         };
         uint32_t stackTop = 0;
+        FunctionPtr             func;
+        shared_ptr<ExprBlock>   block;
     };
 
     struct ExprBreak : Expression {
