@@ -5,19 +5,47 @@ using namespace das;
 
 TextPrinter tout;
 
+class FsFileInfo : public FileInfo {
+    virtual ~FsFileInfo() {
+        das_aligned_free16(source);
+    }
+};
+
+class FsFileAccess : public FileAccess {
+    virtual FileInfo * getNewFileInfo(const string & fileName) override {
+        if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
+            auto info = new FsFileInfo();
+            fseek(ff,0,SEEK_END);
+            info->sourceLength = uint32_t(ftell(ff));
+            fseek(ff,0,SEEK_SET);
+            info->source = (char *) das_aligned_alloc16(info->sourceLength+1);
+            fread(info->source, 1, info->sourceLength, ff);
+            info->source[info->sourceLength] = 0;
+            return setFileInfo(fileName, info);
+        }
+        return nullptr;
+    }
+};
+
 bool unit_test ( const string & fn ) {
 	tout << fn << " ";
-    auto access = make_shared<FileAccess>();
+    auto access = make_shared<FsFileAccess>();
     if ( auto program = parseDaScript(fn, access, tout) ) {
         if ( program->failed() ) {
 			tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-				tout << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr );
+				tout <<  reportError(err.at, err.what, err.cerr );
             }
             return false;
         } else {
             Context ctx;
-            program->simulate(ctx, tout);
+            if ( !program->simulate(ctx, tout) ) {
+                tout << "failed to simulate\n";
+                for ( auto & err : program->errors ) {
+                    tout << reportError(err.at, err.what, err.cerr );
+                }
+                return false;
+            }
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));

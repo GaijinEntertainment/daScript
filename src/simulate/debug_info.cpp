@@ -216,19 +216,9 @@ namespace das
         return line!=info.line || column!=info.column;
     }
 
-    FileInfo::~FileInfo() {
-        if ( source && !builtIn ) {
-            das_aligned_free16(source);
-        }
-    }
-
-    FileInfo * FileAccess::setFileInfo ( const string & fileName, char * src, uint32_t srcLen, bool builtIn ) {
+    FileInfo * FileAccess::setFileInfo ( const string & fileName, FileInfo * info ) {
         if ( files.find(fileName)!=files.end() ) return nullptr;
-        auto info = make_unique<FileInfo>();
-        info->sourceLength = srcLen;
-        info->source = src;
-        info->builtIn = builtIn;
-        files[fileName] = move(info);
+        files[fileName] = unique_ptr<FileInfo>(info);
         auto ins = files.find(fileName);
         ins->second->name = (char *) ins->first.c_str();
         return ins->second.get();
@@ -239,16 +229,7 @@ namespace das
         if ( it != files.end() ) {
             return it->second.get();
         }
-        if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
-            fseek(ff,0,SEEK_END);
-            auto sourceLength = uint32_t(ftell(ff));
-            fseek(ff,0,SEEK_SET);
-            auto source = (char *) das_aligned_alloc16(sourceLength+1);
-            fread(source, 1, sourceLength, ff);
-            source[sourceLength] = 0;
-            return setFileInfo(fileName, source, sourceLength);
-        }
-        return nullptr;
+        return getNewFileInfo(fileName);
     }
 
     string FileAccess::getIncludeFileName ( const string & fileName, const string & incFileName ) const {
@@ -257,16 +238,6 @@ namespace das
             return fileName.substr(0,np+1) + incFileName;
         } else {
             return incFileName;
-        }
-    }
-
-    void FileAccess::freeSourceMemory() {
-        for ( auto & it : files ) {
-            auto fi = it.second.get();
-            if ( fi->source && !fi->builtIn ) {
-                das_aligned_free16(fi->source);
-                fi->source = nullptr;
-            }
         }
     }
 }

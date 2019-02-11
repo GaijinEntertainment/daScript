@@ -170,7 +170,8 @@ namespace das
         TextWriter issues;
         str[str_len-1] = 0;//replace last symbol with null terminating. fixme: This is sloppy, and assumes there is something to replace!
         auto access = make_shared<FileAccess>();
-        access->setFileInfo(modName, (char *) str, uint32_t(str_len), true );
+        auto fileInfo = new FileInfo((char *) str, uint32_t(str_len));
+        access->setFileInfo(modName, fileInfo);
         if (auto program = parseDaScript(modName, access, issues)) {
             if (program->failed()) {
 #if 1

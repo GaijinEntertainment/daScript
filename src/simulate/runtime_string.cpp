@@ -121,6 +121,13 @@ namespace das
         return ss.str();
     }
 
+    string reportError(const struct LineInfo & at, const string & message, CompilationError erc) {
+        return reportError(
+                at.fileInfo ? at.fileInfo->source : nullptr, 
+                at.fileInfo ? at.fileInfo->name : nullptr, 
+                at.line, at.column, message, erc );
+    }
+
     string reportError ( const char * st, const char * fileName, int row, int col, const string & message, CompilationError erc ) {
         TextWriter ssw;
         if ( row && col ) {

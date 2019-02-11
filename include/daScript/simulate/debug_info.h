@@ -48,25 +48,22 @@ namespace das
     };
 
     struct FileInfo {
+        FileInfo() = default;
+        FileInfo(char * s, uint32_t l) : source(s), sourceLength(l) {}
         char *          name = nullptr;
         char *          source = nullptr;
         uint32_t        sourceLength = 0;
-        union {
-            struct {
-                bool    builtIn : 1;
-            };
-            uint32_t    flags = 0;
-        };
-        ~FileInfo();
+        virtual ~FileInfo() {}
     };
 
     class FileAccess {
     public:
         virtual ~FileAccess() {}
-        virtual FileInfo * getFileInfo ( const string & fileName );
-        FileInfo * setFileInfo ( const string & fileName, char * src, uint32_t srcLen, bool builtIn = false );
+        FileInfo * setFileInfo ( const string & fileName, FileInfo * info );
+        FileInfo * getFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
-        void freeSourceMemory();
+    protected:
+        virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
         map<string, unique_ptr<FileInfo>>   files;
     };

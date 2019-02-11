@@ -1378,6 +1378,8 @@ namespace das
             yybegin(fi->source);
         } else {
             g_Program->error(fileName + " not found", LineInfo());
+            g_Program.reset();
+            return program;
         }
         err = yyparse();        // TODO: add mutex or make thread safe?
         yylex_destroy();
