@@ -135,7 +135,6 @@ namespace das
     template<> struct ToBasicType<Iterator *>   { enum { type = Type::tIterator }; };
     template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
     template<> struct ToBasicType<char *>       { enum { type = Type::tString }; };
-    template<> struct ToBasicType<string>       { enum { type = Type::tString }; };
     template<> struct ToBasicType<bool>         { enum { type = Type::tBool }; };
     template<> struct ToBasicType<int64_t>      { enum { type = Type::tInt64 }; };
     template<> struct ToBasicType<uint64_t>     { enum { type = Type::tUInt64 }; };

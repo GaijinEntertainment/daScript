@@ -22,14 +22,6 @@ namespace das
     };
 
     template <>
-    struct cast <string> {
-        static __forceinline string to ( vec4f x )             { return cast<char *>::to(x); }
-        static __forceinline vec4f from ( const string & x )   { return cast<char *>::from((char *)x.c_str()); }
-    };
-    template<> struct cast <string &> : cast<string> {};
-    template<> struct cast <const string &> : cast<string> {};
-
-    template <>
     struct cast <bool> {
         static __forceinline bool to ( vec4f x )               { return (bool) v_extract_xi(v_cast_vec4i(x)); }
         static __forceinline vec4f from ( bool x )             { return v_cast_vec4f(v_splatsi(x)); }
