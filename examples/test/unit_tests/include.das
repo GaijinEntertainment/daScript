@@ -4,6 +4,8 @@
 
 include include_file.inc
 
+include include_file.inc
+
 [export]
 def test
     let y = inc_add_2(3)
