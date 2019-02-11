@@ -8,6 +8,8 @@ namespace das
     template  <typename FuncT, FuncT fn, typename SimNodeT>
     class ExternalFn : public BuiltInFunction {
 
+        static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4100)
