@@ -186,7 +186,7 @@ namespace das
     }
 
     inline void set_das_string(string & str, const char * bs) {
-        str = bs;
+        str = bs ? bs : "";
     }
 
     inline void peek_das_string(const string & str, Block block, Context * context) {
