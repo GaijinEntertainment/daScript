@@ -35,6 +35,7 @@
     bool need_oxford_comma = true;
     bool in_normal = false;
     vector<int> line_no;
+    set<string> already_include;
     
     #define YY_USER_ACTION \
         yylloc.first_line = yylloc.last_line = yylineno; \
@@ -170,11 +171,14 @@
     if ( !info ) {
         yyerror("can't open "+incFileName);
     } else {
-        g_AccessStack.push_back(info);
-        line_no.push_back(yylineno);
-        yylineno = 1;
-        yypush_buffer_state(YY_CURRENT_BUFFER);
-        yy_scan_bytes(info->source, info->sourceLength);
+        if ( already_include.find(incFileName) == already_include.end() ) {
+            already_include.insert(incFileName);
+            g_AccessStack.push_back(info);
+            line_no.push_back(yylineno);
+            yylineno = 1;
+            yypush_buffer_state(YY_CURRENT_BUFFER);
+            yy_scan_bytes(info->source, info->sourceLength);
+        }
     }
     BEGIN(normal);
 }
@@ -343,6 +347,7 @@
 extern int yydebug;
 
 void yybegin(const char * str) {
+    already_include.clear();
     yydebug = 0;
     yylineno = 1;
     line_no.clear();
