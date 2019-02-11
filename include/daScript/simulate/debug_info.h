@@ -55,28 +55,29 @@ namespace das
         uint32_t        sourceLength = 0;
         virtual ~FileInfo() {}
     };
+    typedef shared_ptr<FileInfo> FileInfoPtr;
 
     class FileAccess {
     public:
         virtual ~FileAccess() {}
-        FileInfo * setFileInfo ( const string & fileName, FileInfo * info );
-        FileInfo * getFileInfo ( const string & fileName );
+        FileInfoPtr setFileInfo ( const string & fileName, FileInfo * info );
+        FileInfoPtr getFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
     protected:
-        virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
+        virtual FileInfoPtr getNewFileInfo ( const string & ) { return nullptr; }
     protected:
-        map<string, unique_ptr<FileInfo>>   files;
+        map<string, FileInfoPtr>    files;
     };
     typedef shared_ptr<FileAccess> FileAccessPtr;
 
     struct LineInfo {
         LineInfo() = default;
-        LineInfo(FileInfo * fi, int c, int l) : fileInfo(fi), column(uint32_t(c)), line(uint32_t(l)) {}
+        LineInfo(const FileInfoPtr & fi, int c, int l) : fileInfo(fi), column(uint32_t(c)), line(uint32_t(l)) {}
         bool operator < ( const LineInfo & info ) const;
         bool operator == ( const LineInfo & info ) const;
         bool operator != ( const LineInfo & info ) const;
         string describe() const;
-        FileInfo *  fileInfo;
+        FileInfoPtr fileInfo;
         uint32_t    column = 0, line = 0;
     };
 

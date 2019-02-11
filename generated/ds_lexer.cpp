@@ -1249,7 +1249,7 @@ YY_RULE_SETUP
 { /* got the include file name */
     auto cfi = g_AccessStack.back();
     string incFileName = g_Program->access->getIncludeFileName(cfi->name,yytext);
-    FileInfo * info = g_Program->access->getFileInfo(incFileName);
+    auto info = g_Program->access->getFileInfo(incFileName);
     if ( !info ) {
         yyerror("can't open "+incFileName);
     } else {

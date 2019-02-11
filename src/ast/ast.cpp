@@ -1366,7 +1366,7 @@ namespace das
     // PARSER
 
     ProgramPtr g_Program;
-    vector<FileInfo *>  g_AccessStack;
+    vector<FileInfoPtr>  g_AccessStack;
 
     ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs ) {
         int err;

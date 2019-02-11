@@ -49,8 +49,8 @@ extern int yydebug;
 	#include "daScript/ast/ast.h"
     
     namespace das {
-        extern ProgramPtr           g_Program;
-        extern vector<FileInfo *>   g_AccessStack;
+        extern ProgramPtr			g_Program;
+        extern vector<FileInfoPtr>	g_AccessStack;
     }
     using namespace das;
     

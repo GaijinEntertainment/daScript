@@ -12,7 +12,7 @@ class FsFileInfo : public FileInfo {
 };
 
 class FsFileAccess : public FileAccess {
-    virtual FileInfo * getNewFileInfo(const string & fileName) override {
+    virtual FileInfoPtr getNewFileInfo(const string & fileName) override {
         if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
             auto info = new FsFileInfo();
             fseek(ff,0,SEEK_END);

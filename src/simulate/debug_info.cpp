@@ -216,18 +216,18 @@ namespace das
         return line!=info.line || column!=info.column;
     }
 
-    FileInfo * FileAccess::setFileInfo ( const string & fileName, FileInfo * info ) {
+    FileInfoPtr FileAccess::setFileInfo ( const string & fileName, FileInfo * info ) {
         if ( files.find(fileName)!=files.end() ) return nullptr;
-        files[fileName] = unique_ptr<FileInfo>(info);
+        files[fileName] = FileInfoPtr(info);
         auto ins = files.find(fileName);
         ins->second->name = (char *) ins->first.c_str();
-        return ins->second.get();
+        return ins->second;
     }
 
-    FileInfo * FileAccess::getFileInfo ( const string & fileName ) {
+    FileInfoPtr FileAccess::getFileInfo ( const string & fileName ) {
         auto it = files.find(fileName);
         if ( it != files.end() ) {
-            return it->second.get();
+            return it->second;
         }
         return getNewFileInfo(fileName);
     }
