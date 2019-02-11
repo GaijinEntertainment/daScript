@@ -3,6 +3,7 @@
 #include "module_builtin.h"
 
 #include "daScript/ast/ast_interop.h"
+#include "daScript/ast/ast_handle.h"
 
 #include "daScript/simulate/runtime_array.h"
 
@@ -180,27 +181,26 @@ namespace das
     inline float fast_to_float ( const char *str ){return str ? (float)atof(str) : 0.f;}
     inline int fast_to_int ( const char *str ){return str ? atoi(str) : 0;}
 
-    struct DasStringTypeAnnotation : TypeAnnotation {
-        DasStringTypeAnnotation() : TypeAnnotation("das_string") {}
-        virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
-        virtual bool isRefType() const override { return true; }
-        virtual bool isLocal() const override { return false; }
-    };
-    MAKE_TYPE_FACTORY(das_string, string);
-
-    char * to_das_string(const string & str, Context * ctx) {
+    inline char * to_das_string(const string & str, Context * ctx) {
         return ctx->heap.allocateName(str);
     }
 
-    void set_das_string(string & str, const char * bs) {
+    inline void set_das_string(string & str, const char * bs) {
         str = bs;
+    }
+
+    inline void peek_das_string(const string & str, Block block, Context * context) {
+        vec4f args[1];
+        args[0] = cast<const char *>::from(str.c_str());
+        context->invoke(block, args, nullptr);
     }
 
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // das string binding
         addAnnotation(make_shared<DasStringTypeAnnotation>());
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none);
-        addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "set", SideEffects::none);
+        addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "set", SideEffects::modifyArgument);
+        addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "_builtin_peek", SideEffects::none);
         // regular string
         addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", SideEffects::none);
         addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", SideEffects::none);

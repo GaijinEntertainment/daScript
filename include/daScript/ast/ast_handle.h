@@ -7,6 +7,25 @@ namespace das
     #define DAS_BIND_MANAGED_FIELD(FIELDNAME)   DAS_BIND_FIELD(ManagedType,FIELDNAME)
     #define DAS_BIND_MANAGED_PROP(FIELDNAME)    DAS_BIND_PROP(ManagedType,FIELDNAME)
 
+    struct DasStringTypeAnnotation : TypeAnnotation {
+        DasStringTypeAnnotation() : TypeAnnotation("das_string") {}
+        virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
+        virtual bool isRefType() const override { return true; }
+        virtual bool isLocal() const override { return false; }
+        virtual void walk ( DataWalker & dw, void * p ) override { 
+            auto pstr = (string *)p;
+            if (dw.reading) {
+                char * pss = nullptr;
+                dw.String(pss);
+                *pstr = pss;
+            } else {
+                char * pss = (char *) pstr->c_str();
+                dw.String(pss);
+            }
+        }
+    };
+    MAKE_TYPE_FACTORY(das_string, string);
+
     template <typename OT, bool canNewAndDelete = true>
     struct ManagedStructureAnnotation ;
 

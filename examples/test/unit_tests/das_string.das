@@ -1,5 +1,3 @@
-options log = true // , printVarAccess=true, printRef=true, optimize=false
-
 require UnitTest
 
 [export]
@@ -13,3 +11,4 @@ def test
 		assert("{s}"=="out_of_it")
 		assert(string(s)=="out_of_it")
     return true
+
