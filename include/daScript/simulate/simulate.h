@@ -1150,7 +1150,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_NewWithInitializer ( const LineInfo & at, int32_t b ) : SimNode_CallBase(at), bytes(b) {}
         __forceinline char * compute ( Context & context ) {
             if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
-                memset ( ptr, 0, bytes );
                 vec4f argValues[argCount ? argCount : 1];
                 EvalBlock<argCount>::eval(context, arguments, argValues);
                 context.callWithCopyOnReturn(fnPtr, argValues, ptr, debug.line);
