@@ -10,7 +10,7 @@ __forceinline void * v_extract_ptr(vec4i a) {
 #endif
 
 }
-__forceinline vec4i v_splats_ptr(void * a) {
+__forceinline vec4i v_splats_ptr(const void * a) {
 #if INTPTR_MAX == INT32_MAX
     return v_splatsi((int32_t)a);
 #else
