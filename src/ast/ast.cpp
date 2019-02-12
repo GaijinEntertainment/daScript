@@ -1368,7 +1368,11 @@ namespace das
     ProgramPtr g_Program;
     vector<FileInfoPtr>  g_AccessStack;
 
+    extern "C" int64_t ref_time_ticks ();
+    extern "C" int get_time_usec (int64_t reft);
+
     ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs ) {
+        auto time0 = ref_time_ticks();
         int err;
         auto program = g_Program = make_shared<Program>();
         program->access = access;
@@ -1413,6 +1417,10 @@ namespace das
                 }
             }
             sort(program->errors.begin(), program->errors.end());
+            if ( program->options.getOption("logCompileTime",false) ) {
+                auto dt = get_time_usec(time0) / 1000000.;
+                logs << "compiler took " << dt << "\n";
+            }
             return program;
         }
     }
