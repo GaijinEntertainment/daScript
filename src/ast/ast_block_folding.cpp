@@ -62,8 +62,9 @@ namespace das {
 
     class BlockFolding : public OptVisitor {
     protected:
-        void collect ( vector<ExpressionPtr> & list, ExprBlock * block ) {
-            for ( auto & expr : block->list ) {
+        void collect ( vector<ExpressionPtr> & list, vector<ExpressionPtr> & blockList ) {
+            for ( auto & expr : blockList ) {
+                if ( !expr ) continue;
                 if ( expr->rtti_isBreak() || expr->rtti_isReturn() ) {
                     list.push_back(expr);
                     break;
@@ -71,7 +72,7 @@ namespace das {
                 if ( expr->rtti_isBlock() ) {
                     auto pBlock = static_pointer_cast<ExprBlock>(expr);
                     if ( !pBlock->isClosure && !pBlock->finalList.size() ) {
-                        collect(list, static_cast<ExprBlock *>(expr.get()));
+                        collect(list, pBlock->list);
                     } else {
                         list.push_back(expr);
                     }
@@ -84,9 +85,15 @@ namespace das {
     // ExprBlock
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             vector<ExpressionPtr> list;
-            collect(list, block);
+            collect(list, block->list);
             if ( list!=block->list ) {
                 swap ( block->list, list );
+                reportFolding();
+            }
+            vector<ExpressionPtr> finalList;
+            collect(finalList, block->finalList);
+            if ( finalList!=block->finalList ) {
+                swap ( block->finalList, finalList );
                 reportFolding();
             }
             return Visitor::visit(block);
