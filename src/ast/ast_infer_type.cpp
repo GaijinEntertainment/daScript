@@ -419,9 +419,11 @@ namespace das {
                 }
             } else if ( !var->type->isSameType(*var->init->type,false) ) {
                 error("global variable initialization type mismatch, "
-                      + var->type->describe() + " = " + var->init->type->describe(), var->at );
+                      + var->type->describe() + " = " + var->init->type->describe(), var->at,
+                    CompilationError::invalid_initialization_type);
             } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
-                error("this global variable can't be initialized at all", var->at);
+                error("this global variable can't be initialized at all", var->at,
+                    CompilationError::invalid_initialization_type);
             }
             return Visitor::visitGlobalLetInit(var, init);
         }
@@ -860,13 +862,17 @@ namespace das {
             if ( expr->type && expr->initializer && !expr->name.empty() ) {
                 auto resultType = expr->type;
                 expr->func = inferFunctionCall(expr);
+                swap ( resultType, expr->type );
                 if ( func ) {
-                    swap ( resultType, expr->type );
                     if ( !expr->type->firstType->isSameType(*resultType,true,true) ) {
                         error("initializer returns (" +resultType->describe() + ") vs "
                             +  expr->type->firstType->describe() + ")",
                               expr->at, CompilationError::invalid_new_type);
                     }
+                }
+                else {
+                    error(expr->type->firstType->describe() + " does not have default initializer",
+                        expr->at, CompilationError::invalid_new_type);
                 }
             }
             verifyType(expr->typeexpr);
@@ -1537,18 +1543,23 @@ namespace das {
                 }
             } else if ( !var->type->isSameType(*var->init->type,false,false) ) {
                 error("local variable initialization type mismatch, "
-                      + var->type->describe() + " = " + var->init->type->describe(), var->at );
+                      + var->type->describe() + " = " + var->init->type->describe(), var->at,
+                        CompilationError::invalid_initialization_type);
             } else if ( var->type->ref && !var->type->isSameType(*var->init->type,true,false) ) {
                 error("local variable initialization type mismatch. reference can't be initialized via value, "
-                      + var->type->describe() + " = " + var->init->type->describe(), var->at );
+                      + var->type->describe() + " = " + var->init->type->describe(), var->at,
+                        CompilationError::invalid_initialization_type);
             } else if ( var->type->isRef() &&  !var->type->isConst() && var->init->type->isConst() ) {
                 error("local variable initialization type mismatch. const matters, "
-                      + var->type->describe() + " = " + var->init->type->describe(), var->at );
+                      + var->type->describe() + " = " + var->init->type->describe(), var->at,
+                    CompilationError::invalid_initialization_type);
             } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
-                error("this local variable can't be initialized at all", var->at);
+                error("this local variable can't be initialized at all", var->at,
+                    CompilationError::invalid_initialization_type);
             } else if ( !var->type->ref && !var->init->type->canCopy()
                        && var->init->type->canMove() && !var->move_to_init ) {
-                error("this local variable can only be move-initialized, use <- for that", var->at);
+                error("this local variable can only be move-initialized, use <- for that", var->at,
+                    CompilationError::invalid_initialization_type);
             }
             return Visitor::visitLetInit(expr, var, init);
         }
