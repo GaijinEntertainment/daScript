@@ -1766,6 +1766,32 @@ namespace das {
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
         virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+            // see if we need to fill in missing fields
+            if ( expr->useInitializer && expr->makeType->structType ) {
+                bool anyInit = false;
+                for ( auto & st : expr->structs ) {
+                    for ( auto & fi : expr->makeType->structType->fields ) {
+                        if ( fi.init ) {
+                            anyInit = true;
+                            auto it = find_if(st->begin(), st->end(), [&](const MakeFieldDeclPtr & fd){
+                                return fd->name == fi.name;
+                            });
+                            if ( it==st->end() ) {
+                                auto msf = make_shared<MakeFieldDecl>(fi.at, fi.name, fi.init->clone());
+                                st->push_back(msf);
+                                reportGenericInfer();
+                            }
+                        }
+                    }
+                }
+                if ( !anyInit ) {
+                    error("[[" + expr->makeType->describe() + "() ]] does not have default initializer",
+                          expr->at, CompilationError::invalid_type);
+                } else {
+                    expr->useInitializer = false;
+                }
+            }
+            // result type
             auto resT = make_shared<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->structs.size());
             if ( resDim!=1 ) {

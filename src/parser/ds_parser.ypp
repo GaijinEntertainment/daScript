@@ -1274,6 +1274,12 @@ make_struct_decl
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
+    |   '['[loc] '[' type_declaration[mkt] '(' ')' make_struct_dim[msd] ']' ']' {
+        ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStructure *)$msd)->useInitializer = true;
+        $msd->at = tokAt(@loc);
+        $$ = $msd;
+    }
     ;
 
 make_dim

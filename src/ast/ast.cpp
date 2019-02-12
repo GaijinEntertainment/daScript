@@ -1048,6 +1048,7 @@ namespace das
             cexpr->structs.push_back(mfd);
         }
         cexpr->makeType = make_shared<TypeDecl>(*makeType);
+        cexpr->useInitializer = useInitializer;
         return cexpr;
     }
 

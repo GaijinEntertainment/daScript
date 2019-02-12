@@ -1,5 +1,18 @@
 // options log=true, logStack=true, optimize=true
 
+struct Bar
+    x:int = 1
+    y:int = 2
+    z:int = 3
+    w:int = 4
+
+def test_bar
+    let t0 = [[Bar x=13]]
+    assert(t0.x==13 & t0.y==0 & t0.z==0 & t0.w==0)
+    let t1 = [[Bar() x=13]]
+    assert(t1.x==13 & t1.y==2 & t1.z==3 & t1.w==4)
+    return true
+
 struct Foo
     i : int = 5
     f : float = 6.0
@@ -13,6 +26,7 @@ let
 
 [export]
 def test
+    test_bar()
 	assert(testFoo.i==5 & testFoo.f==6. & testFoo.s=="hello")
 	assert(jestFoo.i==3 & jestFoo.f==4. & jestFoo.s=="blah")
     let t = Foo()

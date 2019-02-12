@@ -1239,6 +1239,7 @@ namespace das
         TypeDeclPtr                 makeType;
         vector<MakeStructPtr>       structs;
         uint32_t                    stackTop = 0;
+        bool                        useInitializer = false;
     };
 
     struct ExprMakeArray : Expression {
