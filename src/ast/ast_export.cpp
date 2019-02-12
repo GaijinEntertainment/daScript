@@ -67,7 +67,7 @@ namespace das {
         virtual void preVisitGlobalLet(const VariablePtr & var) override {
             Visitor::preVisitGlobalLet(var);
             gVar = var->getMangledName();
-            // var->used = false;
+            var->used = false;
         }
         virtual VariablePtr visitGlobalLet(const VariablePtr & var) override {
             gVar.clear();

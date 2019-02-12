@@ -863,7 +863,7 @@ namespace das {
                 auto resultType = expr->type;
                 expr->func = inferFunctionCall(expr);
                 swap ( resultType, expr->type );
-                if ( func ) {
+                if ( expr->func ) {
                     if ( !expr->type->firstType->isSameType(*resultType,true,true) ) {
                         error("initializer returns (" +resultType->describe() + ") vs "
                             +  expr->type->firstType->describe() + ")",

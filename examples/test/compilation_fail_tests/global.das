@@ -1,6 +1,6 @@
 // options log=true, logInferPasses=false, optimize=true
 
-expect 30113, 30109
+expect 30113
 
 struct Foo
     i : int = 5
@@ -8,7 +8,6 @@ struct Foo
 
 let
     g : Foo = new Foo()	// 30113: global variable initialization type mismatch, Foo = Foo?
-			// 30109: Foo does not have default initializer
 
 [export]
 def test

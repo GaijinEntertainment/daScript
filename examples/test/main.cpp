@@ -217,7 +217,7 @@ int main() {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "test/compilation_fail_tests/static_assert_in_infer.das");
+    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/global.das");
     Module::Shutdown();
     return 0;
 #endif
