@@ -12,7 +12,7 @@ namespace das
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool isRefType() const override { return true; }
         virtual bool isLocal() const override { return false; }
-        virtual void walk ( DataWalker & dw, void * p ) override { 
+        virtual void walk ( DataWalker & dw, void * p ) override {
             auto pstr = (string *)p;
             if (dw.reading) {
                 char * pss = nullptr;
@@ -25,6 +25,9 @@ namespace das
         }
     };
     MAKE_TYPE_FACTORY(das_string, string);
+
+    template <typename OT>
+    struct ManagedStructureAlignof {static constexpr size_t alignment = alignof(OT); } ;//we use due to MSVC inability to work with abstarct classes
 
     template <typename OT, bool canNewAndDelete = true>
     struct ManagedStructureAnnotation ;
@@ -52,7 +55,7 @@ namespace das
         }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
-        virtual size_t getAlignOf() const override { return alignof(ManagedType); }
+        virtual size_t getAlignOf() const override { return ManagedStructureAlignof<ManagedType>::alignment; }
         virtual bool isRefType() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
