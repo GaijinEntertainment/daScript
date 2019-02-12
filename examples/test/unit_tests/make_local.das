@@ -7,6 +7,8 @@ struct Bar
     w:int = 4
 
 def test_bar
+    let tf = Bar()
+    assert(tf.x==1 & tf.y==2 & tf.z==3 & tf.w==4)
     let t0 = [[Bar x=13]]
     assert(t0.x==13 & t0.y==0 & t0.z==0 & t0.w==0)
     let t1 = [[Bar() x=13]]

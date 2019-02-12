@@ -627,7 +627,10 @@ namespace das {
     // make structure
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             Visitor::preVisit(expr);
-            ss << "[[" << expr->type->describe() << " ";
+            ss << "[[";
+            if ( expr->type ) {
+                ss << expr->type->describe() << " ";
+            }
         }
         virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);
