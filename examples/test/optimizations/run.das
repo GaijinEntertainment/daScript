@@ -51,10 +51,10 @@ def test
 	assert("{w}"=="[[ 20; 20]]")
     let g = make_g_name("touch_global")
     assert("{g}"=="touch_global_global_ok")
-    let t = "blah"
-    stil_not_writing(t,g_name)
-    assert(t=="it")
+    let T = "blah"
+    stil_not_writing(T,g_name)
+    assert(T=="it")
     let tt = "_global_ok"
-    t = "blah"
-    stil_not_writing(t,tt)
+    T = "blah"
+    stil_not_writing(T,tt)
     return true

@@ -1494,6 +1494,14 @@ namespace das {
                 error("local variable type can't be infered, it needs an initializer",
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
+            for ( auto & lv : local ) {
+                if ( lv->name==var->name ) {
+                    error("local variable " + var->name +" is shadowed by another local variable "
+                          + lv->name + " : " + lv->type->describe() + " at line " + to_string(lv->at.line),
+                          var->at, CompilationError::variable_not_found);
+                    break;
+                }
+            }
             local.push_back(var);
         }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {

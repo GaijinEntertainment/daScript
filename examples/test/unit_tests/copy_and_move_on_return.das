@@ -36,8 +36,8 @@ def test
     // copy on return
     let t = addBar(newFoo(),newFoo())
     assert(t==2)
-    let tt = addBar(newFooB({ let t : Foo; t.bar = 1; return t; }),
-        newFooB({ let t : Foo; t.bar = 1; return t; }))
+    let tt = addBar(newFooB({ let T : Foo; T.bar = 1; return T; }),
+        newFooB({ let T : Foo; T.bar = 1; return T; }))
     assert(tt==2)
     // move on return
     let z <- joinSequences(makeSequence(0,4),makeSequence(5,9))
