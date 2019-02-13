@@ -19,8 +19,8 @@ struct Foo
 def test
     let f0 <- Foo()
     let f1 : Foo
-    _builtin_binary_save(f0) <| $(data:string)
-        _builtin_binary_load(f1, data)
+    binary_save(f0) <| $(data)
+        binary_load(f1, data)
         assert(f1.data_bool==true)
         assert(f1.data_int==1)
         assert(f1.data_float==3.14)
@@ -29,6 +29,5 @@ def test
         for i in range(0,10)
             assert(f1.data_bar.ta[i]==float(i))
     return true
-
 
 

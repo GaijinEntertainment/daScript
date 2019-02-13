@@ -357,7 +357,7 @@ namespace das {
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                     const auto & argT = expr->func->arguments[ai]->type;
-                    if ( argT->isRef() && !argT->isConst() ) {
+                    if ( (argT->isRef() || argT->baseType==anyArgument) && !argT->isConst() ) {
                         if ( expr->func->knownSideEffects && !expr->func->builtIn ) {
                             if ( expr->func->arguments[ai]->access_ref ) {
                                 propagateWrite(expr->arguments[ai].get());

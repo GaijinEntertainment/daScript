@@ -1,6 +1,5 @@
-options log=true, logOptimizationPasses=true, printRef=true, printVarAccess=true
+options log=true // , logOptimizationPasses=true, printRef=true, printVarAccess=true
 
-/*
 def make_10
     let a : array<float>
     for i in range(0,10)
@@ -22,7 +21,7 @@ struct Foo
 def test
     let f0 <- Foo()
     let f1 : Foo
-    binary_save(f0) <| $(data:string)
+    binary_save(f0) <| $(data)
         binary_load(f1, data)
         assert(f1.data_bool==true)
         assert(f1.data_int==1)
@@ -32,5 +31,5 @@ def test
         for i in range(0,10)
             assert(f1.data_bar.ta[i]==float(i))
     return true
-*/
+
 
