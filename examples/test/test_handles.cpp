@@ -199,6 +199,23 @@ inline void test_das_string(Block block, Context * context) {
     if (str != "out_of_it") context->throw_error("test string mismatch");
 }
 
+vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {
+    TypeInfo * typeInfo = call->types[0];
+    if ( typeInfo->dim || typeInfo->type!=Type::tStructure ) {
+        context.throw_error("invalid type");
+        return v_zero();
+    }
+    auto size = getTypeSize(typeInfo);
+    auto data = context.heap.allocate(size);
+    if ( typeInfo->structType && typeInfo->structType->initializer!=-1 ) {
+        auto fn = context.getFunction(typeInfo->structType->initializer);
+        context.callWithCopyOnReturn(fn, nullptr, data, 0);
+    } else {
+        memset(data, 0, size);
+    }
+    return cast<char *>::from(data);
+}
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -210,11 +227,11 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_shared<TestObjectFooAnnotation>(lib));
     addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
     // register function
+    addInterop<new_and_init,void *,vec4f>(*this, lib, "new_and_init", SideEffects::none);
     addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string", SideEffects::none);
     addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo", SideEffects::modifyArgument);
     addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd", SideEffects::modifyArgument);
     addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields", SideEffects::modifyExternal);
-
     addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3", SideEffects::none);
     addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3", SideEffects::modifyArgument);
 }

@@ -35,8 +35,8 @@ namespace das {
         for ( uint32_t i=0; i!=fni->argsSize; ++i ) {
             fni->args[i] = makeVariableDebugInfo(*fn.arguments[i]);
         }
-        fmn2f[mangledName] = fni;
         fni->result = makeTypeInfo(nullptr, fn.result);
+        fmn2f[mangledName] = fni;
         return fni;
     }
 
@@ -56,6 +56,12 @@ namespace das {
             vi->name = debugInfo->allocateName(var.name);
             vi->offset = st.fields[i].offset;
             sti->fields[i] = vi;
+        }
+        sti->initializer = -1;
+        if ( st.module ) {
+            if ( auto fn = st.module->findFunction(st.name) ) {
+                sti->initializer = fn->index;
+            }
         }
         smn2s[mangledName] = sti;
         return sti;

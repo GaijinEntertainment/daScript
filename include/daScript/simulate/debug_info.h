@@ -111,6 +111,7 @@ namespace das
         VarInfo **  fields;
         uint32_t    fieldsSize;
         uint32_t    size;
+        int32_t     initializer;
     };
 
     struct EnumValueInfo {
