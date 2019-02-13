@@ -386,6 +386,7 @@ namespace das {
             if ( !var->genCtor && var->hasAnyInitializers() ) {
                 if ( !hasUserConstructor(var->name) ) {
                     auto ctor = makeConstructor(var);
+                    ctor->exports = program->options.getOption("alwaysExportInitializer", false);
                     extraFunctions.push_back(ctor);
                     var->genCtor = true;
                     reportGenericInfer();
