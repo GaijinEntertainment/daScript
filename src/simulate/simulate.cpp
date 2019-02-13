@@ -97,7 +97,7 @@ namespace das
         TextWriter ssw;
         if ( message ) ssw << message << " ";
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger)
-            << " at " << debug.describe() << "\n";
+            << " at " << debugInfo.describe() << "\n";
         context.to_out(ssw.str().c_str());
         return res;
     }
@@ -109,7 +109,7 @@ namespace das
             string error_message = "assert failed";
             if ( message )
                 error_message = error_message + ", " + message;
-            string error = reportError(debug.fileInfo->source, debug.fileInfo->name, debug.line, debug.column, error_message );
+            string error = reportError(debugInfo.fileInfo->source, debugInfo.fileInfo->name, debugInfo.line, debugInfo.column, error_message );
             error = context.getStackWalk(false) + error;
             context.to_err(error.c_str());
             context.throw_error("assert failed");
