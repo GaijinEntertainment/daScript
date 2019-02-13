@@ -24,7 +24,6 @@ namespace das
             }
         }
     };
-    MAKE_TYPE_FACTORY(das_string, string);
 
     template <typename OT>
     struct ManagedStructureAlignof {static constexpr size_t alignment = alignof(OT); } ;//we use due to MSVC inability to work with abstarct classes
@@ -308,3 +307,4 @@ namespace das
     };
 }
 
+MAKE_TYPE_FACTORY(das_string, das::string);
