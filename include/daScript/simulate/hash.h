@@ -114,5 +114,6 @@ namespace das
     uint32_t hash_value ( Context & ctx, vec4f value, TypeInfo * info );
     uint32_t hash_value ( TypeInfo * info );
     uint32_t hash_value ( StructInfo * info );
+    uint32_t hash_value ( EnumInfo * info );
 }
 

@@ -8,6 +8,7 @@
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/hash.h"
+#include "daScript/simulate/bin_serializer.h"
 
 namespace das
 {
@@ -123,6 +124,9 @@ namespace das
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated", SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(heap_high_watermark)>(*this, lib, "heap_high_watermark", SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth", SideEffects::modifyExternal);
+        // binary serializer
+        addInterop<_builtin_binary_load,void,vec4f,char *>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgument);
+        addInterop<_builtin_binary_save,void,vec4f,Block>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal);
         // function-like expresions
         addCall<ExprAssert>         ("assert");
         addCall<ExprStaticAssert>   ("static_assert");

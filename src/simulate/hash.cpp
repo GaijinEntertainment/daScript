@@ -128,5 +128,11 @@ namespace das
         hash_value(block, info);
         return block.getHash();
     }
+
+    uint32_t hash_value ( EnumInfo * info ) {
+        HashBlock block;
+        hash_value(block, info);
+        return block.getHash();
+    }
 }
 

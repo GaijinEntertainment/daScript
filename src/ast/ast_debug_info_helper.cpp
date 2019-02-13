@@ -19,6 +19,7 @@ namespace das {
             eni->values[i]->value = ev.second;
             i ++;
         }
+        eni->hash = hash_value(eni);
         emn2e[mangledName] = eni;
         return eni;
     }

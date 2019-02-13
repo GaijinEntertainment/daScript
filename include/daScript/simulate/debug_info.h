@@ -125,6 +125,7 @@ namespace das
         char *              name;
         EnumValueInfo **    values;
         uint32_t            totalValues;
+        uint32_t            hash;
     };
 
     struct FuncInfo {

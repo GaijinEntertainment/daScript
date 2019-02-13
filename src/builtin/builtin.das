@@ -30,5 +30,11 @@ def erase(Tab:table<auto(keyT),auto(valT)>;at:keyT)
 def peek ( src:das_string; subexpr:block<(root:string):void> ) : void
   _builtin_peek(src,subexpr)
 
+def binary_save(obj; subexpr:block<(data:string):void>)
+  _builtin_binary_save(obj,subexpr)
+
+def binary_load(obj; data:string)
+  _builtin_binary_load(obj,data)
+
 options indenting = 0
 
