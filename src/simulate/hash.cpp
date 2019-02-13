@@ -1,5 +1,7 @@
 #include "daScript/misc/platform.h"
 
+
+#include "daScript/ast/ast.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/data_walker.h"
@@ -67,6 +69,64 @@ namespace das
         HashDataWalker walker(ctx);
         walker.walk(value,info);
         return walker.getHash();
+    }
+
+    void hash_value ( HashBlock & block, TypeInfo * info );
+
+    void hash_value ( HashBlock & block, StructInfo * si ) {
+        block.write(si->name);
+        for ( uint32_t i=0; i!=si->fieldsSize; ++i ) {
+            auto vi = si->fields[i];
+            block.write(vi->name);
+            block.write(&vi->offset, sizeof(uint32_t));
+        }
+        block.write(&si->fieldsSize, sizeof(uint32_t));
+        block.write(&si->size, sizeof(uint32_t));
+    }
+
+    void hash_value ( HashBlock & block, EnumInfo * ei ) {
+        block.write(ei->name);
+        for ( uint32_t i=0; i!=ei->totalValues; ++i ) {
+            auto ev = ei->values[i];
+            block.write(ev->name);
+            block.write(&ev->value, sizeof(int32_t));
+        }
+        block.write(&ei->totalValues, sizeof(uint32_t));
+    }
+
+    void hash_value ( HashBlock & block, TypeInfo * info ) {
+        block.write(&info->type, sizeof(Type));
+        if ( info->structType ) {
+            hash_value(block, info->structType);
+        }
+        if ( info->enumType ) {
+            hash_value(block, info->enumType);
+        }
+        if ( info->annotation ) {
+            auto mangledName = info->annotation->getMangledName();
+            block.write(mangledName.c_str());
+        }
+        if ( info->firstType ) {
+            hash_value(block, info->firstType);
+        }
+        if ( info->secondType ) {
+            hash_value(block, info->secondType);
+        }
+        block.write(&info->dimSize, sizeof(uint32_t));
+        block.write(info->dim, info->dimSize*sizeof(uint32_t));
+        block.write(&info->flags, sizeof(uint32_t));
+    }
+
+    uint32_t hash_value ( TypeInfo * info ) {
+        HashBlock block;
+        hash_value(block, info);
+        return block.getHash();
+    }
+
+    uint32_t hash_value ( StructInfo * info ) {
+        HashBlock block;
+        hash_value(block, info);
+        return block.getHash();
     }
 }
 

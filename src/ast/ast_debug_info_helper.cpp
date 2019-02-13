@@ -63,6 +63,7 @@ namespace das {
                 sti->initializer = fn->index;
             }
         }
+        sti->hash = hash_value(sti);
         smn2s[mangledName] = sti;
         return sti;
     }
@@ -110,6 +111,7 @@ namespace das {
         } else {
             info->secondType = nullptr;
         }
+        info->hash = hash_value(info);
         return info;
     }
 

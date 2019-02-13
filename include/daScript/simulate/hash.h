@@ -9,7 +9,7 @@ namespace das
 
     // ideas from http://isthe.com/chongo/tech/comp/fnv/
 
-    __forceinline uint32_t hash_block32(uint8_t * block, uint32_t size) {
+    __forceinline uint32_t hash_block32(const uint8_t * block, uint32_t size) {
         const uint32_t fnv_prime = 16777619;
         const uint32_t fnv_bias = 2166136261;
         uint32_t offset_basis = fnv_bias;
@@ -32,7 +32,7 @@ namespace das
         return offset_basis;
     }
 
-    __forceinline uint32_t hash_blockz32(uint8_t * block) {
+    __forceinline uint32_t hash_blockz32(const uint8_t * block) {
         const uint32_t fnv_prime = 16777619;
         const uint32_t fnv_bias = 2166136261;
         uint32_t offset_basis = fnv_bias;
@@ -44,6 +44,27 @@ namespace das
         }
         return offset_basis;
     }
+
+    class HashBlock {
+        const uint32_t fnv_prime = 16777619;
+        uint32_t offset_basis = 2166136261;
+    public:
+        __forceinline void write ( const void * pb, uint32_t size ) {
+            const uint8_t * block = (const uint8_t *) pb;
+            while ( size-- ) {
+                offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            }
+        }
+        __forceinline void write ( const void * pb ) {
+            const uint8_t * block = (const uint8_t *) pb;
+            for (; *block; block++) {
+                offset_basis = ( offset_basis ^ *block ) * fnv_prime;
+            }
+        }
+        __forceinline uint32_t getHash() const  {
+            return (offset_basis <= HASH_KILLED32) ? fnv_prime : offset_basis;
+        }
+    };
 
     __forceinline uint32_t hash_function ( Context &, const void * x, size_t size ) {
         return hash_block32((uint8_t *)x, uint32_t(size));
@@ -67,8 +88,8 @@ namespace das
     }
 
     template <typename TT>
-    __forceinline uint32_t hash_function ( Context &, TT x ) {
-        uint32_t res = hash_block32((uint8_t *)&x, sizeof(x));
+    __forceinline uint32_t hash_function ( Context &, const TT x ) {
+        uint32_t res = hash_block32((const uint8_t *)&x, sizeof(x));
         if (res <= HASH_KILLED32) {
             return 16777619;
         }
@@ -91,5 +112,7 @@ namespace das
 
     uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
     uint32_t hash_value ( Context & ctx, vec4f value, TypeInfo * info );
+    uint32_t hash_value ( TypeInfo * info );
+    uint32_t hash_value ( StructInfo * info );
 }
 

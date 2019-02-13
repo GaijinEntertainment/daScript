@@ -142,6 +142,8 @@ src/simulate/debug_print.cpp
 include/daScript/simulate/debug_print.h
 include/daScript/simulate/for_each.h
 include/daScript/simulate/bind_enum.h
+include/daScript/simulate/bin_serializer.h
+src/simulate/bin_serializer.cpp
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)

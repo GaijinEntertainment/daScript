@@ -99,6 +99,7 @@ namespace das
             };
             uint32_t flags = 0;
         };
+        uint32_t            hash;
     };
 
     struct VarInfo : TypeInfo {
@@ -112,6 +113,7 @@ namespace das
         uint32_t    fieldsSize;
         uint32_t    size;
         int32_t     initializer;
+        uint32_t    hash;
     };
 
     struct EnumValueInfo {
