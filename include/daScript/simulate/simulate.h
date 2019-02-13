@@ -34,7 +34,7 @@ namespace das
 
     struct GlobalVariable {
         char *          name;
-        VarInfo *       debug;
+        VarInfo *       debugInfo;
         SimNode *       init;
         uint32_t        size;
         uint32_t        offset;
@@ -44,11 +44,11 @@ namespace das
         char *      name;
         SimNode *   code;
         uint32_t    stackSize;
-        FuncInfo *  debug;
+        FuncInfo *  debugInfo;
     };
 
     struct SimNode {
-        SimNode ( const LineInfo & at ) : debug(at) {}
+        SimNode ( const LineInfo & at ) : debugInfo(at) {}
         virtual vec4f eval ( Context & ) = 0;
         virtual char *      evalPtr ( Context & context );
         virtual bool        evalBool ( Context & context );
@@ -58,7 +58,7 @@ namespace das
         virtual uint32_t    evalUInt ( Context & context );
         virtual int64_t     evalInt64 ( Context & context );
         virtual uint64_t    evalUInt64 ( Context & context );
-        LineInfo debug;
+        LineInfo debugInfo;
     protected:
         virtual ~SimNode() {}
     };
@@ -169,7 +169,7 @@ namespace das
 #if DAS_ENABLE_STACK_WALK
             Prologue * pp = (Prologue *)stack.sp();
             pp->arguments = args;
-            pp->info = fn->debug;
+            pp->info = fn->debugInfo;
             pp->line = line;
 #endif
             // CALL
@@ -194,7 +194,7 @@ namespace das
 #if DAS_ENABLE_STACK_WALK
             Prologue * pp = (Prologue *)stack.sp();
             pp->arguments = args;
-            pp->info = fn->debug;
+            pp->info = fn->debugInfo;
             pp->line = line;
 #endif
             // CALL
@@ -267,7 +267,7 @@ namespace das
     #if DAS_ENABLE_STACK_WALK
             Prologue * pp           = (Prologue *) stack.sp();
             pp->arguments           = args;
-            pp->info                = fn->debug;
+            pp->info                = fn->debugInfo;
             pp->line                = line;
     #endif
             // CALL
@@ -660,13 +660,13 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            return context.call(fnPtr, argValues, debug.line);
+            return context.call(fnPtr, argValues, debugInfo.line);
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
-                return cast<CTYPE>::to(context.call(fnPtr, argValues, debug.line));    \
+                return cast<CTYPE>::to(context.call(fnPtr, argValues, debugInfo.line));    \
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE
@@ -681,7 +681,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 vec4f argValues[argCount ? argCount : 1];
                 EvalBlock<argCount>::eval(context, arguments, argValues);
                 auto cmres = context.stack.sp() + stackTop;
-                return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, debug.line));
+                return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, debugInfo.line));
         }
     };
 
@@ -1152,7 +1152,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
                 vec4f argValues[argCount ? argCount : 1];
                 EvalBlock<argCount>::eval(context, arguments, argValues);
-                context.callWithCopyOnReturn(fnPtr, argValues, ptr, debug.line);
+                context.callWithCopyOnReturn(fnPtr, argValues, ptr, debugInfo.line);
                 return ptr;
             } else {
                 context.throw_error("out of heap");

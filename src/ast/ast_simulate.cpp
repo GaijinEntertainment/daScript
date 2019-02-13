@@ -240,7 +240,7 @@ namespace das
         } else {
             pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_Invoke>(int(arguments.size()),at);
         }
-        pInvoke->debug = at;
+        pInvoke->debugInfo = at;
         if ( int nArg = (int) arguments.size() ) {
             pInvoke->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
             pInvoke->nArguments = nArg;
@@ -572,7 +572,7 @@ namespace das
             return pSimOp1;
         } else {
             auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
-            pCall->debug = at;
+            pCall->debugInfo = at;
             pCall->fnPtr = context.getFunction(func->index);
             pCall->arguments = (SimNode **) context.code->allocate(1 * sizeof(SimNode *));
             pCall->nArguments = 1;
@@ -589,7 +589,7 @@ namespace das
             return pSimOp2;
         } else {
             auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
-            pCall->debug = at;
+            pCall->debugInfo = at;
             pCall->fnPtr = context.getFunction(func->index);
             pCall->arguments = (SimNode **) context.code->allocate(2 * sizeof(SimNode *));
             pCall->nArguments = 2;
@@ -870,7 +870,7 @@ namespace das
             if ( arg->type->baseType==Type::anyArgument )
                 needTypeInfo = true;
         }
-        pCall->debug = expr->at;
+        pCall->debugInfo = expr->at;
         assert((func->builtIn || func->index>=0) && "calling function which is not used. how?");
         pCall->fnPtr = context.getFunction(func->index);
         if ( int nArg = (int) expr->arguments.size() ) {
@@ -925,7 +925,7 @@ namespace das
                 auto & gvar = context.globalVariables[pvar->index];
                 gvar.name = context.code->allocateName(pvar->name);
                 gvar.size = pvar->type->getSizeOf();
-                gvar.debug = helper.makeVariableDebugInfo(*it.second);
+                gvar.debugInfo = helper.makeVariableDebugInfo(*it.second);
                 gvar.offset = pvar->stackTop = context.globalsSize;
                 context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
             }
@@ -943,7 +943,7 @@ namespace das
                 gfun.name = context.code->allocateName(pfun->name);
                 gfun.code = pfun->simulate(context);
                 gfun.stackSize = pfun->totalStackSize;
-                gfun.debug = helper.makeFunctionDebugInfo(*pfun);
+                gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
             }
         }
         for (auto & pm : library.modules ) {
