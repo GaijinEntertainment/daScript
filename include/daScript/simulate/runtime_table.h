@@ -51,7 +51,7 @@ namespace das
 
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
             uint32_t desired = 32 - __builtin_clz(capacity-1);
-            return max(minLookups, desired * 6);
+            return das::max(minLookups, desired * 6);
         }
 
         __forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {
@@ -135,7 +135,7 @@ namespace das
         }
 
         bool grow ( Table & tab ) {
-            uint32_t newCapacity = max(minCapacity, tab.capacity*2);
+            uint32_t newCapacity = das::max(minCapacity, tab.capacity*2);
         repeatIt:;
             Table newTab;
             uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint32_t));

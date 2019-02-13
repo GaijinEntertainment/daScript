@@ -76,7 +76,7 @@ namespace das
             int szz = INT_MAX;
             for ( int t=0; t!=total; ++t ) {
                 pi[t] = (char **)(context.stack.sp() + stackTop[t]);
-                szz = min(szz, int(pha[t]->size));
+                szz = das::min(szz, int(pha[t]->size));
             }
             SimNode * __restrict pbody = body;
             for (int i = 0; i!=szz && !context.stopFlags; ++i) {
