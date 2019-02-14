@@ -77,8 +77,14 @@ namespace das
 
     template <>
     struct cast <Block> {
-        static __forceinline Block to ( vec4f x )             { return *((Block *)&x); }
-        static __forceinline vec4f from ( Block x )           { vec4f a; *((Block *)&a) = x; return a; }
+        static __forceinline Block to ( vec4f x )             { union { vec4f v; Block t; } A; A.v = x; return A.t; }
+        static __forceinline vec4f from ( const Block x )     { union { vec4f v; Block t; } A; A.t = x; return A.v; }
+    };
+
+    template <>
+    struct cast <Func> {
+        static __forceinline Func to ( vec4f x )             { union { vec4f v; Func t; } A; A.v = x; return A.t; }
+        static __forceinline vec4f from ( const Func x )     { union { vec4f v; Func t; } A; A.t = x; return A.v; }
     };
 
     template <typename TT>

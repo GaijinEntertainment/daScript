@@ -8,12 +8,19 @@ namespace das
         uint32_t    stackOffset;
         uint32_t    argumentsOffset;
         SimNode *   body;
-
         __forceinline bool operator == ( const Block & b ) const {
             return b.stackOffset==stackOffset && b.argumentsOffset==argumentsOffset && b.body==body;
         }
     };
     static_assert(sizeof(Block)<=16,"has to be castable");
+
+    struct Func {
+        int32_t     index;
+        __forceinline bool operator == ( const Func & b ) const {
+            return index == b.index;
+        }
+    };
+    static_assert(sizeof(Func)==sizeof(int32_t), "has to be castable");
 
     struct Array {
         char *      data;

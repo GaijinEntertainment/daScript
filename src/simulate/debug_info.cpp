@@ -37,7 +37,9 @@ namespace das
         {   Type::tFloat4,      "float4"},
         {   Type::tDouble,      "double" },
         {   Type::tRange,       "range" },
-        {   Type::tURange,      "urange"}
+        {   Type::tURange,      "urange"},
+        {   Type::tBlock,       "block"},
+        {   Type::tFunction,    "function"}
     };
 
     string das_to_string ( Type t ) {
@@ -78,6 +80,7 @@ namespace das
             case tStructure:    return 0;
             case tVoid:         return 0;
             case tBlock:        return sizeof(Block);
+            case tFunction:     return sizeof(Func);
             default:
                 assert(0 && "not implemented");
                 return 0;
@@ -114,6 +117,7 @@ namespace das
             case tStructure:    return 1;
             case tVoid:         return 1;
             case tBlock:        return alignof(Block);
+            case tFunction:     return alignof(Func);
             default:
                 assert(0 && "not implemented");
                 return 0;

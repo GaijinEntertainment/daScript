@@ -32,6 +32,7 @@ namespace das
         tHandle,
         tEnumeration,
         tPointer,
+        tFunction,
         tIterator,
         tArray,
         tTable,

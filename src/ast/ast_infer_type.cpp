@@ -90,10 +90,10 @@ namespace das {
                     }
                     verifyType(valueType);
                 }
-            } else if ( decl->baseType==Type::tBlock ) {
+            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction ) {
                 if ( auto resultType = decl->firstType ) {
                     if ( !resultType->isReturnType() ) {
-                        error("not a valid block return type",resultType->at,CompilationError::invalid_return_type);
+                        error("not a valid return type",resultType->at,CompilationError::invalid_return_type);
                     }
                     verifyType(resultType);
                 }
@@ -186,7 +186,7 @@ namespace das {
                     resT->secondType = inferAlias(decl->secondType,fptr);
                     if ( !resT->secondType ) return nullptr;
                 }
-            } else if ( decl->baseType==Type::tBlock ) {
+            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction ) {
                 for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
                     auto & declAT = decl->argTypes[iA];
                     if ( auto infAT = inferAlias(declAT,fptr) ) {

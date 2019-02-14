@@ -162,6 +162,7 @@ namespace das {
             case Type::tString:         return makeNode<NodeType<char *>>(args...);
             case Type::tPointer:        return makeNode<NodeType<void *>>(args...);
             case Type::tBlock:          return makeNode<NodeType<Block>>(args...);
+            case Type::tFunction:       return makeNode<NodeType<Func>>(args...);
             case Type::tDouble:         return makeNode<NodeType<double>>(args...);
             default:
                 assert(0 && "we should not even be here");

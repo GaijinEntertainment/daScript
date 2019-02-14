@@ -17,7 +17,7 @@ namespace das
         } else if ( autoT->baseType==Type::tTable ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
             applyAutoContracts(TT->secondType, autoT->secondType);
-        } else if ( autoT->baseType==Type::tBlock ) {
+        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction ) {
             if ( TT->firstType ) {
                 applyAutoContracts(TT->firstType, autoT->firstType);
             }
@@ -63,6 +63,15 @@ namespace das
             if ( autoT->argTypes.size() != initT->argTypes.size() )             // both have same number of arguments
                 return nullptr;
         }
+        // function has to match function
+        if ( autoT->baseType==Type::tFunction ) {
+            if ( initT->baseType!=Type::tFunction )
+                return nullptr;
+            if ( (autoT->firstType!=nullptr) != (initT->firstType!=nullptr) )   // both do or don't have return type
+                return nullptr;
+            if ( autoT->argTypes.size() != initT->argTypes.size() )             // both have same number of arguments
+                return nullptr;
+        }
         // now, lets make the type
         auto TT = make_shared<TypeDecl>(*initT);
         TT->at = autoT->at;
@@ -82,8 +91,8 @@ namespace das
             if ( !TT->firstType->isWorkhorseType() ) return nullptr;            // table key has to be hashable too
             TT->secondType = inferAutoType(autoT->secondType, initT->secondType);
             if ( !TT->secondType ) return nullptr;
-        } else if ( autoT->baseType==Type::tBlock ) {
-            // if it's a block, infer argument and return types
+        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction ) {
+            // if it's a block or function, infer argument and return types
             if ( autoT->firstType ) {
                 TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
                 if ( !TT->firstType ) return nullptr;
@@ -148,6 +157,25 @@ namespace das
             }
         } else if ( baseType==Type::tBlock ) {
             stream << "block<";
+            if ( argTypes.size() ) {
+                stream << "(";
+                for ( const auto & arg : argTypes ) {
+                    stream << arg->describe(extra);
+                    if ( arg != argTypes.back() ) {
+                        stream << ";";
+                    }
+                }
+                stream << ")";
+            }
+            if ( firstType ) {
+                if ( argTypes.size() ) {
+                    stream << ":";
+                }
+                stream << firstType->describe(extra);
+            }
+            stream << ">";
+        } else if ( baseType==Type::tFunction ) {
+            stream << "function<";
             if ( argTypes.size() ) {
                 stream << "(";
                 for ( const auto & arg : argTypes ) {
@@ -231,7 +259,7 @@ namespace das
                 }
             }
             return secondType ? secondType->findAlias(name,allowAuto) : nullptr;
-        } else if ( baseType==Type::tBlock ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ) {
             for ( auto & arg : argTypes ) {
                 if ( auto att = arg->findAlias(name,allowAuto) ) {
                     return att;
@@ -340,6 +368,14 @@ namespace das
             if ( firstType ) {
                 ss << "#:" << firstType->getMangledName();
             }
+        } else if ( baseType==Type::tFunction ) {
+            ss << "#function";
+            for ( auto & arg : argTypes ) {
+                ss << "#" << arg->getMangledName();
+            }
+            if ( firstType ) {
+                ss << "#:" << firstType->getMangledName();
+            }
         } else if ( baseType==Type::tStructure ) {
             if ( structType ) {
                 ss << structType->name;
@@ -405,11 +441,11 @@ namespace das
                 return false;
             }
         }
-        if ( baseType==Type::tBlock ) {
+        if ( baseType==Type::tBlock || baseType==Type::tFunction ) {
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
-            if ( firstType && argTypes.size()==0 ) {    // if not any block
+            if ( firstType && argTypes.size()==0 ) {    // if not any block or any function
                 if ( argTypes.size() != decl.argTypes.size() ) {
                     return false;
                 }
@@ -627,7 +663,7 @@ namespace das
             if ( secondType )
                 any |= secondType->isAlias();
             return any;
-        } else if ( baseType==Type::tBlock ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ) {
             bool any = false;
             if ( firstType )
                 any |= firstType->isAlias();
@@ -655,7 +691,7 @@ namespace das
             if ( secondType )
                 any |= secondType->isAuto();
             return any;
-        } else if ( baseType==Type::tBlock ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ) {
             bool any = false;
             if ( firstType )
                 any |= firstType->isAuto();
