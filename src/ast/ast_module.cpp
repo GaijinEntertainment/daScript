@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
-    
+
     // ANNOTATION
 
     const AnnotationArgument * AnnotationArgumentList::find ( const string & name, Type type ) const {
