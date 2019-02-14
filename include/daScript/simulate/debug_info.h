@@ -49,10 +49,10 @@ namespace das
 
     struct FileInfo {
         FileInfo() = default;
-        FileInfo(char * s, uint32_t l) : source(s), sourceLength(l) {}
-        char *          name = nullptr;
-        char *          source = nullptr;
-        uint32_t        sourceLength = 0;
+        FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
+        const char *          name = nullptr;
+        const char *          source = nullptr;
+        uint32_t              sourceLength = 0;
         virtual ~FileInfo() {}
     };
     typedef shared_ptr<FileInfo> FileInfoPtr;
