@@ -180,6 +180,7 @@ ADD_DEPENDENCIES(libDaScriptJson libDaScript)
 
 SET(JSON_MAIN_SRC
 examples/json/main.cpp
+examples/common/fileAccess.h
 examples/json/test.das
 )
 
@@ -193,6 +194,7 @@ SETUP_CPP11(jsonTest)
 
 SET(DASCRIPT_MAIN_SRC
 examples/daScript/main.cpp
+examples/common/fileAccess.h
 )
 
 include_directories(include lexer test)
@@ -240,6 +242,7 @@ SOURCE_GROUP_FILES("examples/test/mix" MIX_TEST_SRC)
 
 SET(TEST_MAIN_SRC
 examples/test/main.cpp
+examples/common/fileAccess.h
 examples/test/test_handles.cpp
 examples/test/test_enum.cpp
 examples/test/module_unitTest.h
@@ -265,6 +268,7 @@ SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
 examples/profile/main.cpp
+examples/common/fileAccess.h
 examples/profile/test_profile.cpp
 examples/profile/test_profile.h
 )

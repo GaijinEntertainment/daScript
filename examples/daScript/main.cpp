@@ -1,14 +1,14 @@
 #include "daScript/daScript.h"
-
-#include <fstream>
+#include "../common/fileAccess.h"
 
 using namespace das;
 
 TextPrinter tout;
 
 void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
-    auto access = make_shared<FileAccess>();
-    if ( auto program = parseDaScript(fn, access, tout) ) {
+    auto access = make_shared<FsFileAccess>();
+    ModuleGroup dummyGroup;
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
                 tout << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr );

@@ -1,38 +1,11 @@
 #include "daScript/daScript.h"
-
-#ifdef _MSC_VER
-    #include <io.h>
-#else
-    #include <dirent.h>
-#endif
+#include "../common/fileAccess.h"
 
 using namespace das;
 
 bool g_reportCompilationFailErrors = false;
 
 TextPrinter tout;
-
-class FsFileInfo : public FileInfo {
-    virtual ~FsFileInfo() {
-        das_aligned_free16(source);
-    }
-};
-
-class FsFileAccess : public FileAccess {
-    virtual FileInfoPtr getNewFileInfo(const string & fileName) override {
-        if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
-            auto info = new FsFileInfo();
-            fseek(ff,0,SEEK_END);
-            info->sourceLength = uint32_t(ftell(ff));
-            fseek(ff,0,SEEK_SET);
-            info->source = (char *) das_aligned_alloc16(info->sourceLength+1);
-            fread(info->source, 1, info->sourceLength, ff);
-            info->source[info->sourceLength] = 0;
-            return setFileInfo(fileName, info);
-        }
-        return nullptr;
-    }
-};
 
 bool compilation_fail_test ( const string & fn ) {
     tout << fn << " ";
