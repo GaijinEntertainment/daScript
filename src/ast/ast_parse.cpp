@@ -9,15 +9,15 @@ int yyparse();
 int yylex_destroy();
 
 namespace das {
-    
-    regex REG_require ("\\brequire\\s+(\\w+)");
+
+    std::regex REG_require ("\\brequire\\s+(\\w+)");
 
     vector<string> getAllRequie ( const string & src ) {
         vector<string> req;
-        smatch sm;
+        std::match_results<string::const_iterator> sm;
         auto at = src.begin();
-        while ( regex_search(at, src.end(), sm, REG_require) ) {
-            req.push_back(sm[1]);
+        while ( std::regex_search(at, src.end(), sm, REG_require) ) {
+            req.emplace_back(sm[1].first, sm[1].second);
             at = sm.suffix().first;
         }
         return req;
