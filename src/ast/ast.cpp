@@ -2,12 +2,8 @@
 
 #include "daScript/ast/ast.h"
 
-void yybegin(const char * str);
-int yyparse();
-int yylex_destroy();
-
-namespace das
-{
+namespace das {
+    
     // annotations
 
     string Annotation::getMangledName() const {
@@ -1127,8 +1123,17 @@ namespace das
         failToCompile = true;
     }
 
-    void Program::addModule ( Module * pm ) {
-        library.addModule(pm);
+    bool Program::addModule ( const string & name ) {
+        if ( !library.findModule(name) ) {
+            if ( auto pm = Module::require(name) ) {
+                library.addModule(pm);
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            return true;
+        }
     }
 
     bool Program::addAlias ( const TypeDeclPtr & at ) {
@@ -1362,67 +1367,5 @@ namespace das
             last = optimizationUnused(logs);    if ( failed() ) break;  any |= last;
             if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
         } while ( any );
-    }
-
-    // PARSER
-
-    ProgramPtr g_Program;
-    vector<FileInfoPtr>  g_AccessStack;
-
-    extern "C" int64_t ref_time_ticks ();
-    extern "C" int get_time_usec (int64_t reft);
-
-    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs ) {
-        auto time0 = ref_time_ticks();
-        int err;
-        auto program = g_Program = make_shared<Program>();
-        program->access = access;
-        g_AccessStack.clear();
-        if ( auto fi = g_Program->access->getFileInfo(fileName) ) {
-            g_AccessStack.push_back(fi);
-            yybegin(fi->source);
-        } else {
-            g_Program->error(fileName + " not found", LineInfo());
-            g_Program.reset();
-            return program;
-        }
-        err = yyparse();        // TODO: add mutex or make thread safe?
-        yylex_destroy();
-        g_Program.reset();
-        if ( err || program->failed() ) {
-            sort(program->errors.begin(),program->errors.end());
-            return program;
-        } else {
-            program->inferTypes(logs);
-            if ( !program->failed() ) {
-                if (program->options.getOption("optimize", true)) {
-                    program->optimize(logs);
-                } else {
-                    program->buildAccessFlags(logs);
-                }
-                if (!program->failed())
-                    program->verifyAndFoldContracts();
-                if (!program->failed())
-                    program->markOrRemoveUnusedSymbols();
-                if (!program->failed())
-                    program->allocateStack(logs);
-                if (!program->failed())
-                    program->finalizeAnnotations();
-            }
-            if (!program->failed()) {
-                if (program->options.getOption("log")) {
-                    logs << *program;
-                }
-                if (program->options.getOption("plot")) {
-                    logs << "\n" << program->dotGraph() << "\n";
-                }
-            }
-            sort(program->errors.begin(), program->errors.end());
-            if ( program->options.getOption("logCompileTime",false) ) {
-                auto dt = get_time_usec(time0) / 1000000.;
-                logs << "compiler took " << dt << "\n";
-            }
-            return program;
-        }
     }
 }

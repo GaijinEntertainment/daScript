@@ -1373,7 +1373,8 @@ namespace das
         map<string, FunctionPtr>                generics;           // mangled name 2 generic name
         map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
         mutable map<string, ExprCallFactory>    callThis;
-        string name;
+        string  name;
+        bool    builtIn = false;
     public:
         static intptr_t Karma;
     private:
@@ -1401,6 +1402,7 @@ namespace das
         friend class Module;
         friend class Program;
     public:
+        virtual ~ModuleLibrary() {};
         void addBuiltInModule ();
         void addModule ( Module * module );
         void foreach ( function<bool (Module * module)> && func, const string & name ) const;
@@ -1408,11 +1410,17 @@ namespace das
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
         vector<EnumerationPtr> findEnum ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
+        Module * findModule ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
         TypeDeclPtr makeEnumType ( const string & name ) const;
     protected:
         vector<Module *>                modules;
+    };
+
+    class ModuleGroup : public ModuleLibrary {
+    public:
+        virtual ~ModuleGroup();
     };
 
     class DebugInfoHelper {
@@ -1452,7 +1460,7 @@ namespace das
         bool addFunction ( const FunctionPtr & fn );
         FunctionPtr findFunction(const string & mangledName) const;
         bool addGeneric ( const FunctionPtr & fn );
-        void addModule ( Module * pm );
+        bool addModule ( const string & name );
         void finalizeAnnotations();
         void inferTypes(TextWriter & logs);
         bool optimizationRefFolding();
@@ -1503,7 +1511,11 @@ namespace das
         AnnotationArgumentList      options;
     };
 
-    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs );
+    // this one works for single module only
+    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleLibrary & libGroup );
+
+    // this one collectes dependencies and compiles with modules
+    ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup );
 
     // NOTE: parameters here are unreferenced for a reason
     //            the idea is you copy the function defintion, and paste to your code

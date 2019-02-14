@@ -37,7 +37,8 @@ class FsFileAccess : public FileAccess {
 bool compilation_fail_test ( const string & fn ) {
     tout << fn << " ";
     auto access = make_shared<FsFileAccess>();
-    if ( auto program = parseDaScript(fn, access, tout) ) {
+    ModuleGroup dummyLibGroup;
+    if ( auto program = compileDaScript(fn, access, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
             bool failed = false;
             auto errors = program->expectErrors;
@@ -85,7 +86,8 @@ bool compilation_fail_test ( const string & fn ) {
 bool unit_test ( const string & fn ) {
     tout << fn << " ";
     auto access = make_shared<FsFileAccess>();
-    if ( auto program = parseDaScript(fn, access, tout) ) {
+    ModuleGroup dummyLibGroup;
+    if ( auto program = compileDaScript(fn, access, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -130,7 +132,8 @@ bool unit_test ( const string & fn ) {
 bool exception_test ( const string & fn ) {
     tout << fn << " ";
     auto access = make_shared<FsFileAccess>();
-    if ( auto program = parseDaScript(fn, access, tout) ) {
+    ModuleGroup dummyLibGroup;
+    if ( auto program = compileDaScript(fn, access, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {

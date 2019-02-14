@@ -293,9 +293,7 @@ require_list
 
 require_module
     :   NAME[name] {
-        if ( auto mod = Module::require(*$name) ) {
-            g_Program->addModule(mod);
-        } else {
+        if ( !g_Program->addModule(*$name) ) {
             yyerror("required module not found " + *$name,tokAt(@name),
                 CompilationError::module_not_found);
         }

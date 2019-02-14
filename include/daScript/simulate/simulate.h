@@ -307,7 +307,6 @@ namespace das
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;
-        FileAccessPtr access;
     public:
         uint32_t stopFlags = 0;
         vec4f result;

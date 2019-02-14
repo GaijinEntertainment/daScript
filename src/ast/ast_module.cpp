@@ -2,8 +2,8 @@
 
 #include "daScript/ast/ast.h"
 
-namespace das
-{
+namespace das {
+    
     // ANNOTATION
 
     const AnnotationArgument * AnnotationArgumentList::find ( const string & name, Type type ) const {
@@ -45,11 +45,12 @@ namespace das
         if ( !name.empty() ) {
             next = modules;
             modules = this;
+            builtIn = true;
         }
     }
 
     Module::~Module() {
-        if ( !name.empty() ) {
+        if ( builtIn ) {
             Module ** p = &modules;
             for ( auto m = modules; m != nullptr; p = &m->next, m = m->next ) {
                 if ( m == this ) {
@@ -172,7 +173,8 @@ namespace das
         auto access = make_shared<FileAccess>();
         auto fileInfo = new FileInfo((char *) str, uint32_t(str_len));
         access->setFileInfo(modName, fileInfo);
-        if (auto program = parseDaScript(modName, access, issues)) {
+        ModuleGroup dummyLibGroup;
+        if (auto program = parseDaScript(modName, access, issues, dummyLibGroup)) {
             if (program->failed()) {
 #if 1
                 for (auto & err : program->errors) {
@@ -231,6 +233,13 @@ namespace das
             if ( !any && pm->name!=moduleName ) continue;
             if ( !func(pm) ) break;
         }
+    }
+
+    Module * ModuleLibrary::findModule ( const string & mn ) const {
+        auto it = find_if(modules.begin(), modules.end(), [&](Module * mod){
+            return mod->name == mn;
+        });
+        return it!=modules.end() ? *it : nullptr;
     }
 
     vector<TypeDeclPtr> ModuleLibrary::findAlias ( const string & name ) const {
@@ -318,6 +327,16 @@ namespace das
             assert(0 && "can't make enumeration type");
         }
         return t;
+    }
+
+    // Module group
+
+    ModuleGroup::~ModuleGroup() {
+        for ( auto & mod : modules ) {
+            if ( !mod->builtIn ) {
+                delete mod;
+            }
+        }
     }
 }
 

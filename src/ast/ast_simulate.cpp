@@ -913,7 +913,6 @@ namespace das
         }
         DebugInfoHelper helper(context.debugInfo);
         context.thisHelper = &helper;
-        context.access = access;
         context.globalVariables = (GlobalVariable *) context.code->allocate( totalVariables*sizeof(GlobalVariable) );
         context.globalsSize = 0;
         for (auto & pm : library.modules ) {

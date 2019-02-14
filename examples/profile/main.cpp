@@ -35,7 +35,8 @@ class FsFileAccess : public FileAccess {
 
 bool unit_test ( const string & fn ) {
     auto access = make_shared<FsFileAccess>();
-    if ( auto program = parseDaScript(fn,access,tout) ) {
+    ModuleGroup dummyGroup;
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
         if ( program->failed() ) {
             tout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {
