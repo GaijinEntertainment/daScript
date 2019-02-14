@@ -338,5 +338,19 @@ namespace das {
             }
         }
     }
+
+    ModuleGroupUserData * ModuleGroup::getUserData ( const string & dataName ) const {
+        auto it = userData.find(dataName);
+        return it != userData.end() ? it->second.get() : nullptr;
+    }
+
+    bool ModuleGroup::setUserData ( ModuleGroupUserData * data ) {
+        auto it = userData.find(data->name);
+        if ( it != userData.end() ) {
+            return false;
+        }
+        userData[data->name] = ModuleGroupUserDataPtr(data);
+        return true;
+    }
 }
 

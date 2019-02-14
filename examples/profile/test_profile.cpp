@@ -92,11 +92,29 @@ struct EsComponent {
         name(n), data(d), size(uint32_t(sz)), stride(uint32_t(st)), boxed(bx) {}
 };
 
-vector<EsPassAttributeTable>    g_esPassTable;
-vector<EsAttributeTable>        g_esBlockTable;
+struct EsGroupData : ModuleGroupUserData {
+    EsGroupData() : ModuleGroupUserData("es") {
+        THAT = this;
+    }
+    virtual ~EsGroupData() {
+        THAT = nullptr;
+    }
+    vector<unique_ptr<EsPassAttributeTable>>    g_esPassTable;
+    vector<unique_ptr<EsAttributeTable>>        g_esBlockTable;
+    static EsGroupData * THAT;
+};
+EsGroupData * EsGroupData::THAT = nullptr;
 
 struct EsFunctionAnnotation : FunctionAnnotation {
     EsFunctionAnnotation() : FunctionAnnotation("es") { }
+    EsGroupData * getGroupData( ModuleGroup & group ) const {
+        if ( auto data = group.getUserData("es") ) {
+            return (EsGroupData *) data;
+        }
+        auto esData = new EsGroupData();
+        group.setUserData(esData);
+        return esData;
+    }
     void buildAttributeTable ( EsAttributeTable & tab, const vector<VariablePtr> & arguments, string & err  ) {
         for ( const auto & arg : arguments ) {
             vec4f def = v_zero();
@@ -111,22 +129,23 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             tab.attributes.emplace_back(arg->name, arg->type->getSizeOf(), arg->type->isRef(), def);
         }
     }
-    virtual bool apply ( ExprBlock * block, const AnnotationArgumentList &, string & err ) override {
+    virtual bool apply ( ExprBlock * block, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
         if ( block->arguments.empty() ) {
             err = "block needs arguments";
             return false;
         }
         return true;
     }
-    virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList &, const AnnotationArgumentList &, string & err ) override {
-        size_t index = g_esBlockTable.size();
-        block->annotationData = uint64_t(index | 0xbad00000);
-        EsAttributeTable tab;
-        buildAttributeTable(tab, block->arguments, err);
-        g_esBlockTable.push_back(tab);
+    virtual bool finalize ( ExprBlock * block, ModuleGroup & group, const AnnotationArgumentList &,
+                           const AnnotationArgumentList &, string & err ) override {
+        auto esData = getGroupData(group);
+        auto tab = make_unique<EsAttributeTable>();
+        block->annotationData = uint64_t(tab.get());
+        buildAttributeTable(*tab, block->arguments, err);
+        esData->g_esBlockTable.emplace_back(move(tab));
         return err.empty();
     }
-    virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList &, string & err ) override {
+    virtual bool apply ( const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
         if ( func->arguments.empty() ) {
             err = "function needs arguments";
             return false;
@@ -134,21 +153,23 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         func->exports = true;
         return true;
     };
-    virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args, const AnnotationArgumentList &, string & err ) override {
-        EsPassAttributeTable tab;
+    virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group, const AnnotationArgumentList & args,
+                           const AnnotationArgumentList &, string & err ) override {
+        auto esData = getGroupData(group);
+        auto tab = make_unique<EsPassAttributeTable>();
         if ( auto pp = args.find("pass", Type::tString) ) {
-            tab.pass = pp->sValue;
+            tab->pass = pp->sValue;
         } else {
             err = "pass is not specified";
             return false;
         }
-        tab.functionIndex = (int32_t) func->index;
-        if ( tab.functionIndex<0 ) {
+        tab->functionIndex = (int32_t) func->index;
+        if ( tab->functionIndex<0 ) {
             err = "function is not there";
             return false;
         }
-        buildAttributeTable(tab, func->arguments, err);
-        g_esPassTable.push_back(tab);
+        buildAttributeTable(*tab, func->arguments, err);
+        esData->g_esPassTable.emplace_back(move(tab));
         return err.empty();
     }
 };
@@ -204,19 +225,9 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
 
 bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & components, uint32_t totalComponents ) {
     auto * closure = (SimNode_ClosureBlock *) block.body;
-    size_t index = intptr_t(closure->annotationData);
-    if ( (index & 0xfff00000) != 0xbad00000 ) {
-        context.throw_error("invalid block");
-        return false;
-    }
-    index &= 0x000fffff;
-    if ( index<0 || index>=g_esBlockTable.size() ) {
-        context.throw_error("invalid block");
-        return false;
-    }
-    EsAttributeTable & table = g_esBlockTable[index];
-    uint32_t nAttr = (uint32_t) table.attributes.size();
-    vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
+    EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
+    uint32_t nAttr = (uint32_t) table->attributes.size();
+    vec4f * _args = (vec4f *)(alloca(table->attributes.size() * sizeof(vec4f)));
     context.invokeEx(block, _args, nullptr, [&](SimNode * code){
         vec4f * args = _args;
         char **        data    = (char **) alloca(nAttr * sizeof(char *));
@@ -226,7 +237,7 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
         bool *      ref     = (bool *) alloca(nAttr * sizeof(bool));
         for ( uint32_t a=0; a!=nAttr; ++a ) {
             auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
-                return esc.name == table.attributes[a].name;
+                return esc.name == table->attributes[a].name;
             });
             if ( it != components.end() ) {
                 data[a]   = (char *) it->data;
@@ -234,10 +245,10 @@ bool EsRunBlock ( Context & context, Block block, const vector<EsComponent> & co
                 boxed[a]  = it->boxed;
             } else {
                 data[a] = nullptr;
-                args[a] = table.attributes[a].def;
+                args[a] = table->attributes[a].def;
             }
-            size[a] = table.attributes[a].size;
-            ref[a] = table.attributes[a].ref;
+            size[a] = table->attributes[a].size;
+            ref[a] = table->attributes[a].ref;
         }
         for ( uint32_t i=0; i != totalComponents; ++i ) {
             for ( uint32_t a=0; a!=nAttr; ++a ) {
@@ -298,9 +309,13 @@ void verifyEsComponents() {
 }
 
 void testEsUpdate ( char * pass, Context * ctx ) {
-    for ( auto & tab : g_esPassTable ) {
-        if ( tab.pass==pass ) {
-            EsRunPass(*ctx, tab, g_components, g_total);
+    if ( !EsGroupData::THAT ) {
+        ctx->throw_error("missing pass data");
+        return;
+    }
+    for ( auto & tab : EsGroupData::THAT->g_esPassTable ) {
+        if ( tab->pass==pass ) {
+            EsRunPass(*ctx, *tab, g_components, g_total);
         }
     }
 }

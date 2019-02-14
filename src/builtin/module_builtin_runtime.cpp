@@ -19,21 +19,21 @@ namespace das
 
     struct MarkFunctionAnnotation : FunctionAnnotation {
         MarkFunctionAnnotation(const string & na) : FunctionAnnotation(na) { }
-        virtual bool apply(ExprBlock *, const AnnotationArgumentList &, string & err) override {
+        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err) override {
             err = "not supported for block";
             return false;
         }
-        virtual bool finalize(ExprBlock *, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(ExprBlock *, ModuleGroup &,const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
-        virtual bool finalize(const FunctionPtr &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
     };
 
     struct ExportFunctionAnnotation : MarkFunctionAnnotation {
         ExportFunctionAnnotation() : MarkFunctionAnnotation("export") { }
-        virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             func->exports = true;
             return true;
         };
@@ -41,7 +41,7 @@ namespace das
 
     struct SideEffectsFunctionAnnotation : MarkFunctionAnnotation {
         SideEffectsFunctionAnnotation() : MarkFunctionAnnotation("sideeffects") { }
-        virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             func->sideEffectFlags |= uint32_t(SideEffects::userScenario);
             return true;
         };
@@ -49,7 +49,7 @@ namespace das
     
     struct RunAtCompileTimeFunctionAnnotation : MarkFunctionAnnotation {
         RunAtCompileTimeFunctionAnnotation() : MarkFunctionAnnotation("run") { }
-        virtual bool apply(const FunctionPtr & func, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             func->hasToRunAtCompileTime = true;
             return true;
         };

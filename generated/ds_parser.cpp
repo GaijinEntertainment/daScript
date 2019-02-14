@@ -3110,7 +3110,7 @@ yyreduce:
                     if ( pA->annotation->rtti_isFunctionAnnotation() ) {
                         auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                         string err;
-                        if ( !ann->apply(pFunction, pA->arguments, err) ) {
+                        if ( !ann->apply(pFunction, *g_Program->thisModuleGroup, pA->arguments, err) ) {
                             yyerror("can't apply annotation\n" + err,
                                 tokAt((yylsp[-4])), CompilationError::invalid_annotation);
                         }
@@ -3530,7 +3530,7 @@ yyreduce:
                         if ( pA->annotation->rtti_isFunctionAnnotation() ) {
                             auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                             string err;
-                            if ( !ann->apply(closure, pA->arguments, err) ) {
+                            if ( !ann->apply(closure, *g_Program->thisModuleGroup, pA->arguments, err) ) {
                                 yyerror("can't apply annotation\n" + err, tokAt((yylsp[-3])),
                                     CompilationError::invalid_annotation);
                             }

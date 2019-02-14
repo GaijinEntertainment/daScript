@@ -17,7 +17,7 @@ namespace das
             for ( const auto & an : fn->annotations ) {
                 auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
                 string err = "";
-                if ( !fna->finalize(fn->shared_from_this(), an->arguments, program->options, err) ) {
+                if ( !fna->finalize(fn->shared_from_this(), *program->thisModuleGroup, an->arguments, program->options, err) ) {
                     program->error("can't finalize annotation\n" + err, fn->at, CompilationError::invalid_annotation);
                 }
             }
@@ -27,7 +27,7 @@ namespace das
             for ( const auto & an : block->annotations ) {
                 auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
                 string err = "";
-                if ( !fna->finalize(block, an->arguments, program->options, err) ) {
+                if ( !fna->finalize(block, *program->thisModuleGroup, an->arguments, program->options, err) ) {
                     program->error("can't finalize annotation\n" + err, block->at, CompilationError::invalid_annotation);
                 }
             }

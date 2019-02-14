@@ -505,7 +505,7 @@ function_declaration
                     if ( pA->annotation->rtti_isFunctionAnnotation() ) {
                         auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                         string err;
-                        if ( !ann->apply(pFunction, pA->arguments, err) ) {
+                        if ( !ann->apply(pFunction, *g_Program->thisModuleGroup, pA->arguments, err) ) {
                             yyerror("can't apply annotation\n" + err,
                                 tokAt(@loc), CompilationError::invalid_annotation);
                         }
@@ -769,7 +769,7 @@ expr_block
                         if ( pA->annotation->rtti_isFunctionAnnotation() ) {
                             auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                             string err;
-                            if ( !ann->apply(closure, pA->arguments, err) ) {
+                            if ( !ann->apply(closure, *g_Program->thisModuleGroup, pA->arguments, err) ) {
                                 yyerror("can't apply annotation\n" + err, tokAt(@annL),
                                     CompilationError::invalid_annotation);
                             }

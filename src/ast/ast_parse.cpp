@@ -101,11 +101,12 @@ namespace das {
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
-    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleLibrary & libGroup ) {
+    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup ) {
         auto time0 = ref_time_ticks();
         int err;
         auto program = g_Program = make_shared<Program>();
         program->access = access;
+        program->thisModuleGroup = &libGroup;
         libGroup.foreach([&](Module * pm){
             g_Program->library.addModule(pm);
             return true;
@@ -166,22 +167,23 @@ namespace das {
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod) ) {
                     string modFn = access->getIncludeFileName(fileName, mod) + ".das";
-                    auto prog = parseDaScript(modFn, access, logs, libGroup);
-                    if ( prog->failed() ) {
-                        return prog;
+                    auto program = parseDaScript(modFn, access, logs, libGroup);
+                    if ( program->failed() ) {
+                        return program;
                     }
-                    prog->thisModule->name = mod;
-                    libGroup.addModule(prog->thisModule.release());
+                    program->thisModule->name = mod;
+                    libGroup.addModule(program->thisModule.release());
                 }
             }
             return parseDaScript(fileName, access, logs, libGroup);
         } else {
-            auto prog = make_shared<Program>();
-            prog->access = access;
+            auto program = make_shared<Program>();
+            program->access = access;
+            program->thisModuleGroup = &libGroup;
             for ( auto & mis : missing ) {
-                prog->error("missing prerequisit " + mis, LineInfo());
+                program->error("missing prerequisit " + mis, LineInfo());
             }
-            return prog;
+            return program;
         }
     }
 }

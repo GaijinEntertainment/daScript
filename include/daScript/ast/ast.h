@@ -48,8 +48,8 @@ namespace das
     class Visitor;
 
     class Module;
-
     class ModuleLibrary;
+    class ModuleGroup;
 
     struct TypeDecl : enable_shared_from_this<TypeDecl> {
         TypeDecl() = default;
@@ -421,11 +421,15 @@ namespace das
     struct FunctionAnnotation : Annotation {
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isFunctionAnnotation() const override { return true; }
-        virtual bool apply ( const FunctionPtr & func, const AnnotationArgumentList & args, string & err ) = 0;
-        virtual bool finalize ( const FunctionPtr & func, const AnnotationArgumentList & args,
+        virtual bool apply ( const FunctionPtr & func, ModuleGroup & libGroup,
+                            const AnnotationArgumentList & args, string & err ) = 0;
+        virtual bool finalize ( const FunctionPtr & func, ModuleGroup & libGroup,
+                               const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
-        virtual bool apply ( ExprBlock * block, const AnnotationArgumentList & args, string & err ) = 0;
-        virtual bool finalize ( ExprBlock * block, const AnnotationArgumentList & args,
+        virtual bool apply ( ExprBlock * block, ModuleGroup & libGroup,
+                            const AnnotationArgumentList & args, string & err ) = 0;
+        virtual bool finalize ( ExprBlock * block, ModuleGroup & libGroup,
+                               const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
     };
 
@@ -1418,9 +1422,20 @@ namespace das
         vector<Module *>                modules;
     };
 
+    struct ModuleGroupUserData {
+        ModuleGroupUserData ( const string & n ) : name(n) {}
+        virtual ~ModuleGroupUserData() {}
+        string name;
+    };
+    typedef unique_ptr<ModuleGroupUserData> ModuleGroupUserDataPtr;
+
     class ModuleGroup : public ModuleLibrary {
     public:
         virtual ~ModuleGroup();
+        ModuleGroupUserData * getUserData ( const string & dataName ) const;
+        bool setUserData ( ModuleGroupUserData * data );
+    protected:
+        map<string,ModuleGroupUserDataPtr>  userData;
     };
 
     class DebugInfoHelper {
@@ -1499,6 +1514,7 @@ namespace das
     public:
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
+        ModuleGroup *               thisModuleGroup;
         int                         totalFunctions = 0;
         int                         totalVariables = 0;
         vector<Error>               errors;
@@ -1512,7 +1528,7 @@ namespace das
     };
 
     // this one works for single module only
-    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleLibrary & libGroup );
+    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup );
 
     // this one collectes dependencies and compiles with modules
     ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup );
