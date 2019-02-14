@@ -6,8 +6,9 @@
 #endif
 
 class FsFileInfo : public das::FileInfo {
-    virtual ~FsFileInfo() {
+    virtual void freeSourceData() override {
         das_aligned_free16((void*)source);
+        source = nullptr;
     }
 };
 

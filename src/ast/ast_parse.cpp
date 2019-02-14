@@ -32,7 +32,7 @@ namespace das {
                 while ( src < src_end && !(src[0]=='*' && src[1]=='/')  ) {
                     src ++;
                 }
-                src ++;
+                src +=2;
                 wb = true;
                 continue;
             } else if ( wb && src[0]=='r' ) {

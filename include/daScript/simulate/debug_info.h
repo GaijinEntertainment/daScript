@@ -50,10 +50,11 @@ namespace das
     struct FileInfo {
         FileInfo() = default;
         FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
+        virtual void freeSourceData() {}
+        virtual ~FileInfo() { freeSourceData(); }
         const char *          name = nullptr;
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
-        virtual ~FileInfo() {}
     };
     typedef shared_ptr<FileInfo> FileInfoPtr;
 
@@ -63,6 +64,7 @@ namespace das
         FileInfoPtr setFileInfo ( const string & fileName, FileInfo * info );
         FileInfoPtr getFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
+        void freeSourceData();
     protected:
         virtual FileInfoPtr getNewFileInfo ( const string & ) { return nullptr; }
     protected:

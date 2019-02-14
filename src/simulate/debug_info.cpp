@@ -240,4 +240,10 @@ namespace das
             return incFileName;
         }
     }
+
+    void FileAccess::freeSourceData() {
+        for ( auto & fp : files ) {
+            fp.second->freeSourceData();
+        }
+    }
 }
