@@ -2,38 +2,85 @@
 
 #include "daScript/ast/ast.h"
 
-#include <regex>
-
 void yybegin(const char * str);
 int yyparse();
 int yylex_destroy();
 
 namespace das {
 
-    std::regex REG_require ("\\brequire\\s+(\\w+)");
-
-    vector<string> getAllRequie ( const string & src ) {
+    vector<string> getAllRequie ( const char * src, uint32_t length ) {
         vector<string> req;
-        std::match_results<string::const_iterator> sm;
-        auto at = src.begin();
-        while ( std::regex_search(at, src.end(), sm, REG_require) ) {
-            req.emplace_back(sm[1].first, sm[1].second);
-            at = sm.suffix().first;
+        const char * src_end = src + length - 9;    // needs at least 10 char for 'require a'
+        bool wb = true;
+        while ( src < src_end ) {
+            if ( src[0]=='"' ) {
+                src ++;
+                while ( src < src_end && src[0]!='"' ) {
+                    src ++;
+                }
+                src ++;
+                wb = true;
+                continue;
+            } else if ( src[0]=='/' && src[1]=='/' ) {
+                while ( src < src_end && !(src[0]=='\n') ) {
+                    src ++;
+                }
+                src ++;
+                wb = true;
+                continue;
+            } else if ( src[0]=='/' && src[1]=='*' ) {
+                while ( src < src_end && !(src[0]=='*' && src[1]=='/')  ) {
+                    src ++;
+                }
+                src ++;
+                wb = true;
+                continue;
+            } else if ( wb && src[0]=='r' ) {
+                if ( memcmp(src, "require", 7)==0 ) {
+                    src += 7;
+                    if ( isspace(src[0]) ) {
+                        while ( src < src_end && isspace(src[0]) ) {
+                            src ++;
+                        }
+                        if ( src >= src_end ) {
+                            continue;
+                        }
+                        if ( src[0]=='_' || isalpha(src[0]) ) {
+                            string mod;
+                            while ( src < src_end && (isalnum(src[0]) || src[0]=='_') ) {
+                                mod += *src ++;
+                            }
+                            req.push_back(mod);
+                            continue;
+                        } else {
+                            wb = true;
+                            goto nextChar;
+                        }
+                    } else {
+                        wb = false;
+                        goto nextChar;
+                    }
+                } else {
+                    goto nextChar;
+                }
+            }
+        nextChar:
+            wb = src[0]!='_' && (wb ? !isalnum(src[0]) : !isalpha(src[0]));
+            src ++;
         }
         return req;
     }
 
-    bool getPrerequisits ( const string & fileName, const FileAccessPtr & access, vector<string> & req ) {
+    bool getPrerequisits ( const string & fileName, const FileAccessPtr & access, vector<string> & req, vector<string> & missing ) {
         if ( auto fi = access->getFileInfo(fileName) ) {
-            string src = string ( fi->source, fi->sourceLength );  // stringview?
-            vector<string> ownReq = getAllRequie(fi->source);
+            vector<string> ownReq = getAllRequie(fi->source, fi->sourceLength);
             for ( auto & mod : ownReq ) {
                 if ( !Module::require(mod) ) {
                     if ( find(req.begin(), req.end(), mod)==req.end() ) {
                         req.push_back(mod);
                         // module file name
                         string modFn = access->getIncludeFileName(fileName, mod) + ".das";
-                        if ( !getPrerequisits(modFn, access, req) ) {
+                        if ( !getPrerequisits(modFn, access, req, missing) ) {
                             return false;
                         }
                     }
@@ -41,6 +88,7 @@ namespace das {
             }
             return true;
         } else {
+            missing.push_back(fileName);
             return false;
         }
     }
@@ -112,8 +160,8 @@ namespace das {
     }
 
     ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup ) {
-        vector<string> req;
-        if ( getPrerequisits(fileName, access, req) ) {
+        vector<string> req, missing;
+        if ( getPrerequisits(fileName, access, req, missing) ) {
             reverse(req.begin(), req.end());
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod) ) {
@@ -126,8 +174,15 @@ namespace das {
                     libGroup.addModule(prog->thisModule.release());
                 }
             }
+            return parseDaScript(fileName, access, logs, libGroup);
+        } else {
+            auto prog = make_shared<Program>();
+            prog->access = access;
+            for ( auto & mis : missing ) {
+                prog->error("missing prerequisit " + mis, LineInfo());
+            }
+            return prog;
         }
-        return parseDaScript(fileName, access, logs, libGroup);
     }
 }
 
