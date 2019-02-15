@@ -308,6 +308,7 @@ namespace das {
         auto cexpr = clonePtr<ExprAddr>(expr);
         Expression::clone(cexpr);
         cexpr->target = target;
+        cexpr->func = func;
         return cexpr;
     }
 

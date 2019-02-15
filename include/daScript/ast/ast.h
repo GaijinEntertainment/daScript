@@ -522,6 +522,7 @@ namespace das
         virtual bool rtti_isValues() const { return false; }
         virtual bool rtti_isMakeBlock() const { return false; }
         virtual bool rtti_isIfThenElse() const { return false; }
+        virtual bool rtti_isAddr() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
@@ -571,6 +572,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isAddr() const override { return true; }
         string target;
         FunctionPtr func;
     };

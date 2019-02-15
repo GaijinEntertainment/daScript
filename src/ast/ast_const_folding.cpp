@@ -175,6 +175,7 @@ namespace das {
         stringbuilder(const1,const2,...) -> stringbuilder(const12,...)
         stringbuilder(const) -> const
         def FN return const -> const
+        invoke(@fn,...) -> fn(...)
      */
     class ConstFolding : public FoldingVisitor {
     public:
@@ -321,6 +322,11 @@ namespace das {
             c->constexpression = true;
             return Visitor::visit(c);
         }
+    // addr
+        virtual ExpressionPtr visit ( ExprAddr * a ) override {
+            a->constexpression = true;
+            return Visitor::visit(a);
+        }
     // assert
         virtual ExpressionPtr visit ( ExprAssert * expr ) override {
             if ( expr->arguments[0]->constexpression ) {
@@ -348,6 +354,24 @@ namespace das {
             auto cs = make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false));
             cs->type = make_shared<TypeDecl>(Type::tString);
             return cs;
+        }
+    // ExprInvoke
+        virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
+            auto what = expr->arguments[0];
+            if ( what->type->baseType==Type::tFunction && what->rtti_isAddr() ) {
+                auto pAddr = static_pointer_cast<ExprAddr>(what);
+                auto funcC = pAddr->func;
+                auto pCall = make_shared<ExprCall>(expr->at, funcC->name);
+                pCall->func = funcC;
+                uint32_t numArgs = expr->arguments.size();
+                pCall->arguments.reserve(numArgs-1);
+                for ( uint32_t i=1; i!=numArgs; ++i )
+                    pCall->arguments.push_back( expr->arguments[i]->clone() );
+                pCall->type = make_shared<TypeDecl>(*funcC->result);
+                reportFolding();
+                return pCall;
+            }
+            return Visitor::visit(expr);
         }
     // ExprCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
