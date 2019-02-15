@@ -15,4 +15,3 @@ def test
 	assert(failed,"has to fail, invoking null function")
     return true
 
-

@@ -106,7 +106,7 @@
 %token  _TUINT       _TUINT2      _TUINT3      _TUINT4
 %token  _TFLOAT      _TFLOAT2     _TFLOAT3     _TFLOAT4
 %token  _TRANGE      _TURANGE     _TBLOCK      _TINT64
-%token  _TUINT64     _TYPENAME	  _TDOUBLE
+%token  _TUINT64     _TYPENAME	  _TDOUBLE	   _TFUNCTION
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -1223,6 +1223,35 @@ type_declaration
                         auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                         if ( pDecl->pInit ) {
                             yyerror("can't have default values in block type declaration",
+                                pDecl->at,CompilationError::cant_initialize);
+                        }
+                        $$->argTypes.push_back(pVarType);
+                    }
+                }
+            }
+            deleteVariableDeclarationList($list);
+        }
+    }
+    |   _TFUNCTION[loc] {
+        $$ = new TypeDecl(Type::tFunction);
+        $$->at = tokAt(@loc);
+    }
+    |   _TFUNCTION[loc] '<' type_declaration[blockType] '>' {
+        $$ = new TypeDecl(Type::tFunction);
+        $$->at = tokAt(@loc);
+        $$->firstType = TypeDeclPtr($blockType);
+    }
+    |   _TFUNCTION[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+        $$ = new TypeDecl(Type::tFunction);
+        $$->at = tokAt(@loc);
+        $$->firstType = TypeDeclPtr($result);
+        if ( $list ) {
+            for ( auto pDecl : *$list ) {
+                if ( pDecl->pTypeDecl ) {
+                    for ( size_t ai=0; ai!= pDecl->pNameList->size(); ++ai ) {
+                        auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                        if ( pDecl->pInit ) {
+                            yyerror("can't have default values in function type declaration",
                                 pDecl->at,CompilationError::cant_initialize);
                         }
                         $$->argTypes.push_back(pVarType);

@@ -200,6 +200,7 @@
 <normal>"operator"                                      return _OPERATOR;
 <normal>"require"                                       return _REQUIRE;
 <normal>"block"                                         return _TBLOCK;
+<normal>"function"                                      return _TFUNCTION;
 <normal>"const"                                         return _CONST;
 <normal>"expect"                                        return _EXPECT;
 <normal>"table"                                         return _TABLE;

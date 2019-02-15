@@ -752,7 +752,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index);
+            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
+            if (!simFunc) context.throw_error("invoke null function");
             if ( argCount>1 ) {
                 return context.call(simFunc, argValues + 1, debugInfo.line);
             } else {
@@ -763,7 +764,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index);    \
+            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);  \
+            if (!simFunc) context.throw_error("invoke null function");                          \
             if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.call(simFunc, argValues + 1, debugInfo.line));   \
             } else {                                                                            \
@@ -782,7 +784,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index);
+            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
+            if (!simFunc) context.throw_error("invoke null function");
             auto cmres = context.stack.sp() + stackTop;
             if ( argCount>1 ) {
                 return context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, debugInfo.line);
@@ -794,7 +797,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                                   \
             vec4f argValues[argCount ? argCount : 1];                                               \
             EvalBlock<argCount>::eval(context, arguments, argValues);                               \
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index);        \
+            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);      \
+            if (!simFunc) context.throw_error("invoke null function");                              \
             auto cmres = context.stack.sp() + stackTop;                                             \
             if ( argCount>1 ) {                                                                     \
                 return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, debugInfo.line)); \

@@ -557,6 +557,7 @@ namespace das {
             auto fns = findFuncAddr(expr->target);
             if ( fns.size()==1 ) {
                 expr->func = fns.back();
+                expr->func->addr = true;
                 expr->type = make_shared<TypeDecl>(Type::tFunction);
                 expr->type->firstType = make_shared<TypeDecl>(*expr->func->result);
                 expr->type->argTypes.reserve ( expr->func->arguments.size() );
