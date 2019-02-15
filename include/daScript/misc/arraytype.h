@@ -19,6 +19,9 @@ namespace das
         __forceinline bool operator == ( const Func & b ) const {
             return index == b.index;
         }
+        __forceinline bool operator != ( const Func & b ) const {
+            return index != b.index;
+        }
     };
     static_assert(sizeof(Func)==sizeof(int32_t), "has to be castable");
 

@@ -40,6 +40,22 @@ namespace das
         return stub.value;
     }
 
+    template <>
+    struct SimPolicy<Func> {
+        static __forceinline int32_t to_func ( vec4f val ) {
+            return cast<Func>::to(val).index;
+        }
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
+            return to_func(a) == to_func(b);
+        }
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) {
+            return to_func(a) != to_func(b);
+        }
+    };
+
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,Func);
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,Func);
+
     Module_BuiltIn::Module_BuiltIn() : Module("$") {
         ModuleLibrary lib;
         lib.addModule(this);
@@ -51,6 +67,8 @@ namespace das
         addFunctionBoolean<bool>(*this,lib);
         // pointer
         addFunctionBasic<void *>(*this,lib);
+        // function
+        addFunctionBasic<Func>(*this,lib);
         // int32
         addFunctionBasic<int32_t>(*this,lib);
         addFunctionNumericWithMod<int32_t>(*this,lib);

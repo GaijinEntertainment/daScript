@@ -155,6 +155,7 @@ namespace das
     template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
     template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
     template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
+    template<> struct ToBasicType<Func>         { enum { type = Type::tFunction }; };
     template<> struct ToBasicType<Context *>    { enum { type = Type::fakeContext }; };
     template<> struct ToBasicType<vec4f>        { enum { type = Type::anyArgument }; };
 
@@ -889,7 +890,7 @@ namespace das
         ExprConstInt(int32_t i = 0)  : ExprConstT(i,Type::tInt) {}
         ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConstT(a,i,Type::tInt) {}
     };
-
+    
     struct ExprConstEnumeration : ExprConstT<int32_t,ExprConstEnumeration> {
         ExprConstEnumeration(int32_t i = 0, const TypeDeclPtr & td = nullptr)
             : ExprConstT(i,Type::tEnumeration) {
