@@ -225,15 +225,17 @@ namespace das {
         }
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
-            if ( expr->type->isFoldable() && expr->subexpr->constexpression ) {
-                return evalAndFold(expr);
+            if ( expr->subexpr->constexpression ) {
+                if ( expr->type->isFoldable() && expr->subexpr->type->isFoldable() ) {
+                    return evalAndFold(expr);
+                }
             }
             return Visitor::visit(expr);
         }
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             if ( expr->left->constexpression && expr->right->constexpression ) {
-                if ( expr->type->isFoldable() ) {
+                if ( expr->type->isFoldable() && expr->left->type->isFoldable() && expr->right->type->isFoldable() ) {
                     return evalAndFold(expr);
                 }
             }

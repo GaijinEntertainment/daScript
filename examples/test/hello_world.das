@@ -8,8 +8,9 @@ def test
     let fn = @add
     let t = invoke(fn, 1, 2)
     assert(t==3)
+    assert(fn!=null)
     let qq : function
-    assert(fn!=qq)
+    assert(qq==null)
     return true
 
 

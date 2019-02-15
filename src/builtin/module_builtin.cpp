@@ -56,6 +56,26 @@ namespace das
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,Func);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,Func);
 
+    struct Sim_EqFunPtr : SimNode_Op2 {
+        DAS_BOOL_NODE;
+        Sim_EqFunPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        __forceinline bool compute ( Context & context ) {
+            auto lv = cast<Func>::to(l->eval(context));
+            auto rv = r->evalPtr(context);
+            return !rv && lv.index==0;      // they only equal if both null
+        }
+    };
+
+    struct Sim_NEqFunPtr : SimNode_Op2 {
+        DAS_BOOL_NODE;
+        Sim_NEqFunPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        __forceinline bool compute ( Context & context ) {
+            auto lv = cast<Func>::to(l->eval(context));
+            auto rv = r->evalPtr(context);
+            return rv || lv.index;
+        }
+    };
+
     Module_BuiltIn::Module_BuiltIn() : Module("$") {
         ModuleLibrary lib;
         lib.addModule(this);
@@ -69,6 +89,8 @@ namespace das
         addFunctionBasic<void *>(*this,lib);
         // function
         addFunctionBasic<Func>(*this,lib);
+        addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,Func,void *>>("==",lib) );
+        addFunction( make_shared<BuiltInFn<Sim_NEqFunPtr,bool,Func,void *>>("!=",lib) );
         // int32
         addFunctionBasic<int32_t>(*this,lib);
         addFunctionNumericWithMod<int32_t>(*this,lib);
