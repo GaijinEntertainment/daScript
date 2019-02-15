@@ -176,6 +176,8 @@ namespace das {
         stringbuilder(const) -> const
         def FN return const -> const
         invoke(@fn,...) -> fn(...)
+        @fn==@fn, @fn!=@fn    -> const bool
+        @fn==ptr, @fn!=ptr    -> const bool
      */
     class ConstFolding : public FoldingVisitor {
     public:
@@ -237,6 +239,44 @@ namespace das {
             if ( expr->left->constexpression && expr->right->constexpression ) {
                 if ( expr->type->isFoldable() && expr->left->type->isFoldable() && expr->right->type->isFoldable() ) {
                     return evalAndFold(expr);
+                }
+                if ( expr->type->isSimpleType(Type::tBool) ) {
+                    // we are covering
+                    //  func == func
+                    //  func != func
+                    //  func == ptr
+                    //  func != ptr
+                    if ( expr->left->type->isGoodFunctionType() ) {
+                        bool res;
+                        auto lfn = static_pointer_cast<ExprAddr>(expr->left);
+                        if ( expr->right->type->isGoodFunctionType() ) {
+                            auto rfn = static_pointer_cast<ExprAddr>(expr->right);
+                            if ( expr->op=="==" ) {
+                                res = lfn->func == rfn->func;
+                            } else {
+                                res = lfn->func != rfn->func;
+                            }
+                        } else if ( expr->right->type->isPointer() ) {
+                            auto rpt = static_pointer_cast<ExprConstPtr>(expr->right);
+                            if ( !rpt->getValue() ) {
+                                if ( expr->op=="==" ) {
+                                    res = false;
+                                } else {
+                                    res = true;
+                                }
+                            } else {
+                                res = false;
+                            }
+                        } else {
+                            assert(0 && "how did we even end up here?");
+                            return Visitor::visit(expr);
+                        }
+                        auto sim = Program::makeConst(expr->at, expr->type, cast<bool>::from(res));
+                        sim->type = make_shared<TypeDecl>(*expr->type);
+                        sim->constexpression = true;
+                        reportFolding();
+                        return sim;
+                    }
                 }
             }
             return Visitor::visit(expr);
