@@ -97,6 +97,17 @@ namespace das {
                 }
             }
         }
+        // function address
+        virtual void preVisit(ExprAddr * addr) override {
+            Visitor::preVisit(addr);
+            if (builtInDependencies || !addr->func->builtIn) {
+                if (func) {
+                    func->useFunctions.insert(addr->func);
+                } else {
+                    gVarFuncUse[gVar].push_back(addr->func);
+                }
+            }
+        }
         // function call
         virtual void preVisit(ExprCall * call) override {
             Visitor::preVisit(call);

@@ -69,6 +69,7 @@ namespace das
         bool isGoodArrayType() const;
         bool isGoodTableType() const;
         bool isGoodBlockType() const;
+        bool isGoodFunctionType() const;
         bool isVoid() const;
         bool isRef() const;
         bool isRefType() const;
@@ -562,6 +563,16 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         ExpressionPtr   subexpr;
+    };
+
+    struct ExprAddr : Expression {
+        ExprAddr () = default;
+        ExprAddr ( const LineInfo & a, const string & n ) : Expression(a), target(n) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        string target;
+        FunctionPtr func;
     };
 
     struct ExprNullCoalescing : ExprPtr2Ref {
@@ -1264,9 +1275,9 @@ namespace das
     ,   modifyExternal =    (1<<1)
     ,   modifyArgument =    (1<<2)
     ,   accessGlobal =      (1<<3)
-    ,   invokeBloke =       (1<<4)
+    ,   invoke =            (1<<4)
 
-    ,   inferedSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invokeBloke)
+    ,   inferedSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke)
     };
 
     class Function : public enable_shared_from_this<Function> {
@@ -1647,6 +1658,7 @@ namespace das
         // all visitable expressions
         VISIT_EXPR(ExprRef2Value)
         VISIT_EXPR(ExprPtr2Ref)
+        VISIT_EXPR(ExprAddr)
         VISIT_EXPR(ExprNullCoalescing)
         VISIT_EXPR(ExprAssert)
         VISIT_EXPR(ExprStaticAssert)

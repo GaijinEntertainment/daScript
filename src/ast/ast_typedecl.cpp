@@ -614,6 +614,10 @@ namespace das
         return baseType==Type::tBlock && dim.size()==0;
     }
 
+    bool TypeDecl::isGoodFunctionType() const {
+        return baseType==Type::tFunction && dim.size()==0;
+    }
+
     bool TypeDecl::isGoodArrayType() const {
         return baseType==Type::tArray && dim.size()==0 && firstType;
     }

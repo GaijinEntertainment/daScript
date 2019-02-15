@@ -183,6 +183,12 @@ namespace das
         return GetR2V(context, at, type, subexpr->simulate(context));
     }
 
+    SimNode * ExprAddr::simulate (Context & context) const {
+        assert(func->index>=0 && "how, we specified in the unused");
+        Func fn; fn.index = func->index;
+        return context.code->makeNode<SimNode_ConstValue>(at,cast<Func>::from(fn));
+    }
+
     SimNode * ExprPtr2Ref::simulate (Context & context) const {
         return context.code->makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
@@ -235,10 +241,19 @@ namespace das
         auto blockT = arguments[0]->type;
         SimNode_CallBase * pInvoke;
         if ( blockT->firstType && blockT->firstType->isRefType() ) {
-            pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMove>(
-                                                int(arguments.size()), at, stackTop);
+            if ( blockT->baseType==Type::tBlock ) {
+                pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMove>(
+                                                    int(arguments.size()), at, stackTop);
+            } else {
+                pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMoveFn>(
+                                                    int(arguments.size()), at, stackTop);
+            }
         } else {
-            pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_Invoke>(int(arguments.size()),at);
+            if ( blockT->baseType==Type::tBlock ) {
+                pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_Invoke>(int(arguments.size()),at);
+            } else {
+                pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeFn>(int(arguments.size()),at);
+            }
         }
         pInvoke->debugInfo = at;
         if ( int nArg = (int) arguments.size() ) {

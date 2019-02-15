@@ -383,7 +383,7 @@ namespace das {
         virtual void preVisit(ExprInvoke * expr) override{
             Visitor::preVisit(expr);
             if ( func ) {
-                func->sideEffectFlags |= uint32_t(SideEffects::invokeBloke);
+                func->sideEffectFlags |= uint32_t(SideEffects::invoke);
             }
         }
     // Debug

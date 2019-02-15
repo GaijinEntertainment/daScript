@@ -200,7 +200,7 @@
 %left       '-' '+'
 %left       '*' '/' '%'
 %left       QQ
-%right      UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
+%right      '@' UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
 %left       LPIPE RPIPE LBPIPE
 %left       POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT
 %nonassoc   COLCOL
@@ -843,6 +843,7 @@ expr
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
+    |   '@'[loc] name_in_namespace[name]         { $$ = new ExprAddr(tokAt(@loc),*$name); delete $name; }
     |   name_in_namespace[name] '(' ')' {
             $$ = g_Program->makeCall(tokAt(@name),*$name);
             delete $name;

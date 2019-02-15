@@ -297,6 +297,20 @@ namespace das {
         return cexpr;
     }
 
+    // ExprAddr
+
+    ExpressionPtr ExprAddr::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprAddr::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprAddr>(expr);
+        Expression::clone(cexpr);
+        cexpr->target = target;
+        return cexpr;
+    }
+
     // ExprNullCoalescing
 
     ExpressionPtr ExprNullCoalescing::visit(Visitor & vis) {

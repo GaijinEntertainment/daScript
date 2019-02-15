@@ -149,8 +149,8 @@ namespace das {
                     if ( fn->sideEffectFlags & uint32_t(SideEffects::accessGlobal) ) {
                         ss << "[access_global]";
                     }
-                    if ( fn->sideEffectFlags & uint32_t(SideEffects::invokeBloke) ) {
-                        ss << "[invoke_block]";
+                    if ( fn->sideEffectFlags & uint32_t(SideEffects::invoke) ) {
+                        ss << "[invoke]";
                     }
                     ss << "\n";
                 }
@@ -488,6 +488,10 @@ namespace das {
             if ( printRef && field->write ) ss << "#";
             ss << ".?" << field->name;
             return Visitor::visit(field);
+        }
+    // addr
+        virtual void preVisit ( ExprAddr * expr ) override {
+            ss << "@" << expr->target;
         }
     // ptr2ref
         virtual void preVisit ( ExprPtr2Ref * ptr2ref ) override {

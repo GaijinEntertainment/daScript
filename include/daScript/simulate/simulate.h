@@ -745,6 +745,68 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
+    // Invoke function
+    template <int argCount>
+    struct SimNode_InvokeFn : SimNode_CallBase {
+        SimNode_InvokeFn ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index);
+            if ( argCount>1 ) {
+                return context.call(simFunc, argValues + 1, debugInfo.line);
+            } else {
+                return context.call(simFunc, nullptr, debugInfo.line);
+            }
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                                                   \
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            vec4f argValues[argCount ? argCount : 1];                                           \
+            EvalBlock<argCount>::eval(context, arguments, argValues);                           \
+            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index);    \
+            if ( argCount>1 ) {                                                                 \
+                return cast<CTYPE>::to(context.call(simFunc, argValues + 1, debugInfo.line));   \
+            } else {                                                                            \
+                return cast<CTYPE>::to(context.call(simFunc, nullptr, debugInfo.line));         \
+            }                                                                                   \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    // Invoke function with copy-or-move-on-return
+    template <int argCount>
+    struct SimNode_InvokeAndCopyOrMoveFn : SimNode_CallBase {
+        SimNode_InvokeAndCopyOrMoveFn ( const LineInfo & at, uint32_t sp )
+            : SimNode_CallBase(at) { stackTop = sp; }
+        virtual vec4f eval ( Context & context ) override {
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index);
+            auto cmres = context.stack.sp() + stackTop;
+            if ( argCount>1 ) {
+                return context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, debugInfo.line);
+            } else {
+                return context.callWithCopyOnReturn(simFunc, nullptr, cmres, debugInfo.line);
+            }
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {                                   \
+            vec4f argValues[argCount ? argCount : 1];                                               \
+            EvalBlock<argCount>::eval(context, arguments, argValues);                               \
+            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index);        \
+            auto cmres = context.stack.sp() + stackTop;                                             \
+            if ( argCount>1 ) {                                                                     \
+                return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, debugInfo.line)); \
+            } else {                                                                                \
+                return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, nullptr, cmres, debugInfo.line)); \
+            }                                                                                       \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+
     // StringBuilder
     struct SimNode_StringBuilder : SimNode_CallBase {
         SimNode_StringBuilder ( const LineInfo & at ) : SimNode_CallBase(at) {}

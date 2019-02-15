@@ -201,6 +201,21 @@ namespace das {
             return resT;
         }
 
+        vector<FunctionPtr> findFuncAddr ( const string & name ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                auto itFnList = mod->functionsByName.find(funcName);
+                if ( itFnList != mod->functionsByName.end() ) {
+                    auto & goodFunctions = itFnList->second;
+                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -536,6 +551,30 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
+    // ExprAddr
+        virtual ExpressionPtr visit ( ExprAddr * expr ) override {
+            expr->func.reset();
+            auto fns = findFuncAddr(expr->target);
+            if ( fns.size()==1 ) {
+                expr->func = fns.back();
+                expr->type = make_shared<TypeDecl>(Type::tFunction);
+                expr->type->firstType = make_shared<TypeDecl>(*expr->func->result);
+                expr->type->argTypes.reserve ( expr->func->arguments.size() );
+                for ( auto & arg : expr->func->arguments ) {
+                    auto at = make_shared<TypeDecl>(*arg->type);
+                    expr->type->argTypes.push_back(at);
+                }
+                verifyType(expr->type);
+            } else if ( fns.size()==0 ) {
+                error("function not found " + expr->target, expr->at,
+                      CompilationError::function_not_found);
+            } else {
+                 string candidates = program->describeCandidates(fns);
+                error("function not found " + expr->target + "\n" + candidates, expr->at,
+                      CompilationError::function_not_found);
+            }
+            return Visitor::visit(expr);
+        }
     // ExprPtr2Ref
         virtual ExpressionPtr visit ( ExprPtr2Ref * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
@@ -642,15 +681,15 @@ namespace das {
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()<1 ) {
-                error("expecting invoke(block) or invoke(block,...)", expr->at,
+                error("expecting invoke(block_or_function) or invoke(block_or_function,...)", expr->at,
                       CompilationError::invalid_argument_count);
                 return Visitor::visit(expr);
             }
             // infer
             expr->arguments[0] = Expression::autoDereference(expr->arguments[0]);
             auto blockT = expr->arguments[0]->type;
-            if ( !blockT->isGoodBlockType() ) {
-                error("expecting block, not a " + blockT->describe(), expr->at,
+            if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() ) {
+                error("expecting block or function, not a " + blockT->describe(), expr->at,
                       CompilationError::invalid_argument_type);
             }
             if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {
