@@ -1037,7 +1037,7 @@ alias_declaration
     :   _TYPEDEF[loc] NAME[name] '=' type_declaration[tdecl] {
         $tdecl->alias = *$name;
         if ( !g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
-            yyerror("type alias is alredy defined "+*$name,tokAt(@loc),
+            yyerror("type alias is already defined "+*$name,tokAt(@loc),
                 CompilationError::type_alias_already_declared);
         }
         delete $name;
@@ -1050,7 +1050,7 @@ enum_declaration
         pEnum->at = tokAt(@loc);
         pEnum->name = *$name; 
         if ( !g_Program->addEnumeration(pEnum) ) {
-            yyerror("enumeration is alredy defined "+*$name,tokAt(@pE),
+            yyerror("enumeration is already defined "+*$name,tokAt(@pE),
                 CompilationError::enumeration_already_declared);
         }
 		delete $name;
@@ -1085,14 +1085,14 @@ structure_declaration
                         CompilationError::invalid_annotation);
                 } else if ( !g_Program->addStructureHandle(pStruct,
                         static_pointer_cast<StructureTypeAnnotation>(annotation), args) ) {
-                    yyerror("handled structure is alredy defined "+*$name,tokAt(@loc),
+                    yyerror("handled structure is already defined "+*$name,tokAt(@loc),
                         CompilationError::structure_already_declared);
                 }
             }
             delete $annL;
         } else {
             if ( !g_Program->addStructure(pStruct) )
-                yyerror("structure is alredy defined "+*$name,tokAt(@loc),
+                yyerror("structure is already defined "+*$name,tokAt(@loc),
                     CompilationError::structure_already_declared);
         }
         deleteVariableDeclarationList($list);
