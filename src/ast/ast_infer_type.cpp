@@ -383,6 +383,12 @@ namespace das {
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
+            if ( decl.type->isAuto() && !decl.init) {
+                error("structure field type can't be infered, it needs an initializer",
+                      decl.at, CompilationError::cant_infer_missing_initializer );
+            }
+        }
+        virtual void visitStructureField ( Structure *, Structure::FieldDeclaration & decl, bool ) override {
             if ( decl.type->isAlias() ) {
                 if ( auto aT = inferAlias(decl.type) ) {
                     decl.type = aT;
@@ -391,22 +397,24 @@ namespace das {
                     error("undefined type " + decl.type->describe(), decl.at, CompilationError::invalid_structure_field_type );
                 }
             }
-            if ( decl.type->isAuto() ) {
-                error("structure field type can't be declared auto",decl.at,CompilationError::invalid_structure_field_type);
-            } else  if ( decl.type->isAuto() ) {
-                error("structure field type can't be declared auto",decl.at,CompilationError::invalid_structure_field_type);
-            } else if ( decl.type->isVoid() ) {
+            if ( decl.type->isAuto() && decl.init ) {
+                auto varT = TypeDecl::inferAutoType(decl.type, decl.init->type);
+                if ( !varT ) {
+                    error("structure field initialization type can't be infered, "
+                          + decl.type->describe() + " = " + decl.init->type->describe(),
+                          decl.at, CompilationError::invalid_structure_field_type );
+                } else {
+                    TypeDecl::applyAutoContracts(varT, decl.type);
+                    decl.type = varT;
+                    decl.type->ref = false;
+                    reportGenericInfer();
+                }
+            }
+            if ( decl.type->isVoid() ) {
                 error("structure field type can't be declared void",decl.at,CompilationError::invalid_structure_field_type);
             } else if ( decl.type->ref ) {
                 error("structure field type can't be declared a reference",decl.at,CompilationError::invalid_structure_field_type);
             }
-            verifyType(decl.type);
-            auto fa = decl.type->getAlignOf() - 1;
-            fieldOffset = (fieldOffset + fa) & ~fa;
-            decl.offset = int(fieldOffset);
-            fieldOffset += decl.type->getSizeOf();
-        }
-        virtual void visitStructureField ( Structure *, Structure::FieldDeclaration & decl, bool ) override {
             if ( decl.init ) {
                 if ( decl.init->type ) {
                     if ( !decl.type->isSameType(*decl.init->type,false) ) {
@@ -421,6 +429,12 @@ namespace das {
                               CompilationError::invalid_initialization_type);
                     }
                 }
+            }
+            if ( !decl.type->isAuto() ) {
+                auto fa = decl.type->getAlignOf() - 1;
+                fieldOffset = (fieldOffset + fa) & ~fa;
+                decl.offset = int(fieldOffset);
+                fieldOffset += decl.type->getSizeOf();
             }
             verifyType(decl.type);
         }
@@ -459,6 +473,7 @@ namespace das {
                     varT->ref = false;
                     TypeDecl::applyAutoContracts(varT, var->type);
                     var->type = varT;
+                    reportGenericInfer();
                 }
             } else if ( !var->type->isSameType(*var->init->type,false) ) {
                 error("global variable initialization type mismatch, "
@@ -1057,6 +1072,7 @@ namespace das {
                 } else {
                     TypeDecl::applyAutoContracts(argT, arg->type);
                     arg->type = argT;
+                    reportGenericInfer();
                 }
             }
             if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, true, false) ) {
@@ -1608,6 +1624,7 @@ namespace das {
                     varT->ref = false;
                     TypeDecl::applyAutoContracts(varT, var->type);
                     var->type = varT;
+                    reportGenericInfer();
                 }
             } else if ( !var->type->isSameType(*var->init->type,false,false) ) {
                 error("local variable initialization type mismatch, "

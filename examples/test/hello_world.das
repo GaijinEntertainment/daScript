@@ -2,16 +2,16 @@ options log = true // , logInferPasses=true
 
 struct Point
     x, y : float = 0.0f
-    magnitude : function<(p:Point):float> = @point_magnitude
-    dot : function<(p,dp:Point):float> = @point_dot
+    magnitude  = @point_magnitude
+    dot = @point_dot
 
 def Point(X,Y)
     return [[Point() x=X,y=Y]]
 
-def point_magnitude(this:Point):float
+def point_magnitude(this:Point)
     return this.x*this.x + this.y*this.y
 
-def point_dot(this,p:Point):float
+def point_dot(this,p:Point)
     return this.x*p.x + this.y*p.y
 
 [export]
