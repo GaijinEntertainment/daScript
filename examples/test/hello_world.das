@@ -9,6 +9,7 @@ def make_a
 struct Foo
     a: array<int> <- make_a()
     b:int = 3
+    c:float
 
 [export]
 def test

@@ -6,13 +6,13 @@ def make_10
 
 struct Bar
     t : string = "blah"
-    ta : array<float> = make_10()
+    ta : array<float> <- make_10()
 
 struct Foo
     data_bool:bool=true
     data_int:int = 1
     data_float:float = 3.14
-    data_bar:Bar = Bar()
+    data_bar:Bar <- Bar()
     data_uint_3 : uint[3] = [[ uint 1u; 2u; 3u ]]
 
 [export]
