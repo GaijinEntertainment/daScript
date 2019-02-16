@@ -405,7 +405,7 @@ namespace das {
                 auto funcC = pAddr->func;
                 auto pCall = make_shared<ExprCall>(expr->at, funcC->name);
                 pCall->func = funcC;
-                uint32_t numArgs = expr->arguments.size();
+                uint32_t numArgs = uint32_t(expr->arguments.size());
                 pCall->arguments.reserve(numArgs-1);
                 for ( uint32_t i=1; i!=numArgs; ++i )
                     pCall->arguments.push_back( expr->arguments[i]->clone() );
