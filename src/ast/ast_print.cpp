@@ -110,8 +110,15 @@ namespace das {
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
-            ss << "\t" << decl.name << " : " << decl.type->describe() << "\n";
+            ss << "\t" << decl.name << " : " << decl.type->describe();
+            if ( decl.init ) {
+                ss << (decl.moveSemantic ? " <- " : " = ");
+            }
+        }
+        virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
+            ss << "\n";
             if ( last ) ss << "\n";
+            Visitor::visitStructureField(var, decl, last);
         }
     // global
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
@@ -638,7 +645,7 @@ namespace das {
         }
         virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);
-            ss << decl->name << " = ";
+            ss << decl->name << (decl->moveSemantic ? " <- " : " = ");
         }
         virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !last ) ss << ", ";

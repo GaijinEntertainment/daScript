@@ -1,19 +1,19 @@
-options log=true// , logOptimizationPasses=true
+options logInferPasses=true // log=true// , logOptimizationPasses=true
 
-def add(a,b:int):int
-    return a + b
+def make_a
+    let a:array<int>
+    for i in range(0,10)
+        push(a,i)
+    return <- a
+
+struct Foo
+    a: array<int> <- make_a()
+    b:int = 3
 
 [export]
 def test
-    let fn = @add
-    let t = invoke(fn, 1, 2)
-    assert(t==3)
-    assert(fn!=null)
-    assert(fn==@add)
-    assert(!(fn==null))
-    assert(!(fn!=@add))
-    let qq : function
-    assert(qq==null)
+    let foo <- [[Foo() b=4]]
+    print("foo={foo}\n")
     return true
 
 

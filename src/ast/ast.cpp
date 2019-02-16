@@ -1054,6 +1054,7 @@ namespace das {
                 cfd->at = fd->at;
                 cfd->name = fd->name;
                 cfd->value = fd->value->clone();
+                cfd->moveSemantic = fd->moveSemantic;
                 mfd->push_back(cfd);
             }
             cexpr->structs.push_back(mfd);
@@ -1329,6 +1330,10 @@ namespace das {
             vis.preVisit(pst);
             for ( auto & fi : pst->fields ) {
                 vis.preVisitStructureField(pst, fi, &fi==&pst->fields.back());
+                if ( fi.init ) {
+                    fi.init = fi.init->visit(vis);
+                }
+                vis.visitStructureField(pst, fi, &fi==&pst->fields.back());
             }
             ist.second = vis.visit(pst);
         }

@@ -10,7 +10,20 @@
 
 namespace das
 {
-        // common for move and copy
+    // common for move and copy
+
+    SimNode * makeLocalMove (const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
+        const auto & rightType = *rE->type;
+        // now, to the regular move
+        auto left = context.code->makeNode<SimNode_GetLocal>(at, stackTop);
+        auto right = rE->simulate(context);
+        if ( rightType.isRef() ) {
+            return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
+        } else {
+            assert(0 && "we should not be here");
+            return nullptr;
+        }
+    }
 
     SimNode * makeLocalCopy(const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
@@ -144,7 +157,12 @@ namespace das
                 auto field = makeType->structType->findField(decl->name);
                 assert(field && "should have failed in type infer otherwise");
                 uint32_t fieldStackTop = stackTop + index*stride + field->offset;
-                auto cpy = makeLocalCopy(at,context,fieldStackTop,decl->value);
+                SimNode * cpy;
+                if ( decl->moveSemantic ){
+                    cpy = makeLocalMove(at,context,fieldStackTop,decl->value);
+                } else {
+                    cpy = makeLocalCopy(at,context,fieldStackTop,decl->value);
+                }
                 simlist.push_back(cpy);
             }
         }

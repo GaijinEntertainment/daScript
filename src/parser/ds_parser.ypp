@@ -1066,7 +1066,7 @@ structure_declaration
                 if ( !pStruct->findField(name) ) {
                     auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                     auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
-                    pStruct->fields.emplace_back(name, td, init, pDecl->at);
+                    pStruct->fields.emplace_back(name, td, init, pDecl->move_to_init, pDecl->at);
                 } else {
                     yyerror("structure field is already declared "+name,pDecl->at,
                         CompilationError::structure_field_already_declared);
@@ -1269,15 +1269,15 @@ make_decl
     ;
 
 make_struct_fields
-    :   NAME[fn] '=' expr[value] {
-        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value));
+    :   NAME[fn] copy_or_move[com] expr[value] {
+        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com);
         delete $fn;
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
-    |   make_struct_fields[msd] ',' NAME[fn] '=' expr[value] {
-        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value));
+    |   make_struct_fields[msd] ',' NAME[fn] copy_or_move[com] expr[value] {
+        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com);
         delete $fn;
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;

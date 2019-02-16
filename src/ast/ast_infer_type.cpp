@@ -383,7 +383,6 @@ namespace das {
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
-
             if ( decl.type->isAuto() ) {
                 error("structure field type can't be declared auto",decl.at,CompilationError::invalid_structure_field_type);
             } else if ( decl.type->isVoid() ) {
@@ -396,6 +395,23 @@ namespace das {
             fieldOffset = (fieldOffset + fa) & ~fa;
             decl.offset = int(fieldOffset);
             fieldOffset += decl.type->getSizeOf();
+        }
+        virtual void visitStructureField ( Structure *, Structure::FieldDeclaration & decl, bool ) override {
+            if ( decl.init ) {
+                if ( decl.init->type ) {
+                    if ( !decl.type->isSameType(*decl.init->type,false) ) {
+                        error("structure field initialization type mismatch, "
+                              + decl.type->describe() + " = " + decl.init->type->describe(), decl.at,
+                              CompilationError::invalid_initialization_type);
+                    } else if ( !decl.type->canCopy() && !decl.moveSemantic ) {
+                        error("this field can't be copied, use <- instead",
+                              decl.init->at, CompilationError::invalid_initialization_type );
+                    } else if ( !decl.init->type->canCopy() && !decl.init->type->canMove() ) {
+                        error("this field can't be initialized at all", decl.at,
+                              CompilationError::invalid_initialization_type);
+                    }
+                }
+            }
         }
         virtual StructurePtr visit ( Structure * var ) override {
             if ( !var->genCtor && var->hasAnyInitializers() ) {
@@ -1811,6 +1827,10 @@ namespace das {
                               +field->type->describe()+"), passing ("+decl->value->type->describe()+")",
                                 decl->value->at, CompilationError::invalid_type );
                     }
+                    if( !field->type->canCopy() && !decl->moveSemantic ) {
+                        error("this field can't be copied, use <- instead",
+                              decl->at, CompilationError::invalid_type );
+                    }
                 } else {
                     error("field not found, " + decl->name, decl->at, CompilationError::cant_get_field);
                 }
@@ -1820,6 +1840,14 @@ namespace das {
         virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
             // see if we need to fill in missing fields
             if ( expr->useInitializer && expr->makeType->structType ) {
+                for ( auto & stf : expr->makeType->structType->fields  ) {
+                    if ( stf.init  ) {
+                        if ( !stf.init->type || stf.init->type->isAuto() ) {
+                            error("not fully resolved yet", expr->at);
+                            return Visitor::visit(expr);
+                        }
+                    }
+                }
                 bool anyInit = false;
                 for ( auto & st : expr->structs ) {
                     for ( auto & fi : expr->makeType->structType->fields ) {
@@ -1829,7 +1857,7 @@ namespace das {
                                 return fd->name == fi.name;
                             });
                             if ( it==st->end() ) {
-                                auto msf = make_shared<MakeFieldDecl>(fi.at, fi.name, fi.init->clone());
+                                auto msf = make_shared<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy());
                                 st->push_back(msf);
                                 reportGenericInfer();
                             }
@@ -1919,7 +1947,7 @@ namespace das {
                 logs << "PASS " << pass << ":\n" << *this;
                 sort(errors.begin(), errors.end());
                 for (auto & err : errors) {
-                    logs << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr);
+                    logs << reportError(err.at, err.what, err.cerr);
                 }
             }
             if ( context.finished() )

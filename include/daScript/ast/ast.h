@@ -364,11 +364,12 @@ namespace das
             string          name;
             TypeDeclPtr     type;
             ExpressionPtr   init;
+            bool            moveSemantic;
             LineInfo        at;
             int             offset = 0;
             FieldDeclaration() = default;
-            FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i, const LineInfo & a )
-                : name(n), type(t), init(i), at(a) {}
+            FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i, bool ms, const LineInfo & a )
+                : name(n), type(t), init(i), moveSemantic(ms), at(a) {}
         };
     public:
         Structure ( const string & n ) : name(n) {}
@@ -1240,9 +1241,10 @@ namespace das
         LineInfo        at;
         string          name;
         ExpressionPtr   value;
+        bool            moveSemantic;
         MakeFieldDecl () = default;
-        MakeFieldDecl ( const LineInfo & a, const string & n, const ExpressionPtr & e )
-            : at(a), name(n), value(e) {}
+        MakeFieldDecl ( const LineInfo & a, const string & n, const ExpressionPtr & e, bool mv )
+            : at(a), name(n), value(e), moveSemantic(mv) {}
     };
     typedef shared_ptr<MakeFieldDecl>   MakeFieldDeclPtr;
     typedef vector<MakeFieldDeclPtr>    MakeStruct;
@@ -1569,6 +1571,7 @@ namespace das
         // STRUCTURE
         virtual void preVisit ( Structure * var ) { }
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
+        virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
         virtual StructurePtr visit ( Structure * var ) { return var->shared_from_this(); }
         // FUNCTON
         virtual void preVisit ( Function * ) {}
