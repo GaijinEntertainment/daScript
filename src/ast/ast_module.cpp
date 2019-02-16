@@ -99,6 +99,16 @@ namespace das {
         }
     }
 
+    bool Module::removeStructure ( const StructurePtr & st ) {
+        auto it = structures.find(st->name);
+        if ( it!=structures.end() && it->second==st ) {
+            structures.erase(it);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     bool Module::addStructure ( const StructurePtr & st ) {
         if ( structures.insert(make_pair(st->name, st)).second ) {
             st->module = this;

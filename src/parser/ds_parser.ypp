@@ -73,6 +73,7 @@
     AnnotationList *                faList;
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
+    Structure *                     pStructure;
 }
 
 %destructor { delete $$; } <s>
@@ -149,6 +150,7 @@
 %type <fa>              annotation_declaration
 %type <faList>          annotation_list
 %type <faList>          optional_annotation_list
+%type <pStructure>      structure_name
 
 %type <b>               copy_or_move
 %type <b>               let_scope
@@ -1057,46 +1059,61 @@ enum_declaration
     }
     ;
 
-structure_declaration
-    : optional_annotation_list[annL] _STRUCT[loc] NAME[name] '{' struct_variable_declaration_list[list] '}' {
+structure_name
+    :   NAME[name] {
         auto pStruct = make_shared<Structure>(*$name);
-        pStruct->at = tokAt(@loc);
-        for ( auto pDecl : *$list ) {
-            for ( const auto & name : *pDecl->pNameList ) {
-                if ( !pStruct->findField(name) ) {
-                    auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                    auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
-                    pStruct->fields.emplace_back(name, td, init, pDecl->move_to_init, pDecl->at);
-                } else {
-                    yyerror("structure field is already declared "+name,pDecl->at,
-                        CompilationError::structure_field_already_declared);
-                }
-            }
-        }
-        if ( $annL ) {
-            if ( $annL->size()!=1 ) {
-                yyerror("structures are only allowed one annotation", tokAt(@loc),
-                    CompilationError::invalid_annotation);
-            } else {
-                auto & annotation = $annL->back()->annotation;
-                auto & args = $annL->back()->arguments;
-                if ( !annotation->rtti_isStructureAnnotation() ) {
-                    yyerror("structures are only allowed structure annotation", tokAt(@loc),
-                        CompilationError::invalid_annotation);
-                } else if ( !g_Program->addStructureHandle(pStruct,
-                        static_pointer_cast<StructureTypeAnnotation>(annotation), args) ) {
-                    yyerror("handled structure is already defined "+*$name,tokAt(@loc),
-                        CompilationError::structure_already_declared);
-                }
-            }
-            delete $annL;
+        if ( !g_Program->addStructure(pStruct) ) {
+            yyerror("structure is already defined "+*$name,tokAt(@name),
+                CompilationError::structure_already_declared);
+            $$ = nullptr;
         } else {
-            if ( !g_Program->addStructure(pStruct) )
-                yyerror("structure is already defined "+*$name,tokAt(@loc),
-                    CompilationError::structure_already_declared);
+            $$ = pStruct.get();
+        }
+        delete $name;
+    }
+    ;
+
+structure_declaration
+    : optional_annotation_list[annL] _STRUCT[loc] structure_name[ps] '{' struct_variable_declaration_list[list] '}' {
+        if ( $ps ) {
+            auto pStruct = $ps->shared_from_this();
+            pStruct->at = tokAt(@loc);
+            for ( auto pDecl : *$list ) {
+                for ( const auto & name : *pDecl->pNameList ) {
+                    if ( !pStruct->findField(name) ) {
+                        auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                        auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
+                        pStruct->fields.emplace_back(name, td, init, pDecl->move_to_init, pDecl->at);
+                    } else {
+                        yyerror("structure field is already declared "+name,pDecl->at,
+                            CompilationError::structure_field_already_declared);
+                    }
+                }
+            }
+            if ( $annL ) {
+                if ( $annL->size()!=1 ) {
+                    yyerror("structures are only allowed one annotation", tokAt(@loc),
+                        CompilationError::invalid_annotation);
+                } else {
+                    auto & annotation = $annL->back()->annotation;
+                    auto & args = $annL->back()->arguments;
+                    if ( !annotation->rtti_isStructureAnnotation() ) {
+                        yyerror("structures are only allowed structure annotation", tokAt(@loc),
+                            CompilationError::invalid_annotation);
+                    } else {
+                        if ( !g_Program->addStructureHandle(pStruct,
+                            static_pointer_cast<StructureTypeAnnotation>(annotation), args) ) {
+                                yyerror("handled structure is already defined "+pStruct->name,tokAt(@loc),
+                                CompilationError::structure_already_declared);
+                        } else {
+                            pStruct->module->removeStructure(pStruct);
+                        }
+                    }
+                }
+                delete $annL;
+            }
         }
         deleteVariableDeclarationList($list);
-        delete($name);
     }
     ;
 

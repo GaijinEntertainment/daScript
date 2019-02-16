@@ -383,7 +383,17 @@ namespace das {
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
+            if ( decl.type->isAlias() ) {
+                if ( auto aT = inferAlias(decl.type) ) {
+                    decl.type = aT;
+                    reportGenericInfer();
+                } else {
+                    error("undefined type " + decl.type->describe(), decl.at, CompilationError::invalid_structure_field_type );
+                }
+            }
             if ( decl.type->isAuto() ) {
+                error("structure field type can't be declared auto",decl.at,CompilationError::invalid_structure_field_type);
+            } else  if ( decl.type->isAuto() ) {
                 error("structure field type can't be declared auto",decl.at,CompilationError::invalid_structure_field_type);
             } else if ( decl.type->isVoid() ) {
                 error("structure field type can't be declared void",decl.at,CompilationError::invalid_structure_field_type);
@@ -412,6 +422,7 @@ namespace das {
                     }
                 }
             }
+            verifyType(decl.type);
         }
         virtual StructurePtr visit ( Structure * var ) override {
             if ( !var->genCtor && var->hasAnyInitializers() ) {
@@ -719,18 +730,18 @@ namespace das {
                 auto & argType = blockT->argTypes[i];
                 // same type only
                 if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false)) ) {
-                    error("incomaptible argument (" + passType->describe() + ") vs "
+                    error("incomaptible argument " + to_string(i+1) + " (" + passType->describe() + ") vs "
                           + argType->describe() + ")", expr->at, CompilationError::invalid_argument_type);
                 }
                 // ref types can only add constness
                 if ( argType->isRef() && !argType->constant && passType->constant ) {
-                    error("incomaptible argument (" + passType->describe() + ") vs "
+                    error("incomaptible argument " + to_string(i+1) + " (" + passType->describe() + ") vs "
                           + argType->describe() + "), passing const to non-const argument",
                             expr->at, CompilationError::invalid_argument_type);
                 }
                 // pointer types can only add constant
                 if ( argType->isPointer() && !argType->constant && passType->constant ) {
-                    error("incomaptible argument (" + passType->describe() + ") vs "
+                    error("incomaptible argument " + to_string(i+1) + " (" + passType->describe() + ") vs "
                           + argType->describe() + "), passing const pointer to non-const pointer argument",
                           expr->at, CompilationError::invalid_argument_type);
                 }

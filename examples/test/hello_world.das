@@ -1,20 +1,20 @@
-options logInferPasses=true // log=true// , logOptimizationPasses=true
+options log = true // , logInferPasses=true
 
-def make_a
-    let a:array<int>
-    for i in range(0,10)
-        push(a,i)
-    return <- a
+struct Point
+    x, y : float = 0.0f
+    magnitude : function<(p:Point):float> = @point_magnitude
 
-struct Foo
-    a: array<int> <- make_a()
-    b:int = 3
-    c:float
+def Point(X,Y)
+    return [[Point() x=X,y=Y]]
+
+def point_magnitude(p:Point):float
+    return p.x*p.x + p.y*p.y
 
 [export]
 def test
-    let foo <- [[Foo() b=4]]
-    print("foo={foo}\n")
+    let p  = Point(2.,3.)
+    let t = invoke(p.magnitude, p)
+    print("t={t}\n")
     return true
 
 
