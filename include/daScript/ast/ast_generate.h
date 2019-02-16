@@ -16,5 +16,10 @@ namespace das {
         delete var
      */
     ExpressionPtr makeDelete ( const VariablePtr & var );
+
+    /*
+        a->b(args) is short for invoke(a.b, a, args)
+     */
+    ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b );
 }
 

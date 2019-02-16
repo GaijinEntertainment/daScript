@@ -4,6 +4,15 @@
 
 namespace das {
 
+    /* a->b(args) is short for invoke(a.b, a, args)  */
+    ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b ) {
+        auto pInvoke = new ExprInvoke(at, "invoke");
+        auto pAt = make_shared<ExprField>(at, a->clone(), b);
+        pInvoke->arguments.push_back(pAt);
+        pInvoke->arguments.push_back(ExpressionPtr(a));
+        return pInvoke;
+    }
+
     ExpressionPtr makeDelete ( const VariablePtr & var ) {
         auto eVar = make_shared<ExprVar>(var->at, var->name);
         auto del = make_shared<ExprDelete>(var->at, eVar);

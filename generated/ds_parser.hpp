@@ -47,6 +47,7 @@ extern int yydebug;
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
+    #include "daScript/ast/ast_generate.h"
     
     namespace das {
         extern ProgramPtr			g_Program;
@@ -73,7 +74,7 @@ extern int yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 77 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 78 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 
 /* Token type.  */
 #ifndef YYTOKENTYPE
@@ -185,7 +186,7 @@ extern int yydebug;
 
 union YYSTYPE
 {
-#line 54 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 55 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
 
     char                            ch;
     bool                            b;
@@ -210,7 +211,7 @@ union YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 214 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 215 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 };
 
 typedef union YYSTYPE YYSTYPE;

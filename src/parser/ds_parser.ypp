@@ -1,6 +1,7 @@
 %code requires {
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
+    #include "daScript/ast/ast_generate.h"
     
     namespace das {
         extern ProgramPtr			g_Program;
@@ -186,6 +187,7 @@
 %type <pExpression>     make_struct_dim
 %type <pExpression>     make_dim
 %type <pExpression>     make_dim_decl
+%type <pExpression>     expr_method_call
 
 %type <s>               character_sequence
 %type <s>               string_constant
@@ -810,6 +812,22 @@ expr_assign
     |   expr[left] MODEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"%=", ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
+/* a->b(args) is short for invoke(a.b, a, args)  */
+expr_method_call
+    :   expr[left] RARROW[loc] NAME[method_name] '(' ')' {
+        auto pInvoke = makeInvokeMethod(tokAt(@loc), $left, *$method_name);
+        delete $method_name;
+        $$ = pInvoke;
+    }
+    |   expr[left] RARROW[loc] NAME[method_name] '(' expr_list[arguments] ')' {
+        auto pInvoke = makeInvokeMethod(tokAt(@loc), $left, *$method_name);
+        auto callArgs = sequenceToList($arguments);
+        pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
+        delete $method_name;
+        $$ = pInvoke;
+    }
+    ;
+
 expr
     :   _NULL[loc]                            { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
     |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
@@ -868,6 +886,7 @@ expr
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
     |   expr_typename[subexpr]                  { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
+    |   expr_method_call[subexpr]               { $$ = $subexpr; }
     |   expr_block[subexpr]                     { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg] {
         if ( $fncall->rtti_isCall() ) {
