@@ -101,6 +101,7 @@
 %token  _OPTIONS    _TABLE      _EXPECT     _CONST
 %token  _REQUIRE    _OPERATOR   _ENUM       _FINALLY
 %token  _DELETE     _DEREF      _SCOPE      _TYPEDEF
+%token  _WITH
 
 /* basic types */
 %token  _TBOOL       _TVOID       _TSTRING     _TAUTO
@@ -164,6 +165,7 @@
 %type <pExpression>     expression_let
 %type <pExpression>     expressions
 %type <pExpression>     expression_block
+%type <pExpression>     expression_with
 %type <pExpression>     expression_while_loop
 %type <pExpression>     expression_for_loop
 %type <pExpression>     expression_break
@@ -352,12 +354,21 @@ expression_for_loop
     ;
 
 expression_while_loop
-    :   _WHILE expr[condition] expression_block[block] {
-        auto pWhile = new ExprWhile();
+    :   _WHILE[loc] expr[condition] expression_block[block] {
+        auto pWhile = new ExprWhile(tokAt(@loc));
         pWhile->cond = ExpressionPtr($condition);
         pWhile->body = ExpressionPtr($block);
         ((ExprBlock *)$block)->inTheLoop = true;
         $$ = pWhile;
+    }
+    ;
+
+expression_with
+    :   _WITH[loc] expr[with] expression_block[block] {
+        auto pWith = new ExprWith(tokAt(@loc));
+        pWith->with = ExpressionPtr($with);
+        pWith->body = ExpressionPtr($block);
+        $$ = pWith;
     }
     ;
 
@@ -560,6 +571,7 @@ expression_any
     |   expression_delete[subexpr] ';'      { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
+    |   expression_with[subexpr]            { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
     |   expression_break[subexpr] ';'       { $$ = $subexpr; }
     |   expression_return[subexpr] ';'      { $$ = $subexpr; }

@@ -76,6 +76,11 @@ namespace das {
                     } else {
                         list.push_back(expr);
                     }
+                } else if ( expr->rtti_isWith() ) {
+                    auto pWith = static_pointer_cast<ExprWith>(expr);
+                    if ( pWith->body ) {
+                        list.push_back(pWith->body);
+                    }
                 } else {
                     list.push_back(expr);
                 }

@@ -20,6 +20,7 @@ namespace das {
         vector<ExpressionPtr>   loop;
         vector<ExprBlock *>     blocks;
         vector<ExprBlock *>     scopes;
+        vector<ExprWith *>      with;
         vector<size_t>          varStack;
         size_t                  fieldOffset = 0;
         bool                    needRestart = false;
@@ -375,6 +376,28 @@ namespace das {
             return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
         }
 
+        ExprWith * hasMatchingWith ( const string & fieldName ) const {
+            for ( auto it=with.rbegin(); it!=with.rend(); ++it ) {
+                auto eW = *it;
+                if ( auto eWT = eW->with->type ) {
+                    StructurePtr pSt;
+                    if ( eWT->isStructure() ) {
+                        pSt = eWT->structType;
+                    } else if ( eWT->isPointer() && eWT->firstType && eWT->firstType->isStructure() ) {
+                        pSt = eWT->firstType->structType;
+                    }
+                    if ( pSt ) {
+                        for ( auto fi : pSt->fields ) {
+                            if ( fi.name==fieldName ) {
+                                return eW;
+                            }
+                        }
+                    }
+                }
+            }
+            return nullptr;
+        }
+
     protected:
     // strcuture
         virtual void preVisit ( Structure * that ) override {
@@ -562,6 +585,7 @@ namespace das {
             assert(scopes.size()==0);
             assert(blocks.size()==0);
             assert(local.size()==0);
+            assert(with.size()==0);
             func.reset();
             return Visitor::visit(that);
         }
@@ -1053,6 +1077,10 @@ namespace das {
                     break;
                 }
             }
+            if ( auto eW = hasMatchingWith(var->name) ) {
+                error("block argument " + var->name + " is shadowed by with expression at line " + to_string(eW->at.line),
+                      var->at, CompilationError::variable_not_found);
+            }
             if ( var->type->isAuto() && !var->init) {
                 error("block argument type can't be infered, it needs an initializer",
                       var->at, CompilationError::cant_infer_missing_initializer );
@@ -1143,7 +1171,7 @@ namespace das {
             } else if ( valT->isHandle() ) {
                 expr->annotation = valT->annotation;
                 expr->type = expr->annotation->makeFieldType(expr->name);
-            } else if ( valT->baseType==Type::tStructure ) {
+            } else if ( valT->isStructure() ) {
                 expr->field = valT->structType->findField(expr->name);
             } else if ( valT->isPointer() ) {
                 expr->value = Expression::autoDereference(expr->value);
@@ -1217,6 +1245,11 @@ namespace das {
                     expr->type->ref = true;
                     return Visitor::visit(expr);
                 }
+            }
+            // with
+            if ( auto eW = hasMatchingWith(expr->name) ) {
+                reportGenericInfer();
+                return make_shared<ExprField>(expr->at, eW->with->clone(), expr->name);
             }
             // block arguments
             for ( auto it = blocks.rbegin(); it!=blocks.rend(); ++it ) {
@@ -1492,6 +1525,40 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
+    // ExprWith
+        virtual void preVisit ( ExprWith * expr ) override {
+            Visitor::preVisit(expr);
+            with.push_back(expr);
+        }
+        virtual ExpressionPtr visit ( ExprWith * expr ) override {
+            if ( auto wT = expr->with->type ) {
+                StructurePtr pSt;
+                if ( wT->dim.size() ) {
+                    error("with array in undefined, " + wT->describe(), expr->at,
+                          CompilationError::invalid_with_type );
+                } else if ( wT->isStructure() ) {
+                    pSt = wT->structType;
+                } else if ( wT->isPointer() && wT->firstType && wT->firstType->isStructure() ) {
+                    pSt = wT->firstType->structType;
+                } else {
+                    error("unexpected with type " + wT->describe(), expr->at,
+                          CompilationError::invalid_with_type );
+                }
+                if ( pSt ) {
+                    for ( auto fi : pSt->fields ) {
+                        for ( auto & lv : local ) {
+                            if ( lv->name==fi.name ) {
+                                error("with expression shadows local variable " +
+                                      lv->name + " at line " + to_string(lv->at.line),
+                                        expr->at, CompilationError::variable_not_found);
+                            }
+                        }
+                    }
+                }
+            }
+            with.pop_back();
+            return Visitor::visit(expr);
+        }
     // ExprWhile
         virtual void preVisit ( ExprWhile * expr ) override {
             Visitor::preVisit(expr);
@@ -1591,6 +1658,10 @@ namespace das {
                           var->at, CompilationError::variable_not_found);
                     break;
                 }
+            }
+            if ( auto eW = hasMatchingWith(var->name) ) {
+                error("local variable " + var->name + " is shadowed by with expression at line " + to_string(eW->at.line),
+                      var->at, CompilationError::variable_not_found);
             }
             local.push_back(var);
         }

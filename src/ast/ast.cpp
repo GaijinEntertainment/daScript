@@ -865,6 +865,24 @@ namespace das {
         return flagsE;
     }
 
+    // ExprWith
+
+    ExpressionPtr ExprWith::visit(Visitor & vis) {
+        vis.preVisit(this);
+        with = with->visit(vis);
+        vis.preVisitWithBody(this, body.get());
+        body = body->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprWith::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprWith>(expr);
+        Expression::clone(cexpr);
+        cexpr->with = with->clone();
+        cexpr->body = body->clone();
+        return cexpr;
+    }
+
     // ExprWhile
 
     ExpressionPtr ExprWhile::visit(Visitor & vis) {

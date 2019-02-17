@@ -326,6 +326,15 @@ namespace das {
             if ( !last ) ss << ",";
             return Visitor::visitForSource(ffor, that, last);
         }
+    // with
+        virtual void preVisit ( ExprWith * wh ) override {
+            Visitor::preVisit(wh);
+            ss << "with ";
+        }
+        virtual void preVisitWithBody ( ExprWith * wh, Expression * body ) override {
+            Visitor::preVisitWithBody(wh,body);
+            ss << "\n";
+        }
     // while
         virtual void preVisit ( ExprWhile * wh ) override {
             Visitor::preVisit(wh);

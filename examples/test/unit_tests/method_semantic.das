@@ -1,5 +1,5 @@
 struct Point
-    x, y : float = 0.0f
+    x, y = 0.0f
     magnitude  = @point_magnitude
     dot = @point_dot
 

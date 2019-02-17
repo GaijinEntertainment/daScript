@@ -738,6 +738,10 @@ namespace das
         return (baseType==Type::tHandle) && (dim.size()==0);
     }
 
+    bool TypeDecl::isStructure() const {
+        return (baseType==Type::tStructure) && (dim.size()==0);
+    }
+
     bool TypeDecl::isSimpleType() const {
         if (    baseType==Type::none
             ||  baseType==Type::tVoid

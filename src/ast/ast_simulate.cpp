@@ -733,6 +733,10 @@ namespace das
             }
         }
     }
+
+    SimNode * ExprWith::simulate (Context & context) const {
+        return body->simulate(context);
+    }
     
     void ExprWhile::simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Final * blk ) {
         if ( bod->rtti_isBlock() ) {

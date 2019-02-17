@@ -77,6 +77,7 @@ namespace das
         bool isPointer() const;
         bool isEnum() const;
         bool isHandle() const;
+        bool isStructure() const;
         int getSizeOf() const;
         int getCountOf() const;
         int getAlignOf() const;
@@ -512,6 +513,7 @@ namespace das
         virtual bool rtti_isReturn() const { return false; }
         virtual bool rtti_isBreak() const { return false; }
         virtual bool rtti_isBlock() const { return false; }
+        virtual bool rtti_isWith() const { return false; }
         virtual bool rtti_isVar() const { return false; }
         virtual bool rtti_isField() const { return false; }
         virtual bool rtti_isSwizzle() const { return false; }
@@ -1040,12 +1042,24 @@ namespace das
     };
 
     struct ExprWhile : Expression {
+        ExprWhile() = default;
+        ExprWhile(const LineInfo & a) : Expression(a) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         static void simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Final * blk );
         ExpressionPtr   cond, body;
+    };
+
+    struct ExprWith : Expression {
+        ExprWith() = default;
+        ExprWith(const LineInfo & a) : Expression(a) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isWith() const override { return true; }
+        ExpressionPtr   with, body;
     };
 
     struct ExprLooksLikeCall : Expression {
@@ -1634,6 +1648,8 @@ namespace das
         virtual void preVisitRight ( ExprCopy *, Expression * ) {}
         // MOVE
         virtual void preVisitRight ( ExprMove *, Expression * ) {}
+        // WITH
+        virtual void preVisitWithBody ( ExprWith *, Expression * ) {}
         // WHILE
         virtual void preVisitWhileBody ( ExprWhile *, Expression * ) {}
         // TRY-CATCH
@@ -1721,6 +1737,7 @@ namespace das
         VISIT_EXPR(ExprTypeName)
         VISIT_EXPR(ExprCall)
         VISIT_EXPR(ExprIfThenElse)
+        VISIT_EXPR(ExprWith)
         VISIT_EXPR(ExprWhile)
         VISIT_EXPR(ExprMakeStructure)
         VISIT_EXPR(ExprMakeArray)
