@@ -215,6 +215,8 @@ vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {
     }
     return cast<char *>::from(data);
 }
+int st;
+int *getPtr() {return &st;}
 
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
@@ -234,6 +236,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields", SideEffects::modifyExternal);
     addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3", SideEffects::none);
     addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3", SideEffects::modifyArgument);
+    addExtern<DAS_BIND_FUN(getPtr)>(*this, lib, "getPtr", SideEffects::modifyExternal);
 }
 
 REGISTER_MODULE(Module_UnitTest);
