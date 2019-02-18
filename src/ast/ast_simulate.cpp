@@ -250,6 +250,11 @@ namespace das
                                                context.code->allocateString(message));
     }
 
+    SimNode * ExprMakeLambda::simulate (Context &) const {
+        assert(0 && "we should not be here ever");
+        return nullptr;
+    }
+
     SimNode * ExprMakeBlock::simulate (Context & context) const {
         uint32_t argSp = static_pointer_cast<ExprBlock>(block)->stackTop;
         return context.code->makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp);

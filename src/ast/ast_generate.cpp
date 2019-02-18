@@ -36,5 +36,63 @@ namespace das {
         fn->body = block;
         return fn;
     }
+
+    FunctionPtr generateLambdaFunction ( ExprBlock * block, const StructurePtr & ls ) {
+        auto lfn = "__lambda_function_at_line_" + to_string(block->at.line);
+        auto pFunc = make_shared<Function>();
+        pFunc->at = block->at;
+        pFunc->name = lfn;
+        auto fb = make_shared<ExprBlock>();
+        auto with = make_shared<ExprWith>(block->at);
+        with->with = make_shared<ExprVar>(block->at, "__this");
+        with->body = block->clone();
+        auto wb = static_pointer_cast<ExprBlock>(with->body);
+        wb->blockFlags = 0;
+        fb->list.push_back(with);
+        pFunc->body = fb;
+        pFunc->result = make_shared<TypeDecl>(*block->type);
+        auto cTHIS = make_shared<Variable>();
+        cTHIS->name = "__this";
+        cTHIS->type = make_shared<TypeDecl>(ls);
+        pFunc->arguments.push_back(cTHIS);
+        for ( auto & arg : block->arguments ) {
+            auto cA = arg->clone();
+            pFunc->arguments.push_back(cA);
+        }
+        return pFunc;
+    }
+
+    StructurePtr generateLambdaStruct ( ExprBlock * block, const set<VariablePtr> & capt ) {
+        auto lsn = "__lambda_at_line_" + to_string(block->at.line);
+        auto pStruct = make_shared<Structure>(lsn);
+        auto btd = block->makeBlockType();
+        btd->baseType = Type::tFunction;
+        auto thisArg = make_shared<TypeDecl>(pStruct);
+        btd->argTypes.insert(btd->argTypes.begin(), thisArg);
+        pStruct->fields.emplace_back("__lambda", btd, nullptr, false, block->at);
+        for ( auto var : capt ) {
+            auto td = make_shared<TypeDecl>(*var->type);
+            td->ref = false;
+            td->constant = false;
+            pStruct->fields.emplace_back(var->name, td, nullptr, false, var->at);
+        }
+        return pStruct;
+    }
+
+    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const set<VariablePtr> & capt ) {
+        auto makeS = new ExprMakeStructure();
+        makeS->makeType = make_shared<TypeDecl>(ls);
+        auto ms = make_shared<MakeStruct>();
+        auto atTHIS = make_shared<ExprAddr>(lf->at, lf->name);
+        auto mTHIS = make_shared<MakeFieldDecl>(lf->at, "__lambda", atTHIS, false);
+        ms->push_back(mTHIS);
+        for ( auto cV : capt ) {
+            auto varV = make_shared<ExprVar>(cV->at, cV->name);
+            auto mV = make_shared<MakeFieldDecl>(cV->at, cV->name, varV, !cV->type->canCopy());
+            ms->push_back(mV);
+        }
+        makeS->structs.push_back(ms);
+        return ExpressionPtr(makeS);
+    }
 }
 

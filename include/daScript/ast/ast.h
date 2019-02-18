@@ -631,6 +631,7 @@ namespace das
         VariablePtr findArgument(const string & name);
         vector<SimNode *> collectExpressions ( Context & context, const vector<ExpressionPtr> & list ) const;
         void simulateFinal ( Context & context, SimNode_Final * sim ) const;
+        TypeDeclPtr makeBlockType () const;
         vector<ExpressionPtr>   list;
         vector<ExpressionPtr>   finalList;
         TypeDeclPtr             returnType;
@@ -1087,11 +1088,21 @@ namespace das
     struct ExprMakeBlock : Expression {
         ExprMakeBlock () = default;
         ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b )
-            : Expression(a), block(b) { b->at = a; static_pointer_cast<ExprBlock>(b)->isClosure = true; }
+        : Expression(a), block(b) { b->at = a; static_pointer_cast<ExprBlock>(b)->isClosure = true; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual bool rtti_isMakeBlock() const override { return true; }
+        ExpressionPtr block;
+    };
+
+    struct ExprMakeLambda : Expression {
+        ExprMakeLambda () = default;
+        ExprMakeLambda ( const LineInfo & a, const ExpressionPtr & b )
+            : Expression(a), block(b) { b->at = a; static_pointer_cast<ExprBlock>(b)->isClosure = true; }
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         ExpressionPtr block;
     };
 
@@ -1733,6 +1744,7 @@ namespace das
         VISIT_EXPR(ExprFor)
         VISIT_EXPR(ExprLooksLikeCall)
         VISIT_EXPR(ExprMakeBlock)
+        VISIT_EXPR(ExprMakeLambda)
         VISIT_EXPR(ExprSizeOf)
         VISIT_EXPR(ExprTypeName)
         VISIT_EXPR(ExprCall)

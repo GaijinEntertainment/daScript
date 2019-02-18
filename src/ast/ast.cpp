@@ -372,6 +372,20 @@ namespace das {
         return cexpr;
     }
 
+    // ExprMakeLambda
+
+    ExpressionPtr ExprMakeLambda::visit(Visitor & vis) {
+        vis.preVisit(this);
+        block = block->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprMakeLambda::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMakeLambda>(expr);
+        cexpr->block = block->clone();
+        return cexpr;
+    }
+
     // ExprMakeBlock
 
     ExpressionPtr ExprMakeBlock::visit(Visitor & vis) {
@@ -506,6 +520,19 @@ namespace das {
     }
 
     // ExprBlock
+
+    TypeDeclPtr ExprBlock::makeBlockType () const {
+        auto eT = make_shared<TypeDecl>(Type::tBlock);
+        if ( type ) {
+            eT->firstType = make_shared<TypeDecl>(*type);
+        }
+        for ( auto & arg : arguments ) {
+            if ( arg->type ) {
+                eT->argTypes.push_back(make_shared<TypeDecl>(*arg->type));
+            }
+        }
+        return eT;
+    }
 
     ExpressionPtr ExprBlock::visit(Visitor & vis) {
         vis.preVisit(this);

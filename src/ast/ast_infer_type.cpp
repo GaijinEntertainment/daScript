@@ -5,6 +5,24 @@
 
 namespace das {
 
+    class CaptureLambda : public Visitor {
+    public:
+        virtual void preVisit ( ExprVar * expr ) override {
+            auto var = expr->variable;
+            if ( expr->local || expr->argumentIndex!=-1 ) {
+                auto varT = var->type;
+                if ( !varT || varT->isAuto() || varT->isAlias() ) {
+                    fail = true;
+                    return;
+                }
+                capt.insert(var);
+            }
+        }
+        set<VariablePtr>    capt;
+        bool                fail = false;
+    };
+
+
     // type inference
 
     class InferTypes : public Visitor {
@@ -729,19 +747,40 @@ namespace das {
             expr->type = make_shared<TypeDecl>(*expr->arguments[0]->type);
             return Visitor::visit(expr);
         }
-    // ExprMakeBlock
-        virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
-            // infer
-            auto block = static_pointer_cast<ExprBlock>(expr->block);
-            expr->type = make_shared<TypeDecl>(Type::tBlock);
-            if ( block->type ) {
-                expr->type->firstType = make_shared<TypeDecl>(*block->type);
-            }
-            for ( auto & arg : block->arguments ) {
-                if ( arg->type ) {
-                    expr->type->argTypes.push_back(make_shared<TypeDecl>(*arg->type));
+    // ExprMakeLambda
+        virtual ExpressionPtr visit ( ExprMakeLambda * expr ) override {
+            if ( auto bT = expr->block->type ) {
+                if ( bT->isAlias() || bT->isAuto() ) {
+                    error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
+                } else {
+                    auto block = static_pointer_cast<ExprBlock>(expr->block);
+                    CaptureLambda cl;
+                    block->visit(cl);
+                    if ( !cl.fail ) {
+                        for ( auto ba : block->arguments ) {
+                            cl.capt.erase(ba);
+                        }
+                        auto ls = generateLambdaStruct(block.get(), cl.capt);
+                        if ( program->addStructure(ls) ) {
+                            auto pFn = generateLambdaFunction(block.get(), ls);
+                            if ( program->addFunction(pFn) ) {
+                                auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );
+                                return ms;
+                            } else {
+                                error("lambda function name mismatch", expr->at, CompilationError::invalid_block);
+                            }
+                        } else {
+                            error("lambda struct name mismatch", expr->at, CompilationError::invalid_block);
+                        }
+                    }
                 }
             }
+            return Visitor::visit(expr);
+        }
+    // ExprMakeBlock
+        virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
+            auto block = static_pointer_cast<ExprBlock>(expr->block);
+            expr->type = block->makeBlockType();
             return Visitor::visit(expr);
         }
     // ExprInvoke

@@ -1,15 +1,12 @@
-options log = true // , logInferPasses=true
-
-struct Point
-    x, y  = 0
+options log = true, optimize = false // , logInferPasses=true
 
 [export]
 def test
-    let p = Point()
-    with p
-        x = 1
-        y = 2
-    assert(p.x==1 & p.y==2)
-    return true
+    let x = 2
+    let y = 3.0
+    let XX : int& = x
+    let z = def (a:int;b:float) : bool
+        return (x==a) & (y==b) & (XX==x)
+    ; return true
 
 
