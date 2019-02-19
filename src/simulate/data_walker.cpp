@@ -161,6 +161,7 @@ namespace das {
                 case Type::tStructure:  walk_struct(pa, info->structType); break;
                 case Type::tBlock:      WalkBlock((Block *)pa); break;
                 case Type::tFunction:   WalkFunction((Func *)pa); break;
+                case Type::tLambda:     WalkLambda((Lambda *)pa); break;
                 case Type::tHandle:
                     beforeHandle(pa, info);
                     if ( cancel ) return;

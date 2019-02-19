@@ -202,6 +202,7 @@
 <normal>"require"                                       return _REQUIRE;
 <normal>"block"                                         return _TBLOCK;
 <normal>"function"                                      return _TFUNCTION;
+<normal>"lambda"                                        return _TLAMBDA;
 <normal>"const"                                         return _CONST;
 <normal>"expect"                                        return _EXPECT;
 <normal>"table"                                         return _TABLE;

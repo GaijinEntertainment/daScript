@@ -109,7 +109,7 @@ namespace das {
                     }
                     verifyType(valueType);
                 }
-            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction ) {
+            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction || decl->baseType==Type::tLambda ) {
                 if ( auto resultType = decl->firstType ) {
                     if ( !resultType->isReturnType() ) {
                         error("not a valid return type",resultType->at,CompilationError::invalid_return_type);
@@ -205,7 +205,7 @@ namespace das {
                     resT->secondType = inferAlias(decl->secondType,fptr);
                     if ( !resT->secondType ) return nullptr;
                 }
-            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction ) {
+            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction || decl->baseType==Type::tLambda ) {
                 for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
                     auto & declAT = decl->argTypes[iA];
                     if ( auto infAT = inferAlias(declAT,fptr) ) {
@@ -787,15 +787,15 @@ namespace das {
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()<1 ) {
-                error("expecting invoke(block_or_function) or invoke(block_or_function,...)", expr->at,
+                error("expecting invoke(block_or_function_or_lambda) or invoke(block_or_function_or_lambda,...)", expr->at,
                       CompilationError::invalid_argument_count);
                 return Visitor::visit(expr);
             }
             // infer
             expr->arguments[0] = Expression::autoDereference(expr->arguments[0]);
             auto blockT = expr->arguments[0]->type;
-            if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() ) {
-                error("expecting block or function, not a " + blockT->describe(), expr->at,
+            if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() && !blockT->isGoodLambdaType() ) {
+                error("expecting block, or function, or lambda, not a " + blockT->describe(), expr->at,
                       CompilationError::invalid_argument_type);
             }
             if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {
@@ -961,9 +961,13 @@ namespace das {
                 error("can't ascend (to heap) non-reference value", expr->at,
                       CompilationError::invalid_new_type);
             }
-            expr->type = make_shared<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
-            expr->type->firstType->ref = false;
+            if ( expr->ascType ) {
+                expr->type = make_shared<TypeDecl>(*expr->ascType);
+            } else {
+                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
+                expr->type->firstType->ref = false;
+            }
             return Visitor::visit(expr);
         }
     // ExprNew

@@ -80,7 +80,8 @@ namespace das {
     }
 
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const set<VariablePtr> & capt ) {
-        auto makeS = new ExprMakeStructure();
+        auto asc = new ExprAscend();
+        auto makeS = make_shared<ExprMakeStructure>();
         makeS->makeType = make_shared<TypeDecl>(ls);
         auto ms = make_shared<MakeStruct>();
         auto atTHIS = make_shared<ExprAddr>(lf->at, lf->name);
@@ -92,7 +93,11 @@ namespace das {
             ms->push_back(mV);
         }
         makeS->structs.push_back(ms);
-        return ExpressionPtr(makeS);
+        asc->subexpr = makeS;
+        asc->ascType = make_shared<TypeDecl>(*ls->fields[0].type);
+        asc->ascType->argTypes.erase(asc->ascType->argTypes.begin());
+        asc->ascType->baseType = Type::tLambda;
+        return ExpressionPtr(asc);
     }
 }
 

@@ -25,6 +25,17 @@ namespace das
     };
     static_assert(sizeof(Func)==sizeof(int32_t), "has to be castable");
 
+    struct Lambda {
+        void *      capture;
+        __forceinline bool operator == ( const Lambda & b ) const {
+            return capture == b.capture;
+        }
+        __forceinline bool operator != ( const Lambda & b ) const {
+            return capture != b.capture;
+        }
+    };
+    static_assert(sizeof(Lambda)==sizeof(void *), "has to be castable");
+
     struct Array {
         char *      data;
         uint32_t    size;

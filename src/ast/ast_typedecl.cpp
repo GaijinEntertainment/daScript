@@ -17,7 +17,7 @@ namespace das
         } else if ( autoT->baseType==Type::tTable ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
             applyAutoContracts(TT->secondType, autoT->secondType);
-        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction ) {
+        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction || autoT->baseType==Type::tLambda ) {
             if ( TT->firstType ) {
                 applyAutoContracts(TT->firstType, autoT->firstType);
             }
@@ -54,18 +54,9 @@ namespace das
         // table has to match table
         if ( autoT->baseType==Type::tTable && (initT->baseType!=Type::tTable || !initT->firstType || !initT->secondType) )
             return nullptr;
-        // block has to match block
-        if ( autoT->baseType==Type::tBlock ) {
-            if ( initT->baseType!=Type::tBlock )
-                return nullptr;
-            if ( (autoT->firstType!=nullptr) != (initT->firstType!=nullptr) )   // both do or don't have return type
-                return nullptr;
-            if ( autoT->argTypes.size() != initT->argTypes.size() )             // both have same number of arguments
-                return nullptr;
-        }
-        // function has to match function
-        if ( autoT->baseType==Type::tFunction ) {
-            if ( initT->baseType!=Type::tFunction )
+        // block has to match block, function to function, lambda to lambda
+        if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction || autoT->baseType==Type::tLambda ) {
+            if ( initT->baseType!=autoT->baseType )
                 return nullptr;
             if ( (autoT->firstType!=nullptr) != (initT->firstType!=nullptr) )   // both do or don't have return type
                 return nullptr;
@@ -91,7 +82,7 @@ namespace das
             if ( !TT->firstType->isWorkhorseType() ) return nullptr;            // table key has to be hashable too
             TT->secondType = inferAutoType(autoT->secondType, initT->secondType);
             if ( !TT->secondType ) return nullptr;
-        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction ) {
+        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction || autoT->baseType==Type::tLambda ) {
             // if it's a block or function, infer argument and return types
             if ( autoT->firstType ) {
                 TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
@@ -155,8 +146,8 @@ namespace das
             } else {
                 stream << "iterator";
             }
-        } else if ( baseType==Type::tBlock ) {
-            stream << "block<";
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
+            stream << das_to_string(baseType) << "<";
             if ( argTypes.size() ) {
                 stream << "(";
                 for ( const auto & arg : argTypes ) {
@@ -174,26 +165,7 @@ namespace das
                 stream << firstType->describe(extra);
             }
             stream << ">";
-        } else if ( baseType==Type::tFunction ) {
-            stream << "function<";
-            if ( argTypes.size() ) {
-                stream << "(";
-                for ( const auto & arg : argTypes ) {
-                    stream << arg->describe(extra);
-                    if ( arg != argTypes.back() ) {
-                        stream << ";";
-                    }
-                }
-                stream << ")";
-            }
-            if ( firstType ) {
-                if ( argTypes.size() ) {
-                    stream << ":";
-                }
-                stream << firstType->describe(extra);
-            }
-            stream << ">";
-        } else {
+        }  else {
             stream << das_to_string(baseType);
         }
         if ( extra && baseType!=Type::autoinfer && baseType!=Type::alias && !alias.empty() ) {
@@ -259,7 +231,7 @@ namespace das
                 }
             }
             return secondType ? secondType->findAlias(name,allowAuto) : nullptr;
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
             for ( auto & arg : argTypes ) {
                 if ( auto att = arg->findAlias(name,allowAuto) ) {
                     return att;
@@ -360,16 +332,8 @@ namespace das
             if ( firstType ) {
                 ss << "#" << firstType->getMangledName();
             }
-        } else if ( baseType==Type::tBlock ) {
-            ss << "#block";
-            for ( auto & arg : argTypes ) {
-                ss << "#" << arg->getMangledName();
-            }
-            if ( firstType ) {
-                ss << "#:" << firstType->getMangledName();
-            }
-        } else if ( baseType==Type::tFunction ) {
-            ss << "#function";
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
+            ss << "#" << das_to_string(baseType);
             for ( auto & arg : argTypes ) {
                 ss << "#" << arg->getMangledName();
             }
@@ -441,7 +405,7 @@ namespace das
                 return false;
             }
         }
-        if ( baseType==Type::tBlock || baseType==Type::tFunction ) {
+        if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
@@ -618,6 +582,10 @@ namespace das
         return baseType==Type::tFunction && dim.size()==0;
     }
 
+    bool TypeDecl::isGoodLambdaType() const {
+        return baseType==Type::tLambda && dim.size()==0;
+    }
+
     bool TypeDecl::isGoodArrayType() const {
         return baseType==Type::tArray && dim.size()==0 && firstType;
     }
@@ -667,7 +635,7 @@ namespace das
             if ( secondType )
                 any |= secondType->isAlias();
             return any;
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
             bool any = false;
             if ( firstType )
                 any |= firstType->isAlias();
@@ -695,7 +663,7 @@ namespace das
             if ( secondType )
                 any |= secondType->isAuto();
             return any;
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
             bool any = false;
             if ( firstType )
                 any |= firstType->isAuto();

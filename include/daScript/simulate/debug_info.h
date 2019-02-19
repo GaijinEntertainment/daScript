@@ -33,6 +33,7 @@ namespace das
         tEnumeration,
         tPointer,
         tFunction,
+        tLambda,
         tIterator,
         tArray,
         tTable,

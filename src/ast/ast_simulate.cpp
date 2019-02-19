@@ -267,15 +267,20 @@ namespace das
             if ( blockT->baseType==Type::tBlock ) {
                 pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMove>(
                                                     int(arguments.size()), at, stackTop);
-            } else {
+            } else if ( blockT->baseType==Type::tFunction ) {
                 pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMoveFn>(
                                                     int(arguments.size()), at, stackTop);
+            } else {
+                pInvoke = nullptr;
+                assert(0 && "implement");
             }
         } else {
             if ( blockT->baseType==Type::tBlock ) {
                 pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_Invoke>(int(arguments.size()),at);
-            } else {
+            } else if ( blockT->baseType==Type::tFunction ) {
                 pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeFn>(int(arguments.size()),at);
+            } else {
+                pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeLambda>(int(arguments.size()),at);
             }
         }
         pInvoke->debugInfo = at;

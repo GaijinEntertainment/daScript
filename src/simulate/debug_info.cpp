@@ -39,7 +39,8 @@ namespace das
         {   Type::tRange,       "range" },
         {   Type::tURange,      "urange"},
         {   Type::tBlock,       "block"},
-        {   Type::tFunction,    "function"}
+        {   Type::tFunction,    "function"},
+        {   Type::tLambda,      "lambda"}
     };
 
     string das_to_string ( Type t ) {
@@ -81,6 +82,7 @@ namespace das
             case tVoid:         return 0;
             case tBlock:        return sizeof(Block);
             case tFunction:     return sizeof(Func);
+            case tLambda:       return sizeof(Lambda);
             default:
                 assert(0 && "not implemented");
                 return 0;

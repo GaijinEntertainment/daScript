@@ -87,6 +87,12 @@ namespace das
         static __forceinline vec4f from ( const Func x )     { union { vec4f v; Func t; } A; A.t = x; return A.v; }
     };
 
+    template <>
+    struct cast <Lambda> {
+        static __forceinline Lambda to ( vec4f x )           { union { vec4f v; Lambda t; } A; A.v = x; return A.t; }
+        static __forceinline vec4f from ( const Lambda x )   { union { vec4f v; Lambda t; } A; A.t = x; return A.v; }
+    };
+
     template <typename TT>
     struct cast_fVec {
         static __forceinline TT to ( vec4f x ) {

@@ -70,6 +70,7 @@ namespace das
         bool isGoodTableType() const;
         bool isGoodBlockType() const;
         bool isGoodFunctionType() const;
+        bool isGoodLambdaType() const;
         bool isVoid() const;
         bool isRef() const;
         bool isRefType() const;

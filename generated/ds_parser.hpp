@@ -69,12 +69,13 @@ extern int yydebug;
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
+    void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list );
     
     LineInfo tokAt ( const struct YYLTYPE & li );
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 78 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 79 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 
 /* Token type.  */
 #ifndef YYTOKENTYPE
@@ -139,46 +140,47 @@ extern int yydebug;
     _TYPENAME = 313,
     _TDOUBLE = 314,
     _TFUNCTION = 315,
-    ADDEQU = 316,
-    SUBEQU = 317,
-    DIVEQU = 318,
-    MULEQU = 319,
-    MODEQU = 320,
-    ANDEQU = 321,
-    OREQU = 322,
-    XOREQU = 323,
-    ADDADD = 324,
-    SUBSUB = 325,
-    LEEQU = 326,
-    GREQU = 327,
-    EQUEQU = 328,
-    NOTEQU = 329,
-    RARROW = 330,
-    LARROW = 331,
-    QQ = 332,
-    QDOT = 333,
-    LPIPE = 334,
-    LBPIPE = 335,
-    RPIPE = 336,
-    INTEGER = 337,
-    LONG_INTEGER = 338,
-    UNSIGNED_INTEGER = 339,
-    UNSIGNED_LONG_INTEGER = 340,
-    FLOAT = 341,
-    DOUBLE = 342,
-    NAME = 343,
-    BEGIN_STRING = 344,
-    STRING_CHARACTER = 345,
-    END_STRING = 346,
-    BEGIN_STRING_EXPR = 347,
-    END_STRING_EXPR = 348,
-    UNARY_MINUS = 349,
-    UNARY_PLUS = 350,
-    PRE_INC = 351,
-    PRE_DEC = 352,
-    POST_INC = 353,
-    POST_DEC = 354,
-    COLCOL = 355
+    _TLAMBDA = 316,
+    ADDEQU = 317,
+    SUBEQU = 318,
+    DIVEQU = 319,
+    MULEQU = 320,
+    MODEQU = 321,
+    ANDEQU = 322,
+    OREQU = 323,
+    XOREQU = 324,
+    ADDADD = 325,
+    SUBSUB = 326,
+    LEEQU = 327,
+    GREQU = 328,
+    EQUEQU = 329,
+    NOTEQU = 330,
+    RARROW = 331,
+    LARROW = 332,
+    QQ = 333,
+    QDOT = 334,
+    LPIPE = 335,
+    LBPIPE = 336,
+    RPIPE = 337,
+    INTEGER = 338,
+    LONG_INTEGER = 339,
+    UNSIGNED_INTEGER = 340,
+    UNSIGNED_LONG_INTEGER = 341,
+    FLOAT = 342,
+    DOUBLE = 343,
+    NAME = 344,
+    BEGIN_STRING = 345,
+    STRING_CHARACTER = 346,
+    END_STRING = 347,
+    BEGIN_STRING_EXPR = 348,
+    END_STRING_EXPR = 349,
+    UNARY_MINUS = 350,
+    UNARY_PLUS = 351,
+    PRE_INC = 352,
+    PRE_DEC = 353,
+    POST_INC = 354,
+    POST_DEC = 355,
+    COLCOL = 356
   };
 #endif
 
@@ -187,7 +189,7 @@ extern int yydebug;
 
 union YYSTYPE
 {
-#line 55 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 56 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
 
     char                            ch;
     bool                            b;
@@ -212,7 +214,7 @@ union YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 216 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 218 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 };
 
 typedef union YYSTYPE YYSTYPE;

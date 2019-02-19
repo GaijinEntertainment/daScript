@@ -74,6 +74,7 @@ namespace das {
         virtual void WalkIterator ( struct Iterator * ) {}
         virtual void WalkBlock ( Block * ) {}
         virtual void WalkFunction ( Func * ) {}
+        virtual void WalkLambda ( Lambda * ) {}
         virtual void WalkEnumeration ( int32_t &, EnumInfo * ) {}
     // walk
         virtual void walk ( char * pf, TypeInfo * ti );

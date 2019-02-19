@@ -23,6 +23,7 @@
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
+    void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list );
     
     LineInfo tokAt ( const struct YYLTYPE & li );
     
@@ -110,6 +111,7 @@
 %token  _TFLOAT      _TFLOAT2     _TFLOAT3     _TFLOAT4
 %token  _TRANGE      _TURANGE     _TBLOCK      _TINT64
 %token  _TUINT64     _TYPENAME	  _TDOUBLE	   _TFUNCTION
+%token  _TLAMBDA
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -1302,18 +1304,7 @@ type_declaration
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
         if ( $list ) {
-            for ( auto pDecl : *$list ) {
-                if ( pDecl->pTypeDecl ) {
-                    for ( size_t ai=0; ai!= pDecl->pNameList->size(); ++ai ) {
-                        auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        if ( pDecl->pInit ) {
-                            yyerror("can't have default values in block type declaration",
-                                pDecl->at,CompilationError::cant_initialize);
-                        }
-                        $$->argTypes.push_back(pVarType);
-                    }
-                }
-            }
+            varDeclToTypeDecl($$, $list);
             deleteVariableDeclarationList($list);
         }
     }
@@ -1331,18 +1322,25 @@ type_declaration
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
         if ( $list ) {
-            for ( auto pDecl : *$list ) {
-                if ( pDecl->pTypeDecl ) {
-                    for ( size_t ai=0; ai!= pDecl->pNameList->size(); ++ai ) {
-                        auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        if ( pDecl->pInit ) {
-                            yyerror("can't have default values in function type declaration",
-                                pDecl->at,CompilationError::cant_initialize);
-                        }
-                        $$->argTypes.push_back(pVarType);
-                    }
-                }
-            }
+            varDeclToTypeDecl($$, $list);
+            deleteVariableDeclarationList($list);
+        }
+    }
+    |   _TLAMBDA[loc] {
+        $$ = new TypeDecl(Type::tLambda);
+        $$->at = tokAt(@loc);
+    }
+    |   _TLAMBDA[loc] '<' type_declaration[blockType] '>' {
+        $$ = new TypeDecl(Type::tLambda);
+        $$->at = tokAt(@loc);
+        $$->firstType = TypeDeclPtr($blockType);
+    }
+    |   _TLAMBDA[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+        $$ = new TypeDecl(Type::tLambda);
+        $$->at = tokAt(@loc);
+        $$->firstType = TypeDeclPtr($result);
+        if ( $list ) {
+            varDeclToTypeDecl($$, $list);
             deleteVariableDeclarationList($list);
         }
     }
@@ -1471,6 +1469,21 @@ Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
         string candidates = g_Program->describeCandidates(ann);
         yyerror("too many options for annotation " + name + "\n" + candidates, at, CompilationError::annotation_not_found );
         return nullptr;
+    }
+}
+
+void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list ) {
+    for ( auto pDecl : *list ) {
+        if ( pDecl->pTypeDecl ) {
+            for ( size_t ai=0; ai!= pDecl->pNameList->size(); ++ai ) {
+                auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                if ( pDecl->pInit ) {
+                    yyerror("can't have default values in type declaration",
+                    pDecl->at,CompilationError::cant_initialize);
+                }
+                pType->argTypes.push_back(pVarType);
+            }
+        }
     }
 }
 
