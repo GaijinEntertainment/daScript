@@ -78,20 +78,20 @@ local function advance(bodies, nbody){
       local mag = 1 / (distance * distance * distance)
       local bim = bimass*mag,
             bjm = bj[6]*mag;
-      bivx = bivx - (dx * bjm)
-      bivy = bivy - (dy * bjm)
-      bivz = bivz - (dz * bjm)
-      bj[3] = bj[3] + (dx * bim)
-      bj[4] = bj[4] + (dy * bim)
-      bj[5] = bj[5] + (dz * bim)
+      bivx -= (dx * bjm)
+      bivy -= (dy * bjm)
+      bivz -= (dz * bjm)
+      bj[3] += (dx * bim)
+      bj[4] += (dy * bim)
+      bj[5] += (dz * bim)
     }
     bi[3] = bivx
     bi[4] = bivy
     bi[5] = bivz
 
-    bi[0] = bi[0] + bi[3]
-    bi[1] = bi[1] + bi[4]
-    bi[2] = bi[2] + bi[5]
+    bi[0] += bi[3]
+    bi[1] += bi[4]
+    bi[2] += bi[5]
   }
 }
 
@@ -106,7 +106,7 @@ local function energy(bodies, nbody){
     e = e + (0.5 * bim * (vx*vx + vy*vy + vz*vz))
     for (local j=i+1;j<nbody;j++) {
       local bj = bodies[j]
-      local dx= bi[0]-bj[0]
+      local dx=bi[0]-bj[0]
       local dy=bi[1]-bj[1]
       local dz=bi[2]-bj[2]
       local distance = sqrt(dx*dx + dy*dy + dz*dz)
@@ -121,13 +121,13 @@ local function offsetMomentum(b, nbody){
   for (local i=0;i<nbody;i++){
     local bi = b[i]
     local bim = bi[6]
-    px = px + (bi[3] * bim)
-    py = py + (bi[4] * bim)
-    pz = pz + (bi[5] * bim)
+    px -= (bi[3] * bim)
+    py -= (bi[4] * bim)
+    pz -= (bi[5] * bim)
   }
-  b[0][3] = -px / SOLAR_MASS
-  b[0][4] = -py / SOLAR_MASS
-  b[0][5] = -pz / SOLAR_MASS
+  b[0][3] = px / SOLAR_MASS
+  b[0][4] = py / SOLAR_MASS
+  b[0][5] = pz / SOLAR_MASS
 }
 
 local function scale_bodies(bodies, nbody, scale) {
