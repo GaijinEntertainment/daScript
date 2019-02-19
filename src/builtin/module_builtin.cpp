@@ -76,6 +76,26 @@ namespace das
         }
     };
 
+    struct Sim_EqLambdaPtr : SimNode_Op2 {
+        DAS_BOOL_NODE;
+        Sim_EqLambdaPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        __forceinline bool compute ( Context & context ) {
+            auto lv = cast<Lambda>::to(l->eval(context));
+            auto rv = r->evalPtr(context);
+            return !rv && !lv.capture;      // they only equal if both null
+        }
+    };
+
+    struct Sim_NEqLambdaPtr : SimNode_Op2 {
+        DAS_BOOL_NODE;
+        Sim_NEqLambdaPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        __forceinline bool compute ( Context & context ) {
+            auto lv = cast<Lambda>::to(l->eval(context));
+            auto rv = r->evalPtr(context);
+            return rv || lv.capture;
+        }
+    };
+
     Module_BuiltIn::Module_BuiltIn() : Module("$") {
         ModuleLibrary lib;
         lib.addModule(this);
@@ -91,6 +111,9 @@ namespace das
         addFunctionBasic<Func>(*this,lib);
         addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,Func,void *>>("==",lib) );
         addFunction( make_shared<BuiltInFn<Sim_NEqFunPtr,bool,Func,void *>>("!=",lib) );
+        // lambda
+        addFunction( make_shared<BuiltInFn<Sim_EqLambdaPtr, bool,Lambda,void *>>("==",lib) );
+        addFunction( make_shared<BuiltInFn<Sim_NEqLambdaPtr,bool,Lambda,void *>>("!=",lib) );
         // int32
         addFunctionBasic<int32_t>(*this,lib);
         addFunctionNumericWithMod<int32_t>(*this,lib);

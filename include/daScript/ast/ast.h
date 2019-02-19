@@ -158,6 +158,7 @@ namespace das
     template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
     template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
     template<> struct ToBasicType<Func>         { enum { type = Type::tFunction }; };
+    template<> struct ToBasicType<Lambda>       { enum { type = Type::tLambda }; };
     template<> struct ToBasicType<Context *>    { enum { type = Type::fakeContext }; };
     template<> struct ToBasicType<vec4f>        { enum { type = Type::anyArgument }; };
 

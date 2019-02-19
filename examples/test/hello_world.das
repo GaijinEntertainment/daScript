@@ -8,12 +8,15 @@ def test
     let CNT = 0
     let counter = lambda() <| $ (extra:int) : int
         return CNT++ + extra
+    assert(counter!=null)
+    assert(!(counter==null))
     let x = invoke(counter,13)
     CNT = 100500
     let y = invoke(counter,13)
 	assert(x==13 & y==14)
-    // let l : lambda<bool>
-    // invoke(l)
+    let l : lambda<bool>
+    assert(l==null)
+    assert(!(l!=null))
     CNT = 1
     let counterQQ = lambda() <| $ (extra:int)
         return [[QQ x=CNT++, y=extra]]
