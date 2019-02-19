@@ -803,6 +803,9 @@ namespace das {
                       expr->at, CompilationError::invalid_argument_count);
                 return Visitor::visit(expr);
             }
+            if ( blockT->isGoodLambdaType() ) {
+                expr->arguments[0] = Expression::autoDereference(expr->arguments[0]);
+            }
             for ( size_t i=0; i != blockT->argTypes.size(); ++i ) {
                 auto & passType = expr->arguments[i+1]->type;
                 auto & argType = blockT->argTypes[i];
