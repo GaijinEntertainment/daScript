@@ -56,7 +56,7 @@ local bodies = {
   }
 }
 
-local function advance(bodies, nbody, dt)
+local function advance(bodies, nbody)
   for i=1,nbody do
     local bi = bodies[i]
     local bix, biy, biz, bimass = bi.x, bi.y, bi.z, bi.mass
@@ -65,7 +65,7 @@ local function advance(bodies, nbody, dt)
       local bj = bodies[j]
       local dx, dy, dz = bix-bj.x, biy-bj.y, biz-bj.z
       local distance = sqrt(dx*dx + dy*dy + dz*dz)
-      local mag = dt / (distance * distance * distance)
+      local mag = 1 / (distance * distance * distance)
       local bim, bjm = bimass*mag, bj.mass*mag
       bivx = bivx - (dx * bjm)
       bivy = bivy - (dy * bjm)
@@ -80,9 +80,9 @@ local function advance(bodies, nbody, dt)
   end
   for i=1,nbody do
     local bi = bodies[i]
-    bi.x = bi.x + (dt * bi.vx)
-    bi.y = bi.y + (dt * bi.vy)
-    bi.z = bi.z + (dt * bi.vz)
+    bi.x = bi.x + bi.vx
+    bi.y = bi.y + bi.vy
+    bi.z = bi.z + bi.vz
   end
 end
 
@@ -102,6 +102,16 @@ local function energy(bodies, nbody)
   return e
 end
 
+local function scale_bodies(bodies, nbody, scale)
+  for i=1,nbody do
+    local b = bodies[i]
+    b.mass = b.mass*scale*scale
+    b.vx = b.vx*scale
+    b.vy = b.vy*scale
+    b.vz = b.vz*scale
+  end
+end
+
 local function offsetMomentum(b, nbody)
   local px, py, pz = 0, 0, 0
   for i=1,nbody do
@@ -116,12 +126,20 @@ local function offsetMomentum(b, nbody)
   b[1].vz = -pz / SOLAR_MASS
 end
 
+local function simulate(N, bodies, nbody)
+  scale_bodies(bodies, nbody, 0.01)
+  for i=1,N do
+    advance(bodies, nbody)
+  end
+  scale_bodies(bodies, nbody, 1/0.01)
+end
+
 local N = 500000 --tonumber(arg and arg[1]) or 5000000
 local nbody = #bodies
 
 loadfile("profile.lua")()
 offsetMomentum(bodies, nbody)
 io.write( string.format("%0.9f",energy(bodies, nbody)), "\n")
-io.write(string.format("nbodies loop: %.8f\n", profile_it(10, function () for i=1,N do advance(bodies, nbody, 0.01) end end)))
+io.write(string.format("nbodies loop: %.8f\n", profile_it(10, function () simulate(N, bodies, nbody) end)))
 io.write( string.format("%0.9f",energy(bodies, nbody)), "\n")
 
