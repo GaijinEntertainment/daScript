@@ -64,9 +64,7 @@ def energy():float
     ++i
     for j in range(i, nbodies)
       let b2 = bodies[j]
-      let dx = b.x - b2.x
-      let distance = length(dx)
-      e -= (b.mass * b2.mass) / distance
+      e -= (b.mass * b2.mass) / distance(b.x, b2.x)
   return e
 
 let 
