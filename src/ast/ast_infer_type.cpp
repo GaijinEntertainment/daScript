@@ -10,14 +10,17 @@ namespace das {
         virtual void preVisit ( ExprVar * expr ) override {
             auto var = expr->variable;
             if ( expr->local || expr->argumentIndex!=-1 ) {
-                auto varT = var->type;
-                if ( !varT || varT->isAuto() || varT->isAlias() ) {
-                    fail = true;
-                    return;
+                if ( scope.find(var) != scope.end() ) {
+                    auto varT = var->type;
+                    if ( !varT || varT->isAuto() || varT->isAlias() ) {
+                        fail = true;
+                        return;
+                    }
+                    capt.insert(var);
                 }
-                capt.insert(var);
             }
         }
+        set<VariablePtr>    scope;
         set<VariablePtr>    capt;
         bool                fail = false;
     };
@@ -765,6 +768,15 @@ namespace das {
                         error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
                     } else {
                         CaptureLambda cl;
+                        // we can only capture in-scope variables
+                        // i.e stuff BEFORE the scope
+                        for ( auto & lv : local )
+                            cl.scope.insert(lv);
+                        for ( auto & bls : blocks ) {
+                            for ( auto & blv : bls->arguments ) {
+                                cl.scope.insert(blv);
+                            }
+                        }
                         block->visit(cl);
                         if ( !cl.fail ) {
                             for ( auto ba : block->arguments ) {

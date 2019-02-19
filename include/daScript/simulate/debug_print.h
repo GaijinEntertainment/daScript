@@ -35,10 +35,13 @@ namespace das {
         DebugDataWalker() = delete;
         DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f) {}
     // data structures
-        virtual void beforeStructure ( char *, StructInfo * info ) override {
+        virtual void beforeStructure ( char * ps, StructInfo * info ) override {
             ss << "[[";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << info->name;
+            }
+            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+                ss << " at 0x" << HEX << intptr_t(ps) << DEC;
             }
         }
         virtual void afterStructure ( char *, StructInfo * ) override {

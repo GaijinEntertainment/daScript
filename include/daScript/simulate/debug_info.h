@@ -155,9 +155,11 @@ namespace das
     ,   escapeString =          (1<<0)
     ,   namesAndDimensions =    (1<<1)
     ,   typeQualifiers =        (1<<2)
+    ,   refAddresses =          (1<<3)
 
     ,   string_builder  =   PrintFlags::none
-    ,   debugger        =   PrintFlags::escapeString | PrintFlags::namesAndDimensions | PrintFlags::typeQualifiers
+    ,   debugger        =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
+        | PrintFlags::typeQualifiers | PrintFlags::refAddresses
     ,   stackwalker     =   PrintFlags::escapeString | PrintFlags::namesAndDimensions | PrintFlags::typeQualifiers
     };
 

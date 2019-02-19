@@ -1,14 +1,18 @@
-options log = true // , logInferPasses=true // , optimize = false, printVarAccess=true, printRef=true //
+options log = true // , optimize = false, printVarAccess=true, printRef=true //
 
-let
-	x = [[int 1; 
-			2; 
-			3; 4; 
-			5; 6]]
+def addValue(a,blk)
+    return invoke(blk,a)
 
 [export]
 def test
-	print("x={x}\n")
+    let CNT = 0
+    let counter = lambda() <| $ (extra:int) : int
+        debug(__this,"in labda __this = ")
+        let e1 = addValue(1) <| $ (extraBlock:int) : int
+            debug(__this,"in block __this = ")
+            return extraBlock + CNT
+        return CNT++ + e1
+    print("counter={invoke(counter,0)}\n")
     return true
 
 
