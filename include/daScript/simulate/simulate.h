@@ -406,11 +406,12 @@ namespace das
 
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
-        SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a )
-            : SimNode(at), subexpr(s), argStackTop(a) {}
+        SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a, uint32_t spp )
+            : SimNode(at), subexpr(s), argStackTop(a), stackTop(spp) {}
         virtual vec4f eval ( Context & context ) override;
         SimNode *       subexpr;
         uint32_t        argStackTop;
+        uint32_t        stackTop;
     };
 
     // ASSERT
@@ -691,22 +692,22 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            Block block = cast<Block>::to(argValues[0]);
+            Block * block = cast<Block *>::to(argValues[0]);
             if ( argCount>1 ) {
-                return context.invoke(block, argValues + 1, nullptr);
+                return context.invoke(*block, argValues + 1, nullptr);
             } else {
-                return context.invoke(block, nullptr, nullptr);
+                return context.invoke(*block, nullptr, nullptr);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            Block block = cast<Block>::to(argValues[0]);                                        \
+            Block * block = cast<Block *>::to(argValues[0]);                                    \
             if ( argCount>1 ) {                                                                 \
-                return cast<CTYPE>::to(context.invoke(block, argValues + 1, nullptr));          \
+                return cast<CTYPE>::to(context.invoke(*block, argValues + 1, nullptr));         \
             } else {                                                                            \
-                return cast<CTYPE>::to(context.invoke(block, nullptr, nullptr));                \
+                return cast<CTYPE>::to(context.invoke(*block, nullptr, nullptr));               \
             }                                                                                   \
         }
         DAS_EVAL_NODE
@@ -721,24 +722,24 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            Block block = cast<Block>::to(argValues[0]);
+            Block * block = cast<Block *>::to(argValues[0]);
             auto cmres = context.stack.sp() + stackTop;
             if ( argCount>1 ) {
-                return context.invoke(block, argValues + 1, cmres);
+                return context.invoke(*block, argValues + 1, cmres);
             } else {
-                return context.invoke(block, nullptr, cmres);
+                return context.invoke(*block, nullptr, cmres);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            Block block = cast<Block>::to(argValues[0]);                                        \
+            Block * block = cast<Block *>::to(argValues[0]);                                    \
             auto cmres = context.stack.sp() + stackTop;                                         \
             if ( argCount>1 ) {                                                                 \
-                return cast<CTYPE>::to(context.invoke(block, argValues + 1, cmres));            \
+                return cast<CTYPE>::to(context.invoke(*block, argValues + 1, cmres));           \
             } else {                                                                            \
-                return cast<CTYPE>::to(context.invoke(block, nullptr, cmres));                  \
+                return cast<CTYPE>::to(context.invoke(*block, nullptr, cmres));                 \
             }                                                                                   \
         }
         DAS_EVAL_NODE

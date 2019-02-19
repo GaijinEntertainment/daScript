@@ -391,7 +391,7 @@ namespace das {
         }
     };
 
-    void readJson ( char * str, Block block, Context * context ) {
+    void readJson ( char * str, Block * block, Context * context ) {
         rapidjson::Document doc;
         vec4f args[2];
         if ( doc.Parse(str).HasParseError() ) {
@@ -401,7 +401,7 @@ namespace das {
             args[0] = cast<char *>::from((char *)&doc);
             args[1] = v_zero();
         }
-        context->invoke(block, args, nullptr);
+        context->invoke(*block, args, nullptr);
     }
 
     void json_set_i ( JsValue * rv, int32_t iv, Context * context ) {
@@ -769,12 +769,12 @@ namespace das {
         rapidjson::Document document;
         JsonWalker writer(context, &document, false);
         // args
-        Block block = cast<Block>::to(args[1]);
+        Block * block = cast<Block *>::to(args[1]);
         auto info = call->types[0];
         writer.walk(args[0], info);
         vec4f bargs[1];
         bargs[0] = cast<void *>::from(&document);
-        context.invoke(block, bargs, nullptr);
+        context.invoke(*block, bargs, nullptr);
         return v_zero();
     }
     

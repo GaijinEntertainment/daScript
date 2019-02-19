@@ -203,7 +203,7 @@ namespace das {
     vec4f _builtin_binary_save ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         BinDataSerialize writer(context);
         // args
-        Block block = cast<Block>::to(args[1]);
+        Block * block = cast<Block *>::to(args[1]);
         auto info = call->types[0];
         StringHeader header;
         header.hash = 0;
@@ -215,7 +215,7 @@ namespace das {
         StringHeader * hh = (StringHeader *) writer.bytesAt;
         hh->length = writer.bytesWritten;
         bargs[0] = cast<char *>::from(writer.bytesAt + sizeof(StringHeader));
-        context.invoke(block, bargs, nullptr);
+        context.invoke(*block, bargs, nullptr);
         return v_zero();
     }
 

@@ -320,8 +320,8 @@ void testEsUpdate ( char * pass, Context * ctx ) {
     }
 }
 
-void queryEs (Block block, Context * context) {
-    EsRunBlock(*context, block, g_components, g_total);
+void queryEs (Block * block, Context * context) {
+    EsRunBlock(*context, *block, g_components, g_total);
 }
 #if DAS_USE_EASTL
 #include <EASTL/unordered_map.h>

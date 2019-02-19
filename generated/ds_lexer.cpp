@@ -2925,6 +2925,7 @@ extern int yydebug;
 void yybegin(const char * str) {
     already_include.clear();
     yydebug = 0;
+    tab_size = def_tab_size;
     yylineno = 1;
     line_no.clear();
     yycolumn = 1;

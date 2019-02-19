@@ -230,6 +230,14 @@ namespace das
         }
     };
 
+    template <>
+    struct typeFactory<Block *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tBlock);
+            return t;
+        }
+    };
+
     template <typename TT, int dim>
     struct typeFactory<TT[dim]> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
@@ -1096,6 +1104,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual bool rtti_isMakeBlock() const override { return true; }
         ExpressionPtr block;
+        uint32_t stackTop = 0;
     };
 
     struct ExprMakeLambda : ExprLooksLikeCall {

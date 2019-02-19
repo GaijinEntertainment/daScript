@@ -591,7 +591,8 @@ namespace das {
             }
             verifyType(func->result);
             if ( !func->result->isReturnType() ) {
-                error("not a valid function return type",func->result->at,CompilationError::invalid_return_type);
+                error("not a valid function return type " + func->result->describe(),
+                      func->result->at,CompilationError::invalid_return_type);
             }
             if ( func->result->isRefType() ) {
                 if ( func->result->canCopy() ) {
@@ -601,7 +602,11 @@ namespace das {
                     func->copyOnReturn = false;
                     func->moveOnReturn = true;
                 } else {
-                    assert(0 && "we should not be here");
+                    // the error will be reported in the inferReturnType
+                    /*
+                    error("this type can't be copied or moved. not a valid function return type "
+                          + func->result->describe(),func->result->at,CompilationError::invalid_return_type);
+                    */
                 }
             } else {
                 func->copyOnReturn = false;
@@ -1541,7 +1546,7 @@ namespace das {
             }
             if ( resType->isRefType() ) {
                 if ( !resType->canCopy() && !resType->canMove() ) {
-                    error("this type can't be returned at all",
+                    error("this type can't be returned at all " + resType->describe(),
                           expr->at, CompilationError::invalid_return_type);
                 }
             }

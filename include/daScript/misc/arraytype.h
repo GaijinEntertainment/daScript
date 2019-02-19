@@ -8,11 +8,12 @@ namespace das
         uint32_t    stackOffset;
         uint32_t    argumentsOffset;
         SimNode *   body;
+        vec4f *     functionArguments;
         __forceinline bool operator == ( const Block & b ) const {
-            return b.stackOffset==stackOffset && b.argumentsOffset==argumentsOffset && b.body==body;
+            return b.stackOffset==stackOffset && b.argumentsOffset==argumentsOffset
+                && b.body==body && b.functionArguments==b.functionArguments;
         }
     };
-    static_assert(sizeof(Block)<=16,"has to be castable");
 
     struct Func {
         int32_t     index;

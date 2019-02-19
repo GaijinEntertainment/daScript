@@ -257,7 +257,7 @@ namespace das
 
     SimNode * ExprMakeBlock::simulate (Context & context) const {
         uint32_t argSp = static_pointer_cast<ExprBlock>(block)->stackTop;
-        return context.code->makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp);
+        return context.code->makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp,stackTop);
     }
 
     SimNode * ExprInvoke::simulate (Context & context) const {

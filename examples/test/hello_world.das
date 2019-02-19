@@ -1,4 +1,4 @@
-options log = true // , optimize = false, printVarAccess=true, printRef=true //
+options log = true, logStack = true // , optimize = false, printVarAccess=true, printRef=true //
 
 def addValue(a,blk)
     return invoke(blk,a)

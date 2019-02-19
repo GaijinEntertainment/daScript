@@ -141,6 +141,16 @@ namespace das {
             }
             return Visitor::visitLet(expr,var,last);
         }
+    // ExprMakeBlock
+        virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
+            auto sz = sizeof(Block);
+            expr->stackTop = allocateStack(sz);
+            if ( log ) {
+                logs << "\t" << expr->stackTop << "\t" << sz
+                << "\tmake block " << expr->type->describe() << ", line " << expr->at.line << "\n";
+            }
+            return Visitor::visit(expr);
+        }
     // ExprMakeStructure
         virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
             auto sz = expr->type->getSizeOf();

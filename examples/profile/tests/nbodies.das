@@ -87,7 +87,8 @@ def nbodies(n)
 [export]
 def test()
   offset_momentum()
-  print("\ninitial energy {energy()}\n")
+  // print("\ninitial energy {energy()}\n")
+  energy()
   profile(10, "n-bodies")  <|
     nbodies(500000)
   print("\nresult energy {energy()}\n")

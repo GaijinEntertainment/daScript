@@ -822,7 +822,7 @@ namespace das
         if ( baseType==Type::tHandle ) {
             return annotation->isRefType();
         }
-        return baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || dim.size();
+        return baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tBlock || dim.size();
     }
 
     bool TypeDecl::isIndex() const {

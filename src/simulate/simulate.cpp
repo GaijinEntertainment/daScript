@@ -83,11 +83,12 @@ namespace das
     // SimNode_MakeBlock
 
     vec4f SimNode_MakeBlock::eval ( Context & context )  {
-        Block block;
-        block.stackOffset = context.stack.spi();
-        block.argumentsOffset = argStackTop ? (context.stack.spi() + argStackTop) : 0;
-        block.body = subexpr;
-        return cast<Block>::from(block);
+        Block * block = (Block *) ( context.stack.sp() + stackTop );
+        block->stackOffset = context.stack.spi();
+        block->argumentsOffset = argStackTop ? (context.stack.spi() + argStackTop) : 0;
+        block->body = subexpr;
+        block->functionArguments = context.abiArguments();
+        return cast<Block *>::from(block);
     }
 
     // SimNode_Debug
