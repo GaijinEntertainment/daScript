@@ -48,7 +48,7 @@ def advance()
   for b in bodies
     ++i
     for j in range(i, nbodies)
-      let b2:body& = bodies[j]
+      let b2 = bodies[j]
       let dx = b.x - b2.x
       let inv_distance = 1.0/length(dx)
       let mag = inv_distance * inv_distance * inv_distance
