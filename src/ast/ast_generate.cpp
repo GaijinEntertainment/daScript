@@ -37,8 +37,8 @@ namespace das {
         return fn;
     }
 
-    FunctionPtr generateLambdaFunction ( ExprBlock * block, const StructurePtr & ls ) {
-        auto lfn = "__lambda_function_at_line_" + to_string(block->at.line);
+    FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block, const StructurePtr & ls ) {
+        auto lfn = lambdaName + "#def";
         auto pFunc = make_shared<Function>();
         pFunc->at = block->at;
         pFunc->name = lfn;
@@ -62,8 +62,8 @@ namespace das {
         return pFunc;
     }
 
-    StructurePtr generateLambdaStruct ( ExprBlock * block, const set<VariablePtr> & capt ) {
-        auto lsn = "__lambda_at_line_" + to_string(block->at.line);
+    StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block, const set<VariablePtr> & capt ) {
+        auto lsn = lambdaName;
         auto pStruct = make_shared<Structure>(lsn);
         auto btd = block->makeBlockType();
         btd->baseType = Type::tFunction;

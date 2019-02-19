@@ -224,7 +224,7 @@ namespace das {
             }
             ss << "enum " << value;
         }
-        virtual void WalkFunction ( Func * fn ) {
+        virtual void WalkFunction ( Func * fn ) override {
             if (fn->index) {
                 if (context) {
                     auto simFn = context->getFunction(fn->index - 1);

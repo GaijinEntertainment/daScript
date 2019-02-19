@@ -42,9 +42,13 @@ namespace das {
         vector<size_t>          varStack;
         size_t                  fieldOffset = 0;
         bool                    needRestart = false;
+        uint32_t                newLambdaIndex = 1;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
+        string generateNewLambdaName(const LineInfo & at) {
+            return "#lambda#" + to_string(at.line) + "#" + to_string(newLambdaIndex++);
+        }
         void pushVarStack() {
             varStack.push_back(local.size());
         }
@@ -749,28 +753,36 @@ namespace das {
         }
     // ExprMakeLambda
         virtual ExpressionPtr visit ( ExprMakeLambda * expr ) override {
-            if ( auto bT = expr->block->type ) {
-                if ( bT->isAlias() || bT->isAuto() ) {
-                    error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
-                } else {
-                    auto block = static_pointer_cast<ExprBlock>(expr->block);
-                    CaptureLambda cl;
-                    block->visit(cl);
-                    if ( !cl.fail ) {
-                        for ( auto ba : block->arguments ) {
-                            cl.capt.erase(ba);
-                        }
-                        auto ls = generateLambdaStruct(block.get(), cl.capt);
-                        if ( program->addStructure(ls) ) {
-                            auto pFn = generateLambdaFunction(block.get(), ls);
-                            if ( program->addFunction(pFn) ) {
-                                auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );
-                                return ms;
-                            } else {
-                                error("lambda function name mismatch", expr->at, CompilationError::invalid_block);
+            if ( expr->arguments.size()!=1 ) {
+                error("expecting lambda(closure)", expr->at, CompilationError::invalid_argument_count);
+            } else if ( !expr->arguments[0]->rtti_isMakeBlock() ) {
+                error("expecting lambda(closure)", expr->at, CompilationError::invalid_argument_type);
+            } else {
+                auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);
+                auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
+                if ( auto bT = block->type ) {
+                    if ( bT->isAlias() || bT->isAuto() ) {
+                        error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
+                    } else {
+                        CaptureLambda cl;
+                        block->visit(cl);
+                        if ( !cl.fail ) {
+                            for ( auto ba : block->arguments ) {
+                                cl.capt.erase(ba);
                             }
-                        } else {
-                            error("lambda struct name mismatch", expr->at, CompilationError::invalid_block);
+                            string lname = generateNewLambdaName(block->at);
+                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt);
+                            if ( program->addStructure(ls) ) {
+                                auto pFn = generateLambdaFunction(lname, block.get(), ls);
+                                if ( program->addFunction(pFn) ) {
+                                    auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );
+                                    return ms;
+                                } else {
+                                    error("lambda function name mismatch", expr->at, CompilationError::invalid_block);
+                                }
+                            } else {
+                                error("lambda struct name mismatch", expr->at, CompilationError::invalid_block);
+                            }
                         }
                     }
                 }
@@ -2091,6 +2103,9 @@ namespace das {
         int pass = 0, maxPasses = 50;
         if (auto maxP = options.find("maxInferPasses", Type::tInt)) {
             maxPasses = maxP->iValue;
+        }
+        if ( log ) {
+            logs << "INITIAL CODE:\n" << *this;
         }
         for ( pass = 0; pass < maxPasses; ++pass ) {
             failToCompile = false;

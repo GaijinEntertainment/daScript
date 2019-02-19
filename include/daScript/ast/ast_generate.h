@@ -28,7 +28,7 @@ namespace das {
         capture_field_1
         capture_field_2
      */
-    StructurePtr generateLambdaStruct ( ExprBlock * block, const set<VariablePtr> & capt );
+    StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block, const set<VariablePtr> & capt );
 
     /*
         lambda function, i.e.
@@ -36,7 +36,7 @@ namespace das {
             with THIS
                 ...block_body...
      */
-    FunctionPtr generateLambdaFunction ( ExprBlock * block, const StructurePtr & ls );
+    FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block, const StructurePtr & ls );
 
     /*
          [[__lambda_at_line_xxx THIS=@__lambda_function_at_line_xxx; ba1=ba1; ba2=ba2; ... ]]

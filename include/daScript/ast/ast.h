@@ -1097,14 +1097,12 @@ namespace das
         ExpressionPtr block;
     };
 
-    struct ExprMakeLambda : Expression {
+    struct ExprMakeLambda : ExprLooksLikeCall {
         ExprMakeLambda () = default;
-        ExprMakeLambda ( const LineInfo & a, const ExpressionPtr & b )
-            : Expression(a), block(b) { b->at = a; static_pointer_cast<ExprBlock>(b)->isClosure = true; }
-        virtual SimNode * simulate (Context & context) const override;
+        ExprMakeLambda ( const LineInfo & a, const ExpressionPtr & b = nullptr );
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        ExpressionPtr block;
+        virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprInvoke : ExprLikeCall<ExprInvoke> {

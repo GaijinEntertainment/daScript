@@ -653,11 +653,6 @@ namespace das {
             ss << ")";
             return Visitor::visit(expr);
         }
-    // make block
-        virtual void preVisit ( ExprMakeLambda * expr ) override {
-            Visitor::preVisit(expr);
-            ss << "def ";
-        }
     // make structure
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             Visitor::preVisit(expr);

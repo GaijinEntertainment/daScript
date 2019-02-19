@@ -181,7 +181,6 @@
 %type <pExpression>     expr_sizeof
 %type <pExpression>     expr_typename
 %type <pExpression>     expr_block
-%type <pExpression>     expr_lambda
 %type <pExpression>     expression_any
 %type <pExpression>     expr_numeric_const
 %type <pExpression>     string_builder_body
@@ -808,38 +807,6 @@ expr_block
     }
     ;
 
-expr_lambda
-    :  _DEF optional_function_argument_list[list]
-                                optional_function_type[result] expression_block[block] {
-        $$ = new ExprMakeLambda(tokAt(@block),ExpressionPtr($block));
-        ExprBlock * closure = (ExprBlock *) $block;
-        closure->returnType = TypeDeclPtr($result);
-        if ( $list ) {
-            for ( auto pDecl : *$list ) {
-                if ( pDecl->pTypeDecl ) {
-                    for ( const auto & name : *pDecl->pNameList ) {
-                        if ( !closure->findArgument(name) ) {
-                            VariablePtr pVar = make_shared<Variable>();
-                            pVar->name = name;
-                            pVar->at = pDecl->at;
-                            pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                            if ( pDecl->pInit ) {
-                                pVar->init = ExpressionPtr(pDecl->pInit->clone());
-                                pVar->move_to_init = pDecl->move_to_init;
-                            }
-                            closure->arguments.push_back(pVar);
-                        } else {
-                            yyerror("closure argument is already declared " + name,
-                                pDecl->at,CompilationError::argument_already_declared);
-                        }
-                    }
-                }
-            }
-            deleteVariableDeclarationList($list);
-        }
-    }
-    ;
-
 expr_numeric_const
     :   INTEGER[const]                        { $$ = new ExprConstInt(tokAt(@const),(int32_t)$const); }
     |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(@const),(uint32_t)$const); }
@@ -929,6 +896,8 @@ expr
             $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),das_to_string($type)),$arguments);
         }
     |   _DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   _TLAMBDA[loc] '(' ')'                   { $$ = new ExprMakeLambda(tokAt(@loc)); }
+    |   _TLAMBDA[loc] '(' expr[subexpr] ')'     { $$ = new ExprMakeLambda(tokAt(@loc), ExpressionPtr($subexpr)); }
     |   expr[subexpr] QQ[loc] expr[dval]        { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
             $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
@@ -937,7 +906,6 @@ expr
     |   expr_typename[subexpr]                  { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   expr_method_call[subexpr]               { $$ = $subexpr; }
-    |   expr_lambda[subexpr]                    { $$ = $subexpr; }
     |   expr_block[subexpr]                     { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg] {
         if ( $fncall->rtti_isCall() ) {

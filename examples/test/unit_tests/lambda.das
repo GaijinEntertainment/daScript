@@ -1,6 +1,3 @@
-options log = true, logInferPasses=true // , optimize = false, printVarAccess=true, printRef=true // 
-
-
 [export]
 def test
     let CNT = 0
@@ -11,6 +8,4 @@ def test
     let y = invoke(counter,13)
 	assert(x==13 & y==14)
     return true
-
-
 

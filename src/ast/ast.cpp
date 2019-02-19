@@ -374,15 +374,22 @@ namespace das {
 
     // ExprMakeLambda
 
+    ExprMakeLambda::ExprMakeLambda ( const LineInfo & a, const ExpressionPtr & b )
+    : ExprLooksLikeCall(a, "lambda") {
+        if ( b ) {
+            arguments.push_back(b);
+        }
+    }
+
     ExpressionPtr ExprMakeLambda::visit(Visitor & vis) {
         vis.preVisit(this);
-        block = block->visit(vis);
+        ExprLooksLikeCall::visit(vis);
         return vis.visit(this);
     }
 
     ExpressionPtr ExprMakeLambda::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeLambda>(expr);
-        cexpr->block = block->clone();
+        ExprLooksLikeCall::clone(cexpr);
         return cexpr;
     }
 
