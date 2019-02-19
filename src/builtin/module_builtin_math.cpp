@@ -176,6 +176,11 @@ namespace das {
     __forceinline float lengthSq2(float2 a){vec4f v = v_ldu_half(&a.x); v = v_mul(v,v); return v_extract_x(v_add_x(v, v_rot_1(v)));}
     __forceinline float lengthSq3(float3 a){return v_extract_x(v_length3_sq_x(v_ldu(&a.x)));}
     __forceinline float lengthSq4(float4 a){return v_extract_x(v_length4_sq_x(v_ldu(&a.x)));}
+
+    __forceinline float invlength2(float2 a){vec4f v = v_ldu_half(&a.x); v = v_mul(v,v); return v_extract_x(v_rsqrt_x(v_add_x(v, v_rot_1(v))));}
+    __forceinline float invlength3(float3 a){return v_extract_x(v_rsqrt_x(v_length3_sq_x(v_ldu(&a.x))));}
+    __forceinline float invlength4(float4 a){return v_extract_x(v_rsqrt_x(v_length4_sq_x(v_ldu(&a.x))));}
+
     __forceinline float distance3(float3 a, float3 b){return v_extract_x(v_length3_x(v_sub(v_ldu(&a.x), v_ldu(&b.x))));}
     __forceinline float distanceSq3(float3 a, float3 b){return v_extract_x(v_length3_sq_x(v_sub(v_ldu(&a.x), v_ldu(&b.x))));}
     __forceinline float dot2(float2 a, float2 b){vec4f v = v_mul(v_ldu_half(&a.x), v_ldu_half(&b.x)); return v_extract_x(v_add_x(v, v_rot_1(v)));}
@@ -233,6 +238,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(length2)>(*this, lib, "length", SideEffects::none);
             addExtern<DAS_BIND_FUN(length3)>(*this, lib, "length", SideEffects::none);
             addExtern<DAS_BIND_FUN(length4)>(*this, lib, "length", SideEffects::none);
+            addExtern<DAS_BIND_FUN(invlength2)>(*this, lib, "invLength", SideEffects::none);
+            addExtern<DAS_BIND_FUN(invlength3)>(*this, lib, "invLength", SideEffects::none);
+            addExtern<DAS_BIND_FUN(invlength4)>(*this, lib, "invLength", SideEffects::none);
             addExtern<DAS_BIND_FUN(lengthSq2)>(*this, lib, "lengthSq", SideEffects::none);
             addExtern<DAS_BIND_FUN(lengthSq3)>(*this, lib, "lengthSq", SideEffects::none);
             addExtern<DAS_BIND_FUN(lengthSq4)>(*this, lib, "lengthSq", SideEffects::none);

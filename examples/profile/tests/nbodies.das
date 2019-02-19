@@ -50,7 +50,7 @@ def advance()
     for j in range(i, nbodies)
       let b2 = bodies[j]
       let dx = b.x - b2.x
-      let inv_distance = 1.0/length(dx)
+      let inv_distance = invLength(dx)
       let mag = inv_distance * inv_distance * inv_distance
       b.v -= dx * (b2.mass*mag)
       b2.v += dx * (b.mass*mag)
