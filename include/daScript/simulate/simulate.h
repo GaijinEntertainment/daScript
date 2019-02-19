@@ -222,7 +222,10 @@ namespace das
                 ba->arguments = args;
                 ba->copyOrMoveResult = (char *) cmres;
             }
+            vec4f * __restrict saveFunctionArguments = abiArg;
+            abiArg = block.functionArguments;
             vec4f block_result = block.body->eval(*this);
+            abiArg = saveFunctionArguments;
             if ( ba ) {
                 *ba = saveArguments;
             }
@@ -242,7 +245,10 @@ namespace das
                 ba->arguments = args;
                 ba->copyOrMoveResult = (char *) cmres;
             }
+            vec4f * __restrict saveFunctionArguments = abiArg;
+            abiArg = block.functionArguments;
             when(block.body);
+            abiArg = saveFunctionArguments;
             if ( ba ) {
                 *ba = saveArguments;
             }

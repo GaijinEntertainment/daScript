@@ -1,5 +1,3 @@
-options log = true, logStack = true // , optimize = false, printVarAccess=true, printRef=true //
-
 def addValue(a,blk)
     return invoke(blk,a)
 
@@ -12,6 +10,4 @@ def test
         return CNT++ + e1
     assert(invoke(counter,0)==1)
     return true
-
-
 

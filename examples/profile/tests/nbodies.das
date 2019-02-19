@@ -91,5 +91,6 @@ def test()
   energy()
   profile(10, "n-bodies")  <|
     nbodies(500000)
-  print("\nresult energy {energy()}\n")
+  // print("\nresult energy {energy()}\n")
+  energy()
   return true
