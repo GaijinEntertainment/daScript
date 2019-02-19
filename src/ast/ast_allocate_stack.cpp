@@ -143,7 +143,7 @@ namespace das {
         }
     // ExprMakeBlock
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
-            auto sz = sizeof(Block);
+            auto sz = uint32_t(sizeof(Block));
             expr->stackTop = allocateStack(sz);
             if ( log ) {
                 logs << "\t" << expr->stackTop << "\t" << sz
