@@ -1,4 +1,4 @@
-options log = true, optimize = false // , logInferPasses=true
+options log = true // , optimize = false, printVarAccess=true, printRef=true // , logInferPasses=true
 
 
 [export]
@@ -9,7 +9,7 @@ def test
     ;
     let x = invoke(counter,13)
     let y = invoke(counter,13)
-    print("x={x} y={y}\n")
+	assert(x==13 & y==14)
     return true
 
 

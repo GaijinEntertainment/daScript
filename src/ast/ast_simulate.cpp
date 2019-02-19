@@ -362,7 +362,7 @@ namespace das
 
     SimNode * ExprAscend::simulate (Context & context) const {
         auto se = subexpr->simulate(context);
-        auto bytes = type->firstType->getSizeOf();
+        auto bytes = subexpr->type->getSizeOf();
         return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes);
     }
 

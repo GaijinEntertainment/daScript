@@ -3,6 +3,7 @@
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/heap.h"
 #include "daScript/simulate/runtime_string.h"
+#include "daScript/simulate/simulate.h"
 
 namespace das {
 
@@ -222,6 +223,20 @@ namespace das {
                 }
             }
             ss << "enum " << value;
+        }
+        virtual void WalkFunction ( Func * fn ) {
+            if (fn->index) {
+                if (context) {
+                    auto simFn = context->getFunction(fn->index - 1);
+                    ss << simFn->name;
+                }
+                else {
+                    ss << fn->index - 1;
+                }
+            }   
+            else {
+                ss << "null";
+            }
         }
     };
 
