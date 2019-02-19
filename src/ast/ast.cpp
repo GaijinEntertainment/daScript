@@ -272,7 +272,12 @@ namespace das {
 
     SimNode * ExprRef2Value::GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {
         if ( type->isHandle() ) {
-            return type->annotation->simulateRef2Value(context, at, expr);
+            auto resN = type->annotation->simulateRef2Value(context, at, expr);
+            if ( !resN ) {
+                context.thisProgram->error("integration error, simulateRef2Value returned null",
+                                           at, CompilationError::missing_node );
+            }
+            return resN;
         } else {
             if ( type->isRefType() ) {
                 return expr;

@@ -63,7 +63,12 @@ namespace das
                 return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
             }
         } else if ( rightType.isHandle() ) {
-            return rightType.annotation->simulateCopy(context, at, left, right);
+            auto resN = rightType.annotation->simulateCopy(context, at, left, right);
+            if ( !resN ) {
+                context.thisProgram->error("integration error, simulateCopy returned null",
+                                           at, CompilationError::missing_node );
+            }
+            return resN;
         } else {
             return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
@@ -109,7 +114,12 @@ namespace das
                 return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
             }
         } else if ( rightType.isHandle() ) {
-            return rightType.annotation->simulateCopy(context, at, left, right);
+            auto resN = rightType.annotation->simulateCopy(context, at, left, right);
+            if ( !resN ) {
+                context.thisProgram->error("integration error, simulateCopy returned null",
+                                           at, CompilationError::missing_node );
+            }
+            return resN;
         } else {
             return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
@@ -348,12 +358,22 @@ namespace das
             } else {
                 auto ann = subexpr->type->firstType->annotation;
                 assert(ann->canDeletePtr() && "has to be able to delete ptr");
-                return ann->simulateDeletePtr(context, at, sube, total);
+                auto resN = ann->simulateDeletePtr(context, at, sube, total);
+                if ( !resN ) {
+                    context.thisProgram->error("integration error, simulateDelete returned null",
+                                               at, CompilationError::missing_node );
+                }
+                return resN;
             }
         } else if ( subexpr->type->baseType==Type::tHandle ) {
             auto ann = subexpr->type->annotation;
             assert(ann->canDelete() && "has to be able to delete");
-            return ann->simulateDelete(context, at, sube, total);
+            auto resN =  ann->simulateDelete(context, at, sube, total);
+            if ( !resN ) {
+                context.thisProgram->error("integration error, simulateDelete returned null",
+                                           at, CompilationError::missing_node );
+            }
+            return resN;
         } else {
             assert(0 && "we should not be here");
             return nullptr;
@@ -371,6 +391,10 @@ namespace das
         if ( typeexpr->baseType == Type::tHandle ) {
             assert(typeexpr->annotation->canNew() && "how???");
             newNode = typeexpr->annotation->simulateGetNew(context, at);
+            if ( !newNode ) {
+                context.thisProgram->error("integration error, simulateGetNew returned null",
+                                           at, CompilationError::missing_node );
+            }
         } else {
             int32_t bytes = type->firstType->getSizeOf();
             if ( initializer ) {
@@ -415,6 +439,10 @@ namespace das
             result = context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
         } else if ( subexpr->type->isHandle() ) {
             result = subexpr->type->annotation->simulateGetAt(context, at, index->type, prv, pidx);
+            if ( !result ) {
+                context.thisProgram->error("integration error, simulateGetAt returned null",
+                                           at, CompilationError::missing_node );
+            }
         } else {
             uint32_t stride = subexpr->type->getStride();
             uint32_t range = subexpr->type->dim.back();
@@ -505,9 +533,19 @@ namespace das
         auto simV = value->simulate(context);
         if ( !field ) {
             if ( r2v ) {
-                return annotation->simulateGetFieldR2V(name, context, at, simV);
+                auto resN = annotation->simulateGetFieldR2V(name, context, at, simV);
+                if ( !resN ) {
+                    context.thisProgram->error("integration error, simulateGetFieldR2V returned null",
+                                               at, CompilationError::missing_node );
+                }
+                return resN;
             } else {
-                return annotation->simulateGetField(name, context, at, simV);
+                auto resN = annotation->simulateGetField(name, context, at, simV);
+                if ( !resN ) {
+                    context.thisProgram->error("integration error, simulateGetField returned null",
+                                               at, CompilationError::missing_node );
+                }
+                return resN;
             }
         } else {
             if (type->isPointer()) {
@@ -527,9 +565,19 @@ namespace das
     SimNode * ExprSafeField::simulate (Context & context) const {
         if ( skipQQ ) {
             if ( annotation ) {
-                return annotation->simulateSafeGetFieldPtr(name, context, at, value->simulate(context));
+                auto resN = annotation->simulateSafeGetFieldPtr(name, context, at, value->simulate(context));
+                if ( !resN ) {
+                    context.thisProgram->error("integration error, simulateSafeGetFieldPtr returned null",
+                                               at, CompilationError::missing_node );
+                }
+                return resN;
             } else {
-                return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),field->offset);
+                auto resN = context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),field->offset);
+                if ( !resN ) {
+                    context.thisProgram->error("integration error, simulateSafeFieldDerefPtr returned null",
+                                               at, CompilationError::missing_node );
+                }
+                return resN;
             }
         } else {
             if ( annotation ) {
@@ -814,6 +862,11 @@ namespace das
                          sources[t]->at,
                          sources[t]->simulate(context)
                     );
+                    if ( !result ) {
+                        context.thisProgram->error("integration error, simulateGetIterator returned null",
+                                                   at, CompilationError::missing_node );
+                        return nullptr;
+                    }
                 } else if ( sources[t]->type->dim.size() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_FixedArrayIterator>(
                         sources[t]->at,

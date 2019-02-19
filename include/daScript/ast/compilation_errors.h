@@ -98,5 +98,9 @@ namespace das
     ,   run_failed                              =   40101       //  [run]def fn; ..... fn(nonconst)
 
     ,   too_many_infer_passes                   =   41000
+
+// integration errors
+
+    ,   missing_node                            =   50100       // handled type requires simulateGetXXX
     };
 }
