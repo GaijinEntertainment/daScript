@@ -93,4 +93,7 @@ def test()
     nbodies(500000)
   // print("\nresult energy {energy()}\n")
   energy()
+  testNBodiesInit()
+  profile(10, "n-bodies, C++")  <|
+    testNBodies(500000)
   return true
