@@ -784,6 +784,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);
+            if (!fnIndex) context.throw_error("invoke null lambda");
             SimFunction * simFunc = context.getFunction(*fnIndex-1);
             if (!simFunc) context.throw_error("invoke null function");
             return context.call(simFunc, argValues, debugInfo.line);
@@ -793,6 +794,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);                     \
+            if (!fnIndex) context.throw_error("invoke null lambda");                            \
             SimFunction * simFunc = context.getFunction(*fnIndex-1);                            \
             if (!simFunc) context.throw_error("invoke null function");                          \
             return cast<CTYPE>::to(context.call(simFunc, argValues, debugInfo.line));           \
@@ -835,6 +837,35 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
+    // Invoke function
+    template <int argCount>
+    struct SimNode_InvokeAndCopyOrMoveLambda : SimNode_CallBase {
+        SimNode_InvokeAndCopyOrMoveLambda ( const LineInfo & at, uint32_t sp )
+            : SimNode_CallBase(at) { stackTop = sp; }
+        virtual vec4f eval ( Context & context ) override {
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);
+            if (!fnIndex) context.throw_error("invoke null lambda");
+            SimFunction * simFunc = context.getFunction(*fnIndex-1);
+            if (!simFunc) context.throw_error("invoke null function");
+            auto cmres = context.stack.sp() + stackTop;
+            return context.callWithCopyOnReturn(simFunc, argValues, cmres, debugInfo.line);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                                                   \
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            vec4f argValues[argCount ? argCount : 1];                                           \
+            EvalBlock<argCount>::eval(context, arguments, argValues);                           \
+            int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);                     \
+            if (!fnIndex) context.throw_error("invoke null lambda");                            \
+            SimFunction * simFunc = context.getFunction(*fnIndex-1);                            \
+            if (!simFunc) context.throw_error("invoke null function");                          \
+            auto cmres = context.stack.sp() + stackTop;                                         \
+            return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues, cmres, debugInfo.line));    \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
 
     // StringBuilder
     struct SimNode_StringBuilder : SimNode_CallBase {

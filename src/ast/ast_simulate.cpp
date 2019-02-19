@@ -271,8 +271,8 @@ namespace das
                 pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMoveFn>(
                                                     int(arguments.size()), at, stackTop);
             } else {
-                pInvoke = nullptr;
-                assert(0 && "implement");
+                pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMoveLambda>(
+                                                    int(arguments.size()), at, stackTop);
             }
         } else {
             if ( blockT->baseType==Type::tBlock ) {
