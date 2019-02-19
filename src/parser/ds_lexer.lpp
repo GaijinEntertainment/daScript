@@ -26,6 +26,7 @@
     int tab_size = def_tab_size;   // only 2,4 or 8
     int nested_parentheses = 0;
     int nested_curly_braces = 0;
+	int nested_square_braces = 0;
     int nested_sb = 0;
     int yycolumn = 1;
     int c_style_depth = 0;
@@ -275,6 +276,18 @@
     nested_parentheses ++;
     return '(';
 }
+<normal>\]                                  {
+    if ( !nested_square_braces ) {
+        yyerror("mismatching square braces", CompilationError::mismatching_parentheses);
+        return LEXER_ERROR;
+    }
+    nested_square_braces --;
+    return ']';
+}
+<normal>\[                                  {
+    nested_square_braces ++;
+    return '[';
+}
 <normal>\}                                  {
     if ( nested_sb ) {
         nested_sb --;
@@ -328,7 +341,7 @@
 <normal>[ \t\r]                             /* skip white space */
 <normal>(\/\/.*)*\n                        {
     yycolumn = 1;
-    if  ( !nested_parentheses && !nested_curly_braces ) {
+    if  ( !nested_parentheses && !nested_curly_braces && !nested_square_braces ) {
         bool ns = (current_line_indent!=0) && need_oxford_comma;
         current_line_indent = 0;
         need_oxford_comma = true;
@@ -356,6 +369,7 @@ void yybegin(const char * str) {
     indent_level = 0;
     nested_parentheses = 0;
     nested_curly_braces = 0;
+	nested_square_braces = 0;
     nested_sb = 0;
     need_oxford_comma = true;
     c_style_depth = 0;

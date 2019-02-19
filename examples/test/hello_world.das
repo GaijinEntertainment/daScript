@@ -1,28 +1,14 @@
 options log = true // , logInferPasses=true // , optimize = false, printVarAccess=true, printRef=true //
 
-struct QQ
-    x,y : int
+let
+	x = [[int 1; 
+			2; 
+			3; 4; 
+			5; 6]]
 
 [export]
 def test
-    let CNT = 0
-    let counter = lambda() <| $ (extra:int) : int
-        return CNT++ + extra
-    assert(counter!=null)
-    assert(!(counter==null))
-    let x = invoke(counter,13)
-    CNT = 100500
-    let y = invoke(counter,13)
-	assert(x==13 & y==14)
-    let l : lambda<bool>
-    assert(l==null)
-    assert(!(l!=null))
-    CNT = 1
-    let counterQQ = lambda() <| $ (extra:int)
-        return [[QQ x=CNT++, y=extra]]
-    print("counterQQ={invoke(counterQQ,1)}\n")
-    print("counterQQ={invoke(counterQQ,1)}\n")
-    print("counterQQ={invoke(counterQQ,1)}\n")
+	print("x={x}\n")
     return true
 
 
