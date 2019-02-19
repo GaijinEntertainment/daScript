@@ -523,6 +523,15 @@ namespace das {
             Visitor::preVisit(edel);
             ss << "delete ";
         }
+    // ascend
+        virtual void preVisit ( ExprAscend * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->ascType ) {
+                ss << "new<" << expr->ascType->describe() << "> ";
+            } else {
+                ss << "new ";
+            }
+        }
     // new
         virtual void preVisit ( ExprNew * enew ) override {
             Visitor::preVisit(enew);

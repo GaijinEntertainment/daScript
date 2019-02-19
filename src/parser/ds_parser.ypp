@@ -635,6 +635,9 @@ expr_new
         auto pNew = new ExprNew(tokAt(@loc),TypeDeclPtr($typeDecl),true);
         $$ = parseFunctionArguments(pNew,$arguments);
     }
+    |   _NEWT[loc] make_decl[md] {
+        $$ = new ExprAscend(tokAt(@loc),ExpressionPtr($md));
+    }
     ;
 
 expression_break

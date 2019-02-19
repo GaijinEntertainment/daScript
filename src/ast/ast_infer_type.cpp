@@ -954,6 +954,18 @@ namespace das {
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
         }
+    // ExprAscend
+        virtual ExpressionPtr visit ( ExprAscend * expr ) override {
+            if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            if ( !expr->subexpr->type->isRef() ) {
+                error("can't ascend (to heap) non-reference value", expr->at,
+                      CompilationError::invalid_new_type);
+            }
+            expr->type = make_shared<TypeDecl>(Type::tPointer);
+            expr->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
+            expr->type->firstType->ref = false;
+            return Visitor::visit(expr);
+        }
     // ExprNew
         virtual void preVisit ( ExprNew * call ) override {
             Visitor::preVisit(call);

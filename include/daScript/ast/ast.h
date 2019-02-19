@@ -1224,6 +1224,17 @@ namespace das
         TypeDeclPtr     typeexpr;
     };
 
+    struct ExprAscend : Expression {
+        ExprAscend() = default;
+        ExprAscend( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & as = nullptr )
+            : Expression(a), subexpr(se), ascType(as) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        ExpressionPtr   subexpr;
+        TypeDeclPtr     ascType;
+    };
+
     struct ExprNew : ExprLooksLikeCall {
         ExprNew() = default;
         ExprNew ( const LineInfo & a, TypeDeclPtr t, bool ini )
@@ -1703,6 +1714,7 @@ namespace das
         VISIT_EXPR(ExprValues)
         VISIT_EXPR(ExprErase)
         VISIT_EXPR(ExprFind)
+        VISIT_EXPR(ExprAscend)
         VISIT_EXPR(ExprNew)
         VISIT_EXPR(ExprDelete)
         VISIT_EXPR(ExprAt)

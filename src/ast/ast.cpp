@@ -481,6 +481,21 @@ namespace das {
         return cexpr;
     }
 
+    // ExprAscend
+
+    ExpressionPtr ExprAscend::clone( const ExpressionPtr & expr  ) const {
+        auto cexpr = clonePtr<ExprAscend>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
+
+    ExpressionPtr ExprAscend::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr->visit(vis);
+        return vis.visit(this);
+    }
+
     // ExprNew
 
     ExpressionPtr ExprNew::visit(Visitor & vis) {

@@ -355,6 +355,12 @@ namespace das
         }
     }
 
+    SimNode * ExprAscend::simulate (Context & context) const {
+        auto se = subexpr->simulate(context);
+        auto bytes = type->firstType->getSizeOf();
+        return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes);
+    }
+
     SimNode * ExprNew::simulate (Context & context) const {
         SimNode * newNode;
         if ( typeexpr->baseType == Type::tHandle ) {
