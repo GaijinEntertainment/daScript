@@ -48,3 +48,11 @@ inline void *das_aligned_alloc16(uint32_t size) {return (char *)(new vec4f[(size
 inline void das_aligned_free16(void *ptr) {return delete[] (vec4f*)ptr; }
 #endif
 
+#ifndef DAS_FATAL_LOG
+#define DAS_FATAL_LOG   printf
+#endif
+
+#ifndef DAS_FATAL_ERROR
+#define DAS_FATAL_ERROR { assert(0 && "fatal error"); exit(-1); }
+#endif
+

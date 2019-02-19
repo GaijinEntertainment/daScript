@@ -49,7 +49,8 @@ namespace das
                     copyOnReturn = false;
                     moveOnReturn = true;
                 } else {
-                    assert(0 && "we should not even be here");
+                    DAS_FATAL_LOG("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
+                    DAS_FATAL_ERROR;
                 }
             }
         }
@@ -88,12 +89,18 @@ namespace das
 
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
     __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags ) {
-        mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>>>(name,lib)->setSideEffects(seFlags));
+        if ( !mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>>>(name,lib)->setSideEffects(seFlags)) ) {
+            DAS_FATAL_LOG("addExtern(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
+            DAS_FATAL_ERROR;
+        }
     }
 
     template <InteropFunction func, typename RetT, typename ...Args>
     __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags ) {
-        mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib)->setSideEffects(seFlags));
+        if ( !mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib)->setSideEffects(seFlags)) ) {
+            DAS_FATAL_LOG("addInterop(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
+            DAS_FATAL_ERROR;
+        }
     }
 }
 

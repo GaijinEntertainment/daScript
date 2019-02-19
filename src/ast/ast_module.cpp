@@ -186,13 +186,12 @@ namespace das {
         ModuleGroup dummyLibGroup;
         if (auto program = parseDaScript(modName, access, issues, dummyLibGroup)) {
             if (program->failed()) {
-#if 1
                 for (auto & err : program->errors) {
                     issues << reportError(err.at.fileInfo->source, err.at.fileInfo->name, err.at.line, err.at.column, err.what, err.cerr);
                 }
-                printf("%s\n", issues.str().c_str());
-#endif
-                assert(0 && "this happens when builtin module does not compile");
+                DAS_FATAL_LOG("%s\n", issues.str().c_str());
+                DAS_FATAL_LOG("builtin module did not compile %s\n", modName.c_str());
+                DAS_FATAL_ERROR;
                 return false;
             }
             // ok, now let's rip content
@@ -207,7 +206,8 @@ namespace das {
             }
             return true;
         } else {
-            assert(0 && "this happens when builtin module does not parse");
+            DAS_FATAL_LOG("builtin module did not parse %s\n", modName.c_str());
+            DAS_FATAL_ERROR;
             return false;
         }
     }
