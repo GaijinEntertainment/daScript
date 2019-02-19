@@ -67,9 +67,6 @@ def energy():float
       e -= (b.mass * b2.mass) / distance(b.x, b2.x)
   return e
 
-let 
-  DT = 1e-2
-
 /*
  * Rescale certain properties of bodies. That allows doing
  * consequential advance()'s as if dt were equal to 1.0.
@@ -82,10 +79,10 @@ def scale_bodies(scale)
     b.v = b.v*scale
 
 def nbodies(n)
-  scale_bodies(DT)
+  scale_bodies(0.01)
   for i in range(0, n)
     advance()
-  scale_bodies(1./DT)
+  scale_bodies(1./0.01)
 
 [export]
 def test()
