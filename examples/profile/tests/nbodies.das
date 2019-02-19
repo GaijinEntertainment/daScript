@@ -14,7 +14,7 @@ struct body
   x,v:float3
   mass:float
 let 
-  bodies = ([[body
+  bodies = [[body
             /*sun*/
               x=float3(0,0,0), v=float3(0,0,0), mass = SOLAR_MASS;
             /*jupiter*/
@@ -33,7 +33,7 @@ let
               x = float3( 1.53796971148509165e+01, -2.59193146099879641e+01, 1.79258772950371181e-01 ),
               v = float3( 2.68067772490389322e-03 * DAYS_PER_YEAR, 1.62824170038242295e-03 * DAYS_PER_YEAR, -9.51592254519715870e-05 * DAYS_PER_YEAR ),
               mass = 5.15138902046611451e-05 * SOLAR_MASS
-            ]])
+            ]]
 let 
   nbodies = 5
 
