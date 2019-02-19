@@ -1,3 +1,4 @@
+#include <math.h>
 #include "daScript/misc/platform.h"
 
 #include <dag_noise/dag_uint_noise.h>
@@ -182,6 +183,20 @@ namespace das {
     __forceinline float dot4(float4 a, float4 b){return v_extract_x(v_dot4_x(v_ldu(&a.x), v_ldu(&b.x)));}
 
     __forceinline float3 cross3(float3 a, float3 b){vec4f v = v_cross3(v_ldu(&a.x), v_ldu(&b.x));return *(float3*)&v;}
+    __forceinline double dabs  (double a){return fabs(a);}
+    __forceinline double dsqrt (double a){return sqrt(a);}
+    __forceinline double dexp  (double a){return exp(a);}
+    __forceinline double dlog  (double a){return log(a);}
+    __forceinline double dpow  (double a, double b){return pow(a,b);}
+    __forceinline double dexp2 (double a){return exp2(a);}
+    __forceinline double dlog2 (double a){return log2(a);}
+    __forceinline double dsin  (double a){return sin(a);}
+    __forceinline double dcos  (double a){return cos(a);}
+    __forceinline double dasin (double a){return asin(a);}
+    __forceinline double dacos (double a){return acos(a);}
+    __forceinline double dtan  (double a){return tan(a);}
+    __forceinline double datan (double a){return atan(a);}
+    __forceinline double datan2(double a,double b){return atan2(a,b);}
 
     class Module_Math : public Module {
     public:
@@ -223,6 +238,22 @@ namespace das {
             addExtern<DAS_BIND_FUN(lengthSq4)>(*this, lib, "lengthSq", SideEffects::none);
             addExtern<DAS_BIND_FUN(distance3)>(*this, lib, "distance", SideEffects::none);
             addExtern<DAS_BIND_FUN(distanceSq3)>(*this, lib, "distanceSq", SideEffects::none);
+
+            //double functions
+            addExtern<DAS_BIND_FUN(dabs)>(*this, lib, "abs", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dsqrt)>(*this, lib, "sqrt", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dexp)>(*this, lib, "exp", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dlog)>(*this, lib, "log", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dpow)>(*this, lib, "pow", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dexp2)>(*this, lib, "exp2", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dlog2)>(*this, lib, "log2", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dsin)>(*this, lib, "sin", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dcos)>(*this, lib, "cos", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dasin)>(*this, lib, "asin", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dacos)>(*this, lib, "acos", SideEffects::none);
+            addExtern<DAS_BIND_FUN(dtan)>(*this, lib, "tan", SideEffects::none);
+            addExtern<DAS_BIND_FUN(datan)>(*this, lib, "atan", SideEffects::none);
+            addExtern<DAS_BIND_FUN(datan2)>(*this, lib, "atan2", SideEffects::none);
 
             addFunctionCommonConversion<int, float>(*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);
