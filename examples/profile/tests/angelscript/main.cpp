@@ -37,10 +37,6 @@ DWORD timeGetTime()
 	return time.tv_sec*1000 + time.tv_usec/1000;
 }
 
-int AddOne(int val)
-{
-  return val+1;
-}
 // Linux does have a getch() function in the curses library, but it doesn't
 // work like it does on DOS. So this does the same thing, with out the need
 // of the curses library.
@@ -238,6 +234,10 @@ void print_str(const std::string &msg)
 {
     printf("%s", msg.c_str());
 }
+int AddOne(int val)
+{
+  return val+1;
+}
 void ConfigureEngine(asIScriptEngine *engine)
 {
 	int r;
@@ -274,7 +274,7 @@ void ConfigureEngine(asIScriptEngine *engine)
 	// without having to recompile all the scripts.
 
 	// pass function print to angelscript
-  r = engine->RegisterGlobalFunction("int AddOne(int)", asFUNCTION(sinf), asCALL_CDECL); assert( r >= 0 );
+    r = engine->RegisterGlobalFunction("int AddOne(int)", asFUNCTION(AddOne), asCALL_CDECL); assert( r >= 0 );
 	r = engine->RegisterGlobalFunction("void print(const string &in)", asFUNCTION(print_str), asCALL_CDECL); assert(r >= 0);
 	r = engine->RegisterGlobalFunction("void print(const int &in)", asFUNCTION(print_int), asCALL_CDECL); assert(r >= 0);
 
