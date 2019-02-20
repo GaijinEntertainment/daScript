@@ -259,5 +259,81 @@ namespace das {
         V_SUB(value);
         V_END();
     }
+
+    SimNode * SimNode_New::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(New);
+        V_ARG(bytes);
+        V_END();
+    }
+
+    SimNode * SimNode_NewArray::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(NewArray);
+        V_SUB(newNode);
+        V_SP(stackTop);
+        V_ARG(count);
+        V_END();
+    }
+
+    SimNode * SimNode_ConstValue::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ConstValue);
+        V_ARG(value);
+        V_END();
+    }
+
+    SimNode * SimNode_Zero::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Zero);
+        V_END();
+    }
+
+    SimNode * SimNode_CopyReference::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(CopyReference);
+        V_SUB(l);
+        V_SUB(r);
+        V_END();
+    }
+
+    SimNode * SimNode_CopyRefValue::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(CopyRefValue);
+        V_SUB(l);
+        V_SUB(r);
+        V_ARG(size);
+        V_END();
+    }
+
+    SimNode * SimNode_MoveRefValue::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(MoveRefValue);
+        V_SUB(l);
+        V_SUB(r);
+        V_ARG(size);
+        V_END();
+    }
+
+    SimNode * SimNode_Final::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(Final);
+        for ( uint32_t i=0; i!=totalFinal; ++i ) {
+            finalList[i] = finalList[i]->visit(vis);
+        }
+        V_END();
+    }
+
+    SimNode * SimNode_Block::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(Block);
+        for ( uint32_t i=0; i!=total; ++i ) {
+            list[i] = list[i]->visit(vis);
+        }
+        for ( uint32_t i=0; i!=totalFinal; ++i ) {
+            finalList[i] = finalList[i]->visit(vis);
+        }
+        V_END();
+    }
 }
 

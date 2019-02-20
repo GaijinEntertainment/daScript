@@ -206,4 +206,40 @@ namespace das {
         V_SUB(value);
         V_END();
     }
+
+    template <bool move>
+    SimNode * SimNode_Ascend<move>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Ascend);
+        V_SUB(subexpr);
+        V_ARG(bytes);
+        V_END();
+    }
+
+    template <int argCount>
+    SimNode * SimNode_NewWithInitializer<argCount>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(NewWithInitializer);
+        V_CALL();
+        V_ARG(bytes);
+        V_END();
+    }
+
+    template <typename TT>
+    SimNode * SimNode_CopyValue<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(CopyValue);
+        V_SUB(l);
+        V_SUB(r);
+        V_END();
+    }
+
+    template <typename TT>
+    SimNode * SimNode_CopyRefValueT<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(CopyRefValueT);
+        V_SUB(l);
+        V_SUB(r);
+        V_END();
+    }
 }
