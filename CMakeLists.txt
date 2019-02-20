@@ -123,6 +123,7 @@ src/simulate/runtime_table.cpp
 src/simulate/runtime_range.cpp
 src/simulate/runtime_profile.cpp
 src/simulate/simulate.cpp
+src/simulate/simulate_visit.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h
@@ -137,6 +138,9 @@ include/daScript/simulate/runtime_range.h
 include/daScript/simulate/runtime_profile.h
 include/daScript/simulate/runtime_matrices.h
 include/daScript/simulate/simulate.h
+include/daScript/simulate/simulate_visit.h
+include/daScript/simulate/simulate_visit_op.h
+include/daScript/simulate/simulate_visit_op_undef.h
 include/daScript/simulate/sim_policy.h
 src/simulate/data_walker.cpp
 include/daScript/simulate/data_walker.h
