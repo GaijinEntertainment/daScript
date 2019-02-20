@@ -1413,7 +1413,7 @@ namespace das
         bool addEnumeration ( const EnumerationPtr & st );
         bool addFunction ( const FunctionPtr & fn, bool canFail = false );
         bool addGeneric ( const FunctionPtr & fn );
-        bool addAnnotation ( const AnnotationPtr & ptr );
+        bool addAnnotation ( const AnnotationPtr & ptr, bool canFail = false );
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
@@ -1427,7 +1427,13 @@ namespace das
     public:
         template <typename TT>
         __forceinline void addCall ( const string & fnName ) {
-            callThis[fnName] = [fnName](const LineInfo & at) { return new TT(at, fnName); };
+            if ( callThis.find(fnName)!=callThis.end() ) {
+                DAS_FATAL_LOG("addCall(%s) failed. duplicate call\n", fnName.c_str());
+                DAS_FATAL_ERROR;
+            }
+            callThis[fnName] = [fnName](const LineInfo & at) {
+                return new TT(at, fnName);
+            };
         }
     public:
         map<string, TypeDeclPtr>                aliasTypes;

@@ -72,11 +72,15 @@ namespace das {
         }
     }
 
-    bool Module::addAnnotation ( const AnnotationPtr & ptr ) {
+    bool Module::addAnnotation ( const AnnotationPtr & ptr, bool canFail ) {
         if ( handleTypes.insert(make_pair(ptr->name, move(ptr))).second ) {
             ptr->seal(this);
             return true;
         } else {
+            if ( !canFail ) {
+                DAS_FATAL_LOG("can't add duplicate annotation %s to module %s\n", ptr->name.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
             return false;
         }
     }

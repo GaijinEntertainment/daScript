@@ -1258,8 +1258,7 @@ namespace das {
             annotation->name = st->name;
             string err;
             if ( annotation->create(st,arg,err) ) {
-                thisModule->addAnnotation(annotation);
-                return true;
+                return thisModule->addAnnotation(annotation, true);
             } else {
                 error("can't create structure handle "+ann->name + "\n" + err,st->at,CompilationError::invalid_annotation);
                 return false;
