@@ -1408,7 +1408,7 @@ namespace das
         virtual ~Module();
         bool addAlias ( const TypeDeclPtr & at, bool canFail = false );
         bool addVariable ( const VariablePtr & var );
-        bool addStructure ( const StructurePtr & st );
+        bool addStructure ( const StructurePtr & st, bool canFail = false );
         bool removeStructure ( const StructurePtr & st );
         bool addEnumeration ( const EnumerationPtr & st );
         bool addFunction ( const FunctionPtr & fn, bool canFail = false );

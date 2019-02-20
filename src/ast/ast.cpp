@@ -1233,7 +1233,7 @@ namespace das {
     }
 
     bool Program::addStructure ( const StructurePtr & st ) {
-        return thisModule->addStructure(st);
+        return thisModule->addStructure(st, true);
     }
 
     bool Program::addEnumeration ( const EnumerationPtr & st ) {

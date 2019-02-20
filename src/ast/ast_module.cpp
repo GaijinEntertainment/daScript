@@ -117,11 +117,15 @@ namespace das {
         }
     }
 
-    bool Module::addStructure ( const StructurePtr & st ) {
+    bool Module::addStructure ( const StructurePtr & st, bool canFail ) {
         if ( structures.insert(make_pair(st->name, st)).second ) {
             st->module = this;
             return true;
         } else {
+            if ( !canFail ) {
+                DAS_FATAL_LOG("can't add duplicate structure %s to module %s\n", st->name.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
             return false;
         }
     }
