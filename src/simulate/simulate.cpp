@@ -3,6 +3,7 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_print.h"
+#include <stdarg.h>
 
 // this is here for the default implementation of to_out and to_err
 #include <setjmp.h>
