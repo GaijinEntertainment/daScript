@@ -31,8 +31,8 @@ namespace das {
         SimNode_AsBool(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
         __forceinline bool compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
-            if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return false; }
-            if ( !pv->IsBool() ) { context.throw_error("JSON not a boolean"); return false; }
+            if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return false; }
+            if ( !pv->IsBool() ) { context.throw_error_at(debugInfo,"JSON not a boolean"); return false; }
             return pv->GetBool();
         }
         SimNode * subexpr;
@@ -43,8 +43,8 @@ namespace das {
         SimNode_AsInt(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
         __forceinline int32_t compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
-            if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return 0; }
-            if ( !pv->IsInt() ) { context.throw_error("JSON not a int"); return 0; }
+            if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return 0; }
+            if ( !pv->IsInt() ) { context.throw_error_at(debugInfo,"JSON not a int"); return 0; }
             return pv->GetInt();
         }
         SimNode * subexpr;
@@ -55,8 +55,8 @@ namespace das {
         SimNode_AsFloat(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
         __forceinline float compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
-            if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return 0.0f; }
-            if ( !pv->IsFloat() ) { context.throw_error("JSON not a float"); return 0.0f; }
+            if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return 0.0f; }
+            if ( !pv->IsFloat() ) { context.throw_error_at(debugInfo,"JSON not a float"); return 0.0f; }
             return pv->GetFloat();
         }
         SimNode * subexpr;
@@ -67,8 +67,8 @@ namespace das {
         SimNode_AsDouble(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
         __forceinline double compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
-            if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return 0.0f; }
-            if ( !pv->IsDouble() ) { context.throw_error("JSON not a double"); return 0.0f; }
+            if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return 0.0f; }
+            if ( !pv->IsDouble() ) { context.throw_error_at(debugInfo,"JSON not a double"); return 0.0f; }
             return pv->GetDouble();
         }
         SimNode * subexpr;
@@ -79,8 +79,8 @@ namespace das {
         SimNode_AsString(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
-            if ( !pv ) { context.throw_error("JSON dereferencing null pointer"); return nullptr; }
-            if ( !pv->IsString() ) { context.throw_error("JSON not a string"); return nullptr; }
+            if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return nullptr; }
+            if ( !pv->IsString() ) { context.throw_error_at(debugInfo,"JSON not a string"); return nullptr; }
             auto ps = pv->GetString();
             auto psl = pv->GetStringLength();
             return context.heap.allocateString(ps,psl);
@@ -107,16 +107,16 @@ namespace das {
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
-                if ( !SAFE ) context.throw_error("JSON dereferencing null pointer");
+                if ( !SAFE ) context.throw_error_at(debugInfo,"JSON dereferencing null pointer");
                 return nullptr;
             }
             if ( !pv->IsObject() ) {
-                if ( !SAFE ) context.throw_error("JSON field is not an object");
+                if ( !SAFE ) context.throw_error_at(debugInfo,"JSON field is not an object");
                 return nullptr;
             }
             auto hf = pv->FindMember(index);
             if ( hf == pv->MemberEnd() ) {
-                if ( !SAFE ) context.throw_error("JSON field not found");
+                if ( !SAFE ) context.throw_error_at(debugInfo,"JSON field not found");
                 return nullptr;
             }
             JsValue & value = hf->value;
@@ -133,17 +133,17 @@ namespace das {
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
-                context.throw_error("JSON dereferencing null pointer");
+                context.throw_error_at(debugInfo,"JSON dereferencing null pointer");
                 return nullptr;
             }
             if ( !pv->IsObject() ) {
-                context.throw_error("JSON field is not an object");
+                context.throw_error_at(debugInfo,"JSON field is not an object");
                 return nullptr;
             }
             auto pi = index->evalPtr(context);
             auto hf = pv->FindMember(pi);
             if ( hf == pv->MemberEnd() ) {
-                context.throw_error("JSON field not found");
+                context.throw_error_at(debugInfo,"JSON field not found");
                 return nullptr;
             }
             JsValue & value = hf->value;
@@ -159,16 +159,16 @@ namespace das {
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
-                context.throw_error("JSON dereferencing null pointer");
+                context.throw_error_at(debugInfo,"JSON dereferencing null pointer");
                 return nullptr;
             }
             if ( !pv->IsArray() ) {
-                context.throw_error("JSON field is not an array");
+                context.throw_error_at(debugInfo,"JSON field is not an array");
                 return nullptr;
             }
             auto idx = cast<uint32_t>::to(index->eval(context));
             if ( idx >= pv->Size() ) {
-                context.throw_error("JSON array index out of range");
+                context.throw_error_at(debugInfo,"JSON array index out of range");
                 return nullptr;
             }
             JsValue & value = (*pv)[idx];

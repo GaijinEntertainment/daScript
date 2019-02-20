@@ -22,7 +22,7 @@ namespace das
             vec4f rr = r->eval(context);
             uint32_t idx = cast<uint32_t>::to(rr);
             if ( idx >= pA->size ) {
-                context.throw_error("index out of range");
+                context.throw_error_at(debugInfo,"index out of range");
                 return nullptr;
             } else {
                 return pA->data + idx*stride;

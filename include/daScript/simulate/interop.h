@@ -49,16 +49,20 @@ namespace das
 
     template <typename Result, typename CType, bool Pointer=is_pointer<Result>::value&&is_pointer<CType>::value>
     struct ImplCallStaticFunctionImm {
+        enum { valid = false };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            assert(0 && "we should not even be here");
-            fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
+        static __forceinline CType call(FunctionType &&, Context &, SimNode **, index_sequence<I...> ) {
+            assert(0 && "if this assert triggers, somehow prohibited call was called explicitly."
+                        "like evalDouble on pointer or something similar."
+                        "this means that this template needs to be revisited."
+                        "we should not even be here, because code above verifies 'valid' field.");
             return CType();
         }
     };
 
     template <typename Result, typename CType>
     struct ImplCallStaticFunctionImm<Result, CType, true> {
+        enum { valid = true };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
             return (CType)fn(cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to(ctx, args[I])...);
@@ -67,6 +71,7 @@ namespace das
 
     template <typename Result>
     struct ImplCallStaticFunctionImm<Result,Result, false> {
+        enum { valid = true };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline Result call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             return fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
@@ -75,6 +80,7 @@ namespace das
 
     template <typename CType, bool Pointer>
     struct ImplCallStaticFunctionImm<void,CType,Pointer> {
+        enum { valid = true };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
@@ -84,6 +90,7 @@ namespace das
 
     template <typename Result>
     struct ImplCallStaticFunctionAndCopy {
+        enum { valid = true };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline void call(FunctionType && fn, Context & ctx, Result * res, SimNode ** args, index_sequence<I...> ) {
             *res = fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
@@ -91,13 +98,8 @@ namespace das
     };
 
     template <>
-    struct ImplCallStaticFunctionAndCopy<void> {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline void call(FunctionType && fn, Context & ctx, void *, SimNode ** args, index_sequence<I...> ) {
-            assert(0 && "we should not even be here");
-            fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
-        }
-    };
+    struct ImplCallStaticFunctionAndCopy<void>;
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -121,6 +123,8 @@ namespace das
                 using Arguments = typename FunctionTrait::arguments;                \
                 const int nargs = tuple_size<Arguments>::value;                     \
                 using Indices = make_index_sequence<nargs>;                         \
+                if ( !ImplCallStaticFunctionImm<Result,CTYPE>::valid )              \
+                    context.throw_error_at(debugInfo,"internal integration error"); \
                 return ImplCallStaticFunctionImm<Result,CTYPE>::template            \
                     call<FuncT,Arguments>(*fn, context, arguments, Indices());      \
         }

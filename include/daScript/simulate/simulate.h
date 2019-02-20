@@ -123,12 +123,12 @@ namespace das
             return callWithCopyOnReturn(fnPtr, args, res, 0);
         }
 
-        void fakeCall ( FuncInfo * info, int line, vec4f * args, char * & EP, char * & SP );
-
         vec4f evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
         vec4f evalWithCatch ( SimNode * node );
 
         void throw_error ( const char * message );
+        void throw_error_ex ( const char * message, ... );
+        void throw_error_at ( const LineInfo & at, const char * message, ... );
 
         __forceinline SimFunction * getFunction ( int index ) const {
             return (index>=0 && index<totalFunctions) ? functions + index : nullptr;
@@ -160,7 +160,7 @@ namespace das
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
-                throw_error("stack overflow");
+                throw_error_ex("stack overflow at line %i",line);
                 return v_zero();
             }
             // fill prologue
@@ -185,7 +185,7 @@ namespace das
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
-                throw_error("stack overflow");
+                throw_error_ex("stack overflow at line %i",line);
                 return v_zero();
             }
             // fill prologue
@@ -264,7 +264,7 @@ namespace das
             // PUSH
             char * EP, *SP;
             if(!stack.push(fn->stackSize,EP,SP)) {
-                throw_error("stack overflow");
+                throw_error_ex("stack overflow at line %i", line);
                 return v_zero();
             }
             // fill prologue
@@ -300,6 +300,7 @@ namespace das
         void *          abiCMRES;
     protected:
         const char *    exception = nullptr;
+        string          lastError;
 #if !DAS_ENABLE_EXCEPTIONS
         jmp_buf *       throwBuf = nullptr;
 #endif
@@ -482,7 +483,7 @@ namespace das
                 return prv + offset;
             }
             else {
-                context.throw_error("dereferencing null pointer");
+                context.throw_error_at(debugInfo,"dereferencing null pointer");
                 return nullptr;
             }
         }
@@ -500,7 +501,7 @@ namespace das
                 return cast<TT>::from(*pR);
             }
             else {
-                context.throw_error("dereferencing null pointer");
+                context.throw_error_at(debugInfo,"dereferencing null pointer");
                 return v_zero();
             }
         }
@@ -510,7 +511,7 @@ namespace das
                 return *(char **)(prv + offset);
             }
             else {
-                context.throw_error("dereferencing null pointer");
+                context.throw_error_at(debugInfo,"dereferencing null pointer");
                 return nullptr;
             }
         }
@@ -545,7 +546,7 @@ namespace das
             auto pValue = value->evalPtr(context);
             uint32_t idx = cast<uint32_t>::to(index->eval(context));
             if (idx >= range) {
-                context.throw_error("index out of range");
+                context.throw_error_at(debugInfo,"index out of range");
                 return nullptr;
             } else {
                 return pValue + idx*stride;
@@ -568,7 +569,7 @@ namespace das
             auto vec = value->eval(context);                                                    \
             uint32_t idx = cast<uint32_t>::to(index->eval(context));                            \
             if (idx >= range) {                                                                 \
-                context.throw_error("index out of range");                                      \
+                context.throw_error_at(debugInfo,"index out of range");                         \
                 return (CTYPE) 0;                                                               \
             } else {                                                                            \
                 CTYPE * pv = (CTYPE *) &vec;                                                    \
@@ -760,7 +761,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
-            if (!simFunc) context.throw_error("invoke null function");
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
             if ( argCount>1 ) {
                 return context.call(simFunc, argValues + 1, debugInfo.line);
             } else {
@@ -772,7 +773,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);  \
-            if (!simFunc) context.throw_error("invoke null function");                          \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
             if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.call(simFunc, argValues + 1, debugInfo.line));   \
             } else {                                                                            \
@@ -791,9 +792,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);
-            if (!fnIndex) context.throw_error("invoke null lambda");
+            if (!fnIndex) context.throw_error_at(debugInfo,"invoke null lambda");
             SimFunction * simFunc = context.getFunction(*fnIndex-1);
-            if (!simFunc) context.throw_error("invoke null function");
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
             return context.call(simFunc, argValues, debugInfo.line);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
@@ -801,9 +802,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);                     \
-            if (!fnIndex) context.throw_error("invoke null lambda");                            \
+            if (!fnIndex) context.throw_error_at(debugInfo,"invoke null lambda");               \
             SimFunction * simFunc = context.getFunction(*fnIndex-1);                            \
-            if (!simFunc) context.throw_error("invoke null function");                          \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
             return cast<CTYPE>::to(context.call(simFunc, argValues, debugInfo.line));           \
         }
         DAS_EVAL_NODE
@@ -819,7 +820,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
-            if (!simFunc) context.throw_error("invoke null function");
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
             auto cmres = context.stack.sp() + stackTop;
             if ( argCount>1 ) {
                 return context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, debugInfo.line);
@@ -832,7 +833,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];                                               \
             EvalBlock<argCount>::eval(context, arguments, argValues);                               \
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);      \
-            if (!simFunc) context.throw_error("invoke null function");                              \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");                 \
             auto cmres = context.stack.sp() + stackTop;                                             \
             if ( argCount>1 ) {                                                                     \
                 return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, debugInfo.line)); \
@@ -853,9 +854,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);
-            if (!fnIndex) context.throw_error("invoke null lambda");
+            if (!fnIndex) context.throw_error_at(debugInfo,"invoke null lambda");
             SimFunction * simFunc = context.getFunction(*fnIndex-1);
-            if (!simFunc) context.throw_error("invoke null function");
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
             auto cmres = context.stack.sp() + stackTop;
             return context.callWithCopyOnReturn(simFunc, argValues, cmres, debugInfo.line);
         }
@@ -864,9 +865,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);                     \
-            if (!fnIndex) context.throw_error("invoke null lambda");                            \
+            if (!fnIndex) context.throw_error_at(debugInfo,"invoke null lambda");               \
             SimFunction * simFunc = context.getFunction(*fnIndex-1);                            \
-            if (!simFunc) context.throw_error("invoke null function");                          \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
             auto cmres = context.stack.sp() + stackTop;                                         \
             return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues, cmres, debugInfo.line));    \
         }
@@ -901,7 +902,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto str = to_string ( cast<CastFrom>::to(res) );
             auto cpy = context.heap.allocateString(str);
             if ( !cpy ) {
-                context.throw_error("can't cast to string, out of heap");
+                context.throw_error_at(debugInfo,"can't cast to string, out of heap");
                 return v_zero();
             }
             return cast<char *>::from(cpy);
@@ -1219,7 +1220,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         __forceinline char * compute ( Context & context ) {
             auto ptr = subexpr->evalPtr(context);
             if ( !ptr ) {
-                context.throw_error("dereferencing null pointer");
+                context.throw_error_at(debugInfo,"dereferencing null pointer");
             }
             return ptr;
         }
@@ -1265,7 +1266,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 memset ( ptr, 0, bytes );
                 return ptr;
             } else {
-                context.throw_error("out of heap");
+                context.throw_error_at(debugInfo,"out of heap");
                 return nullptr;
             }
         }
@@ -1286,7 +1287,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 }
                 return ptr;
             } else {
-                context.throw_error("out of heap");
+                context.throw_error_at(debugInfo,"out of heap");
                 return nullptr;
             }
         }
@@ -1305,7 +1306,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 context.callWithCopyOnReturn(fnPtr, argValues, ptr, debugInfo.line);
                 return ptr;
             } else {
-                context.throw_error("out of heap");
+                context.throw_error_at(debugInfo,"out of heap");
                 return nullptr;
             }
         }
@@ -1615,7 +1616,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto pv = (OT *) subexpr->evalPtr(context);
             if ( !pv ) {
                 if ( !SAFE ) {
-                    context.throw_error("Property, dereferencing null pointer");
+                    context.throw_error_at(debugInfo,"Property, dereferencing null pointer");
                 }
                 return v_zero();
             }
@@ -1634,7 +1635,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto pv = (OT *) subexpr->evalPtr(context); \
             if ( !pv ) { \
                 if ( !SAFE ) { \
-                    context.throw_error("Property, dereferencing null pointer"); \
+                    context.throw_error_at(debugInfo,"Property, dereferencing null pointer"); \
                 } \
                 return (CTYPE) 0; \
             } \

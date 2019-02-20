@@ -64,11 +64,11 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
                 if ( it != prv->fields.end() ) {
                     return (char *) (&it->second);
                 } else {
-                    context.throw_error("field not found");
+                    context.throw_error_at(debugInfo, "field %s not found", name);
                     return nullptr;
                 }
             } else {
-                context.throw_error("dereferencing null pointer");
+                context.throw_error_at(debugInfo,"dereferencing null pointer");
                 return nullptr;
             }
         }
@@ -87,11 +87,11 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
                 if ( it != prv->fields.end() ) {
                     return it->second;
                 } else {
-                    context.throw_error("field not found");
+                    context.throw_error_at(debugInfo,"field %s not found",name);
                     return 0;
                 }
             } else {
-                context.throw_error("dereferencing null pointer");
+                context.throw_error_at(debugInfo,"dereferencing null pointer");
                 return 0;
             }
         }

@@ -113,7 +113,7 @@ namespace das
             string error = reportError(debugInfo.fileInfo->source, debugInfo.fileInfo->name, debugInfo.line, debugInfo.column, error_message );
             error = context.getStackWalk(false) + error;
             context.to_err(error.c_str());
-            context.throw_error("assert failed");
+            context.throw_error_at(debugInfo,"assert failed");
         }
         return v_zero();
     }
@@ -201,7 +201,7 @@ namespace das
             context.stopFlags &= ~EvalFlags::stopForReturn;
             return context.abiResult();
         } else {
-            if ( needResult ) context.throw_error("end of block without return");
+            if ( needResult ) context.throw_error_at(debugInfo,"end of block without return");
             return v_zero();
         }
     }
@@ -265,14 +265,14 @@ namespace das
     vec4f SimNode_ReturnReference::eval ( Context & context ) {
         char * ref = subexpr->evalPtr(context);
         if ( context.stack.bottom()<=ref && ref<context.stack.sp()) {
-            context.throw_error("reference bellow current function stack frame");
+            context.throw_error_at(debugInfo,"reference bellow current function stack frame");
             return v_zero();
         }
 #if DAS_ENABLE_STACK_WALK
         auto pp = (Prologue *) context.stack.sp();
         auto top = context.stack.sp() + pp->info->stackSize;
         if ( context.stack.sp()<=ref && ref<top ) {
-            context.throw_error("reference to current function stack frame");
+            context.throw_error_at(debugInfo,"reference to current function stack frame");
             return v_zero();
         }
 #endif
@@ -305,7 +305,7 @@ namespace das
     vec4f SimNode_ReturnReferenceFromBlock::eval ( Context & context ) {
         char * ref = subexpr->evalPtr(context);
         if ( context.stack.bottom()<=ref && ref<context.stack.ap() ) {
-            context.throw_error("reference bellow current call chain stack frame");
+            context.throw_error_at(debugInfo,"reference bellow current call chain stack frame");
             return v_zero();
         }
         context.abiResult() = cast<char *>::from(ref);
@@ -351,7 +351,7 @@ namespace das
     void Context::runInitScript ( void ) {
         char * EP, *SP;
         if(!stack.push(globalInitStackSize,EP,SP)) {
-            throw_error("stack overflow");
+            throw_error("stack overflow in the initialization script");
             return;
         }
         for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
@@ -432,6 +432,28 @@ namespace das
 			fprintf(stderr, "%s", message);
 			fflush(stderr);
 		}
+    }
+
+    void Context::throw_error_at ( const LineInfo & at, const char * message, ... ) {
+        const int PRINT_BUFFER_SIZE = 1024;
+        char buffer[PRINT_BUFFER_SIZE];
+        va_list args;
+        va_start (args, message);
+        vsnprintf (buffer,PRINT_BUFFER_SIZE,message, args);
+        va_end (args);
+        lastError = at.describe() + ": " + buffer;
+        throw_error(lastError.c_str());
+    }
+
+    void Context::throw_error_ex ( const char * message, ... ) {
+        const int PRINT_BUFFER_SIZE = 1024;
+        char buffer[PRINT_BUFFER_SIZE];
+        va_list args;
+        va_start (args, message);
+        vsnprintf (buffer,PRINT_BUFFER_SIZE,message, args);
+        va_end (args);
+        lastError = buffer;
+        throw_error(lastError.c_str());
     }
 
     void Context::throw_error ( const char * message ) {
@@ -535,17 +557,4 @@ namespace das
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-
-    void Context::fakeCall ( FuncInfo * info, int line, vec4f * args, char * & EP, char * & SP ) {
-#if DAS_ENABLE_STACK_WALK
-        if (!stack.push(sizeof(Prologue), EP, SP)) {
-            throw_error("stack overflow");
-            return;
-        }
-        Prologue * pp = (Prologue *) stack.sp();
-        pp->arguments =           args;
-        pp->info =                info;
-        pp->line =                line;
-#endif
-    }
 }

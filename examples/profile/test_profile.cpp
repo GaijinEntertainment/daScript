@@ -310,7 +310,7 @@ void verifyEsComponents() {
 
 void testEsUpdate ( char * pass, Context * ctx ) {
     if ( !EsGroupData::THAT ) {
-        ctx->throw_error("missing pass data");
+        ctx->throw_error_ex("missing pass data for the pass %s", pass);
         return;
     }
     for ( auto & tab : EsGroupData::THAT->g_esPassTable ) {
