@@ -24,7 +24,8 @@ namespace  das {
                     copyOnReturn = false;
                     moveOnReturn = true;
                 } else {
-                    assert(0 && "we should not even be here");
+                    DAS_FATAL_LOG("BuiltInFn %s can't be bound. It returns values which can't be copied or moved\n", fn.c_str());
+                    DAS_FATAL_ERROR;
                 }
             }
         }
@@ -96,12 +97,8 @@ namespace  das {
     void addFunctionNumeric(Module & mod, const ModuleLibrary & lib) {
         addFunctionGroupByAdd<TT>(mod,lib);
         //                                     policy           ret   arg1 arg2    name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Unp<TT>,     TT,   TT>       >("+",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Unm<TT>,     TT,   TT>       >("-",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Sub<TT>,     TT,   TT,  TT>  >("-",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Mul<TT>,     TT,   TT,  TT>  >("*",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Div<TT>,     TT,   TT,  TT>  >("/",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetSub<TT>,  void, TT&, TT>  >("-=",     lib)->setSideEffects(SideEffects::modifyArgument) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetMul<TT>,  void, TT&, TT>  >("*=",     lib)->setSideEffects(SideEffects::modifyArgument) );
         mod.addFunction( make_shared<BuiltInFn<Sim_SetDiv<TT>,  void, TT&, TT>  >("/=",     lib)->setSideEffects(SideEffects::modifyArgument) );
     }
@@ -122,8 +119,8 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_DivScalVec<TT>,  TT,   TTS, TT>  >("/",    lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_MulVecScal<TT>,  TT,   TT,  TTS> >("*",    lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_DivVecScal<TT>,  TT,   TT,  TTS> >("/",    lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<TT>,  void, TT&, TT>  >("*=",   lib)->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<TT>,  void, TT&, TT>  >("/=",   lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetMulScal<TT>,  void, TT&, TTS>  >("*=",   lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetDivScal<TT>,  void, TT&, TTS>  >("/=",   lib)->setSideEffects(SideEffects::modifyArgument) );
     }
 
     // inc-dec

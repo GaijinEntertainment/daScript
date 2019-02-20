@@ -1411,7 +1411,7 @@ namespace das
         bool addStructure ( const StructurePtr & st );
         bool removeStructure ( const StructurePtr & st );
         bool addEnumeration ( const EnumerationPtr & st );
-        bool addFunction ( const FunctionPtr & fn );
+        bool addFunction ( const FunctionPtr & fn, bool canFail = false );
         bool addGeneric ( const FunctionPtr & fn );
         bool addAnnotation ( const AnnotationPtr & ptr );
         TypeDeclPtr findAlias ( const string & name ) const;

@@ -1245,7 +1245,7 @@ namespace das {
     }
 
     bool Program::addFunction ( const FunctionPtr & fn ) {
-        return thisModule->addFunction(fn);
+        return thisModule->addFunction(fn, true);
     }
 
     bool Program::addGeneric ( const FunctionPtr & fn ) {

@@ -46,7 +46,9 @@ namespace das {
             mod.functionsByName.clear();
             for ( auto & fn : functions ) {
                 if ( fn.second->used ) {
-                    mod.addFunction(fn.second);
+                    if ( !mod.addFunction(fn.second, true) ) {
+                        program->error("internal error, failed to add function " + fn.first, fn.second->at );
+                    }
                 }
             }
             for ( auto & var : globals ) {
