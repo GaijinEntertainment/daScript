@@ -101,9 +101,12 @@ namespace das
         virtual void cr () {}
         virtual void op ( const char * /* name */ ) {}
         virtual void sp ( uint32_t /* stackTop */,  const char * /* op */ = "#sp" ) { }
+        virtual void arg ( int32_t /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( uint32_t /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( const char * /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( vec4f /* argV */,  const char * /* argN */  ) { }
+        virtual void arg ( uint64_t /* argV */,  const char * /* argN */  ) { }
+        virtual void arg ( bool /* argV */,  const char * /* argN */  ) { }
         virtual SimNode * sub ( SimNode * node, const char * /* opN */ = "subexpr" ) { return node->visit(*this); }
         virtual SimNode * visit ( SimNode * node ) { return node; }
     };
@@ -1382,7 +1385,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <bool move>
     struct SimNode_Ascend : SimNode {
         DAS_PTR_NODE;
-        SimNode_Ascend ( const LineInfo & at, SimNode * se, int32_t b )
+        SimNode_Ascend ( const LineInfo & at, SimNode * se, uint32_t b )
             : SimNode(at), subexpr(se), bytes(b) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
@@ -1399,13 +1402,13 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         }
         SimNode *   subexpr;
-        int32_t     bytes;
+        uint32_t    bytes;
     };
 
     template <int argCount>
     struct SimNode_NewWithInitializer : SimNode_CallBase {
         DAS_PTR_NODE;
-        SimNode_NewWithInitializer ( const LineInfo & at, int32_t b )
+        SimNode_NewWithInitializer ( const LineInfo & at, uint32_t b )
             : SimNode_CallBase(at), bytes(b) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
@@ -1419,7 +1422,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 return nullptr;
             }
         }
-        int32_t     bytes;
+        uint32_t     bytes;
     };
 
     struct SimNode_NewArray : SimNode {
@@ -1573,6 +1576,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_ClosureBlock : SimNode_Block {
         SimNode_ClosureBlock ( const LineInfo & at, bool nr, uint64_t ad )
             : SimNode_Block(at), needResult(nr), annotationData(ad) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         bool needResult = false;
         uint64_t annotationData = 0;
@@ -1582,6 +1586,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_PTR_NODE;
         SimNode_MakeLocal ( const LineInfo & at, uint32_t sp )
             : SimNode_Block(at), stackTop(sp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
                 list[i++]->eval(context);
@@ -1594,6 +1599,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // LET
     struct SimNode_Let : SimNode_Block {
         SimNode_Let ( const LineInfo & at ) : SimNode_Block(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         SimNode * subexpr = nullptr;
     };
@@ -1602,6 +1608,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_IfThenElse : SimNode {
         SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
@@ -1628,6 +1635,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_IfZeroThenElse : SimNode {
         SimNode_IfZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res == 0 ) {
@@ -1654,6 +1662,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_IfNotZeroThenElse : SimNode {
         SimNode_IfNotZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res != 0 ) {

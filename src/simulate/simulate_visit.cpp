@@ -335,5 +335,54 @@ namespace das {
         }
         V_END();
     }
+
+    SimNode * SimNode_ClosureBlock::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(Block);
+        for ( uint32_t i=0; i!=total; ++i ) {
+            list[i] = list[i]->visit(vis);
+        }
+        for ( uint32_t i=0; i!=totalFinal; ++i ) {
+            finalList[i] = finalList[i]->visit(vis);
+        }
+        V_ARG(needResult);
+        V_ARG(annotationData);
+        V_END();
+    }
+
+    SimNode * SimNode_MakeLocal::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(MakeLocal);
+        for ( uint32_t i=0; i!=total; ++i ) {
+            list[i] = list[i]->visit(vis);
+        }
+        for ( uint32_t i=0; i!=totalFinal; ++i ) {
+            finalList[i] = finalList[i]->visit(vis);
+        }
+        V_SP(stackTop);
+        V_END();
+    }
+
+    SimNode * SimNode_Let::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(Let);        for ( uint32_t i=0; i!=total; ++i ) {
+            list[i] = list[i]->visit(vis);
+        }
+        for ( uint32_t i=0; i!=totalFinal; ++i ) {
+            finalList[i] = finalList[i]->visit(vis);
+        }
+        V_SUB_OPT(subexpr);
+        V_END();
+    }
+
+    SimNode * SimNode_IfThenElse::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(IfThenElse);
+        V_SUB(cond);
+        V_SUB_OPT(if_true);
+        V_SUB_OPT(if_false);
+        V_END();
+    }
+
 }
 

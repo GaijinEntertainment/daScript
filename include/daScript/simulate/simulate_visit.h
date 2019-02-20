@@ -242,4 +242,24 @@ namespace das {
         V_SUB(r);
         V_END();
     }
+
+    template <typename TT>
+    SimNode * SimNode_IfZeroThenElse<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP_TT(IfZeroThenElse);
+        V_SUB(cond);
+        V_SUB_OPT(if_true);
+        V_SUB_OPT(if_false);
+        V_END();
+    }
+
+    template <typename TT>
+    SimNode * SimNode_IfNotZeroThenElse<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP_TT(IfNotZeroThenElse);
+        V_SUB(cond);
+        V_SUB_OPT(if_true);
+        V_SUB_OPT(if_false);
+        V_END();
+    }
 }
