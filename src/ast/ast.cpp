@@ -1225,7 +1225,7 @@ namespace das {
     }
 
     bool Program::addAlias ( const TypeDeclPtr & at ) {
-        return thisModule->addAlias(at);
+        return thisModule->addAlias(at, true);
     }
 
     bool Program::addVariable ( const VariablePtr & var ) {

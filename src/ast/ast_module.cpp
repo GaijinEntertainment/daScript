@@ -62,12 +62,16 @@ namespace das {
         }
     }
 
-    bool Module::addAlias ( const TypeDeclPtr & at ) {
+    bool Module::addAlias ( const TypeDeclPtr & at, bool canFail ) {
         if ( at->alias.empty() ) return false;
         if ( aliasTypes.insert(make_pair(at->alias, move(at))).second ) {
             at->module = this;
             return true;
         } else {
+            if ( !canFail ) {
+                DAS_FATAL_LOG("can't add duplicate alias %s to module %s\n",at->alias.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
             return false;
         }
     }
