@@ -190,5 +190,74 @@ namespace das {
         V_ARG(value);
         V_END();
     }
+
+    SimNode * SimNode_ReturnAndCopy::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnAndCopy);
+        V_SUB_OPT(subexpr);
+        V_ARG(size);
+        V_END();
+    }
+
+    SimNode * SimNode_ReturnAndMove::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnAndMove);
+        V_SUB_OPT(subexpr);
+        V_ARG(size);
+        V_END();
+    }
+
+    SimNode * SimNode_ReturnReference::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnReference);
+        V_SUB_OPT(subexpr);
+        V_END();
+    }
+
+    SimNode * SimNode_ReturnAndCopyFromBlock::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnAndCopyFromBlock);
+        V_SUB_OPT(subexpr);
+        V_ARG(size);
+        V_SP_EX(argStackTop);
+        V_END();
+    }
+
+    SimNode * SimNode_ReturnAndMoveFromBlock::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnAndMoveFromBlock);
+        V_SUB_OPT(subexpr);
+        V_ARG(size);
+        V_SP_EX(argStackTop);
+        V_END();
+    }
+
+    SimNode * SimNode_ReturnReferenceFromBlock::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnReferenceFromBlock);
+        V_SUB_OPT(subexpr);
+        V_END();
+    }
+
+    SimNode * SimNode_Break::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Break);
+        V_END();
+    }
+
+    SimNode * SimNode_Ptr2Ref::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Ptr2Ref);
+        V_SUB_OPT(subexpr);
+        V_END();
+    }
+
+    SimNode * SimNode_NullCoalescingRef::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(NullCoalescingRef);
+        V_SUB(subexpr);
+        V_SUB(value);
+        V_END();
+    }
 }
 

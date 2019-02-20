@@ -19,7 +19,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_FieldDerefR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(SimNode_FieldDerefR2V);
+        V_OP_TT(FieldDerefR2V);
         V_SUB(value);
         V_ARG(offset);
         V_END();
@@ -109,7 +109,7 @@ namespace das {
     template <typename CastTo, typename CastFrom>
     SimNode * SimNode_Cast<CastTo,CastFrom>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP(Cast); // TODO: type name?
+        V_OP(Cast); 
         V_CALL();
         V_END();
     }
@@ -187,6 +187,23 @@ namespace das {
         V_BEGIN();
         V_OP_TT(GetGlobalR2V);
         V_ARG(offset);
+        V_END();
+    }
+
+    template <typename TT>
+    SimNode * SimNode_Ref2Value<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(Ref2Value);
+        V_SUB(subexpr);
+        V_END();
+    }
+
+    template <typename TT>
+    SimNode * SimNode_NullCoalescing<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(NullCoalescing);
+        V_SUB(subexpr);
+        V_SUB(value);
         V_END();
     }
 }

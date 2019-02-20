@@ -1241,6 +1241,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_ReturnAndCopy : SimNode_Return {
         SimNode_ReturnAndCopy ( const LineInfo & at, SimNode * s, uint32_t sz )
             : SimNode_Return(at,s), size(sz) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         uint32_t size;
     };
@@ -1248,17 +1249,21 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_ReturnAndMove : SimNode_ReturnAndCopy {
         SimNode_ReturnAndMove ( const LineInfo & at, SimNode * s, uint32_t sz )
             : SimNode_ReturnAndCopy(at,s,sz) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
     };
 
     struct SimNode_ReturnReference : SimNode_Return {
-        SimNode_ReturnReference ( const LineInfo & at, SimNode * s ) : SimNode_Return(at,s) {}
+        SimNode_ReturnReference ( const LineInfo & at, SimNode * s )
+            : SimNode_Return(at,s) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
     };
 
     struct SimNode_ReturnAndCopyFromBlock : SimNode_ReturnAndCopy {
         SimNode_ReturnAndCopyFromBlock ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t asp )
             : SimNode_ReturnAndCopy(at,s,sz), argStackTop(asp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         uint32_t argStackTop;
     };
@@ -1266,17 +1271,21 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_ReturnAndMoveFromBlock : SimNode_ReturnAndCopyFromBlock {
         SimNode_ReturnAndMoveFromBlock ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t asp )
             : SimNode_ReturnAndCopyFromBlock(at,s,sz, asp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
     };
 
     struct SimNode_ReturnReferenceFromBlock : SimNode_Return {
-        SimNode_ReturnReferenceFromBlock ( const LineInfo & at, SimNode * s ) : SimNode_Return(at,s) {}
+        SimNode_ReturnReferenceFromBlock ( const LineInfo & at, SimNode * s )
+            : SimNode_Return(at,s) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
     };
 
     // BREAK
     struct SimNode_Break : SimNode {
         SimNode_Break ( const LineInfo & at ) : SimNode(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             context.stopFlags |= EvalFlags::stopForBreak;
             return v_zero();
@@ -1286,7 +1295,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     // DEREFERENCE
     template <typename TT>
     struct SimNode_Ref2Value : SimNode {      // &value -> value
-        SimNode_Ref2Value ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
+        SimNode_Ref2Value ( const LineInfo & at, SimNode * s )
+            : SimNode(at), subexpr(s) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *) subexpr->evalPtr(context);
             return cast<TT>::from(*pR);
@@ -1304,7 +1315,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     // POINTER TO REFERENCE (CAST)
     struct SimNode_Ptr2Ref : SimNode {      // ptr -> &value
         DAS_PTR_NODE;
-        SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
+        SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s )
+            : SimNode(at), subexpr(s) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             auto ptr = subexpr->evalPtr(context);
             if ( !ptr ) {
@@ -1318,7 +1331,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     // let(a:int?) x = a && 0
     template <typename TT>
     struct SimNode_NullCoalescing : SimNode_Ptr2Ref {
-        SimNode_NullCoalescing ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
+        SimNode_NullCoalescing ( const LineInfo & at, SimNode * s, SimNode * dv )
+            : SimNode_Ptr2Ref(at,s), value(dv) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *) subexpr->evalPtr(context);
             return pR ? cast<TT>::from(*pR) : value->eval(context);
@@ -1330,14 +1345,15 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
-
         SimNode * value;
     };
 
     // let(a:int?) x = a && default_a
     struct SimNode_NullCoalescingRef : SimNode_Ptr2Ref {
         DAS_PTR_NODE;
-        SimNode_NullCoalescingRef ( const LineInfo & at, SimNode * s, SimNode * dv ) : SimNode_Ptr2Ref(at,s), value(dv) {}
+        SimNode_NullCoalescingRef ( const LineInfo & at, SimNode * s, SimNode * dv )
+            : SimNode_Ptr2Ref(at,s), value(dv) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             auto ptr = subexpr->evalPtr(context);
             return ptr ? ptr : value->evalPtr(context);
