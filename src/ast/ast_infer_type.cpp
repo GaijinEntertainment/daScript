@@ -1130,7 +1130,8 @@ namespace das {
                     block->copyOnReturn = false;
                     block->moveOnReturn = true;
                 } else {
-                    assert(0 && "we should not be here");
+                    error("this type can't be returned at all " + block->returnType->describe(),
+                          block->at, CompilationError::invalid_return_type);
                 }
             } else {
                 block->copyOnReturn = false;

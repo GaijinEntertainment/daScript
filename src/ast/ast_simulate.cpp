@@ -20,14 +20,19 @@ namespace das
         if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            assert(0 && "we should not be here");
+            assert(0 && "we are calling makeLocalMove where expression on a right is not a referece."
+                        "we should not be here, script compiler should have caught this during compilation."
+                        "compiler later will likely report internal compilation error.");
             return nullptr;
         }
     }
 
     SimNode * makeLocalCopy(const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
-        assert ( rightType.canCopy() && "should check above" );
+        assert ( rightType.canCopy() &&
+                "we are calling makeLocalCopy on a type, which can't be copied."
+                "we should not be here, script compiler should have caught this during compilation."
+                "compiler later will likely report internal compilation error.");
         // TODO:
         //  expand to (while managing combinatorics explosion, policy?)
         //      1. local ref variables (iterator results etc)
@@ -76,7 +81,10 @@ namespace das
 
     SimNode * makeCopy(const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
-        assert ( rightType.canCopy() && "should check above" );
+        assert ( rightType.canCopy() &&
+                "we are calling makeCopy on a type, which can't be copied."
+                "we should not be here, script compiler should have caught this during compilation."
+                "compiler later will likely report internal compilation error.");
         // TODO:
         //  expand to (while managing combinatorics explosion, policy?)
         //      1. local ref variables (iterator results etc)
@@ -129,7 +137,9 @@ namespace das
         if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            assert(0 && "we should not be here");
+            assert(0 && "we are calling makeMove where expression on a right is not a referece."
+                   "we should not be here, script compiler should have caught this during compilation."
+                   "compiler later will likely report internal compilation error.");
             return nullptr;
         }
     }
@@ -172,6 +182,9 @@ namespace das
                     cpy = makeLocalMove(at,context,fieldStackTop,decl->value);
                 } else {
                     cpy = makeLocalCopy(at,context,fieldStackTop,decl->value);
+                }
+                if ( !cpy ) {
+                    context.thisProgram->error("internal compilation error, can't generate structure initialization", at);
                 }
                 simlist.push_back(cpy);
             }
@@ -704,15 +717,23 @@ namespace das
     }
 
     SimNode * ExprMove::simulate (Context & context) const {
-        return makeMove(at,
+        auto retN = makeMove(at,
                         context,
                         *right->type,
                         left->simulate(context),
                         right->simulate(context));
+        if ( !retN ) {
+            context.thisProgram->error("internal compilation error, can't generate move", at);
+        }
+        return retN;
     }
 
     SimNode * ExprCopy::simulate (Context & context) const {
-        return makeCopy(at, context, left, right);
+        auto retN = makeCopy(at, context, left, right);
+        if ( !retN ) {
+            context.thisProgram->error("internal compilation error, can't generate copy", at);
+        }
+        return retN;
     }
 
     SimNode * ExprTryCatch::simulate (Context & context) const {
@@ -947,12 +968,19 @@ namespace das
             varExpr->variable = var;
             varExpr->local = local;
             varExpr->type = make_shared<TypeDecl>(*var->type);
-            return makeCopy(var->init->at, context, varExpr, var->init);
-        }
-        else if ( var->type->canMove() )
-            return makeMove(var->init->at, context, *var->init->type, get, init);
-        else {
-            assert(0 && "we should not be here");
+            auto retN = makeCopy(var->init->at, context, varExpr, var->init);
+            if ( !retN ) {
+                context.thisProgram->error("internal compilation error, can't generate copy", var->at);
+            }
+            return retN;
+        } else if ( var->type->canMove() ) {
+            auto retN = makeMove(var->init->at, context, *var->init->type, get, init);
+            if ( !retN ) {
+                context.thisProgram->error("internal compilation error, can't generate move", var->at);
+            }
+            return retN;
+        } else {
+            context.thisProgram->error("internal compilation error, initializing variable which can't be copied or moved", var->at);
             return nullptr;
         }
     }

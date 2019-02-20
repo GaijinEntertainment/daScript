@@ -112,7 +112,11 @@ namespace das
         };
         template <typename FunT, FunT PROP>
         void addProperty ( const string & na ) {
-            auto & field = fields[na]; assert(!field.decl && "field already exist");
+            auto & field = fields[na];
+            if ( field.decl ) {
+                DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
             using resultType = decltype((((ManagedType *)0)->*PROP)());
             field.decl = makeType<resultType>(*mlib);
             field.offset = -1U;
@@ -123,14 +127,20 @@ namespace das
                     case FactoryNodeType::safeGetField:
                     case FactoryNodeType::safeGetFieldPtr:
                     case FactoryNodeType::getFieldR2V:
-                        assert(0 && "we should not be here");
+                        assert(0 && "property requested property type, which is meaningless for the non-ref"
+                                    "we should not be here, since property can't have ref type"
+                                    "daScript compiler will later report missing node error");
                     default:
                         return nullptr;
                 }
             };
         }
         void addFieldEx ( const string & na, off_t offset, TypeDeclPtr pT ) {
-            auto & field = fields[na]; assert(!field.decl && "field already exist");
+            auto & field = fields[na];
+            if ( field.decl ) {
+                DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
             field.decl = pT;
             field.offset = offset;
             auto baseType = field.decl->baseType;
