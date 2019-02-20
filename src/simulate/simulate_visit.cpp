@@ -123,5 +123,72 @@ namespace das {
         V_SP(stackTop);
         V_END();
     }
+
+    SimNode * SimNode_InitLocal::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(InitLocal);
+        V_SP(stackTop);
+        V_ARG(size);
+        V_END();
+    }
+
+    SimNode * SimNode_GetArgument::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetArgument);
+        V_ARG(index);
+        V_END();
+    }
+
+    SimNode * SimNode_GetArgumentRef::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetArgumentRef);
+        V_ARG(index);
+        V_END();
+    }
+
+    SimNode * SimNode_GetBlockArgument::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetBlockArgument);
+        V_SP(stackTop);
+        V_ARG(index);
+        V_END();
+    }
+
+    SimNode * SimNode_GetBlockArgumentRef::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetBlockArgumentRef);
+        V_SP(stackTop);
+        V_ARG(index);
+        V_END();
+    }
+
+    SimNode * SimNode_GetGlobal::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetGlobal);
+        V_ARG(offset);
+        V_END();
+    }
+
+    SimNode * SimNode_TryCatch::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(TryCatch);
+        V_SUB(try_block);
+        V_SUB(catch_block);
+        V_END();
+    }
+
+    SimNode * SimNode_Return::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Return);
+        V_SUB_OPT(subexpr);
+        V_END();
+    }
+
+    SimNode * SimNode_ReturnConst::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnConst);
+        V_ARG(value);
+        V_END();
+    }
 }
 

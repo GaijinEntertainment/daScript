@@ -98,10 +98,12 @@ namespace das
 
     struct SimVisitor {
         virtual void preVisit ( SimNode * ) { }
+        virtual void cr () {}
         virtual void op ( const char * /* name */ ) {}
         virtual void sp ( uint32_t /* stackTop */,  const char * /* op */ = "#sp" ) { }
         virtual void arg ( uint32_t /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( const char * /* argV */,  const char * /* argN */  ) { }
+        virtual void arg ( vec4f /* argV */,  const char * /* argN */  ) { }
         virtual SimNode * sub ( SimNode * node, const char * /* opN */ = "subexpr" ) { return node->visit(*this); }
         virtual SimNode * visit ( SimNode * node ) { return node; }
     };
@@ -1077,7 +1079,9 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
     struct SimNode_InitLocal : SimNode {
-        SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz) : SimNode(at), stackTop(sp), size(sz) {}
+        SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz)
+            : SimNode(at), stackTop(sp), size(sz) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             memset(context.stack.sp() + stackTop, 0, size);
             return v_zero();
@@ -1087,7 +1091,9 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // ARGUMENT VARIABLE "GET"
     struct SimNode_GetArgument : SimNode {
-        SimNode_GetArgument ( const LineInfo & at, int32_t i ) : SimNode(at), index(i) {}
+        SimNode_GetArgument ( const LineInfo & at, int32_t i )
+            : SimNode(at), index(i) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             return context.abiArguments()[index];
         }
@@ -1102,7 +1108,9 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     struct SimNode_GetArgumentRef : SimNode_GetArgument {
         DAS_PTR_NODE;
-        SimNode_GetArgumentRef(const LineInfo & at, int32_t i) : SimNode_GetArgument(at,i) {}
+        SimNode_GetArgumentRef(const LineInfo & at, int32_t i)
+            : SimNode_GetArgument(at,i) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
             return (char *)(&context.abiArguments()[index]);
         }
@@ -1110,7 +1118,9 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <typename TT>
     struct SimNode_GetArgumentR2V : SimNode_GetArgument {
-        SimNode_GetArgumentR2V ( const LineInfo & at, int32_t i ) : SimNode_GetArgument(at,i) {}
+        SimNode_GetArgumentR2V ( const LineInfo & at, int32_t i )
+            : SimNode_GetArgument(at,i) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             TT * pR = cast<TT *>::to(context.abiArguments()[index]);
             return cast<TT>::from(*pR);
@@ -1127,6 +1137,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_GetBlockArgument : SimNode {
         SimNode_GetBlockArgument ( const LineInfo & at, int32_t i, uint32_t sp )
             : SimNode(at), index(i), stackTop(sp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
             return args[index];
@@ -1146,6 +1157,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_GetBlockArgumentR2V : SimNode_GetBlockArgument {
         SimNode_GetBlockArgumentR2V ( const LineInfo & at, int32_t i, uint32_t sp )
             : SimNode_GetBlockArgument(at,i,sp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
             TT * pR = (TT *) cast<char *>::to(args[index]);
@@ -1164,6 +1176,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_PTR_NODE;
         SimNode_GetBlockArgumentRef(const LineInfo & at, int32_t i, uint32_t sp)
             : SimNode_GetBlockArgument(at,i,sp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
             vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
             return (char *)(&args[index]);
@@ -1173,7 +1186,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode {
         DAS_PTR_NODE;
-        SimNode_GetGlobal ( const LineInfo & at, uint32_t o ) : SimNode(at), offset(o) {}
+        SimNode_GetGlobal ( const LineInfo & at, uint32_t o )
+            : SimNode(at), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
             return context.globals + offset;
         }
@@ -1182,7 +1197,9 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <typename TT>
     struct SimNode_GetGlobalR2V : SimNode_GetGlobal {
-        SimNode_GetGlobalR2V ( const LineInfo & at, uint32_t o ) : SimNode_GetGlobal(at,o) {}
+        SimNode_GetGlobalR2V ( const LineInfo & at, uint32_t o )
+            : SimNode_GetGlobal(at,o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *)(context.globals + offset);
             return cast<TT>::from(*pR);
@@ -1197,20 +1214,26 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // TRY-CATCH
     struct SimNode_TryCatch : SimNode {
-        SimNode_TryCatch ( const LineInfo & at, SimNode * t, SimNode * c ) : SimNode(at), try_block(t), catch_block(c) {}
+        SimNode_TryCatch ( const LineInfo & at, SimNode * t, SimNode * c )
+            : SimNode(at), try_block(t), catch_block(c) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         SimNode * try_block, * catch_block;
     };
 
     // RETURN
     struct SimNode_Return : SimNode {
-        SimNode_Return ( const LineInfo & at, SimNode * s ) : SimNode(at), subexpr(s) {}
+        SimNode_Return ( const LineInfo & at, SimNode * s )
+            : SimNode(at), subexpr(s) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         SimNode * subexpr;
     };
 
     struct SimNode_ReturnConst : SimNode {
-        SimNode_ReturnConst ( const LineInfo & at, vec4f v ) : SimNode(at), value(v) {}
+        SimNode_ReturnConst ( const LineInfo & at, vec4f v )
+            : SimNode(at), value(v) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         vec4f value;
     };
