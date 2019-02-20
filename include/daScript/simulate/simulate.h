@@ -118,7 +118,7 @@ namespace das
             stack.reset();
         }
 
-        __forceinline vec4f eval ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
+        __forceinline vec4f eval ( const SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
             return callWithCopyOnReturn(fnPtr, args, res, 0);
         }
 
@@ -155,7 +155,7 @@ namespace das
             return (char *) abiCMRES;
         }
 
-        __forceinline vec4f call(SimFunction * fn, vec4f * args, int line) {
+        __forceinline vec4f call(const SimFunction * fn, vec4f * args, int line) {
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
@@ -180,7 +180,7 @@ namespace das
             return result;
         }
 
-        __forceinline vec4f callWithCopyOnReturn(SimFunction * fn, vec4f * args, void * cmres, int line) {
+        __forceinline vec4f callWithCopyOnReturn(const SimFunction * fn, vec4f * args, void * cmres, int line) {
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
@@ -259,7 +259,7 @@ namespace das
 #endif
 
         template <typename Fn>
-        vec4f callEx(SimFunction * fn, vec4f *args, void * cmres, int line, Fn && when) {
+        vec4f callEx(const SimFunction * fn, vec4f *args, void * cmres, int line, Fn && when) {
             // PUSH
             char * EP, *SP;
             if(!stack.push(fn->stackSize,EP,SP)) {
