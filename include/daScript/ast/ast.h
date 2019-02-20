@@ -1410,7 +1410,7 @@ namespace das
         bool addVariable ( const VariablePtr & var, bool canFail = false );
         bool addStructure ( const StructurePtr & st, bool canFail = false );
         bool removeStructure ( const StructurePtr & st );
-        bool addEnumeration ( const EnumerationPtr & st );
+        bool addEnumeration ( const EnumerationPtr & st, bool canFail = false );
         bool addFunction ( const FunctionPtr & fn, bool canFail = false );
         bool addGeneric ( const FunctionPtr & fn, bool canFail = false );
         bool addAnnotation ( const AnnotationPtr & ptr, bool canFail = false );

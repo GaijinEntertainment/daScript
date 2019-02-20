@@ -102,11 +102,15 @@ namespace das {
         }
     }
 
-    bool Module::addEnumeration ( const EnumerationPtr & en ) {
+    bool Module::addEnumeration ( const EnumerationPtr & en, bool canFail ) {
         if ( enumerations.insert(make_pair(en->name, en)).second ) {
             en->module = this;
             return true;
         } else {
+            if ( !canFail ) {
+                DAS_FATAL_LOG("can't add duplicate enumeration %s to module %s\n", en->name.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
             return false;
         }
     }

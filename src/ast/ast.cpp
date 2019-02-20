@@ -1237,7 +1237,7 @@ namespace das {
     }
 
     bool Program::addEnumeration ( const EnumerationPtr & st ) {
-        return thisModule->addEnumeration(st);
+        return thisModule->addEnumeration(st, true);
     }
 
     FunctionPtr Program::findFunction(const string & mangledName) const {
