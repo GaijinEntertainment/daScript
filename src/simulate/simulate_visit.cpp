@@ -426,5 +426,20 @@ namespace das {
         V_SUB(r);
         V_END();
     }
+
+    SimNode * SimNode_CallBase::visitOp1 ( SimVisitor & vis, const char * op ) {
+        V_BEGIN();
+        vis.op(op);
+        V_SUB(arguments[0]);
+        V_END();
+    }
+
+    SimNode * SimNode_CallBase::visitOp2 ( SimVisitor & vis, const char * op ) {
+        V_BEGIN();
+        vis.op(op);
+        V_SUB(arguments[0]);
+        V_SUB(arguments[1]);
+        V_END();
+    }
 }
 
