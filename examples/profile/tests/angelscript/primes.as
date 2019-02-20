@@ -21,7 +21,13 @@ int main(int unused)
 {
     const int N = 14000;
     print("primes: ");
-    print(primes(N));
+    int ctime = GetSystemTime();
+    int p = primes(N);
+    int time = GetSystemTime()-ctime;
+    print(p);
+    print("\n");
+    print("time taken (msec): ");
+    print (time);
     print("\n");
     return 0;
 }

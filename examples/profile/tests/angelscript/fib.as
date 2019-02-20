@@ -23,9 +23,21 @@ int fibI(int n)
 int main(int unused)
 {
     print("fibR: ");
-    print(fibR(31));
+    int ctime = GetSystemTime();
+    int fr = fibR(31);
+    int time = GetSystemTime()-ctime;
+    print(fr);
+    print("\ntime taken (msec): ");
+    print (time);
+    print("\n");
+    
     print("\nfibI: ");
-    print(fibI(6511134));
+    ctime = GetSystemTime();
+    int fi = fibI(6511134);
+    time = GetSystemTime()-ctime;
+    print(fi);
+    print("\ntime taken (msec): ");
+    print (time);
     print("\n");
     return 0;
 }
