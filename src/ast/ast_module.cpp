@@ -89,11 +89,15 @@ namespace das {
         }
     }
 
-    bool Module::addVariable ( const VariablePtr & var ) {
+    bool Module::addVariable ( const VariablePtr & var, bool canFail ) {
         if ( globals.insert(make_pair(var->name, var)).second ) {
             var->module = this;
             return true;
         } else {
+            if ( !canFail ) {
+                DAS_FATAL_LOG("can't add duplicate variable %s to module %s\n", var->name.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
             return false;
         }
     }

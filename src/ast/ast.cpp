@@ -1229,7 +1229,7 @@ namespace das {
     }
 
     bool Program::addVariable ( const VariablePtr & var ) {
-        return thisModule->addVariable(var);
+        return thisModule->addVariable(var, true);
     }
 
     bool Program::addStructure ( const StructurePtr & st ) {

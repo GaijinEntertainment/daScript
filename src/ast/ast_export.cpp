@@ -53,7 +53,9 @@ namespace das {
             }
             for ( auto & var : globals ) {
                 if ( var.second->used ) {
-                    mod.addVariable(var.second);
+                    if ( !mod.addVariable(var.second, true) ) {
+                        program->error("internal error, failed to add variable " + var.first, var.second->at );
+                    }
                 }
             }
         }
