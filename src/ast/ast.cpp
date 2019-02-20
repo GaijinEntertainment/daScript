@@ -234,7 +234,10 @@ namespace das {
 
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
-            assert(0 && "unsupported expression");
+            assert(0 &&
+                   "its not ok to clone Expression as is."
+                   "if we are here, this means that ::clone function is not written correctly."
+                   "incorrect clone function can be found on the stack above this.");
             return nullptr;
         }
         expr->at = at;

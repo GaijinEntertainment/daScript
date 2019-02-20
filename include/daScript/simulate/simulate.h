@@ -104,8 +104,7 @@ namespace das
         ~Context();
 
         __forceinline void * getVariable ( int index ) const {
-            assert(index>=0 && index<totalVariables && "variable index out of range");
-            return globals + globalVariables[index].offset;
+            return (index>=0 && index<totalVariables) ? (globals + globalVariables[index].offset) : nullptr;
         }
 
         __forceinline void simEnd() {

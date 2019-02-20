@@ -612,6 +612,7 @@ namespace das {
                 func->copyOnReturn = false;
                 func->moveOnReturn = false;
             }
+            // if any of this asserts failed, there is logic error in how we pop
             assert(scopes.size()==0);
             assert(blocks.size()==0);
             assert(local.size()==0);
@@ -1901,7 +1902,7 @@ namespace das {
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
                     if ( arg->type->isAuto() && arg->type->isGoodBlockType() ) {
-                        assert ( arg->rtti_isMakeBlock() && "always MakeBlock" );
+                        assert ( arg->rtti_isMakeBlock() && "it's always MakeBlock. this is how we construct new [[ ]]" );
                         auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
                         auto retT = TypeDecl::inferAutoType(mkBlock->type, funcC->arguments[iF]->type);

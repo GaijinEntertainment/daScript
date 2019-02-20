@@ -58,7 +58,7 @@ namespace das {
                     return;
                 }
             }
-            assert(0 && "failed to unlink");
+            assert(0 && "failed to unlink. was builtIn field assigned after the fact?");
         }
     }
 
@@ -259,8 +259,10 @@ namespace das {
     }
 
     void ModuleLibrary::addModule ( Module * module ) {
-        assert(module && "module not found? or you have forgot to NEED_MODULE(Module_BuiltIn) be called first");
-        modules.push_back(module);
+        assert(module && "module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");
+        if ( module ) {
+            modules.push_back(module);
+        }
     }
 
     void ModuleLibrary::foreach ( function<bool (Module * module)> && func, const string & moduleName ) const {
@@ -332,7 +334,9 @@ namespace das {
         if ( structs.size()==1 ) {
             t->structType = structs.back();
         } else {
-            assert(0 && "can't make structure type");
+            DAS_FATAL_LOG("makeStructureType(%s) failed\n", name.c_str());
+            DAS_FATAL_ERROR;
+            return nullptr;
         }
         return t;
     }
@@ -344,11 +348,13 @@ namespace das {
             if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
                 t->annotation = static_pointer_cast<TypeAnnotation>(handles.back());
             } else {
-                assert(0 && "can't make handle type");
+                DAS_FATAL_LOG("makeHandleType(%s) failed, not a handle type\n", name.c_str());
+                DAS_FATAL_ERROR;
                 return nullptr;
             }
         } else {
-            assert(0 && "can't make handle type. You need to explicitly add annotation for it.");
+            DAS_FATAL_LOG("makeHandleType(%s) failed, missing annotation\n", name.c_str());
+            DAS_FATAL_ERROR;
             return nullptr;
         }
         return t;
@@ -360,7 +366,9 @@ namespace das {
         if ( enums.size()==1 ) {
             t->enumType = enums.back();
         } else {
-            assert(0 && "can't make enumeration type");
+            DAS_FATAL_LOG("makeEnumType(%s) failed\n", name.c_str());
+            DAS_FATAL_ERROR;
+            return nullptr;
         }
         return t;
     }

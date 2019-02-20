@@ -273,8 +273,9 @@ namespace das
                                                context.code->allocateString(message));
     }
 
-    SimNode * ExprMakeLambda::simulate (Context &) const {
-        assert(0 && "we should not be here ever");
+    SimNode * ExprMakeLambda::simulate (Context & context) const {
+        assert(0 && "we should not be here ever, ExprMakeLambda should completly fold during type inference.");
+        context.thisProgram->error("internal compilation error, generating node for ExprMakeLambda", at);
         return nullptr;
     }
 
@@ -327,7 +328,8 @@ namespace das
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
             return context.code->makeValueNode<SimNode_TableErase>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
         } else {
-            assert(0 && "we should not even be here");
+            assert(0 && "we should not even be here. erase can only accept tables. infer type should have failed.");
+            context.thisProgram->error("internal compilation error, generating erase for non-table type", at);
             return nullptr;
         }
     }
@@ -339,7 +341,8 @@ namespace das
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
             return context.code->makeValueNode<SimNode_TableFind>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
         } else {
-            assert(0 && "we should not even be here");
+            assert(0 && "we should not even be here. find can only accept tables. infer type should have failed.");
+            context.thisProgram->error("internal compilation error, generating find for non-table type", at);
             return nullptr;
         }
     }
@@ -388,7 +391,8 @@ namespace das
             }
             return resN;
         } else {
-            assert(0 && "we should not be here");
+            assert(0 && "we should not be here. this is delete for unsupported type. infer types should have failed.");
+            context.thisProgram->error("internal compilation error, generating node for unsupported ExprDelete", at);
             return nullptr;
         }
     }
@@ -441,7 +445,9 @@ namespace das
                     case tUInt:     return context.code->makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range);
                     case tFloat:    return context.code->makeNode<SimNode_AtVector<float>>(at, prv, pidx, range);
                     default:
-                        assert(0 && "we should not even be here");
+                        assert(0 && "we should not even be here. infer type should have failed on unsupported_vector[blah]");
+                        context.thisProgram->error("internal compilation error, generating vector at for unsupported vector type.", at);
+                        return nullptr;
                 }
             }
         } else if ( subexpr->type->isGoodTableType() ) {
@@ -895,7 +901,8 @@ namespace das
                         sources[t]->type->dim.back(),
                         sources[t]->type->getStride());
                 } else {
-                    assert(0 && "we should not be here yet");
+                    assert(0 && "we should not be here. we are doing iterator for on an unsupported type.");
+                    context.thisProgram->error("internal compilation error, generating for-with-iterator", at);
                     return nullptr;
                 }
                 result->stackTop[t] = iteratorVariables[t]->stackTop;
@@ -919,7 +926,8 @@ namespace das
                     result = context.code->makeNode<SimNode_ForRange>(at);
                 }
             } else {
-                assert(0 && "we should not be here yet");
+                assert(0 && "we should not be here yet. logic above assumes optimized for path of some kind.");
+                context.thisProgram->error("internal compilation error, generating for", at);
                 return nullptr;
             }
             for ( int t=0; t!=total; ++t ) {

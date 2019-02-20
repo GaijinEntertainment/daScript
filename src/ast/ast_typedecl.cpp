@@ -517,7 +517,9 @@ namespace das
             case tFloat4:
                 return 4;
             default:
-                assert(0 && "we should not even be here");
+                assert(0 &&
+                        "we should not even be here. we are calling getVectorDim on an unsupported baseType."
+                        "likely new vector type been added.");
                 return 0;
         }
     }
@@ -536,7 +538,9 @@ namespace das
             case tRange:    return Type::tInt;
             case tURange:   return Type::tUInt;
             default:
-                assert(0 && "we should not even be here");
+                assert(0 &&
+                       "we should not even be here. we are calling getVectorBaseType on an unsuppored baseType."
+                       "likely new vector type been added.");
                 return Type::none;
         }
     }
@@ -548,24 +552,31 @@ namespace das
                 case 2:     return Type::tFloat2;
                 case 3:     return Type::tFloat3;
                 case 4:     return Type::tFloat4;
-                default:    assert(0 && "we should not be here"); return Type::none;
+                default:    assert(0 && "we should not be herewe are calling getVectorType on an unsuppored baseType."
+                                   "likely new vector type been added.");
+                            return Type::none;
             }
         } else if ( bt==Type::tInt ) {
             switch ( dim ) {
                 case 2:     return Type::tInt2;
                 case 3:     return Type::tInt3;
                 case 4:     return Type::tInt4;
-                default:    assert(0 && "we should not be here"); return Type::none;
+                default:    assert(0 && "we should not be here. we are calling getVectorType on an unsuppored baseType."
+                                   "likely new vector type been added.");
+                    return Type::none;
             }
         } else if ( bt==Type::tUInt ) {
             switch ( dim ) {
                 case 2:     return Type::tUInt2;
                 case 3:     return Type::tUInt3;
                 case 4:     return Type::tUInt4;
-                default:    assert(0 && "we should not be here"); return Type::none;
+                default:    assert(0 && "we should not be here. we are calling getVectorType on an unsuppored baseType."
+                                   "likely new vector type been added.");
+                    return Type::none;
             }
         } else {
-            assert(0 && "we should not be here");
+            assert(0 && "we should not be here. we are calling getVectorType on an unsuppored baseType."
+                   "likely new vector type been added.");
             return Type::none;
         }
     }
@@ -796,7 +807,8 @@ namespace das
             case Type::tRange:  return Type::tInt;
             case Type::tURange: return Type::tUInt;
             default:
-                assert(0 && "we should not even be here");
+                assert(0 && "we should not even be here. we are calling getRangeBaseType on an unsuppored baseType."
+                       "likely new range type been added.");
                 return Type::none;
         }
     }
