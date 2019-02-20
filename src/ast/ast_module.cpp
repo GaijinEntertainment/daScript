@@ -141,14 +141,17 @@ namespace das {
         }
     }
 
-    bool Module::addGeneric ( const FunctionPtr & fn ) {
+    bool Module::addGeneric ( const FunctionPtr & fn, bool canFail ) {
         auto mangledName = fn->getMangledName();
         if ( generics.insert(make_pair(mangledName, fn)).second ) {
             genericsByName[fn->name].push_back(fn);
             fn->module = this;
             return true;
         } else {
-            // assert(0 && "can't add function");
+            if ( !canFail ) {
+                DAS_FATAL_LOG("can't add duplicate generic function %s to module %s\n", mangledName.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
             return false;
         }
     }

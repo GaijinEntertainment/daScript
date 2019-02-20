@@ -1249,7 +1249,7 @@ namespace das {
     }
 
     bool Program::addGeneric ( const FunctionPtr & fn ) {
-        return thisModule->addGeneric(fn);
+        return thisModule->addGeneric(fn, true);
     }
 
     bool Program::addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg ) {
