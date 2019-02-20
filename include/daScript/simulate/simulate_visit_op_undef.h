@@ -1,6 +1,5 @@
 #undef V_BEGIN
 #undef V_BEGIN_CR
-#undef V_LF
 #undef V_END
 #undef V_OP
 #undef V_OP_TT

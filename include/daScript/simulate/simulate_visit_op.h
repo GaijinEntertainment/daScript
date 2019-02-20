@@ -2,7 +2,6 @@
 
 #define V_BEGIN()       vis.preVisit(this);
 #define V_BEGIN_CR()    vis.preVisit(this); vis.cr();
-#define V_LF()          vis.lf();
 #define V_END()         return vis.visit(this);
 #define V_OP(x)         vis.op(#x);
 #define V_OP_TT(x)      vis.op(#x "_TT");

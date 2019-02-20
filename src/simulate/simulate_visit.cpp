@@ -7,6 +7,12 @@
 
 namespace das {
 
+    void SimVisitor::sub ( SimNode ** nodes, uint32_t count, const char * ) {
+        for ( uint32_t t=0; t!=count; ++t ) {
+            nodes[t] = nodes[t]->visit(*this);
+        }
+    }
+
     void SimNode_CallBase::visitCall ( SimVisitor & vis ) {
         vis.arg(fnPtr->name,"fnPtr");
         V_SP(stackTop);
@@ -316,9 +322,7 @@ namespace das {
     }
 
     void SimNode_Final::visitFinal ( SimVisitor & vis ) {
-        for ( uint32_t i=0; i!=totalFinal; ++i ) {
-            finalList[i] = finalList[i]->visit(vis);
-        }
+        vis.sub(finalList, totalFinal, "final");
     }
 
     SimNode * SimNode_Final::visit ( SimVisitor & vis ) {
@@ -329,16 +333,13 @@ namespace das {
     }
 
     void SimNode_Block::visitBlock ( SimVisitor & vis ) {
-        for ( uint32_t i=0; i!=total; ++i ) {
-            list[i] = list[i]->visit(vis);
-        }
+        vis.sub(list, total, "block");
     }
 
     SimNode * SimNode_Block::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(Block);
         V_BLOCK();
-        V_LF();
         V_FINAL();
         V_END();
     }
@@ -347,7 +348,6 @@ namespace das {
         V_BEGIN_CR();
         V_OP(Block);
         V_BLOCK();
-        V_LF();
         V_FINAL();
         V_ARG(needResult);
         V_ARG(annotationData);
@@ -357,8 +357,6 @@ namespace das {
     SimNode * SimNode_MakeLocal::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(MakeLocal);
-        V_BLOCK();
-        V_LF();
         V_FINAL();
         V_SP(stackTop);
         V_END();
@@ -368,7 +366,6 @@ namespace das {
         V_BEGIN_CR();
         V_OP(Let);
         V_BLOCK();
-        V_LF();
         V_FINAL();
         V_SUB_OPT(subexpr);
         V_END();
@@ -397,6 +394,36 @@ namespace das {
         V_SUB(cond);
         V_SUB(body);
         V_FINAL();
+        V_END();
+    }
+
+    SimNode * SimNode_ForWithIteratorBase::visitFor ( SimVisitor & vis, int total ) {
+        char nbuf[32];
+        V_BEGIN_CR();
+        snprintf(nbuf, sizeof(nbuf), "ForWithIterator_%i", total );
+        vis.op(nbuf);
+        for ( int t=0; t!=total; ++t ) {
+            snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t );
+            vis.sp(stackTop[t],nbuf);
+            vis.sub(source_iterators[t]);
+        }
+        V_SUB(body);
+        V_FINAL();
+        V_END();
+    }
+
+    SimNode * SimNode_Op1::visitOp1 ( SimVisitor & vis, const char * op ) {
+        V_BEGIN();
+        vis.op(op);
+        V_SUB(x);
+        V_END();
+    }
+
+    SimNode * SimNode_Op2::visitOp2 ( SimVisitor & vis, const char * op ) {
+        V_BEGIN();
+        vis.op(op);
+        V_SUB(l);
+        V_SUB(r);
         V_END();
     }
 }

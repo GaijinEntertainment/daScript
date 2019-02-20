@@ -99,7 +99,6 @@ namespace das
     struct SimVisitor {
         virtual void preVisit ( SimNode * ) { }
         virtual void cr () {}
-        virtual void lf () {}
         virtual void op ( const char * /* name */ ) {}
         virtual void sp ( uint32_t /* stackTop */,  const char * /* op */ = "#sp" ) { }
         virtual void arg ( int32_t /* argV */,  const char * /* argN */  ) { }
@@ -108,6 +107,7 @@ namespace das
         virtual void arg ( vec4f /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( uint64_t /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( bool /* argV */,  const char * /* argN */  ) { }
+        virtual void sub ( SimNode ** nodes, uint32_t count, const char * );
         virtual SimNode * sub ( SimNode * node, const char * /* opN */ = "subexpr" ) { return node->visit(*this); }
         virtual SimNode * visit ( SimNode * node ) { return node; }
     };
@@ -1845,7 +1845,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     struct SimNode_ForWithIteratorBase : SimNode_Final {
-        SimNode_ForWithIteratorBase ( const LineInfo & at ) : SimNode_Final(at) {}
+        SimNode_ForWithIteratorBase ( const LineInfo & at )
+            : SimNode_Final(at) {}
+        SimNode * visitFor ( SimVisitor & vis, int total );
         SimNode *   source_iterators[MAX_FOR_ITERATORS];
         SimNode *   body;
         uint32_t    stackTop[MAX_FOR_ITERATORS];
@@ -1853,7 +1855,11 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <int total>
     struct SimNode_ForWithIterator : SimNode_ForWithIteratorBase {
-        SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
+        SimNode_ForWithIterator ( const LineInfo & at )
+            : SimNode_ForWithIteratorBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitFor(vis, total);
+        }
         virtual vec4f eval ( Context & context ) override {
             vec4f * pi[total];
             for ( int t=0; t!=total; ++t ) {
@@ -1894,7 +1900,14 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <>
     struct SimNode_ForWithIterator<0> : SimNode_ForWithIteratorBase {
-        SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
+        SimNode_ForWithIterator ( const LineInfo & at )
+            : SimNode_ForWithIteratorBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN_CR();
+            V_OP(ForWithIterator_0);
+            V_FINAL();
+            V_END();
+        }
         virtual vec4f eval ( Context & context ) override {
             evalFinal(context);
             return v_zero();
@@ -1903,7 +1916,11 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <>
     struct SimNode_ForWithIterator<1> : SimNode_ForWithIteratorBase {
-        SimNode_ForWithIterator ( const LineInfo & at ) : SimNode_ForWithIteratorBase(at) {}
+        SimNode_ForWithIterator ( const LineInfo & at )
+            : SimNode_ForWithIteratorBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitFor(vis, 1);
+        }
         virtual vec4f eval ( Context & context ) override {
             vec4f * pi = (vec4f *)(context.stack.sp() + stackTop[0]);
             Iterator * sources;
@@ -1930,11 +1947,13 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     struct SimNode_Op1 : SimNode {
         SimNode_Op1 ( const LineInfo & at ) : SimNode(at) {}
+        SimNode * visitOp1 ( SimVisitor & vis, const char * op );
         SimNode * x = nullptr;
     };
 
     struct SimNode_Op2 : SimNode {
         SimNode_Op2 ( const LineInfo & at ) : SimNode(at) {}
+        SimNode * visitOp2 ( SimVisitor & vis, const char * op );
         SimNode * l = nullptr;
         SimNode * r = nullptr;
     };
@@ -1942,6 +1961,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct Sim_BoolAnd : SimNode_Op2 {
         DAS_BOOL_NODE;
         Sim_BoolAnd ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitOp2(vis, "BoolAnd");
+        }
         __forceinline bool compute ( Context & context ) {
             if ( !l->evalBool(context) ) {      // if not left, then false
                 return false;
@@ -1954,6 +1976,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct Sim_BoolOr : SimNode_Op2 {
         DAS_BOOL_NODE;
         Sim_BoolOr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitOp2(vis, "BoolOr");
+        }
         __forceinline bool compute ( Context & context )  {
             if ( l->evalBool(context) ) {       // if left, then true
                 return true;
@@ -1970,6 +1995,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
         DAS_NODE(TYPE,CTYPE);                                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op1(at) {}         \
+        virtual SimNode * visit ( SimVisitor & vis ) override {         \
+            return visitOp1(vis, #CALL);                                \
+        }                                                               \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto val = x->eval##TYPE(context);                          \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
