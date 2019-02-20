@@ -99,6 +99,7 @@ namespace das
     struct SimVisitor {
         virtual void preVisit ( SimNode * ) { }
         virtual void cr () {}
+        virtual void lf () {}
         virtual void op ( const char * /* name */ ) {}
         virtual void sp ( uint32_t /* stackTop */,  const char * /* op */ = "#sp" ) { }
         virtual void arg ( int32_t /* argV */,  const char * /* argN */  ) { }
@@ -1549,6 +1550,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     struct SimNode_Final : SimNode {
         SimNode_Final ( const LineInfo & a ) : SimNode(a) {}
+        void visitFinal ( SimVisitor & vis );
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline void evalFinal ( Context & context ) {
             if ( totalFinal ) {
@@ -1567,6 +1569,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // BLOCK
     struct SimNode_Block : SimNode_Final {
         SimNode_Block ( const LineInfo & at ) : SimNode_Final(at) {}
+        void visitBlock ( SimVisitor & vis );
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         SimNode ** list = nullptr;
@@ -1689,6 +1692,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_IfThen : SimNode {
         SimNode_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
             : SimNode(at), cond(c), if_true(t) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
@@ -1704,6 +1708,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_IfZeroThen : SimNode {
         SimNode_IfZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
             : SimNode(at), cond(c), if_true(t) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res==0 ) {
@@ -1718,7 +1723,8 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <typename TT>
     struct SimNode_IfNotZeroThen : SimNode {
         SimNode_IfNotZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
-        : SimNode(at), cond(c), if_true(t) {}
+            : SimNode(at), cond(c), if_true(t) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res != 0 ) {
@@ -1733,14 +1739,18 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // WHILE
     struct SimNode_While : SimNode_Final {
-        SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b ) : SimNode_Final(at), cond(c), body(b) {}
+        SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b )
+            : SimNode_Final(at), cond(c), body(b) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         SimNode * cond, * body;
     };
 
-       template <typename OT, typename Fun, Fun PROP, bool SAFE, typename CTYPE>
+    template <typename OT, typename Fun, Fun PROP, bool SAFE, typename CTYPE>
     struct SimNode_PropertyImpl : SimNode {
-        SimNode_PropertyImpl(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        SimNode_PropertyImpl(const LineInfo & a, SimNode * se)
+            : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             auto pv = (OT *) subexpr->evalPtr(context);
             if ( !pv ) {
@@ -1760,6 +1770,12 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_PropertyImpl<OT,Fun,PROP,SAFE,CTYPE> : SimNode { \
         DAS_NODE(TYPE,CTYPE); \
         SimNode_PropertyImpl(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {} \
+        virtual SimNode * visit ( SimVisitor & vis ) override { \
+            V_BEGIN(); \
+            V_OP("PropertyImpl_" #TYPE); \
+            V_SUB_OPT(subexpr); \
+            V_END(); \
+        } \
         __forceinline CTYPE compute(Context & context) { \
             auto pv = (OT *) subexpr->evalPtr(context); \
             if ( !pv ) { \

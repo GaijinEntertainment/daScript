@@ -2,6 +2,7 @@
 
 #define V_BEGIN()       vis.preVisit(this);
 #define V_BEGIN_CR()    vis.preVisit(this); vis.cr();
+#define V_LF()          vis.lf();
 #define V_END()         return vis.visit(this);
 #define V_OP(x)         vis.op(#x);
 #define V_OP_TT(x)      vis.op(#x "_TT");
@@ -11,6 +12,8 @@
 #define V_SUB(x)        x = vis.sub(x,#x);
 #define V_SUB_OPT(x)    x = x ? vis.sub(x,#x) : nullptr;
 #define V_CALL()        visitCall(vis);
+#define V_FINAL()       visitFinal(vis);
+#define V_BLOCK()       visitBlock(vis);
 
 
 

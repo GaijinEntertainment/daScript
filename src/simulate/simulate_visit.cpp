@@ -315,36 +315,40 @@ namespace das {
         V_END();
     }
 
-    SimNode * SimNode_Final::visit ( SimVisitor & vis ) {
-        V_BEGIN_CR();
-        V_OP(Final);
+    void SimNode_Final::visitFinal ( SimVisitor & vis ) {
         for ( uint32_t i=0; i!=totalFinal; ++i ) {
             finalList[i] = finalList[i]->visit(vis);
         }
+    }
+
+    SimNode * SimNode_Final::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(Final);
+        V_FINAL()
         V_END();
+    }
+
+    void SimNode_Block::visitBlock ( SimVisitor & vis ) {
+        for ( uint32_t i=0; i!=total; ++i ) {
+            list[i] = list[i]->visit(vis);
+        }
     }
 
     SimNode * SimNode_Block::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(Block);
-        for ( uint32_t i=0; i!=total; ++i ) {
-            list[i] = list[i]->visit(vis);
-        }
-        for ( uint32_t i=0; i!=totalFinal; ++i ) {
-            finalList[i] = finalList[i]->visit(vis);
-        }
+        V_BLOCK();
+        V_LF();
+        V_FINAL();
         V_END();
     }
 
     SimNode * SimNode_ClosureBlock::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(Block);
-        for ( uint32_t i=0; i!=total; ++i ) {
-            list[i] = list[i]->visit(vis);
-        }
-        for ( uint32_t i=0; i!=totalFinal; ++i ) {
-            finalList[i] = finalList[i]->visit(vis);
-        }
+        V_BLOCK();
+        V_LF();
+        V_FINAL();
         V_ARG(needResult);
         V_ARG(annotationData);
         V_END();
@@ -353,24 +357,19 @@ namespace das {
     SimNode * SimNode_MakeLocal::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(MakeLocal);
-        for ( uint32_t i=0; i!=total; ++i ) {
-            list[i] = list[i]->visit(vis);
-        }
-        for ( uint32_t i=0; i!=totalFinal; ++i ) {
-            finalList[i] = finalList[i]->visit(vis);
-        }
+        V_BLOCK();
+        V_LF();
+        V_FINAL();
         V_SP(stackTop);
         V_END();
     }
 
     SimNode * SimNode_Let::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
-        V_OP(Let);        for ( uint32_t i=0; i!=total; ++i ) {
-            list[i] = list[i]->visit(vis);
-        }
-        for ( uint32_t i=0; i!=totalFinal; ++i ) {
-            finalList[i] = finalList[i]->visit(vis);
-        }
+        V_OP(Let);
+        V_BLOCK();
+        V_LF();
+        V_FINAL();
         V_SUB_OPT(subexpr);
         V_END();
     }
@@ -379,10 +378,26 @@ namespace das {
         V_BEGIN_CR();
         V_OP(IfThenElse);
         V_SUB(cond);
-        V_SUB_OPT(if_true);
-        V_SUB_OPT(if_false);
+        V_SUB(if_true);
+        V_SUB(if_false);
         V_END();
     }
 
+    SimNode * SimNode_IfThen::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(IfThen);
+        V_SUB(cond);
+        V_SUB(if_true);
+        V_END();
+    }
+
+    SimNode * SimNode_While::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(While);
+        V_SUB(cond);
+        V_SUB(body);
+        V_FINAL();
+        V_END();
+    }
 }
 

@@ -248,8 +248,8 @@ namespace das {
         V_BEGIN_CR();
         V_OP_TT(IfZeroThenElse);
         V_SUB(cond);
-        V_SUB_OPT(if_true);
-        V_SUB_OPT(if_false);
+        V_SUB(if_true);
+        V_SUB(if_false);
         V_END();
     }
 
@@ -258,8 +258,35 @@ namespace das {
         V_BEGIN_CR();
         V_OP_TT(IfNotZeroThenElse);
         V_SUB(cond);
-        V_SUB_OPT(if_true);
-        V_SUB_OPT(if_false);
+        V_SUB(if_true);
+        V_SUB(if_false);
         V_END();
     }
+
+    template <typename TT>
+    SimNode * SimNode_IfZeroThen<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP_TT(IfZeroThen);
+        V_SUB(cond);
+        V_SUB(if_true);
+        V_END();
+    }
+
+    template <typename TT>
+    SimNode * SimNode_IfNotZeroThen<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP_TT(IfNotZeroThen);
+        V_SUB(cond);
+        V_SUB(if_true);
+        V_END();
+    }
+
+    template <typename OT, typename Fun, Fun PROP, bool SAFE, typename CTYPE>
+    SimNode *  SimNode_PropertyImpl<OT,Fun,PROP,SAFE,CTYPE>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP("PropertyImpl");
+        V_SUB_OPT(subexpr);
+        V_END();
+    }
+
 }
