@@ -23,6 +23,7 @@
 
 #ifdef _MSC_VER
 #include <intsafe.h>
+#include <stdarg.h>
 #endif
 
 #include <stdint.h>
