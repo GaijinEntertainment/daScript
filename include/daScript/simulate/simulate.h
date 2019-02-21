@@ -53,7 +53,7 @@ namespace das
     struct SimNode {
         SimNode ( const LineInfo & at ) : debugInfo(at) {}
         virtual vec4f eval ( Context & ) = 0;
-        virtual SimNode * visit ( SimVisitor & ) { return this; };
+        virtual SimNode * visit ( SimVisitor & vis );
         virtual char *      evalPtr ( Context & context );
         virtual bool        evalBool ( Context & context );
         virtual float       evalFloat ( Context & context );

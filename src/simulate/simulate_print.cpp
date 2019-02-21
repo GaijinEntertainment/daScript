@@ -8,6 +8,13 @@ namespace das {
     struct SimPrint : SimVisitor {
         SimPrint ( TextWriter & wr ) : ss(wr) {
         }
+        void crlf() {
+            if ( CR ) {
+                ss << "\n" << string(tab,'\t');
+            } else {
+                ss << " ";
+            }
+        }
         virtual void preVisit ( SimNode * node ) override {
             xcr.push_back(CR);
             CR = false;
@@ -31,31 +38,37 @@ namespace das {
         }
         virtual void sp ( uint32_t stackTop, const char * name ) override {
             SimVisitor::sp(stackTop,name);
-            ss << " #" << stackTop;
+            crlf();
+            ss << "#" << stackTop;
         }
         virtual void arg ( int32_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
-            ss << " " << argV;
+            crlf();
+            ss << argV;
         }
         virtual void arg ( uint32_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
-            ss << " " << argV;
+            crlf();
+            ss << argV;
         }
         virtual void arg ( const char * argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
+            crlf();
             if ( argV ) {
-                ss << " \"" << argV << "\"";
+                ss << "\"" << argV << "\"";
             } else {
-                ss << " null";
+                ss << "null";
             }
         }
         virtual void arg ( uint64_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
-            ss << " " << argV;
+            crlf();
+            ss << argV;
         }
         virtual void arg ( bool argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
-            ss << " " << (argV ? "true" : "false");
+            crlf();
+            ss << (argV ? "true" : "false");
         }
         virtual void arg ( vec4f argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
@@ -63,31 +76,25 @@ namespace das {
                 uint32_t    ui[4];
                 vec4f       v;
             } X; X.v = argV;
-            ss << " {" << X.ui[0] << "," << X.ui[1] << "," << X.ui[2] << "," << X.ui[3] << "}";
+            crlf();
+            ss << "{" << X.ui[0] << "," << X.ui[1] << "," << X.ui[2] << "," << X.ui[3] << "}";
         }
 
         virtual void sub ( SimNode ** nodes, uint32_t count, const char * ) override {
-            ss << "(";
+            if ( count==0 ) return;
+            crlf();
+            ss << "(\t";
+            tab ++;
             for ( uint32_t t = 0; t!=count; ++t ) {
-                tab ++;
-                if ( CR ) {
-                    ss << "\n" << string(tab,'\t');
-                } else {
-                    ss << " ";
-                }
+                if ( t ) crlf();
                 nodes[t] = nodes[t]->visit(*this);
-                tab --;
             }
+            tab --;
             ss << ")";
         }
-        virtual SimNode * sub ( SimNode * node, const char * opN  ) override {
-            if ( CR ) {
-                ss << "\n" << string(tab,'\t');
-            } else {
-                ss << " ";
-            }
-            SimNode * res = SimVisitor::sub(node,opN);
-            return res;
+        virtual SimNode * sub ( SimNode * node, const char *  ) override {
+            crlf();
+            return node->visit(*this);
         }
         TextWriter & ss;
         int tab = 0;

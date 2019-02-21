@@ -1,11 +1,18 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/runtime_range.h"
 
 // this has to be the last included file
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
+
+    SimNode * SimNode::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        vis.op("??");
+        V_END();
+    }
 
     void SimVisitor::sub ( SimNode ** nodes, uint32_t count, const char * ) {
         for ( uint32_t t=0; t!=count; ++t ) {
@@ -441,5 +448,33 @@ namespace das {
         V_SUB(arguments[1]);
         V_END();
     }
+
+    SimNode * SimNode_RangeIterator::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(RangeIterator);
+        V_SUB(subexpr);
+        V_END();
+    }
+
+    SimNode * SimNode_ForRange::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(ForRange);
+        V_SP(stackTop[0]);
+        V_SUB(sources[0]);
+        V_SUB(body);
+        V_FINAL();
+        V_END();
+    }
+
+    SimNode * SimNode_ForRangeNF::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(ForRangeNF);
+        V_SP(stackTop[0]);
+        V_SUB(sources[0]);
+        V_SUB(body);
+        V_FINAL();
+        V_END();
+    }
+
 }
 

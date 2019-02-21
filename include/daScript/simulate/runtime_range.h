@@ -14,18 +14,21 @@ namespace das
     struct SimNode_RangeIterator : SimNode, RangeIterator {
             SimNode_RangeIterator ( const LineInfo & at, SimNode * rng )
             : SimNode(at) { subexpr = rng; }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
     };
 
     struct SimNode_ForRange : SimNode_ForBase  {
         SimNode_ForRange ( const LineInfo & at )
             : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
     };
 
     struct SimNode_ForRangeNF : SimNode_ForBase  {
         SimNode_ForRangeNF ( const LineInfo & at )
             : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
     };
 }
