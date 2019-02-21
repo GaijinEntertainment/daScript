@@ -400,39 +400,39 @@ namespace das {
         V_BEGIN_CR();
         V_OP(While);
         V_SUB(cond);
-        V_SUB(body);
+        vis.sub(list,total,"list");
         V_FINAL();
         V_END();
     }
 
-    SimNode * SimNode_ForBase::visitFor ( SimVisitor & vis, int total, const char * loopName ) {
+    SimNode * SimNode_ForBase::visitFor ( SimVisitor & vis, int totalC, const char * loopName ) {
         char nbuf[32];
         V_BEGIN_CR();
         snprintf(nbuf, sizeof(nbuf), "%s_%i", loopName, total );
         vis.op(nbuf);
-        for ( int t=0; t!=total; ++t ) {
+        for ( int t=0; t!=totalC; ++t ) {
             snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t );
             vis.sp(stackTop[t],nbuf);
             snprintf(nbuf, sizeof(nbuf), "strides[%i]", t );
             vis.arg(strides[t],nbuf);
             vis.sub(sources[t]);
         }
-        V_SUB(body);
+        vis.sub(list,total,"list");
         V_FINAL();
         V_END();
     }
 
-    SimNode * SimNode_ForWithIteratorBase::visitFor ( SimVisitor & vis, int total ) {
+    SimNode * SimNode_ForWithIteratorBase::visitFor ( SimVisitor & vis, int totalC ) {
         char nbuf[32];
         V_BEGIN_CR();
         snprintf(nbuf, sizeof(nbuf), "ForWithIterator_%i", total );
         vis.op(nbuf);
-        for ( int t=0; t!=total; ++t ) {
+        for ( int t=0; t!=totalC; ++t ) {
             snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t );
             vis.sp(stackTop[t],nbuf);
             vis.sub(source_iterators[t]);
         }
-        V_SUB(body);
+        vis.sub(list,total,"list");
         V_FINAL();
         V_END();
     }
@@ -479,7 +479,7 @@ namespace das {
         V_OP(ForRange);
         V_SP(stackTop[0]);
         V_SUB(sources[0]);
-        V_SUB(body);
+        vis.sub(list,total,"list");
         V_FINAL();
         V_END();
     }
@@ -489,7 +489,7 @@ namespace das {
         V_OP(ForRangeNF);
         V_SP(stackTop[0]);
         V_SUB(sources[0]);
-        V_SUB(body);
+        vis.sub(list,total,"list");
         V_FINAL();
         V_END();
     }

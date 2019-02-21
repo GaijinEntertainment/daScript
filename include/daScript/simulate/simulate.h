@@ -1742,12 +1742,12 @@ SIM_NODE_AT_VECTOR(Float, float)
 
 
     // WHILE
-    struct SimNode_While : SimNode_Final {
-        SimNode_While ( const LineInfo & at, SimNode * c, SimNode * b )
-            : SimNode_Final(at), cond(c), body(b) {}
+    struct SimNode_While : SimNode_Block {
+        SimNode_While ( const LineInfo & at, SimNode * c )
+            : SimNode_Block(at), cond(c) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
-        SimNode * cond, * body;
+        SimNode * cond;
     };
 
     template <typename OT, typename Fun, Fun PROP, bool SAFE, typename CTYPE>
@@ -1839,26 +1839,24 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual void close ( Context & context, IteratorContext & itc ) = 0;    // can't throw
     };
 
-    struct SimNode_ForBase : SimNode_Final {
-        SimNode_ForBase ( const LineInfo & at ) : SimNode_Final(at) {}
+    struct SimNode_ForBase : SimNode_Block {
+        SimNode_ForBase ( const LineInfo & at ) : SimNode_Block(at) {}
         SimNode * visitFor ( SimVisitor & vis, int total, const char * loopName );
         SimNode *   sources [MAX_FOR_ITERATORS];
         uint32_t    strides [MAX_FOR_ITERATORS];
         uint32_t    stackTop[MAX_FOR_ITERATORS];
-        SimNode *   body;
         uint32_t    size;
     };
 
-    struct SimNode_ForWithIteratorBase : SimNode_Final {
+    struct SimNode_ForWithIteratorBase : SimNode_Block {
         SimNode_ForWithIteratorBase ( const LineInfo & at )
-            : SimNode_Final(at) {}
+            : SimNode_Block(at) {}
         SimNode * visitFor ( SimVisitor & vis, int total );
         SimNode *   source_iterators[MAX_FOR_ITERATORS];
-        SimNode *   body;
         uint32_t    stackTop[MAX_FOR_ITERATORS];
     };
 
-    template <int total>
+    template <int totalCount>
     struct SimNode_ForWithIterator : SimNode_ForWithIteratorBase {
         SimNode_ForWithIterator ( const LineInfo & at )
             : SimNode_ForWithIteratorBase(at) {}
@@ -1866,36 +1864,38 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitFor(vis, total);
         }
         virtual vec4f eval ( Context & context ) override {
-            vec4f * pi[total];
-            for ( int t=0; t!=total; ++t ) {
+            vec4f * pi[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
                 pi[t] = (vec4f *)(context.stack.sp() + stackTop[t]);
             }
-            Iterator * sources[total] = {};
-            for ( int t=0; t!=total; ++t ) {
+            Iterator * sources[totalCount] = {};
+            for ( int t=0; t!=totalCount; ++t ) {
                 vec4f ll = source_iterators[t]->eval(context);
                 sources[t] = cast<Iterator *>::to(ll);
             }
-            IteratorContext ph[total];
-            SimNode * __restrict pbody = body;
+            IteratorContext ph[totalCount];
             bool needLoop = true;
-            for ( int t=0; t!=total; ++t ) {
+            for ( int t=0; t!=totalCount; ++t ) {
                 needLoop = sources[t]->first(context, ph[t]) && needLoop;
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
-                for ( int t=0; t!=total; ++t ){
+                for ( int t=0; t!=totalCount; ++t ){
                     *pi[t] = ph[t].value;
                 }
-                pbody->eval(context);
-                for ( int t=0; t!=total; ++t ){
+                for (uint32_t bt = 0; bt != total; bt++) {
+                    list[bt]->eval(context);
+                    if ( context.stopFlags ) goto loopend;
+                }
+                for ( int t=0; t!=totalCount; ++t ){
                     if ( !sources[t]->next(context, ph[t]) ) goto loopend;
                     if ( context.stopFlags ) goto loopend;
                 }
             }
         loopend:
             evalFinal(context);
-            for ( int t=0; t!=total; ++t ) {
+            for ( int t=0; t!=totalCount; ++t ) {
                 sources[t]->close(context, ph[t]);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
@@ -1933,12 +1933,15 @@ SIM_NODE_AT_VECTOR(Float, float)
             sources = cast<Iterator *>::to(ll);
             IteratorContext ph;
             bool needLoop = true;
-            SimNode * __restrict pbody = body;
+
             needLoop = sources->first(context, ph) && needLoop;
             if ( context.stopFlags ) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
                 *pi = ph.value;
-                pbody->eval(context);
+                for (uint32_t bt = 0; bt != total; bt++) {
+                    list[bt]->eval(context);
+                    if ( context.stopFlags ) goto loopend;
+                }
                 if ( !sources->next(context, ph) ) goto loopend;
                 if ( context.stopFlags ) goto loopend;
             }

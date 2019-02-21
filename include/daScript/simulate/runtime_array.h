@@ -66,35 +66,38 @@ namespace das
         virtual vec4f eval ( Context & context ) override;
     };
 
-    template <int total>
+    template <int totalCount>
     struct SimNode_ForGoodArray : public SimNode_ForBase {
         SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
-            return visitFor(vis, total, "ForGoodArray");
+            return visitFor(vis, totalCount, "ForGoodArray");
         }
         virtual vec4f eval ( Context & context ) override {
-            Array * __restrict pha[total];
-            char * __restrict ph[total];
-            for ( int t=0; t!=total; ++t ) {
+            Array * __restrict pha[totalCount];
+            char * __restrict ph[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
                 pha[t] = cast<Array *>::to(sources[t]->eval(context));
                 array_lock(context, *pha[t]);
                 ph[t]  = pha[t]->data;
             }
-            char ** __restrict pi[total];
+            char ** __restrict pi[totalCount];
             int szz = INT_MAX;
-            for ( int t=0; t!=total; ++t ) {
+            for ( int t=0; t!=totalCount; ++t ) {
                 pi[t] = (char **)(context.stack.sp() + stackTop[t]);
                 szz = das::min(szz, int(pha[t]->size));
             }
-            SimNode * __restrict pbody = body;
-            for (int i = 0; i!=szz && !context.stopFlags; ++i) {
-                for (int t = 0; t != total; ++t) {
+            for (int i = 0; i!=szz; ++i) {
+                for (int t = 0; t != totalCount; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
-                pbody->eval(context);
+                for (uint32_t bt = 0; bt != total; bt++) {
+                    list[bt]->eval(context);
+                    if ( context.stopFlags ) goto loopend;
+                }
             }
-            for ( int t=0; t!=total; ++t ) {
+        loopend:;
+            for ( int t=0; t!=totalCount; ++t ) {
                 array_unlock(context, *pha[t]);
             }
             evalFinal(context);
@@ -134,12 +137,15 @@ namespace das
             int szz = int(pha->size);
             pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
-            SimNode * __restrict pbody = body;
-            for (int i = 0; i!=szz && !context.stopFlags; ++i) {
+            for (int i = 0; i!=szz; ++i) {
                 *pi = ph;
                 ph += stride;
-                pbody->eval(context);
+                for (uint32_t bt = 0; bt != total; bt++) {
+                    list[bt]->eval(context);
+                    if ( context.stopFlags ) goto loopend;
+                }
             }
+        loopend:;
             evalFinal(context);
             array_unlock(context, *pha);
             context.stopFlags &= ~EvalFlags::stopForBreak;
@@ -148,29 +154,32 @@ namespace das
     };
 
     // FOR
-    template <int total>
+    template <int totalCount>
     struct SimNode_ForFixedArray : SimNode_ForBase {
         SimNode_ForFixedArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
-            return visitFor(vis, total, "ForFixedArray");
+            return visitFor(vis, totalCount, "ForFixedArray");
         }
         virtual vec4f eval ( Context & context ) override {
-            char * __restrict ph[total];
-            for ( int t=0; t!=total; ++t ) {
+            char * __restrict ph[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
                 ph[t] = cast<char *>::to(sources[t]->eval(context));
             }
-            char ** __restrict pi[total];
-            for ( int t=0; t!=total; ++t ) {
+            char ** __restrict pi[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
                 pi[t] = (char **)(context.stack.sp() + stackTop[t]);
             }
-            SimNode * __restrict pbody = body;
-            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
-                for (int t = 0; t != total; ++t) {
+            for (uint32_t i = 0; i != size; ++i) {
+                for (int t = 0; t != totalCount; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
-                pbody->eval(context);
+                for (uint32_t bt = 0; bt != total; bt++) {
+                    list[bt]->eval(context);
+                    if ( context.stopFlags ) goto loopend;
+                }
             }
+        loopend:;
             evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
@@ -202,12 +211,15 @@ namespace das
             char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
             char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
-            SimNode * __restrict pbody = body;
-            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
+            for (uint32_t i = 0; i != size; ++i) {
                 *pi = ph;
                 ph += stride;
-                pbody->eval(context);
+                for (uint32_t bt = 0; bt != total; bt++) {
+                    list[bt]->eval(context);
+                    if ( context.stopFlags ) goto loopend;
+                }
             }
+        loopend:;
             evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();

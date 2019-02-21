@@ -641,6 +641,7 @@ namespace das
         VariablePtr findArgument(const string & name);
         vector<SimNode *> collectExpressions ( Context & context, const vector<ExpressionPtr> & list ) const;
         void simulateFinal ( Context & context, SimNode_Final * sim ) const;
+        void simulateBlock ( Context & context, SimNode_Block * sim ) const;
         TypeDeclPtr makeBlockType () const;
         vector<ExpressionPtr>   list;
         vector<ExpressionPtr>   finalList;
@@ -1059,7 +1060,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        static void simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Final * blk );
+        static void simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Block * blk );
         ExpressionPtr   cond, body;
     };
 

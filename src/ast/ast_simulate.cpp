@@ -502,6 +502,16 @@ namespace das
         }
     }
 
+    void ExprBlock::simulateBlock ( Context & context, SimNode_Block * block ) const {
+        vector<SimNode *> simlist = collectExpressions(context, list);
+        block->total = int(simlist.size());
+        if ( block->total ) {
+            block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
+            for ( uint32_t i = 0; i != block->total; ++i )
+                block->list[i] = simlist[i];
+        }
+    }
+
     SimNode * ExprBlock::simulate (Context & context) const {
         vector<SimNode *> simlist = collectExpressions(context, list);
         // TODO: what if list size is 0?
@@ -829,15 +839,18 @@ namespace das
         return body->simulate(context);
     }
     
-    void ExprWhile::simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Final * blk ) {
+    void ExprWhile::simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Block * blk ) {
         if ( bod->rtti_isBlock() ) {
             auto pBlock = static_pointer_cast<ExprBlock>(bod);
+            pBlock->simulateBlock(context, blk);
             pBlock->simulateFinal(context, blk);
+        } else {
+            context.thisProgram->error("internal error, expecting block", bod->at);
         }
     }
 
     SimNode * ExprWhile::simulate (Context & context) const {
-        auto node = context.code->makeNode<SimNode_While>(at, cond->simulate(context),body->simulate(context));
+        auto node = context.code->makeNode<SimNode_While>(at, cond->simulate(context));
         simulateFinal(context, body, node);
         return node;
     }
@@ -907,7 +920,6 @@ namespace das
                 }
                 result->stackTop[t] = iteratorVariables[t]->stackTop;
             }
-            result->body = subexpr->simulate(context);
             ExprWhile::simulateFinal(context, subexpr, result);
             return result;
         } else {
@@ -940,7 +952,6 @@ namespace das
                 result->stackTop[t] = iteratorVariables[t]->stackTop;
             }
             result->size = fixedSize;
-            result->body = subexpr->simulate(context);
             ExprWhile::simulateFinal(context, subexpr, result);
             return result;
         }
