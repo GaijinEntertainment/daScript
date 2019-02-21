@@ -18,9 +18,7 @@ namespace das {
             vis.arg(fnPtr->name,"fnPtr");
         }
         V_SP(stackTop);
-        for ( int32_t i=0; i!=nArguments; ++i ) {
-            arguments[i] = arguments[i]->visit(vis);
-        }
+        vis.sub(arguments, nArguments, "arguments");
     }
 
     SimNode * SimNode_DeleteStructPtr::visit ( SimVisitor & vis ) {

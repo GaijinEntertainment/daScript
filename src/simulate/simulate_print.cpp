@@ -63,20 +63,17 @@ namespace das {
                 uint32_t    ui[4];
                 vec4f       v;
             } X; X.v = argV;
-            ss << " (" << X.ui[0] << "," << X.ui[1] << "," << X.ui[2] << "," << X.ui[3] << ")";
+            ss << " {" << X.ui[0] << "," << X.ui[1] << "," << X.ui[2] << "," << X.ui[3] << "}";
         }
 
         virtual void sub ( SimNode ** nodes, uint32_t count, const char * ) override {
-            if ( CR ) {
-                ss << "\n" << string(tab,'\t');
-            } else {
-                ss << " ";
-            }
             ss << "(";
             for ( uint32_t t = 0; t!=count; ++t ) {
                 tab ++;
-                if ( t ) {
+                if ( CR ) {
                     ss << "\n" << string(tab,'\t');
+                } else {
+                    ss << " ";
                 }
                 nodes[t] = nodes[t]->visit(*this);
                 tab --;
