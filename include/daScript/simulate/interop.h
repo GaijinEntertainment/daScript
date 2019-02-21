@@ -3,6 +3,8 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/misc/function_traits.h"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 namespace das
 {
     template <typename TT>
@@ -106,7 +108,15 @@ namespace das
 
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCall : SimNode_CallBase {
-        SimNode_ExtFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        const char * extFnName = nullptr;
+        SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName )
+            : SimNode_CallBase(at) { extFnName = fnName; }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            vis.op(extFnName);
+            V_CALL();
+            V_END();
+        }
         virtual vec4f eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;
             using Result = typename FunctionTrait::return_type;
@@ -134,7 +144,15 @@ namespace das
 
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCallAndCopyOrMove : SimNode_CallBase {
-        SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        const char * extFnName = nullptr;
+        SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName )
+            : SimNode_CallBase(at) { extFnName = fnName; }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            vis.op(extFnName);
+            V_CALL();
+            V_END();
+        }
         virtual vec4f eval ( Context & context ) override {
             using FunctionTrait = function_traits<FuncT>;
             using Result = typename FunctionTrait::return_type;
@@ -152,7 +170,15 @@ namespace das
 
     template <InteropFunction fn>
     struct SimNode_InteropFuncCall : SimNode_CallBase {
-        SimNode_InteropFuncCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        const char * extFnName = nullptr;
+        SimNode_InteropFuncCall ( const LineInfo & at, const char * fnName )
+            : SimNode_CallBase(at) { extFnName = fnName; }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            vis.op(extFnName);
+            V_CALL();
+            V_END();
+        }
         virtual vec4f eval ( Context & context ) override {
             vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);
@@ -161,4 +187,7 @@ namespace das
         }
     };
 }
+
+#include "daScript/simulate/simulate_visit_op_undef.h"
+
 

@@ -5,6 +5,8 @@
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 namespace das
 {
     template <typename TT, int mask>
@@ -255,6 +257,12 @@ namespace das
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,1> : SimNode_CallBase {
         SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(VecCtor_1);
+            V_SUB(arguments[0]);
+            V_END();
+        }
         virtual vec4f eval(Context & context) override {
             vec4f argValues[2];
             evalArgs(context, argValues);
@@ -266,6 +274,13 @@ namespace das
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,2> : SimNode_CallBase {
         SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(VecCtor_2);
+            V_SUB(arguments[0]);
+            V_SUB(arguments[1]);
+            V_END();
+        }
         virtual vec4f eval(Context & context) override {
             vec4f argValues[2];
             evalArgs(context, argValues);
@@ -279,6 +294,14 @@ namespace das
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,3> : SimNode_CallBase {
         SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(VecCtor_3);
+            V_SUB(arguments[0]);
+            V_SUB(arguments[1]);
+            V_SUB(arguments[2]);
+            V_END();
+        }
         virtual vec4f eval(Context & context) override {
             vec4f argValues[3];
             evalArgs(context, argValues);
@@ -292,6 +315,15 @@ namespace das
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,4> : SimNode_CallBase {
         SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(VecCtor_4);
+            V_SUB(arguments[0]);
+            V_SUB(arguments[1]);
+            V_SUB(arguments[2]);
+            V_SUB(arguments[3]);
+            V_END();
+        }
         virtual vec4f eval(Context & context) override {
             vec4f argValues[4];
             evalArgs(context, argValues);
