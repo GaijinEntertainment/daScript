@@ -10,7 +10,7 @@ namespace das {
 
     vector<string> getAllRequie ( const char * src, uint32_t length ) {
         vector<string> req;
-        const char * src_end = src + length - 9;    // needs at least 10 char for 'require a'
+        const char * src_end = src + length;
         bool wb = true;
         while ( src < src_end ) {
             if ( src[0]=='"' ) {
