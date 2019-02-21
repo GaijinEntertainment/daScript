@@ -316,8 +316,8 @@ namespace das
             int     iValue;
             float   fValue;
         };
-        AnnotationArgument () : type(Type::tVoid) {}
-        AnnotationArgument ( const string & n, const string & s ) : type(Type::tString), name(n), sValue(s) {}
+        AnnotationArgument () : type(Type::tVoid), iValue(0) {}
+        AnnotationArgument ( const string & n, const string & s ) : type(Type::tString), name(n), sValue(s), iValue(0) {}
         AnnotationArgument ( const string & n, bool  b ) : type(Type::tBool), name(n), bValue(b) {}
         AnnotationArgument ( const string & n, int   i ) : type(Type::tInt), name(n), iValue(i) {}
         AnnotationArgument ( const string & n, float f ) : type(Type::tFloat), name(n), fValue(f) {}
