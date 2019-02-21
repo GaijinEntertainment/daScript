@@ -31,5 +31,19 @@ namespace das
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
     };
+
+    struct SimNode_ForRange1 : SimNode_ForBase  {
+        SimNode_ForRange1 ( const LineInfo & at )
+            : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+    };
+
+    struct SimNode_ForRangeNF1 : SimNode_ForBase  {
+        SimNode_ForRangeNF1 ( const LineInfo & at )
+            : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+    };
 }
 

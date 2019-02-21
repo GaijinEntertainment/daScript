@@ -155,6 +155,87 @@ namespace das
         }
     };
 
+    template <int totalCount>
+    struct SimNode_ForGoodArray1 : public SimNode_ForBase {
+        SimNode_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitFor(vis, totalCount, "ForGoodArray1");
+        }
+        virtual vec4f eval ( Context & context ) override {
+            Array * __restrict pha[totalCount];
+            char * __restrict ph[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
+                pha[t] = cast<Array *>::to(sources[t]->eval(context));
+                array_lock(context, *pha[t]);
+                ph[t]  = pha[t]->data;
+            }
+            char ** __restrict pi[totalCount];
+            int szz = INT_MAX;
+            for ( int t=0; t!=totalCount; ++t ) {
+                pi[t] = (char **)(context.stack.sp() + stackTop[t]);
+                szz = das::min(szz, int(pha[t]->size));
+            }
+            SimNode * __restrict body = list[0];
+            for (int i = 0; i!=szz && !context.stopFlags; ++i) {
+                for (int t = 0; t != totalCount; ++t) {
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                body->eval(context);
+            }
+            for ( int t=0; t!=totalCount; ++t ) {
+                array_unlock(context, *pha[t]);
+            }
+            evalFinal(context);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_ForGoodArray1<0> : public SimNode_ForBase {
+        SimNode_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN_CR();
+            V_OP(ForGoodArray1_0);
+            V_FINAL();
+            V_END();
+        }
+        virtual vec4f eval ( Context & context ) override {
+            evalFinal(context);
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_ForGoodArray1<1> : public SimNode_ForBase {
+        SimNode_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitFor(vis, 1, "ForGoodArray1");
+        }
+        virtual vec4f eval ( Context & context ) override {
+            Array * __restrict pha;
+            char * __restrict ph;
+            pha = cast<Array *>::to(sources[0]->eval(context));
+            array_lock(context, *pha);
+            ph = pha->data;
+            char ** __restrict pi;
+            int szz = int(pha->size);
+            pi = (char **)(context.stack.sp() + stackTop[0]);
+            auto stride = strides[0];
+            SimNode * __restrict body = list[0];
+            for (int i = 0; i!=szz && !context.stopFlags; ++i) {
+                *pi = ph;
+                ph += stride;
+                body->eval(context);
+            }
+            evalFinal(context);
+            array_unlock(context, *pha);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
     // FOR
     template <int totalCount>
     struct SimNode_ForFixedArray : SimNode_ForBase {
@@ -224,6 +305,73 @@ namespace das
                 }
             }
         loopend:;
+            evalFinal(context);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    // FOR
+    template <int totalCount>
+    struct SimNode_ForFixedArray1 : SimNode_ForBase {
+        SimNode_ForFixedArray1 ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitFor(vis, totalCount, "ForFixedArray1");
+        }
+        virtual vec4f eval ( Context & context ) override {
+            char * __restrict ph[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
+                ph[t] = cast<char *>::to(sources[t]->eval(context));
+            }
+            char ** __restrict pi[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
+                pi[t] = (char **)(context.stack.sp() + stackTop[t]);
+            }
+            SimNode * __restrict body = list[0];
+            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
+                for (int t = 0; t != totalCount; ++t) {
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                body->eval(context);
+            }
+            evalFinal(context);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_ForFixedArray1<0> : SimNode_ForBase {
+        SimNode_ForFixedArray1 ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN_CR();
+            V_OP(ForFixedArray1_0);
+            V_FINAL();
+            V_END();
+        }
+        virtual vec4f eval ( Context & context ) override {
+            evalFinal(context);
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_ForFixedArray1<1> : SimNode_ForBase {
+        SimNode_ForFixedArray1 ( const LineInfo & at ) : SimNode_ForBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitFor(vis, 1, "ForFixedArray1");
+        }
+        virtual vec4f eval ( Context & context ) override {
+            char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
+            char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
+            auto stride = strides[0];
+            SimNode * __restrict body = list[0];
+            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
+                *pi = ph;
+                ph += stride;
+                body->eval(context);
+            }
             evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();

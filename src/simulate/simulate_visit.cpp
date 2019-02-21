@@ -494,6 +494,26 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ForRange1::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(ForRange1);
+        V_SP(stackTop[0]);
+        V_SUB(sources[0]);
+        V_SUB(list[0]);
+        V_FINAL();
+        V_END();
+    }
+
+    SimNode * SimNode_ForRangeNF1::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(ForRangeNF1);
+        V_SP(stackTop[0]);
+        V_SUB(sources[0]);
+        V_SUB(list[0]);
+        V_FINAL();
+        V_END();
+    }
+
     SimNode * SimNode_DeleteTable::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(DeleteTable);
