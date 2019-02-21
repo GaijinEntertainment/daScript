@@ -596,7 +596,7 @@ namespace das
                 return resN;
             }
         } else {
-            if (type->isPointer()) {
+            if (value->type->isPointer()) {
                 auto simV = value->simulate(context);
                 if (r2v) {
                     return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(type->baseType, at, simV, field->offset);
@@ -610,7 +610,7 @@ namespace das
     }
 
     SimNode * ExprField::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
-        if ( !field || type->isPointer() ) {
+        if ( !field || value->type->isPointer() ) {
             return nullptr;
         }
         if ( auto chain = value->trySimulate(context, extraOffset + field->offset, r2vType) ) {
@@ -691,7 +691,7 @@ namespace das
         } else if ( argument ) {
             if ( variable->type->isRef() ) {
                 if ( r2vType!=Type::none ) {
-                    return context.code->makeValueNode<SimNode_GetArgumentR2VOff>(type->baseType, at, argumentIndex, extraOffset);
+                    return context.code->makeValueNode<SimNode_GetArgumentR2VOff>(r2vType, at, argumentIndex, extraOffset);
                 } else {
                     return context.code->makeNode<SimNode_GetArgumentOff>(at, argumentIndex, extraOffset);
                 }
