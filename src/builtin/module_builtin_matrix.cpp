@@ -186,7 +186,7 @@ namespace das {
         addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
         // 4x4
         addExtern<DAS_BIND_FUN(float4x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument);
-        addExtern<DAS_BIND_FUN(float_4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation", SideEffects::modifyArgument);
+        addExtern<DAS_BIND_FUN(float_4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation", SideEffects::none);
         // 3x4
         addExtern<DAS_BIND_FUN(float3x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument);
     }
