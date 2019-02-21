@@ -7,6 +7,8 @@
 
 #include "module_builtin.cpp.inc"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 namespace das
 {
     // string
@@ -59,6 +61,9 @@ namespace das
     struct Sim_EqFunPtr : SimNode_Op2 {
         DAS_BOOL_NODE;
         Sim_EqFunPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitOp2(vis, "EqFunPtr");
+        }
         __forceinline bool compute ( Context & context ) {
             auto lv = cast<Func>::to(l->eval(context));
             auto rv = r->evalPtr(context);
@@ -69,6 +74,9 @@ namespace das
     struct Sim_NEqFunPtr : SimNode_Op2 {
         DAS_BOOL_NODE;
         Sim_NEqFunPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitOp2(vis, "NEqFunPtr");
+        }
         __forceinline bool compute ( Context & context ) {
             auto lv = cast<Func>::to(l->eval(context));
             auto rv = r->evalPtr(context);
@@ -79,6 +87,9 @@ namespace das
     struct Sim_EqLambdaPtr : SimNode_Op2 {
         DAS_BOOL_NODE;
         Sim_EqLambdaPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitOp2(vis, "EqLambdaPtr");
+        }
         __forceinline bool compute ( Context & context ) {
             auto lv = cast<Lambda>::to(l->eval(context));
             auto rv = r->evalPtr(context);
@@ -89,6 +100,9 @@ namespace das
     struct Sim_NEqLambdaPtr : SimNode_Op2 {
         DAS_BOOL_NODE;
         Sim_NEqLambdaPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitOp2(vis, "NEqLambdaPtr");
+        }
         __forceinline bool compute ( Context & context ) {
             auto lv = cast<Lambda>::to(l->eval(context));
             auto rv = r->evalPtr(context);

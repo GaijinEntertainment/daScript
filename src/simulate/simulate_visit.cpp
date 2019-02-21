@@ -2,8 +2,9 @@
 
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/runtime_range.h"
+#include "daScript/simulate/runtime_table.h"
+#include "daScript/simulate/runtime_array.h"
 
-// this has to be the last included file
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
@@ -404,6 +405,23 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ForBase::visitFor ( SimVisitor & vis, int total, const char * loopName ) {
+        char nbuf[32];
+        V_BEGIN_CR();
+        snprintf(nbuf, sizeof(nbuf), "%s_%i", loopName, total );
+        vis.op(nbuf);
+        for ( int t=0; t!=total; ++t ) {
+            snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t );
+            vis.sp(stackTop[t],nbuf);
+            snprintf(nbuf, sizeof(nbuf), "strides[%i]", t );
+            vis.arg(strides[t],nbuf);
+            vis.sub(sources[t]);
+        }
+        V_SUB(body);
+        V_FINAL();
+        V_END();
+    }
+
     SimNode * SimNode_ForWithIteratorBase::visitFor ( SimVisitor & vis, int total ) {
         char nbuf[32];
         V_BEGIN_CR();
@@ -476,5 +494,48 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_DeleteTable::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(DeleteTable);
+        V_SUB(subexpr);
+        V_ARG(total);
+        V_ARG(vts_add_kts);
+        V_END();
+    }
+
+    SimNode * SimNode_ArrayAt::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ArrayAt);
+        V_SUB(l);
+        V_SUB(r);
+        V_ARG(stride);
+        V_END();
+    }
+
+    SimNode * SimNode_GoodArrayIterator::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GoodArrayIterator);
+        V_SUB(source);
+        V_ARG(stride);
+        V_END();
+    }
+
+    SimNode * SimNode_FixedArrayIterator::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(FixedArrayIterator);
+        V_SUB(source);
+        V_ARG(size);
+        V_ARG(stride);
+        V_END();
+    }
+
+    SimNode * SimNode_DeleteArray::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(DeleteArray);
+        V_SUB(subexpr);
+        V_ARG(total);
+        V_ARG(stride);
+        V_END();
+    }
 }
 

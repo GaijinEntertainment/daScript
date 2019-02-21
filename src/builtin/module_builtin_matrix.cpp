@@ -6,6 +6,8 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/simulate/runtime_matrices.h"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 namespace das {
     template <typename VecT, int RowC>
     class MatrixAnnotation : public TypeAnnotation {
@@ -136,6 +138,11 @@ namespace das {
     template <typename MatT>
     struct SimNode_MatrixCtor : SimNode_CallBase {
         SimNode_MatrixCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(MatrixCtor);
+            V_END();
+        }
         virtual vec4f eval(Context & context) override {
             assert(stackTop && "copy on return memory not allocated");
             auto cmres = context.stack.sp() + stackTop;

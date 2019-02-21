@@ -24,7 +24,7 @@ def find(Tab:table<auto(keyT),auto(valT)>;at:keyT)
 def erase(Tab:table<auto(keyT),auto(valT)>;at:keyT)
   return __builtin_table_erase(Tab,at)
 
-// string
+options removeUnusedSymbols=false
 
 def peek ( src:das_string; subexpr:block<(root:string):void> ) : void
   _builtin_peek(src,subexpr)

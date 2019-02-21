@@ -1841,6 +1841,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     struct SimNode_ForBase : SimNode_Final {
         SimNode_ForBase ( const LineInfo & at ) : SimNode_Final(at) {}
+        SimNode * visitFor ( SimVisitor & vis, int total, const char * loopName );
         SimNode *   sources [MAX_FOR_ITERATORS];
         uint32_t    strides [MAX_FOR_ITERATORS];
         uint32_t    stackTop[MAX_FOR_ITERATORS];

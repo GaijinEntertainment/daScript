@@ -4,6 +4,8 @@
 #include "daScript/misc/arraytype.h"
 #include "daScript/simulate/hash.h"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 namespace das
 {
 
@@ -187,6 +189,14 @@ namespace das
     struct SimNode_Table : SimNode {
         SimNode_Table(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
             : SimNode(at), tabExpr(t), keyExpr(k), valueTypeSize(vts) {}
+        SimNode * visitTable ( SimVisitor & vis, const char * op ) {
+            V_BEGIN();
+            vis.op(op);
+            V_SUB(tabExpr);
+            V_SUB(keyExpr);
+            V_ARG(valueTypeSize);
+            V_END();
+        }
         SimNode * tabExpr;
         SimNode * keyExpr;
         uint32_t valueTypeSize;
@@ -200,7 +210,11 @@ namespace das
     template <typename KeyType>
     struct SimNode_TableIndex : SimNode_Table {
         DAS_PTR_NODE;
-        SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
+        SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
+            : SimNode_Table(at,t,k,vts) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitTable(vis,"TableIndex");
+        }
         __forceinline char * compute ( Context & context ) {
             Table * tab = (Table *) tabExpr->evalPtr(context);
             vec4f xkey = keyExpr->eval(context);
@@ -215,7 +229,11 @@ namespace das
     template <typename KeyType>
     struct SimNode_TableErase : SimNode_Table {
         DAS_BOOL_NODE;
-        SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
+        SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
+            : SimNode_Table(at,t,k,vts) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitTable(vis,"TableErase");
+        }
         __forceinline bool compute ( Context & context ) {
             Table * tab = (Table *) tabExpr->evalPtr(context);
             vec4f xkey = keyExpr->eval(context);
@@ -229,7 +247,11 @@ namespace das
     template <typename KeyType>
     struct SimNode_TableFind : SimNode_Table {
         DAS_PTR_NODE;
-        SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts) : SimNode_Table(at,t,k,vts) {}
+        SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
+            : SimNode_Table(at,t,k,vts) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitTable(vis,"TableFind");
+        }
         __forceinline char * compute(Context & context) {
             Table * tab = (Table *)tabExpr->evalPtr(context);
             vec4f xkey = keyExpr->eval(context);
@@ -263,6 +285,13 @@ namespace das
     struct SimNode_TableIterator : SimNode {
         SimNode_TableIterator(const LineInfo & at, SimNode * sk, uint32_t stride)
             : SimNode(at) { subexpr.source = sk; subexpr.stride = stride; }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(TableIterator);
+            V_SUB(subexpr.source);
+            V_ARG(subexpr.stride);
+            V_END();
+        }
         virtual vec4f eval ( Context & ) override {
             return cast<Iterator *>::from(&subexpr);
         }
@@ -272,7 +301,11 @@ namespace das
     struct SimNode_DeleteTable : SimNode_Delete {
         SimNode_DeleteTable ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t va )
             : SimNode_Delete(a,s,t), vts_add_kts(va) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         uint32_t vts_add_kts;
     };
 }
+
+#include "daScript/simulate/simulate_visit_op_undef.h"
+
