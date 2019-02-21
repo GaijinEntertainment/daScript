@@ -139,6 +139,15 @@ namespace das {
     }
 
     template <typename TT>
+    SimNode * SimNode_GetLocalRefR2VOff<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(GetLocalRefR2VOff);
+        V_SP(stackTop);
+        V_SP(offset);
+        V_END();
+    }
+
+    template <typename TT>
     SimNode * SimNode_CopyLocal2LocalT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(CopyLocal2LocalT);

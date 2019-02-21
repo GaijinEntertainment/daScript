@@ -1041,6 +1041,36 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
     };
 
+    // WHEN LOCAL VARIABLE STORES REFERENCE
+    struct SimNode_GetLocalRefOff : SimNode_GetLocal {
+        DAS_PTR_NODE;
+        SimNode_GetLocalRefOff(const LineInfo & at, uint32_t sp, uint32_t o)
+            : SimNode_GetLocal(at,sp), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            return (*(char **)(context.stack.sp() + stackTop)) + offset;
+        }
+        uint32_t offset;
+    };
+
+    template <typename TT>
+    struct SimNode_GetLocalRefR2VOff : SimNode_GetLocalRef {
+        SimNode_GetLocalRefR2VOff(const LineInfo & at, uint32_t sp, uint32_t o)
+            : SimNode_GetLocalRef(at,sp), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *)((*(char **)(context.stack.sp() + stackTop)) + offset);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)((*(char **)(context.stack.sp() + stackTop)) + offset); \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+        uint32_t offset;
+    };
+
     template <typename TT>
     struct SimNode_CopyLocal2LocalT : SimNode {
         SimNode_CopyLocal2LocalT(const LineInfo & at, uint32_t spL, uint32_t spR)

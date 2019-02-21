@@ -672,14 +672,13 @@ namespace das
         if ( block ) {
         } else if ( local ) {
             if ( variable->type->ref ) {
-                // TODO: support folding of local Ref variable
-                /*
-                 if ( r2v && !type->isRefType() ) {
-                 return context.code->makeValueNode<SimNode_GetLocalRefR2V>(type->baseType, at, variable->stackTop);
-                 } else {
-                 return context.code->makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
-                 }
-                 */
+                if ( r2vType!=Type::none ) {
+                    return context.code->makeValueNode<SimNode_GetLocalRefR2VOff>(r2vType, at,
+                                                    variable->stackTop, extraOffset);
+                } else {
+                    return context.code->makeNode<SimNode_GetLocalRefOff>(at,
+                                                    variable->stackTop, extraOffset);
+                }
             } else {
                 if ( r2vType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_GetLocalR2V>(r2vType, at,
