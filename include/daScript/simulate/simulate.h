@@ -1164,7 +1164,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            return * cast<CTYPE *>::to(context.abiArguments()[index]);      \
+            char * pR = cast<char *>::to(context.abiArguments()[index]);    \
+            return *(CTYPE *)(pR + offset);                                 \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
