@@ -219,9 +219,10 @@ namespace das
     // SimNode_While
 
     vec4f SimNode_While::eval ( Context & context ) {
+        SimNode ** __restrict tail = list + total;
         while ( cond->evalBool(context) && !context.stopFlags ) {
-            for (uint32_t bt = 0; bt != total; ++bt) {
-                list[bt]->eval(context);
+            for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                (*body)->eval(context);
                 if (context.stopFlags) goto loopend;
             }
         }

@@ -1880,13 +1880,14 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
+            SimNode ** __restrict tail = list + total;
             for ( int i=0; !context.stopFlags; ++i ) {
                 for ( int t=0; t!=totalCount; ++t ){
                     *pi[t] = ph[t].value;
                 }
-                for (uint32_t bt = 0; bt != total; bt++) {
-                    list[bt]->eval(context);
-                    if ( context.stopFlags ) goto loopend;
+                for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    if (context.stopFlags) goto loopend;
                 }
                 for ( int t=0; t!=totalCount; ++t ){
                     if ( !sources[t]->next(context, ph[t]) ) goto loopend;
@@ -1936,11 +1937,12 @@ SIM_NODE_AT_VECTOR(Float, float)
 
             needLoop = sources->first(context, ph) && needLoop;
             if ( context.stopFlags ) goto loopend;
+            SimNode ** __restrict tail = list + total;
             for ( int i=0; !context.stopFlags; ++i ) {
                 *pi = ph.value;
-                for (uint32_t bt = 0; bt != total; bt++) {
-                    list[bt]->eval(context);
-                    if ( context.stopFlags ) goto loopend;
+                for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    if (context.stopFlags) goto loopend;
                 }
                 if ( !sources->next(context, ph) ) goto loopend;
                 if ( context.stopFlags ) goto loopend;

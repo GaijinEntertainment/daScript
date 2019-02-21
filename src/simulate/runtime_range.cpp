@@ -30,10 +30,11 @@ namespace das
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
+        SimNode ** __restrict tail = list + total;
         for (int32_t i = r.from; i != r_to; ++i) {
             *pi = i;
-            for (uint32_t bt = 0; bt != total; ++bt) {
-                list[bt]->eval(context);
+            for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                (*body)->eval(context);
                 if (context.stopFlags) goto loopend;
             }
         }
@@ -48,10 +49,11 @@ namespace das
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
+        SimNode ** __restrict tail = list + total;
         for (int32_t i = r.from; i != r_to; ++i) {
             *pi = i;
-            for (uint32_t bt = 0; bt != total; ++bt) {
-                list[bt]->eval(context);
+            for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                (*body)->eval(context);
             }
         }
         evalFinal(context);

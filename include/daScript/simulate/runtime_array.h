@@ -86,14 +86,15 @@ namespace das
                 pi[t] = (char **)(context.stack.sp() + stackTop[t]);
                 szz = das::min(szz, int(pha[t]->size));
             }
+            SimNode ** __restrict tail = list + total;
             for (int i = 0; i!=szz; ++i) {
                 for (int t = 0; t != totalCount; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
-                for (uint32_t bt = 0; bt != total; bt++) {
-                    list[bt]->eval(context);
-                    if ( context.stopFlags ) goto loopend;
+                for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    if (context.stopFlags) goto loopend;
                 }
             }
         loopend:;
@@ -137,12 +138,13 @@ namespace das
             int szz = int(pha->size);
             pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
+            SimNode ** __restrict tail = list + total;
             for (int i = 0; i!=szz; ++i) {
                 *pi = ph;
                 ph += stride;
-                for (uint32_t bt = 0; bt != total; bt++) {
-                    list[bt]->eval(context);
-                    if ( context.stopFlags ) goto loopend;
+                for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    if (context.stopFlags) goto loopend;
                 }
             }
         loopend:;
@@ -169,14 +171,15 @@ namespace das
             for ( int t=0; t!=totalCount; ++t ) {
                 pi[t] = (char **)(context.stack.sp() + stackTop[t]);
             }
+            SimNode ** __restrict tail = list + total;
             for (uint32_t i = 0; i != size; ++i) {
                 for (int t = 0; t != totalCount; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
-                for (uint32_t bt = 0; bt != total; bt++) {
-                    list[bt]->eval(context);
-                    if ( context.stopFlags ) goto loopend;
+                for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    if (context.stopFlags) goto loopend;
                 }
             }
         loopend:;
@@ -211,12 +214,13 @@ namespace das
             char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
             char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
+            SimNode ** __restrict tail = list + total;
             for (uint32_t i = 0; i != size; ++i) {
                 *pi = ph;
                 ph += stride;
-                for (uint32_t bt = 0; bt != total; bt++) {
-                    list[bt]->eval(context);
-                    if ( context.stopFlags ) goto loopend;
+                for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    if (context.stopFlags) goto loopend;
                 }
             }
         loopend:;
