@@ -48,11 +48,17 @@ namespace das {
         virtual FunctionPtr visit ( Function * that ) override {
             func->totalStackSize = max(func->totalStackSize, stackTop);
             // detecting fastcall
-            if (!func->exports && !func->addr && func->result->isWorkhorseType() && func->totalStackSize == sizeof(Prologue)) {
+            if (!func->exports && !func->addr && func->totalStackSize == sizeof(Prologue)) {
                 if (func->body->rtti_isBlock()) {
                     auto block = static_pointer_cast<ExprBlock>(func->body);
-                    if (block->list.size()==1 && block->finalList.size()==0 && block->list.back()->rtti_isReturn()) {
-                        func->fastCall = true;
+                    if ( func->result->isWorkhorseType() ) {
+                        if (block->list.size()==1 && block->finalList.size()==0 && block->list.back()->rtti_isReturn()) {
+                            func->fastCall = true;
+                        }
+                    } else if ( func->result->isVoid() ) {
+                        if (block->list.size()==1 && block->finalList.size()==0 ) {
+                            func->fastCall = true;
+                        }
                     }
                 }
             }

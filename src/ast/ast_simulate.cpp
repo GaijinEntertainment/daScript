@@ -151,14 +151,18 @@ namespace das
         }
         if ( fastCall ) {
             assert(totalStackSize == sizeof(Prologue) && "function can't allocate stack");
-            assert(result->isWorkhorseType() && "fastcall can only return a workhoree type");
+            assert((result->isWorkhorseType() || result->isVoid()) && "fastcall can only return a workhorse type");
             assert(body->rtti_isBlock() && "function must contain a block");
             auto block = static_pointer_cast<ExprBlock>(body);
             assert(block->list.size()==1 && "fastcall is only one expr in a function body");
-            assert(block->list.back()->rtti_isReturn() && "fastcall body expr is return");
-            auto retE = static_pointer_cast<ExprReturn>(block->list.back());
-            assert(retE->subexpr && "fastcall must return a value");
-            return retE->subexpr->simulate(context);
+            if ( block->list.back()->rtti_isReturn() ) {
+                assert(block->list.back()->rtti_isReturn() && "fastcall body expr is return");
+                auto retE = static_pointer_cast<ExprReturn>(block->list.back());
+                assert(retE->subexpr && "fastcall must return a value");
+                return retE->subexpr->simulate(context);
+            } else {
+                return block->list.back()->simulate(context);
+            }
         } else {
             return body->simulate(context);
         }

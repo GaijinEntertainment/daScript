@@ -1,47 +1,43 @@
-options log = true, logStack = true, logNodes = true // , optimize = false, printVarAccess=true, printRef=true //
+options log = true, logNodes =true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
 
-[sideeffects]
-def fibR(n)
-    if (n < 2)
-        return n
-	return fibR(n - 1) + fibR(n - 2)
 
-[sideeffects]
-def fibI(n)
-    let last = 0
-    let cur = 1
-    for i in range(0, n-1)
-        let tmp = cur
-        cur += last
-        last = tmp
-    return cur
+struct NObject
+    position, velocity : float3
 
-[sideeffects]
-def fibIU(n)
-    let last = 0
-    let cur = 1
-    for i in range(0, (n-1)/4)
-        let tmp1 = cur
-        cur += last
-        let tmp2 = cur
-        cur += tmp1
-        let tmp3 = cur
-        cur += tmp2
-        let tmp4 = cur
-        cur += tmp3
-        last = tmp4
-    return cur
+def update(a:NObject)
+    a.position+=a.velocity
+
+def testSim(objects:array<NObject>)
+    for obj in objects
+        update(obj)
+
+def testSim2(objects:array<NObject>; count:int)
+    for i in range(0,count)
+        testSim(objects)
+
+def testSimI(objects:array<NObject>)
+    for obj in objects
+        obj.position += obj.velocity
+
+def testSim2I(objects:array<NObject>; count:int)
+    for i in range(0,count)
+        testSimI(objects)
+
+def init(objects:array<NObject>)
+    resize(objects, 50000)
+    let i = 0
+    for obj in objects
+        obj.position=float3(i++,i+1,i+2)
+        obj.velocity=float3(1.0,2.0,3.0)
+    assert(i==length(objects))
 
 [export]
 def test()
-    profile(20,"fibbonacci loop") <|
-        fibI(6511134)
-    profile(20,"fibbonacci loop, unrolled") <|
-        fibIU(6511134)
-    profile(20,"fibbonacci recursive") <|
-        fibR(31)
+    let objects:array<NObject>
+    init(objects)
+    let(total=20)
+        profile(total,"particles kinematics") <|
+            testSim2(objects,100)
+        profile(total,"particles kinematics, inlined") <|
+            testSim2I(objects,100)
     return true
-
-
-
-
