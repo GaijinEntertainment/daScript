@@ -1141,6 +1141,36 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
     };
 
+    struct SimNode_GetArgumentOff : SimNode_GetArgument {
+        DAS_PTR_NODE;
+        SimNode_GetArgumentOff(const LineInfo & at, int32_t i, uint32_t o)
+            : SimNode_GetArgument(at,i), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute(Context & context) {
+            char * pR = cast<char *>::to(context.abiArguments()[index]);
+            return pR + offset;
+        }
+        uint32_t offset;
+    };
+
+    template <typename TT>
+    struct SimNode_GetArgumentR2VOff : SimNode_GetArgument {
+        SimNode_GetArgumentR2VOff ( const LineInfo & at, int32_t i, uint32_t o )
+            : SimNode_GetArgument(at,i), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            char * pR = cast<char *>::to(context.abiArguments()[index]);
+            return cast<TT>::from(*((TT *)(pR+offset)));
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                               \
+        virtual CTYPE eval##TYPE ( Context & context ) override {           \
+            return * cast<CTYPE *>::to(context.abiArguments()[index]);      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+        uint32_t offset;
+    };
+
     // BLOCK VARIABLE "GET"
     struct SimNode_GetBlockArgument : SimNode {
         SimNode_GetBlockArgument ( const LineInfo & at, int32_t i, uint32_t sp )

@@ -174,6 +174,15 @@ namespace das {
     }
 
     template <typename TT>
+    SimNode * SimNode_GetArgumentR2VOff<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(GetArgumentR2VOff);
+        V_ARG(index);
+        V_ARG(offset);
+        V_END();
+    }
+
+    template <typename TT>
     SimNode * SimNode_GetBlockArgumentR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(GetBlockArgument);

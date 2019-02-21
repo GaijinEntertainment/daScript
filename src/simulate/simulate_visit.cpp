@@ -160,6 +160,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_GetArgumentOff::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetArgumentOff);
+        V_ARG(index);
+        V_ARG(offset);
+        V_END();
+    }
+
     SimNode * SimNode_GetBlockArgument::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetBlockArgument);

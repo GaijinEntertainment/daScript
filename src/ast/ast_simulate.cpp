@@ -168,6 +168,10 @@ namespace das
         }
     }
 
+    SimNode * Expression::trySimulate (Context &, uint32_t, Type ) const {
+        return nullptr;
+    }
+
     SimNode * ExprMakeStructure::simulate (Context & context) const {
         vector<SimNode *> simlist;
         // init with 0
@@ -537,34 +541,45 @@ namespace das
         }
     }
 
-    SimNode * ExprSwizzle::simulate (Context & context) const {
+    SimNode * ExprSwizzle::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
+        if ( !type->ref && fields.size()!=1 ) {
+            return nullptr;
+        }
         uint32_t offset = fields[0] * sizeof(float);
+        if ( auto chain = value->trySimulate(context, extraOffset + offset, r2vType) ) {
+            return chain;
+        }
         auto simV = value->simulate(context);
         if ( type->ref ) {
-            if ( r2v ) {
-                return context.code->makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,simV,offset);
+            if ( r2vType!=Type::none ) {
+                return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType,at,simV,offset + extraOffset);
             } else {
-                return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset);
+                return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset + extraOffset);
             }
         } else {
-            // assert(!r2v && "how did it ever become value");
-            if ( fields.size()==1 ) {
-                return context.code->makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,simV,offset);
-            } else {
-                auto fsz = fields.size();
-                uint8_t fs[4];
-                fs[0] = fields[0];
-                fs[1] = fields[1];
-                fs[2] = fsz>=3 ? fields[2] : fields[0];
-                fs[3] = fsz>=4 ? fields[3] : fields[0];
-                return context.code->makeNode<SimNode_Swizzle>(at,simV,fs);
-            }
+            return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType,at,simV,offset + extraOffset);
+        }
+        return nullptr;
+    }
+
+    SimNode * ExprSwizzle::simulate (Context & context) const {
+        if ( !type->ref && fields.size()!=1 ) {
+            auto fsz = fields.size();
+            uint8_t fs[4];
+            fs[0] = fields[0];
+            fs[1] = fields[1];
+            fs[2] = fsz>=3 ? fields[2] : fields[0];
+            fs[3] = fsz>=4 ? fields[3] : fields[0];
+            auto simV = value->simulate(context);
+            return context.code->makeNode<SimNode_Swizzle>(at,simV,fs);
+        } else {
+            return trySimulate(context, 0, r2v ? type->baseType : Type::none);
         }
     }
 
     SimNode * ExprField::simulate (Context & context) const {
-        auto simV = value->simulate(context);
         if ( !field ) {
+            auto simV = value->simulate(context);
             if ( r2v ) {
                 auto resN = annotation->simulateGetFieldR2V(name, context, at, simV);
                 if ( !resN ) {
@@ -582,16 +597,30 @@ namespace das
             }
         } else {
             if (type->isPointer()) {
-                if (r2v)
+                auto simV = value->simulate(context);
+                if (r2v) {
                     return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(type->baseType, at, simV, field->offset);
-                else
+                } else {
                     return context.code->makeNode<SimNode_PtrFieldDeref>(at, simV, field->offset);
+                }
             } else {
-                if (r2v)
-                    return context.code->makeValueNode<SimNode_FieldDerefR2V>(type->baseType, at, simV, field->offset);
-                else
-                    return context.code->makeNode<SimNode_FieldDeref>(at, simV, field->offset);
+                return trySimulate(context, 0, r2v ? type->baseType : Type::none);
             }
+        }
+    }
+
+    SimNode * ExprField::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
+        if ( !field || type->isPointer() ) {
+            return nullptr;
+        }
+        if ( auto chain = value->trySimulate(context, extraOffset + field->offset, r2vType) ) {
+            return chain;
+        }
+        auto simV = value->simulate(context);
+        if ( r2vType!=Type::none ) {
+            return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType, at, simV, extraOffset + field->offset);
+        } else {
+            return context.code->makeNode<SimNode_FieldDeref>(at, simV, extraOffset + field->offset);
         }
     }
 
@@ -637,6 +666,40 @@ namespace das
             pSB->nArguments = 0;
         }
         return pSB;
+    }
+
+    SimNode * ExprVar::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
+        if ( block ) {
+        } else if ( local ) {
+            if ( variable->type->ref ) {
+                // TODO: support folding of local Ref variable
+                /*
+                 if ( r2v && !type->isRefType() ) {
+                 return context.code->makeValueNode<SimNode_GetLocalRefR2V>(type->baseType, at, variable->stackTop);
+                 } else {
+                 return context.code->makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
+                 }
+                 */
+            } else {
+                if ( r2vType!=Type::none ) {
+                    return context.code->makeValueNode<SimNode_GetLocalR2V>(r2vType, at,
+                                                                            variable->stackTop + extraOffset);
+                } else {
+                    return context.code->makeNode<SimNode_GetLocal>(at, variable->stackTop + extraOffset);
+                }
+            }
+        } else if ( argument ) {
+            if ( variable->type->isRef() ) {
+                if ( r2vType!=Type::none ) {
+                    return context.code->makeValueNode<SimNode_GetArgumentR2VOff>(type->baseType, at, argumentIndex, extraOffset);
+                } else {
+                    return context.code->makeNode<SimNode_GetArgumentOff>(at, argumentIndex, extraOffset);
+                }
+            }
+        } else { // global
+
+        }
+        return nullptr;
     }
 
     SimNode * ExprVar::simulate (Context & context) const {
