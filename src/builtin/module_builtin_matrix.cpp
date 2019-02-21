@@ -177,6 +177,17 @@ namespace das {
         return mat;
     }
 
+    float3x4 float3x4_mul(const float3x4 &a, const float3x4 &b) {
+        //not working yet!
+        mat44f va,vb,vc;
+        v_mat44_make_from_43cu(va, &a.m[0].x);
+        v_mat44_make_from_43cu(vb, &b.m[0].x);
+        v_mat44_mul43(vc, va, vb);
+        alignas(16) float3x4 ret;
+        v_mat_43ca_from_mat44(&ret.m[0].x, vc);
+        return ret;
+    }
+
     void Module_BuiltIn::addMatrixTypes(ModuleLibrary & lib) {
         // structure annotations
         addAnnotation(make_shared<float4x4_ann>());
@@ -189,5 +200,6 @@ namespace das {
         addExtern<DAS_BIND_FUN(float_4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation", SideEffects::none);
         // 3x4
         addExtern<DAS_BIND_FUN(float3x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument);
+        addExtern<DAS_BIND_FUN(float3x4_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*", SideEffects::none);
     }
 }
