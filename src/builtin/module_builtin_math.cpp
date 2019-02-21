@@ -26,6 +26,8 @@ namespace das {
         static __forceinline float Exp2  ( float a, Context & )          { return v_extract_x(v_exp2(v_splats(a))); }
         static __forceinline float Log2  ( float a, Context & )          { return v_extract_x(v_log2_est_p5(v_splats(a))); }
         static __forceinline float Pow   ( float a, float b, Context & ) { return v_extract_x(v_pow(v_splats(a), v_splats(b))); }
+        static __forceinline float Rcp   ( float a, Context & )          { return v_extract_x(v_rcp_x(v_splats(a))); }
+        static __forceinline float RcpEst( float a, Context & )          { return v_extract_x(v_rcp_est_x(v_splats(a))); }
 
         static __forceinline float Sin   ( float a, Context & )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(s); }
         static __forceinline float Cos   ( float a, Context & )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(c); }
@@ -53,6 +55,8 @@ namespace das {
         static __forceinline vec4f Exp2  ( vec4f a, Context & )          { return v_exp2(a); }
         static __forceinline vec4f Log2  ( vec4f a, Context & )          { return v_log2_est_p5(a); }
         static __forceinline vec4f Pow   ( vec4f a, vec4f b, Context & ) { return v_pow(a, b); }
+        static __forceinline vec4f Rcp   ( vec4f a, Context & )          { return v_rcp(a); }
+        static __forceinline vec4f RcpEst( vec4f a, Context & )          { return v_rcp_est(a); }
 
         static __forceinline vec4f Sin ( vec4f a, Context & ) { vec4f s,c; v_sincos4(a, s, c);return s; }
         static __forceinline vec4f Cos ( vec4f a, Context & ) { vec4f s,c; v_sincos4(a, s, c);return c; }
@@ -107,6 +111,8 @@ namespace das {
     MATH_FUN_OP1(Exp2)
     MATH_FUN_OP1(Log2)
     MATH_FUN_OP2(Pow)
+    MATH_FUN_OP1(Rcp)
+    MATH_FUN_OP1(RcpEst)
 
     //trig
     MATH_FUN_OP1(Sin)
@@ -135,7 +141,7 @@ namespace das {
 
     template <typename TT>
     void addFunctionCommon(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy       ret   arg1 arg2     name
+        //                                     policy        ret   arg1     name
         mod.addFunction( make_shared<BuiltInFn<Sim_Abs<TT>,  TT,   TT>   >("abs",    lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Floor<TT>,TT,   TT>   >("floor",  lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Ceil<TT>, TT,   TT>   >("ceil",   lib) );
@@ -143,7 +149,7 @@ namespace das {
     }
     template <typename Ret, typename TT>
     void addFunctionCommonConversion(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy            ret    arg1 arg2     name
+        //                                     policy          ret    arg1     name
         mod.addFunction( make_shared<BuiltInFn<Sim_Floori<TT>, Ret,   TT>   >("floori",  lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Ceili <TT>, Ret,   TT>   >("ceili",   lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_Roundi<TT>, Ret,   TT>   >("roundi",  lib) );
@@ -152,11 +158,13 @@ namespace das {
 
     template <typename TT>
     void addFunctionPow(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy       ret   arg1 arg2     name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Exp<TT>,  TT,   TT> >("exp",   lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Log<TT>,  TT,   TT> >("log",   lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Exp2<TT>, TT,   TT> >("exp2",  lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Log2<TT>, TT,   TT> >("log2",  lib) );
+        //                                     policy           ret   arg1   name
+        mod.addFunction( make_shared<BuiltInFn<Sim_Exp<TT>,     TT,   TT> >("exp",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Log<TT>,     TT,   TT> >("log",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Exp2<TT>,    TT,   TT> >("exp2",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Log2<TT>,    TT,   TT> >("log2",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Rcp<TT>,     TT,   TT> >("rcp",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_RcpEst<TT>,  TT,   TT> >("rcp_est",  lib) );
 
         mod.addFunction( make_shared<BuiltInFn<Sim_Pow<TT>,  TT,   TT,   TT> >("pow",   lib) );
     }
@@ -191,6 +199,7 @@ namespace das {
     __forceinline double dabs  (double a){return fabs(a);}
     __forceinline double dsqrt (double a){return sqrt(a);}
     __forceinline double dexp  (double a){return exp(a);}
+    __forceinline double drcp  (double a){return 1.0 / a;}
     __forceinline double dlog  (double a){return log(a);}
     __forceinline double dpow  (double a, double b){return pow(a,b);}
     __forceinline double dexp2 (double a){return exp2(a);}
@@ -251,6 +260,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(dabs)>(*this, lib, "abs", SideEffects::none);
             addExtern<DAS_BIND_FUN(dsqrt)>(*this, lib, "sqrt", SideEffects::none);
             addExtern<DAS_BIND_FUN(dexp)>(*this, lib, "exp", SideEffects::none);
+            addExtern<DAS_BIND_FUN(drcp)>(*this, lib, "rcp", SideEffects::none);
             addExtern<DAS_BIND_FUN(dlog)>(*this, lib, "log", SideEffects::none);
             addExtern<DAS_BIND_FUN(dpow)>(*this, lib, "pow", SideEffects::none);
             addExtern<DAS_BIND_FUN(dexp2)>(*this, lib, "exp2", SideEffects::none);

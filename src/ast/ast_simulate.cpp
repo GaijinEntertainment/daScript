@@ -547,7 +547,7 @@ namespace das
                 return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset);
             }
         } else {
-            assert(!r2v && "how did it ever become value");
+            // assert(!r2v && "how did it ever become value");
             if ( fields.size()==1 ) {
                 return context.code->makeValueNode<SimNode_FieldDerefR2V>(type->baseType,at,simV,offset);
             } else {
