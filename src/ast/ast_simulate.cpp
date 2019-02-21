@@ -1106,6 +1106,15 @@ namespace das
             logs << "debug " << context.debugInfo->bytesAllocated() << "\n";
             logs << "heap  " << context.heap.bytesAllocated() << "\n";
         }
+        // log all functions
+        if ( options.getOption("logNodes",false) ) {
+            for ( int i=0; i!=context.totalFunctions; ++i ) {
+                SimFunction * fn = context.getFunction(i);
+                logs << "// " << fn->name << "\n";
+                printSimNode(logs, fn->code);
+                logs << "\n\n";
+            }
+        }
         return errors.size() == 0;
     }
 }

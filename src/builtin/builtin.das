@@ -26,7 +26,6 @@ def erase(Tab:table<auto(keyT),auto(valT)>;at:keyT)
 
 // string
 
-[export]
 def peek ( src:das_string; subexpr:block<(root:string):void> ) : void
   _builtin_peek(src,subexpr)
 

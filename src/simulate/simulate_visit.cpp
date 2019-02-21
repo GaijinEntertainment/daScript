@@ -14,7 +14,9 @@ namespace das {
     }
 
     void SimNode_CallBase::visitCall ( SimVisitor & vis ) {
-        vis.arg(fnPtr->name,"fnPtr");
+        if ( fnPtr ) {
+            vis.arg(fnPtr->name,"fnPtr");
+        }
         V_SP(stackTop);
         for ( int32_t i=0; i!=nArguments; ++i ) {
             arguments[i] = arguments[i]->visit(vis);

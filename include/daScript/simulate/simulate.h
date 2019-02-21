@@ -112,6 +112,8 @@ namespace das
         virtual SimNode * visit ( SimNode * node ) { return node; }
     };
 
+    void printSimNode ( TextWriter & ss, SimNode * node );
+
     class Context {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
@@ -676,7 +678,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
         SimNode ** arguments;
         TypeInfo ** types;
-        SimFunction * fnPtr;
+        SimFunction * fnPtr = nullptr;
         int32_t  nArguments;
         uint32_t stackTop = 0;
     };
@@ -2101,6 +2103,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         DAS_NODE(TYPE,CTYPE);                                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
+        virtual SimNode * visit ( SimVisitor & vis ) override {         \
+            return visitOp2(vis, #CALL);                                \
+        }                                                               \
         __forceinline CTYPE compute ( Context & context ) {             \
             auto lv = l->eval##TYPE(context);                           \
             auto rv = r->eval##TYPE(context);                           \

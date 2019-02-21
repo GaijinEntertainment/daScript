@@ -124,6 +124,7 @@ src/simulate/runtime_range.cpp
 src/simulate/runtime_profile.cpp
 src/simulate/simulate.cpp
 src/simulate/simulate_visit.cpp
+src/simulate/simulate_print.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h
