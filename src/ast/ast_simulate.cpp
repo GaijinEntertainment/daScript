@@ -758,7 +758,7 @@ namespace das
     }
 
     SimNode * ExprOp1::simulate (Context & context) const {
-        if ( func->builtIn ) {
+        if ( func->builtIn && !func->callBased ) {
             auto pSimOp1 = static_cast<SimNode_Op1 *>(func->makeSimNode(context));
             pSimOp1->x = subexpr->simulate(context);
             return pSimOp1;
@@ -774,7 +774,7 @@ namespace das
     }
 
     SimNode * ExprOp2::simulate (Context & context) const {
-        if ( func->builtIn ) {
+        if ( func->builtIn && !func->callBased ) {
             auto pSimOp2 = static_cast<SimNode_Op2 *>(func->makeSimNode(context));
             pSimOp2->l = left->simulate(context);
             pSimOp2->r = right->simulate(context);

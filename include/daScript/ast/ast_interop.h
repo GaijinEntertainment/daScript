@@ -24,6 +24,7 @@ namespace das
 
     public:
         ExternalFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
+            callBased = true;
             using FunctionTrait = function_traits<FuncT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
             using Indices = make_index_sequence<nargs>;
@@ -82,7 +83,10 @@ namespace das
     template  <InteropFunction func, typename RetT, typename ...Args>
     class InteropFn : public InteropFnBase<RetT,Args...> {
     public:
-        InteropFn(const string & name, const ModuleLibrary & lib) : InteropFnBase<RetT,Args...>(name,lib) {}
+        InteropFn(const string & name, const ModuleLibrary & lib) 
+            : InteropFnBase<RetT,Args...>(name,lib) {
+            callBased = true;
+        }
         virtual SimNode * makeSimNode ( Context & context ) override {
             const char * fnName = context.code->allocateName(this->name);
             return context.code->makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at,fnName);

@@ -1372,6 +1372,7 @@ namespace das
         union {
             struct {
                 bool    builtIn : 1;
+                bool    callBased : 1;
                 bool    hasReturn: 1;
                 bool    copyOnReturn : 1;
                 bool    moveOnReturn : 1;
