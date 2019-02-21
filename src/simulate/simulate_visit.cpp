@@ -138,6 +138,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_GetLocalRefOff::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetLocalRefOff);
+        V_SP(stackTop);
+        V_SP(offset);
+        V_END();
+    }
+
     SimNode * SimNode_InitLocal::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(InitLocal);
@@ -157,6 +165,14 @@ namespace das {
         V_BEGIN();
         V_OP(GetArgumentRef);
         V_ARG(index);
+        V_END();
+    }
+
+    SimNode * SimNode_GetArgumentOff::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetArgumentOff);
+        V_ARG(index);
+        V_ARG(offset);
         V_END();
     }
 

@@ -515,6 +515,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
         virtual SimNode * simulate (Context & context) const = 0;
+        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const;
         virtual bool rtti_isSequence() const { return false; }
         virtual bool rtti_isConstant() const { return false; }
         virtual bool rtti_isStringConstant() const { return false; }
@@ -667,6 +668,7 @@ namespace das
         ExprVar ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isVar() const override { return true; }
         string              name;
@@ -692,6 +694,7 @@ namespace das
             : Expression(a), value(val), name(n) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isField() const override { return true; }
         ExpressionPtr   value;
@@ -714,6 +717,7 @@ namespace das
             : Expression(a), value(val), mask(n) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isSwizzle() const override { return true; }
         ExpressionPtr   value;

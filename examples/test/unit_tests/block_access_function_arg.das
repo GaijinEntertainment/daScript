@@ -1,3 +1,5 @@
+// options log=true, logNodes=true, logStack=true
+
 def addValue(a,blk)
     return invoke(blk,a)
 

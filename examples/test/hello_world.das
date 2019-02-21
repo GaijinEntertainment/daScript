@@ -1,6 +1,5 @@
 options log = true, logNodes =true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
 
-
 struct NObject
     position, velocity : float3
 
@@ -35,7 +34,7 @@ def init(objects:array<NObject>)
 def test()
     let objects:array<NObject>
     init(objects)
-    let(total=20)
+    let(total=1)
         profile(total,"particles kinematics") <|
             testSim2(objects,100)
         profile(total,"particles kinematics, inlined") <|

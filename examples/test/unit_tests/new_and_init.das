@@ -1,3 +1,4 @@
+// options log=true, logNodes=true, logStack=true
 options alwaysExportInitializer=true
 
 require UnitTest
