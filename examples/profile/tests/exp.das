@@ -1,4 +1,4 @@
-// options log=true, printVarAccess=true, printRef=true
+// options log=true, logNodes=true, printVarAccess=true, printRef=true
 
 require math
 require testProfile
@@ -22,8 +22,7 @@ def expLoopU(n)
 def expLoopUV(n)
     let sumV = float4(0.)
     for i in range(0, n/4)
-        let k = float(i*4)
-        sumV += exp(rcp_est(float4(1.+k,2.+k,3.+k,4.+k)))
+		sumV += exp(rcp_est(float4(i*16)+float4(1,2,3,4)))
     return sumV.x + sumV.y + sumV.z + sumV.w
 
 [export]
