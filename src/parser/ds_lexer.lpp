@@ -164,8 +164,8 @@
 <include>[ \t]*                     /* eat the whitespace */
 <include>[^ \t\r\n]+                { /* got the include file name */
     auto cfi = g_AccessStack.back();
-    string incFileName = g_Program->access->getIncludeFileName(cfi->name,yytext);
-    auto info = g_Program->access->getFileInfo(incFileName);
+    string incFileName = g_Access->getIncludeFileName(cfi->name,yytext);
+    auto info = g_Access->getFileInfo(incFileName);
     if ( !info ) {
         yyerror("can't open "+incFileName);
     } else {

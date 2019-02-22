@@ -85,7 +85,7 @@ namespace das
     public:
         InteropFn(const string & name, const ModuleLibrary & lib) 
             : InteropFnBase<RetT,Args...>(name,lib) {
-            callBased = true;
+            this->callBased = true;
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
             const char * fnName = context.code->allocateName(this->name);

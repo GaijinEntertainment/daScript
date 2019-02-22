@@ -1597,7 +1597,6 @@ namespace das
         uint32_t                    globalInitStackSize = 0;
     public:
         map<CompilationError,int>   expectErrors;
-        shared_ptr<FileAccess>      access;
     public:
         AnnotationArgumentList      options;
     };

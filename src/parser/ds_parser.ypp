@@ -5,6 +5,7 @@
     
     namespace das {
         extern ProgramPtr			g_Program;
+        extern FileAccessPtr        g_Access;
         extern vector<FileInfoPtr>	g_AccessStack;
     }
     using namespace das;
