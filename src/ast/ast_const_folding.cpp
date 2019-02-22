@@ -423,11 +423,11 @@ namespace das {
                     allNoSideEffects &= arg->noSideEffects;
             }
             if ( allNoSideEffects ) {
-                if ( isNop(expr->func) ) {
+                if ( isNop(expr->func->shared_from_this()) ) {
                     reportFolding();
                     return nullptr;
                 }
-                if ( auto sc = getSimpleConst(expr->func) ) {
+                if ( auto sc = getSimpleConst(expr->func->shared_from_this()) ) {
                     reportFolding();
                     return sc;
                 }

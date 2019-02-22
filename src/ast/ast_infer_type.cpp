@@ -650,10 +650,10 @@ namespace das {
         }
     // ExprAddr
         virtual ExpressionPtr visit ( ExprAddr * expr ) override {
-            expr->func.reset();
+            expr->func = nullptr;
             auto fns = findFuncAddr(expr->target);
             if ( fns.size()==1 ) {
-                expr->func = fns.back();
+                expr->func = fns.back().get();
                 expr->func->addr = true;
                 expr->type = make_shared<TypeDecl>(Type::tFunction);
                 expr->type->firstType = make_shared<TypeDecl>(*expr->func->result);
@@ -1027,7 +1027,7 @@ namespace das {
                 }
             }
             expr->name.clear();
-            expr->func.reset();
+            expr->func = nullptr;
             if ( expr->typeexpr->ref ) {
                 error("can't new a reference", expr->at, CompilationError::invalid_new_type);
             } if ( expr->typeexpr->baseType==Type::tStructure ) {
@@ -1056,7 +1056,7 @@ namespace das {
             }
             if ( expr->type && expr->initializer && !expr->name.empty() ) {
                 auto resultType = expr->type;
-                expr->func = inferFunctionCall(expr);
+                expr->func = inferFunctionCall(expr).get();
                 swap ( resultType, expr->type );
                 if ( expr->func ) {
                     if ( !expr->type->firstType->isSameType(*resultType,true,true) ) {
@@ -1400,7 +1400,7 @@ namespace das {
                 error("too many matching operators '" + expr->op
                       + "' with argument (" + expr->subexpr->type->describe() + ")", expr->at, CompilationError::operator_not_found);
             } else {
-                expr->func = functions[0];
+                expr->func = functions[0].get();
                 expr->type = make_shared<TypeDecl>(*expr->func->result);
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
@@ -1430,7 +1430,7 @@ namespace das {
                       + "' with arguments (" + expr->left->type->describe() + ", " + expr->right->type->describe()
                       + ")\n" + candidates, expr->at, CompilationError::operator_not_found);
             } else {
-                expr->func = functions[0];
+                expr->func = functions[0].get();
                 expr->type = make_shared<TypeDecl>(*expr->func->result);
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->left = Expression::autoDereference(expr->left);
@@ -1556,7 +1556,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprReturn * expr ) override {
             expr->block.reset();
-            expr->func.reset();
+            expr->func = nullptr;
             if ( blocks.size() ) {
                 ExprBlock * block = blocks.back();
                 expr->block = static_pointer_cast<ExprBlock>(block->shared_from_this());
@@ -1580,7 +1580,7 @@ namespace das {
                 }
             } else {
                 // infer
-                expr->func = func;
+                expr->func = func.get();
                 func->hasReturn = true;
                 if ( expr->subexpr ) {
                     if ( !expr->subexpr->type ) return Visitor::visit(expr);
@@ -1935,7 +1935,7 @@ namespace das {
             return nullptr;
         }
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
-            expr->func = inferFunctionCall(expr);
+            expr->func = inferFunctionCall(expr).get();
             return Visitor::visit(expr);
         }
     // ExprKeys

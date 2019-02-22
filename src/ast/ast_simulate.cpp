@@ -425,7 +425,7 @@ namespace das
             if ( initializer ) {
                 auto pCall = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_NewWithInitializer>(int(arguments.size()),at,bytes);
                 pCall->stackTop = -1u;
-                newNode = ExprCall::simulateCall(func, this, context, pCall);
+                newNode = ExprCall::simulateCall(func->shared_from_this(), this, context, pCall);
             } else {
                 newNode = context.code->makeNode<SimNode_New>(at,bytes);
             }
@@ -1139,7 +1139,7 @@ namespace das
 
     SimNode * ExprCall::simulate (Context & context) const {
         auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
-        simulateCall(func, this, context, pCall);
+        simulateCall(func->shared_from_this(), this, context, pCall);
         pCall->stackTop = stackTop;
         return pCall;
     }

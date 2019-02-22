@@ -24,10 +24,10 @@ namespace das {
             if (fn->builtIn) return;
             fn->used = true;
             for (const auto & gv : fn->useGlobalVariables) {
-                propageteVarUse(gv);
+                propageteVarUse(gv->shared_from_this());
             }
             for (const auto & it : fn->useFunctions) {
-                propagateFunctionUse(it);
+                propagateFunctionUse(it->shared_from_this());
             }
         }
         void markUsedFunctions( Module & thisModule, bool forceAll ){
@@ -95,7 +95,7 @@ namespace das {
             Visitor::preVisit(expr);
             if (!expr->local && !expr->argument && !expr->block) {
                 if (func) {
-                    func->useGlobalVariables.insert(expr->variable);
+                    func->useGlobalVariables.insert(expr->variable.get());
                 } else {
                     gVarVarUse[gVar].push_back(expr->variable);
                 }
@@ -108,7 +108,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(addr->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(addr->func);
+                    gVarFuncUse[gVar].push_back(addr->func->shared_from_this());
                 }
             }
         }
@@ -119,7 +119,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(call->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(call->func);
+                    gVarFuncUse[gVar].push_back(call->func->shared_from_this());
                 }
             }
         }
@@ -131,7 +131,7 @@ namespace das {
                     if (func) {
                         func->useFunctions.insert(call->func);
                     } else {
-                        gVarFuncUse[gVar].push_back(call->func);
+                        gVarFuncUse[gVar].push_back(call->func->shared_from_this());
                     }
                 }
             }
@@ -143,7 +143,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(expr->func);
+                    gVarFuncUse[gVar].push_back(expr->func->shared_from_this());
                 }
             }
         }
@@ -154,7 +154,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(expr->func);
+                    gVarFuncUse[gVar].push_back(expr->func->shared_from_this());
                 }
             }
         }
@@ -165,7 +165,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(expr->func);
+                    gVarFuncUse[gVar].push_back(expr->func->shared_from_this());
                 }
             }
         }

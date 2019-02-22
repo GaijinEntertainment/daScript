@@ -589,7 +589,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isAddr() const override { return true; }
         string target;
-        FunctionPtr func;
+        Function * func = nullptr;
     };
 
     struct ExprNullCoalescing : ExprPtr2Ref {
@@ -750,7 +750,7 @@ namespace das
         ExprOp ( const LineInfo & a, const string & o ) : Expression(a), op(o) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         string      op;
-        FunctionPtr func;   // always built-in function
+        Function * func = nullptr;   // always built-in function
     };
 
     // unary    !subexpr
@@ -850,8 +850,8 @@ namespace das
             };
             uint32_t    returnFlags = 0;
         };
-        uint32_t stackTop = 0;
-        FunctionPtr             func;
+        uint32_t                stackTop = 0;
+        Function *              func = nullptr;
         shared_ptr<ExprBlock>   block;
     };
 
@@ -1256,7 +1256,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        FunctionPtr     func;
+        Function *      func = nullptr;
         TypeDeclPtr     typeexpr;
         uint32_t        stackTop = 0;
         bool            initializer = false;
@@ -1270,7 +1270,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode_CallBase * simulateCall (const FunctionPtr & func, const ExprLooksLikeCall * expr,
             Context & context, SimNode_CallBase * pCall);
-        FunctionPtr     func;
+        Function *      func = nullptr;
         uint32_t        stackTop = 0;
     };
 
@@ -1367,8 +1367,8 @@ namespace das
         uint32_t            totalStackSize = 0;
         LineInfo            at;
         Module *            module = nullptr;
-        set<FunctionPtr>    useFunctions;
-        set<VariablePtr>    useGlobalVariables;
+        set<Function *>     useFunctions;
+        set<Variable *>     useGlobalVariables;
         union {
             struct {
                 bool    builtIn : 1;
@@ -1388,9 +1388,9 @@ namespace das
         uint32_t    sideEffectFlags = 0;
         struct InferHistory {
             LineInfo    at;
-            FunctionPtr func;
+            Function *  func = nullptr;
             InferHistory() = default;
-            InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p) {}
+            InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
         };
         vector<InferHistory> inferStack;
     };
