@@ -317,6 +317,7 @@ namespace das
             float   fValue;
         };
         AnnotationArgument () : type(Type::tVoid), iValue(0) {}
+        AnnotationArgument (const AnnotationArgument&a) : type(a.type), iValue(a.iValue),name(a.name),sValue(a.sValue) {}//explicit copy is required to avoid copying union as float and cause FPE
         AnnotationArgument ( const string & n, const string & s ) : type(Type::tString), name(n), sValue(s), iValue(0) {}
         AnnotationArgument ( const string & n, bool  b ) : type(Type::tBool), name(n), bValue(b) {}
         AnnotationArgument ( const string & n, int   i ) : type(Type::tInt), name(n), iValue(i) {}
