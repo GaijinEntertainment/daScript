@@ -122,9 +122,10 @@ namespace das
     }
 
     string reportError(const struct LineInfo & at, const string & message, CompilationError erc) {
+        auto fi = at.fileInfo.lock();
         return reportError(
-                at.fileInfo ? at.fileInfo->source : nullptr, 
-                at.fileInfo ? at.fileInfo->name : nullptr, 
+                fi ? fi->source : nullptr,
+                fi ? fi->name : nullptr,
                 at.line, at.column, message, erc );
     }
 

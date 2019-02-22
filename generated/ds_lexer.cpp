@@ -1230,7 +1230,7 @@ YY_RULE_SETUP
 case YY_STATE_EOF(indent):
 #line 144 "src/parser/ds_lexer.lpp"
 {
-    if ( g_AccessStack.size()==1 ) {
+    if ( g_FileAccessStack.size()==1 ) {
         if ( indent_level ) {
             indent_level--;
             unput('\r');
@@ -1243,7 +1243,7 @@ case YY_STATE_EOF(indent):
         }
     } else {
         yypop_buffer_state();
-        g_AccessStack.pop_back();
+        g_FileAccessStack.pop_back();
         yylineno = line_no.back();
         line_no.pop_back();
     }
@@ -1258,7 +1258,7 @@ case 20:
 YY_RULE_SETUP
 #line 165 "src/parser/ds_lexer.lpp"
 { /* got the include file name */
-    auto cfi = g_AccessStack.back();
+    auto cfi = g_FileAccessStack.back();
     string incFileName = g_Access->getIncludeFileName(cfi->name,yytext);
     auto info = g_Access->getFileInfo(incFileName);
     if ( !info ) {
@@ -1266,7 +1266,7 @@ YY_RULE_SETUP
     } else {
         if ( already_include.find(incFileName) == already_include.end() ) {
             already_include.insert(incFileName);
-            g_AccessStack.push_back(info);
+            g_FileAccessStack.push_back(info.get());
             line_no.push_back(yylineno);
             yylineno = 1;
             yypush_buffer_state(YY_CURRENT_BUFFER);

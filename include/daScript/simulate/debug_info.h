@@ -49,7 +49,7 @@ namespace das
         string      name;
     };
 
-    struct FileInfo {
+    struct FileInfo : public enable_shared_from_this<FileInfo> {
         FileInfo() = default;
         FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
         virtual void freeSourceData() {}
@@ -63,7 +63,7 @@ namespace das
     class FileAccess {
     public:
         virtual ~FileAccess() {}
-        FileInfoPtr setFileInfo ( const string & fileName, FileInfo * info );
+        FileInfoPtr setFileInfo ( const string & fileName, const FileInfoPtr & info );
         FileInfoPtr getFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
         void freeSourceData();
@@ -76,12 +76,13 @@ namespace das
 
     struct LineInfo {
         LineInfo() = default;
-        LineInfo(const FileInfoPtr & fi, int c, int l) : fileInfo(fi), column(uint32_t(c)), line(uint32_t(l)) {}
+        LineInfo(const FileInfoPtr & fi, int c, int l)
+            : fileInfo(fi), column(uint32_t(c)), line(uint32_t(l)) {}
         bool operator < ( const LineInfo & info ) const;
         bool operator == ( const LineInfo & info ) const;
         bool operator != ( const LineInfo & info ) const;
         string describe() const;
-        FileInfoPtr fileInfo;
+        weak_ptr<FileInfo>  fileInfo;
         uint32_t    column = 0, line = 0;
     };
 

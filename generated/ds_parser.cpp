@@ -126,14 +126,14 @@ extern int yydebug;
     namespace das {
         extern ProgramPtr			g_Program;
         extern FileAccessPtr        g_Access;
-        extern vector<FileInfoPtr>	g_AccessStack;
+        extern vector<FileInfo *>	g_FileAccessStack;
     }
     using namespace das;
     
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
             : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
-        ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
+        virtual ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
         LineInfo        at;
         vector<string>  *pNameList;
         TypeDecl        *pTypeDecl;
@@ -3082,7 +3082,7 @@ yyreduce:
 #line 447 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
-        (yyval.pTypeDecl)->at = LineInfo(g_AccessStack.back(), yylloc.first_column,yylloc.first_line);
+        (yyval.pTypeDecl)->at = LineInfo(g_FileAccessStack.back()->shared_from_this(), yylloc.first_column,yylloc.first_line);
     }
 #line 3088 "/Users/borisbatkin/work/yzg/generated/ds_parser.cpp" /* yacc.c:1660  */
     break;
@@ -5253,7 +5253,7 @@ void yyerror(const string & error, const LineInfo & at, CompilationError cerr) {
 }
 
 void yyerror(const string & error, CompilationError cerr) {
-    g_Program->error(error,LineInfo(g_AccessStack.back(),yylloc.first_column,yylloc.first_line),cerr);
+    g_Program->error(error,LineInfo(g_FileAccessStack.back()->shared_from_this(),yylloc.first_column,yylloc.first_line),cerr);
 }
 
 vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
@@ -5288,7 +5288,7 @@ void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
 }
 
 LineInfo tokAt ( const struct YYLTYPE & li ) {
-    return LineInfo(g_AccessStack.back(), li.first_column,li.first_line);
+    return LineInfo(g_FileAccessStack.back()->shared_from_this(), li.first_column,li.first_line);
 }
 
 Annotation * findAnnotation ( const string & name, const LineInfo & at ) {

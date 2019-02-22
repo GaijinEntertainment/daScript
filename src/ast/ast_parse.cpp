@@ -97,7 +97,7 @@ namespace das {
 
     ProgramPtr g_Program;
     FileAccessPtr g_Access;
-    vector<FileInfoPtr>  g_AccessStack;
+    vector<FileInfo *>  g_FileAccessStack;
 
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
@@ -112,22 +112,22 @@ namespace das {
             g_Program->library.addModule(pm);
             return true;
         },"*");
-        g_AccessStack.clear();
+        g_FileAccessStack.clear();
         if ( auto fi = access->getFileInfo(fileName) ) {
-            g_AccessStack.push_back(fi);
+            g_FileAccessStack.push_back(fi.get());
             yybegin(fi->source);
         } else {
             g_Program->error(fileName + " not found", LineInfo());
             g_Program.reset();
             g_Access.reset();
-            g_AccessStack.clear();
+            g_FileAccessStack.clear();
             return program;
         }
         err = yyparse();        // TODO: add mutex or make thread safe?
         yylex_destroy();
         g_Program.reset();
         g_Access.reset();
-        g_AccessStack.clear();
+        g_FileAccessStack.clear();
         if ( err || program->failed() ) {
             sort(program->errors.begin(),program->errors.end());
             return program;

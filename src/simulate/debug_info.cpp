@@ -202,9 +202,9 @@ namespace das
     }
 
     string LineInfo::describe() const {
-        if ( fileInfo ) {
+        if ( auto fi = fileInfo.lock() ) {
             TextWriter ss;
-            ss << fileInfo->name << ":" << line << ":" << column;
+            ss << fi->name << ":" << line << ":" << column;
             return ss.str();
         } else {
             return string();
@@ -212,21 +212,27 @@ namespace das
     }
 
     bool LineInfo::operator < ( const LineInfo & info ) const {
-        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) < 0 ) return true;
+        auto fi = fileInfo.lock();
+        auto ifi = info.fileInfo.lock();
+        if ( fi && ifi && strcmp(fi->name, ifi->name) < 0 ) return true;
         return (line==info.line) ? column<info.column : line<info.line;
     }
     bool LineInfo::operator == ( const LineInfo & info ) const {
-        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) != 0 ) return false;
+        auto fi = fileInfo.lock();
+        auto ifi = info.fileInfo.lock();
+        if ( fi && ifi && strcmp(fi->name, ifi->name) != 0 ) return false;
         return line==info.line && column==info.column;
     }
     bool LineInfo::operator != ( const LineInfo & info ) const {
-        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) != 0 ) return true;
+        auto fi = fileInfo.lock();
+        auto ifi = info.fileInfo.lock();
+        if ( fi && ifi && strcmp(fi->name, ifi->name) != 0 ) return true;
         return line!=info.line || column!=info.column;
     }
 
-    FileInfoPtr FileAccess::setFileInfo ( const string & fileName, FileInfo * info ) {
+    FileInfoPtr FileAccess::setFileInfo ( const string & fileName, const FileInfoPtr & info ) {
         if ( files.find(fileName)!=files.end() ) return nullptr;
-        files[fileName] = FileInfoPtr(info);
+        files[fileName] = info;
         auto ins = files.find(fileName);
         ins->second->name = (char *) ins->first.c_str();
         return ins->second;

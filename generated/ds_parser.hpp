@@ -52,14 +52,14 @@ extern int yydebug;
     namespace das {
         extern ProgramPtr			g_Program;
         extern FileAccessPtr        g_Access;
-        extern vector<FileInfoPtr>	g_AccessStack;
+        extern vector<FileInfo *>	g_FileAccessStack;
     }
     using namespace das;
     
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
             : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
-        ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
+        virtual ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
         LineInfo        at;
         vector<string>  *pNameList;
         TypeDecl        *pTypeDecl;

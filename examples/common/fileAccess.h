@@ -6,6 +6,7 @@
 #endif
 
 class FsFileInfo : public das::FileInfo {
+private:
     virtual void freeSourceData() override {
         das_aligned_free16((void*)source);
         source = nullptr;
@@ -13,9 +14,16 @@ class FsFileInfo : public das::FileInfo {
 };
 
 class FsFileAccess : public das::FileAccess {
+public:
+    void verify() {
+        for ( auto & fi : files ) {
+            assert(fi.second.unique());
+        }
+    }
+private:
     virtual das::FileInfoPtr getNewFileInfo(const das::string & fileName) override {
         if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
-            auto info = new FsFileInfo();
+            auto info = das::make_shared<FsFileInfo>();
             fseek(ff,0,SEEK_END);
             info->sourceLength = uint32_t(ftell(ff));
             fseek(ff,0,SEEK_SET);

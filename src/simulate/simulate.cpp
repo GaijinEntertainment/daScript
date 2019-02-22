@@ -111,7 +111,7 @@ namespace das
             string error_message = "assert failed";
             if ( message )
                 error_message = error_message + ", " + message;
-            string error = reportError(debugInfo.fileInfo->source, debugInfo.fileInfo->name, debugInfo.line, debugInfo.column, error_message );
+            string error = reportError(debugInfo, error_message );
             error = context.getStackWalk(false) + error;
             context.to_err(error.c_str());
             context.throw_error_at(debugInfo,"assert failed");

@@ -9,9 +9,9 @@ TextPrinter tout;
 
 bool compilation_fail_test ( const string & fn ) {
     tout << fn << " ";
-    auto access = make_shared<FsFileAccess>();
+    auto fAccess = make_shared<FsFileAccess>();
     ModuleGroup dummyLibGroup;
-    if ( auto program = compileDaScript(fn, access, tout, dummyLibGroup) ) {
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
             bool failed = false;
             auto errors = program->expectErrors;
@@ -45,6 +45,8 @@ bool compilation_fail_test ( const string & fn ) {
                 return false;
             }
             tout << "ok\n";
+            assert(fAccess.unique());
+            fAccess->verify();
             return true;
         } else {
             tout << "failed, compiled without errors\n";
@@ -58,9 +60,9 @@ bool compilation_fail_test ( const string & fn ) {
 
 bool unit_test ( const string & fn ) {
     tout << fn << " ";
-    auto access = make_shared<FsFileAccess>();
+    auto fAccess = make_shared<FsFileAccess>();
     ModuleGroup dummyLibGroup;
-    if ( auto program = compileDaScript(fn, access, tout, dummyLibGroup) ) {
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -91,6 +93,8 @@ bool unit_test ( const string & fn ) {
                     return false;
                 }
                 tout << "ok\n";
+                assert(fAccess.unique());
+                fAccess->verify();
                 return true;
             } else {
                 tout << "function 'test' not found\n";
@@ -104,9 +108,9 @@ bool unit_test ( const string & fn ) {
 
 bool exception_test ( const string & fn ) {
     tout << fn << " ";
-    auto access = make_shared<FsFileAccess>();
+    auto fAccess = make_shared<FsFileAccess>();
     ModuleGroup dummyLibGroup;
-    if ( auto program = compileDaScript(fn, access, tout, dummyLibGroup) ) {
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -127,6 +131,8 @@ bool exception_test ( const string & fn ) {
                 ctx.evalWithCatch(fnTest, nullptr);
                 if ( auto ex = ctx.getException() ) {
                     tout << "ok\n";
+                    assert(fAccess.unique());
+                    fAccess->verify();
                     return true;
                 }
                 tout << "failed, finished without exception\n";
