@@ -750,7 +750,8 @@ namespace das
         ExprOp ( const LineInfo & a, const string & o ) : Expression(a), op(o) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         string      op;
-        Function * func = nullptr;   // always built-in function
+        Function *  func = nullptr;   // always built-in function
+        uint32_t    stackTop = 0;
     };
 
     // unary    !subexpr

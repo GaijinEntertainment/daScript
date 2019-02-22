@@ -769,6 +769,7 @@ namespace das
             pCall->arguments = (SimNode **) context.code->allocate(1 * sizeof(SimNode *));
             pCall->nArguments = 1;
             pCall->arguments[0] = subexpr->simulate(context);
+            pCall->stackTop = stackTop;
             return pCall;
         }
     }
@@ -787,6 +788,7 @@ namespace das
             pCall->nArguments = 2;
             pCall->arguments[0] = left->simulate(context);
             pCall->arguments[1] = right->simulate(context);
+            pCall->stackTop = stackTop;
             return pCall;
         }
     }

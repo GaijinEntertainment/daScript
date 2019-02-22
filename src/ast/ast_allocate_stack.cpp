@@ -101,6 +101,30 @@ namespace das {
             }
             return Visitor::visit(block);
         }
+    // ExprOp1
+        virtual void preVisit ( ExprOp1 * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
+                auto sz = expr->func->result->getSizeOf();
+                expr->stackTop = allocateStack(sz);
+                if ( log ) {
+                    logs << "\t" << expr->stackTop << "\t" << sz
+                    << "\top1, line " << expr->at.line << "\n";
+                }
+            }
+        }
+    // ExprOp2
+        virtual void preVisit ( ExprOp2 * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
+                auto sz = expr->func->result->getSizeOf();
+                expr->stackTop = allocateStack(sz);
+                if ( log ) {
+                    logs << "\t" << expr->stackTop << "\t" << sz
+                        << "\top2, line " << expr->at.line << "\n";
+                }
+            }
+        }
     // ExprCall
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);

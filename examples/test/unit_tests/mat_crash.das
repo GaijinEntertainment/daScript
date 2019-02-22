@@ -1,4 +1,5 @@
-// options log=true, logStack=true, optimize=true
+// options log=true, logStack=true, logNodes=true, optimize=true
+
 [export]
 def test
     let a,b : float3x4
