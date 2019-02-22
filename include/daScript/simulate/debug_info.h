@@ -52,7 +52,7 @@ namespace das
     struct FileInfo : public enable_shared_from_this<FileInfo> {
         FileInfo() = default;
         FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
-        virtual void freeSourceData() {}
+        virtual void freeSourceData() { }
         virtual ~FileInfo() { freeSourceData(); }
         const char *          name = nullptr;
         const char *          source = nullptr;
@@ -62,7 +62,6 @@ namespace das
 
     class FileAccess {
     public:
-        virtual ~FileAccess() {}
         FileInfoPtr setFileInfo ( const string & fileName, const FileInfoPtr & info );
         FileInfoPtr getFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;

@@ -6,6 +6,10 @@
 #endif
 
 class FsFileInfo : public das::FileInfo {
+public:
+    virtual ~FsFileInfo() { 
+        freeSourceData();
+    }
 private:
     virtual void freeSourceData() override {
         das_aligned_free16((void*)source);
