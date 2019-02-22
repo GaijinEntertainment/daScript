@@ -1554,12 +1554,15 @@ namespace das {
             }
             return false;
         }
+        virtual void preVisit ( ExprReturn * expr ) override {
+            Visitor::preVisit(expr);
+            expr->block = nullptr;
+        }
         virtual ExpressionPtr visit ( ExprReturn * expr ) override {
-            expr->block.reset();
             expr->func = nullptr;
             if ( blocks.size() ) {
                 ExprBlock * block = blocks.back();
-                expr->block = static_pointer_cast<ExprBlock>(block->shared_from_this());
+                expr->block = block;
                 block->hasReturn = true;
                 if ( expr->subexpr ) {
                     if ( !expr->subexpr->type ) return Visitor::visit(expr);

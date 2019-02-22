@@ -1,3 +1,5 @@
+// options log = true
+
 [export]
 def test
     let CNT = 0

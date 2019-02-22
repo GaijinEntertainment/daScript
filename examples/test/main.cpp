@@ -198,7 +198,7 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/unit_tests/mat_crash.das");
+    unit_test(TEST_PATH "examples/test/unit_tests/lambda.das");
     Module::Shutdown();
     return 0;
 #endif

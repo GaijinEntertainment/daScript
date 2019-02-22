@@ -852,7 +852,7 @@ namespace das
         };
         uint32_t                stackTop = 0;
         Function *              func = nullptr;
-        shared_ptr<ExprBlock>   block;
+        ExprBlock *             block = nullptr;
     };
 
     struct ExprBreak : Expression {
