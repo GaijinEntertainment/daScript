@@ -729,6 +729,12 @@ namespace das {
         auto cexpr = clonePtr<ExprVar>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
+        cexpr->variable = variable; 
+        cexpr->local = local;
+        cexpr->block = block;
+        cexpr->pBlock = pBlock;
+        cexpr->argument = argument;
+        cexpr->argumentIndex = argumentIndex;
         return cexpr;
     }
 

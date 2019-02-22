@@ -1323,6 +1323,15 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprVar
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            expr->variable = nullptr;
+            expr->local = false;
+            expr->block = false;
+            expr->pBlock.reset();
+            expr->argument = false;
+            expr->argumentIndex = -1;
+        }
         virtual ExpressionPtr visit ( ExprVar * expr ) override {
             // local (that on the stack)
             for ( auto it = local.rbegin(); it!=local.rend(); ++it ) {

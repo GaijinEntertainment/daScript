@@ -62,6 +62,7 @@ namespace das
 
     class FileAccess {
     public:
+        virtual ~FileAccess() {}
         FileInfoPtr setFileInfo ( const string & fileName, const FileInfoPtr & info );
         FileInfoPtr getFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;

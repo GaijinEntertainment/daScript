@@ -19,10 +19,13 @@ private:
 
 class FsFileAccess : public das::FileAccess {
 public:
-    void verify() {
+    bool verify() {
         for ( auto & fi : files ) {
-            assert(fi.second.unique());
+            if ( !fi.second.unique() ) {
+                return false;
+            }
         }
+        return true;
     }
 private:
     virtual das::FileInfoPtr getNewFileInfo(const das::string & fileName) override {

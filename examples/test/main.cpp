@@ -46,7 +46,7 @@ bool compilation_fail_test ( const string & fn ) {
             }
             tout << "ok\n";
             assert(fAccess.unique());
-            fAccess->verify();
+            assert(fAccess->verify());
             return true;
         } else {
             tout << "failed, compiled without errors\n";
@@ -94,7 +94,7 @@ bool unit_test ( const string & fn ) {
                 }
                 tout << "ok\n";
                 assert(fAccess.unique());
-                fAccess->verify();
+                assert(fAccess->verify());
                 return true;
             } else {
                 tout << "function 'test' not found\n";
@@ -132,7 +132,7 @@ bool exception_test ( const string & fn ) {
                 if ( auto ex = ctx.getException() ) {
                     tout << "ok\n";
                     assert(fAccess.unique());
-                    fAccess->verify();
+                    assert(fAccess->verify());
                     return true;
                 }
                 tout << "failed, finished without exception\n";
