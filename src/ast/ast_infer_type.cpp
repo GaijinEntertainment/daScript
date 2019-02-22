@@ -1851,8 +1851,8 @@ namespace das {
                 // ok, time to find us a good generic
                 auto generics = findMatchingGenerics(expr->name, types);
                 if ( generics.size()==1 ) {
-                    auto generic = generics[0];
-                    auto clone = generic->clone();
+                    auto oneGeneric = generics[0];
+                    auto clone = oneGeneric->clone();
                     clone->inferStack.emplace_back(expr->at, func);
                     clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());
                     for ( size_t sz = 0; sz != types.size(); ++sz ) {
