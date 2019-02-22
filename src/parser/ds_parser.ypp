@@ -13,7 +13,7 @@
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
             : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
-        ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
+        virtual ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
         LineInfo        at;
         vector<string>  *pNameList;
         TypeDecl        *pTypeDecl;

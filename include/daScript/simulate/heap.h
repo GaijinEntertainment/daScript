@@ -13,7 +13,7 @@ namespace das {
     class HeapAllocator {
     public:
         HeapAllocator();
-        ~HeapAllocator();
+        virtual ~HeapAllocator();
         HeapAllocator(const HeapAllocator &) = delete;
         HeapAllocator & operator = (const HeapAllocator &) = delete;
         void setInitialSize ( uint32_t size );
@@ -49,7 +49,7 @@ namespace das {
             reset();
         }
 
-        ~StackAllocator() {
+        virtual ~StackAllocator() {
             das_aligned_free16(stack);
         }
 
