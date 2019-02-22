@@ -332,7 +332,7 @@ namespace das {
         auto t = make_shared<TypeDecl>(Type::tStructure);
         auto structs = findStructure(name);
         if ( structs.size()==1 ) {
-            t->structType = structs.back();
+            t->structType = structs.back().get();
         } else {
             DAS_FATAL_LOG("makeStructureType(%s) failed\n", name.c_str());
             DAS_FATAL_ERROR;

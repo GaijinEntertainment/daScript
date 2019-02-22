@@ -407,9 +407,9 @@ namespace das {
                 if ( auto eWT = eW->with->type ) {
                     StructurePtr pSt;
                     if ( eWT->isStructure() ) {
-                        pSt = eWT->structType;
+                        pSt = eWT->structType->shared_from_this();
                     } else if ( eWT->isPointer() && eWT->firstType && eWT->firstType->isStructure() ) {
-                        pSt = eWT->firstType->structType;
+                        pSt = eWT->firstType->structType->shared_from_this();
                     }
                     if ( pSt ) {
                         for ( auto fi : pSt->fields ) {
@@ -1629,9 +1629,9 @@ namespace das {
                     error("with array in undefined, " + wT->describe(), expr->at,
                           CompilationError::invalid_with_type );
                 } else if ( wT->isStructure() ) {
-                    pSt = wT->structType;
+                    pSt = wT->structType->shared_from_this();
                 } else if ( wT->isPointer() && wT->firstType && wT->firstType->isStructure() ) {
-                    pSt = wT->firstType->structType;
+                    pSt = wT->firstType->structType->shared_from_this();
                 } else {
                     error("unexpected with type " + wT->describe(), expr->at,
                           CompilationError::invalid_with_type );

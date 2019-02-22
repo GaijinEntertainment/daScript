@@ -56,7 +56,7 @@ namespace das
         TypeDecl(const TypeDecl & decl);
         TypeDecl & operator = (const TypeDecl & decl) = delete;
         TypeDecl(Type tt) : baseType(tt) {}
-        TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp) {}
+        TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp.get()) {}
         TypeDecl(const EnumerationPtr & ep) : baseType(Type::tEnumeration), enumType(ep) {}
         friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
         string getMangledName() const;
@@ -109,7 +109,7 @@ namespace das
         Type getRangeBaseType() const;
         const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
         Type                baseType = Type::tVoid;
-        StructurePtr        structType;
+        Structure *         structType = nullptr;
         EnumerationPtr      enumType;
         TypeAnnotationPtr   annotation;
         TypeDeclPtr         firstType;      // map.first or array, or pointer
