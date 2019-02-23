@@ -564,6 +564,7 @@ expression_block
         auto pF = (ExprBlock *) $final;
         swap ( pB->finalList, pF->list );
         $$ = $block;
+        delete $final;
     }
     ;
 
@@ -583,7 +584,10 @@ expression_any
     ;
 
 expressions
-    :                                                   { $$ = new ExprBlock(); }
+    :   [loc]                                           {
+        $$ = new ExprBlock();
+        $$->at = tokAt(@loc);
+    }
     |   expressions[block] expression_any[subexpr]      {
         $$ = $block;
         if ( $subexpr ) {
