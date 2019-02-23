@@ -1,6 +1,6 @@
-#line 1 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
+#line 1 "/Users/borisbatkin/work/yzg/generated/ds_lexer.cpp"
 
-#line 3 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
+#line 3 "/Users/borisbatkin/work/yzg/generated/ds_lexer.cpp"
 
 #define  YY_INT_ALIGNED short int
 
@@ -778,11 +778,11 @@ char *yytext;
         yylloc.last_column = yycolumn + yyleng - 1; \
         yycolumn += yyleng;
         
-#line 781 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
+#line 781 "/Users/borisbatkin/work/yzg/generated/ds_lexer.cpp"
 #define YY_NO_UNISTD_H 1
 /* %option debug */
 
-#line 785 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
+#line 785 "/Users/borisbatkin/work/yzg/generated/ds_lexer.cpp"
 
 #define INITIAL 0
 #define indent 1
@@ -1007,7 +1007,7 @@ YY_DECL
 #line 59 "src/parser/ds_lexer.lpp"
 
 
-#line 1010 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
+#line 1010 "/Users/borisbatkin/work/yzg/generated/ds_lexer.cpp"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1266,7 +1266,7 @@ YY_RULE_SETUP
     } else {
         if ( already_include.find(incFileName) == already_include.end() ) {
             already_include.insert(incFileName);
-            g_FileAccessStack.push_back(info.get());
+            g_FileAccessStack.push_back(info);
             line_no.push_back(yylineno);
             yylineno = 1;
             yypush_buffer_state(YY_CURRENT_BUFFER);
@@ -1895,7 +1895,7 @@ YY_RULE_SETUP
 #line 358 "src/parser/ds_lexer.lpp"
 ECHO;
 	YY_BREAK
-#line 1898 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
+#line 1898 "/Users/borisbatkin/work/yzg/generated/ds_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(strb):
 case YY_STATE_EOF(c_comment):

@@ -12,25 +12,17 @@ public:
     }
 private:
     virtual void freeSourceData() override {
-        das_aligned_free16((void*)source);
-        source = nullptr;
+        if ( source ) {
+            das_aligned_free16((void*)source);
+            source = nullptr;
+        }
     }
 };
 
 class FsFileAccess : public das::FileAccess {
-public:
-    bool verify() {
-        for ( auto & fi : files ) {
-            if ( !fi.second.unique() ) {
-                return false;
-            }
-        }
-        return true;
-    }
-private:
-    virtual das::FileInfoPtr getNewFileInfo(const das::string & fileName) override {
+    virtual das::FileInfo * getNewFileInfo(const das::string & fileName) override {
         if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
-            auto info = das::make_shared<FsFileInfo>();
+            auto info = das::make_unique<FsFileInfo>();
             fseek(ff,0,SEEK_END);
             info->sourceLength = uint32_t(ftell(ff));
             fseek(ff,0,SEEK_SET);
@@ -38,7 +30,7 @@ private:
             fread(source, 1, info->sourceLength, ff);
             source[info->sourceLength] = 0;
             info->source = source;
-            return setFileInfo(fileName, info);
+            return setFileInfo(fileName, move(info));
         }
         return nullptr;
     }

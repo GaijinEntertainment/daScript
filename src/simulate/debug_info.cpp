@@ -202,9 +202,9 @@ namespace das
     }
 
     string LineInfo::describe() const {
-        if ( auto fi = fileInfo.lock() ) {
+        if ( fileInfo ) {
             TextWriter ss;
-            ss << fi->name << ":" << line << ":" << column;
+            ss << fileInfo->name << ":" << line << ":" << column;
             return ss.str();
         } else {
             return string();
@@ -212,36 +212,30 @@ namespace das
     }
 
     bool LineInfo::operator < ( const LineInfo & info ) const {
-        auto fi = fileInfo.lock();
-        auto ifi = info.fileInfo.lock();
-        if ( fi && ifi && strcmp(fi->name, ifi->name) < 0 ) return true;
+        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) < 0 ) return true;
         return (line==info.line) ? column<info.column : line<info.line;
     }
     bool LineInfo::operator == ( const LineInfo & info ) const {
-        auto fi = fileInfo.lock();
-        auto ifi = info.fileInfo.lock();
-        if ( fi && ifi && strcmp(fi->name, ifi->name) != 0 ) return false;
+        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) != 0 ) return false;
         return line==info.line && column==info.column;
     }
     bool LineInfo::operator != ( const LineInfo & info ) const {
-        auto fi = fileInfo.lock();
-        auto ifi = info.fileInfo.lock();
-        if ( fi && ifi && strcmp(fi->name, ifi->name) != 0 ) return true;
+        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) != 0 ) return true;
         return line!=info.line || column!=info.column;
     }
 
-    FileInfoPtr FileAccess::setFileInfo ( const string & fileName, const FileInfoPtr & info ) {
+    FileInfo * FileAccess::setFileInfo ( const string & fileName, FileInfoPtr && info ) {
         if ( files.find(fileName)!=files.end() ) return nullptr;
-        files[fileName] = info;
+        files[fileName] = move(info);
         auto ins = files.find(fileName);
         ins->second->name = (char *) ins->first.c_str();
-        return ins->second;
+        return ins->second.get();
     }
 
-    FileInfoPtr FileAccess::getFileInfo ( const string & fileName ) {
+    FileInfo * FileAccess::getFileInfo ( const string & fileName ) {
         auto it = files.find(fileName);
         if ( it != files.end() ) {
-            return it->second;
+            return it->second.get();
         }
         return getNewFileInfo(fileName);
     }

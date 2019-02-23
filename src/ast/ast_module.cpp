@@ -207,15 +207,13 @@ namespace das {
         TextWriter issues;
         str[str_len-1] = 0;//replace last symbol with null terminating. fixme: This is sloppy, and assumes there is something to replace!
         auto access = make_shared<FileAccess>();
-        auto fileInfo = make_shared<FileInfo>((char *) str, uint32_t(str_len));
-        access->setFileInfo(modName, fileInfo);
+        auto fileInfo = make_unique<FileInfo>((char *) str, uint32_t(str_len));
+        access->setFileInfo(modName, move(fileInfo));
         ModuleGroup dummyLibGroup;
         if (auto program = parseDaScript(modName, access, issues, dummyLibGroup)) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
-                    if ( auto fi = err.at.fileInfo.lock() ) {
-                        issues << reportError(err.at, err.what, err.cerr);
-                    }
+                    issues << reportError(err.at, err.what, err.cerr);
                 }
                 DAS_FATAL_LOG("%s\n", issues.str().c_str());
                 DAS_FATAL_LOG("builtin module did not compile %s\n", modName.c_str());

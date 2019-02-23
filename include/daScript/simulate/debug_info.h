@@ -49,7 +49,7 @@ namespace das
         string      name;
     };
 
-    struct FileInfo : public enable_shared_from_this<FileInfo> {
+    struct FileInfo {
         FileInfo() = default;
         FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
         virtual void freeSourceData() { }
@@ -58,17 +58,17 @@ namespace das
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
     };
-    typedef shared_ptr<FileInfo> FileInfoPtr;
+    typedef unique_ptr<FileInfo> FileInfoPtr;
 
     class FileAccess {
     public:
         virtual ~FileAccess() {}
-        FileInfoPtr setFileInfo ( const string & fileName, const FileInfoPtr & info );
-        FileInfoPtr getFileInfo ( const string & fileName );
+        FileInfo * setFileInfo ( const string & fileName, FileInfoPtr && info );
+        FileInfo * getFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
         void freeSourceData();
     protected:
-        virtual FileInfoPtr getNewFileInfo ( const string & ) { return nullptr; }
+        virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
         map<string, FileInfoPtr>    files;
     };
@@ -76,13 +76,13 @@ namespace das
 
     struct LineInfo {
         LineInfo() = default;
-        LineInfo(const FileInfoPtr & fi, int c, int l)
+        LineInfo(FileInfo * fi, int c, int l)
             : fileInfo(fi), column(uint32_t(c)), line(uint32_t(l)) {}
         bool operator < ( const LineInfo & info ) const;
         bool operator == ( const LineInfo & info ) const;
         bool operator != ( const LineInfo & info ) const;
         string describe() const;
-        weak_ptr<FileInfo>  fileInfo;
+        FileInfo *  fileInfo = nullptr;
         uint32_t    column = 0, line = 0;
     };
 

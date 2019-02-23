@@ -114,7 +114,7 @@ namespace das {
         },"*");
         g_FileAccessStack.clear();
         if ( auto fi = access->getFileInfo(fileName) ) {
-            g_FileAccessStack.push_back(fi.get());
+            g_FileAccessStack.push_back(fi);
             yybegin(fi->source);
         } else {
             g_Program->error(fileName + " not found", LineInfo());
