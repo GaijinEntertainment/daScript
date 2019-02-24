@@ -2938,37 +2938,37 @@ yyreduce:
 
   case 35:
 #line 379 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
-    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s)); delete (yyvsp[0].s); }
+    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s)); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
 #line 2943 "/Users/borisbatkin/work/yzg/generated/ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 36:
 #line 380 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
-    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s)); delete (yyvsp[0].s); }
+    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s)); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
 #line 2949 "/Users/borisbatkin/work/yzg/generated/ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 37:
 #line 381 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
-    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),(yyvsp[0].i));  }
+    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),(yyvsp[0].i)); delete (yyvsp[-2].s); }
 #line 2955 "/Users/borisbatkin/work/yzg/generated/ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 38:
 #line 382 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
-    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),float((yyvsp[0].fd)));  }
+    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),float((yyvsp[0].fd))); delete (yyvsp[-2].s); }
 #line 2961 "/Users/borisbatkin/work/yzg/generated/ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 39:
 #line 383 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
-    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),true);  }
+    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),true); delete (yyvsp[-2].s); }
 #line 2967 "/Users/borisbatkin/work/yzg/generated/ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 40:
 #line 384 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
-    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),false);  }
+    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),false); delete (yyvsp[-2].s); }
 #line 2973 "/Users/borisbatkin/work/yzg/generated/ds_parser.cpp" /* yacc.c:1660  */
     break;
 

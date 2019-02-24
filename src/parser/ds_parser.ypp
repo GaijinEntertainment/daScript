@@ -376,12 +376,12 @@ expression_with
     ;
 
 annotation_argument
-    :   NAME[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value); delete $value; }
-    |   NAME[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value); delete $value; }
-    |   NAME[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value);  }
-    |   NAME[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value));  }
-    |   NAME[name] '=' _TRUE                    { $$ = new AnnotationArgument(*$name,true);  }
-    |   NAME[name] '=' _FALSE                   { $$ = new AnnotationArgument(*$name,false);  }
+    :   NAME[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value); delete $value; delete $name; }
+    |   NAME[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value); delete $value; delete $name; }
+    |   NAME[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value); delete $name; }
+    |   NAME[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value)); delete $name; }
+    |   NAME[name] '=' _TRUE                    { $$ = new AnnotationArgument(*$name,true); delete $name; }
+    |   NAME[name] '=' _FALSE                   { $$ = new AnnotationArgument(*$name,false); delete $name; }
     ;
 
 annotation_argument_list
