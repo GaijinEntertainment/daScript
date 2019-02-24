@@ -10,11 +10,25 @@
 
 namespace das {
 
+    struct SimPolicy_MathInt {
+        static __forceinline int Min   ( int a, int b, Context & ) { return a < b ? a : b; }
+        static __forceinline int Max   ( int a, int b, Context & ) { return a > b ? a : b; }
+    };
+    struct SimPolicy_MathVecI {
+        static __forceinline vec4f Min   ( vec4f a, vec4f b, Context & ) { return v_cast_vec4f(v_mini(v_cast_vec4i(a),v_cast_vec4i(b))); }
+        static __forceinline vec4f Max   ( vec4f a, vec4f b, Context & ) { return v_cast_vec4f(v_maxi(v_cast_vec4i(a),v_cast_vec4i(b))); }
+    };
+
     struct SimPolicy_MathFloat {
         static __forceinline float Abs   ( float a, Context & )          { return v_extract_x(v_abs(v_splats(a))); }
         static __forceinline float Floor ( float a, Context & )          { return v_extract_x(v_floor(v_splats(a))); }
         static __forceinline float Ceil  ( float a, Context & )          { return v_extract_x(v_ceil(v_splats(a))); }
         static __forceinline float Sqrt  ( float a, Context & )          { return v_extract_x(v_sqrt_x(v_splats(a))); }
+        static __forceinline float Min   ( float a, float b, Context & ) { return a < b ? a : b; }
+        static __forceinline float Max   ( float a, float b, Context & ) { return a > b ? a : b; }
+        static __forceinline float Mad   ( float a, float b, float c, Context & ) { return a*b + c; }
+        static __forceinline float Lerp  ( float t, float a, float b, Context & ) { return (b-a)*t +a; }
+        static __forceinline float Clamp  ( float t, float a, float b, Context & ){ return t<a ? (t>b ? b : t) : a; }
 
         static __forceinline int Trunci ( float a, Context & )          { return v_extract_xi(v_cvt_vec4i(v_splats(a))); }
         static __forceinline int Roundi ( float a, Context & )          { return v_extract_xi(v_cvt_roundi(v_splats(a))); }
@@ -44,6 +58,11 @@ namespace das {
         static __forceinline vec4f Floor ( vec4f a, Context & )          { return v_floor(a); }
         static __forceinline vec4f Ceil  ( vec4f a, Context & )          { return v_ceil(a); }
         static __forceinline vec4f Sqrt  ( vec4f a, Context & )          { return v_sqrt4(a); }
+        static __forceinline vec4f Min   ( vec4f a, vec4f b, Context & ) { return v_min(a,b); }
+        static __forceinline vec4f Max   ( vec4f a, vec4f b, Context & ) { return v_max(a,b); }
+        static __forceinline vec4f Clamp ( vec4f a, vec4f r0, vec4f r1, Context & ) { return v_max(v_min(a,r1), r0); }
+        static __forceinline vec4f Mad   ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,b,c); }
+        static __forceinline vec4f Lerp  ( vec4f t, vec4f a, vec4f b, Context & ) { return v_madd(v_sub(b,a),t,a); }
 
         static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
         static __forceinline vec4f Roundi ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_roundi(a)); }
@@ -73,6 +92,11 @@ namespace das {
     template <> struct SimPolicy<float3> : SimPolicy_MathVec {};
     template <> struct SimPolicy<float4> : SimPolicy_MathVec {};
 
+    template <> struct SimPolicy<int>  : SimPolicy_MathInt {};
+    template <> struct SimPolicy<int2> : SimPolicy_MathVecI {};
+    template <> struct SimPolicy<int3> : SimPolicy_MathVecI {};
+    template <> struct SimPolicy<int4> : SimPolicy_MathVecI {};
+
 #define MATH_FUN_OP1(fun)\
       DEFINE_POLICY(fun);\
       IMPLEMENT_OP1_FUNCTION_POLICY(fun,Float,float);\
@@ -94,11 +118,31 @@ namespace das {
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float3);     \
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float4);
 
+#define MATH_FUN_OP2I(fun)\
+      IMPLEMENT_OP2_FUNCTION_POLICY(fun,Int,int);\
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int2);     \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int3);     \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int4);
+
+#define MATH_FUN_OP3(fun)\
+      DEFINE_POLICY(fun);\
+      IMPLEMENT_OP3_FUNCTION_POLICY(fun,Float,float);\
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float2);     \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float3);     \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float4);
+
     //common
     MATH_FUN_OP1(Abs)
     MATH_FUN_OP1(Floor)
     MATH_FUN_OP1(Ceil)
     MATH_FUN_OP1(Sqrt)
+    MATH_FUN_OP2(Min)
+    MATH_FUN_OP2(Max)
+    MATH_FUN_OP2I(Min)
+    MATH_FUN_OP2I(Max)
+    //MATH_FUN_OP3(Clamp)
+    //MATH_FUN_OP3(Mad)
+    //MATH_FUN_OP3(Lerp)
 
     MATH_FUN_OP1_INT(Trunci)
     MATH_FUN_OP1_INT(Floori)
@@ -137,6 +181,12 @@ namespace das {
         mod.addFunction( make_shared<BuiltInFn<Sim_ACos<TT>,       TT,   TT>        >("acos",    lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_ATan2<TT>,      TT,   TT,  TT>   >("atan2",  lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_ATan2_est<TT>,  TT,   TT,  TT>   >("atan2_est",  lib) );
+    }
+
+    template <typename TT>
+    void addFunctionCommonTyped(Module & mod, const ModuleLibrary & lib) {
+        mod.addFunction( make_shared<BuiltInFn<Sim_Min <TT>, TT,   TT,   TT>   >("min",    lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Max <TT>, TT,   TT,   TT>   >("max",    lib) );
     }
 
     template <typename TT>
@@ -233,6 +283,13 @@ namespace das {
             addFunctionCommon<float2>(*this,lib);
             addFunctionCommon<float3>(*this,lib);
             addFunctionCommon<float4>(*this,lib);
+            addFunctionCommonTyped<int2>(*this, lib);
+            addFunctionCommonTyped<int3>(*this, lib);
+            addFunctionCommonTyped<int4>(*this, lib);
+            addFunctionCommonTyped<float2>(*this, lib);
+            addFunctionCommonTyped<float3>(*this, lib);
+            addFunctionCommonTyped<float4>(*this, lib);
+
             addExtern<DAS_BIND_FUN(uint32_hash)>(*this, lib, "uint32_hash", SideEffects::none);
             addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise1D", SideEffects::none);
             addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise2D", SideEffects::none);
