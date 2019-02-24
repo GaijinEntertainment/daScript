@@ -93,7 +93,7 @@ namespace das
             return *((TT *)&x);
         }
         static __forceinline vec4f from ( const TT & x )       {
-            return v_ldu(&x.x);
+            return v_ldu((const float*)&x);
         }
     };
 
@@ -103,7 +103,7 @@ namespace das
             return *((TT *)&x);
         }
         static __forceinline vec4f from ( const TT & x )       {
-            return v_ldu_half(&x.x);
+            return v_ldu_half((const float*)&x);
         }
     };
 
