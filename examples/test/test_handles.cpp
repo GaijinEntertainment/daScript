@@ -218,6 +218,8 @@ vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {
 int st;
 int *getPtr() {return &st;}
 
+das::uint2 get_screen_dimensions() {return das::uint2{1280, 720};}
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -230,6 +232,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
     // register function
     addInterop<new_and_init,void *,vec4f>(*this, lib, "new_and_init", SideEffects::none);
+    addExtern<DAS_BIND_FUN(get_screen_dimensions)>(*this, lib, "get_screen_dimensions", SideEffects::none);
     addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string", SideEffects::none);
     addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo", SideEffects::modifyArgument);
     addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd", SideEffects::modifyArgument);
