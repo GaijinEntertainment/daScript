@@ -57,7 +57,7 @@ namespace das {
 
     SimNode * SimNode_Swizzle::visit ( SimVisitor & vis ) {
         const char * xyzw = "xyzw";
-        char swizzle[4] = { xyzw[fields[0]], xyzw[fields[1]], xyzw[fields[2]], xyzw[fields[3]] };
+        char swizzle[5] = { xyzw[fields[0]], xyzw[fields[1]], xyzw[fields[2]], xyzw[fields[3]], 0 };
         V_BEGIN();
         V_OP(Swizzle);
         V_SUB(value);

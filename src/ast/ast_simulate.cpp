@@ -542,7 +542,7 @@ namespace das
     }
 
     SimNode * ExprSwizzle::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
-        if ( !type->ref && fields.size()!=1 ) {
+        if ( !type->ref || fields.size()!=1 ) {
             return nullptr;
         }
         uint32_t offset = fields[0] * sizeof(float);
@@ -563,11 +563,11 @@ namespace das
     }
 
     SimNode * ExprSwizzle::simulate (Context & context) const {
-        if ( !type->ref && fields.size()!=1 ) {
+        if ( !type->ref || fields.size()!=1 ) {
             auto fsz = fields.size();
             uint8_t fs[4];
             fs[0] = fields[0];
-            fs[1] = fields[1];
+            fs[1] = fsz>=2 ? fields[1] : fields[0];
             fs[2] = fsz>=3 ? fields[2] : fields[0];
             fs[3] = fsz>=4 ? fields[3] : fields[0];
             auto simV = value->simulate(context);

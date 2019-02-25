@@ -1624,6 +1624,9 @@ namespace das {
             if ( !expr->cond->type->isSimpleType(Type::tBool) ) {
                 error("if-then-else condition must be boolean", expr->at, CompilationError::condition_must_be_bool);
             }
+            if ( expr->cond->type->isRef() ) {
+                expr->cond = Expression::autoDereference(expr->cond);
+            }
             return Visitor::visit(expr);
         }
     // ExprWith
@@ -1671,6 +1674,9 @@ namespace das {
             // infer
             if ( !expr->cond->type->isSimpleType(Type::tBool) ) {
                 error("while loop condition must be boolean", expr->at);
+            }
+            if ( expr->cond->type->isRef() ) {
+                expr->cond = Expression::autoDereference(expr->cond);
             }
             return Visitor::visit(expr);
         }
