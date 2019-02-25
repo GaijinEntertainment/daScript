@@ -30,13 +30,16 @@ namespace das {
                 propagateFunctionUse(it->shared_from_this());
             }
         }
-        void markUsedFunctions( Module & thisModule, bool forceAll ){
-            for (const auto & it : thisModule.functions) {
-                auto fn = it.second;
-                if (forceAll || fn->exports) {
-                    propagateFunctionUse(fn);
+        void markUsedFunctions( ModuleLibrary & lib, bool forceAll ){
+            lib.foreach([&](Module * pm) {
+                for (const auto & it : pm->functions) {
+                    auto fn = it.second;
+                    if (forceAll || fn->exports) {
+                        propagateFunctionUse(fn);
+                    }
                 }
-            }
+                return true;
+            }, "*");
         }
         void RemoveUnusedSymbols ( Module & mod ) {
             map<string,FunctionPtr> functions;
@@ -188,14 +191,14 @@ namespace das {
         clearSymbolUse();
         MarkSymbolUse vis(builtInSym);
         visit(vis);
-        vis.markUsedFunctions(*thisModule, false);
+        vis.markUsedFunctions(library, false);
     }
 
     void Program::markOrRemoveUnusedSymbols(bool forceAll) {
         clearSymbolUse();
         MarkSymbolUse vis(false);
         visit(vis);
-        vis.markUsedFunctions(*thisModule, forceAll);
+        vis.markUsedFunctions(library, forceAll);
         if ( options.getOption("removeUnusedSymbols",true) ) {
             vis.RemoveUnusedSymbols(*thisModule);
         }

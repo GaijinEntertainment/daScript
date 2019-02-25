@@ -210,7 +210,7 @@ namespace das {
         auto fileInfo = make_unique<FileInfo>((char *) str, uint32_t(str_len));
         access->setFileInfo(modName, move(fileInfo));
         ModuleGroup dummyLibGroup;
-        if (auto program = parseDaScript(modName, access, issues, dummyLibGroup)) {
+        if (auto program = parseDaScript(modName, access, issues, dummyLibGroup, true)) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
                     issues << reportError(err.at, err.what, err.cerr);
