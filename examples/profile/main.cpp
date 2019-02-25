@@ -95,7 +95,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
-#if 1
+#if 0
     unit_test(TEST_PATH "examples/profile/tests/annotation.das");
     Module::Shutdown();
     return 0;

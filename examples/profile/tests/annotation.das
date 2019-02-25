@@ -22,7 +22,7 @@ def queryOne(dt:float=1.0f)
 
 def queryOneCount(dt:float=1.0f)
     let cntZero = 0U==testProfile::queryEs() <| $ [es] (pos:float3&;vel:float3 const)
-        pos
+        pos // += vel * dt
     print("{cntZero}")
 
 def queryTwo(dt:float=0.5f)
@@ -55,8 +55,10 @@ def test
     testProfile::verifyEsComponents()
     testProfile::initEsComponents()
     queryOne()
+    // testProfile::verifyEsComponents()
+    testProfile::initEsComponents()
     queryOneCount()
-    testProfile::verifyEsComponents()
+    // testProfile::verifyEsComponents()
     testProfile::initEsComponents()
     queryTwo()
     testProfile::verifyEsComponents()
