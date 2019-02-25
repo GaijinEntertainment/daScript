@@ -852,7 +852,7 @@ namespace das
                 return context.code->makeNode<SimNode_ReturnAndMoveFromBlock>(at,
                     simSubE, subexpr->type->getSizeOf(), stackTop);
             }
-        } else {
+        } else if ( subexpr ) {
             if ( func->copyOnReturn ) {
                 return context.code->makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
             } else if ( func->moveOnReturn ) {

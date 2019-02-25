@@ -619,6 +619,7 @@ namespace das {
         for ( auto & arg : arguments ) {
             cexpr->arguments.push_back(arg->clone());
         }
+        cexpr->annotations = annotations;
         return cexpr;
     }
 

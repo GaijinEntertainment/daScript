@@ -226,6 +226,9 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
 uint32_t EsRunBlock ( Context & context, Block block, const vector<EsComponent> & components, uint32_t totalComponents ) {
     auto * closure = (SimNode_ClosureBlock *) block.body;
     EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
+    if ( !table ) {
+        context.throw_error("EsRunBlock - query missing annotation data");
+    }
     uint32_t nAttr = (uint32_t) table->attributes.size();
     vec4f * _args = (vec4f *)(alloca(table->attributes.size() * sizeof(vec4f)));
     context.invokeEx(block, _args, nullptr, [&](SimNode * code){
