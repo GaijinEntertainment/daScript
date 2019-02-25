@@ -102,7 +102,7 @@ namespace das
         int getVectorDim() const;
         static Type getVectorType ( Type baseType, int dim );
         static int getMaskFieldIndex ( char ch );
-        static bool isSequencialMask ( vector<uint8_t> & fields );
+        static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
         static TypeDeclPtr inferAutoType ( TypeDeclPtr autoT, TypeDeclPtr initT );
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );

@@ -1,4 +1,4 @@
- // options log = true, logNodes =true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
+ options log = true, logNodes =true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
 
 struct Foo
 	t : bool

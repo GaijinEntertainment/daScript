@@ -33,7 +33,9 @@ namespace das {
                 auto eswiz = static_pointer_cast<ExprSwizzle>(expr->subexpr);
                 eswiz->r2v = true;
                 eswiz->type->ref = false;
-                eswiz->value = Expression::autoDereference(eswiz->value);
+                if (!TypeDecl::isSequencialMask(eswiz->fields)) {
+                    eswiz->value = Expression::autoDereference(eswiz->value);
+                }
                 return eswiz;
             }else if ( expr->subexpr->rtti_isSafeField() ) {
                 reportFolding();

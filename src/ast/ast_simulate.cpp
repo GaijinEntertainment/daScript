@@ -559,10 +559,11 @@ namespace das
 
     SimNode * ExprSwizzle::simulate (Context & context) const {
         if ( !type->ref ) {
-            auto fsz = fields.size();
-            if (fsz == 1 && value->type->ref) {
+            bool seq = TypeDecl::isSequencialMask(fields);
+            if (seq && value->type->ref) {
                 return trySimulate(context, 0, type->baseType);
             } else {
+                auto fsz = fields.size();
                 uint8_t fs[4];
                 fs[0] = fields[0];
                 fs[1] = fsz >= 2 ? fields[1] : fields[0];

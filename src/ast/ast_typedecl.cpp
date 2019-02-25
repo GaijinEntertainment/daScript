@@ -440,7 +440,7 @@ namespace das
 
     // validate swizzle mask and build mask type
 
-    bool TypeDecl::isSequencialMask ( vector<uint8_t> & fields ) {
+    bool TypeDecl::isSequencialMask ( const vector<uint8_t> & fields ) {
         for ( size_t i=1; i<fields.size(); ++i ) {
             if ( (fields[i-1]+1)!=fields[i] ) {
                 return false;
