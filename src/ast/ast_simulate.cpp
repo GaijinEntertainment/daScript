@@ -542,7 +542,7 @@ namespace das
     }
 
     SimNode * ExprSwizzle::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
-        if ( !type->ref || fields.size()!=1 ) {
+        if ( !value->type->ref ) {
             return nullptr;
         }
         uint32_t offset = fields[0] * sizeof(float);
@@ -550,29 +550,29 @@ namespace das
             return chain;
         }
         auto simV = value->simulate(context);
-        if ( type->ref ) {
-            if ( r2vType!=Type::none ) {
-                return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType,at,simV,offset + extraOffset);
-            } else {
-                return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset + extraOffset);
-            }
-        } else {
+        if ( r2vType!=Type::none ) {
             return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType,at,simV,offset + extraOffset);
+        } else {
+            return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset + extraOffset);
         }
-        return nullptr;
     }
 
     SimNode * ExprSwizzle::simulate (Context & context) const {
-        if ( !type->ref || fields.size()!=1 ) {
+        if ( !type->ref ) {
             auto fsz = fields.size();
-            uint8_t fs[4];
-            fs[0] = fields[0];
-            fs[1] = fsz>=2 ? fields[1] : fields[0];
-            fs[2] = fsz>=3 ? fields[2] : fields[0];
-            fs[3] = fsz>=4 ? fields[3] : fields[0];
-            auto simV = value->simulate(context);
-            return context.code->makeNode<SimNode_Swizzle>(at,simV,fs);
+            if (fsz == 1 && value->type->ref) {
+                return trySimulate(context, 0, type->baseType);
+            } else {
+                uint8_t fs[4];
+                fs[0] = fields[0];
+                fs[1] = fsz >= 2 ? fields[1] : fields[0];
+                fs[2] = fsz >= 3 ? fields[2] : fields[0];
+                fs[3] = fsz >= 4 ? fields[3] : fields[0];
+                auto simV = value->simulate(context);
+                return context.code->makeNode<SimNode_Swizzle>(at, simV, fs);
+            }
         } else {
+
             return trySimulate(context, 0, r2v ? type->baseType : Type::none);
         }
     }

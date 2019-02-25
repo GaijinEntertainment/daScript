@@ -16,27 +16,33 @@ namespace das {
                 if ( expr->subexpr->type->isHandle() ) {
                     return Visitor::visit(expr);
                 } else {
+                    reportFolding();
                     auto evar = static_pointer_cast<ExprVar>(expr->subexpr);
                     evar->r2v = true;
                     evar->type->ref = false;
                     return evar;
                 }
             } else if ( expr->subexpr->rtti_isField() ) {
+                reportFolding();
                 auto efield = static_pointer_cast<ExprField>(expr->subexpr);
                 efield->r2v = true;
                 efield->type->ref = false;
                 return efield;
             } else if ( expr->subexpr->rtti_isSwizzle() ) {
+                reportFolding();
                 auto eswiz = static_pointer_cast<ExprSwizzle>(expr->subexpr);
                 eswiz->r2v = true;
                 eswiz->type->ref = false;
+                eswiz->value = Expression::autoDereference(eswiz->value);
                 return eswiz;
             }else if ( expr->subexpr->rtti_isSafeField() ) {
+                reportFolding();
                 auto efield = static_pointer_cast<ExprSafeField>(expr->subexpr);
                 efield->r2v = true;
                 efield->type->ref = false;
                 return efield;
             } else if ( expr->subexpr->rtti_isAt() ) {
+                reportFolding();
                 auto eat = static_pointer_cast<ExprAt>(expr->subexpr);
                 eat->r2v = true;
                 eat->type->ref = false;

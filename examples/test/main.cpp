@@ -198,7 +198,7 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/unit_tests/test_bool_if.das");
+    unit_test(TEST_PATH "examples/test/hello_world.das");
     Module::Shutdown();
     return 0;
 #endif
