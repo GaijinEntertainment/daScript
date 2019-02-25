@@ -188,6 +188,7 @@ SET(JSON_MAIN_SRC
 examples/json/main.cpp
 examples/common/fileAccess.h
 examples/json/test.das
+examples/json/test_json.das
 )
 
 include_directories(include json)
