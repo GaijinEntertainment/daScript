@@ -166,7 +166,6 @@ namespace das
         virtual void walk ( DataWalker & walker, void * data ) override {
             if ( !sti ) {
                 auto debugInfo = helpA.debugInfo;
-                debugInfo.reset();
                 sti = debugInfo->template makeNode<StructInfo>();
                 sti->name = debugInfo->allocateName(name);
                 // count fields
