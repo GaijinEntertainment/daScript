@@ -789,25 +789,25 @@ expr_block
                 }
             }
             deleteVariableDeclarationList($list);
-            if ( $annL ) {
-                for ( auto pA : *$annL ) {
-                    if ( pA->annotation ) {
-                        if ( pA->annotation->rtti_isFunctionAnnotation() ) {
-                            auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
-                            string err;
-                            if ( !ann->apply(closure, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                                yyerror("can't apply annotation\n" + err, tokAt(@annL),
-                                    CompilationError::invalid_annotation);
-                            }
-                        } else {
-                            yyerror("blocks are only allowed function annotations", tokAt(@annL),
+        }
+        if ( $annL ) {
+            for ( auto pA : *$annL ) {
+                if ( pA->annotation ) {
+                    if ( pA->annotation->rtti_isFunctionAnnotation() ) {
+                        auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
+                        string err;
+                        if ( !ann->apply(closure, *g_Program->thisModuleGroup, pA->arguments, err) ) {
+                            yyerror("can't apply annotation\n" + err, tokAt(@annL),
                                 CompilationError::invalid_annotation);
                         }
+                    } else {
+                        yyerror("blocks are only allowed function annotations", tokAt(@annL),
+                            CompilationError::invalid_annotation);
                     }
                 }
-                swap ( closure->annotations, *$annL );
-                delete $annL;
             }
+            swap ( closure->annotations, *$annL );
+            delete $annL;
         }
     }
     ;
