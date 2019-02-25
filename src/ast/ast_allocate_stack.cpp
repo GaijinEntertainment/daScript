@@ -20,7 +20,7 @@ namespace das {
         vector<uint32_t>        stackTopStack;
         vector<ExprBlock *>     blocks;
         bool                    log = false;
-        TextWriter &               logs;
+        TextWriter &            logs;
     protected:
         uint32_t allocateStack ( uint32_t size ) {
             auto result = stackTop;
@@ -223,6 +223,10 @@ namespace das {
         // allocate used variables and functions indices
         totalVariables = 0;
         totalFunctions = 0;
+        auto log = options.getOption("logStack");
+        if ( log ) {
+            logs << "FUNCTION TABLE:\n";
+        }
         for (auto & pm : library.modules) {
             for (auto & pv : pm->globals) {
                 auto & var = pv.second;
@@ -237,6 +241,9 @@ namespace das {
                 auto & func = pf.second;
                 if (func->used) {
                     func->index = totalFunctions++;
+                    if ( log ) {
+                        logs << func->index << "\t" << func->getMangledName() << "\n";
+                    }
                 }
                 else {
                     func->index = -2;

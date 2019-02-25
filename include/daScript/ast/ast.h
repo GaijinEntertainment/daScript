@@ -1570,6 +1570,7 @@ namespace das
         bool verifyAndFoldContracts();
         void optimize(TextWriter & logs);
         void markSymbolUse(bool builtInSym);
+        void clearSymbolUse();
         void markOrRemoveUnusedSymbols(bool forceAll = false);
         void allocateStack(TextWriter & logs);
         string dotGraph();

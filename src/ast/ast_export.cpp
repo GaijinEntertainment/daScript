@@ -171,13 +171,28 @@ namespace das {
         }
     };
 
+    void Program::clearSymbolUse() {
+        for (auto & pm : library.modules) {
+            for (auto & pv : pm->globals) {
+                auto & var = pv.second;
+                var->used = false;
+            }
+            for (auto & pf : pm->functions) {
+                auto & func = pf.second;
+                func->used = false;
+            }
+        }
+    }
+
     void Program::markSymbolUse(bool builtInSym) {
+        clearSymbolUse();
         MarkSymbolUse vis(builtInSym);
         visit(vis);
         vis.markUsedFunctions(*thisModule, false);
     }
 
     void Program::markOrRemoveUnusedSymbols(bool forceAll) {
+        clearSymbolUse();
         MarkSymbolUse vis(false);
         visit(vis);
         vis.markUsedFunctions(*thisModule, forceAll);

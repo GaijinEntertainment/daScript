@@ -178,6 +178,14 @@ namespace das {
                     }
                     program->thisModule->name = mod;
                     libGroup.addModule(program->thisModule.release());
+                    program->library.foreach([&](Module * pm) -> bool {
+                        if ( !pm->name.empty() && pm->name!="$" ) {
+                            if ( !libGroup.findModule(pm->name) ) {
+                                libGroup.addModule(pm);
+                            }
+                        }
+                        return true;
+                    }, "*");
                 }
             }
             return parseDaScript(fileName, access, logs, libGroup);
