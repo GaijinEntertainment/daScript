@@ -102,7 +102,7 @@ namespace das {
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
-    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup ) {
+    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll ) {
         auto time0 = ref_time_ticks();
         int err;
         auto program = g_Program = make_shared<Program>();
@@ -142,7 +142,7 @@ namespace das {
                 if (!program->failed())
                     program->verifyAndFoldContracts();
                 if (!program->failed())
-                    program->markOrRemoveUnusedSymbols();
+                    program->markOrRemoveUnusedSymbols(exportAll);
                 if (!program->failed())
                     program->allocateStack(logs);
                 if (!program->failed())
@@ -172,7 +172,7 @@ namespace das {
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod) ) {
                     string modFn = access->getIncludeFileName(fileName, mod) + ".das";
-                    auto program = parseDaScript(modFn, access, logs, libGroup);
+                    auto program = parseDaScript(modFn, access, logs, libGroup, true);
                     if ( program->failed() ) {
                         return program;
                     }

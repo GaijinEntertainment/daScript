@@ -18,7 +18,6 @@ struct Bar
     f : Foo
     m : float4x4
 
-[export]
 def test_write
     let t <- Bar()
     t.f = Foo()
@@ -34,7 +33,6 @@ def test_write
         print("readFromJson = {q}\n")
     return true
 
-[export]
 def test_parse
     let json_text = "\{ \"hello\": \"world\", \"t\": true , \"f\": false, \"n\": null, \"i\": 123, \"pi\": 3.1416, \"a\": [1, 2, 3, 4] \}"
     readJson(json_text) <| $ ( root, error )

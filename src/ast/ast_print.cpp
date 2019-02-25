@@ -707,6 +707,15 @@ namespace das {
     }
 
     TextWriter& operator<< (TextWriter& stream, const Program & program) {
+        bool any = false;
+        program.library.foreach([&](Module * pm) {
+            if ( !pm->name.empty() && pm->name!="$" ) {
+                stream << "require " << pm->name << "\n";
+                any = true;
+            }
+            return true;
+        }, "*");
+        if (any) stream << "\n";
         bool logGenerics = program.options.getOption("logGenerics");
         SetPrinterFlags flags;
         const_cast<Program&>(program).visit(flags, logGenerics);

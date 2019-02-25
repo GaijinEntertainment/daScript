@@ -3739,25 +3739,25 @@ yyreduce:
                 }
             }
             deleteVariableDeclarationList((yyvsp[-2].pVarDeclList));
-            if ( (yyvsp[-3].faList) ) {
-                for ( auto pA : *(yyvsp[-3].faList) ) {
-                    if ( pA->annotation ) {
-                        if ( pA->annotation->rtti_isFunctionAnnotation() ) {
-                            auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
-                            string err;
-                            if ( !ann->apply(closure, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                                yyerror("can't apply annotation\n" + err, tokAt((yylsp[-3])),
-                                    CompilationError::invalid_annotation);
-                            }
-                        } else {
-                            yyerror("blocks are only allowed function annotations", tokAt((yylsp[-3])),
+        }
+        if ( (yyvsp[-3].faList) ) {
+            for ( auto pA : *(yyvsp[-3].faList) ) {
+                if ( pA->annotation ) {
+                    if ( pA->annotation->rtti_isFunctionAnnotation() ) {
+                        auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
+                        string err;
+                        if ( !ann->apply(closure, *g_Program->thisModuleGroup, pA->arguments, err) ) {
+                            yyerror("can't apply annotation\n" + err, tokAt((yylsp[-3])),
                                 CompilationError::invalid_annotation);
                         }
+                    } else {
+                        yyerror("blocks are only allowed function annotations", tokAt((yylsp[-3])),
+                            CompilationError::invalid_annotation);
                     }
                 }
-                swap ( closure->annotations, *(yyvsp[-3].faList) );
-                delete (yyvsp[-3].faList);
             }
+            swap ( closure->annotations, *(yyvsp[-3].faList) );
+            delete (yyvsp[-3].faList);
         }
     }
 #line 3764 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
