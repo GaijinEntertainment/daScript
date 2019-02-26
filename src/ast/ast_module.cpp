@@ -261,7 +261,10 @@ namespace das {
     void ModuleLibrary::addModule ( Module * module ) {
         assert(module && "module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");
         if ( module ) {
-            modules.push_back(module);
+            if ( find(modules.begin(),modules.end(),module)==modules.end() ) {
+                modules.push_back(module);
+                module->addPrerequisits(*this);
+            }
         }
     }
 

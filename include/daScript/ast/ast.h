@@ -1420,6 +1420,7 @@ namespace das
     public:
         Module ( const string & n = "" );
         virtual ~Module();
+        virtual void addPrerequisits ( ModuleLibrary & ) const {}
         bool addAlias ( const TypeDeclPtr & at, bool canFail = false );
         bool addVariable ( const VariablePtr & var, bool canFail = false );
         bool addStructure ( const StructurePtr & st, bool canFail = false );
