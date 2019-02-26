@@ -16,6 +16,7 @@
 #pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
 #pragma clang diagnostic ignored "-Wnested-anon-types"
 #pragma clang diagnostic ignored "-Wmissing-braces"
+#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #endif
 
 #include <assert.h>
@@ -59,7 +60,7 @@ inline void das_aligned_free16(void *ptr) {return delete[] (vec4f*)ptr; }
 
 
 #ifndef DAS_ASSERT
-#define DAS_ASSERT(a, msg)   assert(a && msg)
+#define DAS_ASSERT(a)   assert(a)
 #endif
 
 #ifndef DAS_ASSERTF
