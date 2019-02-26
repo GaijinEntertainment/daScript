@@ -126,11 +126,11 @@ namespace das
         ~Context();
 
         __forceinline void * getVariable ( int index ) const {
-            return (uint32_t(index)<totalVariables) ? (globals + globalVariables[index].offset) : nullptr;
+            return (uint32_t(index)<uint32_t(totalVariables)) ? (globals + globalVariables[index].offset) : nullptr;
         }
 
         __forceinline VarInfo * getVariableInfo( int index ) const {
-            return (uint32_t(index)<totalVariables) ? globalVariables[index].debugInfo  : nullptr;;
+            return (uint32_t(index)<uint32_t(totalVariables)) ? globalVariables[index].debugInfo  : nullptr;;
         }
 
         __forceinline void simEnd() {
