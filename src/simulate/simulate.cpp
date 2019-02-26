@@ -14,7 +14,7 @@ namespace das
 {
     // this is here to occasionally investigate untyped evaluation paths
     #define WARN_SLOW_CAST(TYPE)
-    // #define WARN_SLOW_CAST(TYPE)    assert(0 && "internal perofrmance issue, casting eval to eval##TYPE" );
+    // #define WARN_SLOW_CAST(TYPE)    DAS_ASSERTF(0, "internal perofrmance issue, casting eval to eval##TYPE" );
 
     bool SimNode::evalBool ( Context & context ) {
         WARN_SLOW_CAST(Bool);
@@ -249,7 +249,7 @@ namespace das
     vec4f SimNode_ReturnAndCopy::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
         auto pl = context.abiCopyOrMoveResult();
-        assert(pl);
+        DAS_ASSERT(pl);
         memcpy ( pl, pr, size);
         context.abiResult() = cast<char *>::from(pl);
         context.stopFlags |= EvalFlags::stopForReturn;
@@ -259,7 +259,7 @@ namespace das
     vec4f SimNode_ReturnAndMove::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
         auto pl = context.abiCopyOrMoveResult();
-        assert(pl);
+        DAS_ASSERT(pl);
         memcpy ( pl, pr, size);
         memset ( pr, 0, size);
         context.abiResult() = cast<char *>::from(pl);

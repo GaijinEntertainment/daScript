@@ -20,7 +20,7 @@ namespace das
         if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            assert(0 && "we are calling makeLocalMove where expression on a right is not a referece."
+            DAS_ASSERTF(0, "we are calling makeLocalMove where expression on a right is not a referece."
                         "we should not be here, script compiler should have caught this during compilation."
                         "compiler later will likely report internal compilation error.");
             return nullptr;
@@ -137,7 +137,7 @@ namespace das
         if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            assert(0 && "we are calling makeMove where expression on a right is not a referece."
+            DAS_ASSERTF(0, "we are calling makeMove where expression on a right is not a referece."
                    "we should not be here, script compiler should have caught this during compilation."
                    "compiler later will likely report internal compilation error.");
             return nullptr;
@@ -146,7 +146,7 @@ namespace das
 
     SimNode * Function::simulate (Context & context) const {
         if ( builtIn ) {
-            assert(0 && "can only simulate non built-in function");
+            DAS_ASSERTF(0, "can only simulate non built-in function");
             return nullptr;
         }
         if ( fastCall ) {
@@ -282,7 +282,7 @@ namespace das
     }
 
     SimNode * ExprMakeLambda::simulate (Context & context) const {
-        assert(0 && "we should not be here ever, ExprMakeLambda should completly fold during type inference.");
+        DAS_ASSERTF(0, "we should not be here ever, ExprMakeLambda should completly fold during type inference.");
         context.thisProgram->error("internal compilation error, generating node for ExprMakeLambda", at);
         return nullptr;
     }
@@ -336,7 +336,7 @@ namespace das
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
             return context.code->makeValueNode<SimNode_TableErase>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
         } else {
-            assert(0 && "we should not even be here. erase can only accept tables. infer type should have failed.");
+            DAS_ASSERTF(0, "we should not even be here. erase can only accept tables. infer type should have failed.");
             context.thisProgram->error("internal compilation error, generating erase for non-table type", at);
             return nullptr;
         }
@@ -349,7 +349,7 @@ namespace das
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
             return context.code->makeValueNode<SimNode_TableFind>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
         } else {
-            assert(0 && "we should not even be here. find can only accept tables. infer type should have failed.");
+            DAS_ASSERTF(0, "we should not even be here. find can only accept tables. infer type should have failed.");
             context.thisProgram->error("internal compilation error, generating find for non-table type", at);
             return nullptr;
         }
@@ -399,7 +399,7 @@ namespace das
             }
             return resN;
         } else {
-            assert(0 && "we should not be here. this is delete for unsupported type. infer types should have failed.");
+            DAS_ASSERTF(0, "we should not be here. this is delete for unsupported type. infer types should have failed.");
             context.thisProgram->error("internal compilation error, generating node for unsupported ExprDelete", at);
             return nullptr;
         }
@@ -453,7 +453,7 @@ namespace das
                     case tUInt:     return context.code->makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range);
                     case tFloat:    return context.code->makeNode<SimNode_AtVector<float>>(at, prv, pidx, range);
                     default:
-                        assert(0 && "we should not even be here. infer type should have failed on unsupported_vector[blah]");
+                        DAS_ASSERTF(0, "we should not even be here. infer type should have failed on unsupported_vector[blah]");
                         context.thisProgram->error("internal compilation error, generating vector at for unsupported vector type.", at);
                         return nullptr;
                 }
@@ -983,7 +983,7 @@ namespace das
                         sources[t]->type->dim.back(),
                         sources[t]->type->getStride());
                 } else {
-                    assert(0 && "we should not be here. we are doing iterator for on an unsupported type.");
+                    DAS_ASSERTF(0, "we should not be here. we are doing iterator for on an unsupported type.");
                     context.thisProgram->error("internal compilation error, generating for-with-iterator", at);
                     return nullptr;
                 }
@@ -1026,7 +1026,7 @@ namespace das
                     }
                 }
             } else {
-                assert(0 && "we should not be here yet. logic above assumes optimized for path of some kind.");
+                DAS_ASSERTF(0, "we should not be here yet. logic above assumes optimized for path of some kind.");
                 context.thisProgram->error("internal compilation error, generating for", at);
                 return nullptr;
             }
@@ -1112,7 +1112,7 @@ namespace das
                 needTypeInfo = true;
         }
         pCall->debugInfo = expr->at;
-        assert((func->builtIn || func->index>=0) && "calling function which is not used. how?");
+        DAS_ASSERTF((func->builtIn || func->index>=0), "calling function which is not used. how?");
         pCall->fnPtr = context.getFunction(func->index);
         if ( int nArg = (int) expr->arguments.size() ) {
             pCall->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
@@ -1161,7 +1161,7 @@ namespace das
                 auto pvar = it.second;
                 if (!pvar->used)
                     continue;
-                assert(pvar->index >= 0 && "we are simulating variable, which is not used");
+                DAS_ASSERTF(pvar->index >= 0, "we are simulating variable, which is not used");
                 auto & gvar = context.globalVariables[pvar->index];
                 gvar.name = context.code->allocateName(pvar->name);
                 gvar.size = pvar->type->getSizeOf();

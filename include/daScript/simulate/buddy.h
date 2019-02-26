@@ -22,7 +22,7 @@ protected:
         uint32_t used = 0;
         uint32_t getFree() const
         {
-            assert(used <= capacity);
+            DAS_ASSERT(used <= capacity);
             return capacity - used;
         }
         Chunk(uint32_t size): data((char*)das_aligned_alloc16(size)), capacity(size) {}

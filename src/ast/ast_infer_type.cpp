@@ -613,10 +613,10 @@ namespace das {
                 func->moveOnReturn = false;
             }
             // if any of this asserts failed, there is logic error in how we pop
-            assert(scopes.size()==0);
-            assert(blocks.size()==0);
-            assert(local.size()==0);
-            assert(with.size()==0);
+            DAS_ASSERT(scopes.size()==0);
+            DAS_ASSERT(blocks.size()==0);
+            DAS_ASSERT(local.size()==0);
+            DAS_ASSERT(with.size()==0);
             func.reset();
             return Visitor::visit(that);
         }
@@ -1878,7 +1878,7 @@ namespace das {
                         if ( argT->isAuto() ) {
                             auto & passT = types[sz];
                             auto resT = TypeDecl::inferAutoType(argT, passT);
-                            assert(resT && "how? we had this working at findMatchingGenerics");
+                            DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
                             resT->ref = false;              // by default no ref
                             TypeDecl::applyAutoContracts(resT, argT);
                             if ( resT->isRefType() ) {   // we don't pass boxed type by reference ever
@@ -1920,11 +1920,11 @@ namespace das {
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
                     if ( arg->type->isAuto() && arg->type->isGoodBlockType() ) {
-                        assert ( arg->rtti_isMakeBlock() && "it's always MakeBlock. this is how we construct new [[ ]]" );
+                        DAS_ASSERTF ( arg->rtti_isMakeBlock(), "it's always MakeBlock. this is how we construct new [[ ]]" );
                         auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
                         auto retT = TypeDecl::inferAutoType(mkBlock->type, funcC->arguments[iF]->type);
-                        assert ( retT && "how? it matched during findMatchingFunctions the same way");
+                        DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
                         TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
                         block->returnType = make_shared<TypeDecl>(*retT->firstType);
                         for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {

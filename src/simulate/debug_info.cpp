@@ -55,7 +55,7 @@ namespace das
         switch ( type ) {
             case tPointer:      return sizeof(void *);
             case tIterator:     return sizeof(void *);          // Iterator *
-            case tHandle:       assert(0 && "we should not be here. if this happens, iterator was somehow placed on stack. how?");
+            case tHandle:       DAS_ASSERTF(0, "we should not be here. if this happens, iterator was somehow placed on stack. how?");
                                 return sizeof(void *);
             case tString:       return sizeof(char *);
             case tBool:         return sizeof(bool);            static_assert(sizeof(bool)==1,"4 byte bool");
@@ -85,7 +85,7 @@ namespace das
             case tFunction:     return sizeof(Func);
             case tLambda:       return sizeof(Lambda);
             default:
-                assert(0 && "not implemented. likely new built-intype been added, and support has not been updated.");
+                DAS_ASSERTF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
                 return 0;
         }
     }
@@ -94,7 +94,7 @@ namespace das
         switch ( type ) {
             case tPointer:      return alignof(void *);
             case tIterator:     return alignof(void *);          // Iterator *
-            case tHandle:       assert(0 && "we should not be here. if this happens iterator was somehow placed on stack. how?");
+            case tHandle:       DAS_ASSERTF(0, "we should not be here. if this happens iterator was somehow placed on stack. how?");
                                 return alignof(void *);
             case tString:       return alignof(char *);
             case tBool:         return alignof(bool);            static_assert(alignof(bool)==1,"4 byte bool");
@@ -123,7 +123,7 @@ namespace das
             case tBlock:        return alignof(Block);
             case tFunction:     return alignof(Func);
             default:
-                assert(0 && "not implemented. likely new built-intype been added, and support has not been updated.");
+                DAS_ASSERTF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
                 return 0;
         }
     }

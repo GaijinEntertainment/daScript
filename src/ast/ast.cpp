@@ -234,7 +234,7 @@ namespace das {
 
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
-            assert(0 &&
+            DAS_ASSERTF(0,
                    "its not ok to clone Expression as is."
                    "if we are here, this means that ::clone function is not written correctly."
                    "incorrect clone function can be found on the stack above this.");
@@ -743,7 +743,7 @@ namespace das {
 
     ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
-            assert(0 && "can't clone ExprOp");
+            DAS_ASSERTF(0,"can't clone ExprOp");
             return nullptr;
         }
         auto cexpr = static_pointer_cast<ExprOp>(expr);
@@ -1383,7 +1383,7 @@ namespace das {
             case Type::tFloat3:         return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
             case Type::tFloat4:         return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
             case Type::tDouble:         return make_shared<ExprConstDouble>(at, cast<double>::to(value));
-            default:                    assert(0 && "we should not even be here"); return nullptr;
+            default:                    DAS_ASSERTF(0, "we should not even be here"); return nullptr;
         }
     }
 

@@ -87,7 +87,7 @@ namespace das {
             func->useFunctions.clear();
             func->useGlobalVariables.clear();
             func->used = false;
-            assert(!func->builtIn && "visitor should never call 'visit' on builtin function at top level.");
+            DAS_ASSERTF(!func->builtIn, "visitor should never call 'visit' on builtin function at top level.");
         }
         virtual FunctionPtr visit(Function * that) override {
             func.reset();

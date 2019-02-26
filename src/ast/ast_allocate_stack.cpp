@@ -77,7 +77,7 @@ namespace das {
                     logs << "\t\t" << expr->stackTop << "\t\treturn, line " << expr->at.line << "\n";
                 }
             } else {
-                assert(!expr->returnInBlock);
+                DAS_ASSERT(!expr->returnInBlock);
             }
         }
     // ExprBlock

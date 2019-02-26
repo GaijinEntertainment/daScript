@@ -54,7 +54,7 @@ namespace das
         enum { valid = false };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline CType call(FunctionType &&, Context &, SimNode **, index_sequence<I...> ) {
-            assert(0 && "if this assert triggers, somehow prohibited call was called explicitly."
+            DAS_ASSERTF(0, "if this assert triggers, somehow prohibited call was called explicitly."
                         "like evalDouble on pointer or something similar."
                         "this means that this template needs to be revisited."
                         "we should not even be here, because code above verifies 'valid' field.");

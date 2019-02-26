@@ -67,7 +67,7 @@ namespace das
                     case 'n':   result += '\n';    break;
                     case 'r':   result += '\r';    break;
                     case 't':   result += '\t';    break;
-                    case 'u':   assert(0 && "utf-8 characters not supported yet"); break;
+                    case 'u':   DAS_ASSERTF(0, "utf-8 characters not supported yet"); break;
                     default:    break;  // invalid escape character
                 }
             } else

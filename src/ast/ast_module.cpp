@@ -58,7 +58,7 @@ namespace das {
                     return;
                 }
             }
-            assert(0 && "failed to unlink. was builtIn field assigned after the fact?");
+            DAS_ASSERTF(0, "failed to unlink. was builtIn field assigned after the fact?");
         }
     }
 
@@ -259,7 +259,7 @@ namespace das {
     }
 
     void ModuleLibrary::addModule ( Module * module ) {
-        assert(module && "module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");
+        DAS_ASSERTF(module, "module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");
         if ( module ) {
             if ( find(modules.begin(),modules.end(),module)==modules.end() ) {
                 modules.push_back(module);

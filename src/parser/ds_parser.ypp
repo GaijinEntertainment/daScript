@@ -1403,7 +1403,7 @@ vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
     if ( arg->rtti_isSequence() ) {
         while ( arg->rtti_isSequence() ) {
             auto pSeq = static_cast<ExprSequence *>(arg);
-            assert(!pSeq->right->rtti_isSequence());
+            DAS_ASSERT(!pSeq->right->rtti_isSequence());
             argList.push_back(pSeq->right);
             arg = pSeq->left.get();
         }

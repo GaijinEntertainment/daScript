@@ -457,7 +457,7 @@ namespace das
     struct TypeAnnotation : Annotation {
         TypeAnnotation ( const string & n ) : Annotation(n) {}
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const {
-            assert(p && "can only clone real type");
+            DAS_ASSERTF(p, "can only clone real type %s", name.c_str());
             p->name = name;
             return p;
         }

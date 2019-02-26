@@ -127,7 +127,7 @@ namespace das
                     case FactoryNodeType::safeGetField:
                     case FactoryNodeType::safeGetFieldPtr:
                     case FactoryNodeType::getFieldR2V:
-                        assert(0 && "property requested property type, which is meaningless for the non-ref"
+                        DAS_ASSERTF(0, "property requested property type, which is meaningless for the non-ref"
                                     "we should not be here, since property can't have ref type"
                                     "daScript compiler will later report missing node error");
                     default:

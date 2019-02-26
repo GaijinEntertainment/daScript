@@ -144,7 +144,7 @@ namespace das {
             V_END();
         }
         virtual vec4f eval(Context & context) override {
-            assert(stackTop && "copy on return memory not allocated");
+            DAS_ASSERTF(stackTop, "copy on return memory not allocated");
             auto cmres = context.stack.sp() + stackTop;
             memset ( cmres, 0, sizeof(MatT) );
             return cast<void *>::from(cmres);

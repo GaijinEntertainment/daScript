@@ -61,7 +61,7 @@ namespace das {
         }
         template <typename TF>
         void connect_block(TF a, Expression* b, string color = flow_in, const string & extra = "") {
-            assert(b->rtti_isBlock());
+            DAS_ASSERT(b->rtti_isBlock());
             auto block = (ExprBlock *)b;
             sgraph << id(a) << " -> ";
             if (block->list.size()) {
@@ -266,7 +266,7 @@ namespace das {
                 auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
                     return a.get() == arg;
                 });
-                assert(it != call->arguments.end());
+                DAS_ASSERT(it != call->arguments.end());
                 auto idx = it - call->arguments.begin();
                 argName = call->func->arguments[idx]->name;
             }

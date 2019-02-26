@@ -133,7 +133,7 @@ namespace das {
                 case Type::tFloat:      return makeNode<NodeType<float>>(args...);
                 case Type::tDouble:     return makeNode<NodeType<double>>(args...);
                 default:
-                    assert(0 && "we should not even be here. we are calling makeNumericValueNode on an uspported baseType."
+                    DAS_ASSERTF(0, "we should not even be here. we are calling makeNumericValueNode on an uspported baseType."
                                 "likely new numeric type been added.");
                     return nullptr;
             }
@@ -166,8 +166,8 @@ namespace das {
             case Type::tLambda:         return makeNode<NodeType<Lambda>>(args...);
             case Type::tDouble:         return makeNode<NodeType<double>>(args...);
             default:
-                assert(0 && "we should not even be here. we are calling makeValueNode on an uspported baseType."
-                       "likely new by-value builtin type been added.");
+                DAS_ASSERTF(0, "we should not even be here. we are calling makeValueNode on an uspported baseType."
+                              "likely new by-value builtin type been added.");
                 return nullptr;
             }
         }
@@ -193,7 +193,7 @@ namespace das {
             case 15: return makeNode<NodeType<15>>(args...);
             case 16: return makeNode<NodeType<16>>(args...);
             default:
-                assert(0 && "we should not even be here. we are calling makeNodeUnroll on a large number or a negative number."
+                DAS_ASSERTF(0, "we should not even be here. we are calling makeNodeUnroll on a large number or a negative number."
                             "if its negative, there is some issue with the logic of count."
                             "if its large, bigger specialization for unroll should be added.");
                 return nullptr;

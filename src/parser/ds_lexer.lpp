@@ -81,7 +81,7 @@
     return END_STRING;
 }
 <strb>\{                {
-    assert(nested_sb==0);
+    DAS_ASSERT(nested_sb==0);
     nested_sb ++;
     BEGIN(normal);
 	return BEGIN_STRING_EXPR;

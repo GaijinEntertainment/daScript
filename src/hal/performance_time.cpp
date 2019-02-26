@@ -26,7 +26,7 @@ const uint64_t NSEC_IN_SEC = 1000000000LL;
 extern "C" int64_t ref_time_ticks () {
     timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-        assert(false);
+        DAS_ASSERT(false);
         return -1;
     }
 

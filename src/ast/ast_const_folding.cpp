@@ -268,7 +268,7 @@ namespace das {
                                 res = false;
                             }
                         } else {
-                            assert(0 && "how did we even end up here?");
+                            DAS_ASSERTF(0, "how did we even end up here?");
                             return Visitor::visit(expr);
                         }
                         auto sim = Program::makeConst(expr->at, expr->type, cast<bool>::from(res));
@@ -566,11 +566,11 @@ namespace das {
         RunFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {
             TextWriter dummy;
             program->markOrRemoveUnusedSymbols(true);
-            assert ( !program->failed() && "internal error while folding (remove unused)?" );
+            DAS_ASSERTF ( !program->failed(), "internal error while folding (remove unused)?" );
             program->allocateStack(dummy);
-            assert ( !program->failed() && "internal error while folding (allocate stack)?" );
+            DAS_ASSERTF ( !program->failed(), "internal error while folding (allocate stack)?" );
             program->simulate(ctx, dummy);
-            assert ( !program->failed() && "internal error while folding (simulate)?" );
+            DAS_ASSERTF ( !program->failed(), "internal error while folding (simulate)?" );
         }
     protected:
         // ExprCall
@@ -587,7 +587,7 @@ namespace das {
                         allConst &= arg->constexpression;
                 }
                 if ( allConst ) {
-                    assert ( expr->func->index!=-1 );
+                    DAS_ASSERT ( expr->func->index!=-1 );
                     return evalAndFold(expr);
                 }
             }
