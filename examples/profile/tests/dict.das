@@ -1,5 +1,7 @@
 // options log=true, printVarAccess=true, printRef=true
 
+require math
+
 // 8Mb heap
 options heap=8388608
 

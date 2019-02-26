@@ -10,10 +10,18 @@
 
 namespace das {
 
-    struct SimPolicy_MathInt {
-        static __forceinline int Min   ( int a, int b, Context & ) { return a < b ? a : b; }
-        static __forceinline int Max   ( int a, int b, Context & ) { return a > b ? a : b; }
+    template <typename TT>
+    struct SimPolicy_MathTT {
+        static __forceinline TT Min   ( TT a, TT b, Context & ) { return a < b ? a : b; }
+        static __forceinline TT Max   ( TT a, TT b, Context & ) { return a > b ? a : b; }
     };
+
+    struct SimPolicy_MathInt     : SimPolicy_MathTT<int32_t> {};
+    struct SimPolicy_MathUInt    : SimPolicy_MathTT<uint32_t> {};
+    struct SimPolicy_MathInt64   : SimPolicy_MathTT<int64_t> {};
+    struct SimPolicy_MathUInt64  : SimPolicy_MathTT<uint64_t> {};
+    struct SimPolicy_MathDouble  : SimPolicy_MathTT<double> {};
+
     struct SimPolicy_MathVecI {
         static __forceinline vec4f Min   ( vec4f a, vec4f b, Context & ) { return v_cast_vec4f(v_mini(v_cast_vec4i(a),v_cast_vec4i(b))); }
         static __forceinline vec4f Max   ( vec4f a, vec4f b, Context & ) { return v_cast_vec4f(v_maxi(v_cast_vec4i(a),v_cast_vec4i(b))); }
@@ -92,10 +100,15 @@ namespace das {
     template <> struct SimPolicy<float3> : SimPolicy_MathVec {};
     template <> struct SimPolicy<float4> : SimPolicy_MathVec {};
 
-    template <> struct SimPolicy<int>  : SimPolicy_MathInt {};
+    template <> struct SimPolicy<int32_t>  : SimPolicy_MathInt {};
     template <> struct SimPolicy<int2> : SimPolicy_MathVecI {};
     template <> struct SimPolicy<int3> : SimPolicy_MathVecI {};
     template <> struct SimPolicy<int4> : SimPolicy_MathVecI {};
+
+    template <> struct SimPolicy<uint32_t>  : SimPolicy_MathUInt {};
+    template <> struct SimPolicy<int64_t>   : SimPolicy_MathInt64 {};
+    template <> struct SimPolicy<uint64_t>  : SimPolicy_MathUInt64 {};
+    template <> struct SimPolicy<double>    : SimPolicy_MathDouble {};
 
 #define MATH_FUN_OP1(fun)\
       DEFINE_POLICY(fun);\
@@ -106,7 +119,7 @@ namespace das {
 
 #define MATH_FUN_OP1_INT(fun)\
       DEFINE_POLICY(fun);\
-      IMPLEMENT_OP1_FUNCTION_POLICY_EX(fun,Int,int,Float,float);\
+      IMPLEMENT_OP1_FUNCTION_POLICY_EX(fun,Int,int32_t,Float,float);\
       IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float2);     \
       IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float3);     \
       IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float4);
@@ -119,7 +132,7 @@ namespace das {
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float4);
 
 #define MATH_FUN_OP2I(fun)\
-      IMPLEMENT_OP2_FUNCTION_POLICY(fun,Int,int);\
+      IMPLEMENT_OP2_FUNCTION_POLICY(fun,Int,int32_t);\
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int2);     \
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int3);     \
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int4);
@@ -131,18 +144,26 @@ namespace das {
       IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float3);     \
       IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float4);
 
+#define MATH_FUN_OP2A(fun)                              \
+    MATH_FUN_OP2(fun);                                  \
+    MATH_FUN_OP2I(fun);                                 \
+    IMPLEMENT_OP2_FUNCTION_POLICY(fun,UInt,uint32_t);   \
+    IMPLEMENT_OP2_FUNCTION_POLICY(fun,Int64,int64_t);   \
+    IMPLEMENT_OP2_FUNCTION_POLICY(fun,UInt64,uint64_t); \
+    IMPLEMENT_OP2_FUNCTION_POLICY(fun,Double,double);
+
+    // everything
+    MATH_FUN_OP2A(Min)
+    MATH_FUN_OP2A(Max)
+
     //common
     MATH_FUN_OP1(Abs)
     MATH_FUN_OP1(Floor)
     MATH_FUN_OP1(Ceil)
     MATH_FUN_OP1(Sqrt)
-    MATH_FUN_OP2(Min)
-    MATH_FUN_OP2(Max)
-    MATH_FUN_OP2I(Min)
-    MATH_FUN_OP2I(Max)
-    //MATH_FUN_OP3(Clamp)
-    //MATH_FUN_OP3(Mad)
-    //MATH_FUN_OP3(Lerp)
+    MATH_FUN_OP3(Clamp)
+    MATH_FUN_OP3(Mad)
+    MATH_FUN_OP3(Lerp)
 
     MATH_FUN_OP1_INT(Trunci)
     MATH_FUN_OP1_INT(Floori)
@@ -219,6 +240,14 @@ namespace das {
         mod.addFunction( make_shared<BuiltInFn<Sim_Pow<TT>,  TT,   TT,   TT> >("pow",   lib) );
     }
 
+    template <typename TT>
+    void addFunctionOp3(Module & mod, const ModuleLibrary & lib) {
+        //                                     policy         ret arg1 arg2 arg3   name
+        mod.addFunction( make_shared<BuiltInFn<Sim_Lerp<TT>,  TT, TT,  TT,  TT> >("lerp",   lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Clamp<TT>, TT, TT,  TT,  TT> >("clamp",  lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Mad<TT>,   TT, TT,  TT,  TT> >("mad",    lib) );
+    }
+
     __forceinline unsigned int uint_noise2D_int2(das::int2 pos, unsigned int seed)
     {
       return uint_noise2D(pos.x, pos.y, seed);
@@ -278,17 +307,36 @@ namespace das {
             addFunctionPow<float2>(*this,lib);
             addFunctionPow<float3>(*this,lib);
             addFunctionPow<float4>(*this,lib);
+            // op3
+            addFunctionOp3<float >(*this,lib);
+            addFunctionOp3<float2>(*this,lib);
+            addFunctionOp3<float3>(*this,lib);
+            addFunctionOp3<float4>(*this,lib);
             //common
             addFunctionCommon<float>(*this, lib);
             addFunctionCommon<float2>(*this,lib);
             addFunctionCommon<float3>(*this,lib);
             addFunctionCommon<float4>(*this,lib);
+
+            addFunctionCommonTyped<int32_t>(*this, lib);
             addFunctionCommonTyped<int2>(*this, lib);
             addFunctionCommonTyped<int3>(*this, lib);
             addFunctionCommonTyped<int4>(*this, lib);
+
+            addFunctionCommonTyped<uint32_t>(*this, lib);
+            //addFunctionCommonTyped<uint2>(*this, lib);
+            //addFunctionCommonTyped<uint3>(*this, lib);
+            //addFunctionCommonTyped<uint4>(*this, lib);
+
+            addFunctionCommonTyped<float>(*this, lib);
             addFunctionCommonTyped<float2>(*this, lib);
             addFunctionCommonTyped<float3>(*this, lib);
             addFunctionCommonTyped<float4>(*this, lib);
+
+            addFunctionCommonTyped<double>(*this, lib);
+
+            addFunctionCommonTyped<int64_t>(*this, lib);
+            addFunctionCommonTyped<uint64_t>(*this, lib);
 
             addExtern<DAS_BIND_FUN(uint32_hash)>(*this, lib, "uint32_hash", SideEffects::none);
             addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise1D", SideEffects::none);

@@ -38,8 +38,6 @@ namespace das
     DEFINE_OP2_BOOL_NUMERIC(GtEqu);
     DEFINE_OP2_BOOL_NUMERIC(Less);
     DEFINE_OP2_BOOL_NUMERIC(Gt);
-    DEFINE_OP2_FUNCTION_NUMERIC(Min);
-    DEFINE_OP2_FUNCTION_NUMERIC(Max);
     DEFINE_OP2_BASIC_POLICY(Bool,bool);
     DEFINE_OP2_BASIC_POLICY(Ptr,void *);
     // binary and, or, xor

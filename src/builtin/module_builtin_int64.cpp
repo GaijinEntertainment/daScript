@@ -16,14 +16,12 @@ namespace das
         addFunctionNumericWithMod<int64_t>(*this,lib);
         addFunctionIncDec<int64_t>(*this,lib);
         addFunctionOrdered<int64_t>(*this,lib);
-        addFunctionMinMax<int64_t>(*this,lib);
         addFunctionBit<int64_t>(*this,lib);
         // uint64
         addFunctionBasic<uint64_t>(*this,lib);
         addFunctionNumericWithMod<uint64_t>(*this,lib);
         addFunctionIncDec<uint64_t>(*this,lib);
         addFunctionOrdered<uint64_t>(*this,lib);
-        addFunctionMinMax<uint64_t>(*this,lib);
         addFunctionBit<uint64_t>(*this,lib);
     }
 }

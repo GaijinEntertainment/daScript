@@ -483,6 +483,15 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_CallBase::visitOp3 ( SimVisitor & vis, const char * op ) {
+        V_BEGIN();
+        vis.op(op);
+        V_SUB(arguments[0]);
+        V_SUB(arguments[1]);
+        V_SUB(arguments[3]);
+        V_END();
+    }
+
     SimNode * SimNode_RangeIterator::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(RangeIterator);

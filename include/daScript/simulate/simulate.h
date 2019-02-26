@@ -675,6 +675,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         SimNode * visitOp1 ( SimVisitor & vis, const char * op );
         SimNode * visitOp2 ( SimVisitor & vis, const char * op );
+        SimNode * visitOp3 ( SimVisitor & vis, const char * op );
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
             return cast<CTYPE>::to(eval(context));                  \
@@ -2375,6 +2376,37 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_OP2_EVAL_BASIC_POLICY(CTYPE);        \
     DEFINE_OP2_EVAL_NUMERIC_POLICY(CTYPE);      \
     DEFINE_OP2_EVAL_VECNUMERIC_POLICY(CTYPE);
+
+#define IMPLEMENT_OP3_FUNCTION_POLICY(CALL,TYPE,CTYPE)                  \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
+        DAS_NODE(TYPE,CTYPE);                                           \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
+        virtual SimNode * visit ( SimVisitor & vis ) override {         \
+            return visitOp3(vis, #CALL);                                \
+        }                                                               \
+        __forceinline CTYPE compute ( Context & context ) {             \
+            auto a0 = arguments[0]->eval##TYPE(context);                \
+            auto a1 = arguments[1]->eval##TYPE(context);                \
+            auto a2 = arguments[2]->eval##TYPE(context);                \
+            return SimPolicy<CTYPE>::CALL(a0,a1,a2,context);            \
+        }                                                               \
+    };
+
+#define IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(CALL,CTYPE)                  \
+    template <>                                                         \
+    struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
+        virtual SimNode * visit ( SimVisitor & vis ) override {         \
+            return visitOp3(vis, #CALL);                                \
+        }                                                               \
+        virtual vec4f eval ( Context & context ) override {             \
+            auto a0 = arguments[0]->eval(context);                      \
+            auto a1 = arguments[1]->eval(context);                      \
+            auto a2 = arguments[2]->eval(context);                      \
+            return SimPolicy<CTYPE>::CALL(a0,a1,a2,context);            \
+        }                                                               \
+    };
 
     // unary
     DEFINE_POLICY(Unp);
