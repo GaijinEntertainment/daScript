@@ -129,6 +129,11 @@ namespace das
             return (index>=0 && index<totalVariables) ? (globals + globalVariables[index].offset) : nullptr;
         }
 
+        __forceinline VarInfo * getVariableInfo( int index ) const {
+            assert(index>=0 && index<totalVariables && "variable index out of range");
+            return globalVariables[index].debugInfo;
+        }
+
         __forceinline void simEnd() {
             thisProgram = nullptr;
             thisHelper = nullptr;
