@@ -102,6 +102,7 @@
     yylval.ch = *yytext;
     return STRING_CHARACTER;
 }
+<indent>[ \t\r]*\n		/* skip empty line */
 <indent>" "             { 
 	current_line_indent++; 
 	#ifdef FLEX_DEBUG
