@@ -1,54 +1,40 @@
- options log = true, logNodes =true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
+ options log = true, logNodes = true, optimize=true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
 
 struct Foo
-	t : bool
-	v : int3 = int3(1,2,3)
+    x, y : int
 
-def funV(v:int3):int3
-	return v
+struct Foo3D : Foo
+    z : int
+
+struct FooVision
+    f3d : Foo3D
+    color : float4
+
+def setFooGeneric(foo,x,y)
+    foo.x = x
+    foo.y = y
+
+def setFoo(foo:Foo;x,y:int)
+    foo.x = x
+    foo.y = y
 
 [export]
 def test
-	// REGULAR V
-	let v = int3(1,2,3)
-	assert(v==int3(1,2,3))
-	assert(v.x==1 & v.y==2 & v.z==3)
-	assert(v.xy==int2(1,2) & v.yz==int2(2,3) & v.zx==int2(3,1))
-	assert(v.yx==int2(2,1) & v.zy==int2(3,2) & v.xz==int2(1,3))
-	assert(funV(v)==int3(1,2,3))
-	assert(funV(v).x==1 & funV(v).y==2 & funV(v).z==3)
-	v.x = 11
-	assert(v==int3(11,2,3))
-	v.y = 22
-	assert(v==int3(11,22,3))
-	v.z = 33
-	assert(v==int3(11,22,33))
-	assert(v.x==11 & v.y==22 & v.z==33)
-	v.xy = int2(1,2)
-	assert(v.x==1 & v.y==2 & v.z==33)
-	v.yz = int2(2,3)
-	assert(v.x==1 & v.y==2 & v.z==3)
-	v.xyz = int3(11,22,33)
-	assert(v.xyz==int3(11,22,33))
-	// V in the structure
-	let fv = Foo()
-	assert(fv.v==int3(1,2,3))
-	assert(fv.v.x==1 & fv.v.y==2 & fv.v.z==3)
-	assert(fv.v.xy==int2(1,2) & fv.v.yz==int2(2,3) & fv.v.zx==int2(3,1))
-	assert(fv.v.yx==int2(2,1) & fv.v.zy==int2(3,2) & fv.v.xz==int2(1,3))
-	assert(funV(fv.v)==int3(1,2,3))
-	assert(funV(fv.v).x==1 & funV(fv.v).y==2 & funV(fv.v).z==3)
-	fv.v.x = 11
-	assert(fv.v==int3(11,2,3))
-	fv.v.y = 22
-	assert(fv.v==int3(11,22,3))
-	fv.v.z = 33
-	assert(fv.v==int3(11,22,33))
-	assert(fv.v.x==11 & fv.v.y==22 & fv.v.z==33)
-	fv.v.xy = int2(1,2)
-	assert(fv.v.x==1 & fv.v.y==2 & fv.v.z==33)
-	fv.v.yz = int2(2,3)
-	assert(fv.v.x==1 & fv.v.y==2 & fv.v.z==3)
-	fv.v.xyz = int3(11,22,33)
-	assert(fv.v.xyz==int3(11,22,33))
+    let f : Foo
+    let f3d : Foo3D
+    assert(f.x==0 & f.y==0)
+    assert(f3d.x==0 & f3d.y==0)
+    setFooGeneric(f,1,2)
+    setFooGeneric(f3d,1,2)
+    assert(f.x==1 & f.y==2)
+    assert(f3d.x==1 & f3d.y==2)
+    setFoo(f,3,4)
+    setFoo(cast<Foo> f3d,3,4)
+    assert(f.x==3 & f.y==4)
+    assert(f3d.x==3 & f3d.y==4)
+    (cast<Foo> f3d).y = 5
+    assert(f3d.y==5)
+    let fv : FooVision
+    fv.f3d.y = 13
+    assert(fv.f3d.y==13)
     return true

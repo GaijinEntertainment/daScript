@@ -142,6 +142,9 @@ namespace das {
             } else if ( expr->rtti_isValues() ) {
                 auto vs = (ExprValues *) expr;
                 propagateRead(vs->arguments[0].get());
+            } else if ( expr->rtti_isCast() ) {
+                auto ca = (ExprCast *) expr;
+                propagateRead(ca->subexpr.get());
             }
             // TODO:
             //  propagate read to call or expr-like-call???
@@ -177,6 +180,9 @@ namespace das {
             } else if ( expr->rtti_isValues() ) {
                 auto vs = (ExprValues *) expr;
                 propagateWrite(vs->arguments[0].get());
+            } else if ( expr->rtti_isCast() ) {
+                auto ca = (ExprCast *) expr;
+                propagateWrite(ca->subexpr.get());
             }
             // TODO:
             //  propagate write to call or expr-like-call???

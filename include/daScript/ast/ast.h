@@ -391,6 +391,8 @@ namespace das
         };
     public:
         Structure ( const string & n ) : name(n) {}
+        StructurePtr clone() const;
+        bool isCompatibleCast ( const Structure & castS ) const;
         const FieldDeclaration * findField ( const string & name ) const;
         int getSizeOf() const;
         int getAlignOf() const;
@@ -533,6 +535,7 @@ namespace das
         virtual bool rtti_isBlock() const { return false; }
         virtual bool rtti_isWith() const { return false; }
         virtual bool rtti_isVar() const { return false; }
+        virtual bool rtti_isCast() const { return false; }
         virtual bool rtti_isField() const { return false; }
         virtual bool rtti_isSwizzle() const { return false; }
         virtual bool rtti_isSafeField() const { return false; }
@@ -1257,6 +1260,19 @@ namespace das
         TypeDeclPtr     ascType;
     };
 
+    struct ExprCast : Expression {
+        ExprCast() = default;
+        ExprCast( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & ct )
+            : Expression(a), subexpr(se), castType(ct) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isCast() const override { return true; }
+        ExpressionPtr   subexpr;
+        TypeDeclPtr     castType;
+    };
+
     struct ExprNew : ExprLooksLikeCall {
         ExprNew() = default;
         ExprNew ( const LineInfo & a, TypeDeclPtr t, bool ini )
@@ -1745,6 +1761,7 @@ namespace das
         VISIT_EXPR(ExprErase)
         VISIT_EXPR(ExprFind)
         VISIT_EXPR(ExprAscend)
+        VISIT_EXPR(ExprCast)
         VISIT_EXPR(ExprNew)
         VISIT_EXPR(ExprDelete)
         VISIT_EXPR(ExprAt)

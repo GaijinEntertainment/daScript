@@ -12,7 +12,16 @@ namespace das {
     class RefFolding : public OptVisitor {
     protected:
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
-            if ( expr->subexpr->rtti_isVar() ) {
+            if ( expr->subexpr->rtti_isCast() ) {
+                reportFolding();
+                auto ecast = static_pointer_cast<ExprCast>(expr->subexpr);
+                auto nr2v = make_shared<ExprRef2Value>();
+                nr2v->at = expr->at;
+                nr2v->subexpr = ecast->subexpr;
+                ecast->subexpr = nr2v;
+                ecast->type->ref = false;
+                return ecast;
+            } else if ( expr->subexpr->rtti_isVar() ) {
                 if ( expr->subexpr->type->isHandle() ) {
                     return Visitor::visit(expr);
                 } else {

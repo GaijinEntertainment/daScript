@@ -49,6 +49,35 @@ namespace das {
 
     // structure
 
+    StructurePtr Structure::clone() const {
+        auto cs = make_shared<Structure>(name);
+        cs->fields.reserve(fields.size());
+        for ( auto & fd : fields ) {
+            cs->fields.emplace_back(fd.name, fd.type, fd.init, fd.moveSemantic, fd.at);
+        }
+        cs->at = at;
+        cs->module = module;
+        cs->genCtor = genCtor;
+        return cs;
+    }
+
+    bool Structure::isCompatibleCast ( const Structure & castS ) const {
+        if ( castS.fields.size() < fields.size() ) {
+            return false;
+        }
+        for ( size_t i=0; i!=fields.size(); ++i ) {
+            auto & fd = fields[i];
+            auto & cfd = castS.fields[i];
+            if ( fd.name != cfd.name ) {
+                return false;
+            }
+            if ( !fd.type->isSameType(*cfd.type,true,true) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool Structure::hasAnyInitializers() const {
         for ( const auto & fd : fields ) {
             if ( fd.init ) return true;
@@ -494,6 +523,22 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
+    }
+
+    // ExprCast
+
+    ExpressionPtr ExprCast::clone( const ExpressionPtr & expr  ) const {
+        auto cexpr = clonePtr<ExprCast>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->castType = make_shared<TypeDecl>(*castType);
+        return cexpr;
+    }
+
+    ExpressionPtr ExprCast::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr->visit(vis);
+        return vis.visit(this);
     }
 
     // ExprAscend

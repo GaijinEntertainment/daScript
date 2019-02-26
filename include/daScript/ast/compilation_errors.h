@@ -84,6 +84,9 @@ namespace das
     ,   cant_infer_missing_initializer          =   31101       //  let x = 5
     ,   cant_infer_mismatching_restrictions     =   31102       //  let x : auto [5] = int[4][3]
 
+    ,   invalid_cast                            =   31200       //  cast<Goo> ...
+    ,   incompatible_cast                       =   31201       //  cast<NotBarParent> bar
+
     ,   expecting_return_value                  =   32101       // def blah:int without return
     ,   not_expecting_return_value              =   32102       // def blah:void ... return 12
     ,   invalid_return_semantics                =   32103       // return <- required

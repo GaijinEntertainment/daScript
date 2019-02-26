@@ -206,6 +206,7 @@
 <normal>"function"                                      return _TFUNCTION;
 <normal>"lambda"                                        return _TLAMBDA;
 <normal>"const"                                         return _CONST;
+<normal>"cast"                                          return _CAST;
 <normal>"expect"                                        return _EXPECT;
 <normal>"table"                                         return _TABLE;
 <normal>"array"                                         return _ARRAY;

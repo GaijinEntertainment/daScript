@@ -987,6 +987,35 @@ namespace das {
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
         }
+    // ExprCast
+        virtual ExpressionPtr visit ( ExprCast * expr ) override {
+            if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            if ( expr->subexpr->type->isSameType(*expr->castType,false,false) ) {
+                reportGenericInfer();
+                return expr->subexpr;
+            }
+            auto seT = expr->subexpr->type;
+            auto cT = expr->castType;
+            if ( seT->isStructure() ) {
+                if ( expr->castType->isStructure() ) {
+                    if ( cT->structType->isCompatibleCast(*seT->structType) ) {
+                        expr->type = make_shared<TypeDecl>(*expr->castType);
+                        expr->type->ref = expr->subexpr->type->ref;
+                        expr->type->constant = expr->subexpr->type->constant;
+                    } else {
+                        error("incompatible cast, can't cast " + seT->structType->name
+                              + " to " + cT->structType->name, expr->at,
+                                CompilationError::invalid_cast);
+                    }
+                } else {
+                    error("invalid cast, expecting structure", expr->at,
+                          CompilationError::invalid_cast);
+                }
+            } else if ( seT->isPointer() ) {
+
+            }
+            return Visitor::visit(expr);
+        }
     // ExprAscend
         virtual ExpressionPtr visit ( ExprAscend * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);

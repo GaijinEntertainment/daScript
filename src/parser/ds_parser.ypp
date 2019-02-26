@@ -103,7 +103,7 @@
 %token  _OPTIONS    _TABLE      _EXPECT     _CONST
 %token  _REQUIRE    _OPERATOR   _ENUM       _FINALLY
 %token  _DELETE     _DEREF      _SCOPE      _TYPEDEF
-%token  _WITH
+%token  _WITH       _CAST
 
 /* basic types */
 %token  _TBOOL       _TVOID       _TSTRING     _TAUTO
@@ -150,6 +150,7 @@
 %type <s>               name_in_namespace
 %type <s>               annotation_declaration_name
 %type <s>               function_name
+%type <s>               optional_structure_parent
 %type <aa>              annotation_argument
 %type <aaList>          annotation_argument_list
 %type <fa>              annotation_declaration
@@ -180,6 +181,7 @@
 %type <pExpression>     expr_new
 %type <pExpression>     expr_pipe
 %type <pExpression>     expr_sizeof
+%type <pExpression>     expr_cast
 %type <pExpression>     expr_typename
 %type <pExpression>     expr_block
 %type <pExpression>     expression_any
@@ -729,6 +731,12 @@ expression_let
     }
     ;
 
+expr_cast
+    :   _CAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
+        $$ = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
+    }
+    ;
+
 expr_sizeof
     :   _SIZEOF[loc] '(' expr[subexpr] ')' {
             $$ = new ExprSizeOf(tokAt(@loc),ExpressionPtr($subexpr));
@@ -908,6 +916,7 @@ expr
             $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
         }
     |   expr_sizeof[subexpr]                    { $$ = $subexpr; }
+    |   expr_cast[subexpr]                      { $$ = $subexpr; }
     |   expr_typename[subexpr]                  { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   expr_method_call[subexpr]               { $$ = $subexpr; }
@@ -1102,15 +1111,42 @@ enum_declaration
     }
     ;
 
+optional_structure_parent
+    :                                   { $$ = nullptr; }
+    |   ':' name_in_namespace[name]     { $$ = $name; }
+    ;
+
 structure_name
-    :   NAME[name] {
-        auto pStruct = make_shared<Structure>(*$name);
-        if ( !g_Program->addStructure(pStruct) ) {
-            yyerror("structure is already defined "+*$name,tokAt(@name),
-                CompilationError::structure_already_declared);
-            $$ = nullptr;
+    : NAME[name] optional_structure_parent[parent] {
+        StructurePtr pStruct;
+        if ( $parent ) {
+            auto structs = g_Program->findStructure(*$parent);
+            if ( structs.size()==1 ) {
+                pStruct = structs.back()->clone();
+                pStruct->name = *$name;
+            } else if ( structs.size()==0 ) {
+                yyerror("parent structure not found"+*$parent,tokAt(@parent),
+                    CompilationError::structure_not_found);
+            } else {
+                string candidates = g_Program->describeCandidates(structs);
+                yyerror("too many options for "+*$parent + "\n" + candidates,tokAt(@parent),
+                    CompilationError::structure_not_found);
+
+            }
+            delete $parent;
         } else {
-            $$ = pStruct.get();
+            pStruct = make_shared<Structure>(*$name);
+        }
+        if ( pStruct ) {
+            if ( !g_Program->addStructure(pStruct) ) {
+                yyerror("structure is already defined "+*$name,tokAt(@name),
+                    CompilationError::structure_already_declared);
+                $$ = nullptr;
+            } else {
+                $$ = pStruct.get();
+            }
+        } else {
+            $$ = nullptr;
         }
         delete $name;
     }

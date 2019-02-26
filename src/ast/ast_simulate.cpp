@@ -404,6 +404,13 @@ namespace das
             return nullptr;
         }
     }
+    SimNode * ExprCast::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
+        return subexpr->trySimulate(context, extraOffset, r2vType);
+    }
+
+    SimNode * ExprCast::simulate (Context & context) const {
+        return subexpr->simulate(context);
+    }
 
     SimNode * ExprAscend::simulate (Context & context) const {
         auto se = subexpr->simulate(context);
