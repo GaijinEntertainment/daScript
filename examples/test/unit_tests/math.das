@@ -7,6 +7,11 @@ def test
     assert(uint32_hash(1U) != 1U)
     let seed:uint = 1U
     let position:int = 1
+    assert(min(float2(0.5, -1.), float2(-1., 0.5)) == float2(-1.,-1.))
+    assert(min(float4(0.5, -1.,0.5,-1.), float4(-1., 0.5,-1., 0.5)) == float4(-1,-1,-1,-1))
+    assert(clamp(100., 0., 200.) == 100.)
+    assert(clamp(-100., 100., 200.) == 100.)
+    assert(clamp(1000., 100., 200.) == 200.)
     assert(uint_noise1D(position, seed) != seed)
     assert(uint_noise2D(int2(100,100), seed) != seed)
     assert(uint_noise3D(int3(100,100,100), seed) != seed)

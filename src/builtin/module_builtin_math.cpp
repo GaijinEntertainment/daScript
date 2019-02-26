@@ -36,7 +36,7 @@ namespace das {
         static __forceinline float Max   ( float a, float b, Context & ) { return a > b ? a : b; }
         static __forceinline float Mad   ( float a, float b, float c, Context & ) { return a*b + c; }
         static __forceinline float Lerp  ( float t, float a, float b, Context & ) { return (b-a)*t +a; }
-        static __forceinline float Clamp  ( float t, float a, float b, Context & ){ return t<a ? (t>b ? b : t) : a; }
+        static __forceinline float Clamp  ( float t, float a, float b, Context & ){ return t>a ? (t<b ? t : b) : a; }
 
         static __forceinline int Trunci ( float a, Context & )          { return v_extract_xi(v_cvt_vec4i(v_splats(a))); }
         static __forceinline int Roundi ( float a, Context & )          { return v_extract_xi(v_cvt_roundi(v_splats(a))); }
