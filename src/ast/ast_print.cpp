@@ -111,6 +111,9 @@ namespace das {
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
             ss << "\t" << decl.name << " : " << decl.type->describe();
+            if ( decl.parentType ) {
+                ss << " /* from " << that->parent->name << " */";
+            }
             if ( decl.init ) {
                 ss << (decl.moveSemantic ? " <- " : " = ");
             }

@@ -385,6 +385,7 @@ namespace das
             bool            moveSemantic;
             LineInfo        at;
             int             offset = 0;
+            bool            parentType = false;
             FieldDeclaration() = default;
             FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i, bool ms, const LineInfo & a )
                 : name(n), type(t), init(i), moveSemantic(ms), at(a) {}
@@ -407,6 +408,7 @@ namespace das
         LineInfo                    at;
         Module *                    module = nullptr;
         bool                        genCtor = false;
+        Structure *                 parent = nullptr;
     };
 
     struct Variable : public enable_shared_from_this<Variable> {

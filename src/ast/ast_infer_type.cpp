@@ -436,7 +436,18 @@ namespace das {
                       decl.at, CompilationError::cant_infer_missing_initializer );
             }
         }
-        virtual void visitStructureField ( Structure *, Structure::FieldDeclaration & decl, bool ) override {
+        virtual void visitStructureField ( Structure * st, Structure::FieldDeclaration & decl, bool ) override {
+            if ( decl.parentType ) {
+                auto pf = st->parent->findField(decl.name);
+                if ( !pf->type->isAuto() && !pf->type->isAlias() ) {
+                    decl.type = make_shared<TypeDecl>(*pf->type);
+                    decl.parentType = false;
+                    reportGenericInfer();
+                } else {
+                    error("not fully resolved yet", decl.at);
+                }
+                return;
+            }
             if ( decl.type->isAlias() ) {
                 if ( auto aT = inferAlias(decl.type) ) {
                     decl.type = aT;

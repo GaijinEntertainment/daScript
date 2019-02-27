@@ -1147,6 +1147,7 @@ structure_name
             if ( structs.size()==1 ) {
                 pStruct = structs.back()->clone();
                 pStruct->name = *$name;
+                pStruct->parent = structs.back().get();
             } else if ( structs.size()==0 ) {
                 yyerror("parent structure not found"+*$parent,tokAt(@parent),
                     CompilationError::structure_not_found);
@@ -1194,14 +1195,9 @@ structure_declaration
                         }
                     } else {
                         if ( pDecl->override ) {
-                            //if ( oldFd->type->isSameType(*pDecl->pTypeDecl,true,true) ) {
                                 auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
                                 oldFd->init = init;
-                            //} else {
-                            //    yyerror("structure field "+name+" override type mismatch ("+
-                            //        oldFd->type->describe()+") vs ("+pDecl->pTypeDecl->describe()+")",pDecl->at,
-                            //    CompilationError::invalid_override);
-                            // }
+                                oldFd->parentType = oldFd->type->isAuto();
                         } else {
                             yyerror("structure field is already declared "+name
                                 +", use override to replace initial value instead",pDecl->at,

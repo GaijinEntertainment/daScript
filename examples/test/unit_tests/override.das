@@ -1,5 +1,3 @@
-options log = true // , logNodes = true // , optimize=true, printRef = true, printVarAccess = true, logInferPasses = true
-
 struct Foo
     x, y : int
     set = @Foo_setXY
