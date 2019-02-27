@@ -34,6 +34,7 @@ namespace das
     ,   invalid_swizzle_mask                    =   30112       //  vec.xxxxx or vec.xAz or vec.wtf
     ,   invalid_initialization_type             =   30113       //  int a = "b"
     ,   invalid_with_type                       =   30114       //  with int
+    ,   invalid_override                        =   30115       //  override new_field:blah, or old_field:blah without override
 
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)

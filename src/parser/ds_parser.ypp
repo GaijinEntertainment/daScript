@@ -19,6 +19,7 @@
         TypeDecl        *pTypeDecl;
         Expression      *pInit;
         bool            move_to_init = false;
+        bool            override = false;
     };
     
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
@@ -103,7 +104,7 @@
 %token  _OPTIONS    _TABLE      _EXPECT     _CONST
 %token  _REQUIRE    _OPERATOR   _ENUM       _FINALLY
 %token  _DELETE     _DEREF      _SCOPE      _TYPEDEF
-%token  _WITH       _CAST
+%token  _WITH       _CAST       _OVERRIDE
 
 /* basic types */
 %token  _TBOOL       _TVOID       _TSTRING     _TAUTO
@@ -146,6 +147,7 @@
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
+%type <pVarDecl>        structure_variable_declaration
 %type <pVarDecl>        let_variable_declaration
 %type <s>               name_in_namespace
 %type <s>               annotation_declaration_name
@@ -160,6 +162,7 @@
 
 %type <b>               copy_or_move
 %type <b>               let_scope
+%type <b>               optional_override
 
 %type <pEnum>           enum_list
 
@@ -974,9 +977,26 @@ expr
     }
     ;
 
+optional_override
+    :               { $$ = false; }
+    |   _OVERRIDE   { $$ = true; }
+    ;
+
+structure_variable_declaration
+    :   optional_override[ovr] variable_declaration[decl] {
+        $decl->override = $ovr;
+        $$ = $decl;
+    }
+    ;
+
 struct_variable_declaration_list
-    :                                                                            { $$ = new vector<VariableDeclaration*>(); }
-    |   struct_variable_declaration_list[list] variable_declaration[decl] ';'    { $$ = $list; $list->push_back($decl); }
+    :   {
+        $$ = new vector<VariableDeclaration*>();
+    }
+    |   struct_variable_declaration_list[list] structure_variable_declaration[decl] ';' {
+        $$ = $list;
+        $list->push_back($decl);
+    }
     ;
 
 variable_declaration_list
@@ -1159,13 +1179,31 @@ structure_declaration
             pStruct->at = tokAt(@loc);
             for ( auto pDecl : *$list ) {
                 for ( const auto & name : *pDecl->pNameList ) {
-                    if ( !pStruct->findField(name) ) {
-                        auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
-                        pStruct->fields.emplace_back(name, td, init, pDecl->move_to_init, pDecl->at);
+                    auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name);
+                    if ( !oldFd ) {
+                        if ( pDecl->override ) {
+                            yyerror("structure field is not overriding anything, "+name,pDecl->at,
+                                CompilationError::invalid_override);
+                        } else {
+                            auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
+                            pStruct->fields.emplace_back(name, td, init, pDecl->move_to_init, pDecl->at);
+                        }
                     } else {
-                        yyerror("structure field is already declared "+name,pDecl->at,
-                            CompilationError::structure_field_already_declared);
+                        if ( pDecl->override ) {
+                            if ( oldFd->type->isSameType(*pDecl->pTypeDecl,true,true) ) {
+                                auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
+                                oldFd->init = init;
+                            } else {
+                                yyerror("structure field "+name+" override type mismatch ("+
+                                    oldFd->type->describe()+") vs ("+pDecl->pTypeDecl->describe()+")",pDecl->at,
+                                CompilationError::invalid_override);
+                            }
+                        } else {
+                            yyerror("structure field is already declared "+name
+                                +", use override to replace initial value instead",pDecl->at,
+                                    CompilationError::invalid_override);
+                        }
                     }
                 }
             }

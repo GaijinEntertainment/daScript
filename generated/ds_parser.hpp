@@ -65,6 +65,7 @@ extern int yydebug;
         TypeDecl        *pTypeDecl;
         Expression      *pInit;
         bool            move_to_init = false;
+        bool            override = false;
     };
     
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
@@ -76,7 +77,7 @@ extern int yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 80 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 81 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 
 /* Token type.  */
 #ifndef YYTOKENTYPE
@@ -118,71 +119,72 @@ extern int yydebug;
     _TYPEDEF = 290,
     _WITH = 291,
     _CAST = 292,
-    _TBOOL = 293,
-    _TVOID = 294,
-    _TSTRING = 295,
-    _TAUTO = 296,
-    _TINT = 297,
-    _TINT2 = 298,
-    _TINT3 = 299,
-    _TINT4 = 300,
-    _TUINT = 301,
-    _TUINT2 = 302,
-    _TUINT3 = 303,
-    _TUINT4 = 304,
-    _TFLOAT = 305,
-    _TFLOAT2 = 306,
-    _TFLOAT3 = 307,
-    _TFLOAT4 = 308,
-    _TRANGE = 309,
-    _TURANGE = 310,
-    _TBLOCK = 311,
-    _TINT64 = 312,
-    _TUINT64 = 313,
-    _TYPENAME = 314,
-    _TDOUBLE = 315,
-    _TFUNCTION = 316,
-    _TLAMBDA = 317,
-    ADDEQU = 318,
-    SUBEQU = 319,
-    DIVEQU = 320,
-    MULEQU = 321,
-    MODEQU = 322,
-    ANDEQU = 323,
-    OREQU = 324,
-    XOREQU = 325,
-    ADDADD = 326,
-    SUBSUB = 327,
-    LEEQU = 328,
-    GREQU = 329,
-    EQUEQU = 330,
-    NOTEQU = 331,
-    RARROW = 332,
-    LARROW = 333,
-    QQ = 334,
-    QDOT = 335,
-    LPIPE = 336,
-    LBPIPE = 337,
-    RPIPE = 338,
-    INTEGER = 339,
-    LONG_INTEGER = 340,
-    UNSIGNED_INTEGER = 341,
-    UNSIGNED_LONG_INTEGER = 342,
-    FLOAT = 343,
-    DOUBLE = 344,
-    NAME = 345,
-    BEGIN_STRING = 346,
-    STRING_CHARACTER = 347,
-    END_STRING = 348,
-    BEGIN_STRING_EXPR = 349,
-    END_STRING_EXPR = 350,
-    UNARY_MINUS = 351,
-    UNARY_PLUS = 352,
-    PRE_INC = 353,
-    PRE_DEC = 354,
-    POST_INC = 355,
-    POST_DEC = 356,
-    COLCOL = 357
+    _OVERRIDE = 293,
+    _TBOOL = 294,
+    _TVOID = 295,
+    _TSTRING = 296,
+    _TAUTO = 297,
+    _TINT = 298,
+    _TINT2 = 299,
+    _TINT3 = 300,
+    _TINT4 = 301,
+    _TUINT = 302,
+    _TUINT2 = 303,
+    _TUINT3 = 304,
+    _TUINT4 = 305,
+    _TFLOAT = 306,
+    _TFLOAT2 = 307,
+    _TFLOAT3 = 308,
+    _TFLOAT4 = 309,
+    _TRANGE = 310,
+    _TURANGE = 311,
+    _TBLOCK = 312,
+    _TINT64 = 313,
+    _TUINT64 = 314,
+    _TYPENAME = 315,
+    _TDOUBLE = 316,
+    _TFUNCTION = 317,
+    _TLAMBDA = 318,
+    ADDEQU = 319,
+    SUBEQU = 320,
+    DIVEQU = 321,
+    MULEQU = 322,
+    MODEQU = 323,
+    ANDEQU = 324,
+    OREQU = 325,
+    XOREQU = 326,
+    ADDADD = 327,
+    SUBSUB = 328,
+    LEEQU = 329,
+    GREQU = 330,
+    EQUEQU = 331,
+    NOTEQU = 332,
+    RARROW = 333,
+    LARROW = 334,
+    QQ = 335,
+    QDOT = 336,
+    LPIPE = 337,
+    LBPIPE = 338,
+    RPIPE = 339,
+    INTEGER = 340,
+    LONG_INTEGER = 341,
+    UNSIGNED_INTEGER = 342,
+    UNSIGNED_LONG_INTEGER = 343,
+    FLOAT = 344,
+    DOUBLE = 345,
+    NAME = 346,
+    BEGIN_STRING = 347,
+    STRING_CHARACTER = 348,
+    END_STRING = 349,
+    BEGIN_STRING_EXPR = 350,
+    END_STRING_EXPR = 351,
+    UNARY_MINUS = 352,
+    UNARY_PLUS = 353,
+    PRE_INC = 354,
+    PRE_DEC = 355,
+    POST_INC = 356,
+    POST_DEC = 357,
+    COLCOL = 358
   };
 #endif
 
@@ -191,7 +193,7 @@ extern int yydebug;
 
 union YYSTYPE
 {
-#line 57 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 58 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
 
     char                            ch;
     bool                            b;
@@ -216,7 +218,7 @@ union YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 220 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 222 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 };
 
 typedef union YYSTYPE YYSTYPE;
