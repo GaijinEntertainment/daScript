@@ -23,7 +23,7 @@ def test : bool
         // debug(tab)
         i = 0
         while i < total
-            let ( pValue:int? = find(tab,string(i)))
+            find(tab,string(i)) <| $(pValue:int?)
                 if pValue!=null
                     assert(deref(pValue)==i)
                 else
@@ -32,7 +32,8 @@ def test : bool
         let(j,k:int=0)
             i = 0
             while i < total
-                j += find(tab,string(i)) ?? 0
+                find(tab,string(i)) <| $(pVal:int?)
+                    j+= pVal ?? 0
                 if i%7!=0
                     k +=i
                 else
@@ -42,7 +43,8 @@ def test : bool
         let(j,k,zero:int=0)
             i = 0
             while i < total
-                j += find(tab,string(i)) ?? zero
+                find(tab,string(i)) <| $(pVal:int?)
+                    j += pVal ?? zero
                 if i%7!=0
                     k +=i
                 i ++

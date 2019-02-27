@@ -1409,6 +1409,7 @@ namespace das
                 bool    fastCall : 1;
                 bool    knownSideEffects : 1;
                 bool    hasToRunAtCompileTime : 1;
+                bool    unsafe : 1;
             };
             uint32_t flags = 0;
         };

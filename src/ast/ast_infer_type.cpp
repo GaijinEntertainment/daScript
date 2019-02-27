@@ -1025,6 +1025,11 @@ namespace das {
             } else if ( expr->subexpr->type->isConst() ) {
                 error("can't delete constant expression " + expr->subexpr->type->describe(),
                       expr->at, CompilationError::bad_delete);
+            } else if ( expr->subexpr->type->isPointer() ) {
+                if ( func && !func->unsafe ) {
+                    error("delete of pointer requires [unsafe]", expr->at,
+                          CompilationError::unsafe);
+                }
             }
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
@@ -1150,6 +1155,9 @@ namespace das {
                 expr->type = castFunc(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
             } else {
                 expr->type = castStruct(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
+            }
+            if ( expr->upcast && func && !func->unsafe ) {
+                error("upcast requires [unsafe]", expr->at, CompilationError::unsafe);
             }
             if ( expr->type ) {
                 verifyType(expr->type);

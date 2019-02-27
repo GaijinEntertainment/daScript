@@ -8,7 +8,7 @@ def Ball(center:float3; radius:float)
     b.radius = radius
     return b
 
-[export]
+[export,unsafe]
 def test
 	let in scope b0 = new Ball
 	assert(b0.center==float3() & b0.radius==0.0f)
