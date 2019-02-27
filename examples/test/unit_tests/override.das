@@ -1,5 +1,5 @@
 struct Foo
-    x, y : int
+    x, y = 0
     set = @Foo_setXY
 
 def Foo_setXY(this:Foo;x,y:int)
@@ -7,7 +7,7 @@ def Foo_setXY(this:Foo;x,y:int)
     this.y = y
 
 struct Foo3D : Foo
-    z : int = 3
+    z = 3
     override set = cast<auto> @Foo3D_setXY
 
 def Foo3D_setXY(this:Foo3D;x,y:int)
