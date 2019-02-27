@@ -1,29 +1,49 @@
-options log = true // , logNodes = true // , optimize=true, printRef = true, printVarAccess = true, logInferPasses = true
+options log = true, logNodes = true, optimize=true, printRef = true, printVarAccess = true, logOptimizationPasses = true
 
 struct Foo
-    x, y = 0
-    set = @Foo_setXY
-
-def Foo_setXY(this:Foo;x,y:int)
-    this.x = x
-    this.y = y
+    x, y : int
 
 struct Foo3D : Foo
-    z = 3
-    override set = cast<auto> @Foo3D_setXY
+    z : int
 
-def Foo3D_setXY(this:Foo3D;x,y:int)
-    this.x = x
-    this.y = y
-    this.z = 0
+struct FooVision
+    f3d : Foo3D
+    color : float4
+
+def setFooGeneric(foo,x,y)
+    foo.x = x
+    foo.y = y
+
+def setFoo(foo:Foo;x,y:int)
+    foo.x = x
+    foo.y = y
+
+def setFooPtr(foo:Foo?;x,y:int)
+    foo.x = x
+    foo.y = y
+
+[sideeffects]
+def test_ptr
+    let f = new Foo
+    let f3d = new Foo3D
+    assert(f.x==0 & f.y==0)
+    assert(f3d.x==0 & f3d.y==0)
+    setFooGeneric(f,1,2)
+    setFooGeneric(f3d,1,2)
+    assert(f.x==1 & f.y==2)
+    assert(f3d.x==1 & f3d.y==2)
+    setFooPtr(f,3,4)
+    setFooPtr(cast<Foo?> f3d,3,4)
+    assert(f.x==3 & f.y==4)
+    assert(f3d.x==3 & f3d.y==4)
+    (cast<Foo?> f3d).y = 5
+    assert(f3d.y==5)
+    let fv = new FooVision
+    (cast<Foo> fv.f3d).y = 13
+    assert((cast<Foo> fv.f3d).y==13)
 
 [export]
 def test
-    let f = Foo()
-    f->set(1,2)
-    assert(f.x==1 & f.y==2)
-    let f3d = Foo3D()
-    assert(f3d.x==0 & f3d.y==0 & f3d.z==3)
-    f3d->set(1,2)
-    assert(f3d.x==1 & f3d.y==2 & f3d.z==0)
+    test_ptr()
     return true
+
