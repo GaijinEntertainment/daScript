@@ -815,7 +815,30 @@ namespace das {
         }
     // ExprInvoke
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                auto blockT = expr->arguments[0]->type;
+                if ( !blockT ) {
+                    // no go, no block
+                } else if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() && !blockT->isGoodLambdaType() ) {
+                    // no go, not a good block
+                } else if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {
+                    // no go, not a good argument
+                } else {
+                    for ( size_t i=0; i != blockT->argTypes.size(); ++i ) {
+                        auto & arg = expr->arguments[i+1];
+                        auto & passType = arg->type;
+                        auto & argType = blockT->argTypes[i];
+                        if ( arg->rtti_isCast() && !passType ) {
+                            auto argCast = static_pointer_cast<ExprCast>(arg);
+                            if ( argCast->castType->isAuto() ) {
+                                reportGenericInfer();
+                                argCast->castType = make_shared<TypeDecl>(*argType);
+                            }
+                        }
+                    }
+                }
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()<1 ) {
                 error("expecting invoke(block_or_function_or_lambda) or invoke(block_or_function_or_lambda,...)", expr->at,
                       CompilationError::invalid_argument_count);
@@ -990,6 +1013,22 @@ namespace das {
     // ExprCast
         virtual ExpressionPtr visit ( ExprCast * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            if ( expr->castType->isAlias() ) {
+                auto aT = inferAlias(expr->castType);
+                if ( aT ) {
+                    expr->castType = aT;
+                    reportGenericInfer();
+                } else {
+                    error("udefined type " + expr->castType->describe(), expr->at,
+                          CompilationError::type_not_found);
+                    return Visitor::visit(expr);
+                }
+            }
+            if ( expr->castType->isAuto() ) {
+                error("casting to udefined type " + expr->castType->describe(), expr->at,
+                      CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
             if ( expr->subexpr->type->isSameType(*expr->castType,false,false) ) {
                 reportGenericInfer();
                 return expr->subexpr;
@@ -1026,6 +1065,9 @@ namespace das {
                     error("invalid cast, expecting structure pointer", expr->at,
                           CompilationError::invalid_cast);
                 }
+            }
+            if ( expr->type ) {
+                verifyType(expr->type);
             }
             return Visitor::visit(expr);
         }

@@ -4,12 +4,16 @@
 
 namespace das {
 
-    /* a->b(args) is short for invoke(a.b, a, args)  */
+    /* a->b(args) is short for invoke(a.b, cast<auto> a, args)  */
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b ) {
         auto pInvoke = new ExprInvoke(at, "invoke");
         auto pAt = make_shared<ExprField>(at, a->clone(), b);
         pInvoke->arguments.push_back(pAt);
-        pInvoke->arguments.push_back(ExpressionPtr(a));
+        auto pCast = make_shared<ExprCast>();
+        pCast->at = at;
+        pCast->castType = make_shared<TypeDecl>(Type::autoinfer);
+        pCast->subexpr = ExpressionPtr(a);
+        pInvoke->arguments.push_back(pCast);
         return pInvoke;
     }
 
