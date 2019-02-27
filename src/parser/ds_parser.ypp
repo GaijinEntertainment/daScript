@@ -104,7 +104,7 @@
 %token  _OPTIONS    _TABLE      _EXPECT     _CONST
 %token  _REQUIRE    _OPERATOR   _ENUM       _FINALLY
 %token  _DELETE     _DEREF      _SCOPE      _TYPEDEF
-%token  _WITH       _CAST       _OVERRIDE
+%token  _WITH       _CAST       _OVERRIDE   _UPCAST
 
 /* basic types */
 %token  _TBOOL       _TVOID       _TSTRING     _TAUTO
@@ -737,6 +737,9 @@ expression_let
 expr_cast
     :   _CAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
         $$ = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
+    }
+    |   _UPCAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
+        $$ = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl), true);
     }
     ;
 

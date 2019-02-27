@@ -207,6 +207,7 @@
 <normal>"lambda"                                        return _TLAMBDA;
 <normal>"const"                                         return _CONST;
 <normal>"cast"                                          return _CAST;
+<normal>"upcast"                                        return _UPCAST;
 <normal>"override"                                      return _OVERRIDE;
 <normal>"expect"                                        return _EXPECT;
 <normal>"table"                                         return _TABLE;

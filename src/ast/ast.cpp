@@ -532,6 +532,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         cexpr->castType = make_shared<TypeDecl>(*castType);
+        cexpr->upcast = upcast;
         return cexpr;
     }
 

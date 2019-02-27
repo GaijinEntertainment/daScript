@@ -1037,7 +1037,13 @@ namespace das {
             auto cT = expr->castType;
             if ( seT->isStructure() ) {
                 if ( cT->isStructure() ) {
-                    if ( cT->structType->isCompatibleCast(*seT->structType) ) {
+                    bool compatibleCast;
+                    if ( expr->upcast ) {
+                        compatibleCast = seT->structType->isCompatibleCast(*cT->structType);
+                    } else {
+                        compatibleCast = cT->structType->isCompatibleCast(*seT->structType);
+                    }
+                    if ( compatibleCast ) {
                         expr->type = make_shared<TypeDecl>(*cT);
                         expr->type->ref = expr->subexpr->type->ref;
                         expr->type->constant = expr->subexpr->type->constant;
@@ -1052,7 +1058,13 @@ namespace das {
                 }
             } else if ( seT->isPointer() && seT->firstType->isStructure() ) {
                 if ( cT->isPointer() && cT->firstType->isStructure() ) {
-                    if ( cT->firstType->structType->isCompatibleCast(*seT->firstType->structType) ) {
+                    bool compatibleCast;
+                    if ( expr->upcast ) {
+                        compatibleCast = seT->firstType->structType->isCompatibleCast(*cT->firstType->structType);
+                    } else {
+                        compatibleCast = cT->firstType->structType->isCompatibleCast(*seT->firstType->structType);
+                    }
+                    if ( compatibleCast ) {
                         expr->type = make_shared<TypeDecl>(*cT);
                         expr->type->ref = expr->subexpr->type->ref;
                         expr->type->constant = expr->subexpr->type->constant;
@@ -1892,7 +1904,7 @@ namespace das {
                 error("local variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
-            } else if ( var->type->ref && !var->type->isSameType(*var->init->type,true,false) ) {
+            } else if ( var->type->ref && !var->type->isSameType(*var->init->type,false,false) && var->init->type->isRef()) {
                 error("local variable initialization type mismatch. reference can't be initialized via value, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);

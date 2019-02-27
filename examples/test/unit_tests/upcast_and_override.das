@@ -1,5 +1,3 @@
-// options log = true, logNodes = true, optimize=true, printRef = true, printVarAccess = true, logOptimizationPasses = true
-
 struct Foo
     x, y : int
     set = @Foo_setXY
@@ -28,3 +26,4 @@ def test
     f3d->set(1,2)
     assert(f3d.x==1 & f3d.y==2 & f3d.z==0)
     return true
+
