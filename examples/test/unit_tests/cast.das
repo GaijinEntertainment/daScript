@@ -68,3 +68,4 @@ def test
     test_struct()
     test_ptr()
     return true
+

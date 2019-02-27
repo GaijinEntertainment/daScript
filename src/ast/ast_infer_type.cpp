@@ -997,9 +997,9 @@ namespace das {
             auto seT = expr->subexpr->type;
             auto cT = expr->castType;
             if ( seT->isStructure() ) {
-                if ( expr->castType->isStructure() ) {
+                if ( cT->isStructure() ) {
                     if ( cT->structType->isCompatibleCast(*seT->structType) ) {
-                        expr->type = make_shared<TypeDecl>(*expr->castType);
+                        expr->type = make_shared<TypeDecl>(*cT);
                         expr->type->ref = expr->subexpr->type->ref;
                         expr->type->constant = expr->subexpr->type->constant;
                     } else {
@@ -1011,8 +1011,21 @@ namespace das {
                     error("invalid cast, expecting structure", expr->at,
                           CompilationError::invalid_cast);
                 }
-            } else if ( seT->isPointer() ) {
-
+            } else if ( seT->isPointer() && seT->firstType->isStructure() ) {
+                if ( cT->isPointer() && cT->firstType->isStructure() ) {
+                    if ( cT->firstType->structType->isCompatibleCast(*seT->firstType->structType) ) {
+                        expr->type = make_shared<TypeDecl>(*cT);
+                        expr->type->ref = expr->subexpr->type->ref;
+                        expr->type->constant = expr->subexpr->type->constant;
+                    } else {
+                        error("incompatible cast, can't cast " + seT->firstType->structType->name
+                              + "? to " + cT->firstType->structType->name + "?", expr->at,
+                              CompilationError::invalid_cast);
+                    }
+                } else {
+                    error("invalid cast, expecting structure pointer", expr->at,
+                          CompilationError::invalid_cast);
+                }
             }
             return Visitor::visit(expr);
         }

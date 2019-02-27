@@ -537,7 +537,7 @@ namespace das {
 
     ExpressionPtr ExprCast::visit(Visitor & vis) {
         vis.preVisit(this);
-        subexpr->visit(vis);
+        subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
 
@@ -552,7 +552,7 @@ namespace das {
 
     ExpressionPtr ExprAscend::visit(Visitor & vis) {
         vis.preVisit(this);
-        subexpr->visit(vis);
+        subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
 

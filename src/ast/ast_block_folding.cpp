@@ -9,6 +9,7 @@ namespace das {
     //  r2v(expr.field)     = expr.@field
     //  r2v(expr[index])    = expr@[index]
     //  r2v(a ? b : c)      = a ? r2v(b) : r2v(c)
+    //  r2v(cast(x))        = cast(r2v(x))
     class RefFolding : public OptVisitor {
     protected:
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
