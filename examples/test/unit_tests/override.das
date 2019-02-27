@@ -19,7 +19,7 @@ def Foo3D_setXY(this:Foo3D;x,y:int)
 
 [unsafe]
 def Foo3D_setXY2(that:Foo;x,y:int)
-    let this : Foo3D& = upcast<Foo3D> that
+    let this : Foo3D& = upcast<auto> that
     this.x = x
     this.y = y
     this.z = 0

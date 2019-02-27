@@ -1959,6 +1959,15 @@ namespace das {
             if ( var->type->isHandle() && !var->type->annotation->isLocal() )
                 error("can't have local variable of handled type " + var->type->annotation->name ,
                       var->at, CompilationError::invalid_variable_type);
+            if ( !var->type->isAuto() && !var->type->isAlias() ){
+                if ( var->init && var->init->rtti_isCast() ) {
+                    auto castExpr = static_pointer_cast<ExprCast>(var->init);
+                    if ( castExpr->castType->isAuto() ) {
+                        reportGenericInfer();
+                        castExpr->castType = make_shared<TypeDecl>(*var->type);
+                    }
+                }
+            }
             verifyType(var->type);
             if ( expr->inScope && var->type->canDelete() ) {
                 auto scope = scopes.back();
