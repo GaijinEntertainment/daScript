@@ -409,7 +409,7 @@ namespace das
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
-            if ( firstType && argTypes.size()==0 ) {    // if not any block or any function
+            if ( firstType || argTypes.size() ) {    // if not any block or any function
                 if ( argTypes.size() != decl.argTypes.size() ) {
                     return false;
                 }

@@ -1194,14 +1194,14 @@ structure_declaration
                         }
                     } else {
                         if ( pDecl->override ) {
-                            if ( oldFd->type->isSameType(*pDecl->pTypeDecl,true,true) ) {
+                            //if ( oldFd->type->isSameType(*pDecl->pTypeDecl,true,true) ) {
                                 auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
                                 oldFd->init = init;
-                            } else {
-                                yyerror("structure field "+name+" override type mismatch ("+
-                                    oldFd->type->describe()+") vs ("+pDecl->pTypeDecl->describe()+")",pDecl->at,
-                                CompilationError::invalid_override);
-                            }
+                            //} else {
+                            //    yyerror("structure field "+name+" override type mismatch ("+
+                            //        oldFd->type->describe()+") vs ("+pDecl->pTypeDecl->describe()+")",pDecl->at,
+                            //    CompilationError::invalid_override);
+                            // }
                         } else {
                             yyerror("structure field is already declared "+name
                                 +", use override to replace initial value instead",pDecl->at,

@@ -1,8 +1,8 @@
-// options log = true, logNodes = true, optimize=true, printRef = true, printVarAccess = true, logOptimizationPasses = true
+options log = true // , logNodes = true // , optimize=true, printRef = true, printVarAccess = true, logInferPasses = true
 
 struct Foo
     x, y : int
-    set = @Foo_setXY
+    set : function<(this:Foo;x,y:int):void> = @Foo_setXY
 
 def Foo_setXY(this:Foo;x,y:int)
     this.x = x
@@ -10,10 +10,9 @@ def Foo_setXY(this:Foo;x,y:int)
 
 struct Foo3D : Foo
     z : int = 3
-    override set = @Foo3D_setXY
+    override set = cast<auto> @Foo3D_setXY
 
-def Foo3D_setXY(that:Foo;x,y:int)
-    let this : Foo3D & = upcast<Foo3D> that
+def Foo3D_setXY(this:Foo3D;x,y:int)
     this.x = x
     this.y = y
     this.z = 0

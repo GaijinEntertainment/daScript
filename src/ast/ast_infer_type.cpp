@@ -445,7 +445,7 @@ namespace das {
                     error("undefined type " + decl.type->describe(), decl.at, CompilationError::invalid_structure_field_type );
                 }
             }
-            if ( decl.type->isAuto() && decl.init ) {
+            if ( decl.type->isAuto() && decl.init && decl.init->type ) {
                 auto varT = TypeDecl::inferAutoType(decl.type, decl.init->type);
                 if ( !varT ) {
                     error("structure field initialization type can't be infered, "
@@ -475,6 +475,14 @@ namespace das {
                     } else if ( !decl.init->type->canCopy() && !decl.init->type->canMove() ) {
                         error("this field can't be initialized at all", decl.at,
                               CompilationError::invalid_initialization_type);
+                    }
+                } else if ( !decl.type->isAuto() ){
+                    if ( decl.init->rtti_isCast() ) {
+                        auto castExpr = static_pointer_cast<ExprCast>(decl.init);
+                        if ( castExpr->castType->isAuto() ) {
+                            reportGenericInfer();
+                            castExpr->castType = make_shared<TypeDecl>(*decl.type);
+                        }
                     }
                 }
             }
@@ -1011,6 +1019,100 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprCast
+        TypeDeclPtr castStruct ( const LineInfo & at, const TypeDeclPtr & subexprType, const TypeDeclPtr & castType, bool upcast ) const {
+            auto seT = subexprType;
+            auto cT = castType;
+            if ( seT->isStructure() ) {
+                if ( cT->isStructure() ) {
+                    bool compatibleCast;
+                    if ( upcast ) {
+                        compatibleCast = seT->structType->isCompatibleCast(*cT->structType);
+                    } else {
+                        compatibleCast = cT->structType->isCompatibleCast(*seT->structType);
+                    }
+                    if ( compatibleCast ) {
+                        auto exprType = make_shared<TypeDecl>(*cT);
+                        exprType->ref = seT->ref;
+                        exprType->constant = seT->constant;
+                        return exprType;
+                    } else {
+                        error("incompatible cast, can't cast " + seT->structType->name
+                              + " to " + cT->structType->name, at,
+                              CompilationError::invalid_cast);
+                    }
+                } else {
+                    error("invalid cast, expecting structure", at,
+                          CompilationError::invalid_cast);
+                }
+            } else if ( seT->isPointer() && seT->firstType->isStructure() ) {
+                if ( cT->isPointer() && cT->firstType->isStructure() ) {
+                    bool compatibleCast;
+                    if ( upcast ) {
+                        compatibleCast = seT->firstType->structType->isCompatibleCast(*cT->firstType->structType);
+                    } else {
+                        compatibleCast = cT->firstType->structType->isCompatibleCast(*seT->firstType->structType);
+                    }
+                    if ( compatibleCast ) {
+                        auto exprType = make_shared<TypeDecl>(*cT);
+                        exprType->ref = seT->ref;
+                        exprType->constant = seT->constant;
+                        return exprType;
+                    } else {
+                        error("incompatible cast, can't cast " + seT->firstType->structType->name
+                              + "? to " + cT->firstType->structType->name + "?", at,
+                              CompilationError::invalid_cast);
+                    }
+                } else {
+                    error("invalid cast, expecting structure pointer", at,
+                          CompilationError::invalid_cast);
+                }
+            }
+            return nullptr;
+        }
+        TypeDeclPtr castFunc ( const LineInfo & at, const TypeDeclPtr & subexprType, const TypeDeclPtr & castType, bool upcast ) const {
+            auto seTF = subexprType;
+            auto cTF = castType;
+            if ( seTF->argTypes.size()!=cTF->argTypes.size() ) {
+                error("invalid cast, number of arguments does not match", at,
+                      CompilationError::invalid_cast);
+                return nullptr;
+            }
+            // result
+            auto funT = make_shared<TypeDecl>(*seTF);
+            auto cresT = cTF->firstType;
+            auto resT = funT->firstType;
+            if ( !cresT->isSameType(*resT,true,false) ) {
+                if ( resT->isStructure() || (resT->isPointer() && resT->firstType->isStructure()) ) {
+                    auto tryRes = castStruct(at, resT, cresT, upcast);
+                    if ( tryRes ) {
+                        funT->firstType = tryRes;
+                    }
+                }
+            }
+            funT->firstType->constant = cresT->constant;
+            // arguments
+            for ( size_t i=0; i!=seTF->argTypes.size(); ++i ) {
+                auto seT = seTF->argTypes[i];
+                auto cT = cTF->argTypes[i];
+                if ( !cT->isSameType(*seT,true,false) ) {
+                    if ( seT->isStructure() || (seT->isPointer() && seT->firstType->isStructure()) ) {
+                        auto tryArg = castStruct(at, seT, cT, upcast);
+                        if ( tryArg ) {
+                            funT->argTypes[i] = tryArg;
+                        }
+                    }
+                }
+                funT->argTypes[i]->constant = cT->constant;
+            }
+            if ( castType->isSameType(*funT,true,true) ) {
+                return funT;
+            } else {
+                error("incompatible cast, can't cast " + funT->describe() + " to " + castType->describe(), at,
+                      CompilationError::invalid_cast);
+                return nullptr;
+            }
+        }
+
         virtual ExpressionPtr visit ( ExprCast * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             if ( expr->castType->isAlias() ) {
@@ -1029,54 +1131,14 @@ namespace das {
                       CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
-            if ( expr->subexpr->type->isSameType(*expr->castType,false,false) ) {
+            if ( expr->subexpr->type->isSameType(*expr->castType,true,true) ) {
                 reportGenericInfer();
                 return expr->subexpr;
             }
-            auto seT = expr->subexpr->type;
-            auto cT = expr->castType;
-            if ( seT->isStructure() ) {
-                if ( cT->isStructure() ) {
-                    bool compatibleCast;
-                    if ( expr->upcast ) {
-                        compatibleCast = seT->structType->isCompatibleCast(*cT->structType);
-                    } else {
-                        compatibleCast = cT->structType->isCompatibleCast(*seT->structType);
-                    }
-                    if ( compatibleCast ) {
-                        expr->type = make_shared<TypeDecl>(*cT);
-                        expr->type->ref = expr->subexpr->type->ref;
-                        expr->type->constant = expr->subexpr->type->constant;
-                    } else {
-                        error("incompatible cast, can't cast " + seT->structType->name
-                              + " to " + cT->structType->name, expr->at,
-                                CompilationError::invalid_cast);
-                    }
-                } else {
-                    error("invalid cast, expecting structure", expr->at,
-                          CompilationError::invalid_cast);
-                }
-            } else if ( seT->isPointer() && seT->firstType->isStructure() ) {
-                if ( cT->isPointer() && cT->firstType->isStructure() ) {
-                    bool compatibleCast;
-                    if ( expr->upcast ) {
-                        compatibleCast = seT->firstType->structType->isCompatibleCast(*cT->firstType->structType);
-                    } else {
-                        compatibleCast = cT->firstType->structType->isCompatibleCast(*seT->firstType->structType);
-                    }
-                    if ( compatibleCast ) {
-                        expr->type = make_shared<TypeDecl>(*cT);
-                        expr->type->ref = expr->subexpr->type->ref;
-                        expr->type->constant = expr->subexpr->type->constant;
-                    } else {
-                        error("incompatible cast, can't cast " + seT->firstType->structType->name
-                              + "? to " + cT->firstType->structType->name + "?", expr->at,
-                              CompilationError::invalid_cast);
-                    }
-                } else {
-                    error("invalid cast, expecting structure pointer", expr->at,
-                          CompilationError::invalid_cast);
-                }
+            if ( expr->castType->isGoodBlockType() ||  expr->castType->isGoodFunctionType() || expr->castType->isGoodLambdaType() ) {
+                expr->type = castFunc(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
+            } else {
+                expr->type = castStruct(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
             }
             if ( expr->type ) {
                 verifyType(expr->type);
