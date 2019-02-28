@@ -1348,6 +1348,7 @@ namespace das
             struct {
                 bool    useStackRef;
                 bool    doesNotNeedSp;
+                bool    doesNotNeedInit;
             };
             uint32_t makeFlags = 0;
         };
@@ -1371,11 +1372,12 @@ namespace das
         ExprMakeArray ( const LineInfo & at ) : ExprMakeLocal(at) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void setRefSp ( bool ref, uint32_t sp, uint32_t off ) override;
         TypeDeclPtr                 makeType;
         TypeDeclPtr                 recordType;
         vector<ExpressionPtr>       values;
-        uint32_t                    stackTop = 0;
     };
 
     enum class SideEffects : uint32_t {

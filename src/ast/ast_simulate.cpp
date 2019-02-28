@@ -216,6 +216,7 @@ namespace das
     void ExprMakeLocal::setRefSp ( bool ref, uint32_t sp, uint32_t off ) {
         useStackRef = ref;
         doesNotNeedSp = true;
+        doesNotNeedInit = true;
         stackTop = sp;
         extraOffset = off;
     }
@@ -249,7 +250,7 @@ namespace das
         // init with 0
         int total = int(structs.size());
         int stride = makeType->getStride();
-        if ( !useStackRef ) {
+        if ( !doesNotNeedInit ) {
             auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,stride * total);
             simlist.push_back(init0);
         }
@@ -298,26 +299,54 @@ namespace das
         return block;
     }
 
-    SimNode * ExprMakeArray::simulate (Context & context) const {
+    void ExprMakeArray::setRefSp ( bool ref, uint32_t sp, uint32_t off ) {
+        ExprMakeLocal::setRefSp(ref, sp, off);
+        int total = int(values.size());
+        uint32_t stride = recordType->getSizeOf();
+        for ( int index=0; index != total; ++index ) {
+            auto & val = values[index];
+            if ( val->rtti_isMakeLocal() ) {
+                uint32_t offset =  extraOffset + index*stride;
+                auto mkl = static_pointer_cast<ExprMakeLocal>(val);
+                mkl->setRefSp(ref, sp, offset);
+            }
+        }
+    }
+
+    vector<SimNode *> ExprMakeArray::simulateLocal (Context & context) const {
         vector<SimNode *> simlist;
         // init with 0
         int total = int(values.size());
         uint32_t stride = recordType->getSizeOf();
-        if ( !useStackRef ) {
+        if ( !doesNotNeedInit ) {
             auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
             simlist.push_back(init0);
         }
         for ( int index=0; index != total; ++index ) {
             auto & val = values[index];
-            uint32_t indexStackTop = extraOffset + stackTop + index*stride;
+            uint32_t offset = extraOffset + index*stride;
             SimNode * cpy;
-            if ( !useStackRef ) {
-                cpy = makeLocalCopy(at,context,indexStackTop,val);
+            if ( val->rtti_isMakeLocal() ) {
+                // so what happens here, is we ask it for the generated commands and append it to this list only
+                auto mkl = static_pointer_cast<ExprMakeLocal>(val);
+                auto lsim = mkl->simulateLocal(context);
+                simlist.insert(simlist.end(), lsim.begin(), lsim.end());
+                continue;
+            } else if ( !useStackRef ) {
+                cpy = makeLocalCopy(at,context,stackTop+offset,val);
             } else {
-                cpy = makeLocalRefCopy(at,context,stackTop,indexStackTop,val);
+                cpy = makeLocalRefCopy(at,context,stackTop,offset,val);
+            }
+            if ( !cpy ) {
+                context.thisProgram->error("internal compilation error, can't generate array initialization", at);
             }
             simlist.push_back(cpy);
         }
+        return simlist;
+    }
+
+    SimNode * ExprMakeArray::simulate (Context & context) const {
+        auto simlist = simulateLocal(context);
         // we make a block with all those things in it
         auto block = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
         block->total = int(simlist.size());
@@ -1174,10 +1203,15 @@ namespace das
     SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local) {
         SimNode * init = var->init->simulate(context);
         SimNode * get;
-        if ( local )
-            get = context.code->makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
-        else
+        if ( local ) {
+            if ( var->init && var->init->rtti_isMakeLocal() ) {
+                return init;
+            } else {
+                get = context.code->makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
+            }
+        } else {
             get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index);
+        }
         if ( var->type->ref ) {
             return context.code->makeNode<SimNode_CopyReference>(var->init->at, get, init);
         } else if ( var->type->canCopy() ) {

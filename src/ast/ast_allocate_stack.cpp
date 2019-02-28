@@ -164,14 +164,19 @@ namespace das {
             }
         }
     // ExprLet
-        virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
+        virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(expr,var,last);
             auto sz = var->type->getSizeOf();
             var->stackTop = allocateStack(sz);
             if ( log ) {
                 logs << "\t" << var->stackTop << "\t" << sz
                     << "\tlet " << var->name << ", line " << var->at.line << "\n";
             }
-            return Visitor::visitLet(expr,var,last);
+            if ( var->init && var->init->rtti_isMakeLocal() ) {
+                auto mkl = static_pointer_cast<ExprMakeLocal>(var->init);
+                mkl->setRefSp(false, var->stackTop, 0);
+                mkl->doesNotNeedInit = false;
+            }
         }
     // ExprMakeBlock
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
@@ -201,6 +206,7 @@ namespace das {
     // ExprMakeStructure
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             Visitor::preVisit(expr);
+            if ( !func ) return;
             if ( !expr->doesNotNeedSp ) {
                 auto sz = expr->type->getSizeOf();
                 uint32_t stackTop = allocateStack(sz);
@@ -214,6 +220,7 @@ namespace das {
     // ExprMakeArray
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
+            if ( !func ) return;
             if ( !expr->doesNotNeedSp ) {
                 auto sz = expr->type->getSizeOf();
                 expr->stackTop = allocateStack(sz);
@@ -221,6 +228,7 @@ namespace das {
                     logs << "\t" << expr->stackTop << "\t" << sz
                     << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
+                expr->setRefSp(false, stackTop, 0);
             }
         }
     // New
