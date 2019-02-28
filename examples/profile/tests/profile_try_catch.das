@@ -9,16 +9,16 @@ def tryCatch()
 		for i in range (0, 2000)
 			try
 				cnt += arr[i]
-			catch
+			recover
 				fail ++
 		assert(fail==1000)
 
 
 [export]
 def test
-	profile(20,"try-catch") <|
+	profile(20,"try-recover") <|
 		tryCatch()
-	profile(20,"try-catch c++") <|
+	profile(20,"try-recover c++") <|
 		testProfile::testTryCatch()
     return true
 

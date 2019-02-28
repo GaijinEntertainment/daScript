@@ -36,7 +36,7 @@ def test:bool
     try
         debug(int("11abc"), "=")
         assert(false, "can't convert non int string without exception")
-    catch {}
+    recover {}
     assert(to_int("11abc") == 11)
     assert(to_float("11.1abc") == 11.1)
     return true

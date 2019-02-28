@@ -32,8 +32,8 @@ def queryThree()
                 if position==pos
                     count ++
                     if count==100
-                        throw("enough")
-    catch
+                        panic("enough")
+    recover
         assert(count==100)
 
 [export]

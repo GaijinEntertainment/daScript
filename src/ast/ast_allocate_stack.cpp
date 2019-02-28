@@ -216,7 +216,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( inStruct ) return;
             if ( expr->subexpr->rtti_isMakeLocal() ) {
-                auto sz = sizeof(void *);
+                uint32_t sz = sizeof(void *);
                 expr->stackTop = allocateStack(sz);
                 expr->useStackRef = true;
                 if ( log ) {
@@ -233,12 +233,12 @@ namespace das {
             if ( inStruct ) return;
             if ( !expr->doesNotNeedSp ) {
                 auto sz = expr->type->getSizeOf();
-                uint32_t stackTop = allocateStack(sz);
+                uint32_t cStackTop = allocateStack(sz);
                 if ( log ) {
-                    logs << "\t" << stackTop << "\t" << sz
+                    logs << "\t" << cStackTop << "\t" << sz
                         << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
-                expr->setRefSp(false, stackTop, 0);
+                expr->setRefSp(false, cStackTop, 0);
                 expr->doesNotNeedInit = false;
             }
         }
