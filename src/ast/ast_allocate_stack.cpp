@@ -23,11 +23,21 @@ namespace das {
         bool                    log = false;
         bool                    optimize = false;
         TextWriter &            logs;
+        bool                    inStruct = false;
     protected:
         uint32_t allocateStack ( uint32_t size ) {
             auto result = stackTop;
             stackTop += (size + 0xf) & ~0xf;
             return result;
+        }
+    // structure
+        virtual void preVisit ( Structure * var ) override {
+            Visitor::preVisit(var);
+            inStruct = true;
+        }
+        virtual StructurePtr visit ( Structure * var ) override {
+            inStruct = false;
+            return Visitor::visit(var);
         }
     // global variable init
         virtual void preVisitGlobalLet ( const VariablePtr & ) override {
@@ -72,6 +82,8 @@ namespace das {
         }
     // ExprReturn
         virtual void preVisit ( ExprReturn * expr ) override {
+            Visitor::preVisit(expr);
+            if ( inStruct ) return;
             if ( blocks.size() ) {
                 auto block = blocks.back();
                 expr->stackTop = block->stackTop;
@@ -85,6 +97,7 @@ namespace das {
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
+            if ( inStruct ) return;
             if ( block->isClosure ) {
                 blocks.push_back(block);
             }
@@ -98,6 +111,9 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            if ( inStruct ) {
+                return Visitor::visit(block);
+            }
             if ( block->isClosure ) {
                 blocks.pop_back();
             }
@@ -106,6 +122,7 @@ namespace das {
     // ExprOp1
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
+            if ( inStruct ) return;
             if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
                 auto sz = expr->func->result->getSizeOf();
                 expr->stackTop = allocateStack(sz);
@@ -118,6 +135,7 @@ namespace das {
     // ExprOp2
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
+            if ( inStruct ) return;
             if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
                 auto sz = expr->func->result->getSizeOf();
                 expr->stackTop = allocateStack(sz);
@@ -130,6 +148,7 @@ namespace das {
     // ExprCall
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
+            if ( inStruct ) return;
             if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
                 auto sz = expr->func->result->getSizeOf();
                 expr->stackTop = allocateStack(sz);
@@ -142,6 +161,7 @@ namespace das {
     // ExprInvoke
         virtual void preVisit ( ExprInvoke * expr ) override {
             Visitor::preVisit(expr);
+            if ( inStruct ) return;
             if ( expr->type->isRefType() ) {
                 auto sz = expr->type->getSizeOf();
                 expr->stackTop = allocateStack(sz);
@@ -154,6 +174,7 @@ namespace das {
     // ExprFor
         virtual void preVisitForStack ( ExprFor * expr ) override {
             Visitor::preVisitForStack(expr);
+            if ( inStruct ) return;
             for ( auto & var : expr->iteratorVariables ) {
                 auto sz = var->type->getSizeOf();
                 var->stackTop = allocateStack(sz);
@@ -166,6 +187,7 @@ namespace das {
     // ExprLet
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr,var,last);
+            if ( inStruct ) return;
             auto sz = var->type->getSizeOf();
             var->stackTop = allocateStack(sz);
             if ( log ) {
@@ -179,18 +201,20 @@ namespace das {
             }
         }
     // ExprMakeBlock
-        virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
+        virtual void preVisit ( ExprMakeBlock * expr ) override {
+            Visitor::preVisit(expr);
+            if ( inStruct ) return;
             auto sz = uint32_t(sizeof(Block));
             expr->stackTop = allocateStack(sz);
             if ( log ) {
                 logs << "\t" << expr->stackTop << "\t" << sz
                 << "\tmake block " << expr->type->describe() << ", line " << expr->at.line << "\n";
             }
-            return Visitor::visit(expr);
         }
     // ExprAscend
         virtual void preVisit ( ExprAscend * expr ) override {
             Visitor::preVisit(expr);
+            if ( inStruct ) return;
             if ( expr->subexpr->rtti_isMakeLocal() ) {
                 auto sz = sizeof(void *);
                 expr->stackTop = allocateStack(sz);
@@ -206,7 +230,7 @@ namespace das {
     // ExprMakeStructure
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             Visitor::preVisit(expr);
-            if ( !func ) return;
+            if ( inStruct ) return;
             if ( !expr->doesNotNeedSp ) {
                 auto sz = expr->type->getSizeOf();
                 uint32_t stackTop = allocateStack(sz);
@@ -215,12 +239,13 @@ namespace das {
                         << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
                 expr->setRefSp(false, stackTop, 0);
+                expr->doesNotNeedInit = false;
             }
         }
     // ExprMakeArray
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
-            if ( !func ) return;
+            if ( inStruct ) return;
             if ( !expr->doesNotNeedSp ) {
                 auto sz = expr->type->getSizeOf();
                 expr->stackTop = allocateStack(sz);
@@ -229,10 +254,13 @@ namespace das {
                     << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
                 expr->setRefSp(false, stackTop, 0);
+                expr->doesNotNeedInit = false;
             }
         }
     // New
-        virtual ExpressionPtr visit ( ExprNew * expr ) override {
+        virtual void preVisit ( ExprNew * expr ) override {
+            Visitor::preVisit(expr);
+            if ( inStruct ) return;
             if ( expr->type->dim.size() ) {
                 auto sz = uint32_t(expr->type->getCountOf()*sizeof(char *));
                 expr->stackTop = allocateStack(sz);
@@ -241,7 +269,6 @@ namespace das {
                     << "\tNEW " << expr->typeexpr->describe() << ", line " << expr->at.line << "\n";
                 }
             }
-            return Visitor::visit(expr);
         }
     };
 

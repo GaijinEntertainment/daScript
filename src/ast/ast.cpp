@@ -1163,15 +1163,6 @@ namespace das {
         return cexpr;
     }
 
-    // make local
-
-    ExpressionPtr ExprMakeLocal::clone( const ExpressionPtr & expr ) const {
-        auto cexpr = clonePtr<ExprMakeStructure>(expr);
-        Expression::clone(cexpr);
-        cexpr->makeFlags = makeFlags;
-        return cexpr;
-    }
-
     // make structure
 
     ExpressionPtr ExprMakeStructure::clone( const ExpressionPtr & expr ) const {

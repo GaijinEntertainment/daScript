@@ -1338,7 +1338,6 @@ namespace das
     struct ExprMakeLocal : Expression {
         ExprMakeLocal() = default;
         ExprMakeLocal ( const LineInfo & at ) : Expression(at) {}
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual bool rtti_isMakeLocal() const override { return true; }
         virtual void setRefSp ( bool ref, uint32_t sp, uint32_t off );
         virtual vector<SimNode *> simulateLocal ( Context & /*context*/ ) const;
