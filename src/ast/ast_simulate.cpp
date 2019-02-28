@@ -213,13 +213,44 @@ namespace das
         return nullptr;
     }
 
-    SimNode * ExprMakeStructure::simulate (Context & context) const {
+    void ExprMakeLocal::setRefSp ( bool ref, uint32_t sp, uint32_t off ) {
+        useStackRef = ref;
+        doesNotNeedSp = true;
+        stackTop = sp;
+        extraOffset = off;
+    }
+
+    vector<SimNode *> ExprMakeLocal::simulateLocal ( Context & /*context*/ ) const {
+        return vector<SimNode *>();
+    }
+
+    void ExprMakeStructure::setRefSp ( bool ref, uint32_t sp, uint32_t off ) {
+        ExprMakeLocal::setRefSp(ref, sp, off);
+        int total = int(structs.size());
+        int stride = makeType->getStride();
+        // we go through all fields, and if its [[ ]] field
+        // we tell it to piggy-back on our current sp, with appropriate offset
+        for ( int index=0; index != total; ++index ) {
+            auto & fields = structs[index];
+            for ( const auto & decl : *fields ) {
+                auto field = makeType->structType->findField(decl->name);
+                assert(field && "should have failed in type infer otherwise");
+                if ( decl->value->rtti_isMakeLocal() ) {
+                    uint32_t offset =  extraOffset + index*stride + field->offset;
+                    auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                    mkl->setRefSp(ref, sp, offset);
+                }
+            }
+        }
+    }
+
+    vector<SimNode *> ExprMakeStructure::simulateLocal (Context & context) const {
         vector<SimNode *> simlist;
         // init with 0
         int total = int(structs.size());
         int stride = makeType->getStride();
         if ( !useStackRef ) {
-            auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
+            auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,stride * total);
             simlist.push_back(init0);
         }
         for ( int index=0; index != total; ++index ) {
@@ -229,7 +260,13 @@ namespace das
                 assert(field && "should have failed in type infer otherwise");
                 uint32_t offset =  extraOffset + index*stride + field->offset;
                 SimNode * cpy;
-                if ( useStackRef ) {
+                if ( decl->value->rtti_isMakeLocal() ) {
+                    // so what happens here, is we ask it for the generated commands and append it to this list only
+                    auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                    auto lsim = mkl->simulateLocal(context);
+                    simlist.insert(simlist.end(), lsim.begin(), lsim.end());
+                    continue;
+                } else if ( useStackRef ) {
                     if ( decl->moveSemantic ){
                         cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
                     } else {
@@ -248,7 +285,11 @@ namespace das
                 simlist.push_back(cpy);
             }
         }
-        // we make a block with all those things in it
+        return simlist;
+    }
+
+    SimNode * ExprMakeStructure::simulate (Context & context) const {
+        auto simlist = simulateLocal(context);
         auto block = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
         block->total = int(simlist.size());
         block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);

@@ -1165,13 +1165,6 @@ namespace das {
 
     // make local
 
-    void ExprMakeLocal::setRefSp ( uint32_t sp, uint32_t off ) {
-        useStackRef = true;
-        doesNotNeedSp = true;
-        stackTop = sp;
-        extraOffset = off;
-    }
-
     ExpressionPtr ExprMakeLocal::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeStructure>(expr);
         Expression::clone(cexpr);

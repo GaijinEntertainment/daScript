@@ -1340,7 +1340,8 @@ namespace das
         ExprMakeLocal ( const LineInfo & at ) : Expression(at) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual bool rtti_isMakeLocal() const override { return true; }
-        virtual void setRefSp ( uint32_t sp, uint32_t off );
+        virtual void setRefSp ( bool ref, uint32_t sp, uint32_t off );
+        virtual vector<SimNode *> simulateLocal ( Context & /*context*/ ) const;
         uint32_t                    stackTop = 0;
         uint32_t                    extraOffset = 0;
         union {
@@ -1357,7 +1358,9 @@ namespace das
         ExprMakeStructure ( const LineInfo & at ) : ExprMakeLocal(at) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void setRefSp ( bool ref, uint32_t sp, uint32_t off ) override;
         TypeDeclPtr                 makeType;
         vector<MakeStructPtr>       structs;
         bool                        useInitializer;

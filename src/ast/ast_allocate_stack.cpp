@@ -195,7 +195,7 @@ namespace das {
                     << "\tascend, line " << expr->at.line << "\n";
                 }
                 auto mkl = static_pointer_cast<ExprMakeLocal>(expr->subexpr);
-                mkl->setRefSp(expr->stackTop, 0);
+                mkl->setRefSp(true, expr->stackTop, 0);
             }
         }
     // ExprMakeStructure
@@ -203,11 +203,12 @@ namespace das {
             Visitor::preVisit(expr);
             if ( !expr->doesNotNeedSp ) {
                 auto sz = expr->type->getSizeOf();
-                expr->stackTop = allocateStack(sz);
+                uint32_t stackTop = allocateStack(sz);
                 if ( log ) {
-                    logs << "\t" << expr->stackTop << "\t" << sz
+                    logs << "\t" << stackTop << "\t" << sz
                         << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
+                expr->setRefSp(false, stackTop, 0);
             }
         }
     // ExprMakeArray
