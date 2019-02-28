@@ -2,9 +2,9 @@
 
 #include "daScript/ast/ast.h"
 
-void yybegin(const char * str);
-int yyparse();
-int yylex_destroy();
+void das_yybegin(const char * str);
+int das_yyparse();
+int das_yylex_destroy();
 
 namespace das {
 
@@ -118,7 +118,7 @@ namespace das {
         g_FileAccessStack.clear();
         if ( auto fi = access->getFileInfo(fileName) ) {
             g_FileAccessStack.push_back(fi);
-            yybegin(fi->source);
+            das_yybegin(fi->source);
         } else {
             g_Program->error(fileName + " not found", LineInfo());
             g_Program.reset();
@@ -126,8 +126,8 @@ namespace das {
             g_FileAccessStack.clear();
             return program;
         }
-        err = yyparse();        // TODO: add mutex or make thread safe?
-        yylex_destroy();
+        err = das_yyparse();        // TODO: add mutex or make thread safe?
+        das_yylex_destroy();
         g_Program.reset();
         g_Access.reset();
         g_FileAccessStack.clear();

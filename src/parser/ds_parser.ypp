@@ -1,3 +1,4 @@
+%define api.prefix {das_yy}
 %code requires {
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
@@ -45,8 +46,8 @@
     
     using namespace das;
     
-    void yyerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
-    void yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
+    void das_yyerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
+    void das_yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
     int yylex();
     void yybegin(const char * str);
 %}
@@ -284,13 +285,13 @@ options_declaration
 			swap ( g_Program->options, *$list );
 		}
 		auto opt = g_Program->options.find("indenting", tInt);
-		extern int tab_size, def_tab_size;
+		extern int das_tab_size, das_def_tab_size;
 		if (opt)
 		{
 			if (opt->iValue != 0 && opt->iValue != 2 && opt->iValue != 4 && opt->iValue != 8)//this is error
-				tab_size = def_tab_size;
+				das_tab_size = das_def_tab_size;
 			else
-				tab_size = opt->iValue ? opt->iValue : def_tab_size;//0 is default
+				das_tab_size = opt->iValue ? opt->iValue : das_def_tab_size;//0 is default
 		}
 		delete $list;
 	}
@@ -308,7 +309,7 @@ require_list
 require_module
     :   NAME[name] {
         if ( !g_Program->addModule(*$name) ) {
-            yyerror("required module not found " + *$name,tokAt(@name),
+            das_yyerror("required module not found " + *$name,tokAt(@name),
                 CompilationError::module_not_found);
         }
         delete $name;
@@ -514,7 +515,7 @@ function_declaration
                             }
                             pFunction->arguments.push_back(pVar);
                         } else {
-                            yyerror("function argument is already declared " + name,pDecl->at,
+                            das_yyerror("function argument is already declared " + name,pDecl->at,
                                 CompilationError::argument_already_declared);
                         }
                     }
@@ -529,11 +530,11 @@ function_declaration
                         auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                         string err;
                         if ( !ann->apply(pFunction, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            yyerror("can't apply annotation\n" + err,
+                            das_yyerror("can't apply annotation\n" + err,
                                 tokAt(@loc), CompilationError::invalid_annotation);
                         }
                     } else {
-                        yyerror("functions are only allowed function annotations",
+                        das_yyerror("functions are only allowed function annotations",
                             tokAt(@loc), CompilationError::invalid_annotation);
                     }
                 }
@@ -543,14 +544,14 @@ function_declaration
         }
         if ( pFunction->isGeneric() ) {
             if ( !g_Program->addGeneric(pFunction) ) {
-                yyerror("generic function is already defined " +
+                das_yyerror("generic function is already defined " +
                     pFunction->getMangledName(),tokAt(@loc),
                         CompilationError::function_already_declared);
                 pFunction.reset();
             }
         } else {
             if ( !g_Program->addFunction(pFunction) ) {
-                yyerror("function is already defined " +
+                das_yyerror("function is already defined " +
                     pFunction->getMangledName(),tokAt(@loc),
                         CompilationError::function_already_declared);
                 pFunction.reset();
@@ -612,7 +613,7 @@ expr_pipe
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
         } else {
-            yyerror("can only pipe into function call",tokAt(@loc),CompilationError::cant_pipe);
+            das_yyerror("can only pipe into function call",tokAt(@loc),CompilationError::cant_pipe);
             $$ = $fncall;
         }
     }
@@ -698,7 +699,7 @@ expression_let
                         }
                         pLet->variables.push_back(pVar);
                     } else {
-                        yyerror("local variable is already declared " + name,tokAt(@list),
+                        das_yyerror("local variable is already declared " + name,tokAt(@list),
                             CompilationError::local_variable_already_declared);
                     }
                 }
@@ -724,7 +725,7 @@ expression_let
                     }
                     pLet->variables.push_back(pVar);
                 } else {
-                    yyerror("local variable is already declared " + name,tokAt(@loc),
+                    das_yyerror("local variable is already declared " + name,tokAt(@loc),
                         CompilationError::local_variable_already_declared);
                 }
             }
@@ -796,7 +797,7 @@ expr_block
                             }
                             closure->arguments.push_back(pVar);
                         } else {
-                            yyerror("block argument is already declared " + name,
+                            das_yyerror("block argument is already declared " + name,
                                 pDecl->at,CompilationError::argument_already_declared);
                         }
                     }
@@ -811,11 +812,11 @@ expr_block
                         auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                         string err;
                         if ( !ann->apply(closure, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            yyerror("can't apply annotation\n" + err, tokAt(@annL),
+                            das_yyerror("can't apply annotation\n" + err, tokAt(@annL),
                                 CompilationError::invalid_annotation);
                         }
                     } else {
-                        yyerror("blocks are only allowed function annotations", tokAt(@annL),
+                        das_yyerror("blocks are only allowed function annotations", tokAt(@annL),
                             CompilationError::invalid_annotation);
                     }
                 }
@@ -933,7 +934,7 @@ expr
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
         } else {
-            yyerror("can only pipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
+            das_yyerror("can only pipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
             $$ = $fncall;
         }
     }
@@ -943,7 +944,7 @@ expr
             pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr($arg));
             $$ = $fncall;
         } else {
-            yyerror("can only pipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
+            das_yyerror("can only pipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
             $$ = $fncall;
         }
     }
@@ -953,10 +954,10 @@ expr
         if ( enums.size()!=1 ) {
             if ( enums.size() ) {
                 string candidates = g_Program->describeCandidates(enums);
-                yyerror("enumeraiton not found " + *$ena + "\n" + candidates, tokAt(@ena),
+                das_yyerror("enumeraiton not found " + *$ena + "\n" + candidates, tokAt(@ena),
                     CompilationError::enumeration_not_found);
             } else {
-                yyerror("enumeraiton not found " + *$ena, tokAt(@ena),
+                das_yyerror("enumeraiton not found " + *$ena, tokAt(@ena),
                     CompilationError::enumeration_not_found);
             }
         } else {
@@ -966,7 +967,7 @@ expr
 				auto td = make_shared<TypeDecl>(pEnum);
                 resEnum = new ExprConstEnumeration(tokAt(@eni), ff.first, td);
             } else {
-                yyerror("enumeraiton value not found " + *$ena + " " + *$eni, tokAt(@eni),
+                das_yyerror("enumeraiton value not found " + *$ena + " " + *$eni, tokAt(@eni),
                     CompilationError::enumeration_not_found);
             }
         }
@@ -1079,7 +1080,7 @@ global_let
                         pVar->move_to_init = pDecl->move_to_init;
                     }
                     if ( !g_Program->addVariable(pVar) )
-                        yyerror("global variable is already declared " + name,pDecl->at,
+                        das_yyerror("global variable is already declared " + name,pDecl->at,
                             CompilationError::global_variable_already_declared);
                 }
             }
@@ -1094,7 +1095,7 @@ enum_list
     }
     |   enum_list[pE] NAME[name] ';' {
         if ( !$pE->add(*$name) ) {
-            yyerror("enumeration alread declared " + *$name, tokAt(@name),
+            das_yyerror("enumeration alread declared " + *$name, tokAt(@name),
                 CompilationError::enumeration_value_already_declared);
         }
         delete $name;
@@ -1102,7 +1103,7 @@ enum_list
     }
     |   enum_list[pE] NAME[name] '=' INTEGER[value] ';' {
         if ( !$pE->add(*$name,$value) ) {
-            yyerror("enumeration value alread declared " + *$name, tokAt(@name),
+            das_yyerror("enumeration value alread declared " + *$name, tokAt(@name),
                 CompilationError::enumeration_value_already_declared);
         }
         delete $name;
@@ -1114,7 +1115,7 @@ alias_declaration
     :   _TYPEDEF[loc] NAME[name] '=' type_declaration[tdecl] {
         $tdecl->alias = *$name;
         if ( !g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
-            yyerror("type alias is already defined "+*$name,tokAt(@loc),
+            das_yyerror("type alias is already defined "+*$name,tokAt(@loc),
                 CompilationError::type_alias_already_declared);
         }
         delete $name;
@@ -1127,7 +1128,7 @@ enum_declaration
         pEnum->at = tokAt(@loc);
         pEnum->name = *$name; 
         if ( !g_Program->addEnumeration(pEnum) ) {
-            yyerror("enumeration is already defined "+*$name,tokAt(@pE),
+            das_yyerror("enumeration is already defined "+*$name,tokAt(@pE),
                 CompilationError::enumeration_already_declared);
         }
 		delete $name;
@@ -1149,11 +1150,11 @@ structure_name
                 pStruct->name = *$name;
                 pStruct->parent = structs.back().get();
             } else if ( structs.size()==0 ) {
-                yyerror("parent structure not found"+*$parent,tokAt(@parent),
+                das_yyerror("parent structure not found"+*$parent,tokAt(@parent),
                     CompilationError::structure_not_found);
             } else {
                 string candidates = g_Program->describeCandidates(structs);
-                yyerror("too many options for "+*$parent + "\n" + candidates,tokAt(@parent),
+                das_yyerror("too many options for "+*$parent + "\n" + candidates,tokAt(@parent),
                     CompilationError::structure_not_found);
 
             }
@@ -1163,7 +1164,7 @@ structure_name
         }
         if ( pStruct ) {
             if ( !g_Program->addStructure(pStruct) ) {
-                yyerror("structure is already defined "+*$name,tokAt(@name),
+                das_yyerror("structure is already defined "+*$name,tokAt(@name),
                     CompilationError::structure_already_declared);
                 $$ = nullptr;
             } else {
@@ -1186,7 +1187,7 @@ structure_declaration
                     auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name);
                     if ( !oldFd ) {
                         if ( pDecl->override ) {
-                            yyerror("structure field is not overriding anything, "+name,pDecl->at,
+                            das_yyerror("structure field is not overriding anything, "+name,pDecl->at,
                                 CompilationError::invalid_override);
                         } else {
                             auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
@@ -1199,7 +1200,7 @@ structure_declaration
                                 oldFd->init = init;
                                 oldFd->parentType = oldFd->type->isAuto();
                         } else {
-                            yyerror("structure field is already declared "+name
+                            das_yyerror("structure field is already declared "+name
                                 +", use override to replace initial value instead",pDecl->at,
                                     CompilationError::invalid_override);
                         }
@@ -1208,18 +1209,18 @@ structure_declaration
             }
             if ( $annL ) {
                 if ( $annL->size()!=1 ) {
-                    yyerror("structures are only allowed one annotation", tokAt(@loc),
+                    das_yyerror("structures are only allowed one annotation", tokAt(@loc),
                         CompilationError::invalid_annotation);
                 } else {
                     auto & annotation = $annL->back()->annotation;
                     auto & args = $annL->back()->arguments;
                     if ( !annotation->rtti_isStructureAnnotation() ) {
-                        yyerror("structures are only allowed structure annotation", tokAt(@loc),
+                        das_yyerror("structures are only allowed structure annotation", tokAt(@loc),
                             CompilationError::invalid_annotation);
                     } else {
                         if ( !g_Program->addStructureHandle(pStruct,
                             static_pointer_cast<StructureTypeAnnotation>(annotation), args) ) {
-                                yyerror("handled structure is already defined "+pStruct->name,tokAt(@loc),
+                                das_yyerror("handled structure is already defined "+pStruct->name,tokAt(@loc),
                                 CompilationError::structure_already_declared);
                         } else {
                             pStruct->module->removeStructure(pStruct);
@@ -1461,11 +1462,11 @@ make_dim_decl
 
 %%
 
-void yyerror(const string & error, const LineInfo & at, CompilationError cerr) {
+void das_yyerror(const string & error, const LineInfo & at, CompilationError cerr) {
     g_Program->error(error,at,cerr);
 }
 
-void yyerror(const string & error, CompilationError cerr) {
+void das_yyerror(const string & error, CompilationError cerr) {
     g_Program->error(error,LineInfo(g_FileAccessStack.back(),
         yylloc.first_column,yylloc.first_line),cerr);
 }
@@ -1510,11 +1511,11 @@ Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
     if ( ann.size()==1 ) {
         return ann.back().get();
     } else if ( ann.size()==0 ) {
-        yyerror("annotation " + name + " not found", at, CompilationError::annotation_not_found );
+        das_yyerror("annotation " + name + " not found", at, CompilationError::annotation_not_found );
         return nullptr;
     } else {
         string candidates = g_Program->describeCandidates(ann);
-        yyerror("too many options for annotation " + name + "\n" + candidates, at, CompilationError::annotation_not_found );
+        das_yyerror("too many options for annotation " + name + "\n" + candidates, at, CompilationError::annotation_not_found );
         return nullptr;
     }
 }
@@ -1525,7 +1526,7 @@ void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list )
             for ( size_t ai=0; ai!= pDecl->pNameList->size(); ++ai ) {
                 auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                 if ( pDecl->pInit ) {
-                    yyerror("can't have default values in type declaration",
+                    das_yyerror("can't have default values in type declaration",
                     pDecl->at,CompilationError::cant_initialize);
                 }
                 pType->argTypes.push_back(pVarType);
