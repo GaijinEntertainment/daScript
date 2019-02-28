@@ -1077,6 +1077,37 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     template <typename TT>
+    struct SimNode_SetLocalRefRefOffT : SimNode {
+        SimNode_SetLocalRefRefOffT(const LineInfo & at, SimNode * rv, uint32_t sp, uint32_t o)
+            : SimNode(at), value(rv), stackTop(sp), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            auto pr = (TT *) value->evalPtr(context);
+            TT * pL = (TT *)((*(char **)(context.stack.sp() + stackTop)) + offset);
+            *pL = *pr;
+            return v_zero();
+        }
+        SimNode * value;
+        uint32_t stackTop;
+        uint32_t offset;
+    };
+
+    template <typename TT>
+    struct SimNode_SetLocalValueRefOffT : SimNode {
+        SimNode_SetLocalValueRefOffT(const LineInfo & at, SimNode * rv, uint32_t sp, uint32_t o)
+            : SimNode(at), value(rv), stackTop(sp), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            TT * pL = (TT *)((*(char **)(context.stack.sp() + stackTop)) + offset);
+            *pL = EvalTT<TT>::eval(context, value);
+            return v_zero();
+        }
+        SimNode * value;
+        uint32_t stackTop;
+        uint32_t offset;
+    };
+
+    template <typename TT>
     struct SimNode_CopyLocal2LocalT : SimNode {
         SimNode_CopyLocal2LocalT(const LineInfo & at, uint32_t spL, uint32_t spR)
             : SimNode(at), stackTopLeft(spL), stackTopRight(spR) {}
@@ -1484,6 +1515,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
+                memset ( ptr, 0, bytes );
                 char ** pRef = (char **)(context.stack.sp()+stackTop);
                 *pRef = ptr;
                 subexpr->evalPtr(context);

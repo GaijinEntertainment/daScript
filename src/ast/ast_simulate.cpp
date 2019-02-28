@@ -33,8 +33,17 @@ namespace das
                 "we are calling makeLocalRefCopy on a type, which can't be copied."
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
-        auto left = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
         auto right = rE->simulate(context);
+        if ( rightType.isWorkhorseType() ) {
+            if ( rightType.isRef() ) {
+                return context.code->makeValueNode<SimNode_SetLocalRefRefOffT>(rightType.baseType,
+                                                                            at, right, stackTop, offset);
+            } else {
+                return context.code->makeValueNode<SimNode_SetLocalValueRefOffT>(rightType.baseType,
+                                                                            at, right, stackTop, offset);
+            }
+        }
+        auto left = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
         if ( rightType.isRef() ) {
             if ( rightType.isWorkhorseType() ) {
                 return context.code->makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
