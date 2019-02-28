@@ -2,9 +2,9 @@
 
 #include "daScript/ast/ast.h"
 
-void yybegin(const char * str);
-int yyparse();
-int yylex_destroy();
+void das_yybegin(const char * str);
+int das_yyparse();
+int das_yylex_destroy();
 
 namespace das {
 
@@ -71,19 +71,22 @@ namespace das {
         return req;
     }
 
-    bool getPrerequisits ( const string & fileName, const FileAccessPtr & access, vector<string> & req, vector<string> & missing ) {
+    bool getPrerequisits ( const string & fileName, const FileAccessPtr & access, vector<string> & req, vector<string> & missing, ModuleGroup & libGroup) {
         if ( auto fi = access->getFileInfo(fileName) ) {
             vector<string> ownReq = getAllRequie(fi->source, fi->sourceLength);
             for ( auto & mod : ownReq ) {
-                if ( !Module::require(mod) ) {
+                auto module = Module::require(mod);
+                if ( !module ) {
                     if ( find(req.begin(), req.end(), mod)==req.end() ) {
                         req.push_back(mod);
                         // module file name
                         string modFn = access->getIncludeFileName(fileName, mod) + ".das";
-                        if ( !getPrerequisits(modFn, access, req, missing) ) {
+                        if ( !getPrerequisits(modFn, access, req, missing, libGroup) ) {
                             return false;
                         }
                     }
+                } else {
+                    libGroup.addModule(module);
                 }
             }
             return true;
@@ -115,7 +118,7 @@ namespace das {
         g_FileAccessStack.clear();
         if ( auto fi = access->getFileInfo(fileName) ) {
             g_FileAccessStack.push_back(fi);
-            yybegin(fi->source);
+            das_yybegin(fi->source);
         } else {
             g_Program->error(fileName + " not found", LineInfo());
             g_Program.reset();
@@ -123,8 +126,8 @@ namespace das {
             g_FileAccessStack.clear();
             return program;
         }
-        err = yyparse();        // TODO: add mutex or make thread safe?
-        yylex_destroy();
+        err = das_yyparse();        // TODO: add mutex or make thread safe?
+        das_yylex_destroy();
         g_Program.reset();
         g_Access.reset();
         g_FileAccessStack.clear();
@@ -167,7 +170,7 @@ namespace das {
 
     ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup ) {
         vector<string> req, missing;
-        if ( getPrerequisits(fileName, access, req, missing) ) {
+        if ( getPrerequisits(fileName, access, req, missing, libGroup) ) {
             reverse(req.begin(), req.end());
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod) ) {

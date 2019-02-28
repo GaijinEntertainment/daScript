@@ -18,31 +18,32 @@
     
     #define YY_NO_INPUT
     
-    void yyerror(const string & error, CompilationError cerr = CompilationError::syntax_error);
+    void das_yyerror(const string & error, CompilationError cerr = CompilationError::syntax_error);
     
-    int current_line_indent = 0;
-    int indent_level = 0;
-    int def_tab_size = 4;
-    int tab_size = def_tab_size;   // only 2,4 or 8
-    int nested_parentheses = 0;
-    int nested_curly_braces = 0;
-	int nested_square_braces = 0;
-    int nested_sb = 0;
-    int yycolumn = 1;
-    int c_style_depth = 0;
-    bool need_oxford_comma = true;
-    bool in_normal = false;
-    vector<int> line_no;
-    set<string> already_include;
+    int das_current_line_indent = 0;
+    int das_indent_level = 0;
+    int das_def_tab_size = 4;
+    int das_tab_size = das_def_tab_size;   // only 2,4 or 8
+    int das_nested_parentheses = 0;
+    int das_nested_curly_braces = 0;
+	int das_nested_square_braces = 0;
+    int das_nested_sb = 0;
+    int das_yycolumn = 1;
+    int das_c_style_depth = 0;
+    bool das_need_oxford_comma = true;
+    bool das_in_normal = false;
+    vector<int> das_line_no;
+    set<string> das_already_include;
     
     #define YY_USER_ACTION \
-        yylloc.first_line = yylloc.last_line = yylineno; \
-        yylloc.first_column = yycolumn; \
-        yylloc.last_column = yycolumn + yyleng - 1; \
-        yycolumn += yyleng;
+        das_yylloc.first_line = das_yylloc.last_line = yylineno; \
+        das_yylloc.first_column = das_yycolumn; \
+        das_yylloc.last_column = das_yycolumn + yyleng - 1; \
+        das_yycolumn += yyleng;
         
 %}
 
+%option prefix="das_yy"
 %option noyywrap
 %option never-interactive
 %option nounistd
@@ -58,15 +59,15 @@
 
 %%
 
-<indent>"*/"                        yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
-<indent>"/*"                        BEGIN(c_comment); c_style_depth = 1; in_normal = false;
-<normal>"*/"                        yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
-<normal>"/*"                        BEGIN(c_comment); c_style_depth = 1; in_normal = true;
-<c_comment>"/*"                     c_style_depth ++;
+<indent>"*/"                        das_yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<indent>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = false;
+<normal>"*/"                        das_yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<normal>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = true;
+<c_comment>"/*"                     das_c_style_depth ++;
 <c_comment>"*/" {
-    c_style_depth --;
-    if ( c_style_depth==0 ) {
-        if ( in_normal ) {
+    das_c_style_depth --;
+    if ( das_c_style_depth==0 ) {
+        if ( das_in_normal ) {
             BEGIN(normal);
         } else {
             BEGIN(indent);
@@ -81,62 +82,62 @@
     return END_STRING;
 }
 <strb>\{                {
-    DAS_ASSERT(nested_sb==0);
-    nested_sb ++;
+    DAS_ASSERT(das_nested_sb==0);
+    das_nested_sb ++;
     BEGIN(normal);
 	return BEGIN_STRING_EXPR;
 }
 <strb>[\t\r]            {
-    yyerror("string constant exceeds line", CompilationError::string_constant_exceeds_file);
+    das_yyerror("string constant exceeds line", CompilationError::string_constant_exceeds_file);
     return LEXER_ERROR;
 }
 <strb>EOF               {
-    yyerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das_yyerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
     return LEXER_ERROR;
 }
 <strb>\\[\{\"\}]        {
-    yylval.ch = yytext[1];
+    das_yylval.ch = yytext[1];
     return STRING_CHARACTER;
 }
 <strb>.                 {
-    yylval.ch = *yytext;
+    das_yylval.ch = *yytext;
     return STRING_CHARACTER;
 }
 <indent>[ \t\r]*\n		/* skip empty line */
 <indent>" "             { 
-	current_line_indent++; 
+	das_current_line_indent++; 
 	#ifdef FLEX_DEBUG
-		printf("[ ], indent=%i\n", current_line_indent);
+		printf("[ ], indent=%i\n", das_current_line_indent);
 	#endif
 }
 <indent>"\t"            { 
-	current_line_indent = (current_line_indent + tab_size) & ~(tab_size-1);  
+	das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);  
 	#ifdef FLEX_DEBUG
-		printf("\\t, cli=%i\n", current_line_indent);
+		printf("\\t, cli=%i\n", das_current_line_indent);
 	#endif
 }
 <indent>(\/\/.*)*\n     { 
-	current_line_indent = 0; 
-	need_oxford_comma = true; 
-	yycolumn = 1; 
+	das_current_line_indent = 0; 
+	das_need_oxford_comma = true; 
+	das_yycolumn = 1; 
 	#ifdef FLEX_DEBUG
 		printf("new line\n");
 	#endif
 }
 <indent>.               {
     unput(*yytext);
-    if (current_line_indent > indent_level*tab_size ) {
-        indent_level++;
+    if (das_current_line_indent > das_indent_level*das_tab_size ) {
+        das_indent_level++;
         #ifdef FLEX_DEBUG
-        printf("emit {, cli=%i, indent =%i\n", current_line_indent, indent_level);
+        printf("emit {, cli=%i, indent =%i\n", das_current_line_indent, das_indent_level);
         #endif
         return '{';
-    } else if (current_line_indent < indent_level*tab_size ) {
-        indent_level--;
+    } else if (das_current_line_indent < das_indent_level*das_tab_size ) {
+        das_indent_level--;
         #ifdef FLEX_DEBUG
-        printf("emit }, cli=%i, indent =%i\n", current_line_indent, indent_level);
+        printf("emit }, cli=%i, indent =%i\n", das_current_line_indent, das_indent_level);
         #endif
-        yycolumn--;
+        das_yycolumn--;
         return '}';
     } else {
         BEGIN(normal);
@@ -144,8 +145,8 @@
 }
 <indent><<EOF>>         {
     if ( g_FileAccessStack.size()==1 ) {
-        if ( indent_level ) {
-            indent_level--;
+        if ( das_indent_level ) {
+            das_indent_level--;
             unput('\r');
             #ifdef FLEX_DEBUG
             printf("emit }\n");
@@ -157,8 +158,8 @@
     } else {
         yypop_buffer_state();
         g_FileAccessStack.pop_back();
-        yylineno = line_no.back();
-        line_no.pop_back();
+        yylineno = das_line_no.back();
+        das_line_no.pop_back();
     }
 }
 
@@ -168,12 +169,12 @@
     string incFileName = g_Access->getIncludeFileName(cfi->name,yytext);
     auto info = g_Access->getFileInfo(incFileName);
     if ( !info ) {
-        yyerror("can't open "+incFileName);
+        das_yyerror("can't open "+incFileName);
     } else {
-        if ( already_include.find(incFileName) == already_include.end() ) {
-            already_include.insert(incFileName);
+        if ( das_already_include.find(incFileName) == das_already_include.end() ) {
+            das_already_include.insert(incFileName);
             g_FileAccessStack.push_back(info);
-            line_no.push_back(yylineno);
+            das_line_no.push_back(yylineno);
             yylineno = 1;
             yypush_buffer_state(YY_CURRENT_BUFFER);
             yy_scan_bytes(info->source, info->sourceLength);
@@ -183,22 +184,22 @@
 }
 
 <normal>"include"                                       BEGIN(include);
-<normal>"for"                                           need_oxford_comma = false; return _FOR;
-<normal>"while"                                         need_oxford_comma = false; return _WHILE;
-<normal>"if"                                            need_oxford_comma = false; return _IF;
-<normal>"elif"                                          need_oxford_comma = false; return _ELIF;
-<normal>"else"                                          need_oxford_comma = false; return _ELSE;
-<normal>"finally"                                       need_oxford_comma = false; return _FINALLY;
-<normal>"def"                                           need_oxford_comma = false; return _DEF;
-<normal>"with"                                          need_oxford_comma = false; return _WITH;
-<normal>"let"[ \t\r]*\/\/.*\n                           need_oxford_comma = false; unput('\n'); return _LET;
-<normal>"let"[ \t\r]*\(                                 need_oxford_comma = false; unput('(');  return _LET;
+<normal>"for"                                           das_need_oxford_comma = false; return _FOR;
+<normal>"while"                                         das_need_oxford_comma = false; return _WHILE;
+<normal>"if"                                            das_need_oxford_comma = false; return _IF;
+<normal>"elif"                                          das_need_oxford_comma = false; return _ELIF;
+<normal>"else"                                          das_need_oxford_comma = false; return _ELSE;
+<normal>"finally"                                       das_need_oxford_comma = false; return _FINALLY;
+<normal>"def"                                           das_need_oxford_comma = false; return _DEF;
+<normal>"with"                                          das_need_oxford_comma = false; return _WITH;
+<normal>"let"[ \t\r]*\/\/.*\n                           das_need_oxford_comma = false; unput('\n'); return _LET;
+<normal>"let"[ \t\r]*\(                                 das_need_oxford_comma = false; unput('(');  return _LET;
 <normal>"let"                                           return _LET;
-<normal>"struct"                                        need_oxford_comma = false; return _STRUCT;
-<normal>"enum"                                          need_oxford_comma = false; return _ENUM;
-<normal>"try"                                           need_oxford_comma = false; return _TRY;
-<normal>"catch"                                         need_oxford_comma = false; return _CATCH;
-<normal>"typedef"                                       need_oxford_comma = false; return _TYPEDEF;
+<normal>"struct"                                        das_need_oxford_comma = false; return _STRUCT;
+<normal>"enum"                                          das_need_oxford_comma = false; return _ENUM;
+<normal>"try"                                           das_need_oxford_comma = false; return _TRY;
+<normal>"catch"                                         das_need_oxford_comma = false; return _CATCH;
+<normal>"typedef"                                       das_need_oxford_comma = false; return _TYPEDEF;
 <normal>"options"                                       return _OPTIONS;
 <normal>"operator"                                      return _OPERATOR;
 <normal>"require"                                       return _REQUIRE;
@@ -244,85 +245,85 @@
 <normal>"float2"                                        return _TFLOAT2;
 <normal>"float3"                                        return _TFLOAT3;
 <normal>"float4"                                        return _TFLOAT4;
-<normal>[_[:alpha:]][_[:alnum:]]*                       yylval.s = new string(yytext);  return NAME;    // TODO: track allocations
+<normal>[_[:alpha:]][_[:alnum:]]*                       das_yylval.s = new string(yytext);  return NAME;    // TODO: track allocations
 <normal>\"                                  {
         BEGIN(strb);
         return BEGIN_STRING;
     }
-<normal>[0-9]+(u|U)(l|L)                return sscanf(yytext, "%" SCNu64, &yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
-<normal>[0-9]+(l|L)                     return sscanf(yytext, "%" SCNi64, &yylval.i64)!=1 ? LEXER_ERROR : LONG_INTEGER;
-<normal>[0-9]+(u|U)                     return sscanf(yytext, "%u",  &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
-<normal>[0-9]+                          return sscanf(yytext, "%i",  &yylval.i)!=1 ? LEXER_ERROR : INTEGER;
+<normal>[0-9]+(u|U)(l|L)                return sscanf(yytext, "%" SCNu64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+<normal>[0-9]+(l|L)                     return sscanf(yytext, "%" SCNi64, &das_yylval.i64)!=1 ? LEXER_ERROR : LONG_INTEGER;
+<normal>[0-9]+(u|U)                     return sscanf(yytext, "%u",  &das_yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
+<normal>[0-9]+                          return sscanf(yytext, "%i",  &das_yylval.i)!=1 ? LEXER_ERROR : INTEGER;
 
-<normal>0[xX][0-9a-fA-F]+(u|U)(l|L)     return sscanf(yytext, "%" SCNx64, &yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
-<normal>0[xX][0-9a-fA-F]+(l|L)          return sscanf(yytext, "%" SCNx64, &yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
-<normal>0[xX][0-9a-fA-F]+(u|U)          return sscanf(yytext, "%i",  &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
-<normal>0[xX][0-9a-fA-F]+               return sscanf(yytext, "%i",  &yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
+<normal>0[xX][0-9a-fA-F]+(u|U)(l|L)     return sscanf(yytext, "%" SCNx64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+<normal>0[xX][0-9a-fA-F]+(l|L)          return sscanf(yytext, "%" SCNx64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+<normal>0[xX][0-9a-fA-F]+(u|U)          return sscanf(yytext, "%i",  &das_yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
+<normal>0[xX][0-9a-fA-F]+               return sscanf(yytext, "%i",  &das_yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 
-<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
-<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
-<normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
-<normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                    return sscanf(yytext, "%lf", &yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                    return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
 
-<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?lf			return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?lf		return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9]+lf                                        return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9]+[eE][+\-]?[0-9]+lf                        return sscanf(yytext, "%lf", &yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?lf			return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?lf		return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+lf                                        return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+[eE][+\-]?[0-9]+lf                        return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>\)                                  {
-    if ( !nested_parentheses ) {
-        yyerror("mismatching parentheses", CompilationError::mismatching_parentheses);
+    if ( !das_nested_parentheses ) {
+        das_yyerror("mismatching parentheses", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
-    nested_parentheses --;
+    das_nested_parentheses --;
     return ')';
 }
 <normal>\(                                  {
-    nested_parentheses ++;
+    das_nested_parentheses ++;
     return '(';
 }
 <normal>\]                                  {
-    if ( !nested_square_braces ) {
-        yyerror("mismatching square braces", CompilationError::mismatching_parentheses);
+    if ( !das_nested_square_braces ) {
+        das_yyerror("mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
-    nested_square_braces --;
+    das_nested_square_braces --;
     return ']';
 }
 <normal>\[                                  {
-    nested_square_braces ++;
+    das_nested_square_braces ++;
     return '[';
 }
 <normal>\}                                  {
-    if ( nested_sb ) {
-        nested_sb --;
-        if ( !nested_sb ) {
+    if ( das_nested_sb ) {
+        das_nested_sb --;
+        if ( !das_nested_sb ) {
             BEGIN(strb);
 			return END_STRING_EXPR;
         } else {
             return '}';
         }
     } else {
-        if ( !nested_curly_braces ) {
-            yyerror("mismatching curly braces", CompilationError::mismatching_curly_bracers);
+        if ( !das_nested_curly_braces ) {
+            das_yyerror("mismatching curly braces", CompilationError::mismatching_curly_bracers);
             return LEXER_ERROR;
         }
-        nested_curly_braces --;
+        das_nested_curly_braces --;
         return '}';
     }
 }
 <normal>\{                                  {
-    if ( nested_sb ) {
-        nested_sb ++;
+    if ( das_nested_sb ) {
+        das_nested_sb ++;
     } else {
-        nested_curly_braces ++;
+        das_nested_curly_braces ++;
     }
     return '{';
 }
 <normal>"\:\:"                              return COLCOL;
 <normal>"\|\>"                              return RPIPE;
-<normal>\<\|[ \t\r]*\/\/.*\n                need_oxford_comma = false; unput('\n'); return LBPIPE;
-<normal>\<\|[ \t\r]*\n                      need_oxford_comma = false; unput('\n'); return LBPIPE;
-<normal>\<\|[ \t]\$                         need_oxford_comma = false; unput('$'); return LBPIPE;
+<normal>\<\|[ \t\r]*\/\/.*\n                das_need_oxford_comma = false; unput('\n'); return LBPIPE;
+<normal>\<\|[ \t\r]*\n                      das_need_oxford_comma = false; unput('\n'); return LBPIPE;
+<normal>\<\|[ \t]\$                         das_need_oxford_comma = false; unput('$'); return LBPIPE;
 <normal>"\<\|"                              return LPIPE;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\."                              return QDOT;
@@ -344,11 +345,11 @@
 <normal>"\!\="                              return NOTEQU;
 <normal>[ \t\r]                             /* skip white space */
 <normal>(\/\/.*)*\n                        {
-    yycolumn = 1;
-    if  ( !nested_parentheses && !nested_curly_braces && !nested_square_braces ) {
-        bool ns = (current_line_indent!=0) && need_oxford_comma;
-        current_line_indent = 0;
-        need_oxford_comma = true;
+    das_yycolumn = 1;
+    if  ( !das_nested_parentheses && !das_nested_curly_braces && !das_nested_square_braces ) {
+        bool ns = (das_current_line_indent!=0) && das_need_oxford_comma;
+        das_current_line_indent = 0;
+        das_need_oxford_comma = true;
         BEGIN(indent);
         #ifdef FLEX_DEBUG
         printf("emit ;\n");
@@ -361,23 +362,23 @@
 
 %%
 
-extern int yydebug;
+extern int das_yydebug;
 
-void yybegin(const char * str) {
-    already_include.clear();
-    yydebug = 0;
+void das_yybegin(const char * str) {
+    das_already_include.clear();
+    das_yydebug = 0;
     yylineno = 1;
-	tab_size = def_tab_size;
-    line_no.clear();
-    yycolumn = 1;
-    current_line_indent = 0;
-    indent_level = 0;
-    nested_parentheses = 0;
-    nested_curly_braces = 0;
-	nested_square_braces = 0;
-    nested_sb = 0;
-    need_oxford_comma = true;
-    c_style_depth = 0;
+	das_tab_size = das_def_tab_size;
+    das_line_no.clear();
+    das_yycolumn = 1;
+    das_current_line_indent = 0;
+    das_indent_level = 0;
+    das_nested_parentheses = 0;
+    das_nested_curly_braces = 0;
+	das_nested_square_braces = 0;
+    das_nested_sb = 0;
+    das_need_oxford_comma = true;
+    das_c_style_depth = 0;
     BEGIN(normal);
     yy_scan_string(str);
 }

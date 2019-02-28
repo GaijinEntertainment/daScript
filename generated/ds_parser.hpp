@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.2.1.  */
+/* A Bison parser, made by GNU Bison 3.2.4.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -33,17 +33,25 @@
 /* Undocumented macros, especially those whose name start with YY_,
    are private implementation details.  Do not rely on them.  */
 
-#ifndef YY_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
-# define YY_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+#ifndef YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED
+# define YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED
 /* Debug traces.  */
-#ifndef YYDEBUG
-# define YYDEBUG 1
-#endif
+#ifndef DAS_YYDEBUG
+# if defined YYDEBUG
 #if YYDEBUG
-extern int yydebug;
+#   define DAS_YYDEBUG 1
+#  else
+#   define DAS_YYDEBUG 0
+#  endif
+# else /* ! defined YYDEBUG */
+#  define DAS_YYDEBUG 1
+# endif /* ! defined YYDEBUG */
+#endif  /* ! defined DAS_YYDEBUG */
+#if DAS_YYDEBUG
+extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 1 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 2 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
@@ -77,12 +85,12 @@ extern int yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 81 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 89 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.hpp" /* yacc.c:1906  */
 
 /* Token type.  */
-#ifndef YYTOKENTYPE
-# define YYTOKENTYPE
-  enum yytokentype
+#ifndef DAS_YYTOKENTYPE
+# define DAS_YYTOKENTYPE
+  enum das_yytokentype
   {
     LEXER_ERROR = 258,
     _STRUCT = 259,
@@ -190,11 +198,11 @@ extern int yydebug;
 #endif
 
 /* Value type.  */
-#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
+#if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 
-union YYSTYPE
+union DAS_YYSTYPE
 {
-#line 58 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 59 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
 
     char                            ch;
     bool                            b;
@@ -219,31 +227,31 @@ union YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 223 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 231 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.hpp" /* yacc.c:1906  */
 };
 
-typedef union YYSTYPE YYSTYPE;
-# define YYSTYPE_IS_TRIVIAL 1
-# define YYSTYPE_IS_DECLARED 1
+typedef union DAS_YYSTYPE DAS_YYSTYPE;
+# define DAS_YYSTYPE_IS_TRIVIAL 1
+# define DAS_YYSTYPE_IS_DECLARED 1
 #endif
 
 /* Location type.  */
-#if ! defined YYLTYPE && ! defined YYLTYPE_IS_DECLARED
-typedef struct YYLTYPE YYLTYPE;
-struct YYLTYPE
+#if ! defined DAS_YYLTYPE && ! defined DAS_YYLTYPE_IS_DECLARED
+typedef struct DAS_YYLTYPE DAS_YYLTYPE;
+struct DAS_YYLTYPE
 {
   int first_line;
   int first_column;
   int last_line;
   int last_column;
 };
-# define YYLTYPE_IS_DECLARED 1
-# define YYLTYPE_IS_TRIVIAL 1
+# define DAS_YYLTYPE_IS_DECLARED 1
+# define DAS_YYLTYPE_IS_TRIVIAL 1
 #endif
 
 
-extern YYSTYPE yylval;
-extern YYLTYPE yylloc;
-int yyparse (void);
+extern DAS_YYSTYPE das_yylval;
+extern DAS_YYLTYPE das_yylloc;
+int das_yyparse (void);
 
-#endif /* !YY_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */
+#endif /* !YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED  */
