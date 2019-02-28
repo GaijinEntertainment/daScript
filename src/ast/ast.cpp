@@ -548,6 +548,7 @@ namespace das {
         auto cexpr = clonePtr<ExprAscend>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
+        cexpr->ascendFlags = ascendFlags;
         return cexpr;
     }
 
@@ -1162,11 +1163,27 @@ namespace das {
         return cexpr;
     }
 
+    // make local
+
+    void ExprMakeLocal::setRefSp ( uint32_t sp, uint32_t off ) {
+        useStackRef = true;
+        doesNotNeedSp = true;
+        stackTop = sp;
+        extraOffset = off;
+    }
+
+    ExpressionPtr ExprMakeLocal::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMakeStructure>(expr);
+        Expression::clone(cexpr);
+        cexpr->makeFlags = makeFlags;
+        return cexpr;
+    }
+
     // make structure
 
     ExpressionPtr ExprMakeStructure::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeStructure>(expr);
-        Expression::clone(cexpr);
+        ExprMakeLocal::clone(cexpr);
         cexpr->structs.reserve ( structs.size() );
         for ( auto & fields : structs ) {
             auto mfd = make_shared<MakeStruct>();
@@ -1209,7 +1226,7 @@ namespace das {
 
     ExpressionPtr ExprMakeArray::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeArray>(expr);
-        Expression::clone(cexpr);
+        ExprMakeLocal::clone(cexpr);
         cexpr->values.reserve ( values.size() );
         for ( auto & val : values ) {
             cexpr->values.push_back(val->clone());

@@ -381,8 +381,9 @@ namespace das {
     SimNode * SimNode_MakeLocal::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(MakeLocal);
-        V_FINAL();
         V_SP(stackTop);
+        V_BLOCK();
+        V_FINAL();
         V_END();
     }
 

@@ -548,6 +548,7 @@ namespace das
         virtual bool rtti_isNullCoalescing() const { return false; }
         virtual bool rtti_isValues() const { return false; }
         virtual bool rtti_isMakeBlock() const { return false; }
+        virtual bool rtti_isMakeLocal() const { return false; }
         virtual bool rtti_isIfThenElse() const { return false; }
         virtual bool rtti_isAddr() const { return false; }
         virtual Expression * tail() { return this; }
@@ -1260,6 +1261,13 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         ExpressionPtr   subexpr;
         TypeDeclPtr     ascType;
+        uint32_t        stackTop = 0;
+        union {
+            struct {
+                bool    useStackRef;
+            };
+            uint32_t    ascendFlags = 0;
+        };
     };
 
     struct ExprCast : Expression {
@@ -1327,21 +1335,37 @@ namespace das
     typedef vector<MakeFieldDeclPtr>    MakeStruct;
     typedef shared_ptr<MakeStruct>      MakeStructPtr;
 
-    struct ExprMakeStructure : Expression {
+    struct ExprMakeLocal : Expression {
+        ExprMakeLocal() = default;
+        ExprMakeLocal ( const LineInfo & at ) : Expression(at) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual bool rtti_isMakeLocal() const override { return true; }
+        virtual void setRefSp ( uint32_t sp, uint32_t off );
+        uint32_t                    stackTop = 0;
+        uint32_t                    extraOffset = 0;
+        union {
+            struct {
+                bool    useStackRef;
+                bool    doesNotNeedSp;
+            };
+            uint32_t makeFlags = 0;
+        };
+    };
+
+    struct ExprMakeStructure : ExprMakeLocal {
         ExprMakeStructure() = default;
-        ExprMakeStructure ( const LineInfo & at ) : Expression(at) {}
+        ExprMakeStructure ( const LineInfo & at ) : ExprMakeLocal(at) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         TypeDeclPtr                 makeType;
         vector<MakeStructPtr>       structs;
-        uint32_t                    stackTop = 0;
-        bool                        useInitializer = false;
+        bool                        useInitializer;
     };
 
-    struct ExprMakeArray : Expression {
+    struct ExprMakeArray : ExprMakeLocal {
         ExprMakeArray() = default;
-        ExprMakeArray ( const LineInfo & at ) : Expression(at) {}
+        ExprMakeArray ( const LineInfo & at ) : ExprMakeLocal(at) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;

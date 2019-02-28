@@ -9,6 +9,7 @@ namespace das {
         AllocateStack( const ProgramPtr & prog, TextWriter & ls ) : logs(ls) {
             program = prog;
             log = prog->options.getOption("logStack");
+            optimize = prog->options.getOption("optimize");
             if( log ) {
                 logs << "\nSTACK INFORMATION:\n";
             }
@@ -20,6 +21,7 @@ namespace das {
         vector<uint32_t>        stackTopStack;
         vector<ExprBlock *>     blocks;
         bool                    log = false;
+        bool                    optimize = false;
         TextWriter &            logs;
     protected:
         uint32_t allocateStack ( uint32_t size ) {
@@ -181,25 +183,44 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
-    // ExprMakeStructure
-        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
-            auto sz = expr->type->getSizeOf();
-            expr->stackTop = allocateStack(sz);
-            if ( log ) {
-                logs << "\t" << expr->stackTop << "\t" << sz
-                    << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
+    // ExprAscend
+        virtual void preVisit ( ExprAscend * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->subexpr->rtti_isMakeLocal() ) {
+                auto sz = sizeof(void *);
+                expr->stackTop = allocateStack(sz);
+                expr->useStackRef = true;
+                if ( log ) {
+                    logs << "\t" << expr->stackTop << "\t" << sz
+                    << "\tascend, line " << expr->at.line << "\n";
+                }
+                auto mkl = static_pointer_cast<ExprMakeLocal>(expr->subexpr);
+                mkl->setRefSp(expr->stackTop, 0);
             }
-            return Visitor::visit(expr);
+        }
+    // ExprMakeStructure
+        virtual void preVisit ( ExprMakeStructure * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->doesNotNeedSp ) {
+                auto sz = expr->type->getSizeOf();
+                expr->stackTop = allocateStack(sz);
+                if ( log ) {
+                    logs << "\t" << expr->stackTop << "\t" << sz
+                        << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
+                }
+            }
         }
     // ExprMakeArray
-        virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
-            auto sz = expr->type->getSizeOf();
-            expr->stackTop = allocateStack(sz);
-            if ( log ) {
-                logs << "\t" << expr->stackTop << "\t" << sz
-                << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
+        virtual void preVisit ( ExprMakeArray * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->doesNotNeedSp ) {
+                auto sz = expr->type->getSizeOf();
+                expr->stackTop = allocateStack(sz);
+                if ( log ) {
+                    logs << "\t" << expr->stackTop << "\t" << sz
+                    << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
+                }
             }
-            return Visitor::visit(expr);
         }
     // New
         virtual ExpressionPtr visit ( ExprNew * expr ) override {

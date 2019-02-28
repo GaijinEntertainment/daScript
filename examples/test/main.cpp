@@ -198,7 +198,8 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/unit_tests/table.das");
+    unit_test(TEST_PATH "examples/test/hello_world.das");
+    // unit_test(TEST_PATH "examples/test/unit_tests/bin_serializer.das");
     Module::Shutdown();
     return 0;
 #endif

@@ -12,6 +12,47 @@ namespace das
 {
     // common for move and copy
 
+    SimNode * makeLocalRefMove (const LineInfo & at, Context & context, uint32_t stackTop, uint32_t offset, const ExpressionPtr & rE ) {
+        const auto & rightType = *rE->type;
+        // now, to the regular move
+        auto left = context.code->makeNode<SimNode_GetLocalRefOff>(at, stackTop, offset);
+        auto right = rE->simulate(context);
+        if ( rightType.isRef() ) {
+            return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
+        } else {
+            DAS_ASSERTF(0, "we are calling makeLocalRefMove where expression on a right is not a referece."
+                        "we should not be here, script compiler should have caught this during compilation."
+                        "compiler later will likely report internal compilation error.");
+            return nullptr;
+        }
+    }
+
+    SimNode * makeLocalRefCopy(const LineInfo & at, Context & context, uint32_t stackTop, uint32_t offset, const ExpressionPtr & rE ) {
+        const auto & rightType = *rE->type;
+        assert ( rightType.canCopy() &&
+                "we are calling makeLocalRefCopy on a type, which can't be copied."
+                "we should not be here, script compiler should have caught this during compilation."
+                "compiler later will likely report internal compilation error.");
+        auto left = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+        auto right = rE->simulate(context);
+        if ( rightType.isRef() ) {
+            if ( rightType.isWorkhorseType() ) {
+                return context.code->makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
+            } else {
+                return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+            }
+        } else if ( rightType.isHandle() ) {
+            auto resN = rightType.annotation->simulateCopy(context, at, left, right);
+            if ( !resN ) {
+                context.thisProgram->error("integration error, simulateCopy returned null",
+                                           at, CompilationError::missing_node );
+            }
+            return resN;
+        } else {
+            return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
+        }
+    }
+
     SimNode * makeLocalMove (const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
         // now, to the regular move
@@ -177,19 +218,29 @@ namespace das
         // init with 0
         int total = int(structs.size());
         int stride = makeType->getStride();
-        auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
-        simlist.push_back(init0);
+        if ( !useStackRef ) {
+            auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
+            simlist.push_back(init0);
+        }
         for ( int index=0; index != total; ++index ) {
             auto & fields = structs[index];
             for ( const auto & decl : *fields ) {
                 auto field = makeType->structType->findField(decl->name);
                 assert(field && "should have failed in type infer otherwise");
-                uint32_t fieldStackTop = stackTop + index*stride + field->offset;
+                uint32_t offset =  extraOffset + index*stride + field->offset;
                 SimNode * cpy;
-                if ( decl->moveSemantic ){
-                    cpy = makeLocalMove(at,context,fieldStackTop,decl->value);
+                if ( useStackRef ) {
+                    if ( decl->moveSemantic ){
+                        cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
+                    } else {
+                        cpy = makeLocalRefCopy(at,context,stackTop,offset,decl->value);
+                    }
                 } else {
-                    cpy = makeLocalCopy(at,context,fieldStackTop,decl->value);
+                    if ( decl->moveSemantic ){
+                        cpy = makeLocalMove(at,context,stackTop+offset,decl->value);
+                    } else {
+                        cpy = makeLocalCopy(at,context,stackTop+offset,decl->value);
+                    }
                 }
                 if ( !cpy ) {
                     context.thisProgram->error("internal compilation error, can't generate structure initialization", at);
@@ -211,12 +262,19 @@ namespace das
         // init with 0
         int total = int(values.size());
         uint32_t stride = recordType->getSizeOf();
-        auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
-        simlist.push_back(init0);
+        if ( !useStackRef ) {
+            auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
+            simlist.push_back(init0);
+        }
         for ( int index=0; index != total; ++index ) {
             auto & val = values[index];
-            uint32_t indexStackTop = stackTop + index*stride;
-            auto cpy = makeLocalCopy(at,context,indexStackTop,val);
+            uint32_t indexStackTop = extraOffset + stackTop + index*stride;
+            SimNode * cpy;
+            if ( !useStackRef ) {
+                cpy = makeLocalCopy(at,context,indexStackTop,val);
+            } else {
+                cpy = makeLocalRefCopy(at,context,stackTop,indexStackTop,val);
+            }
             simlist.push_back(cpy);
         }
         // we make a block with all those things in it
@@ -415,7 +473,11 @@ namespace das
     SimNode * ExprAscend::simulate (Context & context) const {
         auto se = subexpr->simulate(context);
         auto bytes = subexpr->type->getSizeOf();
-        return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes);
+        if ( useStackRef ) {
+            return context.code->makeNode<SimNode_AscendAndRef<false>>(at, se, bytes, stackTop);
+        } else {
+            return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes);
+        }
     }
 
     SimNode * ExprNew::simulate (Context & context) const {

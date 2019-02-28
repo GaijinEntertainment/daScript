@@ -1476,6 +1476,28 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t    bytes;
     };
 
+    template <bool move>
+    struct SimNode_AscendAndRef : SimNode {
+        DAS_PTR_NODE;
+        SimNode_AscendAndRef ( const LineInfo & at, SimNode * se, uint32_t b, uint32_t sp )
+            : SimNode(at), subexpr(se), bytes(b), stackTop(sp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
+                char ** pRef = (char **)(context.stack.sp()+stackTop);
+                *pRef = ptr;
+                subexpr->evalPtr(context);
+                return ptr;
+            } else {
+                context.throw_error_at(debugInfo,"out of heap");
+                return nullptr;
+            }
+        }
+        SimNode *   subexpr;
+        uint32_t    bytes;
+        uint32_t    stackTop;
+    };
+
     template <int argCount>
     struct SimNode_NewWithInitializer : SimNode_CallBase {
         DAS_PTR_NODE;
