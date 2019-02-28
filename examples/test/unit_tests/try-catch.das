@@ -5,7 +5,7 @@ def test:bool
 	let (a:int=1;b:int?)
 		try
 			a = deref(b)
-		catch
+		recover
 			a = 13
 		assert(a==13)
 	return true

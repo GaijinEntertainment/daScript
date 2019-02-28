@@ -49,7 +49,7 @@ def test_4x4
     let ops = false
     try
         t[4] = float4(0)
-    catch
+    recover
         ops = true
     assert(ops)
 
@@ -69,7 +69,7 @@ def test_any(t:auto(mat))
     let ops = false
     try
         t[row] = vec(0)
-    catch
+    recover
         ops = true
     assert(ops)
 

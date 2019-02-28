@@ -16,7 +16,7 @@ def test
 	try
 		let fn2 : function<(a,b:int):int>
 		let t2 = invoke(fn2, 1, 2)
-	catch
+	recover
 		failed = true
 	assert(failed,"has to fail, invoking null function")
     return true

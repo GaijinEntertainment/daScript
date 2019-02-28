@@ -9,13 +9,13 @@ def test_vec2(a:auto(vec2)!const !&)
     let oor = false
     try
         f2_x[-1] = numT(5)
-    catch
+    recover
         oor = true
     assert(oor)
     oor = false
     try
         f2_x[2] = numT(5)
-    catch
+    recover
         oor = true
     assert(oor)
 
@@ -32,13 +32,13 @@ def test_vec3(a:auto(vec3)!const !&)
     let oor = false
     try
         f3_x[-1] = numT(5)
-    catch
+    recover
         oor = true
     assert(oor)
     oor = false
     try
         f3_x[3] = numT(5)
-    catch
+    recover
         oor = true
     assert(oor)
 
@@ -55,13 +55,13 @@ def test_vec4(a:auto(vec4)!const !&)
     let oor = false
     try
         f4_x[-1] = numT(5)
-    catch
+    recover
         oor = true
     assert(oor)
     oor = false
     try
         f4_x[4] = numT(5)
-    catch
+    recover
         oor = true
     assert(oor)
 
