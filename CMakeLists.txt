@@ -177,34 +177,36 @@ install(
 #
 # C command line tool
 #
-add_executable(uriparse
-    tool/uriparse.c
-)
+if(URIPARSER_BUILD_TOOLS)
+    add_executable(uriparse
+        tool/uriparse.c
+    )
 
-target_link_libraries(uriparse PUBLIC uriparser)
+    target_link_libraries(uriparse PUBLIC uriparser)
 
-if(HAIKU)
-    # Function inet_ntop needs -lsocket or -lnetwork (see pull request #45)
-    check_library_exists(socket inet_ntop "" HAVE_LIBSOCKET__INET_NTOP)
-    check_library_exists(network inet_ntop "" HAVE_LIBNETWORK__INET_NTOP)
-    if(HAVE_LIBSOCKET__INET_NTOP)
-        target_link_libraries(uriparse PUBLIC socket)
+    if(HAIKU)
+        # Function inet_ntop needs -lsocket or -lnetwork (see pull request #45)
+        check_library_exists(socket inet_ntop "" HAVE_LIBSOCKET__INET_NTOP)
+        check_library_exists(network inet_ntop "" HAVE_LIBNETWORK__INET_NTOP)
+        if(HAVE_LIBSOCKET__INET_NTOP)
+            target_link_libraries(uriparse PUBLIC socket)
+        endif()
+        if(HAVE_LIBNETWORK__INET_NTOP)
+            target_link_libraries(uriparse PUBLIC network)
+        endif()
     endif()
-    if(HAVE_LIBNETWORK__INET_NTOP)
-        target_link_libraries(uriparse PUBLIC network)
+
+    if(WIN32)
+        target_link_libraries(uriparse PUBLIC ws2_32)
     endif()
-endif()
 
-if(WIN32)
-    target_link_libraries(uriparse PUBLIC ws2_32)
+    install(
+        TARGETS
+            uriparse
+        DESTINATION
+            ${CMAKE_INSTALL_BINDIR}
+    )
 endif()
-
-install(
-    TARGETS
-        uriparse
-    DESTINATION
-        ${CMAKE_INSTALL_BINDIR}
-)
 
 #
 # C++ test runner
