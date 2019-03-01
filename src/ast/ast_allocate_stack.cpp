@@ -163,12 +163,14 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             if ( inStruct ) return;
-            if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
-                auto sz = expr->func->result->getSizeOf();
-                expr->stackTop = allocateStack(sz);
-                if ( log ) {
-                    logs << "\t" << expr->stackTop << "\t" << sz
-                        << "\tcall, line " << expr->at.line << "\n";
+            if ( !expr->doesNotNeedSp ) {
+                if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
+                    auto sz = expr->func->result->getSizeOf();
+                    expr->stackTop = allocateStack(sz);
+                    if ( log ) {
+                        logs << "\t" << expr->stackTop << "\t" << sz
+                            << "\tcall, line " << expr->at.line << "\n";
+                    }
                 }
             }
         }
@@ -294,12 +296,17 @@ namespace das {
                 expr->takeOverRightStack = true;
                 if ( log ) {
                     logs << "\t" << expr->stackTop << "\t" << sz
-                        << "\tcopy, line " << expr->at.line << "\n";
+                        << "\tcopy [[ ]], line " << expr->at.line << "\n";
                 }
                 auto mkl = static_pointer_cast<ExprMakeLocal>(expr->right);
                 mkl->setRefSp(true, expr->stackTop, 0);
                 mkl->doesNotNeedInit = false;
-            }
+            } /*else if ( expr->right->rtti_isCall() ) {
+                auto cll = static_pointer_cast<ExprCall>(expr->right);
+                if ( !cll->func->builtIn ) {
+                    cll->doesNotNeedSp = true;
+                }
+            } */
         }
     };
 

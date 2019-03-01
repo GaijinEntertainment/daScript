@@ -531,6 +531,7 @@ namespace das
         virtual bool rtti_isConstant() const { return false; }
         virtual bool rtti_isStringConstant() const { return false; }
         virtual bool rtti_isCall() const { return false; }
+        virtual bool rtti_isCallLikeExpr() const { return false; }
         virtual bool rtti_isLet() const { return false; }
         virtual bool rtti_isReturn() const { return false; }
         virtual bool rtti_isBreak() const { return false; }
@@ -1104,7 +1105,7 @@ namespace das
         virtual SimNode * simulate (Context &) const override { return nullptr; }
         virtual ExpressionPtr visit(Visitor & vis) override;
         string describe() const;
-        virtual bool rtti_isCall() const override { return true; }
+        virtual bool rtti_isCallLikeExpr() const override { return true; }
         string                  name;
         vector<ExpressionPtr>   arguments;
         bool                    argumentsFailedToInfer = false;
@@ -1304,6 +1305,7 @@ namespace das
     struct ExprCall : ExprLooksLikeCall {
         ExprCall () = default;
         ExprCall ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) { }
+        virtual bool rtti_isCall() const override { return true; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1311,6 +1313,7 @@ namespace das
             Context & context, SimNode_CallBase * pCall);
         Function *      func = nullptr;
         uint32_t        stackTop = 0;
+        bool            doesNotNeedSp = false;
     };
 
     struct ExprIfThenElse : Expression {

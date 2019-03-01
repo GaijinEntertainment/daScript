@@ -159,7 +159,7 @@ namespace das
             using Arguments = typename FunctionTrait::arguments;
             const int nargs = tuple_size<Arguments>::value;
             using Indices = make_index_sequence<nargs>;
-            Result * cmres = (Result *)(context.stack.sp() + stackTop);
+            Result * cmres = (Result *)(cmresEval->evalPtr(context));
             ImplCallStaticFunctionAndCopy<Result>::template
                 call<FuncT,Arguments>(*fn, context, cmres, arguments, Indices());
             return cast<Result *>::from(cmres);

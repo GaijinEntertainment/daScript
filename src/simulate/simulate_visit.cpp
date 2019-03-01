@@ -25,7 +25,9 @@ namespace das {
         if ( fnPtr ) {
             vis.arg(fnPtr->name,"fnPtr");
         }
-        V_SP(stackTop);
+        if ( cmresEval ) {
+            V_SUB(cmresEval);
+        }
         vis.sub(arguments, nArguments, "arguments");
     }
 

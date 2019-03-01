@@ -608,7 +608,7 @@ expressions
 expr_pipe
     :   expr_assign[fncall] LBPIPE[loc] expr_block[arg] {
         Expression * pipeCall = $fncall->tail();
-        if ( pipeCall->rtti_isCall() ) {
+        if ( pipeCall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) pipeCall;
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
@@ -929,7 +929,7 @@ expr
     |   expr_method_call[subexpr]               { $$ = $subexpr; }
     |   expr_block[subexpr]                     { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg] {
-        if ( $fncall->rtti_isCall() ) {
+        if ( $fncall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) $fncall;
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
@@ -939,7 +939,7 @@ expr
         }
     }
     |   expr[arg] RPIPE[loc] expr[fncall] {
-        if ( $fncall->rtti_isCall() ) {
+        if ( $fncall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) $fncall;
             pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr($arg));
             $$ = $fncall;

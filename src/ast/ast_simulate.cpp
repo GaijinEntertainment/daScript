@@ -162,6 +162,12 @@ namespace das
                 }
             }
         }
+        // now, call with CMRES
+        if ( rE->rtti_isCall() ) {
+
+        }
+
+
         // now, to the regular copy
         auto left = lE->simulate(context);
         auto right = rE->simulate(context);
@@ -443,15 +449,16 @@ namespace das
         auto blockT = arguments[0]->type;
         SimNode_CallBase * pInvoke;
         if ( blockT->firstType && blockT->firstType->isRefType() ) {
+            auto getSp = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
             if ( blockT->baseType==Type::tBlock ) {
                 pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMove>(
-                                                    int(arguments.size()), at, stackTop);
+                                                    int(arguments.size()), at, getSp);
             } else if ( blockT->baseType==Type::tFunction ) {
                 pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMoveFn>(
-                                                    int(arguments.size()), at, stackTop);
+                                                    int(arguments.size()), at, getSp);
             } else {
                 pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMoveLambda>(
-                                                    int(arguments.size()), at, stackTop);
+                                                    int(arguments.size()), at, getSp);
             }
         } else {
             if ( blockT->baseType==Type::tBlock ) {
@@ -582,7 +589,7 @@ namespace das
             int32_t bytes = type->firstType->getSizeOf();
             if ( initializer ) {
                 auto pCall = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_NewWithInitializer>(int(arguments.size()),at,bytes);
-                pCall->stackTop = -1u;
+                pCall->cmresEval = nullptr;
                 newNode = ExprCall::simulateCall(func->shared_from_this(), this, context, pCall);
             } else {
                 newNode = context.code->makeNode<SimNode_New>(at,bytes);
@@ -928,7 +935,7 @@ namespace das
             pCall->arguments = (SimNode **) context.code->allocate(1 * sizeof(SimNode *));
             pCall->nArguments = 1;
             pCall->arguments[0] = subexpr->simulate(context);
-            pCall->stackTop = stackTop;
+            pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
             return pCall;
         }
     }
@@ -947,7 +954,7 @@ namespace das
             pCall->nArguments = 2;
             pCall->arguments[0] = left->simulate(context);
             pCall->arguments[1] = right->simulate(context);
-            pCall->stackTop = stackTop;
+            pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
             return pCall;
         }
     }
@@ -1317,7 +1324,7 @@ namespace das
     SimNode * ExprCall::simulate (Context & context) const {
         auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
         simulateCall(func->shared_from_this(), this, context, pCall);
-        pCall->stackTop = stackTop;
+        pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
         return pCall;
     }
 
