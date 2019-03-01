@@ -21,7 +21,7 @@ please check out [https://uriparser.github.io/](https://uriparser.github.io/).
 ```cmake
 project(hello VERSION 1.0)
 
-find_package(uriparser 0.9.1 CONFIG REQUIRED char wchar_t)
+find_package(uriparser 0.9.2 CONFIG REQUIRED char wchar_t)
 
 add_executable(hello
     hello.c
