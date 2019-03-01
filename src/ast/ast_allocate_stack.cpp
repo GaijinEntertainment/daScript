@@ -270,6 +270,23 @@ namespace das {
                 }
             }
         }
+    // ExprCopy
+        virtual void preVisit ( ExprCopy * expr ) override {
+            Visitor::preVisit(expr);
+            if ( inStruct ) return;
+            if ( expr->right->rtti_isMakeLocal() ) {
+                uint32_t sz = sizeof(void *);
+                expr->stackTop = allocateStack(sz);
+                expr->takeOverRightStack = true;
+                if ( log ) {
+                    logs << "\t" << expr->stackTop << "\t" << sz
+                        << "\tcopy, line " << expr->at.line << "\n";
+                }
+                auto mkl = static_pointer_cast<ExprMakeLocal>(expr->right);
+                mkl->setRefSp(true, expr->stackTop, 0);
+                mkl->doesNotNeedInit = false;
+            }
+        }
     };
 
     // program

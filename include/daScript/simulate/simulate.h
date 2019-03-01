@@ -989,6 +989,18 @@ SIM_NODE_AT_VECTOR(Float, float)
         const char *    message;
     };
 
+    // CMRES "GET" + OFFSET
+    struct SimNode_GetCMResOfs : SimNode {
+        DAS_PTR_NODE;
+        SimNode_GetCMResOfs(const LineInfo & at, uint32_t o)
+            : SimNode(at), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            return ((char *)context.abiCMRES) + offset;
+        }
+        uint32_t offset;
+    };
+
     // LOCAL VARIABLE "GET"
     struct SimNode_GetLocal : SimNode {
         DAS_PTR_NODE;
@@ -1150,6 +1162,22 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t stackTop;
     };
 
+    // AT (INDEX)
+    struct SimNode_SetLocalRefAndEval : SimNode {
+        DAS_PTR_NODE;
+        SimNode_SetLocalRefAndEval ( const LineInfo & at, SimNode * rv, SimNode * ev, uint32_t sp )
+            : SimNode(at), refValue(rv), evalValue(ev), stackTop(sp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute (Context & context) {
+            auto refV = refValue->evalPtr(context);
+            auto pR = (char **)(context.stack.sp() + stackTop);
+            *pR = refV;
+            evalValue->eval(context);
+            return refV;
+        }
+        SimNode * refValue, * evalValue;
+        uint32_t  stackTop;
+    };
 
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
     struct SimNode_InitLocal : SimNode {
@@ -1161,6 +1189,19 @@ SIM_NODE_AT_VECTOR(Float, float)
             return v_zero();
         }
         uint32_t stackTop, size;
+    };
+
+    // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE VIA REFERENCE AND OFFSET
+    struct SimNode_InitLocalRef : SimNode {
+        SimNode_InitLocalRef(const LineInfo & at, uint32_t sp, uint32_t o, uint32_t sz)
+            : SimNode(at), stackTop(sp), offset(o), size(sz) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            char * pI = *((char **)(context.stack.sp() + stackTop)) + offset;
+            memset(pI, 0, size);
+            return v_zero();
+        }
+        uint32_t stackTop, offset, size;
     };
 
     // ARGUMENT VARIABLE "GET"

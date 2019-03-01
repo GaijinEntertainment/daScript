@@ -801,6 +801,8 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        uint32_t    stackTop = 0;
+        bool        takeOverRightStack = false;
     };
 
     // this moves one object to the other

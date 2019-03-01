@@ -124,6 +124,22 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_GetCMResOfs::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetCMResOfs);
+        V_SP(offset);
+        V_END();
+    }
+
+    SimNode * SimNode_SetLocalRefAndEval::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(SetLocalRefAndEval);
+        V_SP(stackTop);
+        V_SUB(refValue);
+        V_SUB(evalValue);
+        V_END();
+    }
+
     SimNode * SimNode_GetLocal::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetLocal);
@@ -150,6 +166,15 @@ namespace das {
         V_BEGIN();
         V_OP(InitLocal);
         V_SP(stackTop);
+        V_ARG(size);
+        V_END();
+    }
+
+    SimNode * SimNode_InitLocalRef::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(InitLocalRef);
+        V_SP(stackTop);
+        V_SP(offset);
         V_ARG(size);
         V_END();
     }

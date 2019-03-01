@@ -260,7 +260,12 @@ namespace das
         int total = int(structs.size());
         int stride = makeType->getStride();
         if ( !doesNotNeedInit ) {
-            auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,stride * total);
+            SimNode * init0;
+            if ( useStackRef ) {
+                init0 = context.code->makeNode<SimNode_InitLocalRef>(at,stackTop,extraOffset,stride * total);
+            } else {
+                init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,stride * total);
+            }
             simlist.push_back(init0);
         }
         for ( int index=0; index != total; ++index ) {
@@ -328,7 +333,12 @@ namespace das
         int total = int(values.size());
         uint32_t stride = recordType->getSizeOf();
         if ( !doesNotNeedInit ) {
-            auto init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop,stride * total);
+            SimNode * init0;
+            if ( useStackRef ) {
+                init0 = context.code->makeNode<SimNode_InitLocalRef>(at,stackTop,extraOffset,stride * total);
+            } else {
+                init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,stride * total);
+            }
             simlist.push_back(init0);
         }
         for ( int index=0; index != total; ++index ) {
@@ -962,11 +972,17 @@ namespace das
     }
 
     SimNode * ExprCopy::simulate (Context & context) const {
-        auto retN = makeCopy(at, context, left, right);
-        if ( !retN ) {
-            context.thisProgram->error("internal compilation error, can't generate copy", at);
+        if ( takeOverRightStack ) {
+            auto sl = left->simulate(context);
+            auto sr = right->simulate(context);
+            return context.code->makeNode<SimNode_SetLocalRefAndEval>(at, sl, sr, stackTop);
+        } else {
+            auto retN = makeCopy(at, context, left, right);
+            if ( !retN ) {
+                context.thisProgram->error("internal compilation error, can't generate copy", at);
+            }
+            return retN;
         }
-        return retN;
     }
 
     SimNode * ExprTryCatch::simulate (Context & context) const {
