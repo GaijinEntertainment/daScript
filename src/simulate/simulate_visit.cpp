@@ -246,6 +246,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ReturnRefAndEval::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnRefAndEval);
+        V_SP(stackTop);
+        V_SUB_OPT(subexpr);
+        V_END();
+    }
+
     SimNode * SimNode_ReturnAndCopy::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(ReturnAndCopy);
@@ -265,6 +273,15 @@ namespace das {
     SimNode * SimNode_ReturnReference::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(ReturnReference);
+        V_SUB_OPT(subexpr);
+        V_END();
+    }
+
+    SimNode * SimNode_ReturnRefAndEvalFromBlock::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnRefAndEvalFromBlock);
+        V_SP(stackTop);
+        V_SP(argStackTop);
         V_SUB_OPT(subexpr);
         V_END();
     }

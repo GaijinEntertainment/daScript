@@ -996,7 +996,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), offset(o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            return ((char *)context.abiCMRES) + offset;
+            return context.abiCopyOrMoveResult() + offset;
         }
         uint32_t offset;
     };
@@ -1392,6 +1392,14 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t size;
     };
 
+    struct SimNode_ReturnRefAndEval : SimNode_Return {
+        SimNode_ReturnRefAndEval ( const LineInfo & at, SimNode * s, uint32_t sp )
+            : SimNode_Return(at,s), stackTop(sp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+        uint32_t stackTop;
+    };
+
     struct SimNode_ReturnAndMove : SimNode_ReturnAndCopy {
         SimNode_ReturnAndMove ( const LineInfo & at, SimNode * s, uint32_t sz )
             : SimNode_ReturnAndCopy(at,s,sz) {}
@@ -1404,6 +1412,14 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_Return(at,s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
+    };
+
+    struct SimNode_ReturnRefAndEvalFromBlock : SimNode_Return {
+        SimNode_ReturnRefAndEvalFromBlock ( const LineInfo & at, SimNode * s, uint32_t sp, uint32_t asp )
+            : SimNode_Return(at,s), stackTop(sp), argStackTop(asp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+        uint32_t stackTop, argStackTop;
     };
 
     struct SimNode_ReturnAndCopyFromBlock : SimNode_ReturnAndCopy {

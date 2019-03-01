@@ -246,6 +246,17 @@ namespace das
         return v_zero();
     }
 
+    vec4f SimNode_ReturnRefAndEval::eval ( Context & context ) {
+        auto pl = context.abiCopyOrMoveResult();
+        DAS_ASSERT(pl);
+        auto pR = ((char **)(context.stack.sp() + stackTop));
+        *pR = pl;
+        subexpr->evalPtr(context);;
+        context.abiResult() = cast<char *>::from(pl);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return v_zero();
+    }
+
     vec4f SimNode_ReturnAndCopy::eval ( Context & context ) {
         auto pr = subexpr->evalPtr(context);
         auto pl = context.abiCopyOrMoveResult();
@@ -282,6 +293,18 @@ namespace das
         }
 #endif
         context.abiResult() = cast<char *>::from(ref);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return v_zero();
+    }
+
+    vec4f SimNode_ReturnRefAndEvalFromBlock::eval ( Context & context ) {
+        auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
+        auto pl = ba->copyOrMoveResult;
+        DAS_ASSERT(pl);
+        auto pR = ((char **)(context.stack.sp() + stackTop));
+        *pR = pl;
+        subexpr->evalPtr(context);;
+        context.abiResult() = cast<char *>::from(pl);
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }

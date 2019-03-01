@@ -1010,7 +1010,10 @@ namespace das
                 return context.code->makeNode<SimNode_ReturnReference>(at, simSubE);
             }
         } else if ( returnInBlock ) {
-            if ( block->copyOnReturn  ) {
+            if ( takeOverRightStack ) {
+                return context.code->makeNode<SimNode_ReturnRefAndEvalFromBlock>(at,
+                            simSubE, refStackTop, stackTop);
+            } else if ( block->copyOnReturn  ) {
                 return context.code->makeNode<SimNode_ReturnAndCopyFromBlock>(at,
                             simSubE, subexpr->type->getSizeOf(), stackTop);
             } else if ( block->moveOnReturn ) {
@@ -1018,7 +1021,9 @@ namespace das
                     simSubE, subexpr->type->getSizeOf(), stackTop);
             }
         } else if ( subexpr ) {
-            if ( func->copyOnReturn ) {
+            if ( takeOverRightStack ) {
+                return context.code->makeNode<SimNode_ReturnRefAndEval>(at, simSubE, refStackTop);
+            } else if ( func->copyOnReturn ) {
                 return context.code->makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
             } else if ( func->moveOnReturn ) {
                 return context.code->makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());

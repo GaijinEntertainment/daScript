@@ -93,6 +93,20 @@ namespace das {
             } else {
                 DAS_ASSERT(!expr->returnInBlock);
             }
+            if ( expr->subexpr ) {
+                if ( expr->subexpr->rtti_isMakeLocal() ) {
+                    uint32_t sz = sizeof(void *);
+                    expr->refStackTop = allocateStack(sz);
+                    expr->takeOverRightStack = true;
+                    if ( log ) {
+                        logs << "\t" << expr->refStackTop << "\t" << sz
+                        << "\return ref and eval, line " << expr->at.line << "\n";
+                    }
+                    auto mkl = static_pointer_cast<ExprMakeLocal>(expr->subexpr);
+                    mkl->setRefSp(true, expr->refStackTop, 0);
+                    mkl->doesNotNeedInit = false;
+                }
+            }
         }
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {

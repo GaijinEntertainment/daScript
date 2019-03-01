@@ -7,15 +7,18 @@ struct Foo
 struct Bar
     a, b : Foo
 
+def makeBar
+    return [[ Bar a=[[Foo() x=1,y=2]], b=[[Foo() x=3,y=4]] ]]
+
 [export]
 def test
-    let pf = new [[Foo() x=1,y=2]]
-    print("pf={pf}\n")
-    let pf2 = new [[Foo[2]() x=1,y=2;x=3,y=4]]
-    print("pf2={pf2}\n")
-    let pb = new [[ Bar a=[[Foo() x=1,y=2]], b=[[Foo() x=3,y=4]] ]]
-    print("pb={pb}\n")
-    let b = [[ Bar a=[[Foo() x=1,y=2]], b=[[Foo() x=3,y=4]] ]]
-    print("b={b}\n")
+    let b1 = makeBar()
+    print("b1={b1}\n")
+    let b2 : Bar
+    b2 = makeBar()
+    print("b2={b2}\n")
+    let b3 = invoke() <| $()
+        return [[ Bar a=[[Foo() x=1,y=2]], b=[[Foo() x=3,y=4]] ]]
+    print("b3={b3}\n")
     return true
 

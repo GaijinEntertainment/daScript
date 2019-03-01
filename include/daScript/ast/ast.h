@@ -860,13 +860,15 @@ namespace das
         ExpressionPtr subexpr;
         union {
             struct {
-                bool moveSemantics   : 1;
-                bool returnReference : 1;
-                bool returnInBlock   : 1;
+                bool moveSemantics      : 1;
+                bool returnReference    : 1;
+                bool returnInBlock      : 1;
+                bool takeOverRightStack : 1;
             };
             uint32_t    returnFlags = 0;
         };
         uint32_t                stackTop = 0;
+        uint32_t                refStackTop = 0;
         Function *              func = nullptr;
         ExprBlock *             block = nullptr;
     };
