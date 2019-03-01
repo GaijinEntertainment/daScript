@@ -9,11 +9,12 @@ NOTE: uriparser is looking for help with a few things:
       Thanks to Jørgen Ibsen for the report!
   * Fixed: Link errors on Haiku regarding function inet_ntop (GitHub #45)
       Thanks to Schrijvers Luc for the patch!
-  * Changed: Migrated from GNU Autotools to CMake (GitHub #17, #47)
+  * Changed: Migrated from GNU Autotools to CMake (GitHub #17, #47, #56)
       Thanks for their support with the CMake migration to:
       - David Demelier
       - Jørgen Ibsen
       - KangLin
+      - Kouhei Sutou
       - Richard Hodges
       - Zachary Lund
   * Removed: All Windows-related build systems other than CMake
