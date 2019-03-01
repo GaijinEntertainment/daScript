@@ -100,7 +100,7 @@ namespace das {
                     expr->takeOverRightStack = true;
                     if ( log ) {
                         logs << "\t" << expr->refStackTop << "\t" << sz
-                        << "\return ref and eval, line " << expr->at.line << "\n";
+                        << "\treturn ref and eval, line " << expr->at.line << "\n";
                     }
                     auto mkl = static_pointer_cast<ExprMakeLocal>(expr->subexpr);
                     mkl->setRefSp(true, expr->refStackTop, 0);
