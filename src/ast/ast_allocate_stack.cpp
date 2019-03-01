@@ -210,10 +210,17 @@ namespace das {
                 logs << "\t" << var->stackTop << "\t" << sz
                     << "\tlet " << var->name << ", line " << var->at.line << "\n";
             }
-            if ( var->init && var->init->rtti_isMakeLocal() ) {
-                auto mkl = static_pointer_cast<ExprMakeLocal>(var->init);
-                mkl->setRefSp(false, var->stackTop, 0);
-                mkl->doesNotNeedInit = false;
+            if ( var->init ) {
+                if ( var->init->rtti_isMakeLocal() ) {
+                    auto mkl = static_pointer_cast<ExprMakeLocal>(var->init);
+                    mkl->setRefSp(false, var->stackTop, 0);
+                    mkl->doesNotNeedInit = false;
+                } else if ( var->init->rtti_isCall() ) {
+                    auto cll = static_pointer_cast<ExprCall>(var->init);
+                    if ( !cll->func->builtIn ) {
+                        cll->doesNotNeedSp = true;
+                    }
+                }
             }
         }
     // ExprMakeBlock
@@ -301,12 +308,12 @@ namespace das {
                 auto mkl = static_pointer_cast<ExprMakeLocal>(expr->right);
                 mkl->setRefSp(true, expr->stackTop, 0);
                 mkl->doesNotNeedInit = false;
-            } /*else if ( expr->right->rtti_isCall() ) {
+            } else if ( expr->right->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(expr->right);
                 if ( !cll->func->builtIn ) {
                     cll->doesNotNeedSp = true;
                 }
-            } */
+            }
         }
     };
 

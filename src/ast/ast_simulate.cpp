@@ -164,10 +164,13 @@ namespace das
         }
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
-
+            auto cll = static_pointer_cast<ExprCall>(rE);
+            if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = lE->simulate(context);
+                return right;
+            }
         }
-
-
         // now, to the regular copy
         auto left = lE->simulate(context);
         auto right = rE->simulate(context);
@@ -1324,7 +1327,9 @@ namespace das
     SimNode * ExprCall::simulate (Context & context) const {
         auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
         simulateCall(func->shared_from_this(), this, context, pCall);
-        pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
+        if ( !doesNotNeedSp ) {
+            pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
+        }
         return pCall;
     }
 
