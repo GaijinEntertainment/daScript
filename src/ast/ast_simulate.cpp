@@ -43,6 +43,15 @@ namespace das
                                                                             at, right, stackTop, offset);
             }
         }
+        // now, call with CMRES
+        if ( rE->rtti_isCall() ) {
+            auto cll = static_pointer_cast<ExprCall>(rE);
+            if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                return right;
+            }
+        }
         auto left = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
         if ( rightType.isRef() ) {
             if ( rightType.isWorkhorseType() ) {
@@ -106,6 +115,15 @@ namespace das
             } else {
                 return context.code->makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
                                                                           at, right, stackTop);
+            }
+        }
+        // now, call with CMRES
+        if ( rE->rtti_isCall() ) {
+            auto cll = static_pointer_cast<ExprCall>(rE);
+            if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
+                return right;
             }
         }
         // now, to the regular copy
@@ -258,6 +276,11 @@ namespace das
                     uint32_t offset =  extraOffset + index*stride + field->offset;
                     auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
                     mkl->setRefSp(ref, sp, offset);
+                } else if ( decl->value->rtti_isCall() ) {
+                    auto cll = static_pointer_cast<ExprCall>(decl->value);
+                    if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                        cll->doesNotNeedSp = true;
+                    }
                 }
             }
         }
@@ -332,6 +355,11 @@ namespace das
                 uint32_t offset =  extraOffset + index*stride;
                 auto mkl = static_pointer_cast<ExprMakeLocal>(val);
                 mkl->setRefSp(ref, sp, offset);
+            } else if ( val->rtti_isCall() ) {
+                auto cll = static_pointer_cast<ExprCall>(val);
+                if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                    cll->doesNotNeedSp = true;
+                }
             }
         }
     }
