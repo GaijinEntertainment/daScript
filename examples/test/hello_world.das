@@ -1,4 +1,4 @@
-// options log = true, logStack=true, logNodes = true, optimize=true // , printRef = true, printVarAccess = true, logOptimizationPasses = true
+options log = true, logStack=true, logNodes = true, optimize=true // , printRef = true, printVarAccess = true, logOptimizationPasses = true
 
 struct Foo
     x, y : int
@@ -22,8 +22,24 @@ def pass123
     //          CallAndCopyOrMove   (GetCMResOffs 0)
     return make123()
 
+def make456
+    let a : int[3]
+    a[0] = 4
+    a[1] = 5
+    a[2] = 6
+    return a
+
 [export]
 def test
+    //  Optimization - call cmres to be passed directly to call
+    //      CallAndCopyOrMove (GetLocal a0)
+    let a0 = make456()
+    assert(a0[0]==4 & a0[1]==5 & a0[2]==6)
+    //  Optimization - call cmres to be passed directly to call
+    //      CallAndCopyOrMove (GetLocal a1)
+    let a1 : int[3]
+    a1 = make456()
+    assert(a1[0]==4 & a1[1]==5 & a1[2]==6)
     //  Optimization - local [[ ]] to be unrolled to direct set
     //      InitLocal
     //      SetLocalValue 1

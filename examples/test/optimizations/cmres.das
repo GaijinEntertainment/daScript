@@ -22,8 +22,24 @@ def pass123
     //          CallAndCopyOrMove   (GetCMResOffs 0)
     return make123()
 
+def make456
+    let a : int[3]
+    a[0] = 4
+    a[1] = 5
+    a[2] = 6
+    return a
+
 [export]
 def test
+    //  Optimization - call cmres to be passed directly to call
+    //      CallAndCopyOrMove (GetLocal a0)
+    let a0 = make456()
+    assert(a0[0]==4 & a0[1]==5 & a0[2]==6)
+    //  Optimization - call cmres to be passed directly to call
+    //      CallAndCopyOrMove (GetLocal a1)
+    let a1 : int[3]
+    a1 = make456()
+    assert(a1[0]==4 & a1[1]==5 & a1[2]==6)
     //  Optimization - local [[ ]] to be unrolled to direct set
     //      InitLocal
     //      SetLocalValue 1
@@ -63,5 +79,4 @@ def test
     let b1 = [[Bar a=[[Foo x=1, y=2]]; b=[[Foo x=3, y=4]]]]
     assert(b1[0].a.x==1 & b1[0].a.y==2 & b1[1].b.x==3 & b1[1].b.y==4)
     return true
-
 
