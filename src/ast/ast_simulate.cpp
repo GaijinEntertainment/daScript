@@ -1020,7 +1020,11 @@ namespace das
                 return context.code->makeNode<SimNode_ReturnReference>(at, simSubE);
             }
         } else if ( returnInBlock ) {
-            if ( takeOverRightStack ) {
+            if ( returnCallCMRES ) {
+                SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
+                simRet->cmresEval = context.code->makeNode<SimNode_GetBlockCMResOfs>(at,0,stackTop);
+                return context.code->makeNode<SimNode_Return>(at, simSubE);
+            } else if ( takeOverRightStack ) {
                 return context.code->makeNode<SimNode_ReturnRefAndEvalFromBlock>(at,
                             simSubE, refStackTop, stackTop);
             } else if ( block->copyOnReturn  ) {
@@ -1031,7 +1035,11 @@ namespace das
                     simSubE, subexpr->type->getSizeOf(), stackTop);
             }
         } else if ( subexpr ) {
-            if ( takeOverRightStack ) {
+            if ( returnCallCMRES ) {
+                SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
+                simRet->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(at,0);
+                return context.code->makeNode<SimNode_Return>(at, simSubE);
+            } else if ( takeOverRightStack ) {
                 return context.code->makeNode<SimNode_ReturnRefAndEval>(at, simSubE, refStackTop);
             } else if ( func->copyOnReturn ) {
                 return context.code->makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());

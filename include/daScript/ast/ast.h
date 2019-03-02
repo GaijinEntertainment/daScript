@@ -865,6 +865,7 @@ namespace das
                 bool returnReference    : 1;
                 bool returnInBlock      : 1;
                 bool takeOverRightStack : 1;
+                bool returnCallCMRES    : 1;
             };
             uint32_t    returnFlags = 0;
         };

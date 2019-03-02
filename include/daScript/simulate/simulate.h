@@ -1002,6 +1002,19 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t offset;
     };
 
+    // BLOCK CMRES "GET" + OFFSET
+    struct SimNode_GetBlockCMResOfs : SimNode {
+        DAS_PTR_NODE;
+        SimNode_GetBlockCMResOfs(const LineInfo & at, uint32_t o, uint32_t asp)
+            : SimNode(at), offset(o), argStackTop(asp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
+            return ba->copyOrMoveResult + offset;
+        }
+        uint32_t offset, argStackTop;
+    };
+
     // LOCAL VARIABLE "GET"
     struct SimNode_GetLocal : SimNode {
         DAS_PTR_NODE;

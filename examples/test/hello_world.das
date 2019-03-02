@@ -7,8 +7,15 @@ struct Foo
 struct Bar
     a, b : Foo
 
+def make123
+    let a : int[3]
+    a[0] = -1
+    a[1] = -2
+    a[2] = -3
+    return a
+
 def makeBar
-    return [[ Bar a=[[Foo() x=1,y=2]], b=[[Foo() x=3,y=4]] ]]
+    return [[ Bar a=[[Foo() x=1,y=2,a=make123()]], b=[[Foo() x=3,y=4]] ]]
 
 def makeFooBar
     return makeBar()
@@ -25,8 +32,8 @@ def test
     let b2 : Bar
     b2 = makeFooBar()
     print("b2={b2}\n")
-    // let b3 = invoke() <| $()
-    //     return [[ Bar a=[[Foo() x=1,y=2]], b=[[Foo() x=3,y=4]] ]]
-    // print("b3={b3}\n")
+    let b3 = invoke() <| $()
+        return makeFooBar()
+    print("b3={b3}\n")
     return true
 

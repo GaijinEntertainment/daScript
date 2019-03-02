@@ -133,6 +133,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_GetBlockCMResOfs::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetBlockCMResOfs);
+        V_SP(offset);
+        V_SP(argStackTop);
+        V_END();
+    }
+
     SimNode * SimNode_SetLocalRefAndEval::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(SetLocalRefAndEval);

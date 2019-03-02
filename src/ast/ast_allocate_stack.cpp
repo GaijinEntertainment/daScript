@@ -105,6 +105,12 @@ namespace das {
                     auto mkl = static_pointer_cast<ExprMakeLocal>(expr->subexpr);
                     mkl->setRefSp(true, expr->refStackTop, 0);
                     mkl->doesNotNeedInit = false;
+                } else if ( expr->subexpr->rtti_isCall() ) {
+                    auto cll = static_pointer_cast<ExprCall>(expr->subexpr);
+                    if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                        cll->doesNotNeedSp = true;
+                        expr->returnCallCMRES = true;
+                    }
                 }
             }
         }
@@ -217,7 +223,7 @@ namespace das {
                     mkl->doesNotNeedInit = false;
                 } else if ( var->init->rtti_isCall() ) {
                     auto cll = static_pointer_cast<ExprCall>(var->init);
-                    if ( !cll->func->builtIn ) {
+                    if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
                         cll->doesNotNeedSp = true;
                     }
                 }
@@ -310,7 +316,7 @@ namespace das {
                 mkl->doesNotNeedInit = false;
             } else if ( expr->right->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(expr->right);
-                if ( !cll->func->builtIn ) {
+                if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
                     cll->doesNotNeedSp = true;
                 }
             }
