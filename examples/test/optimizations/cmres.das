@@ -34,7 +34,7 @@ def test
     //      InitLocalRef
     //      SetLocalValueRefOff 1
     //      SetLocalValueRefOff 2
-    let f1 : Foo                            
+    let f1 : Foo
     f1 = [[Foo x=1, y=2]]                   // stack ptr to hold &f1
     assert(f1.x==1 & f1.y==2)
     //  Optimization - call CMRES to be passed directly to call
@@ -63,4 +63,5 @@ def test
     let b1 = [[Bar a=[[Foo x=1, y=2]]; b=[[Foo x=3, y=4]]]]
     assert(b1[0].a.x==1 & b1[0].a.y==2 & b1[1].b.x==3 & b1[1].b.y==4)
     return true
+
 
