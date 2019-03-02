@@ -1,3 +1,5 @@
+// options log=true, logNodes=true, logStack=true
+
 def make_10
     let a : array<float>
     for i in range(0,10)

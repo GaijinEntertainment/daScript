@@ -14,6 +14,15 @@ namespace das
 
     SimNode * makeLocalRefMove (const LineInfo & at, Context & context, uint32_t stackTop, uint32_t offset, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
+        // now, call with CMRES
+        if ( rE->rtti_isCall() ) {
+            auto cll = static_pointer_cast<ExprCall>(rE);
+            if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                return right;
+            }
+        }
         // now, to the regular move
         auto left = context.code->makeNode<SimNode_GetLocalRefOff>(at, stackTop, offset);
         auto right = rE->simulate(context);
@@ -73,6 +82,15 @@ namespace das
 
     SimNode * makeLocalMove (const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
+        // now, call with CMRES
+        if ( rE->rtti_isCall() ) {
+            auto cll = static_pointer_cast<ExprCall>(rE);
+            if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
+                return right;
+            }
+        }
         // now, to the regular move
         auto left = context.code->makeNode<SimNode_GetLocal>(at, stackTop);
         auto right = rE->simulate(context);
@@ -210,8 +228,21 @@ namespace das
         }
     }
 
-    SimNode * makeMove (const LineInfo & at, Context & context, const TypeDecl & rightType, SimNode * left, SimNode * right ) {
+    SimNode * makeMove (const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
+        const auto & rightType = *rE->type;
+        // now, call with CMRES
+        if ( rE->rtti_isCall() ) {
+            auto cll = static_pointer_cast<ExprCall>(rE);
+            if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = lE->simulate(context);
+                return right;
+            }
+        }
+        // now to the regular one
         if ( rightType.isRef() ) {
+            auto left = lE->simulate(context);
+            auto right = rE->simulate(context);
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
             DAS_ASSERTF(0, "we are calling makeMove where expression on a right is not a referece."
@@ -998,11 +1029,7 @@ namespace das
     }
 
     SimNode * ExprMove::simulate (Context & context) const {
-        auto retN = makeMove(at,
-                        context,
-                        *right->type,
-                        left->simulate(context),
-                        right->simulate(context));
+        auto retN = makeMove(at,context,left,right);
         if ( !retN ) {
             context.thisProgram->error("internal compilation error, can't generate move", at);
         }
@@ -1277,11 +1304,10 @@ namespace das
     }
 
     SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local) {
-        SimNode * init = var->init->simulate(context);
         SimNode * get;
         if ( local ) {
             if ( var->init && var->init->rtti_isMakeLocal() ) {
-                return init;
+                return var->init->simulate(context);
             } else {
                 get = context.code->makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
             }
@@ -1289,7 +1315,8 @@ namespace das
             get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index);
         }
         if ( var->type->ref ) {
-            return context.code->makeNode<SimNode_CopyReference>(var->init->at, get, init);
+            return context.code->makeNode<SimNode_CopyReference>(var->init->at, get,
+                                                                 var->init->simulate(context));
         } else if ( var->type->canCopy() ) {
             auto varExpr = make_shared<ExprVar>(var->at, var->name);
             varExpr->variable = var;
@@ -1301,7 +1328,11 @@ namespace das
             }
             return retN;
         } else if ( var->type->canMove() ) {
-            auto retN = makeMove(var->init->at, context, *var->init->type, get, init);
+            auto varExpr = make_shared<ExprVar>(var->at, var->name);
+            varExpr->variable = var;
+            varExpr->local = local;
+            varExpr->type = make_shared<TypeDecl>(*var->type);
+            auto retN = makeMove(var->init->at, context, varExpr, var->init);
             if ( !retN ) {
                 context.thisProgram->error("internal compilation error, can't generate move", var->at);
             }
