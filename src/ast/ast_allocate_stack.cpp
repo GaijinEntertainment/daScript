@@ -190,12 +190,14 @@ namespace das {
         virtual void preVisit ( ExprInvoke * expr ) override {
             Visitor::preVisit(expr);
             if ( inStruct ) return;
-            if ( expr->type->isRefType() ) {
-                auto sz = expr->type->getSizeOf();
-                expr->stackTop = allocateStack(sz);
-                if ( log ) {
-                    logs << "\t" << expr->stackTop << "\t" << sz
-                        << "\tinvoke, line " << expr->at.line << "\n";
+            if ( !expr->doesNotNeedSp ) {
+                if ( expr->type->isRefType() ) {
+                    auto sz = expr->type->getSizeOf();
+                    expr->stackTop = allocateStack(sz);
+                    if ( log ) {
+                        logs << "\t" << expr->stackTop << "\t" << sz
+                            << "\tinvoke, line " << expr->at.line << "\n";
+                    }
                 }
             }
         }
