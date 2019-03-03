@@ -111,6 +111,12 @@ namespace das {
                         cll->doesNotNeedSp = true;
                         expr->returnCallCMRES = true;
                     }
+                } else if ( expr->subexpr->rtti_isInvoke() ) {
+                    auto cll = static_pointer_cast<ExprInvoke>(expr->subexpr);
+                    if ( cll->isCopyOrMove() ) {
+                        cll->doesNotNeedSp = true;
+                        expr->returnCallCMRES = true;
+                    }
                 }
             }
         }
@@ -226,6 +232,11 @@ namespace das {
                     if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
                         cll->doesNotNeedSp = true;
                     }
+                } else if ( var->init->rtti_isInvoke() ) {
+                    auto cll = static_pointer_cast<ExprInvoke>(var->init);
+                    if ( cll->isCopyOrMove() ) {
+                        cll->doesNotNeedSp = true;
+                    }
                 }
             }
         }
@@ -317,6 +328,11 @@ namespace das {
             } else if ( expr->right->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(expr->right);
                 if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                    cll->doesNotNeedSp = true;
+                }
+            } else if ( expr->right->rtti_isInvoke() ) {
+                auto cll = static_pointer_cast<ExprInvoke>(expr->right);
+                if ( cll->isCopyOrMove() ) {
                     cll->doesNotNeedSp = true;
                 }
             }

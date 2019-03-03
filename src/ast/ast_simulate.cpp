@@ -23,6 +23,15 @@ namespace das
                 return right;
             }
         }
+        // now, invoke with CMRES
+        if ( rE->rtti_isInvoke() ) {
+            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            if ( cll->isCopyOrMove() ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                return right;
+            }
+        }
         // now, to the regular move
         auto left = context.code->makeNode<SimNode_GetLocalRefOff>(at, stackTop, offset);
         auto right = rE->simulate(context);
@@ -61,6 +70,16 @@ namespace das
                 return right;
             }
         }
+        // now, invoke with CMRES
+        if ( rE->rtti_isInvoke() ) {
+            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            if ( cll->isCopyOrMove() ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                return right;
+            }
+        }
+        // wo standard path
         auto left = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
         if ( rightType.isRef() ) {
             if ( rightType.isWorkhorseType() ) {
@@ -86,6 +105,15 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
+                return right;
+            }
+        }
+        // now, invoke with CMRES
+        if ( rE->rtti_isInvoke() ) {
+            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            if ( cll->isCopyOrMove() ) {
                 SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
                 right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
                 return right;
@@ -139,6 +167,15 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
+                return right;
+            }
+        }
+        // now, invoke with CMRES
+        if ( rE->rtti_isInvoke() ) {
+            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            if ( cll->isCopyOrMove() ) {
                 SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
                 right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
                 return right;
@@ -207,6 +244,15 @@ namespace das
                 return right;
             }
         }
+        // now, invoke with CMRES
+        if ( rE->rtti_isInvoke() ) {
+            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            if ( cll->isCopyOrMove() ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = lE->simulate(context);
+                return right;
+            }
+        }
         // now, to the regular copy
         auto left = lE->simulate(context);
         auto right = rE->simulate(context);
@@ -234,6 +280,15 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = lE->simulate(context);
+                return right;
+            }
+        }
+        // now, invoke with CMRES
+        if ( rE->rtti_isInvoke() ) {
+            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            if ( cll->isCopyOrMove() ) {
                 SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
                 right->cmresEval = lE->simulate(context);
                 return right;
@@ -310,6 +365,11 @@ namespace das
                 } else if ( decl->value->rtti_isCall() ) {
                     auto cll = static_pointer_cast<ExprCall>(decl->value);
                     if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                        cll->doesNotNeedSp = true;
+                    }
+                } else if ( decl->value->rtti_isInvoke() ) {
+                    auto cll = static_pointer_cast<ExprInvoke>(decl->value);
+                    if ( cll->isCopyOrMove() ) {
                         cll->doesNotNeedSp = true;
                     }
                 }
@@ -389,6 +449,11 @@ namespace das
             } else if ( val->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(val);
                 if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                    cll->doesNotNeedSp = true;
+                }
+            } else if ( val->rtti_isInvoke() ) {
+                auto cll = static_pointer_cast<ExprInvoke>(val);
+                if ( cll->isCopyOrMove() ) {
                     cll->doesNotNeedSp = true;
                 }
             }
@@ -507,10 +572,15 @@ namespace das
         return context.code->makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp,stackTop);
     }
 
+    bool ExprInvoke::isCopyOrMove() const {
+        auto blockT = arguments[0]->type;
+        return blockT->firstType && blockT->firstType->isRefType();
+    }
+
     SimNode * ExprInvoke::simulate (Context & context) const {
         auto blockT = arguments[0]->type;
         SimNode_CallBase * pInvoke;
-        if ( blockT->firstType && blockT->firstType->isRefType() ) {
+        if ( isCopyOrMove() ) {
             auto getSp = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
             if ( blockT->baseType==Type::tBlock ) {
                 pInvoke = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_InvokeAndCopyOrMove>(

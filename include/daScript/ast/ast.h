@@ -531,6 +531,7 @@ namespace das
         virtual bool rtti_isConstant() const { return false; }
         virtual bool rtti_isStringConstant() const { return false; }
         virtual bool rtti_isCall() const { return false; }
+        virtual bool rtti_isInvoke() const { return false; }
         virtual bool rtti_isCallLikeExpr() const { return false; }
         virtual bool rtti_isLet() const { return false; }
         virtual bool rtti_isReturn() const { return false; }
@@ -1145,7 +1146,10 @@ namespace das
         ExprInvoke ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprInvoke>(a,name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual bool rtti_isInvoke() const override { return true; }
+        bool isCopyOrMove() const;
         uint32_t    stackTop = 0;
+        bool        doesNotNeedSp = false;
     };
 
     struct ExprAssert : ExprLikeCall<ExprAssert> {
