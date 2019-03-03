@@ -103,7 +103,12 @@ namespace das {
                         << "\treturn ref and eval, line " << expr->at.line << "\n";
                     }
                     auto mkl = static_pointer_cast<ExprMakeLocal>(expr->subexpr);
-                    mkl->setRefSp(true, expr->refStackTop, 0);
+                    if ( expr->returnInBlock ) {
+                        mkl->setRefSp(true, false, expr->refStackTop, 0);
+                    } else {
+                        mkl->setRefSp(true, true, expr->refStackTop, 0);
+                        expr->returnMakeCMRES = true;
+                    }
                     mkl->doesNotNeedInit = false;
                 } else if ( expr->subexpr->rtti_isCall() ) {
                     auto cll = static_pointer_cast<ExprCall>(expr->subexpr);
@@ -227,7 +232,7 @@ namespace das {
             if ( var->init ) {
                 if ( var->init->rtti_isMakeLocal() ) {
                     auto mkl = static_pointer_cast<ExprMakeLocal>(var->init);
-                    mkl->setRefSp(false, var->stackTop, 0);
+                    mkl->setRefSp(false, false, var->stackTop, 0);
                     mkl->doesNotNeedInit = false;
                 } else if ( var->init->rtti_isCall() ) {
                     auto cll = static_pointer_cast<ExprCall>(var->init);
@@ -266,7 +271,7 @@ namespace das {
                     << "\tascend, line " << expr->at.line << "\n";
                 }
                 auto mkl = static_pointer_cast<ExprMakeLocal>(expr->subexpr);
-                mkl->setRefSp(true, expr->stackTop, 0);
+                mkl->setRefSp(true, false, expr->stackTop, 0);
             }
         }
     // ExprMakeStructure
@@ -280,7 +285,7 @@ namespace das {
                     logs << "\t" << cStackTop << "\t" << sz
                         << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
-                expr->setRefSp(false, cStackTop, 0);
+                expr->setRefSp(false, false, cStackTop, 0);
                 expr->doesNotNeedInit = false;
             }
         }
@@ -295,7 +300,7 @@ namespace das {
                     logs << "\t" << expr->stackTop << "\t" << sz
                     << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
-                expr->setRefSp(false, stackTop, 0);
+                expr->setRefSp(false, false, stackTop, 0);
                 expr->doesNotNeedInit = false;
             }
         }
@@ -325,7 +330,7 @@ namespace das {
                         << "\tcopy [[ ]], line " << expr->at.line << "\n";
                 }
                 auto mkl = static_pointer_cast<ExprMakeLocal>(expr->right);
-                mkl->setRefSp(true, expr->stackTop, 0);
+                mkl->setRefSp(true, false, expr->stackTop, 0);
                 mkl->doesNotNeedInit = false;
             } else if ( expr->right->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(expr->right);

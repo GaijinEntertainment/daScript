@@ -12,6 +12,93 @@ namespace das
 {
     // common for move and copy
 
+    SimNode * makeLocalCMResMove (const LineInfo & at, Context & context, uint32_t offset, const ExpressionPtr & rE ) {
+        const auto & rightType = *rE->type;
+        // now, call with CMRES
+        if ( rE->rtti_isCall() ) {
+            auto cll = static_pointer_cast<ExprCall>(rE);
+            if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                return right;
+            }
+        }
+        // now, invoke with CMRES
+        if ( rE->rtti_isInvoke() ) {
+            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            if ( cll->isCopyOrMove() ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                return right;
+            }
+        }
+        // now, to the regular move
+        auto left = context.code->makeNode<SimNode_GetCMResOfs>(at, offset);
+        auto right = rE->simulate(context);
+        if ( rightType.isRef() ) {
+            return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
+        } else {
+            DAS_ASSERTF(0, "we are calling makeLocalCMResMove where expression on a right is not a referece."
+                        "we should not be here, script compiler should have caught this during compilation."
+                        "compiler later will likely report internal compilation error.");
+            return nullptr;
+        }
+    }
+
+    SimNode * makeLocalCMResCopy(const LineInfo & at, Context & context, uint32_t offset, const ExpressionPtr & rE ) {
+        const auto & rightType = *rE->type;
+        assert ( rightType.canCopy() &&
+                "we are calling makeLocalCMResCopy on a type, which can't be copied."
+                "we should not be here, script compiler should have caught this during compilation."
+                "compiler later will likely report internal compilation error.");
+        auto right = rE->simulate(context);
+        if ( rightType.isWorkhorseType() ) {
+            if ( rightType.ref ) {
+                return context.code->makeValueNode<SimNode_SetCMResRefT>(rightType.baseType,
+                                                                         at, right, offset);
+            } else {
+                return context.code->makeValueNode<SimNode_SetCMResValueT>(rightType.baseType,
+                                                                           at, right, offset);
+            }
+        }
+        // now, call with CMRES
+        if ( rE->rtti_isCall() ) {
+            auto cll = static_pointer_cast<ExprCall>(rE);
+            if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                return right;
+            }
+        }
+        // now, invoke with CMRES
+        if ( rE->rtti_isInvoke() ) {
+            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            if ( cll->isCopyOrMove() ) {
+                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
+                right->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                return right;
+            }
+        }
+        // wo standard path
+        auto left = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+        if ( rightType.isRef() ) {
+            if ( rightType.isWorkhorseType() ) {
+                return context.code->makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
+            } else {
+                return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+            }
+        } else if ( rightType.isHandle() ) {
+            auto resN = rightType.annotation->simulateCopy(context, at, left, right);
+            if ( !resN ) {
+                context.thisProgram->error("integration error, simulateCopy returned null",
+                                           at, CompilationError::missing_node );
+            }
+            return resN;
+        } else {
+            return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
+        }
+    }
+
     SimNode * makeLocalRefMove (const LineInfo & at, Context & context, uint32_t stackTop, uint32_t offset, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
         // now, call with CMRES
@@ -335,8 +422,9 @@ namespace das
         return nullptr;
     }
 
-    void ExprMakeLocal::setRefSp ( bool ref, uint32_t sp, uint32_t off ) {
+    void ExprMakeLocal::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
         useStackRef = ref;
+        useCMRES = cmres;
         doesNotNeedSp = true;
         doesNotNeedInit = true;
         stackTop = sp;
@@ -347,8 +435,8 @@ namespace das
         return vector<SimNode *>();
     }
 
-    void ExprMakeStructure::setRefSp ( bool ref, uint32_t sp, uint32_t off ) {
-        ExprMakeLocal::setRefSp(ref, sp, off);
+    void ExprMakeStructure::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
+        ExprMakeLocal::setRefSp(ref, cmres, sp, off);
         int total = int(structs.size());
         int stride = makeType->getStride();
         // we go through all fields, and if its [[ ]] field
@@ -361,7 +449,7 @@ namespace das
                 if ( decl->value->rtti_isMakeLocal() ) {
                     uint32_t offset =  extraOffset + index*stride + field->offset;
                     auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
-                    mkl->setRefSp(ref, sp, offset);
+                    mkl->setRefSp(ref, cmres, sp, offset);
                 } else if ( decl->value->rtti_isCall() ) {
                     auto cll = static_pointer_cast<ExprCall>(decl->value);
                     if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
@@ -384,7 +472,9 @@ namespace das
         int stride = makeType->getStride();
         if ( !doesNotNeedInit ) {
             SimNode * init0;
-            if ( useStackRef ) {
+            if ( useCMRES ) {
+                init0 = context.code->makeNode<SimNode_InitLocalCMRes>(at,extraOffset,stride * total);
+            } else if ( useStackRef ) {
                 init0 = context.code->makeNode<SimNode_InitLocalRef>(at,stackTop,extraOffset,stride * total);
             } else {
                 init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,stride * total);
@@ -404,6 +494,12 @@ namespace das
                     auto lsim = mkl->simulateLocal(context);
                     simlist.insert(simlist.end(), lsim.begin(), lsim.end());
                     continue;
+                } else if ( useCMRES ) {
+                    if ( decl->moveSemantic ){
+                        cpy = makeLocalCMResMove(at,context,offset,decl->value);
+                    } else {
+                        cpy = makeLocalCMResCopy(at,context,offset,decl->value);
+                    }
                 } else if ( useStackRef ) {
                     if ( decl->moveSemantic ){
                         cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
@@ -427,8 +523,13 @@ namespace das
     }
 
     SimNode * ExprMakeStructure::simulate (Context & context) const {
+        SimNode_Block * block;
+        if ( useCMRES ) {
+            block = context.code->makeNode<SimNode_MakeLocalCMRes>(at);
+        } else {
+            block = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
+        }
         auto simlist = simulateLocal(context);
-        auto block = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
         block->total = int(simlist.size());
         block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
         for ( uint32_t i = 0; i != block->total; ++i )
@@ -436,8 +537,8 @@ namespace das
         return block;
     }
 
-    void ExprMakeArray::setRefSp ( bool ref, uint32_t sp, uint32_t off ) {
-        ExprMakeLocal::setRefSp(ref, sp, off);
+    void ExprMakeArray::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
+        ExprMakeLocal::setRefSp(ref, cmres, sp, off);
         int total = int(values.size());
         uint32_t stride = recordType->getSizeOf();
         for ( int index=0; index != total; ++index ) {
@@ -445,7 +546,7 @@ namespace das
             if ( val->rtti_isMakeLocal() ) {
                 uint32_t offset =  extraOffset + index*stride;
                 auto mkl = static_pointer_cast<ExprMakeLocal>(val);
-                mkl->setRefSp(ref, sp, offset);
+                mkl->setRefSp(ref, cmres, sp, offset);
             } else if ( val->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(val);
                 if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
@@ -467,7 +568,9 @@ namespace das
         uint32_t stride = recordType->getSizeOf();
         if ( !doesNotNeedInit ) {
             SimNode * init0;
-            if ( useStackRef ) {
+            if ( useCMRES ) {
+                init0 = context.code->makeNode<SimNode_InitLocalCMRes>(at,extraOffset,stride * total);
+            } else if ( useStackRef ) {
                 init0 = context.code->makeNode<SimNode_InitLocalRef>(at,stackTop,extraOffset,stride * total);
             } else {
                 init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,stride * total);
@@ -484,10 +587,12 @@ namespace das
                 auto lsim = mkl->simulateLocal(context);
                 simlist.insert(simlist.end(), lsim.begin(), lsim.end());
                 continue;
-            } else if ( !useStackRef ) {
-                cpy = makeLocalCopy(at,context,stackTop+offset,val);
-            } else {
+            } else if ( useCMRES ) {
+                cpy = makeLocalCMResCopy(at,context,offset,val);
+            } else if ( useStackRef ) {
                 cpy = makeLocalRefCopy(at,context,stackTop,offset,val);
+            } else {
+                cpy = makeLocalCopy(at,context,stackTop+offset,val);
             }
             if ( !cpy ) {
                 context.thisProgram->error("internal compilation error, can't generate array initialization", at);
@@ -498,9 +603,13 @@ namespace das
     }
 
     SimNode * ExprMakeArray::simulate (Context & context) const {
+        SimNode_Block * block;
+        if ( useCMRES ) {
+            block = context.code->makeNode<SimNode_MakeLocalCMRes>(at);
+        } else {
+            block = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
+        }
         auto simlist = simulateLocal(context);
-        // we make a block with all those things in it
-        auto block = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
         block->total = int(simlist.size());
         block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
         for ( uint32_t i = 0; i != block->total; ++i )
@@ -1163,6 +1272,8 @@ namespace das
             if ( returnCallCMRES ) {
                 SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
                 simRet->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(at,0);
+                return context.code->makeNode<SimNode_Return>(at, simSubE);
+            } else if ( returnMakeCMRES ) {
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( takeOverRightStack ) {
                 return context.code->makeNode<SimNode_ReturnRefAndEval>(at, simSubE, refStackTop);

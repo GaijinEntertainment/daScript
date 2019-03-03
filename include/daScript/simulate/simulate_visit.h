@@ -175,6 +175,24 @@ namespace das {
     }
 
     template <typename TT>
+    SimNode * SimNode_SetCMResRefT<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(SetCMResRefT);
+        V_SP(offset);
+        V_SUB(value);
+        V_END();
+    }
+
+    template <typename TT>
+    SimNode * SimNode_SetCMResValueT<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(SetCMResValueT);
+        V_SP(offset);
+        V_SUB(value);
+        V_END();
+    }
+
+    template <typename TT>
     SimNode * SimNode_SetLocalRefRefOffT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(SetLocalRefRefOffT);

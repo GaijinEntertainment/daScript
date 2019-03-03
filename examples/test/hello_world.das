@@ -1,109 +1,32 @@
-options log = true, logStack=true, logNodes = true, optimize=true // , printRef = true, printVarAccess = true, logOptimizationPasses = true
-
 struct Foo
-    x, y : int
-    a : int[3]
+    x,y,z,w:int
 
-struct Bar
-    a, b : Foo
+[sideeffects]
+def make_1
+    let t:Foo
+    t.x = 1
+    t.y = 2
+    t.z = 3
+    t.w = 4
+    return t
 
-def make123
-    //  Optimization - return to pass CMRES into local ref, for structure init
-    //      ReturnRefAndEval
-    //          InitLocalRef
-    //          SetLocalValueRefOff 1
-    //          SetLocalValueRefOff 2
-    //          SetLocalValueRefOff 3
-    return [[int 1;2;3]]                // stack ptr to hold cmres for returnRefAndEval
+[sideeffects]
+def make_2
+    return [[Foo x=1, y=2, z=3, w=4]]
 
-def pass123
-    //  Optimization - GetCMRES to be passed as call return value
-    //      Retrun
-    //          CallAndCopyOrMove   (GetCMResOffs 0)
-    return make123()
+def test_1
+    for x in range(0,100000)
+        make_1()
 
-def make456
-    let a : int[3]
-    a[0] = 4
-    a[1] = 5
-    a[2] = 6
-    return a
-
-def inv123
-    // Optimization - GetCMRES passed directly to invoke
-    //      Return
-    //          InvokeAndCopyOrMove (GetCMResOffs 0)
-    return invoke($(){ return make123(); })
+def test_2
+    for x in range(0,100000)
+        make_2()
 
 [export]
 def test
-    //  Optimization - call cmres to be passed directly to call
-    //      CallAndCopyOrMove (GetLocal a0)
-    let a0 = make456()
-    assert(a0[0]==4 & a0[1]==5 & a0[2]==6)
-    //  Optimization - call cmres to be passed directly to call
-    //      CallAndCopyOrMove (GetLocal a1)
-    let a1 : int[3]
-    a1 = make456()
-    assert(a1[0]==4 & a1[1]==5 & a1[2]==6)
-    //  this tests invoke in inv123
-    let a2 = inv123()
-    assert(a2[0]==1 & a2[1]==2 & a2[2]==3)
-    //  Optimization - local [[ ]] to be unrolled to direct set
-    //      InitLocal
-    //      SetLocalValue 1
-    //      SetLocalValue 2
-    let f0 = [[Foo x=1, y=2]]
-    assert(f0.x==1 & f0.y==2)
-    //  Optimization - copy [[ ]] to be unrolled to Ref set
-    //      InitLocalRef
-    //      SetLocalValueRefOff 1
-    //      SetLocalValueRefOff 2
-    let f1 : Foo                            
-    f1 = [[Foo x=1, y=2]]                   // stack ptr to hold &f1
-    assert(f1.x==1 & f1.y==2)
-    //  Optimization - call CMRES to be passed directly to call
-    //      InitLocal
-    //      CallAndCopyOrMove   (GetLocal f3.a)
-    let f3 = [[Foo a = make123()]]
-    assert(f3.a[0]==1 & f3.a[1]==2 & f3.a[2]==3)
-    //  Optimization - call CMRES ref to be passed directly to call
-    //      InitLocalRef
-    //      CallAndCopyOrMove (GetLocalRefOff offset_of_a)
-    let f4 : Foo
-    f4 = [[Foo a = pass123()]]              // stack ptr to hold &f4
-    assert(f4.a[0]==1 & f4.a[1]==2 & f4.a[2]==3)
-    // Optimization - invoke CMRES ref to be passed directly to invoke
-    let f5 = invoke() <| $()
-        return [[Foo x=1,y=2]]
-    assert(f5.x==1 & f5.y==2)
-    // Optimization - invoke CMRES ref
-    //      InitLocal
-    //      InvokeAndCopyOrMove (GetLocal f6)
-    let f6 : Foo
-    f6 = invoke() <| $()
-        return [[ Foo x=1, y=2, a=inv123() ]]
-    assert(f6.x==1 & f6.y==2 & f6.a[0]==1 & f6.a[1]==2 & f6.a[2]==3)
-    // Optimization
-    //      InitLocal
-    //      InvokeAndCopyOrMove (GetLocal f7.a)
-    let f7 = [[ Foo a=invoke($(){ return make123(); }) ]]
-    assert(f7.a[0]==1 & f7.a[1]==2 & f7.a[2]==3)
-    //  Optimization - nested [[ structures ]] to be flattened, only single init
-    //      InitLocal
-    //      SetLocalValue 1
-    //      SetLocalValue 2
-    let b0 = [[Bar a = [[Foo x=1, y=2]]]]
-    assert(b0.a.x==1 & b0.a.y==2)
-    //  Optimization - nested [[ array ]] to be flattened, only single init
-    //      InitLocal
-    //      SetLocalValue 1
-    //      SetLocalValue 2
-    //      SetLocalValue 3
-    //      SetLocalValue 4
-    let b1 = [[Bar a=[[Foo x=1, y=2]]; b=[[Foo x=3, y=4]]]]
-    assert(b1[0].a.x==1 & b1[0].a.y==2 & b1[1].b.x==3 & b1[1].b.y==4)
+    profile(20,"make t.x=1;...") <|
+        test_1()
+    profile(20,"make [[Foo x=1;...]]") <|
+        test_2()
     return true
-
-
 

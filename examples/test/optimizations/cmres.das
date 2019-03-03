@@ -9,11 +9,11 @@ struct Bar
 
 def make123
     //  Optimization - return to pass CMRES into local ref, for structure init
-    //      ReturnRefAndEval
-    //          InitLocalRef
-    //          SetLocalValueRefOff 1
-    //          SetLocalValueRefOff 2
-    //          SetLocalValueRefOff 3
+    //      Return
+    //          InitLocalCMRes
+    //          SetCMResValueT_TT 1
+    //          SetCMResValueT_TT 2
+    //          SetCMResValueT_TT 3
     return [[int 1;2;3]]                // stack ptr to hold cmres for returnRefAndEval
 
 def pass123
@@ -104,6 +104,3 @@ def test
     let b1 = [[Bar a=[[Foo x=1, y=2]]; b=[[Foo x=3, y=4]]]]
     assert(b1[0].a.x==1 & b1[0].a.y==2 & b1[1].b.x==3 & b1[1].b.y==4)
     return true
-
-
-

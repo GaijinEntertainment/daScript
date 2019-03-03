@@ -867,6 +867,7 @@ namespace das
                 bool returnInBlock      : 1;
                 bool takeOverRightStack : 1;
                 bool returnCallCMRES    : 1;
+                bool returnMakeCMRES    : 1;
             };
             uint32_t    returnFlags = 0;
         };
@@ -1351,13 +1352,14 @@ namespace das
         ExprMakeLocal() = default;
         ExprMakeLocal ( const LineInfo & at ) : Expression(at) {}
         virtual bool rtti_isMakeLocal() const override { return true; }
-        virtual void setRefSp ( bool ref, uint32_t sp, uint32_t off );
+        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off );
         virtual vector<SimNode *> simulateLocal ( Context & /*context*/ ) const;
         uint32_t                    stackTop = 0;
         uint32_t                    extraOffset = 0;
         union {
             struct {
                 bool    useStackRef;
+                bool    useCMRES;
                 bool    doesNotNeedSp;
                 bool    doesNotNeedInit;
             };
@@ -1372,7 +1374,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void setRefSp ( bool ref, uint32_t sp, uint32_t off ) override;
+        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         TypeDeclPtr                 makeType;
         vector<MakeStructPtr>       structs;
         bool                        useInitializer;
@@ -1385,7 +1387,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual void setRefSp ( bool ref, uint32_t sp, uint32_t off ) override;
+        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         TypeDeclPtr                 makeType;
         TypeDeclPtr                 recordType;
         vector<ExpressionPtr>       values;

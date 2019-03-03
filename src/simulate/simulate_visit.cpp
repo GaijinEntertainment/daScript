@@ -180,6 +180,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_InitLocalCMRes::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(InitLocalCMRes);
+        V_SP(offset);
+        V_ARG(size);
+        V_END();
+    }
+
     SimNode * SimNode_InitLocalRef::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(InitLocalRef);
@@ -434,6 +442,14 @@ namespace das {
         V_BEGIN_CR();
         V_OP(MakeLocal);
         V_SP(stackTop);
+        V_BLOCK();
+        V_FINAL();
+        V_END();
+    }
+
+    SimNode * SimNode_MakeLocalCMRes::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(MakeLocalCMRes);
         V_BLOCK();
         V_FINAL();
         V_END();

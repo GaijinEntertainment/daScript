@@ -1176,6 +1176,35 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t stackTop;
     };
 
+    template <typename TT>
+    struct SimNode_SetCMResRefT : SimNode {
+        SimNode_SetCMResRefT(const LineInfo & at, SimNode * rv, uint32_t o)
+            : SimNode(at), value(rv), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            auto pr = (TT *) value->evalPtr(context);
+            TT * pl = (TT *) ( context.abiCopyOrMoveResult() + offset );
+            *pl = *pr;
+            return v_zero();
+        }
+        SimNode * value;
+        uint32_t offset;
+    };
+
+    template <typename TT>
+    struct SimNode_SetCMResValueT : SimNode {
+        SimNode_SetCMResValueT(const LineInfo & at, SimNode * rv, uint32_t o)
+            : SimNode(at), value(rv), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            TT * pl = (TT *) ( context.abiCopyOrMoveResult() + offset );
+            *pl = EvalTT<TT>::eval(context, value);
+            return v_zero();
+        }
+        SimNode * value;
+        uint32_t offset;
+    };
+
     // AT (INDEX)
     struct SimNode_SetLocalRefAndEval : SimNode {
         DAS_PTR_NODE;
@@ -1203,6 +1232,18 @@ SIM_NODE_AT_VECTOR(Float, float)
             return v_zero();
         }
         uint32_t stackTop, size;
+    };
+
+    // ZERO MEMORY OF UNITIALIZED CMRES LOCAL VARIABLE
+    struct SimNode_InitLocalCMRes : SimNode {
+        SimNode_InitLocalCMRes(const LineInfo & at, uint32_t o, uint32_t sz)
+            : SimNode(at), offset(o), size(sz) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            memset(context.abiCopyOrMoveResult() + offset, 0, size);
+            return v_zero();
+        }
+        uint32_t offset, size;
     };
 
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE VIA REFERENCE AND OFFSET
@@ -1792,6 +1833,19 @@ SIM_NODE_AT_VECTOR(Float, float)
             return context.stack.sp() + stackTop;
         }
         uint32_t stackTop;
+    };
+
+    struct SimNode_MakeLocalCMRes : SimNode_Block {
+        DAS_PTR_NODE;
+        SimNode_MakeLocalCMRes ( const LineInfo & at )
+            : SimNode_Block(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
+                list[i++]->eval(context);
+            }
+            return context.abiCopyOrMoveResult();
+        }
     };
 
     // LET
