@@ -853,10 +853,24 @@ namespace das
         } else if ( subexpr->type->isGoodArrayType() ) {
             return nullptr;
         } else {
+            uint32_t range = subexpr->type->dim.back();
+            uint32_t stride = subexpr->type->getStride();
+            if ( index->rtti_isConstant() ) {
+                // if its constant index, like a[3]..., we try to let node bellow simulate
+                auto idxCE = static_pointer_cast<ExprConst>(index);
+                uint32_t idxC = cast<uint32_t>::to(idxCE->value);
+                if ( idxC >= range ) {
+                    context.thisProgram->error("index out of range", at, CompilationError::index_out_of_range);
+                    return nullptr;
+                }
+                auto tnode = subexpr->trySimulate(context, extraOffset + idxC*stride, r2vType);
+                if ( tnode ) {
+                    return tnode;
+                }
+            }
+            // regular scenario
             auto prv = subexpr->simulate(context);
             auto pidx = index->simulate(context);
-            uint32_t stride = subexpr->type->getStride();
-            uint32_t range = subexpr->type->dim.back();
             if ( r2vType!=Type::none ) {
                 return context.code->makeValueNode<SimNode_AtR2V>(r2vType, at, prv, pidx, stride, extraOffset, range);
             } else {

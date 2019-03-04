@@ -90,6 +90,8 @@ namespace das
 
     ,   unsafe                                  =   31300       // unsafe operation in safe function
 
+    ,   index_out_of_range                      =   31400       // a:int[3] a[4]
+
     ,   expecting_return_value                  =   32101       // def blah:int without return
     ,   not_expecting_return_value              =   32102       // def blah:void ... return 12
     ,   invalid_return_semantics                =   32103       // return <- required
