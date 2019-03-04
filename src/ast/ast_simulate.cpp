@@ -65,18 +65,18 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
-                return right;
+                SimNode_CallBase * rightC = (SimNode_CallBase *) right;
+                rightC->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                return rightC;
             }
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->isCopyOrMove() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
-                return right;
+                SimNode_CallBase * rightC = (SimNode_CallBase *) right;
+                rightC->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                return rightC;
             }
         }
         // wo standard path
@@ -152,18 +152,18 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
-                return right;
+                SimNode_CallBase * rightC = (SimNode_CallBase *) right;
+                rightC->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                return rightC;
             }
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->isCopyOrMove() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
-                return right;
+                SimNode_CallBase * rightC = (SimNode_CallBase *) right;
+                rightC->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                return rightC;
             }
         }
         // wo standard path
