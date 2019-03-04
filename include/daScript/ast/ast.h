@@ -633,6 +633,7 @@ namespace das
         ExprAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i )
             : Expression(a), subexpr(s), index(i) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isAt() const override { return true; }

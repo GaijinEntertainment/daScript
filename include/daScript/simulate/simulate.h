@@ -601,6 +601,23 @@ namespace das
         uint32_t  stride, offset, range;
     };
 
+    template <typename TT>
+    struct SimNode_AtR2V : SimNode_At {
+        SimNode_AtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
+            : SimNode_At(at,rv,idx,strd,o,rng) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *) compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)compute(context);                      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
     // AT (INDEX)
     template <typename TT>
     struct SimNode_AtVector;

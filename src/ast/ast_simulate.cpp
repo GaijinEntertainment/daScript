@@ -844,6 +844,27 @@ namespace das
         }
     }
 
+    SimNode * ExprAt::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
+        if ( subexpr->type->isVectorType() || subexpr->type->isHandle() ) {
+            return nullptr;
+        }
+        if ( subexpr->type->isGoodTableType() ) {
+            return nullptr;
+        } else if ( subexpr->type->isGoodArrayType() ) {
+            return nullptr;
+        } else {
+            auto prv = subexpr->simulate(context);
+            auto pidx = index->simulate(context);
+            uint32_t stride = subexpr->type->getStride();
+            uint32_t range = subexpr->type->dim.back();
+            if ( r2vType!=Type::none ) {
+                return context.code->makeValueNode<SimNode_AtR2V>(r2vType, at, prv, pidx, stride, extraOffset, range);
+            } else {
+                return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, extraOffset, range);
+            }
+        }
+    }
+
     SimNode * ExprAt::simulate (Context & context) const {
         auto prv = subexpr->simulate(context);
         auto pidx = index->simulate(context);
@@ -877,9 +898,11 @@ namespace das
                                            at, CompilationError::missing_node );
             }
         } else {
-            uint32_t stride = subexpr->type->getStride();
-            uint32_t range = subexpr->type->dim.back();
-            result = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
+            if ( r2v ) {
+                return trySimulate(context, 0, type->baseType);
+            } else {
+                return trySimulate(context, 0, Type::none);
+            }
         }
         if ( r2v ) {
             return ExprRef2Value::GetR2V(context, at, type, result);
