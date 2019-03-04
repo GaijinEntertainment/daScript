@@ -584,8 +584,8 @@ namespace das
     // AT (INDEX)
     struct SimNode_At : SimNode {
         DAS_PTR_NODE;
-        SimNode_At ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t rng )
-            : SimNode(at), value(rv), index(idx), stride(strd), range(rng) {}
+        SimNode_At ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
+            : SimNode(at), value(rv), index(idx), stride(strd), offset(o), range(rng) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
             auto pValue = value->evalPtr(context);
@@ -594,11 +594,11 @@ namespace das
                 context.throw_error_at(debugInfo,"index out of range");
                 return nullptr;
             } else {
-                return pValue + idx*stride;
+                return pValue + idx*stride + offset;
             }
         }
         SimNode * value, * index;
-        uint32_t  stride, range;
+        uint32_t  stride, offset, range;
     };
 
     // AT (INDEX)

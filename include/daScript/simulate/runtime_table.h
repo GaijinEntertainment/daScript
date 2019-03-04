@@ -210,10 +210,16 @@ namespace das
     template <typename KeyType>
     struct SimNode_TableIndex : SimNode_Table {
         DAS_PTR_NODE;
-        SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
-            : SimNode_Table(at,t,k,vts) {}
+        SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts, uint32_t o)
+            : SimNode_Table(at,t,k,vts), offset(o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
-            return visitTable(vis,"TableIndex");
+            V_BEGIN();
+            V_OP(TableIndex);
+            V_SUB(tabExpr);
+            V_SUB(keyExpr);
+            V_ARG(valueTypeSize);
+            V_ARG(offset);
+            V_END();
         }
         __forceinline char * compute ( Context & context ) {
             Table * tab = (Table *) tabExpr->evalPtr(context);
@@ -222,8 +228,9 @@ namespace das
             TableHash<KeyType> thh(&context,valueTypeSize);
             auto hfn = hash_function(context, key);
             int index = thh.reserve(*tab, key, hfn);    // if index==-1, it was a through, so safe to do
-            return tab->data + index * valueTypeSize;
+            return tab->data + index * valueTypeSize + offset;
         }
+        uint32_t offset;
     };
 
     template <typename KeyType>

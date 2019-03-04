@@ -1,3 +1,5 @@
+options logNodes = true
+
 struct Foo
     x,y,z,w:int
 
@@ -24,9 +26,17 @@ def test_2
 
 [export]
 def test
-    profile(20,"make t.x=1;...") <|
-        test_1()
-    profile(20,"make [[Foo x=1;...]]") <|
-        test_2()
+    let i : int[10]
+    for x in range(0,10)
+        i[x] = x
+    i[3] = 13
+    print("i={i}\n")
+    print("i[3]={i[3]}\n")
+    let a : Foo[10]
+    for x in range(0,10)
+        a[x].y = x
+    a[3].z = 13
+    print("a={a}\n")
+    print("a[3].z={a[3].z}\n")
     return true
 

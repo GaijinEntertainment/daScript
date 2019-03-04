@@ -125,7 +125,7 @@ namespace das {
             }
         };
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &, SimNode * rv, SimNode * idx ) const override {
-            return context.code->makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), RowC);
+            return context.code->makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), 0, RowC);
         }
         virtual void walk ( DataWalker & walker, void * data ) override {
             walker.walk((char *)data, matrixTypeInfo);

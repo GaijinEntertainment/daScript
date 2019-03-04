@@ -105,6 +105,7 @@ namespace das {
         V_SUB(value);
         V_SUB(index);
         V_ARG(stride);
+        V_ARG(offset);
         V_ARG(range);
         V_END();
     }
@@ -623,6 +624,7 @@ namespace das {
         V_SUB(l);
         V_SUB(r);
         V_ARG(stride);
+        V_ARG(offset);
         V_END();
     }
 

@@ -17,8 +17,8 @@ namespace das
     // AT (INDEX)
     struct SimNode_ArrayAt : SimNode {
         DAS_PTR_NODE;
-        SimNode_ArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
-            : SimNode(at), l(ll), r(rr), stride(sz) {}
+        SimNode_ArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz, uint32_t o)
+            : SimNode(at), l(ll), r(rr), stride(sz), offset(o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             Array * pA = (Array *) l->evalPtr(context);
@@ -28,11 +28,11 @@ namespace das
                 context.throw_error_at(debugInfo,"index out of range");
                 return nullptr;
             } else {
-                return pA->data + idx*stride;
+                return pA->data + idx*stride + offset;
             }
         }
         SimNode * l, * r;
-        uint32_t stride;
+        uint32_t stride, offset;
     };
 
     struct GoodArrayIterator : Iterator {

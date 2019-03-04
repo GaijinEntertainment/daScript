@@ -852,7 +852,7 @@ namespace das
             uint32_t range = subexpr->type->getVectorDim();
             uint32_t stride = type->getSizeOf();
             if ( subexpr->type->ref ) {
-                result = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, range);
+                result = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
             } else {
                 switch ( type->baseType ) {
                     case tInt:      return context.code->makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range);
@@ -866,10 +866,10 @@ namespace das
             }
         } else if ( subexpr->type->isGoodTableType() ) {
             uint32_t valueTypeSize = subexpr->type->secondType->getSizeOf();
-            result = context.code->makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize);
+            result = context.code->makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
         } else if ( subexpr->type->isGoodArrayType() ) {
             uint32_t stride = subexpr->type->firstType->getSizeOf();
-            result = context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride);
+            result = context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride, 0);
         } else if ( subexpr->type->isHandle() ) {
             result = subexpr->type->annotation->simulateGetAt(context, at, index->type, prv, pidx);
             if ( !result ) {
@@ -879,7 +879,7 @@ namespace das
         } else {
             uint32_t stride = subexpr->type->getStride();
             uint32_t range = subexpr->type->dim.back();
-            result = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, range);
+            result = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
         }
         if ( r2v ) {
             return ExprRef2Value::GetR2V(context, at, type, result);

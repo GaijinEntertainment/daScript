@@ -230,7 +230,7 @@ namespace das
         struct SimNode_AtVector : SimNode_At {
             DAS_PTR_NODE;
             SimNode_AtVector ( const LineInfo & at, SimNode * rv, SimNode * idx )
-                : SimNode_At(at, rv, idx, 0, 0) {}
+                : SimNode_At(at, rv, idx, 0, 0, 0) {}
             __forceinline char * compute ( Context & context ) {
                 auto pValue = (VectorType *) value->evalPtr(context);
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
