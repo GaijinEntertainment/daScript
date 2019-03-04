@@ -4,6 +4,68 @@
 
 namespace das {
 
+    class VarCMRes : public Visitor {
+    public:
+        VarCMRes( const ProgramPtr & prog ) {
+            program = prog;
+        }
+    protected:
+        int                     inBlock = 0;
+        ProgramPtr              program;
+        FunctionPtr             func;
+        VariablePtr             cmresVAR;
+        bool                    failedToCMRES = false;
+    protected:
+    // function
+        virtual void preVisit ( Function * f ) override {
+            Visitor::preVisit(f);
+            func = f->shared_from_this();
+        }
+        virtual FunctionPtr visit ( Function * that ) override {
+            if ( cmresVAR && !failedToCMRES ) cmresVAR->aliasCMRES = true;
+            func.reset();
+            cmresVAR.reset();
+            failedToCMRES = false;
+            assert(inBlock==0);
+            return Visitor::visit(that);
+        }
+    // ExprBlock
+        virtual void preVisit ( ExprBlock * block ) override {
+            Visitor::preVisit(block);
+            if ( block->isClosure ) inBlock ++;
+        }
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            if ( block->isClosure ) inBlock --;
+            return Visitor::visit(block);
+        }
+    // ExprReturn
+        virtual void preVisit ( ExprReturn * expr ) override {
+            Visitor::preVisit(expr);
+            if ( failedToCMRES ) return;
+            if ( inBlock ) return;
+            // we can safely skip makeLocal, invoke, or call
+            // they are going to CMRES directly, and do not affect nothing
+            if ( !func->result->isRefType() ) return;
+            if ( expr->subexpr->rtti_isCall() ) return;
+            if ( expr->subexpr->rtti_isInvoke() ) return;
+            if ( expr->subexpr->rtti_isMakeLocal() ) return;
+            // if its return X
+            if ( expr->subexpr->rtti_isVar() ) {
+                auto evar = static_pointer_cast<ExprVar>(expr->subexpr);
+                if ( !evar->local ) return; // if its not local, we safely ignore
+                auto var = evar->variable;
+                if ( var->type->ref ) {     // we return local ref variable, so ... game over
+                    failedToCMRES = true;
+                } else if ( !cmresVAR ) {
+                    cmresVAR = var;
+                } else if ( cmresVAR!=var ) {
+                    // TODO:    verify if we need to fail?
+                    failedToCMRES = true;
+                }
+            }
+        }
+    };
+
     class AllocateStack : public Visitor {
     public:
         AllocateStack( const ProgramPtr & prog, TextWriter & ls ) : logs(ls) {
@@ -107,7 +169,7 @@ namespace das {
                         mkl->setRefSp(true, false, expr->refStackTop, 0);
                     } else {
                         mkl->setRefSp(true, true, expr->refStackTop, 0);
-                        expr->returnMakeCMRES = true;
+                        expr->returnCMRES = true;
                     }
                     mkl->doesNotNeedInit = false;
                 } else if ( expr->subexpr->rtti_isCall() ) {
@@ -121,6 +183,11 @@ namespace das {
                     if ( cll->isCopyOrMove() ) {
                         cll->doesNotNeedSp = true;
                         expr->returnCallCMRES = true;
+                    }
+                } else if ( expr->subexpr->rtti_isVar() ) {
+                    auto evar = static_pointer_cast<ExprVar>(expr->subexpr);
+                    if ( evar->variable->aliasCMRES ) {
+                        expr->returnCMRES = true;
                     }
                 }
             }
@@ -224,15 +291,22 @@ namespace das {
             Visitor::preVisitLet(expr,var,last);
             if ( inStruct ) return;
             auto sz = var->type->getSizeOf();
-            var->stackTop = allocateStack(sz);
-            if ( log ) {
-                logs << "\t" << var->stackTop << "\t" << sz
-                    << "\tlet " << var->name << ", line " << var->at.line << "\n";
+            if ( var->aliasCMRES ) {
+                if ( log ) {
+                    logs << "\tCR\t" << sz
+                        << "\tlet " << var->name << ", line " << var->at.line << "\n";
+                }
+            } else {
+                var->stackTop = allocateStack(sz);
+                if ( log ) {
+                    logs << "\t" << var->stackTop << "\t" << sz
+                        << "\tlet " << var->name << ", line " << var->at.line << "\n";
+                }
             }
             if ( var->init ) {
                 if ( var->init->rtti_isMakeLocal() ) {
                     auto mkl = static_pointer_cast<ExprMakeLocal>(var->init);
-                    mkl->setRefSp(false, false, var->stackTop, 0);
+                    mkl->setRefSp(false, var->aliasCMRES, var->stackTop, 0);
                     mkl->doesNotNeedInit = false;
                 } else if ( var->init->rtti_isCall() ) {
                     auto cll = static_pointer_cast<ExprCall>(var->init);
@@ -349,6 +423,10 @@ namespace das {
     // program
 
     void Program::allocateStack(TextWriter & logs) {
+        // move some variables to CMRES
+        VarCMRes vcm(shared_from_this());
+        visit(vcm);
+        // allocate stack for the rest of them
         AllocateStack context(shared_from_this(), logs);
         visit(context);
         // allocate used variables and functions indices

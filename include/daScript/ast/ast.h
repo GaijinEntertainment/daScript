@@ -426,6 +426,7 @@ namespace das
             struct {
                 bool    move_to_init : 1;
                 bool    used : 1;
+                bool    aliasCMRES : 1;
             };
             uint32_t flags = 0;
         };
@@ -868,7 +869,7 @@ namespace das
                 bool returnInBlock      : 1;
                 bool takeOverRightStack : 1;
                 bool returnCallCMRES    : 1;
-                bool returnMakeCMRES    : 1;
+                bool returnCMRES        : 1;
             };
             uint32_t    returnFlags = 0;
         };

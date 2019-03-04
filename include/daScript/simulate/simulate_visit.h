@@ -125,7 +125,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_AtR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP(AtR2V);
+        V_OP_TT(AtR2V);
         V_SUB(value);
         V_SUB(index);
         V_ARG(stride);
@@ -135,9 +135,17 @@ namespace das {
     }
 
     template <typename TT>
+    SimNode * SimNode_GetCMResOfsR2V<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(GetCMResOfsR2V);
+        V_SP(offset);
+        V_END();
+    }
+
+    template <typename TT>
     SimNode * SimNode_GetLocalR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(GetLocalR2V);
+        V_OP_TT(GetLocalR2V_TT);
         V_SP(stackTop);
         V_END();
     }

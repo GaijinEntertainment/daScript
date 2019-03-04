@@ -41,7 +41,7 @@ namespace das
             : SimNode_ArrayAt(at,rv,idx,strd,o) {}
         SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
-            V_OP(ArrayAtR2V);
+            V_OP_TT(ArrayAtR2V);
             V_SUB(l);
             V_SUB(r);
             V_ARG(stride);

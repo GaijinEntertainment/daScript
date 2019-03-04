@@ -1019,6 +1019,23 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t offset;
     };
 
+    template <typename TT>
+    struct SimNode_GetCMResOfsR2V : SimNode_GetCMResOfs {
+        SimNode_GetCMResOfsR2V(const LineInfo & at, uint32_t o)
+            : SimNode_GetCMResOfs(at,o)  {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *)compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)compute(context);                      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
     // BLOCK CMRES "GET" + OFFSET
     struct SimNode_GetBlockCMResOfs : SimNode {
         DAS_PTR_NODE;

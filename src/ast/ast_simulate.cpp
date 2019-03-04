@@ -235,7 +235,7 @@ namespace das
         if ( rightType.isWorkhorseType() ) {
             if ( rE->rtti_isVar() ) {
                 auto rvar = static_pointer_cast<ExprVar>(rE);
-                if ( rvar->local && !rvar->variable->type->ref ) {
+                if ( rvar->local && !rvar->variable->type->ref && !rvar->variable->aliasCMRES ) {
                     return context.code->makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
                                                                                 at, stackTop,
                                                                                 rvar->variable->stackTop);
@@ -305,20 +305,33 @@ namespace das
         if ( rightType.isWorkhorseType() && lE->rtti_isVar() ) {
             auto var = static_pointer_cast<ExprVar>(lE);
             if ( var->local && !var->variable->type->ref ) {
-                if ( rE->rtti_isVar() ) {
-                    auto rvar = static_pointer_cast<ExprVar>(rE);
-                    if ( rvar->local && !rvar->variable->type->ref ) {
-                        return context.code->makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
-                                at, var->variable->stackTop, rvar->variable->stackTop);
+                if ( var->variable->aliasCMRES ) {
+                    auto right = rE->simulate(context);
+                    if ( rightType.isWorkhorseType() ) {
+                        if ( rightType.ref ) {
+                            return context.code->makeValueNode<SimNode_SetCMResRefT>(rightType.baseType,
+                                                                                     at, right, 0);
+                        } else {
+                            return context.code->makeValueNode<SimNode_SetCMResValueT>(rightType.baseType,
+                                                                                       at, right, 0);
+                        }
                     }
-                }
-                auto right = rE->simulate(context);
-                if ( rightType.ref ) {
-                    return context.code->makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
-                                at, right, var->variable->stackTop);
                 } else {
-                    return context.code->makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
-                                at, right, var->variable->stackTop);
+                    if ( rE->rtti_isVar() ) {
+                        auto rvar = static_pointer_cast<ExprVar>(rE);
+                        if ( rvar->local && !rvar->variable->type->ref&& !rvar->variable->aliasCMRES ) {
+                            return context.code->makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
+                                    at, var->variable->stackTop, rvar->variable->stackTop);
+                        }
+                    }
+                    auto right = rE->simulate(context);
+                    if ( rightType.ref ) {
+                        return context.code->makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
+                                    at, right, var->variable->stackTop);
+                    } else {
+                        return context.code->makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
+                                    at, right, var->variable->stackTop);
+                    }
                 }
             }
         }
@@ -1127,6 +1140,12 @@ namespace das
                     return context.code->makeNode<SimNode_GetLocalRefOff>(at,
                                                     variable->stackTop, extraOffset);
                 }
+            } else if ( variable->aliasCMRES ) {
+                if ( r2vType!=Type::none ) {
+                    return context.code->makeValueNode<SimNode_GetCMResOfsR2V>(r2vType, at,extraOffset);
+                } else {
+                    return context.code->makeNode<SimNode_GetCMResOfs>(at, extraOffset);
+                }
             } else {
                 if ( r2vType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_GetLocalR2V>(r2vType, at,
@@ -1167,18 +1186,10 @@ namespace das
                 }
             }
         } else if ( local ) {
-            if ( variable->type->ref ) {
-                if ( r2v && !type->isRefType() ) {
-                    return context.code->makeValueNode<SimNode_GetLocalRefR2V>(type->baseType, at, variable->stackTop);
-                } else {
-                    return context.code->makeNode<SimNode_GetLocalRef>(at, variable->stackTop);
-                }
+            if ( r2v ) {
+                return trySimulate(context, 0, type->baseType);
             } else {
-                if ( r2v && !type->isRefType()) {
-                    return context.code->makeValueNode<SimNode_GetLocalR2V>(type->baseType, at, variable->stackTop);
-                } else {
-                    return context.code->makeNode<SimNode_GetLocal>(at, variable->stackTop);
-                }
+                return trySimulate(context, 0, Type::none);
             }
         } else if ( argument) {
             if (variable->type->isRef()) {
@@ -1314,7 +1325,7 @@ namespace das
                 SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
                 simRet->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(at,0);
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
-            } else if ( returnMakeCMRES ) {
+            } else if ( returnCMRES ) {
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( takeOverRightStack ) {
                 return context.code->makeNode<SimNode_ReturnRefAndEval>(at, simSubE, refStackTop);
@@ -1516,6 +1527,8 @@ namespace das
             SimNode * init;
             if (var->init) {
                 init = ExprLet::simulateInit(context, var, true);
+            } else if (var->aliasCMRES ) {
+                init = context.code->makeNode<SimNode_InitLocalCMRes>(pLet->at, 0, var->type->getSizeOf());
             } else {
                 init = context.code->makeNode<SimNode_InitLocal>(pLet->at, var->stackTop, var->type->getSizeOf());
             }
