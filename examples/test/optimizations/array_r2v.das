@@ -1,4 +1,4 @@
-options logNodes = true, logStack = true
+// options logNodes = true, logStack = true
 
 struct Foo
     x,y,z,w:int
@@ -27,4 +27,5 @@ def test
     let c : table<int,Foo>
     testA(c)
     return true
+
 

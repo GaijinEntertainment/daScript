@@ -35,6 +35,31 @@ namespace das
         uint32_t stride, offset;
     };
 
+    template <typename TT>
+    struct SimNode_ArrayAtR2V : SimNode_ArrayAt {
+        SimNode_ArrayAtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o )
+            : SimNode_ArrayAt(at,rv,idx,strd,o) {}
+        SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(ArrayAtR2V);
+            V_SUB(l);
+            V_SUB(r);
+            V_ARG(stride);
+            V_ARG(offset);
+            V_END();
+        }
+        virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *) compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)compute(context);                      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
     struct GoodArrayIterator : Iterator {
         virtual bool first ( Context & context, IteratorContext & itc ) override;
         virtual bool next  ( Context & context, IteratorContext & itc ) override;

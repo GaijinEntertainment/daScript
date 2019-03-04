@@ -851,7 +851,14 @@ namespace das
         if ( subexpr->type->isGoodTableType() ) {
             return nullptr;
         } else if ( subexpr->type->isGoodArrayType() ) {
-            return nullptr;
+            auto prv = subexpr->simulate(context);
+            auto pidx = index->simulate(context);
+            uint32_t stride = subexpr->type->firstType->getSizeOf();
+            if ( r2vType!=Type::none ) {
+                return context.code->makeValueNode<SimNode_ArrayAtR2V>(r2vType, at, prv, pidx, stride, extraOffset);
+            } else {
+                return context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride, extraOffset);
+            }
         } else {
             uint32_t range = subexpr->type->dim.back();
             uint32_t stride = subexpr->type->getStride();
@@ -902,9 +909,6 @@ namespace das
         } else if ( subexpr->type->isGoodTableType() ) {
             uint32_t valueTypeSize = subexpr->type->secondType->getSizeOf();
             result = context.code->makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
-        } else if ( subexpr->type->isGoodArrayType() ) {
-            uint32_t stride = subexpr->type->firstType->getSizeOf();
-            result = context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride, 0);
         } else if ( subexpr->type->isHandle() ) {
             result = subexpr->type->annotation->simulateGetAt(context, at, index->type, prv, pidx);
             if ( !result ) {
