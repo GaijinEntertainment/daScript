@@ -360,19 +360,23 @@ namespace das {
         }
 
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr & td,
-                                         SimNode * val, SimNode * idx, uint32_t ofs ) const override {
+                                         const ExpressionPtr & val, const ExpressionPtr & idx, uint32_t ofs ) const override {
             if ( ofs ) context.thisProgram->error("internal error, offset in JSON node", at);
             if ( td->isSimpleType(Type::tString) ) {
-                return context.code->makeNode<SimNode_GetJsonField>(at, val, idx);
+                return context.code->makeNode<SimNode_GetJsonField>(at,
+                                                                    val->simulate(context),
+                                                                    idx->simulate(context));
             } else if ( td->isIndex() ){
-                return context.code->makeNode<SimNode_GetJsonAt>(at, val, idx);
+                return context.code->makeNode<SimNode_GetJsonAt>(at,
+                                                                 val->simulate(context),
+                                                                 idx->simulate(context));
             } else {
                 return nullptr;
             }
         }
 
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & td,
-                                         SimNode * val, SimNode * idx, uint32_t ofs ) const override {
+                                         const ExpressionPtr & val, const ExpressionPtr & idx, uint32_t ofs ) const override {
             context.thisProgram->error("internal error, simulateGetAtR2V for JSON node", at);
             return simulateGetAt(context, at, td, val, idx, ofs);
         }

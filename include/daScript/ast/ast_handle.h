@@ -290,8 +290,11 @@ namespace das
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
         virtual TypeDeclPtr makeIteratorType () const override { return make_shared<TypeDecl>(*vecType); }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
-            return context.code->makeNode<SimNode_AtStdVector>(at, rv, idx, ofs);
+                                         const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
+            return context.code->makeNode<SimNode_AtStdVector>(at,
+                                                               rv->simulate(context),
+                                                               idx->simulate(context),
+                                                               ofs);
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
             return context.code->makeNode<SimNode_VectorIterator>(at, rv);
@@ -320,8 +323,11 @@ namespace das
 #undef EVAL_NODE
         };
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                            SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
-            return context.code->makeNode<SimNode_AtStdVectorR2V>(at, rv, idx, ofs);
+                                            const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
+            return context.code->makeNode<SimNode_AtStdVectorR2V>(at,
+                                                                  rv->simulate(context),
+                                                                  idx->simulate(context),
+                                                                  ofs);
         }
     };
 

@@ -124,13 +124,45 @@ namespace das {
                 return nullptr;
             }
         };
+        SimNode * trySimulate ( Context & context, const ExpressionPtr & subexpr, const ExpressionPtr & index, Type r2vType ) const {
+            if ( index->rtti_isConstant() ) {
+                // if its constant index, like a[3]..., we try to let node bellow simulate
+                auto idxCE = static_pointer_cast<ExprConst>(index);
+                uint32_t idxC = cast<uint32_t>::to(idxCE->value);
+                if ( idxC >= RowC ) {
+                    context.thisProgram->error("index out of range", subexpr->at, CompilationError::index_out_of_range);
+                    return nullptr;
+                }
+                uint32_t stride = sizeof(float)*ColC;
+                auto tnode = subexpr->trySimulate(context, idxC*stride, r2vType);
+                if ( tnode ) {
+                    return tnode;
+                }
+            }
+            return nullptr;
+        }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
-            return context.code->makeNode<SimNode_At>(at, rv, idx, uint32_t(sizeof(float)*ColC), ofs, RowC);
+                                         const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
+            if ( auto tnode = trySimulate(context, rv, idx, Type::none) ) {
+                return tnode;
+            } else {
+                return context.code->makeNode<SimNode_At>(at,
+                                                          rv->simulate(context),
+                                                          idx->simulate(context),
+                                                          uint32_t(sizeof(float)*ColC), ofs, RowC);
+            }
         }
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                            SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
-            return context.code->makeNode<SimNode_AtR2V<float>>(at, rv, idx, uint32_t(sizeof(float)*ColC), ofs, RowC);
+                                            const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
+            Type r2vType = (Type) ToBasicType<VecT>::type;
+            if ( auto tnode = trySimulate(context, rv, idx, r2vType) ) {
+                return tnode;
+            } else {
+                return context.code->makeNode<SimNode_AtR2V<float>>(at,
+                                                                    rv->simulate(context),
+                                                                    idx->simulate(context),
+                                                                    uint32_t(sizeof(float)*ColC), ofs, RowC);
+            }
         }
         virtual void walk ( DataWalker & walker, void * data ) override {
             walker.walk((char *)data, matrixTypeInfo);

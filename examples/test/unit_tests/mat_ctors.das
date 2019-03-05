@@ -53,6 +53,10 @@ def test_4x4
         ops = true
     assert(ops)
 
+[sideeffects]
+def pass(a)
+    return a
+
 def test_any(t:auto(mat))
     let v : auto(vec) = t[0]
     let col = sizeof(type vec) / 4
@@ -68,7 +72,7 @@ def test_any(t:auto(mat))
     verifyIdentity(t)
     let ops = false
     try
-        t[row] = vec(0)
+        t[pass(row)] = vec(0)   // the reason to use pass here is so that we don't get compile time error
     recover
         ops = true
     assert(ops)

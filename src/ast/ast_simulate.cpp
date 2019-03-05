@@ -864,16 +864,14 @@ namespace das
             return nullptr;
         } else if ( subexpr->type->isHandle() ) {
             SimNode * result;
-            auto prv = subexpr->simulate(context);
-            auto pidx = index->simulate(context);
             if ( r2vType!=Type::none ) {
-                result = subexpr->type->annotation->simulateGetAtR2V(context, at, index->type, prv, pidx, extraOffset);
+                result = subexpr->type->annotation->simulateGetAtR2V(context, at, index->type, subexpr, index, extraOffset);
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAtR2V returned null",
                                                at, CompilationError::missing_node );
                 }
             } else {
-                result = subexpr->type->annotation->simulateGetAt(context, at, index->type, prv, pidx, extraOffset);
+                result = subexpr->type->annotation->simulateGetAt(context, at, index->type, subexpr, index, extraOffset);
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAt returned null",
                                                at, CompilationError::missing_node );
