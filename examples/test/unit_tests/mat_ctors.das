@@ -48,7 +48,7 @@ def test_4x4
     verifyIdentity(t)
     let ops = false
     try
-        t[4] = float4(0)
+        t[pass(4)] = float4(0)  // the reason to use pass here is so that we don't get compile time error
     recover
         ops = true
     assert(ops)
@@ -77,8 +77,21 @@ def test_any(t:auto(mat))
         ops = true
     assert(ops)
 
+[sideeffects]
+def test_r2v
+    let m : float4x4
+    m[0] = float4(1,2,3,4)
+    m[1].y = 6.
+    m[2] = float4(5,6,7,8)
+    assert(m[0]==float4(1,2,3,4))
+    assert(m[1].y==6.)
+    assert(m[1]==float4(0,6,0,0))
+    assert(m[2]==float4(5,6,7,8))
+    return true
+
 [export]
 def test
+    test_r2v()
     test_4x4()
     test_any(float4x4())
     test_any(float3x4())

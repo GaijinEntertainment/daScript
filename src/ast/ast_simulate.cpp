@@ -922,8 +922,12 @@ namespace das
             uint32_t range = subexpr->type->getVectorDim();
             uint32_t stride = type->getSizeOf();
             if ( subexpr->type->ref ) {
-                assert(!r2v);
-                return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
+                auto result = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
+                if ( r2v ) {
+                    return ExprRef2Value::GetR2V(context, at, type, result);
+                } else {
+                    return result;
+                }
             } else {
                 switch ( type->baseType ) {
                     case tInt:      return context.code->makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range);

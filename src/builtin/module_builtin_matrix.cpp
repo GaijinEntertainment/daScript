@@ -124,17 +124,18 @@ namespace das {
                 return nullptr;
             }
         };
-        SimNode * trySimulate ( Context & context, const ExpressionPtr & subexpr, const ExpressionPtr & index, Type r2vType ) const {
+        SimNode * trySimulate ( Context & context, const ExpressionPtr & subexpr, const ExpressionPtr & index,
+                               Type r2vType, uint32_t ofs ) const {
             if ( index->rtti_isConstant() ) {
                 // if its constant index, like a[3]..., we try to let node bellow simulate
                 auto idxCE = static_pointer_cast<ExprConst>(index);
                 uint32_t idxC = cast<uint32_t>::to(idxCE->value);
                 if ( idxC >= RowC ) {
-                    context.thisProgram->error("index out of range", subexpr->at, CompilationError::index_out_of_range);
+                    context.thisProgram->error("matrix index out of range", subexpr->at, CompilationError::index_out_of_range);
                     return nullptr;
                 }
                 uint32_t stride = sizeof(float)*ColC;
-                auto tnode = subexpr->trySimulate(context, idxC*stride, r2vType);
+                auto tnode = subexpr->trySimulate(context, idxC*stride + ofs, r2vType);
                 if ( tnode ) {
                     return tnode;
                 }
@@ -143,7 +144,7 @@ namespace das {
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
-            if ( auto tnode = trySimulate(context, rv, idx, Type::none) ) {
+            if ( auto tnode = trySimulate(context, rv, idx, Type::none, ofs) ) {
                 return tnode;
             } else {
                 return context.code->makeNode<SimNode_At>(at,
@@ -155,7 +156,7 @@ namespace das {
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                             const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
             Type r2vType = (Type) ToBasicType<VecT>::type;
-            if ( auto tnode = trySimulate(context, rv, idx, r2vType) ) {
+            if ( auto tnode = trySimulate(context, rv, idx, r2vType, ofs) ) {
                 return tnode;
             } else {
                 return context.code->makeNode<SimNode_AtR2V<float>>(at,

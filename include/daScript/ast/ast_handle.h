@@ -238,7 +238,7 @@ namespace das
                 auto pValue = (VectorType *) value->evalPtr(context);
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
                 if ( idx >= pValue->size() ) {
-                    context.throw_error_at(debugInfo,"index out of range");
+                    context.throw_error_at(debugInfo,"std::vector index out of range");
                     return nullptr;
                 } else {
                     return ((char *)(pValue->data() + idx)) + offset;
