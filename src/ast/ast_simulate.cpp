@@ -858,11 +858,28 @@ namespace das
     }
 
     SimNode * ExprAt::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
-        if ( subexpr->type->isVectorType() || subexpr->type->isHandle() ) {
+        if ( subexpr->type->isVectorType() ) {
             return nullptr;
-        }
-        if ( subexpr->type->isGoodTableType() ) {
+        } else if ( subexpr->type->isGoodTableType() ) {
             return nullptr;
+        } else if ( subexpr->type->isHandle() ) {
+            SimNode * result;
+            auto prv = subexpr->simulate(context);
+            auto pidx = index->simulate(context);
+            if ( r2vType!=Type::none ) {
+                result = subexpr->type->annotation->simulateGetAtR2V(context, at, index->type, prv, pidx, extraOffset);
+                if ( !result ) {
+                    context.thisProgram->error("integration error, simulateGetAtR2V returned null",
+                                               at, CompilationError::missing_node );
+                }
+            } else {
+                result = subexpr->type->annotation->simulateGetAt(context, at, index->type, prv, pidx, extraOffset);
+                if ( !result ) {
+                    context.thisProgram->error("integration error, simulateGetAt returned null",
+                                               at, CompilationError::missing_node );
+                }
+            }
+            return result;
         } else if ( subexpr->type->isGoodArrayType() ) {
             auto prv = subexpr->simulate(context);
             auto pidx = index->simulate(context);
@@ -900,14 +917,15 @@ namespace das
     }
 
     SimNode * ExprAt::simulate (Context & context) const {
-        auto prv = subexpr->simulate(context);
-        auto pidx = index->simulate(context);
         SimNode * result = nullptr;
         if ( subexpr->type->isVectorType() ) {
+            auto prv = subexpr->simulate(context);
+            auto pidx = index->simulate(context);
             uint32_t range = subexpr->type->getVectorDim();
             uint32_t stride = type->getSizeOf();
             if ( subexpr->type->ref ) {
-                result = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
+                assert(!r2v);
+                return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
             } else {
                 switch ( type->baseType ) {
                     case tInt:      return context.code->makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range);
@@ -920,13 +938,14 @@ namespace das
                 }
             }
         } else if ( subexpr->type->isGoodTableType() ) {
+            auto prv = subexpr->simulate(context);
+            auto pidx = index->simulate(context);
             uint32_t valueTypeSize = subexpr->type->secondType->getSizeOf();
             result = context.code->makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
-        } else if ( subexpr->type->isHandle() ) {
-            result = subexpr->type->annotation->simulateGetAt(context, at, index->type, prv, pidx);
-            if ( !result ) {
-                context.thisProgram->error("integration error, simulateGetAt returned null",
-                                           at, CompilationError::missing_node );
+            if ( r2v ) {
+                return ExprRef2Value::GetR2V(context, at, type, result);
+            } else {
+                return result;
             }
         } else {
             if ( r2v ) {
@@ -934,11 +953,6 @@ namespace das
             } else {
                 return trySimulate(context, 0, Type::none);
             }
-        }
-        if ( r2v ) {
-            return ExprRef2Value::GetR2V(context, at, type, result);
-        } else {
-            return result;
         }
     }
     

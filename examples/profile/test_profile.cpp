@@ -502,7 +502,6 @@ void advance(int nbodies, struct planet * __restrict bodies, float dt)
 
 void advancev(int nbodies, struct planet * __restrict bodies, float dt)
 {
-    int i, j;
     vec4f vdt = v_splats(dt);
     struct planet *__restrict b = bodies, *be = bodies + nbodies;
     do {

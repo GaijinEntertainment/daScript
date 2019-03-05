@@ -129,7 +129,7 @@ namespace das {
     struct SimNode_GetJsonField : SimNode {
         DAS_PTR_NODE;
         SimNode_GetJsonField(const LineInfo & a, SimNode * se, SimNode * i)
-        : SimNode(a), subexpr(se), index(i) {}
+            : SimNode(a), subexpr(se), index(i) {}
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
@@ -360,7 +360,8 @@ namespace das {
         }
 
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr & td,
-                                         SimNode * val, SimNode * idx ) const override {
+                                         SimNode * val, SimNode * idx, uint32_t ofs ) const override {
+            if ( ofs ) context.thisProgram->error("internal error, offset in JSON node", at);
             if ( td->isSimpleType(Type::tString) ) {
                 return context.code->makeNode<SimNode_GetJsonField>(at, val, idx);
             } else if ( td->isIndex() ){
@@ -368,6 +369,12 @@ namespace das {
             } else {
                 return nullptr;
             }
+        }
+
+        virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & td,
+                                         SimNode * val, SimNode * idx, uint32_t ofs ) const override {
+            context.thisProgram->error("internal error, simulateGetAtR2V for JSON node", at);
+            return simulateGetAt(context, at, td, val, idx, ofs);
         }
 
         void print(TextWriter & ss, const JsValue & value) const {

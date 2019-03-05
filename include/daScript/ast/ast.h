@@ -491,7 +491,8 @@ namespace das
         virtual SimNode * simulateSafeGetField ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateSafeGetFieldPtr ( const string &, Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
-        virtual SimNode * simulateGetAt ( Context &, const LineInfo &, const TypeDeclPtr &, SimNode *, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateGetAt ( Context &, const LineInfo &, const TypeDeclPtr &, SimNode *, SimNode *, uint32_t ) const { return nullptr; }
+        virtual SimNode * simulateGetAtR2V ( Context &, const LineInfo &, const TypeDeclPtr &, SimNode *, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual void walk ( DataWalker &, void * ) { }
     };

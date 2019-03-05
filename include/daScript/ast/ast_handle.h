@@ -214,8 +214,11 @@ namespace das
         }
     };
 
+    template <typename OT, bool r2v=false>
+    struct ManagedVectorAnnotation;
+
     template <typename OT>
-    struct ManagedVectorAnnotation : TypeAnnotation {
+    struct ManagedVectorAnnotation<OT,false> : TypeAnnotation {
         typedef vector<OT> VectorType;
         struct SimNode_VectorLength : SimNode {
             DAS_INT_NODE;
@@ -227,10 +230,10 @@ namespace das
             }
             SimNode * value;
         };
-        struct SimNode_AtVector : SimNode_At {
+        struct SimNode_AtStdVector : SimNode_At {
             DAS_PTR_NODE;
-            SimNode_AtVector ( const LineInfo & at, SimNode * rv, SimNode * idx )
-                : SimNode_At(at, rv, idx, 0, 0, 0) {}
+            SimNode_AtStdVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
+                : SimNode_At(at, rv, idx, 0, ofs, 0) {}
             __forceinline char * compute ( Context & context ) {
                 auto pValue = (VectorType *) value->evalPtr(context);
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
@@ -238,7 +241,7 @@ namespace das
                     context.throw_error_at(debugInfo,"index out of range");
                     return nullptr;
                 } else {
-                    return (char *)(pValue->data() + idx);
+                    return ((char *)(pValue->data() + idx)) + offset;
                 }
             }
         };
@@ -286,8 +289,9 @@ namespace das
         }
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
         virtual TypeDeclPtr makeIteratorType () const override { return make_shared<TypeDecl>(*vecType); }
-        virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &, SimNode * rv, SimNode * idx ) const override {
-            return context.code->makeNode<SimNode_AtVector>(at, rv, idx);
+        virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
+                                         SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+            return context.code->makeNode<SimNode_AtStdVector>(at, rv, idx, ofs);
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
             return context.code->makeNode<SimNode_VectorIterator>(at, rv);
@@ -297,6 +301,28 @@ namespace das
             return nullptr;
         }
         TypeDeclPtr vecType;
+    };
+
+    template <typename OT>
+    struct ManagedVectorAnnotation<OT,true> : ManagedVectorAnnotation<OT,false> {
+        struct SimNode_AtStdVectorR2V : ManagedVectorAnnotation<OT,false>::SimNode_AtStdVector {
+            SimNode_AtStdVectorR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
+                : ManagedVectorAnnotation<OT,false>::SimNode_AtStdVector(at, rv, idx, ofs) {}
+            virtual vec4f eval ( Context & context ) override {
+                OT * pR = (OT *) ManagedVectorAnnotation<OT,false>::SimNode_AtStdVector::compute(context);
+                return cast<OT>::from(*pR);
+            }
+#define EVAL_NODE(TYPE,CTYPE)                                           \
+            virtual CTYPE eval##TYPE ( Context & context ) override {   \
+                return *(CTYPE *)ManagedVectorAnnotation<OT,false>::SimNode_AtStdVector::compute(context);    \
+            }
+            DAS_EVAL_NODE
+#undef EVAL_NODE
+        };
+        virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr &,
+                                            SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+            return context.code->makeNode<SimNode_AtStdVectorR2V>(at, rv, idx, ofs);
+        }
     };
 
     template <typename OT>
