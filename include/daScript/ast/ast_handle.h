@@ -149,11 +149,13 @@ namespace das
             field.offset = offset;
             auto baseType = field.decl->baseType;
             field.factory = [offset,baseType](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
-                if ( nt==FactoryNodeType::getField || nt==FactoryNodeType::getFieldR2V ) {
-                    auto r2vType = (nt==FactoryNodeType::getField) ? Type::none : baseType;
-                    auto tnode = value->trySimulate(context, offset, r2vType);
-                    if ( tnode ) {
-                        return tnode;
+                if ( !value->type->isPointer() ) {
+                    if ( nt==FactoryNodeType::getField || nt==FactoryNodeType::getFieldR2V ) {
+                        auto r2vType = (nt==FactoryNodeType::getField) ? Type::none : baseType;
+                        auto tnode = value->trySimulate(context, offset, r2vType);
+                        if ( tnode ) {
+                            return tnode;
+                        }
                     }
                 }
                 auto simV = value->simulate(context);

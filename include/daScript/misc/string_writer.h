@@ -69,7 +69,7 @@ namespace das {
         StringWriter & operator << (unsigned long long v)   { return write(hex ? "%llx" : "%llu", v); }
         StringWriter & operator << (float v)                { return write(fixed ? "%.9f" : "%g", v); }
         StringWriter & operator << (double v)               { return write(fixed ? "%.17f" : "%g", v); }
-        StringWriter & operator << (char * v)               { return write(v); }
+        StringWriter & operator << (char * v)               { return write((const char*)v); }
         StringWriter & operator << (const char * v)         { return write(v); }
         StringWriter & operator << (const string & v)       { return writeStr(v.c_str(), v.length()); }
     protected:

@@ -289,7 +289,9 @@ namespace das {
             }
         }
 
-        virtual SimNode * simulateGetField ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr ) const override {
+        virtual SimNode * simulateGetField ( const string & fn, Context & context,
+                                            const LineInfo & at, const ExpressionPtr & sube ) const override {
+            auto subexpr = sube->simulate(context);
             // IS XXX
             auto isField = simulateIsField<false>(fn, context, at, subexpr);
             if ( isField ) {
@@ -318,12 +320,15 @@ namespace das {
             }
         }
 
-        virtual SimNode * simulateGetFieldR2V ( const string &, Context &, const LineInfo &, SimNode * ) const override {
+        virtual SimNode * simulateGetFieldR2V ( const string &, Context &,
+                                               const LineInfo &, const ExpressionPtr & ) const override {
             assert(0 && "implement");
             return nullptr;
         }
 
-        virtual SimNode * simulateSafeGetField ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr ) const override {
+        virtual SimNode * simulateSafeGetField ( const string & fn, Context & context,
+                                                const LineInfo & at, const ExpressionPtr & sube ) const override {
+            auto subexpr = sube->simulate(context);
             // IS XXX
             auto isField = simulateIsField<true>(fn, context, at, subexpr);
             if ( isField ) {
@@ -333,7 +338,9 @@ namespace das {
             return nullptr;
         }
 
-        virtual SimNode * simulateSafeGetFieldPtr ( const string & fn, Context & context, const LineInfo & at, SimNode * subexpr) const override {
+        virtual SimNode * simulateSafeGetFieldPtr ( const string & fn, Context & context,
+                                                   const LineInfo & at, const ExpressionPtr & sube) const override {
+            auto subexpr = sube->simulate(context);
             // AS XXX
             if (fn == "as_bool") {
                 return context.code->makeNode<SimNode_SafeAs<

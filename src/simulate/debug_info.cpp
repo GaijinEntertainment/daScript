@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/debug_info.h"
+#include "daScript/ast/ast.h"
 
 #include "daScript/misc/enums.h"
 #include "daScript/misc/arraytype.h"
@@ -177,7 +178,7 @@ namespace das
     string debug_type ( TypeInfo * info ) {
         TextWriter stream;
         if ( info->type==Type::tHandle ) {
-            stream << ((BasicAnnotation *)info->annotation)->name;
+            stream << info->annotation->name;
         } else if ( info->type==Type::tStructure ) {
             stream << info->structType->name;
         } else if ( info->type==Type::tPointer ) {

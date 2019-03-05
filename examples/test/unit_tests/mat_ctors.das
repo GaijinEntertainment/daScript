@@ -83,10 +83,14 @@ def test_r2v
     m[0] = float4(1,2,3,4)
     m[1].y = 6.
     m[2] = float4(5,6,7,8)
+    m.w = float4(9,10,11,12)
+    m.w.z = 111.
     assert(m[0]==float4(1,2,3,4))
     assert(m[1].y==6.)
     assert(m[1]==float4(0,6,0,0))
     assert(m[2]==float4(5,6,7,8))
+    assert(m.w.z==111.)
+    assert(m.w==float4(9,10,111,12))
     return true
 
 [export]

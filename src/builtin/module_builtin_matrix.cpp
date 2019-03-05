@@ -88,6 +88,12 @@ namespace das {
                                             const LineInfo & at, const ExpressionPtr & value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
+                if ( !value->type->isPointer() ) {
+                    auto tnode = value->trySimulate(context, field*sizeof(VecT), Type::none);
+                    if ( tnode ) {
+                        return tnode;
+                    }
+                }
                 return context.code->makeNode<SimNode_FieldDeref>(at,
                                                                   value->simulate(context),
                                                                   uint32_t(field*sizeof(VecT)));
@@ -100,6 +106,12 @@ namespace das {
             int field = GetField(na);
             if ( field!=-1 ) {
                 auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
+                if ( !value->type->isPointer() ) {
+                    auto tnode = value->trySimulate(context, field*sizeof(VecT), bt);
+                    if ( tnode ) {
+                        return tnode;
+                    }
+                }
                 return context.code->makeValueNode<SimNode_FieldDerefR2V>(bt,
                                                                           at,
                                                                           value->simulate(context),

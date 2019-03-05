@@ -154,9 +154,9 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context,
                                            const LineInfo & at, const ExpressionPtr & rv ) const  override {
         return context.code->makeNode<SimNode_IntFieldDerefR2V>(at,rv->simulate(context),context.code->allocateName(na));
-    }
-    virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * rv ) const  override {
-        return context.code->makeNode<SimNode_SafeIntFieldDeref>(at,rv,context.code->allocateName(na));
+    }    virtual SimNode * simulateSafeGetField ( const string & na, Context & context,
+                                            const LineInfo & at, const ExpressionPtr & rv ) const  override {
+        return context.code->makeNode<SimNode_SafeIntFieldDeref>(at,rv->simulate(context),context.code->allocateName(na));
     }
     virtual size_t getSizeOf() const override { return sizeof(IntFields); }
     virtual size_t getAlignOf() const override { return alignof(IntFields); }
