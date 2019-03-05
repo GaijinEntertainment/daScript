@@ -202,17 +202,19 @@ namespace das {
                             if (!ite->if_false) {
                                 if (ite->if_true->rtti_isBlock()) {
                                     auto tb = static_pointer_cast<ExprBlock>(ite->if_true);
-                                    auto lastE = tb->list.back();
-                                    if (lastE->rtti_isReturn() || lastE->rtti_isBreak()) {
-                                        vector<ExpressionPtr> tail;
-                                        tail.insert(tail.begin(), block->list.begin() + i + 1, block->list.end());
-                                        auto fb = make_shared<ExprBlock>();
-                                        fb->at = tail.front()->at;
-                                        swap(fb->list, tail);
-                                        ite->if_false = fb;
-                                        block->list.resize(i + 1);
-                                        reportFolding();
-                                        return Visitor::visit(block);
+                                    if ( tb->list.size() ) {
+                                        auto lastE = tb->list.back();
+                                        if (lastE->rtti_isReturn() || lastE->rtti_isBreak()) {
+                                            vector<ExpressionPtr> tail;
+                                            tail.insert(tail.begin(), block->list.begin() + i + 1, block->list.end());
+                                            auto fb = make_shared<ExprBlock>();
+                                            fb->at = tail.front()->at;
+                                            swap(fb->list, tail);
+                                            ite->if_false = fb;
+                                            block->list.resize(i + 1);
+                                            reportFolding();
+                                            return Visitor::visit(block);
+                                        }
                                     }
                                 }
                             }
