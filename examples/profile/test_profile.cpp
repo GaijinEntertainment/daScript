@@ -432,6 +432,7 @@ __noinline void testParticlesI(int count) {
 }
 
 __noinline void testTryCatch(Context * context) {
+    #if _CPPUNWIND || __cpp_exceptions
     int arr[1000];
     int cnt = 0;
     for (int j = 0; j != 100; ++j) {
@@ -450,6 +451,7 @@ __noinline void testTryCatch(Context * context) {
             return;
         }
     }
+    #endif
 }
 
 __noinline float testExpLoop(int count) {
@@ -464,12 +466,11 @@ __noinline float testExpLoop(int count) {
 #define days_per_year 365.24f
 
 struct planet {
-    float x, y, z;
-    float vx, vy, vz;
-    float mass;
+    float x, y, z; float pad;
+    float vx, vy, vz; float mass;
 };
 
-void advance(int nbodies, struct planet * bodies, float dt)
+void advance(int nbodies, struct planet * __restrict bodies, float dt)
 {
     int i, j;
 
@@ -481,7 +482,7 @@ void advance(int nbodies, struct planet * bodies, float dt)
             float dy = b->y - b2->y;
             float dz = b->z - b2->z;
             float distanced = dx * dx + dy * dy + dz * dz;
-            float distance = sqrt(distanced);
+            float distance = sqrtf(distanced);
             float mag = dt / (distanced * distance);
             b->vx -= dx * b2->mass * mag;
             b->vy -= dy * b2->mass * mag;
@@ -496,6 +497,32 @@ void advance(int nbodies, struct planet * bodies, float dt)
         b->x += dt * b->vx;
         b->y += dt * b->vy;
         b->z += dt * b->vz;
+    }
+}
+
+void advancev(int nbodies, struct planet * __restrict bodies, float dt)
+{
+    int i, j;
+    vec4f vdt = v_splats(dt);
+    struct planet *__restrict b = bodies, *be = bodies + nbodies;
+    do {
+        for (struct planet *__restrict b2 = b+1; b2 != be; ++b2) {
+            vec4f dx = v_sub(v_ld(&b->x), v_ld(&b2->x));
+            vec4f distanced = v_length3_sq_x(dx);
+            vec4f distance = v_sqrt_x(distanced);
+            vec4f mag = v_splat_x(v_div_x(vdt, v_mul_x(distanced, distance)));
+            vec4f bv = v_ld(&b->vx), b2v = v_ld(&b2->vx);
+            bv = v_perm_xyzd(v_sub(bv, v_mul(dx, v_mul(v_splat_w(b2v), mag))), bv);
+            b2v = v_perm_xyzd(v_add(b2v, v_mul(dx, v_mul(v_splat_w(bv), mag))), b2v);
+            v_st(&b->vx, bv);
+            v_st(&b2->vx, b2v);
+        }
+    } while(++b != be);
+
+    for (i = 0; i < nbodies; i++, ++bodies) {
+        bodies->x += dt * bodies->vx;
+        bodies->y += dt * bodies->vy;
+        bodies->z += dt * bodies->vz;
     }
 }
 
@@ -583,7 +610,7 @@ void testNBodiesInit() {
 
 void testNBodies(int32_t N) {
     for (int32_t n = 0; n != N; ++n) {
-        advance(NBODIES, bodies, 0.01f);
+        advancev(NBODIES, bodies, 0.01f);
     }
 }
 
