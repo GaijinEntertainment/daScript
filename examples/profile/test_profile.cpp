@@ -512,17 +512,17 @@ void advancev(int nbodies, struct planet * __restrict bodies, float dt)
             vec4f distance = v_sqrt_x(distanced);
             vec4f mag = v_splat_x(v_div_x(vdt, v_mul_x(distanced, distance)));
             vec4f bv = v_ld(&b->vx), b2v = v_ld(&b2->vx);
-            bv = v_perm_xyzd(v_sub(bv, v_mul(dx, v_mul(v_splat_w(b2v), mag))), bv);
-            b2v = v_perm_xyzd(v_add(b2v, v_mul(dx, v_mul(v_splat_w(bv), mag))), b2v);
+            bv = v_sub(bv, v_mul(dx, v_mul(v_splat_w(b2v), mag)));//.w will be zero, since dx.w is zero
+            b2v = v_add(b2v, v_mul(dx, v_mul(v_splat_w(bv), mag)));
             v_st(&b->vx, bv);
             v_st(&b2->vx, b2v);
         }
     } while(++b != be);
 
-    for (i = 0; i < nbodies; i++, ++bodies) {
-        bodies->x += dt * bodies->vx;
-        bodies->y += dt * bodies->vy;
-        bodies->z += dt * bodies->vz;
+    for (struct planet *__restrict b = bodies; b != be; ++b)
+    {
+        vec4f bx = v_ld(&b->x), bv = v_ld(&b->vx);
+        v_st(&b->x, v_madd(vdt, bv, bx));
     }
 }
 
@@ -564,12 +564,13 @@ void offset_momentum(int nbodies, struct planet * bodies)
 #define NBODIES 5
 struct planet bodies[NBODIES] = {
     {                               /* sun */
-        0, 0, 0, 0, 0, 0, solar_mass
+        0, 0, 0, 0, 0, 0, 0,solar_mass
     },
     {                               /* jupiter */
         4.84143144246472090e+00f,
         -1.16032004402742839e+00f,
         -1.03622044471123109e-01f,
+        0.f,
         1.66007664274403694e-03f * days_per_year,
         7.69901118419740425e-03f * days_per_year,
         -6.90460016972063023e-05f * days_per_year,
@@ -579,6 +580,7 @@ struct planet bodies[NBODIES] = {
         8.34336671824457987e+00f,
         4.12479856412430479e+00f,
         -4.03523417114321381e-01f,
+        0.f,
         -2.76742510726862411e-03f * days_per_year,
         4.99852801234917238e-03f * days_per_year,
         2.30417297573763929e-05f * days_per_year,
@@ -588,6 +590,7 @@ struct planet bodies[NBODIES] = {
         1.28943695621391310e+01f,
         -1.51111514016986312e+01f,
         -2.23307578892655734e-01f,
+        0.f,
         2.96460137564761618e-03f * days_per_year,
         2.37847173959480950e-03f * days_per_year,
         -2.96589568540237556e-05f * days_per_year,
@@ -597,6 +600,7 @@ struct planet bodies[NBODIES] = {
         1.53796971148509165e+01f,
         -2.59193146099879641e+01f,
         1.79258772950371181e-01f,
+        0.f,
         2.68067772490389322e-03f * days_per_year,
         1.62824170038242295e-03f * days_per_year,
         -9.51592254519715870e-05f * days_per_year,
