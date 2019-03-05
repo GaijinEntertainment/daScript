@@ -44,7 +44,7 @@ namespace das
             string      name;
             TypeDeclPtr decl;
             uint32_t    offset;
-            function<SimNode * (FactoryNodeType,Context &,const LineInfo &, SimNode *)>   factory;
+            function<SimNode * (FactoryNodeType,Context &,const LineInfo &, const ExpressionPtr &)>   factory;
         };
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml )
             : TypeAnnotation(n), mlib(&ml) { }
@@ -77,7 +77,8 @@ namespace das
                 return nullptr;
             }
         }
-        virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+        virtual SimNode * simulateGetField ( const string & na, Context & context,
+                                            const LineInfo & at, const ExpressionPtr & value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
                 return it->second.factory(FactoryNodeType::getField,context,at,value);
@@ -85,7 +86,8 @@ namespace das
                 return nullptr;
             }
         }
-        virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+        virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context,
+                                               const LineInfo & at, const ExpressionPtr & value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
                 auto itT = it->second.decl;
@@ -94,7 +96,8 @@ namespace das
                 return nullptr;
             }
         }
-        virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+        virtual SimNode * simulateSafeGetField ( const string & na, Context & context,
+                                                const LineInfo & at, const ExpressionPtr & value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
                 return it->second.factory(FactoryNodeType::safeGetField,context,at,value);
@@ -102,7 +105,8 @@ namespace das
                 return nullptr;
             }
         };
-        virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+        virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context,
+                                                   const LineInfo & at, const ExpressionPtr & value ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
                 return it->second.factory(FactoryNodeType::safeGetFieldPtr,context,at,value);
@@ -120,10 +124,10 @@ namespace das
             using resultType = decltype((((ManagedType *)0)->*PROP)());
             field.decl = makeType<resultType>(*mlib);
             field.offset = -1U;
-            field.factory = [](FactoryNodeType nt,Context & context,const LineInfo & at, SimNode * value) -> SimNode * {
+            field.factory = [](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
                 switch ( nt ) {
                     case FactoryNodeType::getField:
-                        return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value);
+                        return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value->simulate(context));
                     case FactoryNodeType::safeGetField:
                     case FactoryNodeType::safeGetFieldPtr:
                     case FactoryNodeType::getFieldR2V:
@@ -144,16 +148,24 @@ namespace das
             field.decl = pT;
             field.offset = offset;
             auto baseType = field.decl->baseType;
-            field.factory = [offset,baseType](FactoryNodeType nt,Context & context,const LineInfo & at, SimNode * value) -> SimNode * {
+            field.factory = [offset,baseType](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
+                if ( nt==FactoryNodeType::getField || nt==FactoryNodeType::getFieldR2V ) {
+                    auto r2vType = (nt==FactoryNodeType::getField) ? Type::none : baseType;
+                    auto tnode = value->trySimulate(context, offset, r2vType);
+                    if ( tnode ) {
+                        return tnode;
+                    }
+                }
+                auto simV = value->simulate(context);
                 switch ( nt ) {
                     case FactoryNodeType::getField:
-                        return context.code->makeNode<SimNode_FieldDeref>(at,value,offset);
+                        return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset);
                     case FactoryNodeType::getFieldR2V:
-                        return context.code->makeValueNode<SimNode_FieldDerefR2V>(baseType,at,value,offset);
+                        return context.code->makeValueNode<SimNode_FieldDerefR2V>(baseType,at,simV,offset);
                     case FactoryNodeType::safeGetField:
-                        return context.code->makeNode<SimNode_SafeFieldDeref>(at,value,offset);
+                        return context.code->makeNode<SimNode_SafeFieldDeref>(at,simV,offset);
                     case FactoryNodeType::safeGetFieldPtr:
-                        return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value,offset);
+                        return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,simV,offset);
                     default:
                         return nullptr;
                 }
@@ -299,8 +311,9 @@ namespace das
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
             return context.code->makeNode<SimNode_VectorIterator>(at, rv);
         }
-        virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
-            if ( na=="length" ) return context.code->makeNode<SimNode_VectorLength>(at,value);
+        virtual SimNode * simulateGetField ( const string & na, Context & context,
+                                            const LineInfo & at, const ExpressionPtr & value ) const override {
+            if ( na=="length" ) return context.code->makeNode<SimNode_VectorLength>(at,value->simulate(context));
             return nullptr;
         }
         TypeDeclPtr vecType;

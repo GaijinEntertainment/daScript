@@ -84,19 +84,26 @@ namespace das {
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return context.code->makeNode<SimNode_CopyValue<ThisMatrix>>(at, l, r);
         }
-        virtual SimNode * simulateGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+        virtual SimNode * simulateGetField ( const string & na, Context & context,
+                                            const LineInfo & at, const ExpressionPtr & value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.code->makeNode<SimNode_FieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
+                return context.code->makeNode<SimNode_FieldDeref>(at,
+                                                                  value->simulate(context),
+                                                                  uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
         }
-        virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+        virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context,
+                                               const LineInfo & at, const ExpressionPtr & value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
                 auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-                return context.code->makeValueNode<SimNode_FieldDerefR2V>(bt,at,value,uint32_t(field*sizeof(VecT)));
+                return context.code->makeValueNode<SimNode_FieldDerefR2V>(bt,
+                                                                          at,
+                                                                          value->simulate(context),
+                                                                          uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
@@ -108,18 +115,24 @@ namespace das {
             uint32_t ms = uint32_t(sizeof(ThisMatrix));
             return context.code->makeNode<SimNode_DeleteStructPtr>(at,sube,count,ms);
         }
-        virtual SimNode * simulateSafeGetField ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+        virtual SimNode * simulateSafeGetField ( const string & na, Context & context,
+                                                const LineInfo & at, const ExpressionPtr & value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.code->makeNode<SimNode_SafeFieldDeref>(at,value,uint32_t(field*sizeof(VecT)));
+                return context.code->makeNode<SimNode_SafeFieldDeref>(at,
+                                                                      value->simulate(context),
+                                                                      uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }
         };
-        virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context, const LineInfo & at, SimNode * value ) const override {
+        virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context,
+                                                   const LineInfo & at, const ExpressionPtr & value ) const override {
             int field = GetField(na);
             if ( field!=-1 ) {
-                return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value,uint32_t(field*sizeof(VecT)));
+                return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,
+                                                                         value->simulate(context),
+                                                                         uint32_t(field*sizeof(VecT)));
             } else {
                 return nullptr;
             }

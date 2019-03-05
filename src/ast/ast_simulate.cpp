@@ -1056,16 +1056,15 @@ namespace das
 
     SimNode * ExprField::simulate (Context & context) const {
         if ( !field ) {
-            auto simV = value->simulate(context);
             if ( r2v ) {
-                auto resN = annotation->simulateGetFieldR2V(name, context, at, simV);
+                auto resN = annotation->simulateGetFieldR2V(name, context, at, value);
                 if ( !resN ) {
                     context.thisProgram->error("integration error, simulateGetFieldR2V returned null",
                                                at, CompilationError::missing_node );
                 }
                 return resN;
             } else {
-                auto resN = annotation->simulateGetField(name, context, at, simV);
+                auto resN = annotation->simulateGetField(name, context, at, value);
                 if ( !resN ) {
                     context.thisProgram->error("integration error, simulateGetField returned null",
                                                at, CompilationError::missing_node );
@@ -1104,7 +1103,7 @@ namespace das
     SimNode * ExprSafeField::simulate (Context & context) const {
         if ( skipQQ ) {
             if ( annotation ) {
-                auto resN = annotation->simulateSafeGetFieldPtr(name, context, at, value->simulate(context));
+                auto resN = annotation->simulateSafeGetFieldPtr(name, context, at, value);
                 if ( !resN ) {
                     context.thisProgram->error("integration error, simulateSafeGetFieldPtr returned null",
                                                at, CompilationError::missing_node );
@@ -1120,7 +1119,12 @@ namespace das
             }
         } else {
             if ( annotation ) {
-                return annotation->simulateSafeGetField(name, context, at, value->simulate(context));
+                auto resN = annotation->simulateSafeGetField(name, context, at, value);
+                if ( !resN ) {
+                    context.thisProgram->error("integration error, simulateSafeGetField returned null",
+                                               at, CompilationError::missing_node );
+                }
+                return resN;
             } else {
                 return context.code->makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),field->offset);
             }
