@@ -70,6 +70,7 @@ namespace das {
         static __forceinline vec4f Max   ( vec4f a, vec4f b, Context & ) { return v_max(a,b); }
         static __forceinline vec4f Clamp ( vec4f a, vec4f r0, vec4f r1, Context & ) { return v_max(v_min(a,r1), r0); }
         static __forceinline vec4f Mad   ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,b,c); }
+        static __forceinline vec4f MadS  ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,v_perm_xxxx(b),c); }
         static __forceinline vec4f Lerp  ( vec4f a, vec4f b, vec4f t, Context & ) { return v_madd(v_sub(b,a),t,a); }
 
         static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
@@ -189,6 +190,11 @@ namespace das {
 
     MATH_FUN_OP2(ATan2)
     MATH_FUN_OP2(ATan2_est)
+
+    DEFINE_POLICY(MadS)     // vector_a*scalar_b + vector_c
+    IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,float2);
+    IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,float3);
+    IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,float4);
 
     // trig types
     template <typename TT>
@@ -368,6 +374,11 @@ namespace das {
             addFunctionOp3<float2>(*this,lib);
             addFunctionOp3<float3>(*this,lib);
             addFunctionOp3<float4>(*this,lib);
+
+            addFunction( make_shared<BuiltInFn<Sim_MadS<float2>,   float2, float2,  float,  float2> >("mad",    lib) );
+            addFunction( make_shared<BuiltInFn<Sim_MadS<float3>,   float3, float3,  float,  float3> >("mad",    lib) );
+            addFunction( make_shared<BuiltInFn<Sim_MadS<float4>,   float4, float4,  float,  float4> >("mad",    lib) );
+
             //common
             addFunctionCommon<float>(*this, lib);
             addFunctionCommon<float2>(*this,lib);

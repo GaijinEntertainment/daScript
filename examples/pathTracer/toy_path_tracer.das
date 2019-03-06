@@ -68,9 +68,9 @@ def Camera(lookFrom,lookAt,vup:float3;vfov,aspect,aperture,focusDist:float)
 
 def getRay(this:Camera;s,t:float)
     let rd = this.lensRadius * randomInUnitDisk(RAND_SEED)
-    let offset = this.u*rd.x + this.v*rd.y
+    let offset = mad(this.u,rd.x,this.v*rd.y)
     return [[Ray orig = this.origin + offset,
-        dir = normalize(this.lowerLeftCorner + s*this.horizontal + t*this.vertical - this.origin - offset) ]]
+        dir = normalize(mad(this.vertical,t,mad(this.horizontal,s,this.lowerLeftCorner)) - this.origin - offset) ]]
 
 enum Type
     Lambert
@@ -122,8 +122,8 @@ def hitSpheres(r:Ray const;tMin,tMax:float;outHit:Hit)
     for sph in s_Spheres
         let co = sph.center - r.orig
         let nb = dot(co,r.dir)
-        let c = lengthSq(co) - sph.radius2
-        let discr = nb*nb - c
+        let c = sph.radius2 - lengthSq(co)
+        let discr = mad(nb,nb,c)
         if discr > 0.
             let discrSq = sqrt(discr)
             let t = nb - discrSq
@@ -173,7 +173,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         return true
     elif mat.mtype == Type Metal
         let refl = reflect(r_in.dir,rec.normal)
-        scattered = [[Ray orig=rec.pos, dir=normalize(refl + mat.roughness*randomInUnitSphere(RAND_SEED))]]
+        scattered = [[Ray orig=rec.pos, dir=normalize(mad(randomInUnitSphere(RAND_SEED),mat.roughness,refl))]]
         attenuation = mat.albedo
         return dot(scattered.dir,rec.normal) > 0.
     elif mat.mtype == Type Dielectric
