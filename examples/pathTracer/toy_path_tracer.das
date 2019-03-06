@@ -21,12 +21,15 @@ let
 def schlick(cosine,ri:float)
     let r0 = (1. - ri) / (1. + ri)
     r0 = r0 * r0
-    return lerp ( r0, 1., pow(1.-cosine,5.) )
-    // return r0 + (1. - r0) * pow(1. - cosine, 5.);
+    let pp = 1.-cosine
+    let pp2 = pp*pp
+    return lerp ( r0, 1., pp*pp2*pp2 )  // pow(pp,5.)
 
 struct Sphere
     center : float3
     radius : float
+    radius2 : float
+    iRadius : float
 
 struct Ray
     orig : float3
@@ -119,7 +122,7 @@ def hitSpheres(r:Ray const;tMin,tMax:float;outHit:Hit)
     for sph in s_Spheres
         let co = sph.center - r.orig
         let nb = dot(co,r.dir)
-        let c = lengthSq(co) - sph.radius*sph.radius    // todo: sqRadius?
+        let c = lengthSq(co) - sph.radius2
         let discr = nb*nb - c
         if discr > 0.
             let discrSq = sqrt(discr)
@@ -132,7 +135,7 @@ def hitSpheres(r:Ray const;tMin,tMax:float;outHit:Hit)
         ++ i
     if id != -1
         outHit.pos = pointAt(r,hitT)
-        outHit.normal = (outHit.pos - s_Spheres[id].center) / s_Spheres[id].radius  // todo: invRadius?
+        outHit.normal = (outHit.pos - s_Spheres[id].center) * s_Spheres[id].iRadius
         outHit.t = hitT
     return id
 
@@ -151,9 +154,9 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
             let sw = normalize(s.center-rec.pos)
             let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
             let sv = cross(sw,su)
-            let cosAMax = sqrt(max(0.,1.-s.radius*s.radius/lengthSq(rec.pos-s.center)))
+            let cosAMax = sqrt(max(0.,1.-s.radius*s.radius/distanceSq(rec.pos,s.center)))
             let eps = randomFloat4(RAND_SEED)
-            let cosA = 1. - eps.x + eps.x * cosAMax
+            let cosA = mad(eps.x,cosAMax,1.) - eps.x
             let sinA = sqrt ( 1. - cosA*cosA )
             let phi = 2. * PI * eps.y
             let l = su*cos(phi)*sinA + sv*sin(phi)*sinA + sw*cosA
@@ -218,7 +221,7 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;doMaterialE:bool = true)
                 if !doMaterialE
                     matE = float3(0)
                 doMaterialE = mat.mtype != Type Lambert
-            return matE + lightE + attenuation * trace(scattered,depth+1,inoutRayCount,doMaterialE)
+            return  mad ( attenuation, trace(scattered,depth+1,inoutRayCount,doMaterialE), matE + lightE )
         else
             return matE
     else
@@ -253,8 +256,14 @@ def draw(time:float;frameCount,screenWidth,screenHeight:int;backbuffer:array<flo
     rayCount += trace(screenWidth,screenHeight,frameCount,backbuffer,cam)
     outRayCount = rayCount
 
+def prepare
+    for sph in s_Spheres
+        sph.radius2 = sph.radius * sph.radius
+        sph.iRadius = 1. / sph.radius
+
 [export]
 def test
+    prepare()
     let width = 320
     let height = 240
     let kFrameCount = 16
