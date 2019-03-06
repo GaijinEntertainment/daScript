@@ -291,6 +291,10 @@ namespace das {
     __forceinline double datan (double a){return atan(a);}
     __forceinline double datan2(double a,double b){return atan2(a,b);}
 
+    // __forceinline float2 normalize2(float2 a){vec4f v = v_norm2(v_ldu_half(&a.x)); return *(float2*)&v;}
+    __forceinline float3 normalize3(float3 a){vec4f v = v_norm3(v_ldu(&a.x)); return *(float3*)&v;}
+    __forceinline float4 normalize4(float4 a){vec4f v = v_norm4(v_ldu(&a.x)); return *(float4*)&v;}
+
     class Module_Math : public Module {
     public:
         Module_Math() : Module("math") {
@@ -348,6 +352,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(dot4)>(*this, lib, "dot", SideEffects::none);
 
             addExtern<DAS_BIND_FUN(cross3)>(*this, lib, "cross", SideEffects::none);
+
+            // addExtern<DAS_BIND_FUN(normalize2)>(*this, lib, "normalize", SideEffects::none);
+            addExtern<DAS_BIND_FUN(normalize3)>(*this, lib, "normalize", SideEffects::none);
+            addExtern<DAS_BIND_FUN(normalize4)>(*this, lib, "normalize", SideEffects::none);
 
             addExtern<DAS_BIND_FUN(length2)>(*this, lib, "length", SideEffects::none);
             addExtern<DAS_BIND_FUN(length3)>(*this, lib, "length", SideEffects::none);

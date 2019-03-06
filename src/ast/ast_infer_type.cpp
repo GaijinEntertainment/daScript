@@ -1601,7 +1601,7 @@ namespace das {
                 if ( !expr->left->type->isSameType(*expr->right->type,false) )
                     error("operations on incompatible pointers are prohibited", expr->at);
             if ( expr->left->type->isEnum() && expr->right->type->isEnum() )
-                if ( !expr->left->type->isSameType(*expr->right->type,false) )
+                if ( !expr->left->type->isSameType(*expr->right->type,false,false) )
                     error("operations on different enumerations are prohibited", expr->at);
             vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
             auto functions = findMatchingFunctions(expr->op, types);
