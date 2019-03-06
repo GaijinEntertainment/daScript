@@ -1,6 +1,7 @@
 // options log=true, logNodes=true
 
 require math
+require testProfile
 
 let
     PI : float const = 3.14159265358979323846
@@ -266,7 +267,7 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;state:uint&;doMaterialE:bool = true
         let t = 0.5 * (unitDir + float3(1.))
         return ((float3(1.0) - t) * float3(1.) + t * float3(0.5, 0.7, 1.0)) * 0.3
 
-def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float4>;cam:Camera)
+def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:Camera)
     let invWidth = 1. / float(screenWidth)
     let invHeight = 1. / float(screenHeight)
     let lerpFac = float(frameCount) / float(frameCount + 1)
@@ -284,12 +285,11 @@ def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float4>;cam:C
                 let r = getRay(cam, u, v, state)
                 col += trace(r, 0, rayCount, state)
             col *= 1. / float(DO_SAMPLES_PER_PIXEL)
-            let bb : float4 & = backbuffer[backbufferIdx]
-            bb.xyz = bb.xyz * lerpFac + col * (1. - lerpFac)
+            backbuffer[backbufferIdx] = backbuffer[backbufferIdx] * lerpFac + col * (1. - lerpFac)
             backbufferIdx ++
     return rayCount
 
-def draw(time:float;frameCount,screenWidth,screenHeight:int;backbuffer:array<float4>;outRayCount:int&)
+def draw(time:float;frameCount,screenWidth,screenHeight:int;backbuffer:array<float3>;outRayCount:int&)
     let rayCount = 0
     if DO_ANIMATE
         s_Spheres[1].center.y = cos(time)+1.0
@@ -304,11 +304,14 @@ def draw(time:float;frameCount,screenWidth,screenHeight:int;backbuffer:array<flo
 
 [export]
 def test
+
+    // UNCOMMENT THIS FOR THE TEST TO RUN
     return true
+
     let width = 320
     let height = 240
     let kFrameCount = 30
-    let backbuffer : array<float4>
+    let backbuffer : array<float3>
     resize(backbuffer,width*height)
     let s = 0.
     let totalRayCount = 0
@@ -324,5 +327,6 @@ def test
         let mrayS = float(totalRayCount) / s * 1.0e-6f
         let mrayFr = float(rayCount) * 10e-6f
         print("{ms}ms\t{mrayS} Mrays/s\t{mrayFr} Mrays/frame\tframes {frames}\n")
+        // saveTga("frame_{i}.tga",backbuffer,width,height)
     return true
 
