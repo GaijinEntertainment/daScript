@@ -94,7 +94,7 @@ namespace das {
         }
         virtual SimNode * sub ( SimNode * node, const char *  ) override {
             crlf();
-            return node->visit(*this);
+            return node ? node->visit(*this) : nullptr;
         }
         TextWriter & ss;
         int tab = 0;
