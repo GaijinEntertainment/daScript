@@ -1,4 +1,4 @@
-options log=true, logNodes=true
+// options log=true, logNodes=true
 
 require math
 require PathTracerHelper
