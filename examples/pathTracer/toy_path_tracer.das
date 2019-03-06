@@ -263,7 +263,7 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;state:uint&;doMaterialE:bool = true
     else
         let unitDir = r.dir
         let t = 0.5 * (unitDir + float3(1.))
-        return ((float3(1.0) - t) * float3(1.) + t * float3(0.5, 0.7, 1.0)) * 0.3
+        return  lerp(0.3*float3(1.), 0.3*float3(0.5, 0.7, 1.0), t)
 
 def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:Camera)
     let invWidth = 1. / float(screenWidth)
@@ -299,7 +299,7 @@ def draw(time:float;frameCount,screenWidth,screenHeight:int;backbuffer:array<flo
 def test
     let width = 320
     let height = 240
-    let kFrameCount = 4
+    let kFrameCount = 16
     let backbuffer : array<float3>
     resize(backbuffer,width*height)
     let s = 0.
