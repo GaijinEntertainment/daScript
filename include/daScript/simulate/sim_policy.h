@@ -61,9 +61,13 @@ namespace  das {
         static __forceinline TT BinAnd ( TT a, TT b, Context & ) { return a & b; }
         static __forceinline TT BinOr  ( TT a, TT b, Context & ) { return a | b; }
         static __forceinline TT BinXor ( TT a, TT b, Context & ) { return a ^ b; }
+        static __forceinline TT BinShl ( TT a, TT b, Context & ) { return a << b; }
+        static __forceinline TT BinShr ( TT a, TT b, Context & ) { return a >> b; }
         static __forceinline void SetBinAnd ( TT & a, TT b, Context & ) { a &= b; }
         static __forceinline void SetBinOr  ( TT & a, TT b, Context & ) { a |= b; }
         static __forceinline void SetBinXor ( TT & a, TT b, Context & ) { a ^= b; }
+        static __forceinline void SetBinShl ( TT & a, TT b, Context & ) { a <<= b; }
+        static __forceinline void SetBinShr ( TT & a, TT b, Context & ) { a >>= b; }
         static __forceinline void SetMod    ( TT & a, TT b, Context & ) { a %= b; }
     };
 

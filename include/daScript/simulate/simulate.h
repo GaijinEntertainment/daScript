@@ -2654,9 +2654,13 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_POLICY(BinAnd);
     DEFINE_POLICY(BinOr);
     DEFINE_POLICY(BinXor);
+    DEFINE_POLICY(BinShl);
+    DEFINE_POLICY(BinShr);
     DEFINE_POLICY(SetBinAnd);
     DEFINE_POLICY(SetBinOr);
     DEFINE_POLICY(SetBinXor);
+    DEFINE_POLICY(SetBinShl);
+    DEFINE_POLICY(SetBinShr);
     // boolean and, or, xor
     DEFINE_POLICY(SetBoolAnd);
     DEFINE_POLICY(SetBoolOr);

@@ -133,8 +133,12 @@ namespace  das {
         mod.addFunction( make_shared<BuiltInFn<Sim_BinAnd<TT>,     TT,   TT,  TT>  >("&",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BinOr<TT>,      TT,   TT,  TT>  >("|",      lib) );
         mod.addFunction( make_shared<BuiltInFn<Sim_BinXor<TT>,     TT,   TT,  TT>  >("^",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinAnd<TT>,  void, TT,  TT&> >("&=",     lib)->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinOr<TT>,   void, TT,  TT&> >("|=",     lib)->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinXor<TT>,  void, TT,  TT&> >("^=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinShl<TT>,     TT,   TT,  TT>  >("<<",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinShr<TT>,     TT,   TT,  TT>  >(">>",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinAnd<TT>,  void, TT&, TT>  >("&=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinOr<TT>,   void, TT&, TT>  >("|=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinXor<TT>,  void, TT&, TT>  >("^=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinShl<TT>,  void, TT&, TT>  >("<<=",    lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinShr<TT>,  void, TT&, TT>  >(">>=",    lib)->setSideEffects(SideEffects::modifyArgument) );
     }
 }

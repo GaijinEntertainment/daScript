@@ -118,8 +118,8 @@
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
-%token  ANDEQU      OREQU       XOREQU
-%token  ADDADD      SUBSUB      LEEQU
+%token  ANDEQU      OREQU       XOREQU      SHL         SHR
+%token  ADDADD      SUBSUB      LEEQU       SHLEQU      SHREQU
 %token  GREQU       EQUEQU      NOTEQU      RARROW      LARROW
 %token  QQ          QDOT        LPIPE       LBPIPE      RPIPE
 
@@ -205,13 +205,14 @@
 
 /* operation precedence*/
 %left       ','
-%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW
+%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW SHLEQU SHREQU
 %right      '?' ':'
 %left       '|'
 %left       '^'
 %left       '&'
 %left       EQUEQU NOTEQU
 %left       '<' '>' LEEQU GREQU
+%left       SHL SHR
 %left       '-' '+'
 %left       '*' '/' '%'
 %left       QQ
@@ -490,6 +491,10 @@ function_name
     |   SUBSUB _OPERATOR  { $$ = new string("--"); }
     |   _OPERATOR ADDADD  { $$ = new string("+++"); }
     |   _OPERATOR SUBSUB  { $$ = new string("---"); }
+    |   _OPERATOR SHL     { $$ = new string("<<"); }
+    |   _OPERATOR SHR     { $$ = new string(">>"); }
+    |   _OPERATOR SHLEQU  { $$ = new string("<<="); }
+    |   _OPERATOR SHREQU  { $$ = new string(">>="); }
     ;
 
 function_declaration
@@ -847,6 +852,8 @@ expr_assign
     |   expr[left] MULEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] DIVEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"/=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] MODEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"%=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] SHLEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"<<=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] SHREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),">>=", ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
 /* a->b(args) is short for invoke(a.b, a, args)  */
@@ -878,6 +885,8 @@ expr
     |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),"+",ExpressionPtr($subexpr)); }
     |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),"-",ExpressionPtr($subexpr)); }
     |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] SHL[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"<<", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] SHR[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),">>", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '+'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '-'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"-", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '*'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*", ExpressionPtr($left), ExpressionPtr($right)); }
