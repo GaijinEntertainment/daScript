@@ -145,7 +145,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         let target = rec.pos + rec.normal + randomUnitVector(RAND_SEED)
         scattered = [[Ray orig=rec.pos, dir=normalize(target - rec.pos)]]
         attenuation = mat.albedo
-        let s = s_Spheres[LIGHT_SPHERE_ID]
+        let s : Sphere & = s_Spheres[LIGHT_SPHERE_ID]
         let sw = normalize(s.center-rec.pos)
         let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
         let sv = cross(sw,su)
@@ -161,10 +161,8 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         ++inoutRayCount
         let ray = [[Ray orig=rec.pos, dir=l]]
         if hitWorld(ray,kMinT,kMaxT,lightHit,hitID) & hitID==LIGHT_SPHERE_ID
-            let omega = mad(-2.,cosAMax,2.)
-            let rdir = r_in.dir
-            let nl = dot(rec.normal,rdir) < 0.  ? rec.normal : -rec.normal
-            outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( saturate(dot(l,nl))*omega )
+            let nl = dot(rec.normal,r_in.dir) < 0. ? rec.normal : -rec.normal
+            outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( saturate(dot(l,nl))*mad(-2.,cosAMax,2.) )
         return true
     elif mat.mtype == Type Metal
         let refl = reflect(r_in.dir,rec.normal)
@@ -172,28 +170,21 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         attenuation = mat.albedo
         return dot(scattered.dir,rec.normal) > 0.
     elif mat.mtype == Type Dielectric
-        let outwardN : float3
-        let rdir = r_in.dir
-        let refl = reflect(rdir, rec.normal)
-        let nint : float
         attenuation = float3(1)
         let refr : float3
         let reflProb : float
-        let cosine : float
-        if dot(rdir,rec.normal)>0.
-            outwardN = -rec.normal
-            nint = mat.ri
-            cosine = mat.ri * dot(rdir, rec.normal)
+        if dot(r_in.dir,rec.normal)>0.
+            if refract(r_in.dir,-rec.normal,mat.ri,refr)
+                reflProb = schlick(mat.ri * dot(r_in.dir, rec.normal),mat.ri)
+            else
+                reflProb = 1.
         else
-            outwardN = rec.normal
-            nint = 1.0 / mat.ri
-            cosine = - dot(rdir, rec.normal)
-        if refract(rdir,outwardN,nint,refr)
-            reflProb = schlick(cosine,mat.ri)
-        else
-            reflProb = 1.
+            if refract(r_in.dir,rec.normal,1.0/mat.ri,refr)
+                reflProb = schlick(-dot(r_in.dir, rec.normal),mat.ri)
+            else
+                reflProb = 1.
         if randomFloat(RAND_SEED) < reflProb
-            scattered = [[Ray orig=rec.pos, dir=normalize(refl)]]
+            scattered = [[Ray orig=rec.pos, dir=normalize(reflect(r_in.dir, rec.normal))]]
         else
             scattered = [[Ray orig=rec.pos, dir=normalize(refr)]]
     else
