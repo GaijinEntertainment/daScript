@@ -15,6 +15,9 @@ let
     DO_LIGHT_SAMPLING : bool const = true
     LIGHT_SPHERE_ID : int const = 8
 
+let
+    RAND_SEED = randomSeed(1234)
+
 def schlick(cosine,ri:float)
     let r0 = (1. - ri) / (1. + ri)
     r0 = r0 * r0
@@ -60,8 +63,8 @@ def Camera(lookFrom,lookAt,vup:float3;vfov,aspect,aperture,focusDist:float)
     this.vertical = 2. * halfHeight * focusDist * this.v
     return this
 
-def getRay(this:Camera;s,t:float;state:int4&)
-    let rd = this.lensRadius * randomInUnitDisk(state)
+def getRay(this:Camera;s,t:float)
+    let rd = this.lensRadius * randomInUnitDisk(RAND_SEED)
     let offset = this.u*rd.x + this.v*rd.y
     return [[Ray orig = this.origin + offset,
         dir = normalize(this.lowerLeftCorner + s*this.horizontal + t*this.vertical - this.origin - offset) ]]
@@ -137,10 +140,10 @@ def hitWorld(r:Ray const;tMin,tMax:float;outHit:Hit;outID:int&)
     outID = hitSpheres(r,tMin,tMax,outHit)
     return outID != -1
 
-def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; scattered:Ray; outLightE:float3&; inoutRayCount:int&; state:int4&)
+def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; scattered:Ray; outLightE:float3&; inoutRayCount:int&)
     outLightE = float3(0)
     if mat.mtype==Type Lambert
-        let target = rec.pos + rec.normal + randomUnitVector(state)
+        let target = rec.pos + rec.normal + randomUnitVector(RAND_SEED)
         scattered = [[Ray orig=rec.pos, dir=normalize(target - rec.pos)]]
         attenuation = mat.albedo
         if DO_LIGHT_SAMPLING
@@ -149,11 +152,10 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
             let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
             let sv = cross(sw,su)
             let cosAMax = sqrt(max(0.,1.-s.radius*s.radius/lengthSq(rec.pos-s.center)))
-            let eps1 = randomFloat(state)
-            let eps2 = randomFloat(state)
-            let cosA = 1. - eps1 + eps1 * cosAMax
+            let eps = randomFloat4(RAND_SEED)
+            let cosA = 1. - eps.x + eps.x * cosAMax
             let sinA = sqrt ( 1. - cosA*cosA )
-            let phi = 2. * PI * eps2
+            let phi = 2. * PI * eps.y
             let l = su*cos(phi)*sinA + sv*sin(phi)*sinA + sw*cosA
             let lightHit : Hit
             let hitID = 0
@@ -163,11 +165,11 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
                 let omega = 2.*PI*(1.-cosAMax)
                 let rdir = r_in.dir
                 let nl = dot(rec.normal,rdir) < 0.  ? rec.normal : -rec.normal
-                outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( max(0.,dot(l,nl))*omega/PI )
+                outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( max(0.,dot(l,nl))*omega*(1./PI) )
         return true
     elif mat.mtype == Type Metal
         let refl = reflect(r_in.dir,rec.normal)
-        scattered = [[Ray orig=rec.pos, dir=normalize(refl + mat.roughness*randomInUnitSphere(state))]]
+        scattered = [[Ray orig=rec.pos, dir=normalize(refl + mat.roughness*randomInUnitSphere(RAND_SEED))]]
         attenuation = mat.albedo
         return dot(scattered.dir,rec.normal) > 0.
     elif mat.mtype == Type Dielectric
@@ -191,7 +193,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
             reflProb = schlick(cosine,mat.ri)
         else
             reflProb = 1.
-        if randomFloat(state) < reflProb
+        if randomFloat(RAND_SEED) < reflProb
             scattered = [[Ray orig=rec.pos, dir=normalize(refl)]]
         else
             scattered = [[Ray orig=rec.pos, dir=normalize(refr)]]
@@ -201,7 +203,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         return false
     return true
 
-def trace(r:Ray;depth:int;inoutRayCount:int&;state:int4&;doMaterialE:bool = true)
+def trace(r:Ray;depth:int;inoutRayCount:int&;doMaterialE:bool = true)
     let rec : Hit
     let id = 0
     ++inoutRayCount
@@ -211,12 +213,12 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;state:int4&;doMaterialE:bool = true
         let lightE : float3
         let mat : Material & = s_SphereMats[id]
         let matE = mat.emissive
-        if depth<kMaxDepth & scatter(mat,r,rec,attenuation,scattered,lightE,inoutRayCount,state)
+        if depth<kMaxDepth & scatter(mat,r,rec,attenuation,scattered,lightE,inoutRayCount)
             if DO_LIGHT_SAMPLING
                 if !doMaterialE
                     matE = float3(0)
                 doMaterialE = mat.mtype != Type Lambert
-            return matE + lightE + attenuation * trace(scattered,depth+1,inoutRayCount,state,doMaterialE)
+            return matE + lightE + attenuation * trace(scattered,depth+1,inoutRayCount,doMaterialE)
         else
             return matE
     else
@@ -229,14 +231,13 @@ def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:C
     let lerpFac = float3(float(frameCount) / float(frameCount + 1))
     let rayCount = 0
     let backbufferIdx = 0
-    let state = randomSeed(frameCount*6271)
     for y in range(0,screenHeight)
         for x in range(0,screenWidth)
             let col = float3(0)
             for s in range(0,DO_SAMPLES_PER_PIXEL)
-                let uv = (float2(x,y) + randomFloat4(state).xy) * invWH
-                let r = getRay(cam, uv.x, uv.y, state)
-                col += trace(r, 0, rayCount, state)
+                let uv = (float2(x,y) + randomFloat4(RAND_SEED).xy) * invWH
+                let r = getRay(cam, uv.x, uv.y)
+                col += trace(r, 0, rayCount)
             col *= 1. / float(DO_SAMPLES_PER_PIXEL)
             backbuffer[backbufferIdx] = lerp(col, backbuffer[backbufferIdx], lerpFac)
             backbufferIdx ++
