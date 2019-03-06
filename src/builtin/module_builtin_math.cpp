@@ -307,6 +307,40 @@ namespace das {
         cv = cos(a);
     }
 
+    // def reflect(v,n:float3)
+    //  return v - float(2.) * dot(v, n) * n
+    __forceinline float3 reflect ( float3 vv, float3 nn ) {
+        vec4f v = v_ldu(&vv.x);
+        vec4f n = v_ldu(&nn.x);
+        vec4f t = v_mul(v_dot3(v,n),n);
+        vec4f res = v_sub(v, v_add(t,t));
+        return *((float3 *)&res);
+    }
+
+    // def refract(v,n:float3;nint:float;outRefracted:float3&)
+    // let dt = dot(v,n)
+    // let discr = 1. - nint*nint*(1.-dt*dt)
+    // if discr > 0.
+    //     outRefracted = nint*(v-n*dt)-n*sqrt(discr)
+    //     return true
+    // return false
+    __forceinline bool refract ( float3 vv, float3 nn, float nint, float3 & outRefracted ) {
+        vec4f v = v_ldu(&vv.x);
+        vec4f n = v_ldu(&nn.x);
+        vec4f dtv = v_dot3(v,n);
+        float dt = v_extract_x(dtv);
+        float discr = 1.0f - nint*nint*(1.0f - dt*dt);
+        if ( discr > 0.0f ) {
+            vec4f nintv = v_splats(nint);
+            vec4f sqrt_discr = v_perm_xxxx(v_sqrt_x(v_splats(discr)));
+            vec4f outR = v_sub(v_mul(nintv,v_sub(v,v_mul(n,dtv))), v_mul(n,sqrt_discr));
+            outRefracted = *((float3 *)&outR);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     class Module_Math : public Module {
     public:
         Module_Math() : Module("math") {
@@ -398,8 +432,11 @@ namespace das {
             addExtern<DAS_BIND_FUN(datan)>(*this, lib, "atan", SideEffects::none);
             addExtern<DAS_BIND_FUN(datan2)>(*this, lib, "atan2", SideEffects::none);
 
-            addExtern<DAS_BIND_FUN(sincosF)>(*this, lib, "sincos", SideEffects::none);
-            addExtern<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::none);
+            addExtern<DAS_BIND_FUN(sincosF)>(*this, lib, "sincos", SideEffects::modifyArgument);
+            addExtern<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::modifyArgument);
+
+            addExtern<DAS_BIND_FUN(reflect)>(*this, lib, "reflect", SideEffects::none);
+            addExtern<DAS_BIND_FUN(refract)>(*this, lib, "refract", SideEffects::modifyArgument);
 
             addFunctionCommonConversion<int, float>(*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);

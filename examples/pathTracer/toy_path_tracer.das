@@ -16,20 +16,10 @@ let
     LIGHT_SPHERE_ID : int const = 8
 
 def schlick(cosine,ri:float)
-    let r0 = (1. - ri) / (1. + ri);
-    r0 = r0 * r0;
-    return r0 + (1. - r0) * pow(1. - cosine, 5.);
-
-def reflect(v,n)
-    return v - float(2.) * dot(v, n) * n
-
-def refract(v,n:float3;nint:float;outRefracted:float3&)
-    let dt = dot(v,n)
-    let discr = 1. - nint*nint*(1.-dt*dt)
-    if discr > 0.
-        outRefracted = nint*(v-n*dt)-n*sqrt(discr)
-        return true
-    return false
+    let r0 = (1. - ri) / (1. + ri)
+    r0 = r0 * r0
+    return lerp ( r0, 1., pow(1.-cosine,5.) )
+    // return r0 + (1. - r0) * pow(1. - cosine, 5.);
 
 struct Sphere
     center : float3
@@ -172,18 +162,15 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
             if hitWorld(ray,kMinT,kMaxT,lightHit,hitID) & hitID==LIGHT_SPHERE_ID
                 let omega = 2.*PI*(1.-cosAMax)
                 let rdir = r_in.dir
-                // todo: assert is_normalized(rdir)
                 let nl = dot(rec.normal,rdir) < 0.  ? rec.normal : -rec.normal
                 outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( max(0.,dot(l,nl))*omega/PI )
         return true
     elif mat.mtype == Type Metal
-        // Debug.Assert(r_in.dir.IsNormalized); Debug.Assert(rec.normal.IsNormalized);
         let refl = reflect(r_in.dir,rec.normal)
         scattered = [[Ray orig=rec.pos, dir=normalize(refl + mat.roughness*randomInUnitSphere(state))]]
         attenuation = mat.albedo
         return dot(scattered.dir,rec.normal) > 0.
     elif mat.mtype == Type Dielectric
-        // Debug.Assert(r_in.dir.IsNormalized); Debug.Assert(rec.normal.IsNormalized);
         let outwardN : float3
         let rdir = r_in.dir
         let refl = reflect(rdir, rec.normal)
@@ -238,8 +225,7 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;state:int4&;doMaterialE:bool = true
         return  lerp(0.3*float3(1.), 0.3*float3(0.5, 0.7, 1.0), t)
 
 def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:Camera)
-    let invWidth = 1. / float(screenWidth)
-    let invHeight = 1. / float(screenHeight)
+    let invWH = float(1) / float2(screenWidth, screenHeight)
     let lerpFac = float3(float(frameCount) / float(frameCount + 1))
     let rayCount = 0
     let backbufferIdx = 0
@@ -248,9 +234,8 @@ def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:C
         for x in range(0,screenWidth)
             let col = float3(0)
             for s in range(0,DO_SAMPLES_PER_PIXEL)
-                let u = (float(x) + randomFloat(state)) * invWidth
-                let v = (float(y) + randomFloat(state)) * invHeight
-                let r = getRay(cam, u, v, state)
+                let uv = (float2(x,y) + randomFloat4(state).xy) * invWH
+                let r = getRay(cam, uv.x, uv.y, state)
                 col += trace(r, 0, rayCount, state)
             col *= 1. / float(DO_SAMPLES_PER_PIXEL)
             backbuffer[backbufferIdx] = lerp(col, backbuffer[backbufferIdx], lerpFac)
