@@ -542,10 +542,14 @@ namespace das {
                     var->type = varT;
                     reportGenericInfer();
                 }
-            } else if ( !var->type->isSameType(*var->init->type,false) ) {
+            } else if ( !var->type->isSameType(*var->init->type,false,false) ) {
                 error("global variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
+            } else if ( !var->type->isConst() && var->init->type->isConst() ) {
+                error("global variable initialization type mismatch, const matters "
+                      + var->type->describe() + " = " + var->init->type->describe(), var->at,
+                      CompilationError::invalid_initialization_type);
             } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
                 error("this global variable can't be initialized at all", var->at,
                     CompilationError::invalid_initialization_type);
