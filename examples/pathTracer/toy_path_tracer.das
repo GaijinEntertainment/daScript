@@ -12,7 +12,6 @@ let
 let
     DO_LENGTH : int const = 9
     DO_SAMPLES_PER_PIXEL : int const = 4
-    DO_LIGHT_SAMPLING : bool const = true
     LIGHT_SPHERE_ID : int const = 8
 
 let
@@ -21,9 +20,7 @@ let
 def schlick(cosine,ri:float)
     let r0 = (1. - ri) / (1. + ri)
     r0 = r0 * r0
-    let pp = 1.-cosine
-    let pp2 = pp*pp
-    return lerp ( r0, 1., pp*pp2*pp2 )  // pow(pp,5.)
+    return lerp ( r0, 1., pow(1.-cosine,5.))
 
 struct Sphere
     center : float3
@@ -149,27 +146,26 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         let target = rec.pos + rec.normal + randomUnitVector(RAND_SEED)
         scattered = [[Ray orig=rec.pos, dir=normalize(target - rec.pos)]]
         attenuation = mat.albedo
-        if DO_LIGHT_SAMPLING
-            let s = s_Spheres[LIGHT_SPHERE_ID]
-            let sw = normalize(s.center-rec.pos)
-            let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
-            let sv = cross(sw,su)
-            let cosAMax = sqrt(saturate(1.-s.radius*s.radius*invDistanceSq(rec.pos,s.center)))
-            let eps = randomFloat4(RAND_SEED)
-            let cosA = mad(eps.x,cosAMax,1.) - eps.x
-            let sinA = sqrt ( 1. - cosA*cosA )
-            let sinPhi, cosPhi : float
-            sincos(2. * PI * eps.y, sinPhi, cosPhi)
-            let l = su*(cosPhi*sinA) + sv*(sinPhi*sinA) + sw*cosA
-            let lightHit : Hit
-            let hitID = 0
-            ++inoutRayCount
-            let ray = [[Ray orig=rec.pos, dir=l]]
-            if hitWorld(ray,kMinT,kMaxT,lightHit,hitID) & hitID==LIGHT_SPHERE_ID
-                let omega = 2.*(1.-cosAMax)
-                let rdir = r_in.dir
-                let nl = dot(rec.normal,rdir) < 0.  ? rec.normal : -rec.normal
-                outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( saturate(dot(l,nl))*omega )
+        let s = s_Spheres[LIGHT_SPHERE_ID]
+        let sw = normalize(s.center-rec.pos)
+        let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
+        let sv = cross(sw,su)
+        let cosAMax = sqrt(saturate(1.-s.radius*s.radius*invDistanceSq(rec.pos,s.center)))
+        let eps = randomFloat4(RAND_SEED)
+        let cosA = mad(eps.x,cosAMax,1.) - eps.x
+        let sinA = sqrt ( 1. - cosA*cosA )
+        let sinPhi, cosPhi : float
+        sincos(2. * PI * eps.y, sinPhi, cosPhi)
+        let l = su*(cosPhi*sinA) + sv*(sinPhi*sinA) + sw*cosA
+        let lightHit : Hit
+        let hitID = 0
+        ++inoutRayCount
+        let ray = [[Ray orig=rec.pos, dir=l]]
+        if hitWorld(ray,kMinT,kMaxT,lightHit,hitID) & hitID==LIGHT_SPHERE_ID
+            let omega = mad(-2.,cosAMax,2.)
+            let rdir = r_in.dir
+            let nl = dot(rec.normal,rdir) < 0.  ? rec.normal : -rec.normal
+            outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( saturate(dot(l,nl))*omega )
         return true
     elif mat.mtype == Type Metal
         let refl = reflect(r_in.dir,rec.normal)
@@ -218,10 +214,9 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;doMaterialE:bool = true)
         let mat : Material & = s_SphereMats[id]
         let matE = mat.emissive
         if depth<kMaxDepth & scatter(mat,r,rec,attenuation,scattered,lightE,inoutRayCount)
-            if DO_LIGHT_SAMPLING
-                if !doMaterialE
-                    matE = float3(0)
-                doMaterialE = mat.mtype != Type Lambert
+            if !doMaterialE
+                matE = float3(0)
+            doMaterialE = mat.mtype != Type Lambert
             return  mad ( attenuation, trace(scattered,depth+1,inoutRayCount,doMaterialE), matE + lightE )
         else
             return matE
@@ -239,8 +234,7 @@ def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:C
             let col = float3(0)
             for s in range(0,DO_SAMPLES_PER_PIXEL)
                 let uv = (float2(x,y) + randomFloat4(RAND_SEED).xy) * invWH
-                let r = getRay(cam, uv.x, uv.y)
-                col += trace(r, 0, rayCount)
+                col += trace(getRay(cam, uv.x, uv.y), 0, rayCount)
             col *= 1. / float(DO_SAMPLES_PER_PIXEL)
             backbuffer[backbufferIdx] = lerp(col, backbuffer[backbufferIdx], lerpFac)
             backbufferIdx ++
