@@ -35,7 +35,7 @@ namespace das {
         static __forceinline float Min   ( float a, float b, Context & ) { return a < b ? a : b; }
         static __forceinline float Max   ( float a, float b, Context & ) { return a > b ? a : b; }
         static __forceinline float Mad   ( float a, float b, float c, Context & ) { return a*b + c; }
-        static __forceinline float Lerp  ( float t, float a, float b, Context & ) { return (b-a)*t +a; }
+        static __forceinline float Lerp  ( float a, float b, float t, Context & ) { return (b-a)*t +a; }
         static __forceinline float Clamp  ( float t, float a, float b, Context & ){ return t>a ? (t<b ? t : b) : a; }
 
         static __forceinline int Trunci ( float a, Context & )          { return v_extract_xi(v_cvt_vec4i(v_splats(a))); }
@@ -70,7 +70,7 @@ namespace das {
         static __forceinline vec4f Max   ( vec4f a, vec4f b, Context & ) { return v_max(a,b); }
         static __forceinline vec4f Clamp ( vec4f a, vec4f r0, vec4f r1, Context & ) { return v_max(v_min(a,r1), r0); }
         static __forceinline vec4f Mad   ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,b,c); }
-        static __forceinline vec4f Lerp  ( vec4f t, vec4f a, vec4f b, Context & ) { return v_madd(v_sub(b,a),t,a); }
+        static __forceinline vec4f Lerp  ( vec4f a, vec4f b, vec4f t, Context & ) { return v_madd(v_sub(b,a),t,a); }
 
         static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
         static __forceinline vec4f Roundi ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_roundi(a)); }

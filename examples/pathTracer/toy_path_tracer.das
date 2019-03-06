@@ -268,7 +268,7 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;state:uint&;doMaterialE:bool = true
 def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:Camera)
     let invWidth = 1. / float(screenWidth)
     let invHeight = 1. / float(screenHeight)
-    let lerpFac = float(frameCount) / float(frameCount + 1)
+    let lerpFac = float3(float(frameCount) / float(frameCount + 1))
     let rayCount = 0
     let backbufferIdx = 0
     for y in range(0,screenHeight)
@@ -281,7 +281,7 @@ def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:C
                 let r = getRay(cam, u, v, state)
                 col += trace(r, 0, rayCount, state)
             col *= 1. / float(DO_SAMPLES_PER_PIXEL)
-            backbuffer[backbufferIdx] = backbuffer[backbufferIdx] * lerpFac + col * (1. - lerpFac)
+            backbuffer[backbufferIdx] = lerp(col, backbuffer[backbufferIdx], lerpFac)
             backbufferIdx ++
     return rayCount
 
