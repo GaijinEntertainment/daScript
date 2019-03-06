@@ -295,6 +295,18 @@ namespace das {
     __forceinline float3 normalize3(float3 a){vec4f v = v_norm3(v_ldu(&a.x)); return *(float3*)&v;}
     __forceinline float4 normalize4(float4 a){vec4f v = v_norm4(v_ldu(&a.x)); return *(float4*)&v;}
 
+    __forceinline void sincosF ( float a, float & sv, float & cv ) {
+        vec4f s,c;
+        v_sincos4(v_splats(a), s, c);
+        sv = v_extract_x(s);
+        cv = v_extract_x(c);
+    }
+
+    __forceinline void sincosD ( double a, double & sv, double & cv ) {
+        sv = sin(a);
+        cv = cos(a);
+    }
+
     class Module_Math : public Module {
     public:
         Module_Math() : Module("math") {
@@ -385,6 +397,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(dtan)>(*this, lib, "tan", SideEffects::none);
             addExtern<DAS_BIND_FUN(datan)>(*this, lib, "atan", SideEffects::none);
             addExtern<DAS_BIND_FUN(datan2)>(*this, lib, "atan2", SideEffects::none);
+
+            addExtern<DAS_BIND_FUN(sincosF)>(*this, lib, "sincos", SideEffects::none);
+            addExtern<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::none);
 
             addFunctionCommonConversion<int, float>(*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);

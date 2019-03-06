@@ -1,9 +1,10 @@
-// options log=true, logNodes=true
+options log=true, logNodes=true
 
 require math
 require PathTracerHelper
 
-require toy_random
+// require toy_random
+require random
 
 let
     PI : float const = 3.14159265358979323846
@@ -69,7 +70,7 @@ def Camera(lookFrom,lookAt,vup:float3;vfov,aspect,aperture,focusDist:float)
     this.vertical = 2. * halfHeight * focusDist * this.v
     return this
 
-def getRay(this:Camera;s,t:float;state:uint4&)
+def getRay(this:Camera;s,t:float;state:int4&)
     let rd = this.lensRadius * randomInUnitDisk(state)
     let offset = this.u*rd.x + this.v*rd.y
     return [[Ray orig = this.origin + offset,
@@ -146,7 +147,7 @@ def hitWorld(r:Ray const;tMin,tMax:float;outHit:Hit;outID:int&)
     outID = hitSpheres(r,tMin,tMax,outHit)
     return outID != -1
 
-def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; scattered:Ray; outLightE:float3&; inoutRayCount:int&; state:uint4&)
+def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; scattered:Ray; outLightE:float3&; inoutRayCount:int&; state:int4&)
     outLightE = float3(0)
     if mat.mtype==Type Lambert
         let target = rec.pos + rec.normal + randomUnitVector(state)
@@ -213,7 +214,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         return false
     return true
 
-def trace(r:Ray;depth:int;inoutRayCount:int&;state:uint4&;doMaterialE:bool = true)
+def trace(r:Ray;depth:int;inoutRayCount:int&;state:int4&;doMaterialE:bool = true)
     let rec : Hit
     let id = 0
     ++inoutRayCount
@@ -242,8 +243,8 @@ def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:C
     let lerpFac = float3(float(frameCount) / float(frameCount + 1))
     let rayCount = 0
     let backbufferIdx = 0
+    let state = randomSeed(frameCount*6271)
     for y in range(0,screenHeight)
-        let state = randSeed(uint(y*9781 + frameCount*6271))
         for x in range(0,screenWidth)
             let col = float3(0)
             for s in range(0,DO_SAMPLES_PER_PIXEL)
@@ -288,6 +289,8 @@ def test
         let mrayS = float(totalRayCount) / s * 1.0e-6f
         let mrayFr = float(rayCount) * 10e-6f
         print("{ms}ms\t{mrayS} Mrays/s\t{mrayFr} Mrays/frame\tframes {frames}\n")
+    let sw1 = getClock()
+    print("tracer took {sw1-sw0} sec\n")
     saveTga("path_tracer.tga",backbuffer,width,height)
     return true
 

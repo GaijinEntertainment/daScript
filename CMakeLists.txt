@@ -91,6 +91,7 @@ src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_time.cpp
 src/builtin/module_builtin_das.cpp
 src/builtin/module_builtin_math.cpp
+src/builtin/module_builtin_random.cpp
 src/builtin/module_builtin_string.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das
@@ -189,6 +190,7 @@ SET(PATH_TRACER_MAIN_SRC
 examples/pathTracer/main.cpp
 examples/common/fileAccess.h
 examples/pathTracer/toy_path_tracer.das
+examples/pathTracer/toy_random.das
 )
 
 include_directories(include pathTracer)
