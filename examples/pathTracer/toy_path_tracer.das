@@ -154,7 +154,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
             let sw = normalize(s.center-rec.pos)
             let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
             let sv = cross(sw,su)
-            let cosAMax = sqrt(max(0.,1.-s.radius*s.radius*invDistanceSq(rec.pos,s.center)))
+            let cosAMax = sqrt(saturate(1.-s.radius*s.radius*invDistanceSq(rec.pos,s.center)))
             let eps = randomFloat4(RAND_SEED)
             let cosA = mad(eps.x,cosAMax,1.) - eps.x
             let sinA = sqrt ( 1. - cosA*cosA )
@@ -166,10 +166,10 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
             ++inoutRayCount
             let ray = [[Ray orig=rec.pos, dir=l]]
             if hitWorld(ray,kMinT,kMaxT,lightHit,hitID) & hitID==LIGHT_SPHERE_ID
-                let omega = 2.*PI*(1.-cosAMax)
+                let omega = 2.*(1.-cosAMax)
                 let rdir = r_in.dir
                 let nl = dot(rec.normal,rdir) < 0.  ? rec.normal : -rec.normal
-                outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( max(0.,dot(l,nl))*omega*(1./PI) )
+                outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( saturate(dot(l,nl))*omega )
         return true
     elif mat.mtype == Type Metal
         let refl = reflect(r_in.dir,rec.normal)
@@ -226,8 +226,7 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;doMaterialE:bool = true)
         else
             return matE
     else
-        let unitDir = r.dir
-        let t = 0.5 * (unitDir + float3(1.))
+        let t = mad(r.dir,0.5,float3(1.))
         return  lerp(0.3*float3(1.), 0.3*float3(0.5, 0.7, 1.0), t)
 
 def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:Camera)

@@ -14,6 +14,7 @@ namespace das {
     struct SimPolicy_MathTT {
         static __forceinline TT Min   ( TT a, TT b, Context & ) { return a < b ? a : b; }
         static __forceinline TT Max   ( TT a, TT b, Context & ) { return a > b ? a : b; }
+        static __forceinline TT Sat   ( TT a, Context & )    { return a < 0 ? 0  : (a > 1 ? 1 : a);}
     };
 
     struct SimPolicy_MathInt     : SimPolicy_MathTT<int32_t> {};
@@ -25,6 +26,9 @@ namespace das {
     struct SimPolicy_MathVecI {
         static __forceinline vec4f Min   ( vec4f a, vec4f b, Context & ) { return v_cast_vec4f(v_mini(v_cast_vec4i(a),v_cast_vec4i(b))); }
         static __forceinline vec4f Max   ( vec4f a, vec4f b, Context & ) { return v_cast_vec4f(v_maxi(v_cast_vec4i(a),v_cast_vec4i(b))); }
+        static __forceinline vec4f Sat   ( vec4f a, Context & ) {
+            return v_cast_vec4f(v_mini(v_maxi(v_cast_vec4i(a),v_cast_vec4i(v_zero())),v_splatsi(1)));
+        }
     };
 
     struct SimPolicy_MathFloat {
@@ -34,6 +38,7 @@ namespace das {
         static __forceinline float Sqrt  ( float a, Context & )          { return v_extract_x(v_sqrt_x(v_splats(a))); }
         static __forceinline float Min   ( float a, float b, Context & ) { return a < b ? a : b; }
         static __forceinline float Max   ( float a, float b, Context & ) { return a > b ? a : b; }
+        static __forceinline float Sat   ( float a, Context & )          { return a < 0 ? 0 : (a > 1 ? 1 : a); }
         static __forceinline float Mad   ( float a, float b, float c, Context & ) { return a*b + c; }
         static __forceinline float Lerp  ( float a, float b, float t, Context & ) { return (b-a)*t +a; }
         static __forceinline float Clamp  ( float t, float a, float b, Context & ){ return t>a ? (t<b ? t : b) : a; }
@@ -68,6 +73,7 @@ namespace das {
         static __forceinline vec4f Sqrt  ( vec4f a, Context & )          { return v_sqrt4(a); }
         static __forceinline vec4f Min   ( vec4f a, vec4f b, Context & ) { return v_min(a,b); }
         static __forceinline vec4f Max   ( vec4f a, vec4f b, Context & ) { return v_max(a,b); }
+        static __forceinline vec4f Sat   ( vec4f a, Context & )          { return v_min(v_max(a,v_zero()),v_splats(1.0f)); }
         static __forceinline vec4f Clamp ( vec4f a, vec4f r0, vec4f r1, Context & ) { return v_max(v_min(a,r1), r0); }
         static __forceinline vec4f Mad   ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,b,c); }
         static __forceinline vec4f MadS  ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,v_perm_xxxx(b),c); }
@@ -162,6 +168,7 @@ namespace das {
     MATH_FUN_OP1(Floor)
     MATH_FUN_OP1(Ceil)
     MATH_FUN_OP1(Sqrt)
+    MATH_FUN_OP1(Sat)
     MATH_FUN_OP3(Clamp)
     MATH_FUN_OP3(Mad)
     MATH_FUN_OP3(Lerp)
@@ -219,10 +226,11 @@ namespace das {
     template <typename TT>
     void addFunctionCommon(Module & mod, const ModuleLibrary & lib) {
         //                                     policy        ret   arg1     name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Abs<TT>,  TT,   TT>   >("abs",    lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Floor<TT>,TT,   TT>   >("floor",  lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Ceil<TT>, TT,   TT>   >("ceil",   lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Sqrt<TT>, TT,   TT>   >("sqrt",   lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Abs<TT>,  TT,   TT>   >("abs",       lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Floor<TT>,TT,   TT>   >("floor",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Ceil<TT>, TT,   TT>   >("ceil",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Sqrt<TT>, TT,   TT>   >("sqrt",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Sat<TT>,  TT,   TT>   >("saturate",  lib) );
     }
     template <typename Ret, typename TT>
     void addFunctionCommonConversion(Module & mod, const ModuleLibrary & lib) {
