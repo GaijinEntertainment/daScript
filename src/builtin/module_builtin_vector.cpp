@@ -122,6 +122,23 @@ namespace das
         static __forceinline vec4f Mul ( vec4f a, vec4f b, Context & ) {
             return v_cast_vec4f(v_muli(v_cast_vec4i(a),v_cast_vec4i(b)));
         }
+        static __forceinline vec4f BinAnd ( vec4f a, vec4f b, Context & ) {
+            return v_cast_vec4f(v_andi(v_cast_vec4i(a),v_cast_vec4i(b)));
+        }
+        static __forceinline vec4f BinOr ( vec4f a, vec4f b, Context & ) {
+            return v_cast_vec4f(v_ori(v_cast_vec4i(a),v_cast_vec4i(b)));
+        }
+        static __forceinline vec4f BinXor ( vec4f a, vec4f b, Context & ) {
+            return v_cast_vec4f(v_xori(v_cast_vec4i(a),v_cast_vec4i(b)));
+        }
+        static __forceinline vec4f BinShl ( vec4f a, vec4f b, Context & ) {
+            int32_t shift = v_extract_xi(b);
+            return v_cast_vec4f(v_slli(v_cast_vec4i(a),shift));
+        }
+        static __forceinline vec4f BinShr ( vec4f a, vec4f b, Context & ) {
+            int32_t shift = v_extract_xi(b);
+            return v_cast_vec4f(v_srai(v_cast_vec4i(a),shift));
+        }
         static __forceinline void SetAdd  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_addi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
@@ -141,6 +158,28 @@ namespace das
         static __forceinline void SetMod  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_modi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
+        }
+        static __forceinline void SetBinAnd  ( char * a, vec4f b, Context & ) {
+            TT * pa = (TT *)a;
+            *pa = cast<TT>::to (v_cast_vec4f(v_andi(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
+        }
+        static __forceinline void SetBinOr  ( char * a, vec4f b, Context & ) {
+            TT * pa = (TT *)a;
+            *pa = cast<TT>::to (v_cast_vec4f(v_ori(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
+        }
+        static __forceinline void SetBinXor  ( char * a, vec4f b, Context & ) {
+            TT * pa = (TT *)a;
+            *pa = cast<TT>::to (v_cast_vec4f(v_xori(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
+        }
+        static __forceinline void SetBinShl  ( char * a, vec4f b, Context & ) {
+            TT * pa = (TT *)a;
+            int32_t shift = v_extract_xi(b);
+            *pa = cast<TT>::to (v_cast_vec4f(v_slli(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
+        }
+        static __forceinline void SetBinShr  ( char * a, vec4f b, Context & ) {
+            TT * pa = (TT *)a;
+            int32_t shift = v_extract_xi(b);
+            *pa = cast<TT>::to (v_cast_vec4f(v_srai(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
         }
         // vector-scalar
         static __forceinline vec4f DivVecScal ( vec4f a, vec4f b, Context & ) {
@@ -179,6 +218,10 @@ namespace das
         static __forceinline vec4f Mod ( vec4f a, vec4f b, Context & ) {
             return v_cast_vec4f(v_modu(v_cast_vec4i(a),v_cast_vec4i(b)));
         }
+        static __forceinline vec4f BinShr ( vec4f a, vec4f b, Context & ) {
+            int32_t shift = v_extract_xi(b);
+            return v_cast_vec4f(v_srli(v_cast_vec4i(a),shift));
+        }
         static __forceinline void SetDiv  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_divu(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
@@ -190,6 +233,11 @@ namespace das
         static __forceinline void SetMod  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
             *pa = cast<TT>::to (v_cast_vec4f(v_modu(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
+        }
+        static __forceinline void SetBinShr  ( char * a, vec4f b, Context & ) {
+            TT * pa = (TT *)a;
+            int32_t shift = v_extract_xi(b);
+            *pa = cast<TT>::to (v_cast_vec4f(v_srli(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
         }
         // vector-scalar
         static __forceinline vec4f DivVecScal ( vec4f a, vec4f b, Context & ) {
@@ -244,6 +292,25 @@ namespace das
 
     DEFINE_OP2_EVAL_BASIC_POLICY(range);
     DEFINE_OP2_EVAL_BASIC_POLICY(urange);
+
+#define DEFINE_VECTOR_BIN_POLICY(CTYPE)                 \
+    IMPLEMENT_OP2_EVAL_POLICY(BinAnd, CTYPE);           \
+    IMPLEMENT_OP2_EVAL_POLICY(BinOr,  CTYPE);           \
+    IMPLEMENT_OP2_EVAL_POLICY(BinXor, CTYPE);           \
+    IMPLEMENT_OP2_EVAL_POLICY(BinShl, CTYPE);           \
+    IMPLEMENT_OP2_EVAL_POLICY(BinShr, CTYPE);           \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetBinAnd, CTYPE);    \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetBinOr,  CTYPE);    \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetBinXor, CTYPE);    \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetBinShl, CTYPE);    \
+    IMPLEMENT_OP2_EVAL_SET_POLICY(SetBinShr, CTYPE);
+
+    DEFINE_VECTOR_BIN_POLICY(int2);
+    DEFINE_VECTOR_BIN_POLICY(int3);
+    DEFINE_VECTOR_BIN_POLICY(int4);
+    DEFINE_VECTOR_BIN_POLICY(uint2);
+    DEFINE_VECTOR_BIN_POLICY(uint3);
+    DEFINE_VECTOR_BIN_POLICY(uint4);
 
     // VECTOR C-TOR
     template <typename TT, typename Policy, int vecS>
@@ -367,6 +434,51 @@ addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,4>,VTYPE,int64_t,int64_t,int64_t,int64_t>>    (#VTYPE,lib) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>,VTYPE,uint64_t,uint64_t,uint64_t,uint64_t>>(#VTYPE,lib) );
 
+    // built-in numeric types
+    template <typename TT>
+    void addFunctionVecBit(Module & mod, const ModuleLibrary & lib) {
+        //                                     policy              ret   arg1 arg2    name
+     // mod.addFunction( make_shared<BuiltInFn<Sim_BinNot<TT>,     TT,   TT>            >("~",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinAnd<TT>,     TT,   TT,  TT>       >("&",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinOr<TT>,      TT,   TT,  TT>       >("|",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinXor<TT>,     TT,   TT,  TT>       >("^",      lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinShl<TT>,     TT,   TT,  int32_t>  >("<<",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_BinShr<TT>,     TT,   TT,  int32_t>  >(">>",     lib) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinAnd<TT>,  void, TT&, TT>       >("&=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinOr<TT>,   void, TT&, TT>       >("|=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinXor<TT>,  void, TT&, TT>       >("^=",     lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinShl<TT>,  void, TT&, int32_t>  >("<<=",    lib)->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinShr<TT>,  void, TT&, int32_t>  >(">>=",    lib)->setSideEffects(SideEffects::modifyArgument) );
+    }
+
+    struct SimNode_Int4ToFloat4 : SimNode_CallBase {
+        SimNode_Int4ToFloat4(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Int4ToFloat4);
+            V_SUB(arguments[0]);
+            V_END();
+        }
+        virtual vec4f eval(Context & context) override {
+            vec4f i4 = arguments[0]->eval(context);
+            return v_cvt_vec4f(v_cast_vec4i(i4));
+        }
+    };
+
+    struct SimNode_UInt4ToFloat4 : SimNode_CallBase {
+        SimNode_UInt4ToFloat4(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(UInt4ToFloat4);
+            V_SUB(arguments[0]);
+            V_END();
+        }
+        virtual vec4f eval(Context & context) override {
+            vec4f i4 = arguments[0]->eval(context);
+            return v_cvt_vec4f(v_cast_vec4i(i4));   // todo: replace wrong cast
+        }
+    };
+
     void Module_BuiltIn::addVectorTypes(ModuleLibrary & lib) {
         // float2
         addFunctionBasic<float2>(*this,lib);
@@ -374,52 +486,64 @@ addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>
         addFunctionVecNumeric<float2,float>(*this,lib);
         ADD_VEC_CTOR_1(float2);
         ADD_VEC_CTOR_2(float2);
+        addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float2, int2>>("float2",lib) );
+        addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float2,uint2>>("float2",lib) );
         // float3
         addFunctionBasic<float3>(*this,lib);
         addFunctionNumeric<float3>(*this,lib);
         addFunctionVecNumeric<float3, float>(*this,lib);
         ADD_VEC_CTOR_1(float3);
         ADD_VEC_CTOR_3(float3);
+        addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float3, int3>>("float3",lib) );
+        addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float3,uint3>>("float3",lib) );
         // float4
         addFunctionBasic<float4>(*this,lib);
         addFunctionNumeric<float4>(*this,lib);
         addFunctionVecNumeric<float4, float>(*this,lib);
         ADD_VEC_CTOR_1(float4);
         ADD_VEC_CTOR_4(float4);
+        addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float4, int4>>("float4",lib) );
+        addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float4,uint4>>("float4",lib) );
         // int2
         addFunctionBasic<int2>(*this,lib);
         addFunctionNumeric<int2>(*this,lib);
         addFunctionVecNumeric<int2, int32_t>(*this,lib);
+        addFunctionVecBit<int2>(*this,lib);
         ADD_VEC_CTOR_1(int2);
         ADD_VEC_CTOR_2(int2);
         // int3
         addFunctionBasic<int3>(*this,lib);
         addFunctionNumeric<int3>(*this,lib);
         addFunctionVecNumeric<int3, int32_t>(*this,lib);
+        addFunctionVecBit<int3>(*this,lib);
         ADD_VEC_CTOR_1(int3);
         ADD_VEC_CTOR_3(int3);
         // int4
         addFunctionBasic<int4>(*this,lib);
         addFunctionNumeric<int4>(*this,lib);
         addFunctionVecNumeric<int4,int32_t>(*this,lib);
+        addFunctionVecBit<int4>(*this,lib);
         ADD_VEC_CTOR_1(int4);
         ADD_VEC_CTOR_4(int4);
         // uint2
         addFunctionBasic<uint2>(*this,lib);
         addFunctionNumeric<uint2>(*this,lib);
         addFunctionVecNumeric<uint2, uint32_t>(*this,lib);
+        addFunctionVecBit<uint2>(*this,lib);
         ADD_VEC_CTOR_1(uint2);
         ADD_VEC_CTOR_2(uint2);
         // uint3
         addFunctionBasic<uint3>(*this,lib);
         addFunctionNumeric<uint3>(*this,lib);
         addFunctionVecNumeric<uint3,uint32_t>(*this,lib);
+        addFunctionVecBit<uint3>(*this,lib);
         ADD_VEC_CTOR_1(uint3);
         ADD_VEC_CTOR_3(uint3);
         // uint4
         addFunctionBasic<uint4>(*this,lib);
         addFunctionNumeric<uint4>(*this,lib);
         addFunctionVecNumeric<uint4, uint32_t>(*this,lib);
+        addFunctionVecBit<uint4>(*this,lib);
         ADD_VEC_CTOR_1(uint4);
         ADD_VEC_CTOR_4(uint4);
         // range
