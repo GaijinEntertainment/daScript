@@ -119,8 +119,7 @@ def hitSpheres(r:Ray const;tMin,tMax:float;outHit:Hit)
     for sph in s_Spheres
         let co = sph.center - r.orig
         let nb = dot(co,r.dir)
-        let c = sph.radius2 - lengthSq(co)
-        let discr = mad(nb,nb,c)
+        let discr = mad(nb,nb, sph.radius2 - lengthSq(co))
         if discr > 0.
             let discrSq = sqrt(discr)
             let t = nb - discrSq
@@ -131,9 +130,9 @@ def hitSpheres(r:Ray const;tMin,tMax:float;outHit:Hit)
                 hitT = t
         ++ i
     if id != -1
-        outHit.pos = pointAt(r,hitT)
-        outHit.normal = (outHit.pos - s_Spheres[id].center) * s_Spheres[id].iRadius
-        outHit.t = hitT
+        outHit = [[Hit pos = pointAt(r,hitT),
+            normal = (outHit.pos - s_Spheres[id].center) * s_Spheres[id].iRadius,
+            t = hitT]]
     return id
 
 def hitWorld(r:Ray const;tMin,tMax:float;outHit:Hit;outID:int&)
