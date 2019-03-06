@@ -268,8 +268,14 @@ namespace das {
     __forceinline float invlength3(float3 a){return v_extract_x(v_rsqrt_x(v_length3_sq_x(v_ldu(&a.x))));}
     __forceinline float invlength4(float4 a){return v_extract_x(v_rsqrt_x(v_length4_sq_x(v_ldu(&a.x))));}
 
+    __forceinline float invlengthSq2(float2 a){vec4f v = v_ldu_half(&a.x); v = v_mul(v,v); return v_extract_x(v_rcp_x(v_add_x(v, v_rot_1(v))));}
+    __forceinline float invlengthSq3(float3 a){return v_extract_x(v_rcp_x(v_length3_sq_x(v_ldu(&a.x))));}
+    __forceinline float invlengthSq4(float4 a){return v_extract_x(v_rcp_x(v_length4_sq_x(v_ldu(&a.x))));}
+
     __forceinline float distance3(float3 a, float3 b){return v_extract_x(v_length3_x(v_sub(v_ldu(&a.x), v_ldu(&b.x))));}
+    __forceinline float invdistance3(float3 a, float3 b){return v_extract_x(v_rcp_x(v_length3_x(v_sub(v_ldu(&a.x), v_ldu(&b.x)))));}
     __forceinline float distanceSq3(float3 a, float3 b){return v_extract_x(v_length3_sq_x(v_sub(v_ldu(&a.x), v_ldu(&b.x))));}
+    __forceinline float invdistanceSq3(float3 a, float3 b){return v_extract_x(v_rcp_x(v_length3_sq_x(v_sub(v_ldu(&a.x), v_ldu(&b.x)))));}
     __forceinline float dot2(float2 a, float2 b){vec4f v = v_mul(v_ldu_half(&a.x), v_ldu_half(&b.x)); return v_extract_x(v_add_x(v, v_rot_1(v)));}
     __forceinline float dot3(float3 a, float3 b){return v_extract_x(v_dot3_x(v_ldu(&a.x), v_ldu(&b.x)));}
     __forceinline float dot4(float4 a, float4 b){return v_extract_x(v_dot4_x(v_ldu(&a.x), v_ldu(&b.x)));}
@@ -409,11 +415,16 @@ namespace das {
             addExtern<DAS_BIND_FUN(invlength2)>(*this, lib, "invLength", SideEffects::none);
             addExtern<DAS_BIND_FUN(invlength3)>(*this, lib, "invLength", SideEffects::none);
             addExtern<DAS_BIND_FUN(invlength4)>(*this, lib, "invLength", SideEffects::none);
+            addExtern<DAS_BIND_FUN(invlengthSq2)>(*this, lib, "invLengthSq", SideEffects::none);
+            addExtern<DAS_BIND_FUN(invlengthSq3)>(*this, lib, "invLengthSq", SideEffects::none);
+            addExtern<DAS_BIND_FUN(invlengthSq4)>(*this, lib, "invLengthSq", SideEffects::none);
             addExtern<DAS_BIND_FUN(lengthSq2)>(*this, lib, "lengthSq", SideEffects::none);
             addExtern<DAS_BIND_FUN(lengthSq3)>(*this, lib, "lengthSq", SideEffects::none);
             addExtern<DAS_BIND_FUN(lengthSq4)>(*this, lib, "lengthSq", SideEffects::none);
             addExtern<DAS_BIND_FUN(distance3)>(*this, lib, "distance", SideEffects::none);
             addExtern<DAS_BIND_FUN(distanceSq3)>(*this, lib, "distanceSq", SideEffects::none);
+            addExtern<DAS_BIND_FUN(invdistance3)>(*this, lib, "invDistance", SideEffects::none);
+            addExtern<DAS_BIND_FUN(invdistanceSq3)>(*this, lib, "invDistanceSq", SideEffects::none);
 
             //double functions
             addExtern<DAS_BIND_FUN(dabs)>(*this, lib, "abs", SideEffects::none);

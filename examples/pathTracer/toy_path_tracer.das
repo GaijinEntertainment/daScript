@@ -154,12 +154,13 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
             let sw = normalize(s.center-rec.pos)
             let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
             let sv = cross(sw,su)
-            let cosAMax = sqrt(max(0.,1.-s.radius*s.radius/distanceSq(rec.pos,s.center)))
+            let cosAMax = sqrt(max(0.,1.-s.radius*s.radius*invDistanceSq(rec.pos,s.center)))
             let eps = randomFloat4(RAND_SEED)
             let cosA = mad(eps.x,cosAMax,1.) - eps.x
             let sinA = sqrt ( 1. - cosA*cosA )
-            let phi = 2. * PI * eps.y
-            let l = su*cos(phi)*sinA + sv*sin(phi)*sinA + sw*cosA
+            let sinPhi, cosPhi : float
+            sincos(2. * PI * eps.y, sinPhi, cosPhi)
+            let l = su*(cosPhi*sinA) + sv*(sinPhi*sinA) + sw*cosA
             let lightHit : Hit
             let hitID = 0
             ++inoutRayCount
