@@ -183,6 +183,20 @@ ADD_LIBRARY(libDaScriptJson ${JSON_MAIN})
 SETUP_CPP11(libDaScriptJson)
 ADD_DEPENDENCIES(libDaScriptJson libDaScript)
 
+# PathTracer
+
+SET(PATH_TRACER_MAIN_SRC
+examples/pathTracer/main.cpp
+examples/common/fileAccess.h
+examples/pathTracer/toy_path_tracer.das
+)
+
+include_directories(include pathTracer)
+add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} )
+TARGET_LINK_LIBRARIES(pathTracer libDaScript)
+ADD_DEPENDENCIES(pathTracer libDaScript)
+SETUP_CPP11(pathTracer)
+
 # JSON Example
 
 SET(JSON_MAIN_SRC

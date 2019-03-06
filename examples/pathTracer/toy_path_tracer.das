@@ -1,16 +1,14 @@
 // options log=true, logNodes=true
 
 require math
-require testProfile
+require PathTracerHelper
 
 let
     PI : float const = 3.14159265358979323846
 
 let
     DO_LENGTH : int const = 9
-    DO_ANIMATE : bool const = false
     DO_SAMPLES_PER_PIXEL : int const = 4
-    DO_ANIMATE_SMOOTHING : float const = 0.5
     DO_LIGHT_SAMPLING : bool const = true
     LIGHT_SPHERE_ID : int const = 8
 
@@ -271,8 +269,6 @@ def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:C
     let invWidth = 1. / float(screenWidth)
     let invHeight = 1. / float(screenHeight)
     let lerpFac = float(frameCount) / float(frameCount + 1)
-    if DO_ANIMATE
-        lerpFac *= DO_ANIMATE_SMOOTHING
     let rayCount = 0
     let backbufferIdx = 0
     for y in range(0,screenHeight)
@@ -291,9 +287,6 @@ def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:C
 
 def draw(time:float;frameCount,screenWidth,screenHeight:int;backbuffer:array<float3>;outRayCount:int&)
     let rayCount = 0
-    if DO_ANIMATE
-        s_Spheres[1].center.y = cos(time)+1.0
-        s_Spheres[8].center.z = sin(time)*0.3
     let lookfrom = float3(0,2,3)
     let lookat = float3(0)
     let distToFocus = 3.
@@ -304,17 +297,14 @@ def draw(time:float;frameCount,screenWidth,screenHeight:int;backbuffer:array<flo
 
 [export]
 def test
-
-    // UNCOMMENT THIS FOR THE TEST TO RUN
-    return true
-
     let width = 320
     let height = 240
-    let kFrameCount = 30
+    let kFrameCount = 4
     let backbuffer : array<float3>
     resize(backbuffer,width*height)
     let s = 0.
     let totalRayCount = 0
+    print("\ntracing...\n")
     let sw0 = getClock()
     for i in range(0,kFrameCount)
         let rayCount = 0
@@ -327,6 +317,6 @@ def test
         let mrayS = float(totalRayCount) / s * 1.0e-6f
         let mrayFr = float(rayCount) * 10e-6f
         print("{ms}ms\t{mrayS} Mrays/s\t{mrayFr} Mrays/frame\tframes {frames}\n")
-        // saveTga("frame_{i}.tga",backbuffer,width,height)
+    saveTga("path_tracer.tga",backbuffer,width,height)
     return true
 
