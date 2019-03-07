@@ -43,7 +43,7 @@ namespace das {
     }
 
     __forceinline float randomFloat ( int4 & seed ) {
-        return float(randomInt(seed)) * (1.0/float(LCG_RAND_MAX));
+        return float(randomInt(seed)) * (1.0f/float(LCG_RAND_MAX));
     }
 
     __forceinline vec4f _randomFloat4 ( int4 & seed ) {
