@@ -15,7 +15,7 @@ let
     LIGHT_SPHERE_ID : int const = 8
 
 let
-    RAND_SEED = randomSeed(1234)
+    RAND_SEED : int4 
 
 def schlick(cosine,ri:float)
     let r0 = (1. - ri) / (1. + ri)
@@ -214,12 +214,13 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;doMaterialE:bool = true)
         let t = mad(r.dir,0.5,float3(1.))
         return  lerp(0.3*float3(1.), 0.3*float3(0.5, 0.7, 1.0), t)
 
-def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:Camera)
+def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;backbuffer:array<float3>;cam:Camera)
     let invWH = float(1) / float2(screenWidth, screenHeight)
     let lerpFac = float3(float(frameCount) / float(frameCount + 1))
     let rayCount = 0
-    let backbufferIdx = 0
-    for y in range(0,screenHeight)
+    let backbufferIdx = ymin * screenWidth
+    for y in range(ymin,ymax)
+		RAND_SEED = randomSeed(y*117 + frameCount*13)
         for x in range(0,screenWidth)
             let col = float3(0)
             for s in range(0,DO_SAMPLES_PER_PIXEL)
@@ -230,20 +231,28 @@ def trace(screenWidth,screenHeight,frameCount:int;backbuffer:array<float3>;cam:C
             backbufferIdx ++
     return rayCount
 
-def draw(time:float;frameCount,screenWidth,screenHeight:int;backbuffer:array<float3>;outRayCount:int&)
+def draw(time:float;frameCount,screenWidth,screenHeight,ymin,ymax:int;backbuffer:array<float3>;outRayCount:int&)
     let rayCount = 0
     let lookfrom = float3(0,2,3)
     let lookat = float3(0)
     let distToFocus = 3.
     let aperture = 0.1
     let cam = Camera(lookfrom,lookat,float3(0,1,0),60.,float(screenWidth)/float(screenHeight),aperture,distToFocus)
-    rayCount += trace(screenWidth,screenHeight,frameCount,backbuffer,cam)
+    rayCount += trace(screenWidth,screenHeight,frameCount,ymin,ymax,backbuffer,cam)
     outRayCount = rayCount
 
 def prepare
     for sph in s_Spheres
         sph.radius2 = sph.radius * sph.radius
         sph.iRadius = 1. / sph.radius
+
+[export]
+def job(backbuffer:array<float3>;frameCount,width,height,ymin,ymax:int)
+    prepare()
+    let totalRayCount = 0
+    draw(0., frameCount, width, height, ymin, ymax, backbuffer, totalRayCount)
+	return totalRayCount
+	
 
 [export]
 def test
@@ -259,7 +268,7 @@ def test
     let sw0 = getClock()
     for i in range(0,kFrameCount)
         let rayCount = 0
-        draw(s, i, width, height, backbuffer, rayCount)
+        draw(s, i, width, height, 0, height, backbuffer, rayCount)
         totalRayCount += rayCount
         let sw1 = getClock()
         s = sw1 - sw0

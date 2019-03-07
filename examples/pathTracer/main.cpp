@@ -1,6 +1,9 @@
 #include "daScript/daScript.h"
 #include "../common/fileAccess.h"
 
+#include <thread>
+#include <atomic>
+
 using namespace std;
 using namespace das;
 
@@ -59,6 +62,10 @@ REGISTER_MODULE(Module_PathTracerHelper);
 
 TextPrinter tout;
 
+
+extern "C" int64_t ref_time_ticks();
+extern "C" int get_time_usec(int64_t reft);
+
 bool unit_test ( const string & fn ) {
 	tout << fn << " ";
     auto access = make_shared<FsFileAccess>();
@@ -79,6 +86,58 @@ bool unit_test ( const string & fn ) {
                 }
                 return false;
             }
+#if 1
+            int width = 1280;
+            int height = 720;
+            int frameCount = 64;
+            Array arr;
+            memset(&arr, 0, sizeof(Array));
+            array_resize(ctx, arr, width*height, sizeof(float3), true);
+            int numCPU = max(thread::hardware_concurrency(), 1u);
+            int chunk = height / numCPU;
+            tout << "running on " << numCPU << ", " << chunk << " lines at a time\n";
+            int magRayCount = 0;
+            auto t0 = clock();
+            for (int frame = 0; frame != frameCount; ++frame) {
+                auto t0f = clock();
+                vector<thread> threads;
+                atomic<int> rayCount = 0;
+                for (int c = 0; c != numCPU; ++c) {
+                    auto thC = new Context(ctx);
+                    threads.emplace_back(thread([&, thC]() {
+                        auto fnJob = thC->findFunction("job");
+                        thC->restart();
+                        int yMin = c * chunk;
+                        int yMax = min((c + 1)*chunk, height);
+                        // def job(backbuffer:array<float3>;width,height,ymin,ymax:int)
+                        vec4f args[6];
+                        args[0] = cast<void *>::from((Array *)&arr);
+                        args[1] = cast<int32_t>::from(frame);
+                        args[2] = cast<int32_t>::from(width);
+                        args[3] = cast<int32_t>::from(height);
+                        args[4] = cast<int32_t>::from(yMin);
+                        args[5] = cast<int32_t>::from(yMax);
+                        int totalRays = cast<int>::to(thC->eval(fnJob, args));
+                        rayCount += totalRays;
+                        if (auto ex = thC->getException()) {
+                            tout << "exception: " << ex << "\n";
+                        }
+                        delete thC;
+                    }));
+                }
+                tout << "waiting for frame " << frame << "...";
+                for (auto & th : threads) {
+                    th.join();
+                }
+                auto t1 = clock();
+                magRayCount += rayCount;
+                tout << "done, " << int(rayCount) / double(1000000) << " mrays this frame, " << (double(t1 - t0f) / CLK_TCK) << " sec\n";
+            }
+            auto t2 = clock();
+            tout << "took " << (double(t2 - t0) / CLK_TCK) << " sec, " << ((magRayCount/1000000.0) * CLK_TCK / (t2-t0)) << " mrays/s\n";
+            saveTga("threaded.tga", &arr, width, height, &ctx);
+            return true;
+#else
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
@@ -96,6 +155,7 @@ bool unit_test ( const string & fn ) {
 				tout << "function 'test' not found\n";
                 return false;
             }
+#endif
         }
     } else {
         return false;
