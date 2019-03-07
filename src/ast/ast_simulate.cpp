@@ -915,18 +915,18 @@ namespace das
     }
 
     SimNode * ExprAt::simulate (Context & context) const {
-        SimNode * result = nullptr;
+
         if ( subexpr->type->isVectorType() ) {
             auto prv = subexpr->simulate(context);
             auto pidx = index->simulate(context);
             uint32_t range = subexpr->type->getVectorDim();
             uint32_t stride = type->getSizeOf();
             if ( subexpr->type->ref ) {
-                auto result = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
+                auto res = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
                 if ( r2v ) {
-                    return ExprRef2Value::GetR2V(context, at, type, result);
+                    return ExprRef2Value::GetR2V(context, at, type, res);
                 } else {
-                    return result;
+                    return res;
                 }
             } else {
                 switch ( type->baseType ) {
@@ -943,11 +943,11 @@ namespace das
             auto prv = subexpr->simulate(context);
             auto pidx = index->simulate(context);
             uint32_t valueTypeSize = subexpr->type->secondType->getSizeOf();
-            result = context.code->makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
+            auto res = context.code->makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
             if ( r2v ) {
-                return ExprRef2Value::GetR2V(context, at, type, result);
+                return ExprRef2Value::GetR2V(context, at, type, res);
             } else {
-                return result;
+                return res;
             }
         } else {
             if ( r2v ) {

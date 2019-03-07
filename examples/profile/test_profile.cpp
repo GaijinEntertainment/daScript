@@ -650,8 +650,6 @@ public:
         addExtern<DAS_BIND_FUN(testExpLoop)>(*this, lib, "testExpLoop",SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(testNBodiesInit)>(*this, lib, "testNBodiesInit",SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(testNBodies)>(*this, lib, "testNBodies",SideEffects::modifyExternal);
-        // TGA
-        addExtern<DAS_BIND_FUN(saveTga)>(*this, lib, "saveTga",SideEffects::modifyExternal);
     }
 };
 
