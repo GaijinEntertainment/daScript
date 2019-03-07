@@ -7,7 +7,7 @@ using namespace das;
 uint8_t LinearToSRGB ( float x ) {
     x = max(x, 0.0f);
     x = max(1.055f * (float)pow(x, 0.416666667f) - 0.055f, 0.0f);
-    return min((unsigned int)(x * 255.9f), 255u);
+    return (uint8_t) min((unsigned int)(x * 255.9f), 255u);
 }
 
 void saveTga ( const char * fileName, Array * arr, int width, int height, Context * context ) {
