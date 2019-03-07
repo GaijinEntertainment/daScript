@@ -10,9 +10,13 @@ let
     PI : float const = 3.14159265358979323846
 
 let
-    DO_LENGTH : int const = 9
     DO_SAMPLES_PER_PIXEL : int const = 4
     LIGHT_SPHERE_ID : int const = 8
+
+let
+    kMinT = 0.001
+    kMaxT = 1.0e7f
+    kMaxDepth = 10
 
 let
     RAND_SEED : int4 
@@ -106,11 +110,6 @@ let
         mtype = Type Dielectric, albedo = float3(0.4, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 1.5;
         mtype = Type Lambert,    albedo = float3(0.8, 0.6, 0.2), emissive = float3(30,25,15),  roughness = 0.,  ri = 0.
     ]]
-
-let
-    kMinT = 0.001
-    kMaxT = 1.0e7f
-    kMaxDepth = 10
 
 def hitSpheres(r:Ray const;tMin,tMax:float;outHit:Hit)
     let hitT = tMax

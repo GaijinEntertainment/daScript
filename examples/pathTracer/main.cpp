@@ -115,7 +115,6 @@ bool unit_test ( const string & fn ) {
                 for (int c = 0; c != numCPU; ++c) {
                     auto thC = ctxU[c].get();
                     threads.emplace_back(thread([&,thC,c]() {
-                        thC->restart();
                         int yMin = c * chunk;
                         int yMax = min((c + 1)*chunk, height);
                         // def job(backbuffer:array<float3>;width,height,ymin,ymax:int)
@@ -148,7 +147,7 @@ bool unit_test ( const string & fn ) {
                 << "took " << get_time_sec(t2 - t0) << " sec, "
                 << "total " << mrays << " mrays, "
                 << (mrays / get_time_sec(t2-t0)) << " mrays/s\n";
-            saveTga("threaded.tga", &arr, width, height, &ctx);
+            saveTga("path_tracer.tga", &arr, width, height, &ctx);
             return true;
 #else
             if ( auto fnTest = ctx.findFunction("test") ) {
