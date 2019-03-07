@@ -101,7 +101,7 @@ bool unit_test ( const string & fn ) {
             for (int frame = 0; frame != frameCount; ++frame) {
                 auto t0f = clock();
                 vector<thread> threads;
-                atomic<int> rayCount = 0;
+                atomic<int> rayCount;
                 for (int c = 0; c != numCPU; ++c) {
                     auto thC = new Context(ctx);
                     threads.emplace_back(thread([&, thC]() {
@@ -131,10 +131,10 @@ bool unit_test ( const string & fn ) {
                 }
                 auto t1 = clock();
                 magRayCount += rayCount;
-                tout << "done, " << int(rayCount) / double(1000000) << " mrays this frame, " << (double(t1 - t0f) / CLK_TCK) << " sec\n";
+                tout << "done, " << int(rayCount) / double(1000000) << " mrays this frame, " << (double(t1 - t0f) / CLOCKS_PER_SEC) << " sec\n";
             }
             auto t2 = clock();
-            tout << "took " << (double(t2 - t0) / CLK_TCK) << " sec, " << ((magRayCount/1000000.0) * CLK_TCK / (t2-t0)) << " mrays/s\n";
+            tout << "took " << (double(t2 - t0) / CLOCKS_PER_SEC) << " sec, " << ((magRayCount/1000000.0) * CLOCKS_PER_SEC / (t2-t0)) << " mrays/s\n";
             saveTga("threaded.tga", &arr, width, height, &ctx);
             return true;
 #else
