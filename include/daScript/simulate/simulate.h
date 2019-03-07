@@ -123,7 +123,7 @@ namespace das
         Context();
         Context(const Context &);
         Context & operator = (const Context &) = delete;
-        ~Context();
+        virtual ~Context();
 
         __forceinline void * getVariable ( int index ) const {
             return (uint32_t(index)<uint32_t(totalVariables)) ? (globals + globalVariables[index].offset) : nullptr;

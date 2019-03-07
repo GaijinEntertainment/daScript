@@ -66,6 +66,10 @@ TextPrinter tout;
 extern "C" int64_t ref_time_ticks();
 extern "C" int get_time_usec(int64_t reft);
 
+double get_time_sec(uint64_t t) {
+    return t / 1000000000.0;
+}
+
 bool unit_test ( const string & fn ) {
 	tout << fn << " ";
     auto access = make_shared<FsFileAccess>();
@@ -87,25 +91,30 @@ bool unit_test ( const string & fn ) {
                 return false;
             }
 #if 1
-            int width = 1280;
-            int height = 720;
-            int frameCount = 64;
+            int width = 320;
+            int height = 240;
+            int frameCount = 16;
             Array arr;
             memset(&arr, 0, sizeof(Array));
             array_resize(ctx, arr, width*height, sizeof(float3), true);
             int numCPU = max(thread::hardware_concurrency(), 1u);
             int chunk = height / numCPU;
-            tout << "running on " << numCPU << ", " << chunk << " lines at a time\n";
-            int magRayCount = 0;
-            auto t0 = clock();
+            tout << "running on " << numCPU << " threads, " << chunk << " lines at a time\n";
+            int64_t magRayCount = 0;
+            auto t0 = ref_time_ticks();
+            vector<unique_ptr<Context>> ctxU;
+            for ( int c=0; c!=numCPU; ++c ) {
+                ctxU.emplace_back(make_unique<Context>(ctx));
+            }
+            auto fnJob = ctx.findFunction("job");
             for (int frame = 0; frame != frameCount; ++frame) {
-                auto t0f = clock();
+                auto t0f = ref_time_ticks();
                 vector<thread> threads;
                 atomic<int> rayCount;
+                rayCount = 0;
                 for (int c = 0; c != numCPU; ++c) {
-                    auto thC = new Context(ctx);
-                    threads.emplace_back(thread([&, thC]() {
-                        auto fnJob = thC->findFunction("job");
+                    auto thC = ctxU[c].get();
+                    threads.emplace_back(thread([&,thC,c]() {
                         thC->restart();
                         int yMin = c * chunk;
                         int yMax = min((c + 1)*chunk, height);
@@ -122,19 +131,23 @@ bool unit_test ( const string & fn ) {
                         if (auto ex = thC->getException()) {
                             tout << "exception: " << ex << "\n";
                         }
-                        delete thC;
                     }));
                 }
                 tout << "waiting for frame " << frame << "...";
                 for (auto & th : threads) {
                     th.join();
                 }
-                auto t1 = clock();
+                auto t1 = ref_time_ticks();
                 magRayCount += rayCount;
-                tout << "done, " << int(rayCount) / double(1000000) << " mrays this frame, " << (double(t1 - t0f) / CLOCKS_PER_SEC) << " sec\n";
+                tout << "done, " << int(rayCount) / double(1000000.0) << " mrays this frame, "
+                    << get_time_sec(t1 - t0f) << " sec\n";
             }
-            auto t2 = clock();
-            tout << "took " << (double(t2 - t0) / CLOCKS_PER_SEC) << " sec, " << ((magRayCount/1000000.0) * CLOCKS_PER_SEC / (t2-t0)) << " mrays/s\n";
+            auto t2 = ref_time_ticks();
+            auto mrays = magRayCount / 1000000.0;
+            tout
+                << "took " << get_time_sec(t2 - t0) << " sec, "
+                << "total " << mrays << " mrays, "
+                << (mrays / get_time_sec(t2-t0)) << " mrays/s\n";
             saveTga("threaded.tga", &arr, width, height, &ctx);
             return true;
 #else
