@@ -67,7 +67,7 @@ extern "C" int64_t ref_time_ticks();
 extern "C" int get_time_usec(int64_t reft);
 
 double get_time_sec(uint64_t t) {
-    return t / 1000000000.0;
+    return get_time_usec(t) / 1000000.0;
 }
 
 bool unit_test ( const string & fn ) {
@@ -91,8 +91,8 @@ bool unit_test ( const string & fn ) {
                 return false;
             }
 #if 1
-            int width = 320;
-            int height = 240;
+            int width = 1280;
+            int height = 720;
             int frameCount = 16;
             Array arr;
             memset(&arr, 0, sizeof(Array));
@@ -136,17 +136,16 @@ bool unit_test ( const string & fn ) {
                 for (auto & th : threads) {
                     th.join();
                 }
-                auto t1 = ref_time_ticks();
+                auto dtf = get_time_sec(t0f);
                 magRayCount += rayCount;
-                tout << "done, " << int(rayCount) / double(1000000.0) << " mrays this frame, "
-                    << get_time_sec(t1 - t0f) << " sec\n";
+                tout << "done, " << int(rayCount) / double(1000000.0) << " mrays this frame, " << dtf << " sec\n";
             }
-            auto t2 = ref_time_ticks();
+            auto dta = get_time_sec(t0);
             auto mrays = magRayCount / 1000000.0;
             tout
-                << "took " << get_time_sec(t2 - t0) << " sec, "
+                << "took " << dta << " sec, "
                 << "total " << mrays << " mrays, "
-                << (mrays / get_time_sec(t2-t0)) << " mrays/s\n";
+                << (mrays / dta) << " mrays/s\n";
             saveTga("path_tracer.tga", &arr, width, height, &ctx);
             return true;
 #else
