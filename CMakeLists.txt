@@ -196,6 +196,9 @@ examples/pathTracer/toy_random.das
 include_directories(include pathTracer)
 add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(pathTracer libDaScript)
+IF (UNIX)
+  TARGET_LINK_LIBRARIES(pathTracer pthread)
+ENDIF()
 ADD_DEPENDENCIES(pathTracer libDaScript)
 SETUP_CPP11(pathTracer)
 
