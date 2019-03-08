@@ -462,7 +462,7 @@ namespace das {
             return Visitor::visitForSource(ffor, that, last);
         }
         virtual ExpressionPtr visit ( ExprFor * ffor ) override {
-            ss << "\n" << string(tab-1,'\t') << "loopend:;\n";
+            ss << "\n";
             for ( auto & var : ffor->iteratorVariables ) {
                 ss << string(tab,'\t') << "das_iterator_close(" << forSrcName(var->name) << ");\n";
             }
