@@ -158,6 +158,9 @@ namespace das {
                 if (program->options.getOption("plot")) {
                     logs << "\n" << program->dotGraph() << "\n";
                 }
+                if (program->options.getOption("logCpp")) {
+                    program->aotCpp(logs);
+                }
             }
             sort(program->errors.begin(), program->errors.end());
             if ( program->options.getOption("logCompileTime",false) ) {

@@ -1649,6 +1649,8 @@ namespace das
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
         void visit(Visitor & vis, bool visitGenerics = false);
+        void setPrintFlags();
+        void aotCpp ( TextWriter & logs );
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {

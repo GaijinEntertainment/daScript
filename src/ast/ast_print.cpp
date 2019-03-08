@@ -704,6 +704,11 @@ namespace das {
         int                 tab = 0;
     };
 
+    void Program::setPrintFlags() {
+        SetPrinterFlags flags;
+        visit(flags);
+    }
+
     template <typename TT>
     __forceinline TextWriter&  print ( TextWriter& stream, const TT & value ) {
         SetPrinterFlags flags;
