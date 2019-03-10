@@ -63,19 +63,19 @@ local function advance(bodies, nbody){
     local bix = bi[0]
     local biy = bi[1]
     local biz = bi[2]
-    local bimass = bi[6]
 
     local bivx = bi[3]
     local bivy = bi[4]
     local bivz = bi[5]
+    local bimass = bi[6]
 
     for (local j=i+1;j<nbody;j++) {
       local bj = bodies[j]
       local dx = bix-bj[0]
       local dy = biy-bj[1]
       local dz = biz-bj[2]
-      local distance = sqrt(dx*dx + dy*dy + dz*dz)
-      local mag = 1 / (distance * distance * distance)
+      local distance2 = (dx*dx + dy*dy + dz*dz)
+      local mag = 1 / (distance2 * sqrt(distance2))
       local bim = bimass*mag,
             bjm = bj[6]*mag;
       bivx -= (dx * bjm)

@@ -13,6 +13,7 @@
 #include <angelscript.h>
 #include <scriptstdstring/scriptstdstring.h>
 #include <scriptarray/scriptarray.h>
+#include <scriptmath/scriptmath.h>
 
 #ifdef USE_JIT
 #include "as_jit.h"
@@ -248,6 +249,7 @@ void ConfigureEngine(asIScriptEngine *engine)
 	// on how to register a custom string type, and other object types.
 	RegisterStdString(engine);
 	RegisterScriptArray(engine, true);
+	RegisterScriptMath(engine);
 
 	if( !strstr(asGetLibraryOptions(), "AS_MAX_PORTABILITY") )
 	{
