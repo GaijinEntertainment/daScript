@@ -24,12 +24,18 @@ int main(int unused)
     int ctime = GetSystemTime();
     for (uint j = 0; j < 100; ++j)
     {
-      for (uint i = 0; i < particles.length(); ++i)
-         particles[i].update();
+      for (uint i = 0,e =particles.length(); i < e; ++i)
+      {
+         //particles[i].update();
+         Particle@ p = particles[i];
+         p.x += p.vx;
+         p.y += p.vy;
+         p.z += p.vz;
+       }
      }
     int time = GetSystemTime()-ctime;
     print("\n");
-    print("time taken (msec): ");
+    print("particles inlined: time taken (msec): ");
     print (time);
     print("\n");
     return 0;

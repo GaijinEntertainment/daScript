@@ -1,8 +1,8 @@
 local function update_particle(p)
 {
-  p.pos.x=p.pos.x+p.vel.x
-  p.pos.y=p.pos.y+p.vel.y
-  p.pos.z=p.pos.z+p.vel.z
+  p.x+=p.vx
+  p.y+=p.vy
+  p.z+=p.vz
 }
 
 local function update(particles)
@@ -20,20 +20,15 @@ local function update_several_times(particles, count)
   }
 }
 
-local function updateI(particles)
-{
-  foreach(p in particles) {
-    p.pos.x=p.pos.x+p.vel.x
-    p.pos.y=p.pos.y+p.vel.y
-    p.pos.z=p.pos.z+p.vel.z
-  }
-}
-
 local function update_several_timesI(particles, count)
 {
   for (local i = 0; i < count; ++i)
   {
-    updateI(particles)
+    foreach(p in particles) {
+      p.x+=p.vx
+      p.y+=p.vy
+      p.z+=p.vz
+    }
   }
 }
 
@@ -43,8 +38,8 @@ for (local i = 0; i < 50000; ++i)
 {
   particles.push(
   	{
-  		pos = {x = i + 0.1, y = i + 0.2, z = i + 0.3},
-  		vel = {x = 1.1, y = 2.1,  z = 3.1}
+  		x = i + 0.1, y = i + 0.2, z = i + 0.3,
+  		vx = 1.1, vy = 2.1,  vz = 3.1
   	})
 }
 
