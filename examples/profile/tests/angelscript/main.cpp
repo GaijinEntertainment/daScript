@@ -147,7 +147,7 @@ int RunApplication(int argc, const char **argv)
 	// script the timeOut variable will be set to the time when the script must 
 	// stop executing. 
 	DWORD timeOut;
-	r = ctx->SetLineCallback(asFUNCTION(LineCallback), &timeOut, asCALL_CDECL);
+	//r = ctx->SetLineCallback(asFUNCTION(LineCallback), &timeOut, asCALL_CDECL);
 	if( r < 0 )
 	{
 		cout << "Failed to set the line callback function." << endl;

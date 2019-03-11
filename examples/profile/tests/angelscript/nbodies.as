@@ -89,7 +89,7 @@ void init_bodies()
   bodies[0].offsetMomentum(px,py,pz);
 }
 
-void advance_bodies(float dt, int nbody)
+void advance_bodies(int nbody)
 {
   float dx, dy, dz, dist2, mag, bm;   
   float bix, biy, biz, bimass, bivx, bivy, bivz;
@@ -110,7 +110,7 @@ void advance_bodies(float dt, int nbody)
       dz = biz - bj.z;
 
       dist2 = dx*dx + dy*dy + dz*dz;               
-      mag = dt / (sqrt(dist2) * dist2);
+      mag = 1 / (sqrt(dist2) * dist2);
 
       bm = bj.mass * mag;
       bivx -= dx * bm;
@@ -125,9 +125,9 @@ void advance_bodies(float dt, int nbody)
     bi.vx = bivx;
     bi.vy = bivy;
     bi.vz = bivz;
-    bi.x = bix + dt * bivx;
-    bi.y = biy + dt * bivy;
-    bi.z = biz + dt * bivz;
+    bi.x = bix + bivx;
+    bi.y = biy + bivy;
+    bi.z = biz + bivz;
   }      
 }
 
@@ -161,6 +161,16 @@ float calc_energy(int nbody){
   return e;
 }                                                                                                           
 
+void scale_bodies(int nbody, float scale) {
+  for(int i=0; i < nbody; ++i) {
+    Body@ bi = bodies[i];
+    bi.mass *= scale*scale;
+    bi.vx *= scale;
+    bi.vy *= scale;
+    bi.vz *= scale;
+  }
+}
+
 int main(int u)
 {
   //int n = 5000;
@@ -168,11 +178,13 @@ int main(int u)
   init_bodies();
   int nbody = bodies.length();
   print("\nenergy before "+calc_energy(nbody));
+  scale_bodies(nbody, 0.01);
   int ctime = GetSystemTime();
   for (int i=0; i<n; ++i) {
-    advance_bodies(0.01, nbody);
+    advance_bodies(nbody);
   }
   int time = GetSystemTime()-ctime;
+  scale_bodies(nbody, 1./0.01);
   print("\nenergy after "+calc_energy(nbody));
   print("\nnbodies "+time);
   return 0;
