@@ -1,4 +1,4 @@
-options logCpp=true, log=true
+options logCpp=true, log=true, logNodes=true
 
 [sideeffects]
 def fibR(n)
@@ -16,26 +16,9 @@ def fibI(n)
         last = tmp
     return cur
 
-[sideeffects]
-def fibIU(n)
-    let last = 0
-    let cur = 1
-    for i in range(0, (n-1)/4)
-        let tmp1 = cur
-        cur += last
-        let tmp2 = cur
-        cur += tmp1
-        let tmp3 = cur
-        cur += tmp2
-        let tmp4 = cur
-        cur += tmp3
-        last = tmp4
-    return cur
-
 [export]
 def test()
     print("fibI={fibI(6511134)}\n")
-    print("fibIU={fibIU(6511134)}\n")
     print("fibR={fibR(31)}\n")
     return true
 

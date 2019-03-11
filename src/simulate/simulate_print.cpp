@@ -2,8 +2,25 @@
 
 #include "daScript/simulate/simulate.h"
 
+#if __APPLE__
+#include <cxxabi.h>
+#endif
+
 
 namespace das {
+
+#if __APPLE__
+    string demangle(const char* mangled)
+    {
+        int status;
+        unique_ptr<char[], void (*)(void*)> result(abi::__cxa_demangle(mangled, 0, 0, &status), free);
+        return result.get() ? string(result.get()) : "error occurred";
+    }
+#else
+    string demangle(const char* mangled) {
+        return string();
+    }
+#endif
 
     struct SimPrint : SimVisitor {
         SimPrint ( TextWriter & wr ) : ss(wr) {
@@ -32,9 +49,14 @@ namespace das {
         virtual void cr () override {
             CR = true;
         }
-        virtual void op ( const char * name ) override {
+        virtual void op ( const char * name, size_t typeSize, const char * typeName ) override {
             SimVisitor::op(name);
             ss << name;
+            if ( typeName ) {
+                ss << "_TT<" << demangle(typeName) << ">";
+            } else if ( typeSize ) {
+                ss << "_TT<(" << typeSize << ")>";
+            }
         }
         virtual void sp ( uint32_t stackTop, const char * name ) override {
             SimVisitor::sp(stackTop,name);

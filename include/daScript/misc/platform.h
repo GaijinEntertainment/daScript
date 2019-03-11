@@ -66,3 +66,9 @@ inline void das_aligned_free16(void *ptr) {return delete[] (vec4f*)ptr; }
 #ifndef DAS_ASSERTF
 #define DAS_ASSERTF(a, msg, ...)   assert(a && msg)
 #endif
+
+#ifndef DAS_TYPE_NAME
+#include <typeinfo>
+#define DAS_TYPE_NAME(TT) (typeid(TT).name())
+#endif
+

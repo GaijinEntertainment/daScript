@@ -345,7 +345,7 @@ namespace das {
 
     SimNode * SimNode_NullCoalescingRef::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(NullCoalescingRef);
+        V_OP(NullCoalescingRef);
         V_SUB(subexpr);
         V_SUB(value);
         V_END();

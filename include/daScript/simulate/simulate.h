@@ -99,7 +99,7 @@ namespace das
     struct SimVisitor {
         virtual void preVisit ( SimNode * ) { }
         virtual void cr () {}
-        virtual void op ( const char * /* name */ ) {}
+        virtual void op ( const char * /* name */, size_t /* sz */ = 0, const char * /* TT */ = nullptr ) {}
         virtual void sp ( uint32_t /* stackTop */,  const char * /* op */ = "#sp" ) { }
         virtual void arg ( int32_t /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( uint32_t /* argV */,  const char * /* argN */  ) { }
