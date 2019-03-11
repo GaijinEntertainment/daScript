@@ -133,11 +133,11 @@ namespace das
         }
         static __forceinline vec4f BinShl ( vec4f a, vec4f b, Context & ) {
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
-            return v_cast_vec4f(v_slli(v_cast_vec4i(a),shift));
+            return v_cast_vec4f(v_sll(v_cast_vec4i(a),shift));
         }
         static __forceinline vec4f BinShr ( vec4f a, vec4f b, Context & ) {
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
-            return v_cast_vec4f(v_srai(v_cast_vec4i(a),shift));
+            return v_cast_vec4f(v_sra(v_cast_vec4i(a),shift));
         }
         static __forceinline void SetAdd  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
@@ -174,12 +174,12 @@ namespace das
         static __forceinline void SetBinShl  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
-            *pa = cast<TT>::to (v_cast_vec4f(v_slli(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
+            *pa = cast<TT>::to (v_cast_vec4f(v_sll(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
         }
         static __forceinline void SetBinShr  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
-            *pa = cast<TT>::to (v_cast_vec4f(v_srai(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
+            *pa = cast<TT>::to (v_cast_vec4f(v_sra(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
         }
         // vector-scalar
         static __forceinline vec4f DivVecScal ( vec4f a, vec4f b, Context & ) {
@@ -220,7 +220,7 @@ namespace das
         }
         static __forceinline vec4f BinShr ( vec4f a, vec4f b, Context & ) {
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
-            return v_cast_vec4f(v_srli(v_cast_vec4i(a),shift));
+            return v_cast_vec4f(v_srl(v_cast_vec4i(a),shift));
         }
         static __forceinline void SetDiv  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
@@ -237,7 +237,7 @@ namespace das
         static __forceinline void SetBinShr  ( char * a, vec4f b, Context & ) {
             TT * pa = (TT *)a;
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
-            *pa = cast<TT>::to (v_cast_vec4f(v_srli(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
+            *pa = cast<TT>::to (v_cast_vec4f(v_srl(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
         }
         // vector-scalar
         static __forceinline vec4f DivVecScal ( vec4f a, vec4f b, Context & ) {
