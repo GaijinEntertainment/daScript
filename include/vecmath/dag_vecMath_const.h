@@ -11,7 +11,7 @@
 
 #include "dag_vecMathDecl.h"
 
-#if _MSC_VER
+#if defined(_MSC_VER) && !defined(__clang__)
   #define DECL_VEC_CONST extern const __declspec(selectany) __declspec(align(16))
 #else
   #define DECL_VEC_CONST alignas(16) static const

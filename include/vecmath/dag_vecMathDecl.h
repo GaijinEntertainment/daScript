@@ -209,7 +209,7 @@ typedef vec4f quat4f;
 //! plane as 4D vector, .xyz=Norm, .w=D
 typedef vec4f plane3f;
 
-//to avoid memsetting the data if using eastl!
+//to avoid memsetting the data!
 namespace eastl
 {
   template <typename Count> inline void uninitialized_default_fill_n(vec4f* , Count){}

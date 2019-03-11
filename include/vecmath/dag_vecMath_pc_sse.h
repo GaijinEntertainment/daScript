@@ -214,6 +214,11 @@ VECMATH_FINLINE vec4i VECTORCALL v_subi(vec4i a, vec4i b) { return _mm_sub_epi32
 VECMATH_FINLINE vec4i VECTORCALL v_slli(vec4i v, int bits) {return _mm_slli_epi32(v, bits);}
 VECMATH_FINLINE vec4i VECTORCALL v_srli(vec4i v, int bits) {return _mm_srli_epi32(v, bits);}
 VECMATH_FINLINE vec4i VECTORCALL v_srai(vec4i v, int bits) {return _mm_srai_epi32(v, bits);}
+
+VECMATH_FINLINE vec4i VECTORCALL v_sll(vec4i v, int bits) {return _mm_slli_epi32(v, bits);}
+VECMATH_FINLINE vec4i VECTORCALL v_srl(vec4i v, int bits) {return _mm_srli_epi32(v, bits);}
+VECMATH_FINLINE vec4i VECTORCALL v_sra(vec4i v, int bits) {return _mm_srai_epi32(v, bits);}
+
 VECMATH_FINLINE vec4i VECTORCALL v_ori(vec4i a, vec4i b) {return _mm_or_si128(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL v_andi(vec4i a, vec4i b) {return _mm_and_si128(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL v_andnoti(vec4i a, vec4i b) {return _mm_andnot_si128(a, b);}
@@ -327,7 +332,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_neg(vec4f a) { return v_sub(v_zero(), a); }
 VECMATH_FINLINE vec4i VECTORCALL v_negi(vec4i a){ return v_subi(v_cast_vec4i(v_zero()), a); }
 VECMATH_FINLINE vec4f VECTORCALL v_abs(vec4f a)
 {
-  #if defined(__clang)
+  #if defined(__clang__)
     return v_max(v_neg(a), a);
   #else
     //for this code clang creates one instruction, but uses memory for it.
@@ -919,7 +924,7 @@ VECMATH_FINLINE int VECTORCALL v_extract_wi(vec4i v) {return _mm_cvtsi128_si32(_
 
 VECMATH_FINLINE int64_t VECTORCALL v_extract_xi64 ( vec4i a )
 {
-#if defined(_MSC_VER)//visual studio is not capable of produce reasonable code otherwise!
+#if defined(_MSC_VER) && !defined(__clang__)//visual studio is not capable of produce reasonable code otherwise!
     return a.m128i_i64[0];
 #else
     int64_t t; _mm_storel_epi64((__m128i*)&t, a); return t;

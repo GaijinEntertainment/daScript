@@ -196,12 +196,19 @@ VECMATH_FINLINE vec4i VECTORCALL v_addi(vec4i a, vec4i b);
 //! (a - b)
 VECMATH_FINLINE vec4i VECTORCALL v_subi(vec4i a, vec4i b);
 
-//! shift left (unsigned integer)
+//! shift left (unsigned integer). bits is immediate value
 VECMATH_FINLINE vec4i VECTORCALL v_slli(vec4i v, int bits);
-//! shift right (unsigned integer)
+//! shift right (unsigned integer). bits is immediate value
 VECMATH_FINLINE vec4i VECTORCALL v_srli(vec4i v, int bits);
-//! shift right (signed integer)
+//! shift right (signed integer). bits is immediate value
 VECMATH_FINLINE vec4i VECTORCALL v_srai(vec4i v, int bits);
+
+//! shift left (unsigned integer)
+VECMATH_FINLINE vec4i VECTORCALL v_sll(vec4i v, int bits);
+//! shift right (unsigned integer)
+VECMATH_FINLINE vec4i VECTORCALL v_srl(vec4i v, int bits);
+//! shift right (signed integer)
+VECMATH_FINLINE vec4i VECTORCALL v_sra(vec4i v, int bits);
 
 //! a | b (bitwise, integer)
 VECMATH_FINLINE vec4i VECTORCALL v_ori(vec4i a, vec4i b);

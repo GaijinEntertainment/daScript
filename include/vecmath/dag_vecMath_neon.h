@@ -1163,6 +1163,9 @@ VECMATH_FINLINE vec4i VECTORCALL v_slli(vec4i v, int bits) { return (int32x4_t)v
 VECMATH_FINLINE vec4i VECTORCALL v_srli(vec4i v, int bits) { return (int32x4_t)vshrq_n_u32((uint32x4_t)v, bits); }
 VECMATH_FINLINE vec4i VECTORCALL v_srai(vec4i v, int bits) { return vshrq_n_s32(v, bits); }
 #endif
+VECMATH_FINLINE vec4i VECTORCALL v_sll(vec4i v, int bits) { return (int32x4_t)vshlq_u32((uint32x4_t)v, (int32x4_t)v_splatsi(bits)); }
+VECMATH_FINLINE vec4i VECTORCALL v_srl(vec4i v, int bits) { return (int32x4_t)vshlq_u32((uint32x4_t)v, (int32x4_t)v_splatsi(-bits)); }
+VECMATH_FINLINE vec4i VECTORCALL v_sra(vec4i v, int bits) { return vshlq_s32(v, (int32x4_t)v_splatsi(-bits)); }
 
 VECMATH_FINLINE vec4i VECTORCALL v_ori(vec4i a, vec4i b) { return vorrq_s32(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL v_andi(vec4i a, vec4i b) { return vandq_s32(a, b); }
