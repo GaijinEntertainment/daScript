@@ -32,7 +32,7 @@ namespace das {
     };
 
     struct SimPolicy_MathFloat {
-        static __forceinline float Abs   ( float a, Context & )          { return v_extract_x(v_abs(v_splats(a))); }
+        static __forceinline float Abs   ( float a, Context & )          { return fabsf(a); }
         static __forceinline float Floor ( float a, Context & )          { return v_extract_x(v_floor(v_splats(a))); }
         static __forceinline float Ceil  ( float a, Context & )          { return v_extract_x(v_ceil(v_splats(a))); }
         static __forceinline float Sqrt  ( float a, Context & )          { return v_extract_x(v_sqrt_x(v_splats(a))); }
@@ -77,6 +77,13 @@ namespace das {
         static __forceinline vec4f Clamp ( vec4f a, vec4f r0, vec4f r1, Context & ) { return v_max(v_min(a,r1), r0); }
         static __forceinline vec4f Mad   ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,b,c); }
         static __forceinline vec4f MadS  ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,v_perm_xxxx(b),c); }
+        static __forceinline vec4f Reflect(vec4f v, vec4f n, Context & )
+        {
+            // def reflect(v,n:float3)
+            //  return v - float(2.) * dot(v, n) * n
+            vec4f t = v_mul(v_dot3(v,n),n);
+            return v_sub(v, v_add(t,t));
+        }
         static __forceinline vec4f Lerp  ( vec4f a, vec4f b, vec4f t, Context & ) { return v_madd(v_sub(b,a),t,a); }
 
         static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
@@ -203,6 +210,9 @@ namespace das {
     IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,float3);
     IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,float4);
 
+    DEFINE_POLICY(Reflect)     // reflect
+    IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(Reflect,float3);
+
     // trig types
     template <typename TT>
     void addFunctionTrig(Module & mod, const ModuleLibrary & lib) {
@@ -325,16 +335,6 @@ namespace das {
     __forceinline void sincosD ( double a, double & sv, double & cv ) {
         sv = sin(a);
         cv = cos(a);
-    }
-
-    // def reflect(v,n:float3)
-    //  return v - float(2.) * dot(v, n) * n
-    __forceinline float3 reflect ( float3 vv, float3 nn ) {
-        vec4f v = v_ldu(&vv.x);
-        vec4f n = v_ldu(&nn.x);
-        vec4f t = v_mul(v_dot3(v,n),n);
-        vec4f res = v_sub(v, v_add(t,t));
-        return *((float3 *)&res);
     }
 
     // def refract(v,n:float3;nint:float;outRefracted:float3&)
@@ -465,7 +465,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(sincosF)>(*this, lib, "sincos", SideEffects::modifyArgument);
             addExtern<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::modifyArgument);
 
-            addExtern<DAS_BIND_FUN(reflect)>(*this, lib, "reflect", SideEffects::none);
+            addFunction( make_shared<BuiltInFn<Sim_Reflect<float3>,   float3, float3,  float3> >("reflect",    lib) );
             addExtern<DAS_BIND_FUN(refract)>(*this, lib, "refract", SideEffects::modifyArgument);
 
             addFunctionCommonConversion<int, float>(*this, lib);
