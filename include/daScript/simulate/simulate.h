@@ -966,7 +966,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_StringBuilder ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
-        TypeInfo ** types;
     };
 
     // CAST
@@ -2152,7 +2151,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ForWithIterator ( const LineInfo & at )
             : SimNode_ForWithIteratorBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
-            return visitFor(vis, total);
+            return visitFor(vis, totalCount);
         }
         virtual vec4f eval ( Context & context ) override {
             vec4f * pi[totalCount];

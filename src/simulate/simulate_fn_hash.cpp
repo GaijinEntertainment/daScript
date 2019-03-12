@@ -44,7 +44,7 @@ namespace das {
             write(argN);
         }
         virtual void arg ( const char * argV,  const char * argN  ) override {
-            write(argV);
+            if ( argV ) write(argV);
             write(argN);
         }
         virtual void arg ( vec4f argV,  const char * argN ) override {

@@ -565,7 +565,7 @@ namespace das {
         vis.op(op);
         V_SUB(arguments[0]);
         V_SUB(arguments[1]);
-        V_SUB(arguments[3]);
+        V_SUB(arguments[2]);
         V_END();
     }
 

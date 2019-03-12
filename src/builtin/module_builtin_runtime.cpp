@@ -133,7 +133,7 @@ namespace das
         addAnnotation(make_shared<UnsafeFunctionAnnotation>());
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
         addExtern<DAS_BIND_FUN(builtin_terminate)> (*this, lib, "terminate", SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk", SideEffects::modifyExternal);
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal);
