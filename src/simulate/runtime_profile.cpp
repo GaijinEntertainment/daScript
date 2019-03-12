@@ -7,7 +7,7 @@ extern "C" int get_time_usec (int64_t reft);
 
 namespace das
 {
-    float builtin_profile ( int32_t count, char * category, const Block & block, Context * context ) {
+    float builtin_profile ( int32_t count, const char * category, const Block & block, Context * context ) {
         count = max(count, 1);
         int minT = INT32_MAX;
         for ( int32_t i = 0; i != count; ++i ) {

@@ -2,6 +2,7 @@
 
 #include <setjmp.h>
 #include "daScript/misc/vectypes.h"
+#include "daScript/misc/type_name.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/simulate/cast.h"
 #include "daScript/simulate/runtime_string.h"
@@ -99,7 +100,7 @@ namespace das
     struct SimVisitor {
         virtual void preVisit ( SimNode * ) { }
         virtual void cr () {}
-        virtual void op ( const char * /* name */, size_t /* sz */ = 0, const char * /* TT */ = nullptr ) {}
+        virtual void op ( const char * /* name */, size_t /* sz */ = 0, const string & /* TT */ = string() ) {}
         virtual void sp ( uint32_t /* stackTop */,  const char * /* op */ = "#sp" ) { }
         virtual void arg ( int32_t /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( uint32_t /* argV */,  const char * /* argN */  ) { }

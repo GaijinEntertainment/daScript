@@ -110,6 +110,7 @@ include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
 include/daScript/misc/rangetype.h
 include/daScript/misc/string_writer.h
+include/daScript/misc/type_name.h
 src/misc/string_writer.cpp
 )
 list(SORT MISC_SRC)
