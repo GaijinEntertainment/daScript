@@ -387,6 +387,19 @@ namespace das {
             ss << "float4(" << val.x << "f," << val.y << "f," << val.z << "f," << val.w << "f)";
             return Visitor::visit(c);
         }
+        // if then else
+        virtual void preVisit ( ExprIfThenElse * ifte ) override {
+            Visitor::preVisit(ifte);
+            ss << "if ( ";
+        }
+        virtual void preVisitIfBlock ( ExprIfThenElse * ifte, Expression * block ) override {
+            Visitor::preVisitIfBlock(ifte,block);
+            ss << " )\n";
+        }
+        virtual void preVisitElseBlock ( ExprIfThenElse * ifte, Expression * block ) override {
+            Visitor::preVisitElseBlock(ifte, block);
+            ss << string(tab,'\t') << "else\n";
+        }
     // string builder
         virtual void preVisit ( ExprStringBuilder * expr ) override {
             Visitor::preVisit(expr);

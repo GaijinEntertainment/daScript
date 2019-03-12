@@ -97,56 +97,68 @@ namespace das {
     };
 
     namespace aot {
-        int fibI ( Context * __context__, int n )
+        bool isprime ( Context * __context__, int n )
         {
-            int last = 0;
-            int cur = 1;
             {
                 bool __need_loop = true;
-                das_iterator<range> __i_iterator(range(0,n - 1));
+                das_iterator<range> __i_iterator(range(2,n));
                 int i;
                 __need_loop = __i_iterator.first(__context__,i) && __need_loop;
                 for ( ; __need_loop ; __need_loop &= __need_loop && __i_iterator.next(__context__,i) )
                 {
-                    int tmp = cur;
-                    cur += last;
-                    last = tmp;
+                    if ( (n % i) == 0 )
+                    {
+                        return false;
+                    };
                 }
                 __i_iterator.close(__context__,i);
             };
-            return cur;
+            return true;
         }
 
-        int fibR ( Context * __context__, int n )
+        int primes ( Context * __context__, int n )
         {
-            return (n < 2) ? n : (fibR(__context__,n - 1) + fibR(__context__,n - 2));
+            int count = 0;
+            {
+                bool __need_loop = true;
+                das_iterator<range> __i_iterator(range(2,n + 1));
+                int i;
+                __need_loop = __i_iterator.first(__context__,i) && __need_loop;
+                for ( ; __need_loop ; __need_loop &= __need_loop && __i_iterator.next(__context__,i) )
+                {
+                    if ( isprime(__context__,i) )
+                    {
+                        ++count;
+                    };
+                }
+                __i_iterator.close(__context__,i);
+            };
+            return count;
         }
 
         bool test ( Context * __context__ )
         {
-            int ii, rr;
-            builtin_profile(20,"fibbonacci loop",das_make_block<void>(__context__,[&]()->void{
-                ii = fibI(__context__,6511134);
+            int pl = 0;
+            builtin_profile(20,"primes loop",das_make_block<void>(__context__,[&]()->void{
+                pl = primes(__context__,14000);
             }),__context__);
-            builtin_profile(20,"fibbonacci recursive",das_make_block<void>(__context__,[&]()->void{
-                rr = fibR(__context__,31);
-            }),__context__);
-            printf("%i %i\n", ii, rr);
+            // print(das_string_builder("pl=", pl, "\n"),__context__);
+            printf("pl=%i\n", pl);
             return true;
         }
 
-        void registerAot(AotLibrary & aotLib)
+        void registerAot ( AotLibrary & aotLib )
         {
-            // fibI
-            aotLib[0xfb2b67397b8e1040] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(fibI)>>();
+            // isprime
+            aotLib[0x5a13440d659400bf] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(isprime)>>();
             };
-            // fibR
-            aotLib[0x1699e592401b4ce5] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(fibR)>>();
+            // primes
+            aotLib[0x7f950695145e822] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(primes)>>();
             };
             // test
-            aotLib[0xda3d144b0aa3a86a] = [&](Context & ctx){
+            aotLib[0x431c339711f89356] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(test)>>();
             };
         }

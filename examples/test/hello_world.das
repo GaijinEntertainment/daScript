@@ -1,26 +1,36 @@
-options logCpp=true, logNodes=true
+options logCpp=true, logNodes=false
+
+def isprime(n)
+    for i in range(2, n)
+        if (n % i == 0)
+            return false
+    return true
 
 [sideeffects]
-def fibR(n)
-    if (n < 2)
-        return n
-	return fibR(n - 1) + fibR(n - 2)
+def primes(n)
+    let count = 0
+    for i in range(2, n+1)
+        if (isprime(i))
+            ++count
+    return count
 
 [sideeffects]
-def fibI(n)
-    let last = 0
-    let cur = 1
-    for i in range(0, n-1)
-        let tmp = cur
-        cur += last
-        last = tmp
-    return cur
+def primesI(n)
+    let count = 0
+    for i in range(2, n+1)
+		count ++
+		for j in range(2,i)
+			if i % j == 0
+				count --
+				break
+    return count
 
 [export]
 def test()
-    profile(20,"fibbonacci loop") <|
-        fibI(6511134)
-    profile(20,"fibbonacci recursive") <|
-        fibR(31)
+	let pl = 0
+	profile(20,"primes loop") <|
+        pl = primes(14000)
+	print("pl={pl}\n")
     return true
+
 
