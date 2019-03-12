@@ -374,6 +374,13 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ConstString::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ConstString);
+        V_ARG(value);
+        V_END();
+    }
+
     SimNode * SimNode_Zero::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(Zero);

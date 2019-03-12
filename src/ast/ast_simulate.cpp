@@ -658,7 +658,7 @@ namespace das
 
     SimNode * ExprConstString::simulate (Context & context) const {
         char * str = context.code->allocateString(text);
-        return context.code->makeNode<SimNode_ConstValue>(at,cast<char *>::from(str));
+        return context.code->makeNode<SimNode_ConstString>(at,str);
     }
 
     SimNode * ExprStaticAssert::simulate (Context &) const {

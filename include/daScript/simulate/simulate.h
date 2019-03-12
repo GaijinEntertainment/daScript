@@ -1715,6 +1715,16 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // CONST-VALUE
+    struct SimNode_ConstString : SimNode {
+        SimNode_ConstString(const LineInfo & at, char * c)
+            : SimNode(at), value(c) { }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f       eval ( Context & )      override { return cast<char *>::from(value); }
+        virtual char *      evalPtr(Context &)      override { return value; }
+        char * value;
+    };
+
+    // CONST-VALUE
     struct SimNode_ConstValue : SimNode {
         SimNode_ConstValue(const LineInfo & at, vec4f c)
             : SimNode(at), value(c) { }

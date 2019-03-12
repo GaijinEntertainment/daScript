@@ -13,12 +13,14 @@ namespace das {
             while ( size-- ) {
                 offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
             }
+            // printf("%llx", offset_basis);
         }
         __forceinline void write ( const void * pb ) {
             const uint8_t * block = (const uint8_t *) pb;
             for (; *block; block++) {
                 offset_basis = ( offset_basis ^ *block ) * fnv_prime;
             }
+            // printf("[%s] %llx ", (const char *) pb, offset_basis);
         }
         __forceinline uint64_t getHash() const  {
             return (offset_basis <= 1) ? fnv_prime : offset_basis;

@@ -1,4 +1,4 @@
-options logCpp=true
+options logCpp=true, logNodes=true
 
 [sideeffects]
 def fibR(n)

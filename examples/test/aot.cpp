@@ -124,27 +124,29 @@ namespace das {
 
         bool test ( Context * __context__ )
         {
+            int ii, rr;
             builtin_profile(20,"fibbonacci loop",das_make_block<void>(__context__,[&]()->void{
-                fibI(__context__,6511134);
+                ii = fibI(__context__,6511134);
             }),__context__);
             builtin_profile(20,"fibbonacci recursive",das_make_block<void>(__context__,[&]()->void{
-                fibR(__context__,31);
+                rr = fibR(__context__,31);
             }),__context__);
+            printf("%i %i\n", ii, rr);
             return true;
         }
 
-        void registerAot ( AotLibrary & aotLib )
+        void registerAot(AotLibrary & aotLib)
         {
             // fibI
-            aotLib[0x5bae295d453c458a] = [&](Context & ctx){
+            aotLib[0xfb2b67397b8e1040] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(fibI)>>();
             };
             // fibR
-            aotLib[0x6ac4dc42d12fa50] = [&](Context & ctx){
+            aotLib[0x1699e592401b4ce5] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(fibR)>>();
             };
             // test
-            aotLib[0x9f8f4bbfb9d8dc7f] = [&](Context & ctx){
+            aotLib[0xda3d144b0aa3a86a] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(test)>>();
             };
         }
