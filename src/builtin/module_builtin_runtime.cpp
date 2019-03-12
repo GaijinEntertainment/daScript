@@ -164,7 +164,7 @@ namespace das
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile
-        addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal, "builtin_profile");
         addString(lib);
     }
 }

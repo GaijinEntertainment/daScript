@@ -124,7 +124,7 @@ namespace das {
         CppAot () {}
         string str() const { return ss.str(); };
     protected:
-        TextWriter ss;
+        TextWriter ss, se;
         int        lastNewLine = -1;
         int        tab = 0;
     protected:
@@ -400,11 +400,35 @@ namespace das {
             ss << ")";
             return Visitor::visit(expr);
         }
+    // ExprMakeBlock
+        virtual void preVisit ( ExprMakeBlock * expr ) override {
+            Visitor::preVisit(expr);
+            auto block = static_pointer_cast<ExprBlock>(expr->block);
+            ss << "das_make_block<";
+            ss << describeCppType(block->returnType);
+            for ( auto & arg : block->arguments ) {
+                ss << "," << describeCppType(arg->type);
+            }
+            ss << ">(__context__,[&](";
+            for ( auto & arg : block->arguments ) {
+                ss << describeCppType(arg->type) << " " << arg->name;
+            }
+            ss << ")->" << describeCppType(block->returnType);
+        }
+        virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
+            ss << ")";
+            return Visitor::visit(expr);
+        }
     // call
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
             if ( call->func->builtIn ) {
-                ss << call->name << "(";
+                auto bif = static_cast<BuiltInFunction *>(call->func);
+                if ( bif->cppName.empty() ) {
+                    ss << bif->name << "(";
+                } else {
+                    ss << bif->cppName << "(";
+                }
             } else {
                 // TODO: support 'hybrid' calls here
                 ss << call->name << "(__context__,";
@@ -420,19 +444,19 @@ namespace das {
         }
     // for
         string forSrcName ( const string & varName ) const {
-            return "_" + varName + "_iterator";
+            return "__" + varName + "_iterator";
         }
         virtual void preVisit ( ExprFor * ffor ) override {
             Visitor::preVisit(ffor);
             ss << "{\n";
             tab ++;
-            ss << string(tab,'\t') << "bool need_loop = true;\n";
+            ss << string(tab,'\t') << "bool __need_loop = true;\n";
         }
         virtual void preVisitForBody ( ExprFor * ffor, Expression * body ) override {
             Visitor::preVisitForBody(ffor, body);
-            ss << string(tab,'\t') << "for ( ; need_loop ; need_loop = need_loop";
+            ss << string(tab,'\t') << "for ( ; __need_loop ; __need_loop &= __need_loop";
             for ( auto & var : ffor->iteratorVariables ) {
-                ss << " & das_iterator_next(" << var->name << "," << forSrcName(var->name) << ")";
+                ss << " && " << forSrcName(var->name) << ".next(__context__," << var->name << ")";
             }
             ss << " )\n";
             ss << string(tab,'\t');
@@ -446,7 +470,8 @@ namespace das {
                 }
             }
             auto & var = ffor->iteratorVariables[idx];
-            ss << string(tab,'\t') << "auto " << forSrcName(var->name) << " = das_iterator(";
+            ss << string(tab,'\t') << "das_iterator<" << describeCppType(ffor->sources[idx]->type)
+                << "> " << forSrcName(var->name) << "(";
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
             size_t idx;
@@ -458,13 +483,14 @@ namespace das {
             ss << ");\n";
             auto & var = ffor->iteratorVariables[idx];
             ss << string(tab,'\t') << describeCppType(var->type) << " " << var->name << ";\n";
-            ss << string(tab,'\t') << "need_loop = das_iterator_first(" << var->name << "," << forSrcName(var->name) << ") && need_loop;\n";
+            ss << string(tab,'\t') << "__need_loop = " << forSrcName(var->name)
+                << ".first(__context__," << var->name << ") && __need_loop;\n";
             return Visitor::visitForSource(ffor, that, last);
         }
         virtual ExpressionPtr visit ( ExprFor * ffor ) override {
             ss << "\n";
             for ( auto & var : ffor->iteratorVariables ) {
-                ss << string(tab,'\t') << "das_iterator_close(" << forSrcName(var->name) << ");\n";
+                ss << string(tab,'\t') << forSrcName(var->name) << ".close(__context__," << var->name << ");\n";
             }
             tab --;
             ss << string(tab,'\t') << "}";

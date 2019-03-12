@@ -113,6 +113,7 @@ namespace das
     };
 
     void printSimNode ( TextWriter & ss, SimNode * node );
+    uint64_t getSemanticHash ( SimNode * node );
 
     class Context {
         template <typename TT> friend struct SimNode_GetGlobalR2V;

@@ -128,6 +128,7 @@ src/simulate/runtime_profile.cpp
 src/simulate/simulate.cpp
 src/simulate/simulate_visit.cpp
 src/simulate/simulate_print.cpp
+src/simulate/simulate_fn_hash.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h
@@ -274,6 +275,7 @@ examples/common/fileAccess.h
 examples/test/test_handles.cpp
 examples/test/test_enum.cpp
 examples/test/module_unitTest.h
+examples/test/aot.cpp
 )
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)

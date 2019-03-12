@@ -3,6 +3,12 @@
 
 using namespace das;
 
+namespace das {
+    namespace aot {
+        void registerAot ( AotLibrary & aotLib );
+    }
+}
+
 bool g_reportCompilationFailErrors = false;
 
 TextPrinter tout;
@@ -76,6 +82,10 @@ bool unit_test ( const string & fn ) {
                 }
                 return false;
             }
+            // now, what we get to do is to link AOT
+            AotLibrary aotLib;
+            das::aot::registerAot(aotLib);
+            program->linkCppAot(ctxBase, aotLib, tout);
             // note: copy of the context is here for testing purposes only
             //          that way we test context-copying functionality every time
             Context ctx(ctxBase);

@@ -254,9 +254,10 @@ namespace das {
 
     // built-in function
 
-    BuiltInFunction::BuiltInFunction ( const string & fn ) {
+    BuiltInFunction::BuiltInFunction ( const string & fn, const string & fnCpp ) {
         builtIn = true;
         name = fn;
+        cppName = fnCpp;
     }
 
     // expression

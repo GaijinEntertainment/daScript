@@ -1722,6 +1722,32 @@ namespace das
                 logs << "\n\n";
             }
         }
+        if (options.getOption("logCpp")) {
+            logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
+            for ( int i=0; i!=context.totalFunctions; ++i ) {
+                SimFunction * fn = context.getFunction(i);
+                uint64_t semH = getSemanticHash(fn->code);
+                logs << "\t// " << fn->name << "\n";
+                logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
+                logs << "ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(" << fn->name << ")>>();\n\t};\n";
+
+            }
+            logs << "}\n";
+        }
         return errors.size() == 0;
+    }
+
+    void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
+        for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
+            SimFunction & fn = context.functions[fni];
+            uint64_t semHash = getSemanticHash(fn.code);
+            auto it = aotLib.find(semHash);
+            if ( it != aotLib.end() ) {
+                fn.code = (it->second)(context);
+                logs << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+            } else {
+                 logs << "NOT FOUND " << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+            }
+        }
     }
 }

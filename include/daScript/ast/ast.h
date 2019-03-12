@@ -1472,7 +1472,9 @@ namespace das
 
     class BuiltInFunction : public Function {
     public:
-        BuiltInFunction ( const string & fn );
+        BuiltInFunction ( const string & fn, const string & fnCpp );
+    public:
+        string cppName;
     };
 
     struct Error {
@@ -1609,6 +1611,10 @@ namespace das
         map<string,EnumInfo *>      emn2e;
     };
 
+    // this is how we make node
+    typedef function<SimNode * (Context &)> AotFactory;
+    typedef map<uint64_t,AotFactory> AotLibrary;
+
     class Program : public enable_shared_from_this<Program> {
     public:
         Program();
@@ -1643,6 +1649,7 @@ namespace das
         void allocateStack(TextWriter & logs);
         string dotGraph();
         bool simulate ( Context & context, TextWriter & logs );
+        void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );

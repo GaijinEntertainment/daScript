@@ -1,4 +1,4 @@
-options logCpp=true, log=true, logNodes=true
+options logCpp=true
 
 [sideeffects]
 def fibR(n)
@@ -18,7 +18,9 @@ def fibI(n)
 
 [export]
 def test()
-    print("fibI={fibI(6511134)}\n")
-    print("fibR={fibR(31)}\n")
+    profile(20,"fibbonacci loop") <|
+        fibI(6511134)
+    profile(20,"fibbonacci recursive") <|
+        fibR(31)
     return true
 
