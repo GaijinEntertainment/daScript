@@ -5,6 +5,8 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast_policy_types.h"
 
+#include "daScript/simulate/sim_policy.h"
+
 #include <ctime>
 
 namespace das {

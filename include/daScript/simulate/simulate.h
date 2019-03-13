@@ -7,7 +7,6 @@
 #include "daScript/simulate/cast.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_info.h"
-#include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/heap.h"
 
 #include "daScript/simulate/simulate_visit_op.h"

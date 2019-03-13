@@ -5,6 +5,8 @@
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/debug_print.h"
 
+#include "daScript/simulate/sim_policy.h"
+
 namespace das
 {
     // string operations
