@@ -1460,6 +1460,8 @@ namespace das {
             }
             ist.second = vis.visit(pst);
         }
+        // real things
+        vis.preVisitProgramBody(this);
         // globals
         for ( auto & it : thisModule->globals ) {
             auto & var = it.second;

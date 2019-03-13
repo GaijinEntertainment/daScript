@@ -1,36 +1,46 @@
 options logCpp=true, logNodes=false
 
-def isprime(n)
-    for i in range(2, n)
-        if (n % i == 0)
-            return false
-    return true
+struct NObject
+    position, velocity : float3 = float3(0)
 
-[sideeffects]
-def primes(n)
-    let count = 0
-    for i in range(2, n+1)
-        if (isprime(i))
-            ++count
-    return count
+def update(a:NObject)
+    let b : NObject & = a
+    a.position+=b.velocity
 
-[sideeffects]
-def primesI(n)
-    let count = 0
-    for i in range(2, n+1)
-		count ++
-		for j in range(2,i)
-			if i % j == 0
-				count --
-				break
-    return count
+def testSim(objects:array<NObject>)
+    for obj in objects
+        update(obj)
+
+def testSim2(objects:array<NObject>; count:int)
+    for i in range(0,count)
+        testSim(objects)
+
+def testSimI(objects:array<NObject>)
+    for obj in objects
+        obj.position += obj.velocity
+
+def testSim2I(objects:array<NObject>; count:int)
+    for i in range(0,count)
+        testSimI(objects)
+
+def init(objects:array<NObject>)
+    resize(objects, 50000)
+    let i = 0
+    for obj in objects
+        obj.position=float3(i++,i+1,i+2)
+        obj.velocity=float3(1.0,2.0,3.0)
+    assert(i==length(objects))
 
 [export]
 def test()
-	let pl = 0
-	profile(20,"primes loop") <|
-        pl = primes(14000)
-	print("pl={pl}\n")
+    let objects:array<NObject>
+    init(objects)
+    let(total=20)
+        profile(total,"particles kinematics") <|
+            testSim2(objects,100)
+        profile(total,"particles kinematics, inlined") <|
+            testSim2I(objects,100)
     return true
+
 
 

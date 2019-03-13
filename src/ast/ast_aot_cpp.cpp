@@ -74,7 +74,7 @@ namespace das {
         return g_cppCTypeTable.find(t);
     }
 
-    string describeCppType ( const TypeDeclPtr & type ) {
+    string describeCppType ( const TypeDeclPtr & type, bool substituteRef = false ) {
         TextWriter stream;
         auto baseType = type->baseType;
         if ( type->constant ) {
@@ -152,7 +152,11 @@ namespace das {
             stream << " >";
         }
         if ( type->ref ) {
-            stream << " &";
+            if ( !substituteRef ) {
+                stream << " &";
+            } else {
+                stream << " *";
+            }
         }
         return stream.str();
     }
@@ -234,6 +238,55 @@ namespace das {
             return expr->topLevel || expr->bottomLevel || expr->argLevel;
         }
     protected:
+        // strcuture
+        virtual void preVisit ( Structure * that ) override {
+            Visitor::preVisit(that);
+            ss << "\nstruct " << that->name << " {\n";
+        }
+        virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
+            Visitor::preVisitStructureField(that, decl, last);
+            ss << "\t" << describeCppType(decl.type) << " " << decl.name << ";";
+            if ( decl.parentType ) {
+                ss << " /* from " << that->parent->name << " */";
+            }
+            if ( decl.init ) {
+                ss << " /* = ";
+            }
+        }
+        virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
+            if ( decl.init ) {
+                ss << " */\n";
+            } else {
+                ss << "\n";
+            }
+            Visitor::visitStructureField(var, decl, last);
+        }
+        virtual StructurePtr visit ( Structure * that ) override {
+            ss << "};\n";
+            return Visitor::visit(that);
+        }
+    // program body
+        virtual void preVisitProgramBody ( Program * prog ) override {
+            // functions
+            ss << "\n";
+            for ( auto & fnI : prog->thisModule->functions ) {
+                auto & fn = fnI.second;
+                if ( !fn->builtIn ) {
+                    ss << describeCppType(fn->result) << " " << fn->name << " ( Context * __context__";
+                    for ( auto & var : fn->arguments ) {
+                        ss << describeCppType(var->type) << " ";
+                        if ( var->type->isRefType() ) {
+                            ss << "& ";
+                        }
+                        ss << var->name;
+                        if ( var != fn->arguments.back() ) {
+                            ss << ", ";
+                        }
+                    }
+                    ss << " );\n";
+                }
+            }
+        }
     // function
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
@@ -245,14 +298,18 @@ namespace das {
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
-            ss << ", " << describeCppType(arg->type) << " " << arg->name;
+            // arg
+            ss << ", " << describeCppType(arg->type);
+            if ( arg->type->isRefType() ) {
+                ss << " & ";
+            }
+            ss << " " << arg->name;
         }
         virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & arg, Expression * expr ) override {
             Visitor::preVisitArgumentInit(fn,arg,expr);
             ss << " = ";
         }
         virtual VariablePtr visitArgument ( Function * fn, const VariablePtr & that, bool last ) override {
-            // if ( !last ) ss << "; ";
             return Visitor::visitArgument(fn, that, last);
         }
         virtual FunctionPtr visit ( Function * fn ) override {
@@ -300,7 +357,7 @@ namespace das {
         }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
-            ss << describeCppType(var->type) << " " << var->name;
+            ss << describeCppType(var->type,true) << " " << var->name;
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             if ( let->subexpr ) {
@@ -312,6 +369,15 @@ namespace das {
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
             ss << " = ";
+            if ( var->type->ref ) {
+                ss << "&(";
+            }
+        }
+        virtual ExpressionPtr visitLetInit ( ExprLet * let , const VariablePtr & var, Expression * that ) override {
+            if ( var->type->ref ) {
+                ss << ")";
+            }
+            return Visitor::visitLetInit(let, var, that);
         }
     // copy
         virtual void preVisitRight ( ExprCopy * that, Expression * right ) override {
@@ -384,8 +450,21 @@ namespace das {
         }
     // var
         virtual ExpressionPtr visit ( ExprVar * var ) override {
-            ss << var->name;
+            if ( var->local && var->variable->type->ref ) {
+                ss << "(*" << var->name << ")";
+            } else {
+                ss << var->name;
+            }
             return Visitor::visit(var);
+        }
+    // field
+        virtual ExpressionPtr visit ( ExprField * field ) override {
+            if ( field->value->type->baseType==Type::tPointer ) {
+                 ss << "->" << field->name;
+            } else {
+                ss << "." << field->name;
+            }
+            return Visitor::visit(field);
         }
     // const
         virtual ExpressionPtr visit(ExprFakeContext * c) override {
@@ -585,15 +664,20 @@ namespace das {
         string forSrcName ( const string & varName ) const {
             return "__" + varName + "_iterator";
         }
+        string needLoopName ( ExprFor * ffor ) const {
+            return "__need_loop_" + to_string(ffor->at.line);
+        }
         virtual void preVisit ( ExprFor * ffor ) override {
             Visitor::preVisit(ffor);
             ss << "{\n";
             tab ++;
-            ss << string(tab,'\t') << "bool __need_loop = true;\n";
+            auto nl = needLoopName(ffor);
+            ss << string(tab,'\t') << "bool " << nl << " = true;\n";
         }
         virtual void preVisitForBody ( ExprFor * ffor, Expression * body ) override {
             Visitor::preVisitForBody(ffor, body);
-            ss << string(tab,'\t') << "for ( ; __need_loop ; __need_loop &= __need_loop";
+            auto nl = needLoopName(ffor);
+            ss << string(tab,'\t') << "for ( ; " << nl << " ; " << nl << " &= " << nl;
             for ( auto & var : ffor->iteratorVariables ) {
                 ss << " && " << forSrcName(var->name) << ".next(__context__," << var->name << ")";
             }
@@ -621,9 +705,12 @@ namespace das {
             }
             ss << ");\n";
             auto & var = ffor->iteratorVariables[idx];
-            ss << string(tab,'\t') << describeCppType(var->type) << " " << var->name << ";\n";
-            ss << string(tab,'\t') << "__need_loop = " << forSrcName(var->name)
-                << ".first(__context__," << var->name << ") && __need_loop;\n";
+            // source
+            ss << string(tab,'\t') << describeCppType(var->type,true) << " " << var->name << ";\n";
+            // loop
+            auto nl = needLoopName(ffor);
+            ss << string(tab,'\t') << nl << " = " << forSrcName(var->name)
+                << ".first(__context__," << var->name << ") && " << nl << ";\n";
             return Visitor::visitForSource(ffor, that, last);
         }
         virtual ExpressionPtr visit ( ExprFor * ffor ) override {

@@ -6,6 +6,16 @@
 namespace das {
 
     template <typename TT>
+    struct TArray : Array {
+        TArray() {
+            data = nullptr;
+            size = 0;
+            capacity = 0;
+            lock = 0;
+        }
+    };
+
+    template <typename TT>
     struct das_iterator;
 
     template <>
@@ -143,76 +153,11 @@ namespace das {
     }
 
     void builtin_print ( char * text, Context * context );
+    void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context );
 
     namespace aot {
-
-        TypeInfo __type_info__a7069c83 = { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 };
-        TypeInfo __type_info__f293c4e8 = { Type::tInt, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xf293c4e8 };
-        TypeInfo * __tinfo_0[3] = { &__type_info__a7069c83, &__type_info__f293c4e8, &__type_info__a7069c83 };
-        
-        bool isprime ( Context * __context__, int32_t n )
-        {
-            {
-                bool __need_loop = true;
-                das_iterator<range> __i_iterator(range(2,n));
-                int32_t i;
-                __need_loop = __i_iterator.first(__context__,i) && __need_loop;
-                for ( ; __need_loop ; __need_loop &= __need_loop && __i_iterator.next(__context__,i) )
-                {
-                    if ( (n % i) == 0 )
-                    {
-                        return false;
-                    };
-                }
-                __i_iterator.close(__context__,i);
-            };
-            return true;
-        }
-
-        int32_t primes ( Context * __context__, int32_t n )
-        {
-            int32_t count = 0;
-            {
-                bool __need_loop = true;
-                das_iterator<range> __i_iterator(range(2,n + 1));
-                int32_t i;
-                __need_loop = __i_iterator.first(__context__,i) && __need_loop;
-                for ( ; __need_loop ; __need_loop &= __need_loop && __i_iterator.next(__context__,i) )
-                {
-                    if ( isprime(__context__,i) )
-                    {
-                        ++count;
-                    };
-                }
-                __i_iterator.close(__context__,i);
-            };
-            return count;
-        }
-
-        bool test ( Context * __context__ )
-        {
-            int32_t pl = 0;
-            builtin_profile(20,"primes loop",das_make_block<void>(__context__,[&]()->void{
-                pl = primes(__context__,14000);
-            }),__context__);
-            builtin_print(das_string_builder(__context__,SimNode_AotInterop<3>(__tinfo_0, cast<char *>::from("pl="), cast<int32_t>::from(pl), cast<char *>::from("\n"))),__context__);
-            return true;
-        }
-
         void registerAot ( AotLibrary & aotLib )
         {
-            // isprime
-            aotLib[0x5a13440d659400bf] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(isprime)>>();
-            };
-            // primes
-            aotLib[0x7f950695145e822] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(primes)>>();
-            };
-            // test
-            aotLib[0x431c339711f89356] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(test)>>();
-            };
         }
     }
 }

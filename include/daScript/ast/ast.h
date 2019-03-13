@@ -156,6 +156,8 @@ namespace das
     template<> struct ToBasicType<urange>       { enum { type = Type::tURange }; };
     template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
     template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
+    template<> struct ToBasicType<Array>        { enum { type = Type::tArray }; };
+    template<> struct ToBasicType<Table>        { enum { type = Type::tTable }; };
     template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
     template<> struct ToBasicType<Func>         { enum { type = Type::tFunction }; };
     template<> struct ToBasicType<Lambda>       { enum { type = Type::tLambda }; };
@@ -1720,6 +1722,8 @@ namespace das
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
         virtual StructurePtr visit ( Structure * var ) { return var->shared_from_this(); }
+        // REAL THINGS (AFTER STRUCTS AND ENUMS)
+        virtual void preVisitProgramBody ( Program * prog ) {}
         // FUNCTON
         virtual void preVisit ( Function * ) {}
         virtual FunctionPtr visit ( Function * that ) { return that->shared_from_this(); }

@@ -17,8 +17,8 @@ namespace das {
         return arr->capacity;
     }
 
-    void builtin_array_resize ( Array * pArray, int newSize, int stride, Context * context ) {
-        array_resize ( *context, *pArray, newSize, stride, true );
+    void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context ) {
+        array_resize ( *context, pArray, newSize, stride, true );
     }
 
     void builtin_array_reserve ( Array * pArray, int newSize, int stride, Context * context ) {
