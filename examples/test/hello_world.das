@@ -1,11 +1,10 @@
 options logCpp=true, logNodes=false
 
 struct NObject
-    position, velocity : float3 = float3(0)
+    position, velocity : float3
 
 def update(a:NObject)
-    let b : NObject & = a
-    a.position+=b.velocity
+    a.position+=a.velocity
 
 def testSim(objects:array<NObject>)
     for obj in objects

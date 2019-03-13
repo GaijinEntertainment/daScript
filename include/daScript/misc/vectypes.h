@@ -28,6 +28,11 @@ namespace das
         __forceinline bool operator == ( const vec3<TT> & vec ) const {
             return x==vec.x && y==vec.y && z==vec.z;
         }
+        vec3() = default;
+        vec3(const vec3 &) = default;
+        vec3(TT X, TT Y, TT Z) : x(X), y(Y), z(Z) {}
+        vec3(TT t) : x(t), y(t), z(t) {}
+        operator vec4f() const { return v_ldu((float *)this); }
     };
 
     template <typename TT>

@@ -274,14 +274,11 @@ namespace das {
                 if ( !fn->builtIn ) {
                     ss << describeCppType(fn->result) << " " << fn->name << " ( Context * __context__";
                     for ( auto & var : fn->arguments ) {
-                        ss << describeCppType(var->type) << " ";
+                        ss << ", " << describeCppType(var->type) << " ";
                         if ( var->type->isRefType() ) {
                             ss << "& ";
                         }
                         ss << var->name;
-                        if ( var != fn->arguments.back() ) {
-                            ss << ", ";
-                        }
                     }
                     ss << " );\n";
                 }
@@ -509,7 +506,7 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            ss << c->getValue() << "f";
+            ss << c->getValue();
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
@@ -548,17 +545,17 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprConstFloat2 * c ) override {
             auto val = c->getValue();
-            ss << "float2(" << val.x << "f," << val.y << "f)";
+            ss << "float2(" << val.x << "," << val.y << ")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat3 * c ) override {
             auto val = c->getValue();
-            ss << "float3(" << val.x << "f," << val.y << "f," << val.z << "f)";
+            ss << "float3(" << val.x << "," << val.y << "," << val.z << ")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat4 * c ) override {
             auto val = c->getValue();
-            ss << "float4(" << val.x << "f," << val.y << "f," << val.z << "f," << val.w << "f)";
+            ss << "float4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
             return Visitor::visit(c);
         }
         // if then else
