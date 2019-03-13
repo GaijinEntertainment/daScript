@@ -1,6 +1,7 @@
 #include "daScript/daScript.h"
 
-#include <daScript/simulate/runtime_profile.h>
+#include "daScript/simulate/runtime_profile.h"
+#include "daScript/simulate/debug_print.h"
 
 namespace das {
 
@@ -96,6 +97,38 @@ namespace das {
         }
     };
 
+    struct SimNode_AotInterop : SimNode_CallBase {
+        SimNode_AotInterop ( int nArgs, TypeInfo * info, vec4f * args )
+            : SimNode_CallBase(LineInfo()) {
+            nArguments = nArgs;
+            for ( int32_t i=0; i!=nArguments; ++i ) {
+                typeStubs[i] = info + i;
+            }
+            types = typeStubs;
+            argValues = args;
+        };
+        virtual vec4f eval ( Context & ) override {
+            return v_zero();
+        };
+        TypeInfo *  typeStubs[16];
+        vec4f *     argValues;
+    };
+
+    char * das_string_builder ( Context * __context__, const SimNode_AotInterop & node ) {
+        StringBuilderWriter writer(__context__->heap);
+        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
+        for ( int i = 0; i!=node.nArguments; ++i ) {
+            walker.walk(node.argValues[i], node.types[i]);
+        }
+        auto pStr = writer.c_str();
+        if ( !pStr ) {
+            __context__->throw_error("can't allocate string builder result, out of heap");
+        }
+        return pStr;
+    }
+
+    void builtin_print ( char * text, Context * context );
+
     namespace aot {
         bool isprime ( Context * __context__, int n )
         {
@@ -138,12 +171,11 @@ namespace das {
 
         bool test ( Context * __context__ )
         {
-            int pl = 0;
+            int32_t pl = 0;
             builtin_profile(20,"primes loop",das_make_block<void>(__context__,[&]()->void{
                 pl = primes(__context__,14000);
             }),__context__);
-            // print(das_string_builder("pl=", pl, "\n"),__context__);
-            printf("pl=%i\n", pl);
+            builtin_print(das_string_builder(__context__,SimNode_AotInterop(3, (TypeInfo [3]) {{ Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 }, { Type::tInt, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xf293c4e8 }, { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 }}, (vec4f [3]) {cast<char *>::from("pl="), cast<int32_t>::from(pl), cast<char *>::from("\n")})),__context__);
             return true;
         }
 

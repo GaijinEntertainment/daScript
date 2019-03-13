@@ -96,13 +96,13 @@ namespace das
         uint32_t            dimSize;
         uint32_t *          dim;
         union {
+            uint32_t flags = 0;
             struct {
                 bool        ref : 1;
                 bool        refType : 1;
                 bool        canCopy : 1;
                 bool        isPod : 1;
             };
-            uint32_t flags = 0;
         };
         uint32_t            hash;
     };

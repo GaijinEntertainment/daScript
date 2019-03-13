@@ -6,6 +6,40 @@
 
 namespace das {
 
+    Enum<Type> g_cppCTypeTable = {
+        {   Type::autoinfer,    "autoinfer"  },
+        {   Type::alias,        "alias"  },
+        {   Type::anyArgument,  "anyArgument"  },
+        {   Type::tVoid,        "tVoid"  },
+        {   Type::tBool,        "tBool"  },
+        {   Type::tInt64,       "tInt64"  },
+        {   Type::tUInt64,      "tUInt64"  },
+        {   Type::tString,      "tString" },
+        {   Type::tPointer,     "tPointer" },
+        {   Type::tEnumeration, "tEnumeration" },
+        {   Type::tIterator,    "tIterator" },
+        {   Type::tArray,       "tArray" },
+        {   Type::tTable,       "tTable" },
+        {   Type::tInt,         "tInt"   },
+        {   Type::tInt2,        "tInt2"  },
+        {   Type::tInt3,        "tInt3"  },
+        {   Type::tInt4,        "tInt4"  },
+        {   Type::tUInt,        "tUInt"  },
+        {   Type::tUInt2,       "tUInt2" },
+        {   Type::tUInt3,       "tUInt3" },
+        {   Type::tUInt4,       "tUInt4" },
+        {   Type::tFloat,       "tFloat" },
+        {   Type::tFloat2,      "tFloat2"},
+        {   Type::tFloat3,      "tFloat3"},
+        {   Type::tFloat4,      "tFloat4"},
+        {   Type::tDouble,      "tDouble" },
+        {   Type::tRange,       "tRange" },
+        {   Type::tURange,      "tURange"},
+        {   Type::tBlock,       "tBlock"},
+        {   Type::tFunction,    "tFunction"},
+        {   Type::tLambda,      "tLambda"}
+    };
+
     Enum<Type> g_cppTypeTable = {
         {   Type::tVoid,        "void"     },
         {   Type::tBool,        "bool"     },
@@ -34,6 +68,10 @@ namespace das {
 
     string das_to_cppString ( Type t ) {
         return g_cppTypeTable.find(t);
+    }
+
+    string das_to_cppCTypeString ( Type t ) {
+        return g_cppCTypeTable.find(t);
     }
 
     string describeCppType ( const TypeDeclPtr & type ) {
@@ -105,7 +143,7 @@ namespace das {
             }
             stream << ">";
         }  else {
-            stream << das_to_string(baseType);
+            stream << das_to_cppString(baseType);
         }
         if ( type->dim.size() ) {
             for ( auto d : type->dim ) {
@@ -117,6 +155,82 @@ namespace das {
             stream << " &";
         }
         return stream.str();
+    }
+
+    /*
+     struct TypeInfo {
+
+     TypeAnnotation *    annotation;
+     TypeInfo *          firstType;      // map  from, or array
+     TypeInfo *          secondType;     // map  to
+     uint32_t            dimSize;
+     uint32_t *          dim;
+     union {
+     struct {
+     bool        ref : 1;
+     bool        refType : 1;
+     bool        canCopy : 1;
+     bool        isPod : 1;
+     };
+     uint32_t flags = 0;
+     };
+     uint32_t            hash;
+     };
+     */
+
+    void describeCppStructInfo ( TextWriter & ss, StructInfo * info ) {
+    }
+
+    void describeCppEnumInfo ( TextWriter & ss, EnumInfo * info ) {
+    }
+
+    void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info ) {
+        ss << "{ Type::" << das_to_cppCTypeString(info->type) << ", ";
+        if ( info->structType ) {
+            describeCppStructInfo(ss, info->structType);
+        } else {
+            ss << "nullptr";
+        }
+        ss << ", ";
+        if ( info->enumType ) {
+            describeCppEnumInfo(ss, info->enumType);
+        } else {
+            ss << "nullptr";
+        }
+        ss << ", /*annotation*/ nullptr";
+        ss << ", ";
+        if ( info->firstType ) {
+            describeCppTypeInfo(ss, info->firstType);
+        } else {
+            ss << "nullptr";
+        }
+        ss << ", ";
+        if ( info->secondType ) {
+            describeCppTypeInfo(ss, info->secondType);
+        } else {
+            ss << "nullptr";
+        }
+        ss << ", " << info->dimSize;
+        ss << ", ";
+        if ( info->dimSize ) {
+            ss << "{";
+            for ( uint32_t i=0; i!=info->dimSize; ++i ) {
+                if ( i ) ss << ",";
+                ss << info->dim[i];
+            }
+            ss << "}";
+        } else {
+            ss << "nullptr";
+        }
+        ss << ", " << info->flags;
+        ss << ", 0x" << HEX << info->hash << DEC;
+        ss << " }";
+    }
+
+    string describeCppTypeInfo ( TypeInfo * info ) {
+        TextWriter ss;
+        describeCppTypeInfo(ss,info);
+        return ss.str();
     }
 
     class CppAot : public Visitor {
@@ -403,14 +517,38 @@ namespace das {
     // string builder
         virtual void preVisit ( ExprStringBuilder * expr ) override {
             Visitor::preVisit(expr);
-            ss << "das_string_builder(";
+            uint32_t nArgs = uint32_t(expr->elements.size());
+            ss << "das_string_builder(__context__,SimNode_AotInterop(";
+            if ( nArgs ) {
+                DebugInfoHelper helper;
+                ss << nArgs << ", (TypeInfo [" << nArgs << "]) {";
+                for ( uint32_t i=0; i!=nArgs; ++i ) {
+                    auto & el = expr->elements[i];
+                    TypeInfo * info = helper.makeTypeInfo(nullptr, el->type);
+                    if ( i ) ss << ", ";
+                    describeCppTypeInfo(ss, info);
+                }
+                ss << "}, (vec4f [" << nArgs << "]) {";
+            } else {
+                ss << "0, nullptr, nullptr";
+            }
+        }
+        virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
+            Visitor::preVisitStringBuilderElement(sb, expr, last);
+            ss << "cast<" << describeCppType(expr->type) << ">::from(";
+
         }
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
+            ss << ")";
             if ( !last ) ss << ", ";
             return Visitor::visitStringBuilderElement(sb, expr, last);
         }
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
-            ss << ")";
+            if ( expr->elements.size()) {
+                ss << "}))";
+            } else {
+                ss << "))";
+            }
             return Visitor::visit(expr);
         }
     // ExprMakeBlock
