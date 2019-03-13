@@ -693,9 +693,12 @@ namespace das {
         virtual void preVisitForBody ( ExprFor * ffor, Expression * body ) override {
             Visitor::preVisitForBody(ffor, body);
             auto nl = needLoopName(ffor);
-            ss << string(tab,'\t') << "for ( ; " << nl << " ; " << nl << " &= " << nl;
+            ss << string(tab,'\t') << "for ( ; " << nl << " ; " << nl << " = ";
             for ( auto & var : ffor->iteratorVariables ) {
-                ss << " && " << forSrcName(var->name) << ".next(__context__," << var->name << ")";
+                if (var != ffor->iteratorVariables.front()) {
+                    ss << " && ";
+                }
+                ss << forSrcName(var->name) << ".next(__context__," << var->name << ")";
             }
             ss << " )\n";
             ss << string(tab,'\t');

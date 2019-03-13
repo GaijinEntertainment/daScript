@@ -204,7 +204,7 @@ namespace das {
                 das_iterator<TArray<struct NObject>> __obj_iterator(objects);
                 struct NObject * obj;
                 __need_loop_28 = __obj_iterator.first(__context__,obj) && __need_loop_28;
-                for ( ; __need_loop_28 ; __need_loop_28 &= __need_loop_28 && __obj_iterator.next(__context__,obj) )
+                for ( ; __need_loop_28 ; __need_loop_28 = __obj_iterator.next(__context__,obj) )
                 {
                     (*obj).position = float3(i++,i + 1,i + 2);
                     (*obj).velocity = float3(1,2,3);
@@ -239,7 +239,7 @@ namespace das {
                 das_iterator<TArray<struct NObject>> __obj_iterator(objects);
                 struct NObject * obj;
                 __need_loop_10 = __obj_iterator.first(__context__,obj) && __need_loop_10;
-                for ( ; __need_loop_10 ; __need_loop_10 &= __need_loop_10 && __obj_iterator.next(__context__,obj) )
+                for ( ; __need_loop_10 ; __need_loop_10 = __obj_iterator.next(__context__,obj) )
                 {
                     update(__context__,(*obj));
                 }
@@ -254,7 +254,7 @@ namespace das {
                 das_iterator<range> __i_iterator(range(0,count));
                 int32_t i;
                 __need_loop_14 = __i_iterator.first(__context__,i) && __need_loop_14;
-                for ( ; __need_loop_14 ; __need_loop_14 &= __need_loop_14 && __i_iterator.next(__context__,i) )
+                for ( ; __need_loop_14 ; __need_loop_14 = __i_iterator.next(__context__,i) )
                 {
                     testSim(__context__,objects);
                 }
@@ -269,7 +269,7 @@ namespace das {
                 das_iterator<range> __i_iterator(range(0,count));
                 int32_t i;
                 __need_loop_22 = __i_iterator.first(__context__,i) && __need_loop_22;
-                for ( ; __need_loop_22 ; __need_loop_22 &= __need_loop_22 && __i_iterator.next(__context__,i) )
+                for ( ; __need_loop_22 ; __need_loop_22 = __i_iterator.next(__context__,i) )
                 {
                     testSimI(__context__,objects);
                 }
@@ -284,7 +284,7 @@ namespace das {
                 das_iterator<TArray<struct NObject>> __obj_iterator(objects);
                 struct NObject * obj;
                 __need_loop_18 = __obj_iterator.first(__context__,obj) && __need_loop_18;
-                for ( ; __need_loop_18 ; __need_loop_18 &= __need_loop_18 && __obj_iterator.next(__context__,obj) )
+                for ( ; __need_loop_18 ; __need_loop_18 = __obj_iterator.next(__context__,obj) )
                 {
                     SimPolicy<float3>::SetAdd((char *)&((*obj).position),(*obj).velocity,*__context__);
                 }
