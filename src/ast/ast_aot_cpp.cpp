@@ -217,10 +217,11 @@ namespace das {
         CppAot () {}
         string str() const { return sti.str() + ss.str(); };
     protected:
-        TextWriter ss, sti;
-        int        lastNewLine = -1;
-        int        tab = 0;
-        int        debugInfoGlobal = 0;
+        TextWriter      ss, sti;
+        int             lastNewLine = -1;
+        int             tab = 0;
+        int             debugInfoGlobal = 0;
+        set<uint32_t>   tinfo;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -498,22 +499,30 @@ namespace das {
         virtual void preVisit ( ExprStringBuilder * expr ) override {
             Visitor::preVisit(expr);
             uint32_t nArgs = uint32_t(expr->elements.size());
-            ss << "das_string_builder(__context__,SimNode_AotInterop(";
+            ss << "das_string_builder(__context__,SimNode_AotInterop<" << nArgs << ">(";
             if ( nArgs ) {
                 DebugInfoHelper helper;
-                string debug_info_name = "__type_info__" + to_string(debugInfoGlobal++);
-                sti << "\nTypeInfo " << debug_info_name << "[" << nArgs << "] = {\n";
-                for ( uint32_t i=0; i!=nArgs; ++i ) {
-                    auto & el = expr->elements[i];
+                vector<TypeInfo*> elInfo;
+                elInfo.reserve(expr->elements.size());
+                for ( auto & el : expr->elements ) {
                     TypeInfo * info = helper.makeTypeInfo(nullptr, el->type);
-                    sti << "\t";
-                    describeCppTypeInfo(sti, info);
-                    sti << ",\n";
+                    if ( tinfo.find(info->hash)==tinfo.end() ) {
+                        tinfo.insert(info->hash);
+                        sti << "\nTypeInfo __type_info__" << HEX << info->hash << DEC << " = ";
+                        describeCppTypeInfo(sti, info);
+                        sti << ";";
+                    }
+                    elInfo.push_back(info);
                 }
-                sti << "};\n";
-                ss << nArgs << ", " << debug_info_name << ", ";
-            } else {
-                ss << "0, nullptr";
+                string debug_info_name = "__tinfo_" + to_string(debugInfoGlobal++);
+                sti << "\nTypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
+                for ( size_t i=0; i!=elInfo.size(); ++i ) {
+                    auto info = elInfo[i];
+                    if ( i ) sti << ", ";
+                    sti << "&__type_info__" << HEX << info->hash << DEC;
+                }
+                sti << " };\n";
+                ss << debug_info_name << ", ";
             }
         }
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {

@@ -97,31 +97,43 @@ namespace das {
         }
     };
 
-    struct SimNode_AotInterop : SimNode_CallBase {
-        SimNode_AotInterop ( int nArgs, TypeInfo * info, ... )
-            : SimNode_CallBase(LineInfo()) {
-            nArguments = nArgs;
-            va_list args;
-            va_start(args, info);
-            for ( int32_t i=0; i!=nArguments; ++i ) {
-                typeStubs[i] = info + i;
-                argValues[i] = va_arg(args, vec4f);
-            }
-            va_end(args);
-            types = typeStubs;
-        };
+    struct SimNode_AotInteropBase : SimNode_CallBase {
+        SimNode_AotInteropBase() : SimNode_CallBase(LineInfo()) {}
         virtual vec4f eval ( Context & ) override {
             return v_zero();
         };
-        TypeInfo *  typeStubs[16];
-        vec4f       argValues[16];
+        vec4f *     argumentValues;
     };
 
-    char * das_string_builder ( Context * __context__, const SimNode_AotInterop & node ) {
+    template <int argumentCount>
+    struct SimNode_AotInterop : SimNode_AotInteropBase {
+        template <typename ...VI>
+        SimNode_AotInterop ( TypeInfo ** tinfo, VI... args ) {
+            nArguments = argumentCount;
+            types = tinfo;
+            argumentValues = argValues;
+            vec4f argsE[argumentCount] = { args... };
+            for ( int i=0; i!=argumentCount; ++i ) {
+                argumentValues[i] = argsE[i];
+            }
+        };
+        vec4f       argValues[argumentCount];
+    };
+
+    template <>
+    struct SimNode_AotInterop<0> : SimNode_AotInteropBase {
+        SimNode_AotInterop () {
+            nArguments = 0;
+            types = nullptr;
+            argumentValues = nullptr;
+        }
+    };
+
+    char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
         StringBuilderWriter writer(__context__->heap);
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
         for ( int i = 0; i!=node.nArguments; ++i ) {
-            walker.walk(node.argValues[i], node.types[i]);
+            walker.walk(node.argumentValues[i], node.types[i]);
         }
         auto pStr = writer.c_str();
         if ( !pStr ) {
@@ -133,12 +145,11 @@ namespace das {
     void builtin_print ( char * text, Context * context );
 
     namespace aot {
-        TypeInfo __type_info__0[3] = {
-            { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 },
-            { Type::tInt, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xf293c4e8 },
-            { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 },
-        };
 
+        TypeInfo __type_info__a7069c83 = { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 };
+        TypeInfo __type_info__f293c4e8 = { Type::tInt, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xf293c4e8 };
+        TypeInfo * __tinfo_0[3] = { &__type_info__a7069c83, &__type_info__f293c4e8, &__type_info__a7069c83 };
+        
         bool isprime ( Context * __context__, int32_t n )
         {
             {
@@ -184,7 +195,7 @@ namespace das {
             builtin_profile(20,"primes loop",das_make_block<void>(__context__,[&]()->void{
                 pl = primes(__context__,14000);
             }),__context__);
-            builtin_print(das_string_builder(__context__,SimNode_AotInterop(3, __type_info__0, cast<char *>::from("pl="), cast<int32_t>::from(pl), cast<char *>::from("\n"))),__context__);
+            builtin_print(das_string_builder(__context__,SimNode_AotInterop<3>(__tinfo_0, cast<char *>::from("pl="), cast<int32_t>::from(pl), cast<char *>::from("\n"))),__context__);
             return true;
         }
 
