@@ -410,15 +410,34 @@ namespace das {
             return Visitor::visit(that);
         }
     // op2
+        bool isOpPolicy ( ExprOp * that, const ExpressionPtr & left ) const {
+            return left->type->isPolicyType() || isalpha(that->op[0]);
+        }
+        string opPolicyName ( ExprOp * that ) {
+            auto bfn = static_cast<BuiltInFunction *>(that->func);
+            return bfn->cppName.empty() ? bfn->name : bfn->cppName;
+        }
         virtual void preVisit ( ExprOp2 * that ) override {
             Visitor::preVisit(that);
-            if ( !noBracket(that) ) ss << "(";
+             if ( !noBracket(that) ) ss << "(";
+            if ( isOpPolicy(that, that->left) ) {
+                ss << "SimPolicy<" << das_to_cppString(that->left->type->baseType) << ">::" << opPolicyName(that) << "(";
+                if ( that->left->type->ref ) ss << "(char *)&(";
+            }
         }
-        virtual void preVisitRight ( ExprOp2 * op2, Expression * right ) override {
-            Visitor::preVisitRight(op2,right);
-            ss << " " << op2->op << " ";
+        virtual void preVisitRight ( ExprOp2 * that, Expression * right ) override {
+            Visitor::preVisitRight(that,right);
+            if ( isOpPolicy(that, that->left) ) {
+                if ( that->left->type->ref ) ss << ")";
+                ss << ",";
+            } else {
+                ss << " " << that->op << " ";
+            }
         }
         virtual ExpressionPtr visit ( ExprOp2 * that ) override {
+            if ( isOpPolicy(that, that->left) ) {
+                ss << ",*__context__)";
+            }
             if ( !noBracket(that) ) ss << ")";
             return Visitor::visit(that);
         }

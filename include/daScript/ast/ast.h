@@ -90,6 +90,7 @@ namespace das
         bool canDelete() const;
         bool isPod() const;
         bool isWorkhorseType() const; // we can return this, or pass this
+        bool isPolicyType() const;
         bool isReturnType() const;
         bool isCtorType() const;
         bool isRange() const;

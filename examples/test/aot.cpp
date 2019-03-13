@@ -3,6 +3,8 @@
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/debug_print.h"
 
+#include "daScript/simulate/sim_policy.h"
+
 namespace das {
 
     template <typename TT>
@@ -178,11 +180,6 @@ namespace das {
     void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context );
     int builtin_array_size ( const Array & arr );
 
-    __forceinline void operator += ( float3 & a, const float3 & b ) {
-        float3 * pa = (float3 *) &a;
-        *pa = cast<float3>::to ( v_add(cast<float3>::from(*pa), b));
-    }
-
     namespace aot {
         struct NObject {
             float3 position;
@@ -289,7 +286,7 @@ namespace das {
                 __need_loop_18 = __obj_iterator.first(__context__,obj) && __need_loop_18;
                 for ( ; __need_loop_18 ; __need_loop_18 &= __need_loop_18 && __obj_iterator.next(__context__,obj) )
                 {
-                    (*obj).position += (*obj).velocity;
+                    SimPolicy<float3>::SetAdd((char *)&((*obj).position),(*obj).velocity,*__context__);
                 }
                 __obj_iterator.close(__context__,obj);
             };
@@ -297,7 +294,7 @@ namespace das {
 
         void update ( Context * __context__, struct NObject &  a )
         {
-            a.position += a.velocity;
+            SimPolicy<float3>::SetAdd((char *)&(a.position),a.velocity,*__context__);
         }
 
         void registerAot ( AotLibrary & aotLib )
