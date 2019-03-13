@@ -197,7 +197,7 @@ namespace das
         for ( uint32_t i=0; i!=info->dimSize; ++i ) {
             stream << "[" << info->dim[i] << "]";
         }
-        if ( info->ref )
+        if ( info->flags & TypeInfo::flag_ref )
             stream << " &";
         return stream.str();
     }

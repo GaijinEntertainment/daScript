@@ -98,20 +98,23 @@ namespace das {
     };
 
     struct SimNode_AotInterop : SimNode_CallBase {
-        SimNode_AotInterop ( int nArgs, TypeInfo * info, vec4f * args )
+        SimNode_AotInterop ( int nArgs, TypeInfo * info, ... )
             : SimNode_CallBase(LineInfo()) {
             nArguments = nArgs;
+            va_list args;
+            va_start(args, info);
             for ( int32_t i=0; i!=nArguments; ++i ) {
                 typeStubs[i] = info + i;
+                argValues[i] = va_arg(args, vec4f);
             }
+            va_end(args);
             types = typeStubs;
-            argValues = args;
         };
         virtual vec4f eval ( Context & ) override {
             return v_zero();
         };
         TypeInfo *  typeStubs[16];
-        vec4f *     argValues;
+        vec4f       argValues[16];
     };
 
     char * das_string_builder ( Context * __context__, const SimNode_AotInterop & node ) {
@@ -130,12 +133,18 @@ namespace das {
     void builtin_print ( char * text, Context * context );
 
     namespace aot {
-        bool isprime ( Context * __context__, int n )
+        TypeInfo __type_info__0[3] = {
+            { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 },
+            { Type::tInt, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xf293c4e8 },
+            { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 },
+        };
+
+        bool isprime ( Context * __context__, int32_t n )
         {
             {
                 bool __need_loop = true;
                 das_iterator<range> __i_iterator(range(2,n));
-                int i;
+                int32_t i;
                 __need_loop = __i_iterator.first(__context__,i) && __need_loop;
                 for ( ; __need_loop ; __need_loop &= __need_loop && __i_iterator.next(__context__,i) )
                 {
@@ -149,13 +158,13 @@ namespace das {
             return true;
         }
 
-        int primes ( Context * __context__, int n )
+        int32_t primes ( Context * __context__, int32_t n )
         {
-            int count = 0;
+            int32_t count = 0;
             {
                 bool __need_loop = true;
                 das_iterator<range> __i_iterator(range(2,n + 1));
-                int i;
+                int32_t i;
                 __need_loop = __i_iterator.first(__context__,i) && __need_loop;
                 for ( ; __need_loop ; __need_loop &= __need_loop && __i_iterator.next(__context__,i) )
                 {
@@ -175,7 +184,7 @@ namespace das {
             builtin_profile(20,"primes loop",das_make_block<void>(__context__,[&]()->void{
                 pl = primes(__context__,14000);
             }),__context__);
-            builtin_print(das_string_builder(__context__,SimNode_AotInterop(3, (TypeInfo [3]) {{ Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 }, { Type::tInt, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xf293c4e8 }, { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 }}, (vec4f [3]) {cast<char *>::from("pl="), cast<int32_t>::from(pl), cast<char *>::from("\n")})),__context__);
+            builtin_print(das_string_builder(__context__,SimNode_AotInterop(3, __type_info__0, cast<char *>::from("pl="), cast<int32_t>::from(pl), cast<char *>::from("\n"))),__context__);
             return true;
         }
 

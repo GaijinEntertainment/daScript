@@ -157,27 +157,6 @@ namespace das {
         return stream.str();
     }
 
-    /*
-     struct TypeInfo {
-
-     TypeAnnotation *    annotation;
-     TypeInfo *          firstType;      // map  from, or array
-     TypeInfo *          secondType;     // map  to
-     uint32_t            dimSize;
-     uint32_t *          dim;
-     union {
-     struct {
-     bool        ref : 1;
-     bool        refType : 1;
-     bool        canCopy : 1;
-     bool        isPod : 1;
-     };
-     uint32_t flags = 0;
-     };
-     uint32_t            hash;
-     };
-     */
-
     void describeCppStructInfo ( TextWriter & ss, StructInfo * info ) {
     }
 
@@ -236,11 +215,12 @@ namespace das {
     class CppAot : public Visitor {
     public:
         CppAot () {}
-        string str() const { return ss.str(); };
+        string str() const { return sti.str() + ss.str(); };
     protected:
-        TextWriter ss, se;
+        TextWriter ss, sti;
         int        lastNewLine = -1;
         int        tab = 0;
+        int        debugInfoGlobal = 0;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -521,16 +501,19 @@ namespace das {
             ss << "das_string_builder(__context__,SimNode_AotInterop(";
             if ( nArgs ) {
                 DebugInfoHelper helper;
-                ss << nArgs << ", (TypeInfo [" << nArgs << "]) {";
+                string debug_info_name = "__type_info__" + to_string(debugInfoGlobal++);
+                sti << "\nTypeInfo " << debug_info_name << "[" << nArgs << "] = {\n";
                 for ( uint32_t i=0; i!=nArgs; ++i ) {
                     auto & el = expr->elements[i];
                     TypeInfo * info = helper.makeTypeInfo(nullptr, el->type);
-                    if ( i ) ss << ", ";
-                    describeCppTypeInfo(ss, info);
+                    sti << "\t";
+                    describeCppTypeInfo(sti, info);
+                    sti << ",\n";
                 }
-                ss << "}, (vec4f [" << nArgs << "]) {";
+                sti << "};\n";
+                ss << nArgs << ", " << debug_info_name << ", ";
             } else {
-                ss << "0, nullptr, nullptr";
+                ss << "0, nullptr";
             }
         }
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
@@ -544,11 +527,7 @@ namespace das {
             return Visitor::visitStringBuilderElement(sb, expr, last);
         }
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
-            if ( expr->elements.size()) {
-                ss << "}))";
-            } else {
-                ss << "))";
-            }
+            ss << "))";
             return Visitor::visit(expr);
         }
     // ExprMakeBlock

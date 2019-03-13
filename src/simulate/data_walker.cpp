@@ -14,7 +14,7 @@ namespace das {
     }
 
     void DataWalker::walk ( vec4f x, TypeInfo * info ) {
-        if ( info->refType ) {
+        if ( info->flags & TypeInfo::flag_refType ) {
             walk(cast<char *>::to(x), info );
         } else {
             walk((char *)&x, info );
@@ -100,11 +100,11 @@ namespace das {
     void DataWalker::walk ( char * pa, TypeInfo * info ) {
         if ( pa == nullptr ) {
             Null(info);
-        } else if ( info->ref ) {
+        } else if ( info->flags & TypeInfo::flag_ref ) {
             beforeRef(pa,info);
             if ( cancel ) return;
             TypeInfo ti = *info;
-            ti.ref = false;
+            ti.flags &= ~TypeInfo::flag_ref;
             walk(*(char **)pa, &ti);
             if ( cancel ) return;
             afterRef(pa,info);

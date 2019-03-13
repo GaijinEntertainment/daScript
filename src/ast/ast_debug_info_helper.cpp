@@ -96,12 +96,17 @@ namespace das {
         } else {
             info->enumType = nullptr;
         }
-        info->ref = type->ref;
-        info->refType = type->isRefType();
+        info->flags = 0;
+        if (type->ref)
+            info->flags |= TypeInfo::flag_ref;
+        if (type->isRefType())
+            info->flags |= TypeInfo::flag_refType;
         if ( type->isRefType() )
-            info->ref = false;
-        info->canCopy = type->canCopy();
-        info->isPod = type->isPod();
+            info->flags &= ~TypeInfo::flag_ref;
+        if (type->canCopy())
+            info->flags |= TypeInfo::flag_canCopy;
+        if (type->isPod())
+            info->flags |= TypeInfo::flag_isPod;
         if ( type->firstType ) {
             info->firstType = makeTypeInfo(nullptr, type->firstType);
         } else {

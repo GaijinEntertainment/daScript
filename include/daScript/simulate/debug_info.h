@@ -87,6 +87,12 @@ namespace das
     };
 
     struct TypeInfo {
+        enum {
+            flag_ref = 1<<0,
+            flag_refType = 1<<1,
+            flag_canCopy = 1<<2,
+            flag_isPod = 1<<3
+        };
         Type                type;
         StructInfo *        structType;
         EnumInfo *          enumType;
@@ -95,15 +101,7 @@ namespace das
         TypeInfo *          secondType;     // map  to
         uint32_t            dimSize;
         uint32_t *          dim;
-        union {
-            uint32_t flags = 0;
-            struct {
-                bool        ref : 1;
-                bool        refType : 1;
-                bool        canCopy : 1;
-                bool        isPod : 1;
-            };
-        };
+        uint32_t            flags;
         uint32_t            hash;
     };
 
