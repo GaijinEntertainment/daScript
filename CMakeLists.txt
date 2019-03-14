@@ -154,6 +154,7 @@ include/daScript/simulate/for_each.h
 include/daScript/simulate/bind_enum.h
 include/daScript/simulate/bin_serializer.h
 src/simulate/bin_serializer.cpp
+include/daScript/simulate/aot_builtin_math.h
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)

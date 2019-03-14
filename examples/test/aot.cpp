@@ -4,6 +4,7 @@
 #include "daScript/simulate/debug_print.h"
 
 #include "daScript/simulate/sim_policy.h"
+#include "daScript/simulate/aot_builtin_math.h"
 
 namespace das {
 
@@ -181,155 +182,102 @@ namespace das {
     int builtin_array_size ( const Array & arr );
 
     namespace aot {
-        struct NObject {
-            float3 position;
-            float3 velocity;
-        };
+        TypeInfo __type_info__fa15db70 = { Type::tFloat, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xfa15db70 };
+        TypeInfo __type_info__a7069c83 = { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 };
+        TypeInfo * __tinfo_0[6] = { &__type_info__fa15db70, &__type_info__a7069c83, &__type_info__fa15db70, &__type_info__a7069c83, &__type_info__fa15db70, &__type_info__a7069c83 };
 
-        void init ( Context * __context__, TArray<struct NObject> & objects );
-        void resize ( Context * __context__, TArray<struct NObject> & Arr, int32_t newSize );
+        float expLoop ( Context * __context__, int32_t n );
+        float expLoopU ( Context * __context__, int32_t n );
+        float expLoopUV ( Context * __context__, int32_t n );
         bool test ( Context * __context__ );
-        void testSim ( Context * __context__, TArray<struct NObject> & objects );
-        void testSim2 ( Context * __context__, TArray<struct NObject> & objects, int32_t count );
-        void testSim2I ( Context * __context__, TArray<struct NObject> & objects, int32_t count );
-        void testSimI ( Context * __context__, TArray<struct NObject> & objects );
-        void update ( Context * __context__, struct NObject & a );
 
-        void init ( Context * __context__, TArray<struct NObject> &  objects )
+        float expLoop ( Context * __context__, int32_t n )
         {
-            resize(__context__,objects,50000);
-            int32_t i = 0;
+            float sum = 0;
             {
-                bool __need_loop_28 = true;
-                das_iterator<TArray<struct NObject>> __obj_iterator(objects);
-                struct NObject * obj;
-                __need_loop_28 = __obj_iterator.first(__context__,obj) && __need_loop_28;
-                for ( ; __need_loop_28 ; __need_loop_28 = __obj_iterator.next(__context__,obj) )
+                bool __need_loop_8 = true;
+                das_iterator<range> __i_iterator(range(0,n));
+                int32_t i;
+                __need_loop_8 = __i_iterator.first(__context__,i) && __need_loop_8;
+                for ( ; __need_loop_8 ; __need_loop_8 = __i_iterator.next(__context__,i) )
                 {
-                    (*obj).position = float3(i++,i + 1,i + 2);
-                    (*obj).velocity = float3(1,2,3);
+                    sum += SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(1 + float(i),*__context__),*__context__);
                 }
-                __obj_iterator.close(__context__,obj);
+                __i_iterator.close(__context__,i);
             };
-            assert(i == builtin_array_size(objects));
+            return sum;
         }
 
-        void resize ( Context * __context__, TArray<struct NObject> &  Arr, int32_t newSize )
+        float expLoopU ( Context * __context__, int32_t n )
         {
-            builtin_array_resize(Arr,newSize,24,__context__);
+            float sum = 0;
+            {
+                bool __need_loop_15 = true;
+                das_iterator<range> __i_iterator(range(0,n / 4));
+                int32_t i;
+                __need_loop_15 = __i_iterator.first(__context__,i) && __need_loop_15;
+                for ( ; __need_loop_15 ; __need_loop_15 = __i_iterator.next(__context__,i) )
+                {
+                    float k = float(i * 4);
+                    sum += (((SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(1 + k,*__context__),*__context__) + SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(2 + k,*__context__),*__context__)) + SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(3 + k,*__context__),*__context__)) + SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(4 + k,*__context__),*__context__));
+                }
+                __i_iterator.close(__context__,i);
+            };
+            return sum;
+        }
+
+        float expLoopUV ( Context * __context__, int32_t n )
+        {
+            float4 sumV = float4(0,0,0,0);
+            {
+                bool __need_loop_23 = true;
+                das_iterator<range> __i_iterator(range(0,n / 4));
+                int32_t i;
+                __need_loop_23 = __i_iterator.first(__context__,i) && __need_loop_23;
+                for ( ; __need_loop_23 ; __need_loop_23 = __i_iterator.next(__context__,i) )
+                {
+                    SimPolicy<float4>::SetAdd((char *)&(sumV),SimPolicy<float4>::Exp(SimPolicy<float4>::RcpEst(SimPolicy<float4>::Add(float4(i * 16),float4(1,2,3,4),*__context__),*__context__),*__context__),*__context__);
+                }
+                __i_iterator.close(__context__,i);
+            };
+            return ((v_extract_x(sumV) /*x*/ + v_extract_y(sumV) /*y*/) + v_extract_z(sumV) /*z*/) + v_extract_w(sumV) /*w*/;
         }
 
         bool test ( Context * __context__ )
         {
-            TArray<struct NObject> objects;
-            init(__context__,objects);
-            builtin_profile(20,"particles kinematics",das_make_block<void>(__context__,[&]()->void{
-                testSim2(__context__,objects,100);
+            float l1 = 0;
+            float l2 = 0;
+            float l3 = 0;
+            builtin_profile(20,"exp loop",das_make_block<void>(__context__,[&]()->void{
+                l1 = expLoop(__context__,1000000);
             }),__context__);
-            builtin_profile(20,"particles kinematics, inlined",das_make_block<void>(__context__,[&]()->void{
-                testSim2I(__context__,objects,100);
+            builtin_profile(20,"exp loop, unrolled",das_make_block<void>(__context__,[&]()->void{
+                l2 = expLoopU(__context__,1000000);
             }),__context__);
+            builtin_profile(20,"exp loop, unrolled and vectorized",das_make_block<void>(__context__,[&]()->void{
+                l3 = expLoopUV(__context__,1000000);
+            }),__context__);
+            builtin_print(das_string_builder(__context__,SimNode_AotInterop<6>(__tinfo_0, cast<float>::from(l1), cast<char *>::from(" "), cast<float>::from(l2), cast<char *>::from(" "), cast<float>::from(l3), cast<char *>::from("\n"))),__context__);
             return true;
-        }
-
-        void testSim ( Context * __context__, TArray<struct NObject> &  objects )
-        {
-            {
-                bool __need_loop_10 = true;
-                das_iterator<TArray<struct NObject>> __obj_iterator(objects);
-                struct NObject * obj;
-                __need_loop_10 = __obj_iterator.first(__context__,obj) && __need_loop_10;
-                for ( ; __need_loop_10 ; __need_loop_10 = __obj_iterator.next(__context__,obj) )
-                {
-                    update(__context__,(*obj));
-                }
-                __obj_iterator.close(__context__,obj);
-            };
-        }
-
-        void testSim2 ( Context * __context__, TArray<struct NObject> &  objects, int32_t count )
-        {
-            {
-                bool __need_loop_14 = true;
-                das_iterator<range> __i_iterator(range(0,count));
-                int32_t i;
-                __need_loop_14 = __i_iterator.first(__context__,i) && __need_loop_14;
-                for ( ; __need_loop_14 ; __need_loop_14 = __i_iterator.next(__context__,i) )
-                {
-                    testSim(__context__,objects);
-                }
-                __i_iterator.close(__context__,i);
-            };
-        }
-
-        void testSim2I ( Context * __context__, TArray<struct NObject> &  objects, int32_t count )
-        {
-            {
-                bool __need_loop_22 = true;
-                das_iterator<range> __i_iterator(range(0,count));
-                int32_t i;
-                __need_loop_22 = __i_iterator.first(__context__,i) && __need_loop_22;
-                for ( ; __need_loop_22 ; __need_loop_22 = __i_iterator.next(__context__,i) )
-                {
-                    testSimI(__context__,objects);
-                }
-                __i_iterator.close(__context__,i);
-            };
-        }
-
-        void testSimI ( Context * __context__, TArray<struct NObject> &  objects )
-        {
-            {
-                bool __need_loop_18 = true;
-                das_iterator<TArray<struct NObject>> __obj_iterator(objects);
-                struct NObject * obj;
-                __need_loop_18 = __obj_iterator.first(__context__,obj) && __need_loop_18;
-                for ( ; __need_loop_18 ; __need_loop_18 = __obj_iterator.next(__context__,obj) )
-                {
-                    SimPolicy<float3>::SetAdd((char *)&((*obj).position),(*obj).velocity,*__context__);
-                }
-                __obj_iterator.close(__context__,obj);
-            };
-        }
-
-        void update ( Context * __context__, struct NObject &  a )
-        {
-            SimPolicy<float3>::SetAdd((char *)&(a.position),a.velocity,*__context__);
         }
 
         void registerAot ( AotLibrary & aotLib )
         {
-            // init
-            aotLib[0x2ef0c2d40c7b9f7a] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(init)>>();
+            // expLoop
+            aotLib[0xb1257f787d1e1f5f] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(expLoop)>>();
             };
-            // resize
-            aotLib[0x15055da9cbaf5ce7] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(resize)>>();
+            // expLoopU
+            aotLib[0x3b6672d35f5f6887] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(expLoopU)>>();
+            };
+            // expLoopUV
+            aotLib[0xffe70d9155a9c61] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(expLoopUV)>>();
             };
             // test
-            aotLib[0x12a91e62a039b87e] = [&](Context & ctx){
+            aotLib[0x320335ac69f5e9bf] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(test)>>();
-            };
-            // testSim
-            aotLib[0x1beaf59f1850ac7d] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(testSim)>>();
-            };
-            // testSim2
-            aotLib[0x25de74e07521a1e1] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(testSim2)>>();
-            };
-            // testSim2I
-            aotLib[0x9bb9d4057e379790] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(testSim2I)>>();
-            };
-            // testSimI
-            aotLib[0x7d97eddd19b95e0b] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(testSimI)>>();
-            };
-            // update
-            aotLib[0xa9d1143522a8b7d3] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(update)>>();
             };
         }
     }

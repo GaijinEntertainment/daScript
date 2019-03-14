@@ -1049,7 +1049,6 @@ namespace das
                 return context.code->makeNode<SimNode_Swizzle>(at, simV, fs);
             }
         } else {
-
             return trySimulate(context, 0, r2v ? type->baseType : Type::none);
         }
     }

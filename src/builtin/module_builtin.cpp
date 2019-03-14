@@ -63,13 +63,13 @@ namespace das
     IMPLEMENT_OP2_POLICY(BoolXor, Bool, bool);
 
 #define ADD_NUMERIC_CASTS(TYPE,CTYPE)                                                                   \
-    addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib) );                              \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,float>,CTYPE,float>>(#TYPE,lib) );           \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,double>,CTYPE,double>>(#TYPE,lib) );         \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int32_t>,CTYPE,int32_t>>(#TYPE,lib) );       \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib) );     \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int64_t>,CTYPE,int64_t>>(#TYPE,lib) );       \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint64_t>,CTYPE,uint64_t>>(#TYPE,lib) );
+    addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,"",false) );                              \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,float>,CTYPE,float>>(#TYPE,lib,"",false) );           \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,double>,CTYPE,double>>(#TYPE,lib,"",false) );         \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int32_t>,CTYPE,int32_t>>(#TYPE,lib,"",false) );       \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib,"",false) );     \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int64_t>,CTYPE,int64_t>>(#TYPE,lib,"",false) );       \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint64_t>,CTYPE,uint64_t>>(#TYPE,lib,"",false) );
 
     // string
     DEFINE_OP2_EVAL_BASIC_POLICY(char *);
@@ -183,11 +183,11 @@ namespace das
         addFunctionBasic<void *>(*this,lib);
         // function
         addFunctionBasic<Func>(*this,lib);
-        addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,Func,void *>>("==",lib) );
-        addFunction( make_shared<BuiltInFn<Sim_NEqFunPtr,bool,Func,void *>>("!=",lib) );
+        addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,Func,void *>>("==",lib,"",false) );
+        addFunction( make_shared<BuiltInFn<Sim_NEqFunPtr,bool,Func,void *>>("!=",lib,"",false) );
         // lambda
-        addFunction( make_shared<BuiltInFn<Sim_EqLambdaPtr, bool,Lambda,void *>>("==",lib) );
-        addFunction( make_shared<BuiltInFn<Sim_NEqLambdaPtr,bool,Lambda,void *>>("!=",lib) );
+        addFunction( make_shared<BuiltInFn<Sim_EqLambdaPtr, bool,Lambda,void *>>("==",lib,"",false) );
+        addFunction( make_shared<BuiltInFn<Sim_NEqLambdaPtr,bool,Lambda,void *>>("!=",lib,"",false) );
         // int32
         addFunctionBasic<int32_t>(*this,lib);
         addFunctionNumericWithMod<int32_t>(*this,lib);
@@ -232,11 +232,11 @@ namespace das
         addFunctionBasic<char *>(*this,lib);
         addFunctionOrdered<char *>(*this,lib);
         addFunctionConcat<char *>(*this,lib);
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t>>    ("string",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t>>   ("string",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int64_t>,   char *,int64_t>>    ("string",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint64_t>,  char *,uint64_t>>   ("string",lib) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float>>      ("string",lib) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t>>    ("string",lib,"das_to_string",false) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t>>   ("string",lib,"das_to_string",false) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int64_t>,   char *,int64_t>>    ("string",lib,"das_to_string",false) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint64_t>,  char *,uint64_t>>   ("string",lib,"das_to_string",false) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float>>      ("string",lib,"das_to_string",false) );
         // VECTOR & MATRIX TYPES
         addVectorTypes(lib);
         addMatrixTypes(lib);

@@ -590,6 +590,49 @@ namespace das {
             Visitor::preVisitElseBlock(ifte, block);
             ss << string(tab,'\t') << "else\n";
         }
+    // swizzle
+        virtual void preVisit ( ExprSwizzle * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->type->ref ) {
+                ss << "das_swizzle_ref(";
+            } else {
+                if ( expr->fields.size()==1 ) {
+                    const char * mask = "xyzw";
+                    ss << "v_extract_" << mask[expr->fields[0]];
+                    if ( expr->type->baseType!=Type::tFloat ) ss << "i";
+                    ss << "(";
+                } else if ( TypeDecl::isSequencialMask(expr->fields) ) {
+                    ss << "das_swizzle_seq(";
+                } else {
+                    ss << "das_swizzle(";
+                }
+            }
+        }
+        virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
+            if ( expr->type->ref ) {
+                ss << ")";
+            } else {
+                if ( expr->fields.size()==1 ) {
+                    ss << ")";
+                } else if ( TypeDecl::isSequencialMask(expr->fields) ) {
+                    ss << ")";
+                } else {
+                    ss << ")";
+                }
+            }
+            ss << " /*";
+            for ( auto f : expr->fields ) {
+                switch ( f ) {
+                    case 0:     ss << "x"; break;
+                    case 1:     ss << "y"; break;
+                    case 2:     ss << "z"; break;
+                    case 3:     ss << "w"; break;
+                    default:    ss << "?"; break;
+                }
+            }
+            ss << "*/";
+            return Visitor::visit(expr);
+        }
     // string builder
         virtual void preVisit ( ExprStringBuilder * expr ) override {
             Visitor::preVisit(expr);
@@ -658,6 +701,9 @@ namespace das {
             Visitor::preVisit(call);
             if ( call->func->builtIn ) {
                 auto bif = static_cast<BuiltInFunction *>(call->func);
+                if ( bif->policyBased ) {
+                    ss << "SimPolicy<" << das_to_cppString(call->arguments[0]->type->baseType) << ">::";
+                }
                 if ( bif->cppName.empty() ) {
                     ss << bif->name << "(";
                 } else {
@@ -672,9 +718,12 @@ namespace das {
             if ( !last ) ss << ",";
             return Visitor::visitCallArg(call, arg, last);
         }
-        virtual ExpressionPtr visit ( ExprCall * c ) override {
+        virtual ExpressionPtr visit ( ExprCall * call ) override {
+            if ( call->func->policyBased ) {
+                ss << ",*__context__";
+            }
             ss << ")";
-            return Visitor::visit(c);
+            return Visitor::visit(call);
         }
     // for
         string forSrcName ( const string & varName ) const {

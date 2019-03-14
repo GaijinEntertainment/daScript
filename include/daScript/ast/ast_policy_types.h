@@ -5,8 +5,9 @@ namespace  das {
     template  <typename SimT, typename RetT, typename ...Args>
     class BuiltInFn : public BuiltInFunction {
     public:
-        BuiltInFn(const string & fn, const ModuleLibrary & lib, const string & cna = string())
+        BuiltInFn(const string & fn, const ModuleLibrary & lib, const string & cna = string(), bool pbas = true)
         : BuiltInFunction(fn,cna) {
+            this->policyBased = pbas;
             this->result = makeType<RetT>(lib);
             this->totalStackSize = sizeof(Prologue);
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
