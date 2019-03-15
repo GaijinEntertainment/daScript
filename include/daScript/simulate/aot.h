@@ -78,6 +78,21 @@ namespace das {
 
     template <typename TK, typename TV>
     struct TTable : Table {
+        TTable() = default;
+        TTable(TTable & arr) { moveT(arr); }
+        TTable(TTable && arr ) { moveT(arr); }
+        TTable & operator = ( TTable & arr ) { moveT(arr); return *this; }
+        TTable & operator = ( TTable && arr ) { moveT(arr); return *this; }
+        void moveA ( Table & arr ) {
+            data = arr.data; arr.data = 0;
+            size = arr.size; arr.size = 0;
+            capacity = arr.capacity; arr.capacity = 0;
+            lock = arr.lock; arr.lock = 0;
+            keys = arr.keys; arr.keys = 0;
+            hashes = arr.hashes; arr.hashes = 0;
+            maxLookups = arr.maxLookups; arr.maxLookups = 0;
+            shift = arr.shift; arr.shift = 0;
+        }
         __forceinline TV & operator () ( const TK & key, Context * __context__ ) {
             TableHash<TK> thh(__context__,sizeof(TV));
             auto hfn = hash_function(*__context__, key);
@@ -125,7 +140,7 @@ namespace das {
         __forceinline das_iterator(TDim<TT,size> & r) : that(&r) {
             array_end = r.data + size;
         }
-        __forceinline bool first ( Context * __context__, TT * & i ) {
+        __forceinline bool first ( Context *, TT * & i ) {
             i = (TT *) that->data;
             return i!=array_end;
         }
@@ -133,7 +148,7 @@ namespace das {
             i++;
             return i!=array_end;
         }
-        __forceinline void close ( Context * __context__, TT * & i ) {
+        __forceinline void close ( Context *, TT * & i ) {
             i = nullptr;
         }
         TDim<TT,size> * that;
