@@ -74,8 +74,8 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            Context ctxBase;
-            if ( !program->simulate(ctxBase, tout) ) {
+            Context ctx;
+            if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
                     tout << reportError(err.at, err.what, err.cerr );
@@ -85,10 +85,7 @@ bool unit_test ( const string & fn ) {
             // now, what we get to do is to link AOT
             AotLibrary aotLib;
             das::aot::registerAot(aotLib);
-            program->linkCppAot(ctxBase, aotLib, tout);
-            // note: copy of the context is here for testing purposes only
-            //          that way we test context-copying functionality every time
-            Context ctx(ctxBase);
+            program->linkCppAot(ctx, aotLib, tout);
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));

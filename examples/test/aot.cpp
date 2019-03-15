@@ -3,7 +3,6 @@
 #include "daScript/simulate/aot.h"
 
 namespace das {
-
     namespace aot {
         TypeInfo __type_info__ec0ec894 = { Type::tUInt, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xec0ec894 };
         TypeInfo * __tinfo_0[1] = { &__type_info__ec0ec894 };
@@ -18,11 +17,11 @@ namespace das {
             builtin_table_clear(tab,__context__);
             int32_t maxOcc = 0;
             {
-                bool __need_loop_16 = true;
+                bool __need_loop_19 = true;
                 das_iterator<TArray<char *>> __s_iterator(src);
                 char * * s;
-                __need_loop_16 = __s_iterator.first(__context__,s) && __need_loop_16;
-                for ( ; __need_loop_16 ; __need_loop_16 = __s_iterator.next(__context__,s) )
+                __need_loop_19 = __s_iterator.first(__context__,s) && __need_loop_19;
+                for ( ; __need_loop_19 ; __need_loop_19 = __s_iterator.next(__context__,s) )
                 {
                     maxOcc = SimPolicy<int32_t>::Max(++tab((*s),__context__),maxOcc,*__context__);
                 }
@@ -35,11 +34,11 @@ namespace das {
         {
             resize(__context__,src,500000);
             {
-                bool __need_loop_9 = true;
+                bool __need_loop_12 = true;
                 das_iterator<range> __i_iterator(range(0,500000));
                 int32_t i;
-                __need_loop_9 = __i_iterator.first(__context__,i) && __need_loop_9;
-                for ( ; __need_loop_9 ; __need_loop_9 = __i_iterator.next(__context__,i) )
+                __need_loop_12 = __i_iterator.first(__context__,i) && __need_loop_12;
+                for ( ; __need_loop_12 ; __need_loop_12 = __i_iterator.next(__context__,i) )
                 {
                     uint32_t num = ((0x1033c4d7u ^ uint32_t(i * 119)) % 0x7a120u);
                     src(i,__context__) = das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_0, cast<uint32_t>::from(num)));
@@ -61,6 +60,7 @@ namespace das {
             builtin_profile(20,"dictionary",das_make_block<void>(__context__,[&]()->void{
                 dict(__context__,tab,src);
             }),__context__);
+            DAS_ASSERT(heap_depth(__context__) == 1);
             return true;
         }
 
@@ -79,7 +79,7 @@ namespace das {
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(resize)>>();
             };
             // test
-            aotLib[0xc397fa877b1da7ce] = [&](Context & ctx){
+            aotLib[0xa64f158bcf3d1c9d] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(test)>>();
             };
         }

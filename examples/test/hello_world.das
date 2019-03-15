@@ -1,5 +1,8 @@
 options logCpp=true, logNodes=false
 
+// 8Mb heap
+options heap=8388608
+
 require math
 
 def makeRandomSequence(src:array<string>)
@@ -24,6 +27,7 @@ def test
     makeRandomSequence(src)
 	profile(20,"dictionary") <|
         dict(tab,src)
+    assert(heap_depth()==1)
     return true
 
 
