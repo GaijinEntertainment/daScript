@@ -4,83 +4,177 @@
 
 namespace das {
     namespace aot {
-        TypeInfo __type_info__ec0ec894 = { Type::tUInt, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xec0ec894 };
-        TypeInfo * __tinfo_0[1] = { &__type_info__ec0ec894 };
-
-        int32_t dict ( Context * __context__, TTable<char *,int32_t> & tab, TArray<char *> & src );
-        void makeRandomSequence ( Context * __context__, TArray<char *> & src );
-        void resize ( Context * __context__, TArray<char *> & Arr, int32_t newSize );
+        void make_test_array ( Context * __context__, TArray<int32_t> & a, int32_t extra );
+        void resize ( Context * __context__, TArray<int32_t> & Arr, int32_t newSize );
         bool test ( Context * __context__ );
+        void verify_test_array ( Context * __context__, TArray<int32_t> & a, int32_t extra );
 
-        int32_t dict ( Context * __context__, TTable<char *,int32_t> &  tab, TArray<char *> &  src )
+        void make_test_array ( Context * __context__, TArray<int32_t> &  a, int32_t extra = 0 )
         {
-            builtin_table_clear(tab,__context__);
-            int32_t maxOcc = 0;
+            int32_t i = 0;
+            resize(__context__,a,10);
             {
-                bool __need_loop_19 = true;
-                das_iterator<TArray<char *>> __s_iterator(src);
-                char * * s;
-                __need_loop_19 = __s_iterator.first(__context__,s) && __need_loop_19;
-                for ( ; __need_loop_19 ; __need_loop_19 = __s_iterator.next(__context__,s) )
+                bool __need_loop_8 = true;
+                das_iterator<TArray<int32_t>> __x_iterator(a);
+                int32_t * x;
+                __need_loop_8 = __x_iterator.first(__context__,x) && __need_loop_8;
+                for ( ; __need_loop_8 ; __need_loop_8 = __x_iterator.next(__context__,x) )
                 {
-                    maxOcc = SimPolicy<int32_t>::Max(++tab((*s),__context__),maxOcc,*__context__);
+                    (*x) = i++ + extra;
                 }
-                __s_iterator.close(__context__,s);
-            };
-            return maxOcc;
-        }
-
-        void makeRandomSequence ( Context * __context__, TArray<char *> &  src )
-        {
-            resize(__context__,src,500000);
-            {
-                bool __need_loop_12 = true;
-                das_iterator<range> __i_iterator(range(0,500000));
-                int32_t i;
-                __need_loop_12 = __i_iterator.first(__context__,i) && __need_loop_12;
-                for ( ; __need_loop_12 ; __need_loop_12 = __i_iterator.next(__context__,i) )
-                {
-                    uint32_t num = ((0x1033c4d7u ^ uint32_t(i * 119)) % 0x7a120u);
-                    src(i,__context__) = das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_0, cast<uint32_t>::from(num)));
-                }
-                __i_iterator.close(__context__,i);
+                __x_iterator.close(__context__,x);
             };
         }
 
-        void resize ( Context * __context__, TArray<char *> &  Arr, int32_t newSize )
+        void resize ( Context * __context__, TArray<int32_t> &  Arr, int32_t newSize )
         {
-            builtin_array_resize(Arr,newSize,8,__context__);
+            builtin_array_resize(Arr,newSize,4,__context__);
         }
 
         bool test ( Context * __context__ )
         {
-            TTable<char *,int32_t> tab; das_zero(tab);
-            TArray<char *> src; das_zero(src);
-            makeRandomSequence(__context__,src);
-            builtin_profile(20,"dictionary",das_make_block<void>(__context__,[&]()->void{
-                dict(__context__,tab,src);
-            }),__context__);
-            DAS_ASSERT(heap_depth(__context__) == 1);
+            { /* let */
+                TArray<int32_t> a; das_zero(a); {
+                    make_test_array(__context__,a,0);
+                    make_test_array(__context__,a,13);
+                    make_test_array(__context__,a,0);
+                    { /* let */
+                        TArray<int32_t> b = a; {
+                            DAS_ASSERT(builtin_array_size(a) == 0);
+                            das_move(a,b);
+                        }
+                    };
+                }
+            };
+            { /* let */
+                TArray<int32_t> a; das_zero(a); TArray<int32_t> b; das_zero(b); int32_t i = 0; {
+                    resize(__context__,a,10);
+                    resize(__context__,b,10);
+                    {
+                        bool __need_loop_94 = true;
+                        das_iterator<TArray<int32_t>> __l_iterator(a);
+                        int32_t * l;
+                        __need_loop_94 = __l_iterator.first(__context__,l) && __need_loop_94;
+                        das_iterator<TArray<int32_t>> __r_iterator(b);
+                        int32_t * r;
+                        __need_loop_94 = __r_iterator.first(__context__,r) && __need_loop_94;
+                        for ( ; __need_loop_94 ; __need_loop_94 = __l_iterator.next(__context__,l) && __r_iterator.next(__context__,r) )
+                        {
+                            (*l) = i;
+                            (*r) = (i * 2) - 5;
+                            i++;
+                        }
+                        __l_iterator.close(__context__,l);
+                        __r_iterator.close(__context__,r);
+                    };
+                    i = 0;
+                    {
+                        bool __need_loop_100 = true;
+                        das_iterator<TArray<int32_t>> __l_iterator(a);
+                        int32_t * l;
+                        __need_loop_100 = __l_iterator.first(__context__,l) && __need_loop_100;
+                        das_iterator<TArray<int32_t>> __r_iterator(b);
+                        int32_t * r;
+                        __need_loop_100 = __r_iterator.first(__context__,r) && __need_loop_100;
+                        for ( ; __need_loop_100 ; __need_loop_100 = __l_iterator.next(__context__,l) && __r_iterator.next(__context__,r) )
+                        {
+                            DAS_ASSERT((*l) == i);
+                            DAS_ASSERT((*r) == ((i * 2) - 5));
+                            i++;
+                        }
+                        __l_iterator.close(__context__,l);
+                        __r_iterator.close(__context__,r);
+                    };
+                    i = 0;
+                    {
+                        bool __need_loop_105 = true;
+                        das_iterator<TArray<int32_t>> __l_iterator(a);
+                        int32_t * l;
+                        __need_loop_105 = __l_iterator.first(__context__,l) && __need_loop_105;
+                        das_iterator<TArray<int32_t>> __r_iterator(b);
+                        int32_t * r;
+                        __need_loop_105 = __r_iterator.first(__context__,r) && __need_loop_105;
+                        for ( ; __need_loop_105 ; __need_loop_105 = __l_iterator.next(__context__,l) && __r_iterator.next(__context__,r) )
+                        {
+                            if ( (*l) > (*r) )
+                            {
+                                DAS_ASSERT((*l) > (*r));
+                                i++;
+                            };
+                        }
+                        __l_iterator.close(__context__,l);
+                        __r_iterator.close(__context__,r);
+                    };
+                    DAS_ASSERT(i == 5);
+                }
+            };
+            { /* let */
+                TDim<TArray<int32_t>,10> a; das_zero(a); int32_t i = 0; {
+                    {
+                        bool __need_loop_111 = true;
+                        das_iterator<TDim<TArray<int32_t>,10>> __b_iterator(a);
+                        TArray<int32_t> * b;
+                        __need_loop_111 = __b_iterator.first(__context__,b) && __need_loop_111;
+                        for ( ; __need_loop_111 ; __need_loop_111 = __b_iterator.next(__context__,b) )
+                        {
+                            make_test_array(__context__,(*b),i++);
+                        }
+                        __b_iterator.close(__context__,b);
+                    };
+                    i = 0;
+                    {
+                        bool __need_loop_114 = true;
+                        das_iterator<TDim<TArray<int32_t>,10>> __b_iterator(a);
+                        TArray<int32_t> * b;
+                        __need_loop_114 = __b_iterator.first(__context__,b) && __need_loop_114;
+                        for ( ; __need_loop_114 ; __need_loop_114 = __b_iterator.next(__context__,b) )
+                        {
+                            verify_test_array(__context__,(*b),i++);
+                        }
+                        __b_iterator.close(__context__,b);
+                    };
+                }
+            };
             return true;
+        }
+
+        void verify_test_array ( Context * __context__, TArray<int32_t> &  a, int32_t extra = 0 )
+        {
+            DAS_ASSERT(builtin_array_size(a) == 10);
+            { /* let */
+                int32_t i = 0; {
+                    {
+                        bool __need_loop_14 = true;
+                        das_iterator<TArray<int32_t>> __x_iterator(a);
+                        int32_t * x;
+                        __need_loop_14 = __x_iterator.first(__context__,x) && __need_loop_14;
+                        for ( ; __need_loop_14 ; __need_loop_14 = __x_iterator.next(__context__,x) )
+                        {
+                            DAS_ASSERT((*x) == (extra + i++));
+                        }
+                        __x_iterator.close(__context__,x);
+                    };
+                }
+            };
         }
 
         void registerAot ( AotLibrary & aotLib )
         {
-            // dict
-            aotLib[0xae931145262ae07a] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(dict)>>();
-            };
-            // makeRandomSequence
-            aotLib[0xe95eb3db2fdfd555] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(makeRandomSequence)>>();
+            // make_test_array
+            aotLib[0x9dffbe8b284cd090] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(make_test_array)>>();
             };
             // resize
-            aotLib[0xe9cd57f4be1ff7f7] = [&](Context & ctx){
+            aotLib[0xee40c19956b18323] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(resize)>>();
             };
             // test
-            aotLib[0xa64f158bcf3d1c9d] = [&](Context & ctx){
+            aotLib[0x5c0b8124a2b250ff] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(test)>>();
+            };
+            // verify_test_array
+            aotLib[0xfa2f4f2092a0f924] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(verify_test_array)>>();
             };
         }
     }

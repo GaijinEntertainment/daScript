@@ -13,7 +13,49 @@ namespace das {
     }
 
     template <typename TT>
+    __forceinline void das_move ( TT & a, TT & b ) {
+        a = b;
+        memset(&b, 0, sizeof(TT));
+    }
+
+
+    template <typename TT, uint32_t size>
+    struct TDim {
+        enum { capacity = size };
+        TT  data[size];
+        __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
+            uint32_t idx = uint32_t(index);
+            if ( idx>=size ) __context__->throw_error("index out of range");
+            return ((TT *)data)[index];
+        }
+        __forceinline const TT & operator () ( int32_t index, Context * __context__ ) const {
+            uint32_t idx = uint32_t(index);
+            if ( idx>=size ) __context__->throw_error("index out of range");
+            return ((TT *)data)[index];
+        }
+        __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
+            if ( idx>=size ) __context__->throw_error("index out of range");
+            return ((TT *)data)[index];
+        }
+        __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
+            if ( idx>=size ) __context__->throw_error("index out of range");
+            return ((TT *)data)[index];
+        }
+    };
+
+    template <typename TT>
     struct TArray : Array {
+        TArray() = default;
+        TArray(TArray & arr) { moveA(arr); }
+        TArray(TArray && arr ) { moveA(arr); }
+        TArray & operator = ( TArray & arr ) { moveA(arr); return *this; }
+        TArray & operator = ( TArray && arr ) { moveA(arr); return *this; }
+        void moveA ( Array & arr ) {
+            data = arr.data; arr.data = 0;
+            size = arr.size; arr.size = 0;
+            capacity = arr.capacity; arr.capacity = 0;
+            lock = arr.lock; arr.lock = 0;
+        }
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) __context__->throw_error("index out of range");
@@ -76,6 +118,26 @@ namespace das {
         }
         Array * that;
         TT * array_end;
+    };
+
+    template <typename TT, uint32_t size>
+    struct das_iterator<TDim<TT,size>> {
+        __forceinline das_iterator(TDim<TT,size> & r) : that(&r) {
+            array_end = r.data + size;
+        }
+        __forceinline bool first ( Context * __context__, TT * & i ) {
+            i = (TT *) that->data;
+            return i!=array_end;
+        }
+        __forceinline bool next  ( Context *, TT * & i ) {
+            i++;
+            return i!=array_end;
+        }
+        __forceinline void close ( Context * __context__, TT * & i ) {
+            i = nullptr;
+        }
+        TDim<TT,size> * that;
+        TT *            array_end;
     };
 
     template <typename resType, typename ...argType>

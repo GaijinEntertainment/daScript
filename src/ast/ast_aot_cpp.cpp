@@ -74,14 +74,16 @@ namespace das {
         return g_cppCTypeTable.find(t);
     }
 
-    string describeCppType ( const TypeDeclPtr & type, bool substituteRef = false ) {
+    string describeCppType ( const TypeDeclPtr & type, bool substituteRef = false, bool skipRef = false ) {
         TextWriter stream;
         auto baseType = type->baseType;
         if ( type->constant ) {
             stream << "const ";     // TODO: do we skip it alltogether?
         }
         if ( type->dim.size() ) {
-            stream << "TDim< ";
+            for ( auto d : type->dim ) {
+                stream << "TDim<";
+            }
         }
         if ( baseType==Type::alias ) {
             stream << "/* alias */";
@@ -147,11 +149,10 @@ namespace das {
         }
         if ( type->dim.size() ) {
             for ( auto d : type->dim ) {
-                stream << "," << d;
+                stream << "," << d << ">";
             }
-            stream << " >";
         }
-        if ( type->ref ) {
+        if ( type->ref && !skipRef ) {
             if ( !substituteRef ) {
                 stream << " &";
             } else {
@@ -350,17 +351,13 @@ namespace das {
             if ( let->subexpr ) {
                 ss << "{ /* let */\n";
                 tab ++;
+                ss << string(tab,'\t');
             }
         }
         virtual ExpressionPtr visit ( ExprLet * let ) override {
-            for ( auto & var : let->variables ) {
-                if ( !var->init && !var->type->canInitWithZero() ) {
-                    ss << "; das_zero(" << var->name << ")";
-                }
-            }
             if ( let->subexpr ) {
                 tab --;
-                ss << string(tab,'\t') << "}";
+                ss << "\n" << string(tab,'\t') << "}";
             }
             return Visitor::visit(let);
         }
@@ -369,7 +366,13 @@ namespace das {
             ss << describeCppType(var->type,true) << " " << var->name;
             if ( !var->init && var->type->canInitWithZero() ) {
                 ss << " = 0";
+            } else if ( !var->init && !var->type->canInitWithZero() ) {
+                ss << "; das_zero(" << var->name << ")";
             }
+        }
+        virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+            if ( let->scoped ) ss << "; ";
+            return Visitor::visitLet(let, var, last);
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
@@ -800,7 +803,7 @@ namespace das {
                 }
             }
             auto & var = ffor->iteratorVariables[idx];
-            ss << string(tab,'\t') << "das_iterator<" << describeCppType(ffor->sources[idx]->type)
+            ss << string(tab,'\t') << "das_iterator<" << describeCppType(ffor->sources[idx]->type,false,true)
                 << "> " << forSrcName(var->name) << "(";
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
