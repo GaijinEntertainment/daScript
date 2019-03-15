@@ -4,6 +4,7 @@
 #include "daScript/simulate/debug_print.h"
 
 #include "daScript/simulate/sim_policy.h"
+#include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/aot_builtin_math.h"
 
 namespace das {
@@ -15,6 +16,44 @@ namespace das {
             size = 0;
             capacity = 0;
             lock = 0;
+        }
+        __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
+            uint32_t idx = uint32_t(index);
+            if ( idx>=size ) __context__->throw_error("index out of range");
+            return ((TT *)data)[index];
+        }
+        __forceinline const TT & operator () ( int32_t index, Context * __context__ ) const {
+            uint32_t idx = uint32_t(index);
+            if ( idx>=size ) __context__->throw_error("index out of range");
+            return ((TT *)data)[index];
+        }
+        __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
+            if ( idx>=size ) __context__->throw_error("index out of range");
+            return ((TT *)data)[index];
+        }
+        __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
+            if ( idx>=size ) __context__->throw_error("index out of range");
+            return ((TT *)data)[index];
+        }
+    };
+
+    template <typename TK, typename TV>
+    struct TTable : Table {
+        TTable() {
+            data = nullptr;
+            size = 0;
+            capacity = 0;
+            lock = 0;
+            keys = nullptr;
+            hashes = nullptr;
+            maxLookups = 0;
+            shift = 0;
+        }
+        TV & operator () ( const TK & key, Context * __context__ ) {
+            TableHash<TK> thh(__context__,sizeof(TV));
+            auto hfn = hash_function(*__context__, key);
+            int index = thh.reserve(*this, key, hfn);
+            return ((TV *)data)[index];
         }
     };
 
@@ -177,106 +216,82 @@ namespace das {
         return pStr;
     }
 
-    void builtin_print ( char * text, Context * context );
-    void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context );
-    int builtin_array_size ( const Array & arr );
-
     namespace aot {
-        TypeInfo __type_info__fa15db70 = { Type::tFloat, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xfa15db70 };
-        TypeInfo __type_info__a7069c83 = { Type::tString, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 };
-        TypeInfo * __tinfo_0[6] = { &__type_info__fa15db70, &__type_info__a7069c83, &__type_info__fa15db70, &__type_info__a7069c83, &__type_info__fa15db70, &__type_info__a7069c83 };
+        TypeInfo __type_info__ec0ec894 = { Type::tUInt, nullptr, nullptr, /*annotation*/ nullptr, nullptr, nullptr, 0, nullptr, 12, 0xec0ec894 };
+        TypeInfo * __tinfo_0[1] = { &__type_info__ec0ec894 };
 
-        float expLoop ( Context * __context__, int32_t n );
-        float expLoopU ( Context * __context__, int32_t n );
-        float expLoopUV ( Context * __context__, int32_t n );
+        int32_t dict ( Context * __context__, TTable<char *,int32_t> & tab, TArray<char *> & src );
+        void makeRandomSequence ( Context * __context__, TArray<char *> & src );
+        void resize ( Context * __context__, TArray<char *> & Arr, int32_t newSize );
         bool test ( Context * __context__ );
 
-        float expLoop ( Context * __context__, int32_t n )
+        int32_t dict ( Context * __context__, TTable<char *,int32_t> &  tab, TArray<char *> &  src )
         {
-            float sum = 0;
+            builtin_table_clear(tab,__context__);
+            int32_t maxOcc = 0;
             {
-                bool __need_loop_8 = true;
-                das_iterator<range> __i_iterator(range(0,n));
-                int32_t i;
-                __need_loop_8 = __i_iterator.first(__context__,i) && __need_loop_8;
-                for ( ; __need_loop_8 ; __need_loop_8 = __i_iterator.next(__context__,i) )
+                bool __need_loop_16 = true;
+                das_iterator<TArray<char *>> __s_iterator(src);
+                char * * s;
+                __need_loop_16 = __s_iterator.first(__context__,s) && __need_loop_16;
+                for ( ; __need_loop_16 ; __need_loop_16 = __s_iterator.next(__context__,s) )
                 {
-                    sum += SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(1 + float(i),*__context__),*__context__);
+                    maxOcc = SimPolicy<int32_t>::Max(++tab((*s),__context__),maxOcc,*__context__);
                 }
-                __i_iterator.close(__context__,i);
+                __s_iterator.close(__context__,s);
             };
-            return sum;
+            return maxOcc;
         }
 
-        float expLoopU ( Context * __context__, int32_t n )
+        void makeRandomSequence ( Context * __context__, TArray<char *> &  src )
         {
-            float sum = 0;
+            resize(__context__,src,500000);
             {
-                bool __need_loop_15 = true;
-                das_iterator<range> __i_iterator(range(0,n / 4));
+                bool __need_loop_9 = true;
+                das_iterator<range> __i_iterator(range(0,500000));
                 int32_t i;
-                __need_loop_15 = __i_iterator.first(__context__,i) && __need_loop_15;
-                for ( ; __need_loop_15 ; __need_loop_15 = __i_iterator.next(__context__,i) )
+                __need_loop_9 = __i_iterator.first(__context__,i) && __need_loop_9;
+                for ( ; __need_loop_9 ; __need_loop_9 = __i_iterator.next(__context__,i) )
                 {
-                    float k = float(i * 4);
-                    sum += (((SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(1 + k,*__context__),*__context__) + SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(2 + k,*__context__),*__context__)) + SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(3 + k,*__context__),*__context__)) + SimPolicy<float>::Exp(SimPolicy<float>::RcpEst(4 + k,*__context__),*__context__));
+                    uint32_t num = ((0x1033c4d7u ^ uint32_t(i * 119)) % 0x7a120u);
+                    src(i,__context__) = das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_0, cast<uint32_t>::from(num)));
                 }
                 __i_iterator.close(__context__,i);
             };
-            return sum;
         }
 
-        float expLoopUV ( Context * __context__, int32_t n )
+        void resize ( Context * __context__, TArray<char *> &  Arr, int32_t newSize )
         {
-            float4 sumV = float4(0,0,0,0);
-            {
-                bool __need_loop_23 = true;
-                das_iterator<range> __i_iterator(range(0,n / 4));
-                int32_t i;
-                __need_loop_23 = __i_iterator.first(__context__,i) && __need_loop_23;
-                for ( ; __need_loop_23 ; __need_loop_23 = __i_iterator.next(__context__,i) )
-                {
-                    SimPolicy<float4>::SetAdd((char *)&(sumV),SimPolicy<float4>::Exp(SimPolicy<float4>::RcpEst(SimPolicy<float4>::Add(float4(i * 16),float4(1,2,3,4),*__context__),*__context__),*__context__),*__context__);
-                }
-                __i_iterator.close(__context__,i);
-            };
-            return ((v_extract_x(sumV) /*x*/ + v_extract_y(sumV) /*y*/) + v_extract_z(sumV) /*z*/) + v_extract_w(sumV) /*w*/;
+            builtin_array_resize(Arr,newSize,8,__context__);
         }
 
         bool test ( Context * __context__ )
         {
-            float l1 = 0;
-            float l2 = 0;
-            float l3 = 0;
-            builtin_profile(20,"exp loop",das_make_block<void>(__context__,[&]()->void{
-                l1 = expLoop(__context__,1000000);
+            TTable<char *,int32_t> tab;
+            TArray<char *> src;
+            makeRandomSequence(__context__,src);
+            builtin_profile(20,"dictionary",das_make_block<void>(__context__,[&]()->void{
+                dict(__context__,tab,src);
             }),__context__);
-            builtin_profile(20,"exp loop, unrolled",das_make_block<void>(__context__,[&]()->void{
-                l2 = expLoopU(__context__,1000000);
-            }),__context__);
-            builtin_profile(20,"exp loop, unrolled and vectorized",das_make_block<void>(__context__,[&]()->void{
-                l3 = expLoopUV(__context__,1000000);
-            }),__context__);
-            builtin_print(das_string_builder(__context__,SimNode_AotInterop<6>(__tinfo_0, cast<float>::from(l1), cast<char *>::from(" "), cast<float>::from(l2), cast<char *>::from(" "), cast<float>::from(l3), cast<char *>::from("\n"))),__context__);
             return true;
         }
 
         void registerAot ( AotLibrary & aotLib )
         {
-            // expLoop
-            aotLib[0xb1257f787d1e1f5f] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(expLoop)>>();
+            // dict
+            aotLib[0xae931145262ae07a] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(dict)>>();
             };
-            // expLoopU
-            aotLib[0x3b6672d35f5f6887] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(expLoopU)>>();
+            // makeRandomSequence
+            aotLib[0xe95eb3db2fdfd555] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(makeRandomSequence)>>();
             };
-            // expLoopUV
-            aotLib[0xffe70d9155a9c61] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(expLoopUV)>>();
+            // resize
+            aotLib[0xe9cd57f4be1ff7f7] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(resize)>>();
             };
             // test
-            aotLib[0x320335ac69f5e9bf] = [&](Context & ctx){
+            aotLib[0xc397fa877b1da7ce] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(test)>>();
             };
         }

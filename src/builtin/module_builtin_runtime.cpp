@@ -4,8 +4,8 @@
 
 #include "daScript/ast/ast_interop.h"
 
-#include "daScript/simulate/runtime_array.h"
-#include "daScript/simulate/runtime_table.h"
+#include "daScript/simulate/aot_builtin.h"
+
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/bin_serializer.h"
@@ -98,8 +98,8 @@ namespace das
         return arr->capacity;
     }
 
-    void builtin_table_clear ( Table * arr, Context * context ) {
-        table_clear(*context, *arr);
+    void builtin_table_clear ( Table & arr, Context * context ) {
+        table_clear(*context, arr);
     }
 
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args ) {
@@ -151,7 +151,7 @@ namespace das
         // hash
         addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none);
         // table functions
-        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument);
+        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_table_clear");
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none);
         addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", SideEffects::none);
         addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock", SideEffects::modifyArgument);

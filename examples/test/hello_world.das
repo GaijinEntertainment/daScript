@@ -2,41 +2,31 @@ options logCpp=true, logNodes=false
 
 require math
 
-[sideeffects]
-def expLoop(n)
-    let sum = 0.
-    for i in range(0, n)
-        sum += exp(rcp_est(1. + float(i)))
-    return sum
+def makeRandomSequence(src:array<string>)
+    let n = 500000
+    let mod = uint(n)
+    resize(src,n)
+    for i in range(0,n)
+        let num = (271828183u ^ uint(i*119))%mod
+        src[i] = "{num}"
 
-[sideeffects]
-def expLoopU(n)
-    let sum = 0.
-    for i in range(0, n/4)
-        let k = float(i*4)
-        sum += exp(rcp_est(1. + k)) + exp(rcp_est(2. + k)) + exp(rcp_est(3. + k)) + exp(rcp_est(4. + k))
-    return sum
-
-[sideeffects]
-def expLoopUV(n)
-    let sumV = float4(0.)
-    for i in range(0, n/4)
-		sumV += exp(rcp_est(float4(i*16)+float4(1,2,3,4)))
-    return sumV.x + sumV.y + sumV.z + sumV.w
+def dict(tab:table<string,int>; src:array<string>)
+    clear(tab)
+    let maxOcc = 0
+    for s in src
+        maxOcc = max(++tab[s],maxOcc)
+    return maxOcc
 
 [export]
-def test()
-    let l1 = 0.
-    let l2 = 0.
-    let l3 = 0.
-    profile(20,"exp loop") <|
-        l1 = expLoop(1000000)
-    profile(20,"exp loop, unrolled") <|
-        l2 = expLoopU(1000000)
-    profile(20,"exp loop, unrolled and vectorized") <|
-        l3 = expLoopUV(1000000)
-    print("{l1} {l2} {l3}\n")
+def test
+    let tab : table<string,int>
+    let src : array<string>
+    makeRandomSequence(src)
+	profile(20,"dictionary") <|
+        dict(tab,src)
     return true
+
+
 
 
 

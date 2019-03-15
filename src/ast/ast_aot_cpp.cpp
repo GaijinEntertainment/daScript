@@ -482,6 +482,16 @@ namespace das {
             }
             return Visitor::visit(field);
         }
+    // at
+        virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override {
+            Visitor::preVisitAtIndex(expr, index);
+            ss << "(";
+
+        }
+        virtual ExpressionPtr visit ( ExprAt * that ) override {
+            ss << ",__context__)";
+            return Visitor::visit(that);
+        }
     // const
         virtual ExpressionPtr visit(ExprFakeContext * c) override {
             ss << "__context__";

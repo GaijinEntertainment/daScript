@@ -7,6 +7,8 @@
 
 #include "daScript/simulate/runtime_array.h"
 
+#include "daScript/simulate/aot_builtin.h"
+
 namespace das {
 
     int builtin_array_size ( const Array & arr ) {
