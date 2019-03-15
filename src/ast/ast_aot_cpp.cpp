@@ -720,6 +720,21 @@ namespace das {
             ss << ")";
             return Visitor::visit(expr);
         }
+    // looks like call
+        virtual void preVisit ( ExprLooksLikeCall * call ) override {
+            Visitor::preVisit(call);
+            if ( call->name=="assert" ) ss << "DAS_ASSERT";
+            else ss << call->name;
+            ss << "(";
+        }
+        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
+            if ( !last ) ss << ",";
+            return Visitor::visitLooksLikeCallArg(call, arg, last);
+        }
+        virtual ExpressionPtr visit ( ExprLooksLikeCall * c ) override {
+            ss << ")";
+            return Visitor::visit(c);
+        }
     // call
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
