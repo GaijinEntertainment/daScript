@@ -19,10 +19,10 @@ namespace das {
     void builtin_table_lock ( Table * arr, Context * context );
     void builtin_table_unlock ( Table * arr, Context * context );
     int builtin_array_size ( const Array & arr );
-    int builtin_array_capacity ( const Array * arr );
+    int builtin_array_capacity ( const Array & arr );
     void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context );
-    void builtin_array_reserve ( Array * pArray, int newSize, int stride, Context * context );
-    int builtin_array_push ( Array * pArray, int index, int stride, Context * context );
-    void builtin_array_erase ( Array * pArray, int index, int stride, Context * context ) ;
-    void builtin_array_clear ( Array * pArray, Context * context );
+    void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context );
+    int builtin_array_push ( Array & pArray, int index, int stride, Context * context );
+    void builtin_array_erase ( Array & pArray, int index, int stride, Context * context ) ;
+    void builtin_array_clear ( Array & pArray, Context * context );
 }

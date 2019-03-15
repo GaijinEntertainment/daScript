@@ -603,6 +603,16 @@ namespace das {
             ss << "float4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
             return Visitor::visit(c);
         }
+    // ExprWhile
+        virtual void preVisit ( ExprWhile * wh ) override {
+            Visitor::preVisit(wh);
+            ss << "while ( ";
+        }
+        virtual void preVisitWhileBody ( ExprWhile * wh, Expression * body ) override {
+            Visitor::preVisitWhileBody(wh,body);
+            ss << " )\n";
+            ss << string(tab,'\t');
+        }
     // if then else
         virtual void preVisit ( ExprIfThenElse * ifte ) override {
             Visitor::preVisit(ifte);
@@ -726,8 +736,10 @@ namespace das {
     // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
-            if ( call->name=="assert" ) ss << "DAS_ASSERT";
-            else ss << call->name;
+            if ( call->name=="assert" ) {
+                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT";
+                else ss << "DAS_ASSERTF";
+            } else ss << call->name;
             ss << "(";
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
