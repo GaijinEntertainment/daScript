@@ -352,16 +352,24 @@ namespace das {
                 tab ++;
             }
         }
-        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-            Visitor::preVisitLet(let, var, last);
-            ss << describeCppType(var->type,true) << " " << var->name;
-        }
-        virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+        virtual ExpressionPtr visit ( ExprLet * let ) override {
+            for ( auto & var : let->variables ) {
+                if ( !var->init && !var->type->canInitWithZero() ) {
+                    ss << "; das_zero(" << var->name << ")";
+                }
+            }
             if ( let->subexpr ) {
                 tab --;
                 ss << string(tab,'\t') << "}";
             }
-            return Visitor::visitLet(let, var, last);
+            return Visitor::visit(let);
+        }
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(let, var, last);
+            ss << describeCppType(var->type,true) << " " << var->name;
+            if ( !var->init && var->type->canInitWithZero() ) {
+                ss << " = 0";
+            }
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);

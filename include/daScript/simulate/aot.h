@@ -8,13 +8,12 @@
 namespace das {
 
     template <typename TT>
+    __forceinline void das_zero ( TT & a ) {
+        memset(&a, 0, sizeof(TT));
+    }
+
+    template <typename TT>
     struct TArray : Array {
-        __forceinline TArray() {
-            data = nullptr;
-            size = 0;
-            capacity = 0;
-            lock = 0;
-        }
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) __context__->throw_error("index out of range");
@@ -37,16 +36,6 @@ namespace das {
 
     template <typename TK, typename TV>
     struct TTable : Table {
-        __forceinline TTable() {
-            data = nullptr;
-            size = 0;
-            capacity = 0;
-            lock = 0;
-            keys = nullptr;
-            hashes = nullptr;
-            maxLookups = 0;
-            shift = 0;
-        }
         __forceinline TV & operator () ( const TK & key, Context * __context__ ) {
             TableHash<TK> thh(__context__,sizeof(TV));
             auto hfn = hash_function(*__context__, key);

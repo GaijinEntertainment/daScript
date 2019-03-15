@@ -55,8 +55,8 @@ namespace das {
 
         bool test ( Context * __context__ )
         {
-            TTable<char *,int32_t> tab;
-            TArray<char *> src;
+            TTable<char *,int32_t> tab; das_zero(tab);
+            TArray<char *> src; das_zero(src);
             makeRandomSequence(__context__,src);
             builtin_profile(20,"dictionary",das_make_block<void>(__context__,[&]()->void{
                 dict(__context__,tab,src);
