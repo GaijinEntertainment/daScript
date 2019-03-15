@@ -472,6 +472,11 @@ namespace das {
             ss << "return ";
             if ( expr->moveSemantics ) ss << "/* <- */ ";
         }
+    // break
+        virtual void preVisit ( ExprBreak * that ) override {
+            Visitor::preVisit(that);
+            ss << "break";
+        }
     // var
         virtual ExpressionPtr visit ( ExprVar * var ) override {
             if ( var->local && var->variable->type->ref ) {
@@ -595,7 +600,7 @@ namespace das {
             ss << "float4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
             return Visitor::visit(c);
         }
-        // if then else
+    // if then else
         virtual void preVisit ( ExprIfThenElse * ifte ) override {
             Visitor::preVisit(ifte);
             ss << "if ( ";
@@ -603,6 +608,7 @@ namespace das {
         virtual void preVisitIfBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitIfBlock(ifte,block);
             ss << " )\n";
+            ss << string(tab,'\t');
         }
         virtual void preVisitElseBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitElseBlock(ifte, block);
