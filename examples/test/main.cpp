@@ -3,11 +3,15 @@
 
 using namespace das;
 
+#define USE_AOT 0
+
+#if USE_AOT
 namespace das {
     namespace aot {
         void registerAot ( AotLibrary & aotLib );
     }
 }
+#endif
 
 bool g_reportCompilationFailErrors = false;
 
@@ -82,10 +86,12 @@ bool unit_test ( const string & fn ) {
                 }
                 return false;
             }
+#if USE_AOT
             // now, what we get to do is to link AOT
             AotLibrary aotLib;
             das::aot::registerAot(aotLib);
             program->linkCppAot(ctx, aotLib, tout);
+#endif
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
@@ -205,8 +211,8 @@ int main() {
     return 0;
 #endif
 #if 1 // Debug this one test
-    unit_test(TEST_PATH "examples/test/hello_world.das");
-    // unit_test(TEST_PATH "examples/test/unit_tests/handle.das");
+    // unit_test(TEST_PATH "examples/test/hello_world.das");
+    unit_test(TEST_PATH "examples/test/unit_tests/block.das");
     Module::Shutdown();
     return 0;
 #endif

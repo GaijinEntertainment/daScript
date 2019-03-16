@@ -78,6 +78,7 @@ def test:bool
             return v1 + a1
         assert(res==1003)
         v1 = 4
+        debug(res)
         res = badd(1000) <| $(a2:int):int
             return badd(2000,$(a3:int):int { return a3 + a2 + v1; })
         assert(res==3004)
