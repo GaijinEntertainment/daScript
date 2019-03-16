@@ -331,6 +331,9 @@ namespace das {
                 logs << "\t" << expr->stackTop << "\t" << sz
                 << "\tmake block " << expr->type->describe() << ", line " << expr->at.line << "\n";
             }
+            if ( func ) {
+                func->hasMakeBlock = true;
+            }
         }
     // ExprAscend
         virtual void preVisit ( ExprAscend * expr ) override {

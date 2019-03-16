@@ -1466,6 +1466,7 @@ namespace das
                 bool    knownSideEffects : 1;
                 bool    hasToRunAtCompileTime : 1;
                 bool    unsafe : 1;
+                bool    hasMakeBlock : 1;
             };
             uint32_t flags = 0;
         };

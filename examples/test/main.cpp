@@ -3,7 +3,7 @@
 
 using namespace das;
 
-#define USE_AOT 0
+#define USE_AOT 1
 
 #if USE_AOT
 namespace das {
@@ -210,9 +210,9 @@ int main() {
     Module::Shutdown();
     return 0;
 #endif
-#if 0 // Debug this one test
-    // unit_test(TEST_PATH "examples/test/hello_world.das");
-    unit_test(TEST_PATH "examples/test/unit_tests/block.das");
+#if 1 // Debug this one test
+    unit_test(TEST_PATH "examples/test/hello_world.das");
+    // unit_test(TEST_PATH "examples/test/unit_tests/block.das");
     Module::Shutdown();
     return 0;
 #endif

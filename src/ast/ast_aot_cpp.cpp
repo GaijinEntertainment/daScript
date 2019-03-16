@@ -295,7 +295,11 @@ namespace das {
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
             Visitor::preVisitFunctionBody(fn,expr);
-            ss << " ) { das_stack_prologue __prologue(__context__," << fn->totalStackSize << ",__LINE__);\n";
+            if ( fn->hasMakeBlock ) {
+                ss << " ) { das_stack_prologue __prologue(__context__," << fn->totalStackSize << ",__LINE__);\n";
+            } else {
+                ss << " )\n";
+            }
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
@@ -314,7 +318,11 @@ namespace das {
             return Visitor::visitArgument(fn, that, last);
         }
         virtual FunctionPtr visit ( Function * fn ) override {
-            ss << "}\n";
+            if ( fn->hasMakeBlock ) {
+                ss << "}\n";
+            } else {
+                ss << "\n";
+            }
             return Visitor::visit(fn);
         }
     // block
@@ -743,16 +751,20 @@ namespace das {
                 if ( call->arguments.size()==1 ) ss << "DAS_ASSERT(";
                 else ss << "DAS_ASSERTF(";
             } else if ( call->name=="invoke" ) {
-                ss << "das_invoke<" << describeCppType(call->type) << ">::invoke<";
-                for ( const auto & arg : call->arguments ) {
-                    if ( arg!=call->arguments.front() ) {
-                        ss << describeCppType(arg->type);
-                        if ( arg!=call->arguments.back() ) {
-                            ss << ",";
+                ss << "das_invoke<" << describeCppType(call->type) << ">::invoke";
+                if ( call->arguments.size()>1 ) {
+                    ss << "<";
+                    for ( const auto & arg : call->arguments ) {
+                        if ( arg!=call->arguments.front() ) {
+                            ss << describeCppType(arg->type);
+                            if ( arg!=call->arguments.back() ) {
+                                ss << ",";
+                            }
                         }
                     }
+                    ss << ">";
                 }
-                ss << ">(__context__,";
+                ss << "(__context__,";
             } else ss << call->name << "(";
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
@@ -778,7 +790,8 @@ namespace das {
                 }
             } else {
                 // TODO: support 'hybrid' calls here
-                ss << call->name << "(__context__,";
+                ss << call->name << "(__context__";
+                if  ( call->arguments.size() ) ss << ",";
             }
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
