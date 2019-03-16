@@ -182,14 +182,6 @@ namespace das
             return (char *) abiCMRES;
         }
 
-        __forceinline vec4f * abiBlockArguments() {
-            return abiBlockArg;
-        }
-
-        __forceinline char * abiBlockCopyOrMoveResult() {
-            return (char *) abiBlockCMRES;
-        }
-
         __forceinline vec4f call(const SimFunction * fn, vec4f * args, int line) {
             // PUSH
             char * EP, *SP;
@@ -248,9 +240,6 @@ namespace das
         __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
             char * EP, *SP;
             stack.invoke(block.stackOffset, EP, SP);
-            auto aa = abiBlockArg; auto acm = abiBlockCMRES;
-            abiBlockArg = args; abiBlockCMRES = cmres;
-
             BlockArguments * __restrict ba = nullptr;
             BlockArguments saveArguments;
             if ( block.argumentsOffset ) {
@@ -266,8 +255,6 @@ namespace das
             if ( ba ) {
                 *ba = saveArguments;
             }
-
-            abiBlockArg = aa; abiBlockCMRES = acm;
             stack.pop(EP, SP);
             return block_result;
         }
@@ -276,9 +263,6 @@ namespace das
         vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when) {
             char * EP, *SP;
             stack.invoke(block.stackOffset,EP,SP);
-            auto aa = abiBlockArg; auto acm = abiBlockCMRES;
-            abiBlockArg = args; abiBlockCMRES = cmres;
-
             BlockArguments * ba = nullptr;
             BlockArguments saveArguments;
             if ( block.argumentsOffset ) {
@@ -294,9 +278,6 @@ namespace das
             if ( ba ) {
                 *ba = saveArguments;
             }
-
-            abiBlockArg = aa; abiBlockCMRES = acm;
-            stack.pop(EP,SP);
             return result;
         }
 #ifdef _MSC_VER
@@ -342,8 +323,6 @@ namespace das
     public:
         vec4f *         abiArg;
         void *          abiCMRES;
-        vec4f *         abiBlockArg;
-        void *          abiBlockCMRES;
     protected:
         const char *    exception = nullptr;
         string          lastError;
@@ -1394,11 +1373,13 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), index(i), stackTop(sp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            return context.abiBlockArguments()[index];
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
+            return args[index];
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            return cast<CTYPE>::to(context.abiBlockArguments()[index]);     \
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));    \
+            return cast<CTYPE>::to(args[index]);                            \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -1412,12 +1393,14 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetBlockArgument(at,i,sp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = cast<TT *>::to(context.abiBlockArguments()[index]);
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
+            TT * pR = (TT *) cast<char *>::to(args[index]);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            return * cast<CTYPE *>::to(context.abiBlockArguments()[index]); \
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));    \
+            return * cast<CTYPE *>::to(args[index]);                        \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -1429,7 +1412,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetBlockArgument(at,i,sp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
-            return (char *)(&(context.abiBlockArguments()[index]));
+            vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
+            return (char *)(&args[index]);
         }
     };
 

@@ -99,7 +99,9 @@ list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 XXD(src/builtin/builtin.das)
 
+IF(MSVC)
 set_source_files_properties(src/builtin/module_builtin_vector.cpp PROPERTIES COMPILE_FLAGS /bigobj)
+ENDIF()
 
 SET(MISC_SRC
 include/daScript/misc/enums.h
