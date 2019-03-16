@@ -3,152 +3,92 @@
 #include "daScript/simulate/aot.h"
 
 namespace das {
+
+    struct das_stack_prologue {
+        __forceinline das_stack_prologue ( Context * __context__, uint32_t stackSize, int32_t line )
+            : context(__context__) {
+            char * EP, *SP;
+            if (!context->stack.push(stackSize, EP, SP)) {
+                context->throw_error("stack overflow");
+            }
+#if DAS_ENABLE_STACK_WALK
+            Prologue * pp = (Prologue *)context->stack.sp();
+            pp->arguments = nullptr;    // arguments
+            pp->info = nullptr;         // FunctionDebugInfo
+            pp->line = line;
+#endif
+        }
+        __forceinline ~das_stack_prologue () {
+            context->stack.pop(EP, SP);
+        }
+        Context * context;
+        char * EP, * SP;
+    };
+
+    template <typename ResType>
+    struct das_invoke {
+        template <typename ...ArgType>
+        static __forceinline ResType invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
+            vec4f arguments [] = { cast<ArgType>::from(arg)... };
+            vec4f result = __context__->invoke(blk, arguments, nullptr);
+            return cast<ResType>::to(result);
+        }
+    };
+
+    template <>
+    struct das_invoke<void> {
+        template <typename ...ArgType>
+        static __forceinline void invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
+            vec4f arguments [] = { cast<ArgType>::from(arg)... };
+            __context__->invoke(blk, arguments, nullptr);
+        }
+    };
+
+
+    template <typename resType, typename ...argType>
+    struct das_make_block : Block, SimNode {
+        typedef function < resType ( argType... ) > BlockFn;
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, BlockFn && func )
+        : SimNode(LineInfo()), blockFunction(func) {
+            stackOffset = context->stack.spi();
+            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+            body = this;
+            functionArguments = context->abiArguments();
+        };
+        virtual vec4f eval ( Context & context ) override {
+            vec4f ** arguments = (vec4f **)(context.stack.bottom() + argumentsOffset);
+            vec4f * arg = *arguments;
+            return cast<resType>::from ( blockFunction ( cast<argType>::to(*arg++)... ) );
+        }
+        BlockFn blockFunction;
+    };
+
     namespace aot {
-        void erase ( Context * __context__, TArray<int32_t> & Arr, int32_t at );
-        void pass_array ( Context * __context__, TArray<int32_t> & arr );
-        void push ( Context * __context__, TArray<int32_t> & Arr, int32_t value, int32_t at );
-        void reserve ( Context * __context__, TArray<int32_t> & Arr, int32_t newSize );
-        void resize ( Context * __context__, TArray<int32_t> & Arr, int32_t newSize );
+        int32_t badd ( Context * __context__, int32_t ext, const Block /*int32_t,int32_t*/ & b );
         bool test ( Context * __context__ );
 
-        void erase ( Context * __context__, TArray<int32_t> &  Arr, int32_t at )
-        {
-            builtin_array_erase(Arr,at,4,__context__);
-        }
+        int32_t badd ( Context * __context__, int32_t ext, const Block /*int32_t,int32_t*/ &  b ) { das_stack_prologue __prologue(__context__,32,__LINE__);
+            {
+                return das_invoke<int32_t>::invoke<int32_t>(__context__,b,ext);
+            }}
 
-        void pass_array ( Context * __context__, TArray<int32_t> &  arr )
-        {
-            push(__context__,arr,4,-1);
-        }
-
-        void push ( Context * __context__, TArray<int32_t> &  Arr, int32_t value, int32_t at = -1 )
-        {
-            Arr(builtin_array_push(Arr,at,4,__context__),__context__) = value;
-        }
-
-        void reserve ( Context * __context__, TArray<int32_t> &  Arr, int32_t newSize )
-        {
-            builtin_array_reserve(Arr,newSize,4,__context__);
-        }
-
-        void resize ( Context * __context__, TArray<int32_t> &  Arr, int32_t newSize )
-        {
-            builtin_array_resize(Arr,newSize,4,__context__);
-        }
-
-        bool test ( Context * __context__ )
-        {
-            { /* let */
-                TArray<int32_t> arr; das_zero(arr); TArray<int32_t> arr2; das_zero(arr2); {
-                    DAS_ASSERTF(builtin_array_size(arr) == 0,"array starts at 0 length");
-                    push(__context__,arr,1,-1);
-                    push(__context__,arr,2,-1);
-                    push(__context__,arr,3,-1);
-                    DAS_ASSERTF(builtin_array_size(arr) == 3,"array length is 3");
-                    DAS_ASSERTF(builtin_array_capacity(arr) == 16,"its 2x, but no less than 16");
-                    pass_array(__context__,arr);
-                    DAS_ASSERTF(builtin_array_size(arr) == 4,"array length is 4");
-                    resize(__context__,arr,6);
-                    DAS_ASSERTF(builtin_array_size(arr) == 6,"array length is now 6");
-                    resize(__context__,arr,17);
-                    DAS_ASSERTF(builtin_array_capacity(arr) == 32,"now bigger");
-                    reserve(__context__,arr,33);
-                    DAS_ASSERTF(builtin_array_capacity(arr) == 33,"now even bigger");
-                    resize(__context__,arr,4);
-                    DAS_ASSERTF(builtin_array_capacity(arr) == 33,"did not grow smaller");
-                    DAS_ASSERTF(builtin_array_size(arr) == 4,"resized properly");
-                    das_move(arr2,arr);
-                    DAS_ASSERT(builtin_array_size(arr) == 0);
-                    DAS_ASSERT(builtin_array_size(arr2) == 4);
-                    { /* let */
-                        int32_t index = 0; {
-                            while ( index < 4 )
-                            {
-                                arr2(index++,__context__)++;
-                            };
-                        }
-                    };
-                    das_move(arr,arr2);
-                    DAS_ASSERT(builtin_array_size(arr2) == 0);
-                    DAS_ASSERT(builtin_array_size(arr) == 4);
-                    resize(__context__,arr,3);
-                    DAS_ASSERT(arr(2,__context__) == 4);
-                    resize(__context__,arr,4);
-                    DAS_ASSERTF(arr(3,__context__) == 0,"new element after resize is 0");
-                    push(__context__,arr,1,0);
-                    {
-                        bool __need_loop_41 = true;
-                        das_iterator<range> __t_iterator(range(1,5));
-                        int32_t t;
-                        __need_loop_41 = __t_iterator.first(__context__,t) && __need_loop_41;
-                        for ( ; __need_loop_41 ; __need_loop_41 = __t_iterator.next(__context__,t) )
-                        {
-                            DAS_ASSERT(arr((t - 1),__context__) == t);
-                        }
-                        __t_iterator.close(__context__,t);
-                    };
-                    resize(__context__,arr,4);
-                    push(__context__,arr,5,4);
-                    push(__context__,arr,7,2);
-                    erase(__context__,arr,2);
-                    {
-                        bool __need_loop_47 = true;
-                        das_iterator<range> __t_iterator(range(1,5));
-                        int32_t t;
-                        __need_loop_47 = __t_iterator.first(__context__,t) && __need_loop_47;
-                        for ( ; __need_loop_47 ; __need_loop_47 = __t_iterator.next(__context__,t) )
-                        {
-                            DAS_ASSERT(arr((t - 1),__context__) == t);
-                        }
-                        __t_iterator.close(__context__,t);
-                    };
-                    erase(__context__,arr,0);
-                    erase(__context__,arr,3);
-                    {
-                        bool __need_loop_51 = true;
-                        das_iterator<range> __t_iterator(range(2,4));
-                        int32_t t;
-                        __need_loop_51 = __t_iterator.first(__context__,t) && __need_loop_51;
-                        for ( ; __need_loop_51 ; __need_loop_51 = __t_iterator.next(__context__,t) )
-                        {
-                            DAS_ASSERT(arr((t - 2),__context__) == t);
-                        }
-                        __t_iterator.close(__context__,t);
-                    };
-                    TArray<int32_t> a; das_zero(a);
-                    push(__context__,a,1,-1);
-                    push(__context__,a,2,-1);
-                    TArray<int32_t> b = a;
-                    DAS_ASSERT((builtin_array_size(a) == 0) & (builtin_array_size(b) == 2));
-                }
-            };
-            return true;
-        }
+        bool test ( Context * __context__ ) { das_stack_prologue __prologue(__context__,96,__LINE__);
+            {
+                int32_t res = badd(__context__,1000,das_make_block<int32_t,int32_t>(__context__,80,[&](int32_t a1)->int32_t{
+                    return 3 + a1;
+                }));
+                DAS_ASSERT(res == 1003);
+                return true;
+            }}
 
         void registerAot ( AotLibrary & aotLib )
         {
-            // erase
-            aotLib[0x9b8ff4fd5f68660f] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(erase)>>();
-            };
-            // pass_array
-            aotLib[0x6983bd750fff848a] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(pass_array)>>();
-            };
-            // push
-            aotLib[0xf444c43590897ecc] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(push)>>();
-            };
-            // reserve
-            aotLib[0x4ab498a257a2e4d5] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(reserve)>>();
-            };
-            // resize
-            aotLib[0xee40c19956b18323] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(resize)>>();
+            // badd
+            aotLib[0xcc64039be0d22892] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(badd)>>();
             };
             // test
-            aotLib[0xfc4f6c30fe3057d6] = [&](Context & ctx){
+            aotLib[0xe3cbe80141123b50] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(test)>>();
             };
         }

@@ -155,24 +155,6 @@ namespace das {
         TT *            array_end;
     };
 
-    template <typename resType, typename ...argType>
-    struct das_make_block : Block, SimNode {
-        typedef function < resType ( argType... ) > BlockFn;
-        __forceinline das_make_block ( Context * context, BlockFn && func )
-        : SimNode(LineInfo()), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = 0;                            // TODO: allocate on the stack
-            body = this;
-            functionArguments = context->abiArguments();
-        };
-        virtual vec4f eval ( Context & ) override {
-            blockFunction();
-            return v_zero();
-        }
-        BlockFn blockFunction;
-    };
-
-
     template <typename TT>
     struct cast_aot_arg {
         static __forceinline TT to ( Context &, vec4f x ) {

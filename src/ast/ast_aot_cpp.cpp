@@ -81,7 +81,7 @@ namespace das {
             stream << "const ";     // TODO: do we skip it alltogether?
         }
         if ( type->dim.size() ) {
-            for ( auto d : type->dim ) {
+            for ( size_t d=0; d!=type->dim.size(); ++d ) {
                 stream << "TDim<";
             }
         }
@@ -132,7 +132,10 @@ namespace das {
                 stream << "Iterator";
             }
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
-            stream << "T" << das_to_cppString(baseType) << "<";
+            if ( !type->constant && type->baseType==Type::tBlock ) {
+                stream << "const ";
+            }
+            stream << das_to_cppString(baseType) << " /*";
             if ( type->firstType ) {
                 stream << describeCppType(type->firstType);
             } else {
@@ -143,7 +146,7 @@ namespace das {
                     stream << "," << describeCppType(arg);
                 }
             }
-            stream << ">";
+            stream << "*/";
         }  else {
             stream << das_to_cppString(baseType);
         }
@@ -292,7 +295,7 @@ namespace das {
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
             Visitor::preVisitFunctionBody(fn,expr);
-            ss << " )\n";
+            ss << " ) { das_stack_prologue __prologue(__context__," << fn->totalStackSize << ",__LINE__);\n";
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
@@ -311,7 +314,7 @@ namespace das {
             return Visitor::visitArgument(fn, that, last);
         }
         virtual FunctionPtr visit ( Function * fn ) override {
-            ss << "\n";
+            ss << "}\n";
             return Visitor::visit(fn);
         }
     // block
@@ -723,7 +726,7 @@ namespace das {
             for ( auto & arg : block->arguments ) {
                 ss << "," << describeCppType(arg->type);
             }
-            ss << ">(__context__,[&](";
+            ss << ">(__context__," << block->stackTop << ",[&](";
             for ( auto & arg : block->arguments ) {
                 ss << describeCppType(arg->type) << " " << arg->name;
             }
@@ -737,10 +740,20 @@ namespace das {
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
             if ( call->name=="assert" ) {
-                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT";
-                else ss << "DAS_ASSERTF";
-            } else ss << call->name;
-            ss << "(";
+                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT(";
+                else ss << "DAS_ASSERTF(";
+            } else if ( call->name=="invoke" ) {
+                ss << "das_invoke<" << describeCppType(call->type) << ">::invoke<";
+                for ( const auto & arg : call->arguments ) {
+                    if ( arg!=call->arguments.front() ) {
+                        ss << describeCppType(arg->type);
+                        if ( arg!=call->arguments.back() ) {
+                            ss << ",";
+                        }
+                    }
+                }
+                ss << ">(__context__,";
+            } else ss << call->name << "(";
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
             if ( !last ) ss << ",";
