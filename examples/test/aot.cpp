@@ -7,7 +7,6 @@ namespace das {
     struct das_stack_prologue {
         __forceinline das_stack_prologue ( Context * __context__, uint32_t stackSize, int32_t line )
             : context(__context__) {
-            char * EP, *SP;
             if (!context->stack.push(stackSize, EP, SP)) {
                 context->throw_error("stack overflow");
             }
