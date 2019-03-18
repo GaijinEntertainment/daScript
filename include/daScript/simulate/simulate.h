@@ -323,7 +323,7 @@ namespace das
     public:
         vec4f *         abiArg;
         void *          abiCMRES;
-    protected:
+    public:
         const char *    exception = nullptr;
         string          lastError;
 #if !DAS_ENABLE_EXCEPTIONS

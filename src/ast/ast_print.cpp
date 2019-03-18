@@ -309,7 +309,7 @@ namespace das {
         }
         virtual void preVisitCatch ( ExprTryCatch * tc, Expression * block ) override {
             Visitor::preVisitCatch(tc, block);
-            ss << string(tab,'\t') << "catch\n";
+            ss << string(tab,'\t') << "recover\n";
         }
     // for
         virtual void preVisit ( ExprFor * ffor ) override {

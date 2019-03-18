@@ -1654,6 +1654,8 @@ namespace das
         return pCall;
     }
 
+    string describeCppFunc ( Function * fn, bool needName = false );
+
     bool Program::simulate ( Context & context, TextWriter & logs ) {
         context.thisProgram = this;
         if ( auto optHeap = options.find("heap",Type::tInt) ) {
@@ -1681,6 +1683,7 @@ namespace das
         context.totalVariables = totalVariables;
         context.functions = (SimFunction *) context.code->allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
+        vector<Function *> fnn; fnn.reserve(totalFunctions);
         for (auto & pm : library.modules) {
             for (auto & it : pm->functions) {
                 auto pfun = it.second;
@@ -1691,6 +1694,7 @@ namespace das
                 gfun.code = pfun->simulate(context);
                 gfun.stackSize = pfun->totalStackSize;
                 gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
+                fnn.push_back(pfun.get());
             }
         }
         for (auto & pm : library.modules ) {
@@ -1728,7 +1732,7 @@ namespace das
                 uint64_t semH = getSemanticHash(fn->code);
                 logs << "\t// " << fn->name << "\n";
                 logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
-                logs << "ctx.code->makeNode<SimNode_Aot<DAS_BIND_FUN(" << fn->name << ")>>();\n\t};\n";
+                logs << "ctx.code->makeNode<SimNode_Aot<" << describeCppFunc(fnn[i]) << "," << fn->name << ">>();\n\t};\n";
 
             }
             logs << "}\n";

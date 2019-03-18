@@ -21,6 +21,16 @@ namespace das {
         memset(&b, 0, sizeof(TT));
     }
 
+    template <typename TT>
+    struct das_arg {
+        static __forceinline TT & pass ( TT && a ) {
+            return *((TT *)&a);
+        }
+        static __forceinline TT & pass ( TT & a ) {
+            return a;
+        }
+    };
+
     template <typename ResT,typename VecT, int index>
     struct das_swizzle_ref {
         static ResT & swizzle ( VecT & val ) {
@@ -404,5 +414,39 @@ namespace das {
         }
         BlockFn blockFunction;
     };
+
+    template <typename TA, typename TB>
+    __forceinline void das_try_recover ( Context * __context__, TA && try_block, TB && catch_block ) {
+        auto aa = __context__->abiArg; auto acm = __context__->abiCMRES;
+        char * EP, * SP;
+        __context__->stack.watermark(EP,SP);
+#if DAS_ENABLE_EXCEPTIONS
+        try {
+            try_block();
+        } catch ( const dasException & ) {
+            __context__->abiArg = aa;
+            __context__->abiCMRES = acm;
+            __context__->stack.pop(EP,SP);
+            __context__->stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            catch_block();
+        }
+#else
+        jmp_buf ev;
+        jmp_buf * JB = __context__->throwBuf;
+        __context__->throwBuf = &ev;
+        if ( !setjmp(ev) ) {
+            try_block();
+        } else {
+            __context__->throwBuf = JB;
+            __context__->abiArg = aa;
+            __context__->abiCMRES = acm;
+            __context__->stack.pop(EP,SP);
+            __context__->stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            __context__->exception = nullptr;
+            catch_block();
+        }
+        __context__->throwBuf = JB;
+#endif
+    }
 }
 

@@ -99,7 +99,7 @@ def test_r2v
 [export]
 def test
     test_r2v()
-    // test_4x4()
-    // test_any(float4x4())
-    // test_any(float3x4())
+    test_4x4()
+    test_any(float4x4())
+    test_any(float3x4())
     return true

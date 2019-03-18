@@ -225,6 +225,24 @@ namespace das {
         return ss.str();
     }
 
+    string describeCppFunc ( Function * fn, bool needName = true ) {
+        TextWriter ss;
+        ss << describeCppType(fn->result) << " ";
+        if ( needName ) {
+            ss << fn->name;
+        }
+        ss << " ( Context * __context__";
+        for ( auto & var : fn->arguments ) {
+            ss << ", " << describeCppType(var->type) << " ";
+            if ( var->type->isRefType() ) {
+                ss << "& ";
+            }
+            ss << var->name;
+        }
+        ss << " )";
+        return ss.str();
+    }
+
     class CppAot : public Visitor {
     public:
         CppAot () {}
@@ -281,15 +299,7 @@ namespace das {
             for ( auto & fnI : prog->thisModule->functions ) {
                 auto & fn = fnI.second;
                 if ( !fn->builtIn ) {
-                    ss << describeCppType(fn->result) << " " << fn->name << " ( Context * __context__";
-                    for ( auto & var : fn->arguments ) {
-                        ss << ", " << describeCppType(var->type) << " ";
-                        if ( var->type->isRefType() ) {
-                            ss << "& ";
-                        }
-                        ss << var->name;
-                    }
-                    ss << " );\n";
+                    ss << describeCppFunc(fn.get()) << ";\n";
                 }
             }
         }
@@ -450,19 +460,27 @@ namespace das {
             if ( isOpPolicy(that, that->left) ) {
                 ss << "SimPolicy<" << das_to_cppString(that->left->type->baseType) << ">::" << opPolicyName(that) << "(";
                 if ( that->left->type->ref ) ss << "(char *)&(";
+                if ( policyArgNeedCast(that->left->type) ) {
+                    ss << "cast<" << describeCppType(that->left->type,false,true) << ">::from(";
+                }
             }
         }
         virtual void preVisitRight ( ExprOp2 * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
             if ( isOpPolicy(that, that->left) ) {
+                if ( policyArgNeedCast(that->left->type) )ss << ")";
                 if ( that->left->type->ref ) ss << ")";
                 ss << ",";
+                if ( policyArgNeedCast(that->right->type) ) {
+                    ss << "cast<" << describeCppType(that->right->type,false,true) << ">::from(";
+                }
             } else {
                 ss << " " << that->op << " ";
             }
         }
         virtual ExpressionPtr visit ( ExprOp2 * that ) override {
             if ( isOpPolicy(that, that->left) ) {
+                if ( policyArgNeedCast(that->right->type) )ss << ")";
                 ss << ",*__context__)";
             }
             if ( !noBracket(that) ) ss << ")";
@@ -752,6 +770,21 @@ namespace das {
             ss << "))";
             return Visitor::visit(expr);
         }
+    // try-catch
+        virtual void preVisit ( ExprTryCatch * tc ) override {
+            Visitor::preVisit(tc);
+            ss << "das_try_recover(__context__, [&]()\n";
+            ss << string(tab,'\t');
+        }
+        virtual void preVisitCatch ( ExprTryCatch * tc, Expression * block ) override {
+            Visitor::preVisitCatch(tc, block);
+            ss << ", [&]()\n";
+            ss << string(tab,'\t');
+        }
+        virtual ExpressionPtr visit ( ExprTryCatch * tc ) override {
+            ss << ")";
+            return Visitor::visit(tc);
+        }
     // ExprMakeBlock
         virtual void preVisit ( ExprMakeBlock * expr ) override {
             Visitor::preVisit(expr);
@@ -814,6 +847,15 @@ namespace das {
                 return false;
             }
         }
+        bool policyArgNeedCast ( const TypeDeclPtr & argType ) {
+            if ( argType->isVectorType() ) {
+                return false;
+            }
+            if ( !argType->isPolicyType() ) {
+                return false;
+            }
+            return true;
+        }
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
             if ( call->func->builtIn ) {
@@ -835,7 +877,32 @@ namespace das {
                 if  ( call->arguments.size() ) ss << ",";
             }
         }
+        bool needsArgPass ( const TypeDeclPtr & argType ) const {
+            return !argType->constant;
+        }
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            Visitor::preVisitCallArg(call, arg, last);
+            if ( arg->type->isRefType() ) {
+                auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
+                    return a.get() == arg;
+                });
+                DAS_ASSERT(it != call->arguments.end());
+                auto argType = (*it)->type;
+                if ( needsArgPass(argType) ) {
+                    ss << "das_arg<" << describeCppType(argType,false,true) << ">::pass(";
+                }
+            }
+        }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            if ( arg->type->isRefType() ) {
+                auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
+                    return a.get() == arg;
+                });
+                DAS_ASSERT(it != call->arguments.end());
+                if ( needsArgPass((*it)->type) ) {
+                    ss << ")";
+                }
+            }
             if ( !last ) ss << ",";
             return Visitor::visitCallArg(call, arg, last);
         }
