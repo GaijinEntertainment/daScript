@@ -79,7 +79,7 @@ namespace das {
         }
         info->type = type->baseType;
         info->dimSize = (uint32_t) type->dim.size();
-        info->annotation = type->annotation.get();
+        info->annotation_or_name = type->annotation.get();
         if ( info->dimSize ) {
             info->dim = (uint32_t *) debugInfo->allocate(sizeof(uint32_t) * info->dimSize );
             for ( uint32_t i=0; i != info->dimSize; ++i ) {

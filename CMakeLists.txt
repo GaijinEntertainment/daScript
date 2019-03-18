@@ -161,6 +161,7 @@ src/simulate/bin_serializer.cpp
 include/daScript/simulate/aot.h
 include/daScript/simulate/aot_builtin.h
 include/daScript/simulate/aot_builtin_math.h
+include/daScript/simulate/aot_builtin_matrix.h
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)

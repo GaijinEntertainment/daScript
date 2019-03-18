@@ -8,6 +8,8 @@
 
 #include "daScript/simulate/simulate_visit_op.h"
 
+#include "daScript/simulate/aot_builtin_matrix.h"
+
 namespace das {
     template <typename VecT, int RowC>
     class MatrixAnnotation : public TypeAnnotation {
@@ -81,6 +83,14 @@ namespace das {
             pt->ref = true;
             return pt;
         }
+        // aot
+        virtual void aotPreVisitGetField ( TextWriter &, const string & ) override {
+
+        }
+        virtual void aotVisitGetField ( TextWriter & ss, const string & name ) override {
+            ss << ".m[" << TypeDecl::getMaskFieldIndex(name[0]) << "]";
+        }
+        // simulate
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return context.code->makeNode<SimNode_CopyValue<ThisMatrix>>(at, l, r);
         }

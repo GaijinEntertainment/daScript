@@ -165,7 +165,7 @@ namespace das {
                 case Type::tHandle:
                     beforeHandle(pa, info);
                     if ( cancel ) return;
-                    info->annotation->walk(*this, pa);
+                    Module::resolveAnnotation(info)->walk(*this, pa);
                     if ( cancel ) return;
                     afterHandle(pa, info);
                     break;

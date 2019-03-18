@@ -490,6 +490,10 @@ namespace das
         virtual TypeDeclPtr makeSafeFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const { return nullptr; }
         virtual TypeDeclPtr makeIteratorType () const { return nullptr; }
+        // aot
+        virtual void aotPreVisitGetField ( TextWriter &, const string & ) { }
+        virtual void aotVisitGetField ( TextWriter & ss, const string & name ) { ss << "." << name; }
+        // simulate
         virtual SimNode * simulateDelete ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateDeletePtr ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateCopy ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
@@ -1518,6 +1522,7 @@ namespace das
         bool compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
         static void Shutdown();
+        static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
     public:
         template <typename TT>
         __forceinline void addCall ( const string & fnName ) {

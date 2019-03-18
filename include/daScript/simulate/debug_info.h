@@ -96,7 +96,7 @@ namespace das
         Type                type;
         StructInfo *        structType;
         EnumInfo *          enumType;
-        TypeAnnotation *    annotation;
+        TypeAnnotation *    annotation_or_name;
         TypeInfo *          firstType;      // map  from, or array
         TypeInfo *          secondType;     // map  to
         uint32_t            dimSize;
@@ -104,6 +104,8 @@ namespace das
         uint32_t            flags;
         uint32_t            hash;
     };
+
+    TypeAnnotation * resolveAnnotation ( TypeInfo * info );
 
     struct VarInfo : TypeInfo {
         char *      name;

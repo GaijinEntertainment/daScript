@@ -37,7 +37,8 @@ namespace das {
         {   Type::tURange,      "tURange"},
         {   Type::tBlock,       "tBlock"},
         {   Type::tFunction,    "tFunction"},
-        {   Type::tLambda,      "tLambda"}
+        {   Type::tLambda,      "tLambda"},
+        {   Type::tHandle,      "tHandle"}
     };
 
     Enum<Type> g_cppTypeTable = {
@@ -184,7 +185,11 @@ namespace das {
         } else {
             ss << "nullptr";
         }
-        ss << ", /*annotation*/ nullptr";
+        if ( info->annotation_or_name ) {
+            ss << ", DAS_MAKE_ANNOTATION(\"" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
+        } else {
+            ss << ", nullptr";
+        }
         ss << ", ";
         if ( info->firstType ) {
             describeCppTypeInfo(ss, info->firstType);
@@ -501,8 +506,17 @@ namespace das {
             return Visitor::visit(var);
         }
     // field
+        virtual void preVisit ( ExprField * field ) override {
+            Visitor::preVisit(field);
+            if ( field->value->type->isHandle() ) {
+                field->value->type->annotation->aotPreVisitGetField(ss, field->name);
+            }
+        }
         virtual ExpressionPtr visit ( ExprField * field ) override {
-            if ( field->value->type->baseType==Type::tPointer ) {
+            if ( field->value->type->isHandle() ) {
+                field->value->type->annotation->aotVisitGetField(ss, field->name);
+                ss << " /*" << field->name << "*/";
+            } else if ( field->value->type->baseType==Type::tPointer ) {
                  ss << "->" << field->name;
             } else {
                 ss << "." << field->name;
@@ -510,9 +524,19 @@ namespace das {
             return Visitor::visit(field);
         }
     // at
+        virtual void preVisit ( ExprAt * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !(expr->type->dim.size() || expr->type->isGoodArrayType() || expr->type->isGoodTableType()) ) {
+                ss << "das_index<" << describeCppType(expr->subexpr->type,false,true) << ">::at(";
+            }
+        }
         virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override {
             Visitor::preVisitAtIndex(expr, index);
-            ss << "(";
+            if ( expr->type->dim.size() || expr->type->isGoodArrayType() || expr->type->isGoodTableType() ) {
+                ss << "(";
+            } else {
+                ss << ",";
+            }
 
         }
         virtual ExpressionPtr visit ( ExprAt * that ) override {
@@ -642,7 +666,10 @@ namespace das {
         virtual void preVisit ( ExprSwizzle * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->type->ref ) {
-                ss << "das_swizzle_ref(";
+                ss << "das_swizzle_ref<"
+                    << describeCppType(expr->type,false,true) << ","
+                    << describeCppType(expr->value->type,false,true) << ","
+                    << int32_t(expr->fields[0]) << ">::swizzle(";
             } else {
                 if ( expr->fields.size()==1 ) {
                     const char * mask = "xyzw";
@@ -776,12 +803,26 @@ namespace das {
             return Visitor::visit(c);
         }
     // call
+        bool isPolicyBasedCall ( ExprCall * call ) const {
+            auto bif = static_cast<BuiltInFunction *>(call->func);
+            if ( !call->arguments.size() && call->type->baseType==Type::tHandle ) {
+                // c-tor?
+                return false;
+            } else if ( bif->policyBased ) {
+                return true;
+            } else {
+                return false;
+            }
+        }
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
             if ( call->func->builtIn ) {
                 auto bif = static_cast<BuiltInFunction *>(call->func);
-                if ( bif->policyBased ) {
-                    ss << "SimPolicy<" << das_to_cppString(call->arguments[0]->type->baseType) << ">::";
+                if ( !call->arguments.size() && call->type->baseType==Type::tHandle ) {
+                    // c-tor?
+                    ss << "/*c-tor*/ ";
+                } else if ( bif->policyBased ) {
+                    ss << "SimPolicy<" << das_to_cppString(call->type->baseType) << ">::";
                 }
                 if ( bif->cppName.empty() ) {
                     ss << bif->name << "(";
@@ -799,7 +840,7 @@ namespace das {
             return Visitor::visitCallArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprCall * call ) override {
-            if ( call->func->policyBased ) {
+            if ( isPolicyBasedCall(call) ) {
                 ss << ",*__context__";
             }
             ss << ")";

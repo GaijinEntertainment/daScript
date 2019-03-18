@@ -4,9 +4,12 @@
 
 namespace das {
 
+    class Context;
+
     template <typename VecT, int rowC>
     struct Matrix {
         VecT    m[rowC];
+        Matrix() { memset(this, 0, sizeof(Matrix<VecT,rowC>) ); }
     };
 
     typedef Matrix<float4,4> float4x4;
