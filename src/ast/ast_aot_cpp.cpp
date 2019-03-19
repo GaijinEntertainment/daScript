@@ -75,11 +75,13 @@ namespace das {
         return g_cppCTypeTable.find(t);
     }
 
-    string describeCppType ( const TypeDeclPtr & type, bool substituteRef = false, bool skipRef = false ) {
+    string describeCppType ( const TypeDeclPtr & type, bool substituteRef = false, bool skipRef = false, bool skipConst = false ) {
         TextWriter stream;
         auto baseType = type->baseType;
-        if ( type->constant ) {
-            stream << "const ";     // TODO: do we skip it alltogether?
+        if ( !skipConst ) {
+            if ( type->constant ) {
+                stream << "const ";     // TODO: do we skip it alltogether?
+            }
         }
         if ( type->dim.size() ) {
             for ( size_t d=0; d!=type->dim.size(); ++d ) {
@@ -95,7 +97,11 @@ namespace das {
             }
             stream << " */";
         } else if ( baseType==Type::tHandle ) {
-            stream << "/* handled */ " << type->annotation->name;
+            if ( type->annotation->cppName.empty() ) {
+                stream << "/* handled */ " << type->annotation->name;
+            } else {
+                stream << "/* handled */ " << type->annotation->cppName;
+            }
         } else if ( baseType==Type::tArray ) {
             if ( type->firstType ) {
                 stream << "TArray<" << describeCppType(type->firstType) << ">";
@@ -122,7 +128,7 @@ namespace das {
             }
         } else if ( baseType==Type::tEnumeration ) {
             if ( type->enumType ) {
-                stream << "enum class " << type->enumType->name;
+                stream << "enum " << type->enumType->name;
             } else {
                 stream << "/* unspecified enumeration */";
             }
@@ -265,7 +271,22 @@ namespace das {
             return expr->topLevel || expr->bottomLevel || expr->argLevel;
         }
     protected:
-        // strcuture
+    // enumeration
+        virtual void preVisit ( Enumeration * enu ) override {
+            Visitor::preVisit(enu);
+            ss << "\nenum class " << enu->name << "{\n";
+        }
+        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) override {
+            Visitor::preVisitEnumerationValue(enu, name, value, last);
+            ss << "\t" << name << " = " << value;
+            if ( !last ) ss << ",";
+            ss << "\n";
+        }
+        virtual EnumerationPtr visit ( Enumeration * enu ) override {
+            ss << "};\n";
+            return Visitor::visit(enu);
+        }
+    // strcuture
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             ss << "\nstruct " << that->name << " {\n";
@@ -429,7 +450,7 @@ namespace das {
             }
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-            if ( let->scoped ) ss << "; ";
+            if ( let->scoped || !last ) ss << "; ";
             return Visitor::visitLet(let, var, last);
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
@@ -464,23 +485,50 @@ namespace das {
             return Visitor::visit(that);
         }
     // op1
+        void outPolicy ( const TypeDeclPtr & decl ) {
+            if ( decl->baseType!=Type::tHandle ){
+                ss << "SimPolicy<" << das_to_cppString(decl->baseType) << ">";
+            } else {
+                auto pname = decl->annotation->cppName.empty() ? decl->annotation->name : decl->annotation->cppName;
+                ss << "SimPolicy<" << pname << ">";
+            }
+        }
+        bool isOpPolicy ( ExprOp1 * that ) const {
+            if ( isalpha(that->op[0]) ) return true;
+            return that->subexpr->type->isPolicyType();
+        }
         virtual void preVisit ( ExprOp1 * that ) override {
             Visitor::preVisit(that);
-            if ( that->op!="+++" && that->op!="---" ) {
-                ss << that->op;
+            if ( isOpPolicy(that) ){
+                outPolicy(that->subexpr->type);
+                ss << "::" << opPolicyName(that) << "(";
+            } else {
+                if ( that->op!="+++" && that->op!="---" ) {
+                    ss << that->op;
+                }
+                if ( !noBracket(that) && !that->subexpr->bottomLevel ) ss << "(";
             }
-            if ( !noBracket(that) && !that->subexpr->bottomLevel ) ss << "(";
         }
         virtual ExpressionPtr visit ( ExprOp1 * that ) override {
-            if ( that->op=="+++" || that->op=="---" ) {
-                ss << that->op[0] << that->op[1];
+            if ( isOpPolicy(that) ){
+                ss << ",*__context__)";
+            } else {
+                if ( that->op=="+++" || that->op=="---" ) {
+                    ss << that->op[0] << that->op[1];
+                }
+                if ( !noBracket(that) && !that->subexpr->bottomLevel ) ss << ")";
             }
-            if ( !noBracket(that) && !that->subexpr->bottomLevel ) ss << ")";
             return Visitor::visit(that);
         }
     // op2
-        bool isOpPolicy ( ExprOp * that, const ExpressionPtr & left ) const {
-            return left->type->isPolicyType() || isalpha(that->op[0]);
+        bool isOpPolicy ( ExprOp2 * that ) const {
+            if ( isalpha(that->op[0]) ) return true;
+            return that->type->isPolicyType() || that->left->type->isPolicyType() || that->right->type->isPolicyType();
+        }
+        const TypeDeclPtr & opPolicyBase ( ExprOp2 * that ) const {
+            if ( that->type->isPolicyType() ) return that->type;
+            else if ( that->left->type->isPolicyType() ) return that->left->type;
+            else return that->right->type;
         }
         string opPolicyName ( ExprOp * that ) {
             auto bfn = static_cast<BuiltInFunction *>(that->func);
@@ -489,30 +537,34 @@ namespace das {
         virtual void preVisit ( ExprOp2 * that ) override {
             Visitor::preVisit(that);
              if ( !noBracket(that) ) ss << "(";
-            if ( isOpPolicy(that, that->left) ) {
-                ss << "SimPolicy<" << das_to_cppString(that->left->type->baseType) << ">::" << opPolicyName(that) << "(";
+            if ( isOpPolicy(that) ) {
+                auto pt = opPolicyBase(that);
+                outPolicy(pt);
+                ss << "::" << opPolicyName(that) << "(";
                 if ( that->left->type->ref ) ss << "(char *)&(";
-                if ( policyArgNeedCast(that->type, that->left->type) ) {
-                    ss << "cast<" << describeCppType(that->left->type,false,true) << ">::from(";
+                if ( policyArgNeedCast(pt, that->left->type) ) {
+                    ss << "cast<" << describeCppType(that->left->type,false,true,true) << ">::from(";
                 }
             }
         }
         virtual void preVisitRight ( ExprOp2 * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
-            if ( isOpPolicy(that, that->left) ) {
-                if ( policyArgNeedCast(that->type, that->left->type) )ss << ")";
+            if ( isOpPolicy(that) ) {
+                auto pt = opPolicyBase(that);
+                if ( policyArgNeedCast(pt, that->left->type) )ss << ")";
                 if ( that->left->type->ref ) ss << ")";
                 ss << ",";
-                if ( policyArgNeedCast(that->type, that->right->type) ) {
-                    ss << "cast<" << describeCppType(that->right->type,false,true) << ">::from(";
+                if ( policyArgNeedCast(pt, that->right->type) ) {
+                    ss << "cast<" << describeCppType(that->right->type,false,true,true) << ">::from(";
                 }
             } else {
                 ss << " " << that->op << " ";
             }
         }
         virtual ExpressionPtr visit ( ExprOp2 * that ) override {
-            if ( isOpPolicy(that, that->left) ) {
-                if ( policyArgNeedCast(that->type, that->right->type) )ss << ")";
+            if ( isOpPolicy(that) ) {
+                auto pt = opPolicyBase(that);
+                if ( policyArgNeedCast(pt, that->right->type) )ss << ")";
                 ss << ",*__context__)";
             }
             if ( !noBracket(that) ) ss << ")";
@@ -730,7 +782,10 @@ namespace das {
                     if ( expr->type->baseType!=Type::tFloat ) ss << "i";
                     ss << "(";
                 } else if ( TypeDecl::isSequencialMask(expr->fields) ) {
-                    ss << "das_swizzle_seq(";
+                    ss << "das_swizzle_seq<"
+                    << describeCppType(expr->type,false,true) << ","
+                    << describeCppType(expr->value->type,false,true) << ","
+                    << int32_t(expr->fields[0]) << ">::swizzle(";
                 } else {
                     ss << "das_swizzle(";
                 }
@@ -943,10 +998,24 @@ namespace das {
             if ( argType->isVectorType() ) {
                 return false;
             }
-            if ( !polType->isPolicyType() && !argType->isPolicyType() ) {
+            if ( !polType->isHandle() ) {
+                if ( polType->isVecPolicyType() && argType->isVecPolicyType() ) {
+                    return false;
+                }
+            }
+            if ( !polType->isPolicyType() ) {
                 return false;
             }
             return true;
+        }
+        bool isPolicyBasedCall ( ExprCall * call ) {
+            if ( call->func->builtIn ) {
+                auto bif = static_cast<BuiltInFunction *>(call->func);
+                if ( bif->policyBased ) {
+                    return true;
+                }
+            }
+            return false;
         }
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
@@ -956,7 +1025,8 @@ namespace das {
                     // c-tor?
                     ss << "/*c-tor*/ ";
                 } else if ( bif->policyBased ) {
-                    ss << "SimPolicy<" << das_to_cppString(call->type->baseType) << ">::";
+                    outPolicy(call->type);
+                    ss << "::";
                 }
                 if ( bif->cppName.empty() ) {
                     ss << bif->name << "(";
@@ -974,24 +1044,31 @@ namespace das {
         }
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
             Visitor::preVisitCallArg(call, arg, last);
+            auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
+                return a.get() == arg;
+            });
+            DAS_ASSERT(it != call->arguments.end());
+            auto argType = (*it)->type;
             if ( arg->type->isRefType() ) {
-                auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
-                    return a.get() == arg;
-                });
-                DAS_ASSERT(it != call->arguments.end());
-                auto argType = (*it)->type;
                 if ( needsArgPass(argType) ) {
                     ss << "das_arg<" << describeCppType(argType,false,true) << ">::pass(";
                 }
             }
+            if ( isPolicyBasedCall(call) && policyArgNeedCast(call->type, argType) ) {
+                ss << "cast<" << describeCppType(argType,false,true,true) << ">::from(";
+            }
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
+                return a.get() == arg;
+            });
+            DAS_ASSERT(it != call->arguments.end());
+            auto argType = (*it)->type;
+            if ( isPolicyBasedCall(call) && policyArgNeedCast(call->type, argType) ) {
+                ss << ")";
+            }
             if ( arg->type->isRefType() ) {
-                auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
-                    return a.get() == arg;
-                });
-                DAS_ASSERT(it != call->arguments.end());
-                if ( needsArgPass((*it)->type) ) {
+                if ( needsArgPass(argType) ) {
                     ss << ")";
                 }
             }

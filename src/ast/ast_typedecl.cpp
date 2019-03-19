@@ -819,6 +819,8 @@ namespace das
         if ( dim.size() )
             return true;
         switch ( baseType ) {
+            case Type::tVoid:
+            case Type::tEnumeration:
             case Type::tBool:
             case Type::tInt64:
             case Type::tUInt64:
@@ -832,6 +834,11 @@ namespace das
         }
     }
 
+    bool TypeDecl::isVecPolicyType() const {
+        if ( dim.size() )
+            return false;
+        return isPolicyType();
+    }
 
     bool TypeDecl::isReturnType() const {
         if ( isGoodBlockType() ) {

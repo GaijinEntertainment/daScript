@@ -45,8 +45,9 @@ namespace das
     struct EnumInfo;
 
     struct BasicAnnotation {
-        BasicAnnotation ( const string & n ) : name(n) {}
+        BasicAnnotation ( const string & n, const string & cpn = "" ) : name(n), cppName(cpn) {}
         string      name;
+        string      cppName;
     };
 
     struct FileInfo {

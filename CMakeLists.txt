@@ -162,6 +162,8 @@ include/daScript/simulate/aot.h
 include/daScript/simulate/aot_builtin.h
 include/daScript/simulate/aot_builtin_math.h
 include/daScript/simulate/aot_builtin_matrix.h
+include/daScript/simulate/aot_builtin_random.h
+include/daScript/simulate/aot_builtin_time.h
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
@@ -197,6 +199,7 @@ ADD_DEPENDENCIES(libDaScriptJson libDaScript)
 
 SET(PATH_TRACER_MAIN_SRC
 examples/pathTracer/main.cpp
+examples/pathTracer/aot.cpp
 examples/common/fileAccess.h
 examples/pathTracer/toy_path_tracer.das
 examples/pathTracer/toy_random.das

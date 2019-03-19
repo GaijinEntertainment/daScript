@@ -15,6 +15,12 @@ namespace das
         __forceinline bool operator == ( const vec2<TT> & vec ) const {
             return x==vec.x && y==vec.y;
         }
+        vec2() = default;
+        vec2(const vec2 &) = default;
+        vec2(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)) {}
+        vec2(TT X, TT Y) : x(X), y(Y) {}
+        vec2(TT t) : x(t), y(t) {}
+        operator vec4f() const { return v_ldu_half((float *)this); };
     };
 
     template <typename TT>

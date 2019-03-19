@@ -91,6 +91,7 @@ namespace das
         bool isPod() const;
         bool isWorkhorseType() const; // we can return this, or pass this
         bool isPolicyType() const;
+        bool isVecPolicyType() const;
         bool isReturnType() const;
         bool isCtorType() const;
         bool isRange() const;
@@ -345,7 +346,7 @@ namespace das
     };
 
     struct Annotation : BasicAnnotation, enable_shared_from_this<Annotation> {
-        Annotation ( const string & n ) : BasicAnnotation(n) {}
+        Annotation ( const string & n, const string & cpn = "" ) : BasicAnnotation(n,cpn) {}
         virtual ~Annotation() {}
         virtual void seal( Module * m ) { module = m; }
         virtual bool rtti_isHandledTypeAnnotation() const { return false; }
@@ -468,10 +469,11 @@ namespace das
     };
 
     struct TypeAnnotation : Annotation {
-        TypeAnnotation ( const string & n ) : Annotation(n) {}
+        TypeAnnotation ( const string & n, const string & cpn = "" ) : Annotation(n,cpn) {}
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const {
             DAS_ASSERTF(p, "can only clone real type %s", name.c_str());
             p->name = name;
+            p->cppName = cppName;
             return p;
         }
         virtual bool canMove() const { return true; }

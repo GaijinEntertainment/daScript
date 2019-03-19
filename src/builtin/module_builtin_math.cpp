@@ -175,9 +175,9 @@ namespace das {
             addFunctionOp3<float3>(*this,lib);
             addFunctionOp3<float4>(*this,lib);
 
-            addFunction( make_shared<BuiltInFn<Sim_MadS<float2>,   float2, float2,  float,  float2> >("mad", lib, "Sim_MadS") );
-            addFunction( make_shared<BuiltInFn<Sim_MadS<float3>,   float3, float3,  float,  float3> >("mad", lib, "Sim_MadS") );
-            addFunction( make_shared<BuiltInFn<Sim_MadS<float4>,   float4, float4,  float,  float4> >("mad", lib, "Sim_MadS") );
+            addFunction( make_shared<BuiltInFn<Sim_MadS<float2>,   float2, float2,  float,  float2> >("mad", lib, "MadS") );
+            addFunction( make_shared<BuiltInFn<Sim_MadS<float3>,   float3, float3,  float,  float3> >("mad", lib, "MadS") );
+            addFunction( make_shared<BuiltInFn<Sim_MadS<float4>,   float4, float4,  float,  float4> >("mad", lib, "MadS") );
 
             //common
             addFunctionCommon<float>(*this, lib);

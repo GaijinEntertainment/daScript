@@ -5,6 +5,8 @@
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/aot_builtin_math.h"
 #include "daScript/simulate/aot_builtin_matrix.h"
+#include "daScript/simulate/aot_builtin_random.h"
+#include "daScript/simulate/aot_builtin_time.h"
 
 namespace das {
 
@@ -45,6 +47,13 @@ namespace das {
     struct das_swizzle_ref {
         static ResT & swizzle ( VecT & val ) {
             return  *((ResT *)((&val.x) + index));
+        }
+    };
+
+    template <typename ResT,typename VecT, int index>
+    struct das_swizzle_seq {
+        static const ResT & swizzle ( const VecT & val ) {
+            return  *((const ResT *)((&val.x) + index));
         }
     };
 
@@ -464,7 +473,7 @@ namespace das {
             body = this;
             functionArguments = context->abiArguments();
         };
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f eval ( Context & ) override {
             blockFunction ( );
             return v_zero();
         }
