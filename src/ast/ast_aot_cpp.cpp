@@ -290,7 +290,7 @@ namespace das {
         }
         virtual StructurePtr visit ( Structure * that ) override {
             ss << "};\n";
-            ss << "static_assert(sizeof(" << that->name << ")==" << that->getSizeOf() << ");\n";
+            ss << "static_assert(sizeof(" << that->name << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
             return Visitor::visit(that);
         }
     // program body
