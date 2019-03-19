@@ -48,8 +48,8 @@ namespace das {
             this->output();
             return *this;
         }
-        StringWriter & write(const char * st) {
-            return writeStr(st, strlen(st));
+        StringWriter & write(const char * stst) {
+            return writeStr(stst, strlen(stst));
         }
         StringWriter & operator << (const StringWriterTag & v ) {
             if (&v == &HEX) hex = true;

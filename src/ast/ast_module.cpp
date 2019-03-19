@@ -45,8 +45,8 @@ namespace das {
             info->annotation_or_name = nullptr;
             for ( auto pm = Module::modules; pm!=nullptr; pm=pm->next ) {
                 if ( pm->name == moduleName ) {
-                    if ( auto ann = pm->findAnnotation(annName) ) {
-                        info->annotation_or_name = (TypeAnnotation *) ann.get();
+                    if ( auto annT = pm->findAnnotation(annName) ) {
+                        info->annotation_or_name = (TypeAnnotation *) annT.get();
                     }
                     break;
                 }

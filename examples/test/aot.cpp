@@ -19,24 +19,24 @@ namespace das {
 
         void __init_script ( Context * __context__ )
         {
-            das_global<float,0>(__context__) /*SOLAR_MASS*/ = 39.478420f;
+            das_global<float,0>(__context__) /*SOLAR_MASS*/ = 39.4784f;
             das_global<TDim<struct body,5>,0>(__context__) /*bodies*/ = (([&]() -> TDim<struct body,5> {
                 TDim<struct body,5> __mks_19; das_zero(__mks_19);
-                __mks_19(0,__context__).x = float3(0,0,0);
-                __mks_19(0,__context__).v = float3(0,0,0);
+                __mks_19(0,__context__).x = float3(0.f,0.f,0.f);
+                __mks_19(0,__context__).v = float3(0.f,0.f,0.f);
                 __mks_19(0,__context__).mass = das_global<float,0>(__context__) /*SOLAR_MASS*/;
-                __mks_19(1,__context__).x = float3(4.84143,-1.16032,-0.103622);
-                __mks_19(1,__context__).v = float3(0.606326,2.81199,-0.0252184);
-                __mks_19(1,__context__).mass = 0.037694f;
-                __mks_19(2,__context__).x = float3(8.34337,4.1248,-0.403523);
-                __mks_19(2,__context__).v = float3(-1.01077,1.82566,0.00841576);
-                __mks_19(2,__context__).mass = 0.011286f;
-                __mks_19(3,__context__).x = float3(12.8944,-15.1112,-0.223308);
-                __mks_19(3,__context__).v = float3(1.08279,0.868713,-0.0108326);
-                __mks_19(3,__context__).mass = 0.001724f;
-                __mks_19(4,__context__).x = float3(15.3797,-25.9193,0.179259);
-                __mks_19(4,__context__).v = float3(0.979091,0.594699,-0.034756);
-                __mks_19(4,__context__).mass = 0.002034f;
+                __mks_19(1,__context__).x = float3(4.84143f,-1.16032f,-0.103622f);
+                __mks_19(1,__context__).v = float3(0.606326f,2.81199f,-0.0252184f);
+                __mks_19(1,__context__).mass = 0.0376937f;
+                __mks_19(2,__context__).x = float3(8.34337f,4.1248f,-0.403523f);
+                __mks_19(2,__context__).v = float3(-1.01077f,1.82566f,0.00841576f);
+                __mks_19(2,__context__).mass = 0.0112863f;
+                __mks_19(3,__context__).x = float3(12.8944f,-15.1112f,-0.223308f);
+                __mks_19(3,__context__).v = float3(1.08279f,0.868713f,-0.0108326f);
+                __mks_19(3,__context__).mass = 0.00172372f;
+                __mks_19(4,__context__).x = float3(15.3797f,-25.9193f,0.179259f);
+                __mks_19(4,__context__).v = float3(0.979091f,0.594699f,-0.034756f);
+                __mks_19(4,__context__).mass = 0.00203369f;
                 return __mks_19;
             })());
         }
@@ -76,7 +76,7 @@ namespace das {
 
         float energy ( Context * __context__ )
         {
-            float e = 0.000000f;
+            float e = 0.f;
             int32_t i = 0;
             {
                 bool __need_loop_64 = true;
@@ -85,7 +85,7 @@ namespace das {
                 __need_loop_64 = __b_iterator.first(__context__,b) && __need_loop_64;
                 for ( ; __need_loop_64 ; __need_loop_64 = __b_iterator.next(__context__,b) )
                 {
-                    e += ((0.500000f * (*b).mass) * lengthSq3((*b).v));
+                    e += ((0.5f * (*b).mass) * lengthSq3((*b).v));
                     ++i;
                     {
                         bool __need_loop_67 = true;
@@ -107,7 +107,7 @@ namespace das {
 
         void nbodies ( Context * __context__, int32_t n )
         {
-            scale_bodies(__context__,0.010000f);
+            scale_bodies(__context__,0.01f);
             {
                 bool __need_loop_85 = true;
                 das_iterator<range> __i_iterator(range(0,n));
@@ -119,7 +119,7 @@ namespace das {
                 }
                 __i_iterator.close(__context__,i);
             };
-            scale_bodies(__context__,100.000000f);
+            scale_bodies(__context__,100.f);
         }
 
         void offset_momentum ( Context * __context__ )
@@ -136,7 +136,7 @@ namespace das {
                 }
                 __b_iterator.close(__context__,b);
             };
-            das_global<TDim<struct body,5>,0>(__context__) /*bodies*/(0,__context__).v = SimPolicy<float3>::DivVecScal(px,cast<float>::from(39.478420f),*__context__);
+            das_global<TDim<struct body,5>,0>(__context__) /*bodies*/(0,__context__).v = SimPolicy<float3>::DivVecScal(px,cast<float>::from(39.4784f),*__context__);
         }
 
         void scale_bodies ( Context * __context__, float scale )
@@ -156,15 +156,15 @@ namespace das {
         }
 
         bool test ( Context * __context__ ) { das_stack_prologue __prologue(__context__,64,__LINE__);
-            {
-                offset_momentum(__context__);
-                energy(__context__);
-                builtin_profile(10,"n-bodies",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
-                    nbodies(__context__,500000);
-                })),__context__);
-                energy(__context__);
-                return true;
-            }}
+        {
+            offset_momentum(__context__);
+            energy(__context__);
+            builtin_profile(10,"n-bodies",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
+                nbodies(__context__,500000);
+            })),__context__);
+            energy(__context__);
+            return true;
+        }}
 
         void registerAot ( AotLibrary & aotLib )
         {

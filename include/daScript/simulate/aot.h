@@ -454,6 +454,23 @@ namespace das {
         BlockFn blockFunction;
     };
 
+    template <>
+    struct das_make_block<void> : Block, SimNode {
+        typedef function < void () > BlockFn;
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, BlockFn && func )
+            : SimNode(LineInfo()), blockFunction(func) {
+            stackOffset = context->stack.spi();
+            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+            body = this;
+            functionArguments = context->abiArguments();
+        };
+        virtual vec4f eval ( Context & context ) override {
+            blockFunction ( );
+            return v_zero();
+        }
+        BlockFn blockFunction;
+    };
+
     template <typename TA, typename TB>
     __forceinline void das_try_recover ( Context * __context__, TA && try_block, TB && catch_block ) {
         auto aa = __context__->abiArg; auto acm = __context__->abiCMRES;

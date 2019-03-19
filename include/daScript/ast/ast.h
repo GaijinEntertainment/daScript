@@ -492,7 +492,7 @@ namespace das
         virtual TypeDeclPtr makeIteratorType () const { return nullptr; }
         // aot
         virtual void aotPreVisitGetField ( TextWriter &, const string & ) { }
-        virtual void aotVisitGetField ( TextWriter & ss, const string & name ) { ss << "." << name; }
+        virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) { ss << "." << fieldName; }
         // simulate
         virtual SimNode * simulateDelete ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateDeletePtr ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }

@@ -635,12 +635,7 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            auto stf = to_string(c->getValue());
-            if ( stf.find('.') != string::npos ) {
-                ss << stf << "f";
-            } else {
-                ss << stf << ".0f";
-            }
+            ss << to_string_ex(c->getValue()) << "f";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
@@ -679,17 +674,17 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprConstFloat2 * c ) override {
             auto val = c->getValue();
-            ss << "float2(" << val.x << "," << val.y << ")";
+            ss << "float2(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f)";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat3 * c ) override {
             auto val = c->getValue();
-            ss << "float3(" << val.x << "," << val.y << "," << val.z << ")";
+            ss << "float3(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f)";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat4 * c ) override {
             auto val = c->getValue();
-            ss << "float4(" << val.x << "," << val.y << "," << val.z << "," << val.w << ")";
+            ss << "float4(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f," << to_string_ex(val.w) << "f)";
             return Visitor::visit(c);
         }
     // ExprWhile

@@ -383,6 +383,9 @@ namespace das
             return;
         }
         if ( aotInitScript ) {
+            vec4f args[1] = { cast<void *>::from(this) };
+            abiArg = args;
+            abiCMRES = nullptr;
             aotInitScript->eval(*this);
         } else {
             for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
