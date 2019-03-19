@@ -9,6 +9,7 @@ namespace das {
             float3 v;
             float mass;
         };
+        static_assert(sizeof(body)==28);
 
         void advance ( Context * __context__ );
         float energy ( Context * __context__ );
@@ -19,8 +20,8 @@ namespace das {
 
         void __init_script ( Context * __context__ )
         {
-            das_global<float,0>(__context__) /*SOLAR_MASS*/ = 39.4784f;
-            das_global<TDim<struct body,5>,0>(__context__) /*bodies*/ = (([&]() -> TDim<struct body,5> {
+            das_global<float,0>(__context__) = 39.4784f; /*SOLAR_MASS*/
+            das_global<TDim<struct body,5>,16>(__context__) = (([&]() -> TDim<struct body,5> {
                 TDim<struct body,5> __mks_19; das_zero(__mks_19);
                 __mks_19(0,__context__).x = float3(0.f,0.f,0.f);
                 __mks_19(0,__context__).v = float3(0.f,0.f,0.f);
@@ -38,7 +39,7 @@ namespace das {
                 __mks_19(4,__context__).v = float3(0.979091f,0.594699f,-0.034756f);
                 __mks_19(4,__context__).mass = 0.00203369f;
                 return __mks_19;
-            })());
+            })()); /*bodies*/
         }
 
         void advance ( Context * __context__ )
@@ -46,7 +47,7 @@ namespace das {
             int32_t i = 0;
             {
                 bool __need_loop_50 = true;
-                das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,0>(__context__) /*bodies*/);
+                das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/);
                 struct body * b;
                 __need_loop_50 = __b_iterator.first(__context__,b) && __need_loop_50;
                 for ( ; __need_loop_50 ; __need_loop_50 = __b_iterator.next(__context__,b) )
@@ -59,7 +60,7 @@ namespace das {
                         __need_loop_52 = __j_iterator.first(__context__,j) && __need_loop_52;
                         for ( ; __need_loop_52 ; __need_loop_52 = __j_iterator.next(__context__,j) )
                         {
-                            struct body * b2 = &(das_global<TDim<struct body,5>,0>(__context__) /*bodies*/(j,__context__));
+                            struct body * b2 = &(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/(j,__context__));
                             float3 dx = (SimPolicy<float3>::Sub((*b).x,(*b2).x,*__context__));
                             float inv_distance = invlength3(dx);
                             float mag = ((inv_distance * inv_distance) * inv_distance);
@@ -80,7 +81,7 @@ namespace das {
             int32_t i = 0;
             {
                 bool __need_loop_64 = true;
-                das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,0>(__context__) /*bodies*/);
+                das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/);
                 struct body * b;
                 __need_loop_64 = __b_iterator.first(__context__,b) && __need_loop_64;
                 for ( ; __need_loop_64 ; __need_loop_64 = __b_iterator.next(__context__,b) )
@@ -94,7 +95,7 @@ namespace das {
                         __need_loop_67 = __j_iterator.first(__context__,j) && __need_loop_67;
                         for ( ; __need_loop_67 ; __need_loop_67 = __j_iterator.next(__context__,j) )
                         {
-                            struct body b2 = das_global<TDim<struct body,5>,0>(__context__) /*bodies*/(j,__context__);
+                            struct body b2 = das_global<TDim<struct body,5>,16>(__context__) /*bodies*/(j,__context__);
                             e -= (((*b).mass * b2.mass) / distance3((*b).x,b2.x));
                         }
                         __j_iterator.close(__context__,j);
@@ -127,7 +128,7 @@ namespace das {
             float3 px = 0;
             {
                 bool __need_loop_44 = true;
-                das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,0>(__context__) /*bodies*/);
+                das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/);
                 struct body * b;
                 __need_loop_44 = __b_iterator.first(__context__,b) && __need_loop_44;
                 for ( ; __need_loop_44 ; __need_loop_44 = __b_iterator.next(__context__,b) )
@@ -136,14 +137,14 @@ namespace das {
                 }
                 __b_iterator.close(__context__,b);
             };
-            das_global<TDim<struct body,5>,0>(__context__) /*bodies*/(0,__context__).v = SimPolicy<float3>::DivVecScal(px,cast<float>::from(39.4784f),*__context__);
+            das_global<TDim<struct body,5>,16>(__context__) /*bodies*/(0,__context__).v = SimPolicy<float3>::DivVecScal(px,cast<float>::from(39.4784f),*__context__);
         }
 
         void scale_bodies ( Context * __context__, float scale )
         {
             {
                 bool __need_loop_79 = true;
-                das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,0>(__context__) /*bodies*/);
+                das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/);
                 struct body * b;
                 __need_loop_79 = __b_iterator.first(__context__,b) && __need_loop_79;
                 for ( ; __need_loop_79 ; __need_loop_79 = __b_iterator.next(__context__,b) )
@@ -156,15 +157,15 @@ namespace das {
         }
 
         bool test ( Context * __context__ ) { das_stack_prologue __prologue(__context__,64,__LINE__);
-        {
-            offset_momentum(__context__);
-            energy(__context__);
-            builtin_profile(10,"n-bodies",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
-                nbodies(__context__,500000);
-            })),__context__);
-            energy(__context__);
-            return true;
-        }}
+            {
+                offset_momentum(__context__);
+                energy(__context__);
+                builtin_profile(10,"n-bodies",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
+                    nbodies(__context__,500000);
+                })),__context__);
+                energy(__context__);
+                return true;
+            }}
 
         void registerAot ( AotLibrary & aotLib )
         {

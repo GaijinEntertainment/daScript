@@ -290,6 +290,7 @@ namespace das {
         }
         virtual StructurePtr visit ( Structure * that ) override {
             ss << "};\n";
+            ss << "static_assert(sizeof(" << that->name << ")==" << that->getSizeOf() << ");\n";
             return Visitor::visit(that);
         }
     // program body
@@ -319,12 +320,15 @@ namespace das {
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
             ss << string(tab,'\t');
+            if ( !var->used ) ss << "/* ";
             ss << (var->init ? "das_global" : "das_global_zero");
             ss << "<" << describeCppType(var->type,false,true)
-                << "," << int32_t(var->stackTop) << ">(__context__) /*"  << var->name << "*/";
+                << "," << int32_t(var->stackTop) << ">(__context__)";
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
-            ss << ";\n";
+            if ( !var->used ) ss << " */";
+            ss << "; /*" << var->name << "*/\n";
+
             return Visitor::visitGlobalLet(var);
         }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
