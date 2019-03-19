@@ -21,6 +21,16 @@ namespace das {
         memset(&b, 0, sizeof(TT));
     }
 
+    template <typename TT, int offset>
+    __forceinline TT & das_global ( Context * __context__ ) {
+        return *(TT *)(__context__->globals + offset);
+    }
+
+    template <typename TT, int offset>
+    __forceinline void das_global_zero ( Context * __context__ ) {
+        memset(__context__->globals + offset, 0, sizeof(TT));
+    }
+
     template <typename TT>
     struct das_arg {
         static __forceinline TT & pass ( TT && a ) {
@@ -121,7 +131,7 @@ namespace das {
         TArray(TArray && arr ) { moveA(arr); }
         TArray & operator = ( TArray & arr ) { moveA(arr); return *this; }
         TArray & operator = ( TArray && arr ) { moveA(arr); return *this; }
-        void moveA ( Array & arr ) {
+        __forceinline void moveA ( Array & arr ) {
             data = arr.data; arr.data = 0;
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;
@@ -154,7 +164,7 @@ namespace das {
         TTable(TTable && arr ) { moveT(arr); }
         TTable & operator = ( TTable & arr ) { moveT(arr); return *this; }
         TTable & operator = ( TTable && arr ) { moveT(arr); return *this; }
-        void moveA ( Table & arr ) {
+        __forceinline void moveA ( Table & arr ) {
             data = arr.data; arr.data = 0;
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;

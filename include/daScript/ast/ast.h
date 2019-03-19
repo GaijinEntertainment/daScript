@@ -1673,6 +1673,7 @@ namespace das
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
         void aotCpp ( TextWriter & logs );
+        void registerAotCpp ( TextWriter & logs, Context & context );
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {
@@ -1762,10 +1763,12 @@ namespace das
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) {}
         virtual ExpressionPtr visitLetInit ( ExprLet *, const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
         // GLOBAL LET
+        virtual void preVisitGlobalLetBody ( Program * prog ) {}
         virtual void preVisitGlobalLet ( const VariablePtr & ) {}
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) { return var; }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * ) {}
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
+        virtual void visitGlobalLetBody ( Program * prog ) {}
         // STRING BUILDER
         virtual void preVisit ( ExprStringBuilder * expr ) {}
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) {}

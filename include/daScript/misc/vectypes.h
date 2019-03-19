@@ -30,6 +30,7 @@ namespace das
         }
         vec3() = default;
         vec3(const vec3 &) = default;
+        vec3(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)), z(v_extract_z(t)) {}
         vec3(TT X, TT Y, TT Z) : x(X), y(Y), z(Z) {}
         vec3(TT t) : x(t), y(t), z(t) {}
         operator vec4f() const { return v_ldu((float *)this); };
@@ -48,6 +49,7 @@ namespace das
         }
         vec4() = default;
         vec4(const vec4 &) = default;
+        vec4(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)), z(v_extract_z(t)), w(v_extract_w(t)) {}
         vec4(TT X, TT Y, TT Z, TT W) : x(X), y(Y), z(Z), w(W) {}
         vec4(TT t) : x(t), y(t), z(t), w(t) {}
         operator vec4f() const { return v_ldu((float *)this); };

@@ -126,6 +126,8 @@ namespace das
         Context & operator = (const Context &) = delete;
         virtual ~Context();
 
+        uint64_t getInitSemanticHash();
+
         __forceinline void * getVariable ( int index ) const {
             return (uint32_t(index)<uint32_t(totalVariables)) ? (globals + globalVariables[index].offset) : nullptr;
         }
@@ -336,6 +338,7 @@ namespace das
         SimFunction * functions = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
+        SimNode * aotInitScript = nullptr;
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;

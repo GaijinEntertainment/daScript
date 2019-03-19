@@ -304,10 +304,24 @@ namespace das {
             }
             ss << "\n";
         }
+    // global let body
+        virtual void preVisitGlobalLetBody ( Program * prog ) override {
+            Visitor::preVisitGlobalLetBody(prog);
+            ss << "void __init_script ( Context * __context__ )\n{\n";
+            tab ++;
+        }
+        virtual void visitGlobalLetBody ( Program * prog ) override {
+            tab --;
+            ss << "}\n";
+            Visitor::visitGlobalLetBody(prog);
+        }
     // global
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
-            ss << describeCppType(var->type) << " "  << var->name;
+            ss << string(tab,'\t');
+            ss << (var->init ? "das_global" : "das_global_zero");
+            ss << "<" << describeCppType(var->type,false,true)
+                << "," << int32_t(var->stackTop) << ">(__context__) /*"  << var->name << "*/";
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
             ss << ";\n";
@@ -474,7 +488,7 @@ namespace das {
             if ( isOpPolicy(that, that->left) ) {
                 ss << "SimPolicy<" << das_to_cppString(that->left->type->baseType) << ">::" << opPolicyName(that) << "(";
                 if ( that->left->type->ref ) ss << "(char *)&(";
-                if ( policyArgNeedCast(that->left->type) ) {
+                if ( policyArgNeedCast(that->type, that->left->type) ) {
                     ss << "cast<" << describeCppType(that->left->type,false,true) << ">::from(";
                 }
             }
@@ -482,10 +496,10 @@ namespace das {
         virtual void preVisitRight ( ExprOp2 * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
             if ( isOpPolicy(that, that->left) ) {
-                if ( policyArgNeedCast(that->left->type) )ss << ")";
+                if ( policyArgNeedCast(that->type, that->left->type) )ss << ")";
                 if ( that->left->type->ref ) ss << ")";
                 ss << ",";
-                if ( policyArgNeedCast(that->right->type) ) {
+                if ( policyArgNeedCast(that->type, that->right->type) ) {
                     ss << "cast<" << describeCppType(that->right->type,false,true) << ">::from(";
                 }
             } else {
@@ -494,7 +508,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprOp2 * that ) override {
             if ( isOpPolicy(that, that->left) ) {
-                if ( policyArgNeedCast(that->right->type) )ss << ")";
+                if ( policyArgNeedCast(that->type, that->right->type) )ss << ")";
                 ss << ",*__context__)";
             }
             if ( !noBracket(that) ) ss << ")";
@@ -532,8 +546,11 @@ namespace das {
         virtual ExpressionPtr visit ( ExprVar * var ) override {
             if ( var->local && var->variable->type->ref ) {
                 ss << "(*" << var->name << ")";
-            } else {
+            } else if ( var->block || var->local || var->argument) {
                 ss << var->name;
+            } else {
+                ss << "das_global<" << describeCppType(var->variable->type,false,true)
+                    << "," << int32_t(var->variable->stackTop) << ">(__context__) /*" << var->name << "*/";
             }
             return Visitor::visit(var);
         }
@@ -618,7 +635,12 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            ss << c->getValue();
+            auto stf = to_string(c->getValue());
+            if ( stf.find('.') != string::npos ) {
+                ss << stf << "f";
+            } else {
+                ss << stf << ".0f";
+            }
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
@@ -875,8 +897,8 @@ namespace das {
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
             if ( call->name=="assert" ) {
-                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT(";
-                else ss << "DAS_ASSERTF(";
+                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT((";
+                else ss << "DAS_ASSERTF((";
             } else if ( call->name=="invoke" ) {
                 ss << "das_invoke<" << describeCppType(call->type) << ">::invoke";
                 if ( call->arguments.size()>1 ) {
@@ -898,9 +920,13 @@ namespace das {
             if ( !last ) ss << ",";
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
-        virtual ExpressionPtr visit ( ExprLooksLikeCall * c ) override {
-            ss << ")";
-            return Visitor::visit(c);
+        virtual ExpressionPtr visit ( ExprLooksLikeCall * call ) override {
+            if ( call->name=="assert" ) {
+                ss << "))"; // ts macro
+            } else {
+                ss << ")";
+            }
+            return Visitor::visit(call);
         }
     // call
         bool isPolicyBasedCall ( ExprCall * call ) const {
@@ -914,11 +940,11 @@ namespace das {
                 return false;
             }
         }
-        bool policyArgNeedCast ( const TypeDeclPtr & argType ) {
+        bool policyArgNeedCast ( const TypeDeclPtr & polType, const TypeDeclPtr & argType ) {
             if ( argType->isVectorType() ) {
                 return false;
             }
-            if ( !argType->isPolicyType() ) {
+            if ( !polType->isPolicyType() && !argType->isPolicyType() ) {
                 return false;
             }
             return true;
@@ -1046,6 +1072,51 @@ namespace das {
             return Visitor::visit(ffor);
         }
     };
+
+    uint64_t Context::getInitSemanticHash() {
+        const uint64_t fnv_prime = 1099511628211ul;
+        uint64_t hash = globalsSize;
+        for ( int i=0; i!=totalVariables; ++i ) {
+            hash = (hash ^ globalVariables[i].offset) * fnv_prime;
+            hash = (hash ^ globalVariables[i].size) * fnv_prime;
+            if ( globalVariables[i].init ) {
+                hash = (hash ^ getSemanticHash(globalVariables[i].init)) * fnv_prime;
+            }
+        }
+        return hash;
+    }
+
+    void Program::registerAotCpp ( TextWriter & logs, Context & context ) {
+        vector<Function *> fnn; fnn.reserve(totalFunctions);
+        for (auto & pm : library.modules) {
+            for (auto & it : pm->functions) {
+                auto pfun = it.second;
+                if (pfun->index < 0 || !pfun->used)
+                    continue;
+                fnn.push_back(pfun.get());
+            }
+        }
+        logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
+        for ( int i=0; i!=context.totalFunctions; ++i ) {
+            SimFunction * fn = context.getFunction(i);
+            uint64_t semH = getSemanticHash(fn->code);
+            logs << "\t// " << fn->name << "\n";
+            logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
+            logs << "ctx.code->makeNode<SimNode_Aot";
+            if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
+                logs << "CMRES";
+            }
+            logs << "<" << describeCppFunc(fnn[i],false) << "," << fn->name << ">>();\n\t};\n";
+        }
+        if ( context.totalVariables ) {
+            uint64_t semH = context.getInitSemanticHash();
+            logs << "\t// [[ init script ]]\n";
+            logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
+            logs << "ctx.code->makeNode<SimNode_Aot";
+            logs << "<void (Context *), __init_script>>();\n\t};\n";
+        }
+        logs << "}\n";
+    }
 
     void Program::aotCpp ( TextWriter & logs ) {
         setPrintFlags();

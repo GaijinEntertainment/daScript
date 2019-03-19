@@ -1654,8 +1654,6 @@ namespace das
         return pCall;
     }
 
-    string describeCppFunc ( Function * fn, bool needName = false );
-
     bool Program::simulate ( Context & context, TextWriter & logs ) {
         context.thisProgram = this;
         if ( auto optHeap = options.find("heap",Type::tInt) ) {
@@ -1683,7 +1681,6 @@ namespace das
         context.totalVariables = totalVariables;
         context.functions = (SimFunction *) context.code->allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
-        vector<Function *> fnn; fnn.reserve(totalFunctions);
         for (auto & pm : library.modules) {
             for (auto & it : pm->functions) {
                 auto pfun = it.second;
@@ -1694,7 +1691,6 @@ namespace das
                 gfun.code = pfun->simulate(context);
                 gfun.stackSize = pfun->totalStackSize;
                 gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
-                fnn.push_back(pfun.get());
             }
         }
         for (auto & pm : library.modules ) {
@@ -1726,20 +1722,7 @@ namespace das
             }
         }
         if (options.getOption("logCpp")) {
-            logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
-            for ( int i=0; i!=context.totalFunctions; ++i ) {
-                SimFunction * fn = context.getFunction(i);
-                uint64_t semH = getSemanticHash(fn->code);
-                logs << "\t// " << fn->name << "\n";
-                logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
-                logs << "ctx.code->makeNode<SimNode_Aot";
-                if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
-                    logs << "CMRES";
-                }
-                logs << "<" << describeCppFunc(fnn[i]) << "," << fn->name << ">>();\n\t};\n";
-
-            }
-            logs << "}\n";
+            registerAotCpp(logs,context);
         }
         return errors.size() == 0;
     }
@@ -1754,6 +1737,16 @@ namespace das
                 logs << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
             } else {
                  logs << "NOT FOUND " << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+            }
+        }
+        if ( context.totalVariables ) {
+            uint64_t semHash = context.getInitSemanticHash();
+            auto it = aotLib.find(semHash);
+            if ( it != aotLib.end() ) {
+                context.aotInitScript = (it->second)(context);
+                logs << "INIT SCRIPT AOT=0x" << HEX << semHash << DEC << "\n";
+            } else {
+                logs << "INIT SCRIPT NOT FOUND, AOT=0x" << HEX << semHash << DEC << "\n";
             }
         }
     }

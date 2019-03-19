@@ -94,6 +94,7 @@ bool unit_test ( const string & fn ) {
 #endif
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
+                ctx.runInitScript();    // this is here for testing purposes only
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
                 if ( auto ex = ctx.getException() ) {
                     tout << "exception: " << ex << "\n";

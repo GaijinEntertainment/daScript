@@ -1463,6 +1463,7 @@ namespace das {
         // real things
         vis.preVisitProgramBody(this);
         // globals
+        vis.preVisitGlobalLetBody(this);
         for ( auto & it : thisModule->globals ) {
             auto & var = it.second;
             vis.preVisitGlobalLet(var);
@@ -1473,6 +1474,7 @@ namespace das {
             }
             var = vis.visitGlobalLet(var);
         }
+        vis.visitGlobalLetBody(this);
         // generics
         if ( visitGenerics ) {
             for ( auto & fn : thisModule->generics ) {
