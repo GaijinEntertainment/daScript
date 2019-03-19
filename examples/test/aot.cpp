@@ -3,84 +3,95 @@
 #include "daScript/simulate/aot.h"
 
 namespace das {
-
     namespace aot {
-        TypeInfo __type_info__ec0ec894 = { Type::tUInt, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, 12, 0xec0ec894 };
-        TypeInfo * __tinfo_0[1] = { &__type_info__ec0ec894 };
+        struct Bar {
+            int32_t x; /* = 1 */
+            int32_t y; /* = 2 */
+            int32_t z; /* = 3 */
+            int32_t w; /* = 4 */
+        };
 
-        int32_t dict ( Context * __context__, TTable<char *,int32_t> & tab, TArray<char *> & src );
-        void makeRandomSequence ( Context * __context__, TArray<char *> & src );
-        void resize ( Context * __context__, TArray<char *> & Arr, int32_t newSize );
+        struct Foo {
+            int32_t i; /* = 5 */
+            float f; /* = 6 */
+            char * s; /* = "hello" */
+        };
+
+        struct Foo Foo ( Context * __context__ = nullptr );
         bool test ( Context * __context__ );
 
-        int32_t dict ( Context * __context__, TTable<char *,int32_t> &  tab, TArray<char *> &  src )
+        struct Foo jestFoo = (([]() -> struct Foo {
+            struct Foo __mks_29; das_zero(__mks_29);
+            __mks_29.i = 3;
+            __mks_29.f = 4;
+            __mks_29.s = "blah";
+            return __mks_29;
+        })());
+        struct Foo testFoo = Foo();
+
+        struct Foo Foo ( Context * __context__ )
         {
-            builtin_table_clear(das_arg<TTable<char *,int32_t>>::pass(tab),__context__);
-            int32_t maxOcc = 0;
-            {
-                bool __need_loop_18 = true;
-                das_iterator<TArray<char *>> __s_iterator(src);
-                char * * s;
-                __need_loop_18 = __s_iterator.first(__context__,s) && __need_loop_18;
-                for ( ; __need_loop_18 ; __need_loop_18 = __s_iterator.next(__context__,s) )
-                {
-                    maxOcc = SimPolicy<int32_t>::Max(++tab((*s),__context__),maxOcc,*__context__);
-                }
-                __s_iterator.close(__context__,s);
-            };
-            return maxOcc;
+            return (([&]() -> struct Foo {
+                struct Foo __mks_20; das_zero(__mks_20);
+                __mks_20.i = 5;
+                __mks_20.f = 6;
+                __mks_20.s = "hello";
+                return __mks_20;
+            })());
         }
 
-        void makeRandomSequence ( Context * __context__, TArray<char *> &  src )
+        bool test ( Context * __context__ )
         {
-            resize(__context__,das_arg<TArray<char *>>::pass(src),500000);
-            {
-                bool __need_loop_11 = true;
-                das_iterator<range> __i_iterator(range(0,500000));
-                int32_t i;
-                __need_loop_11 = __i_iterator.first(__context__,i) && __need_loop_11;
-                for ( ; __need_loop_11 ; __need_loop_11 = __i_iterator.next(__context__,i) )
-                {
-                    uint32_t num = ((0x1033c4d7u ^ uint32_t(i * 119)) % 0x7a120u);
-                    src(i,__context__) = das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_0, cast<uint32_t>::from(num)));
-                }
-                __i_iterator.close(__context__,i);
-            };
+            DAS_ASSERT(((testFoo.i == 5) & (testFoo.f == 6)) & (SimPolicy<char *>::Equ(cast<char *>::from(testFoo.s),cast<char *>::from("hello"),*__context__)));
+            DAS_ASSERT(((jestFoo.i == 3) & (jestFoo.f == 4)) & (SimPolicy<char *>::Equ(cast<char *>::from(jestFoo.s),cast<char *>::from("blah"),*__context__)));
+            struct Foo t = Foo(__context__);
+            DAS_ASSERT(t.i == 5);
+            DAS_ASSERT(t.f == 6);
+            DAS_ASSERT(SimPolicy<char *>::Equ(cast<char *>::from(t.s),cast<char *>::from("hello"),*__context__));
+            struct Foo q = (([&]() -> struct Foo {
+                struct Foo __mks_40; das_zero(__mks_40);
+                __mks_40.i = 6;
+                __mks_40.s = "world";
+                return __mks_40;
+            })());
+            DAS_ASSERT(q.i == 6);
+            DAS_ASSERT(q.f == 0);
+            DAS_ASSERT(SimPolicy<char *>::Equ(cast<char *>::from(q.s),cast<char *>::from("world"),*__context__));
+            TDim<struct Foo,3> qq3 = (([&]() -> TDim<struct Foo,3> {
+                TDim<struct Foo,3> __mks_44; das_zero(__mks_44);
+                __mks_44(0,__context__).i = 1;
+                __mks_44(1,__context__).i = 2;
+                __mks_44(2,__context__).i = 3;
+                return __mks_44;
+            })());
+            DAS_ASSERT(((qq3(0,__context__).i == 1) & (qq3(1,__context__).i == 2)) & (qq3(2,__context__).i == 3));
+            TDim<int32_t,4> ar = (([&]() -> TDim<int32_t,4> {
+                TDim<int32_t,4> __mka_46; das_zero(__mka_46);
+                __mka_46(0,__context__) = 1;
+                __mka_46(1,__context__) = 2;
+                __mka_46(2,__context__) = 3;
+                __mka_46(3,__context__) = 4;
+                return __mka_46;
+            })());
+            DAS_ASSERT((((ar(0,__context__) == 1) & (ar(1,__context__) == 2)) & (ar(2,__context__) == 3)) & (ar(3,__context__) == 4));
+            TDim<struct Foo,2> arf = (([&]() -> TDim<struct Foo,2> {
+                TDim<struct Foo,2> __mka_48; das_zero(__mka_48);
+                __mka_48(0,__context__) = Foo(__context__);
+                __mka_48(1,__context__) = Foo(__context__);
+                return __mka_48;
+            })());
+            DAS_ASSERT((arf(0,__context__).i == 5) & (arf(1,__context__).i == 5));
+            return true;
         }
-
-        void resize ( Context * __context__, TArray<char *> &  Arr, int32_t newSize )
-        {
-            builtin_array_resize(das_arg<TArray<char *>>::pass(Arr),newSize,8,__context__);
-        }
-
-        bool test ( Context * __context__ ) { das_stack_prologue __prologue(__context__,144,__LINE__);
-            {
-                TTable<char *,int32_t> tab; das_zero(tab);
-                TArray<char *> src; das_zero(src);
-                makeRandomSequence(__context__,das_arg<TArray<char *>>::pass(src));
-                builtin_profile(20,"dictionary",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
-                    dict(__context__,das_arg<TTable<char *,int32_t>>::pass(tab),das_arg<TArray<char *>>::pass(src));
-                })),__context__);
-                DAS_ASSERT(heap_depth(__context__) == 1);
-                return true;
-            }}
 
         void registerAot ( AotLibrary & aotLib )
         {
-            // dict
-            aotLib[0xae931145262ae07a] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<int32_t  ( Context * __context__, TTable<char *,int32_t> & tab, TArray<char *> & src ),dict>>();
-            };
-            // makeRandomSequence
-            aotLib[0xe95eb3db2fdfd555] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<void  ( Context * __context__, TArray<char *> & src ),makeRandomSequence>>();
-            };
-            // resize
-            aotLib[0xe9cd57f4be1ff7f7] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<void  ( Context * __context__, TArray<char *> & Arr, int32_t newSize ),resize>>();
+            // Foo
+            aotLib[0x35d4cae09b5ce919] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_AotCMRES<struct Foo  ( Context * __context__ ),Foo>>();
             };
             // test
-            aotLib[0xa64f158bcf3d1c9d] = [&](Context & ctx){
+            aotLib[0x7b2c8b57df5c6bab] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<bool  ( Context * __context__ ),test>>();
             };
         }

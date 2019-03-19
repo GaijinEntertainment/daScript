@@ -287,6 +287,35 @@ namespace das {
         }
     };
 
+    template <typename Result>
+    struct ImplAotStaticFunctionCMRES {
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline Result call(FunctionType && fn, Context & ctx, index_sequence<I...> ) {
+            return fn( cast_aot_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, ctx.abiArguments()[ I ? I-1 : 0 ] )... );
+        }
+    };
+
+    template <typename FuncT, FuncT fn>
+    struct SimNode_AotCMRES : SimNode_CallBase {
+        const char * extFnName = nullptr;
+        __forceinline SimNode_AotCMRES ( ) : SimNode_CallBase(LineInfo()) {}
+        virtual vec4f eval ( Context & context ) override {
+            using FunctionTrait = function_traits<FuncT>;
+            using Result = typename FunctionTrait::return_type;
+            using Arguments = typename FunctionTrait::arguments;
+            const int nargs = tuple_size<Arguments>::value;
+            using Indices = make_index_sequence<nargs>;
+            vec4f * aa = context.abiArg;
+            vec4f stub[1];
+            if ( !aa ) context.abiArg = stub;
+            *((Result *)context.abiCMRES) = ImplAotStaticFunctionCMRES<Result>::template
+                call<FuncT,Arguments>(*fn, context, Indices());
+            context.abiArg = aa;
+            context.abiResult() = cast<void *>::from(context.abiCMRES);
+            return context.abiResult();
+        }
+    };
+
     struct SimNode_AotInteropBase : SimNode_CallBase {
         __forceinline SimNode_AotInteropBase() : SimNode_CallBase(LineInfo()) {}
         virtual vec4f eval ( Context & ) override {

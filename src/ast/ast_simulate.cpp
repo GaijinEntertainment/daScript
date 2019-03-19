@@ -1732,7 +1732,11 @@ namespace das
                 uint64_t semH = getSemanticHash(fn->code);
                 logs << "\t// " << fn->name << "\n";
                 logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
-                logs << "ctx.code->makeNode<SimNode_Aot<" << describeCppFunc(fnn[i]) << "," << fn->name << ">>();\n\t};\n";
+                logs << "ctx.code->makeNode<SimNode_Aot";
+                if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
+                    logs << "CMRES";
+                }
+                logs << "<" << describeCppFunc(fnn[i]) << "," << fn->name << ">>();\n\t};\n";
 
             }
             logs << "}\n";

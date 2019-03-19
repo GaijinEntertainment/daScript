@@ -302,6 +302,20 @@ namespace das {
                     ss << describeCppFunc(fn.get()) << ";\n";
                 }
             }
+            ss << "\n";
+        }
+    // global
+        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
+            Visitor::preVisitGlobalLet(var);
+            ss << describeCppType(var->type) << " "  << var->name;
+        }
+        virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
+            ss << ";\n";
+            return Visitor::visitGlobalLet(var);
+        }
+        virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
+            Visitor::preVisitGlobalLetInit(var, init);
+            ss << " = ";
         }
     // function
         virtual void preVisit ( Function * fn) override {
@@ -784,6 +798,59 @@ namespace das {
         virtual ExpressionPtr visit ( ExprTryCatch * tc ) override {
             ss << ")";
             return Visitor::visit(tc);
+        }
+    // make structure
+        string mksName ( ExprMakeStructure * expr ) const {
+            return "__mks_" + to_string(expr->at.line);
+        }
+        virtual void preVisit ( ExprMakeStructure * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "(([&]() -> " << describeCppType(expr->type,false,true) << " {\n";
+            tab ++;
+            ss << string(tab,'\t')<< describeCppType(expr->type,false,true) << " " << mksName(expr)
+                << "; das_zero(" << mksName(expr) << ");\n";
+
+        }
+        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
+            Visitor::preVisitMakeStructureField(expr,index,decl,last);
+            ss << string(tab,'\t') << mksName(expr);
+            if ( expr->structs.size()!=1 ) ss << "(" << index << ",__context__)";
+            ss << "." << decl->name << " = ";
+        }
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
+            ss << ";\n";
+            return Visitor::visitMakeStructureField(expr,index,decl,last);
+        }
+        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+            ss << string(tab,'\t') << "return " << mksName(expr)<< ";\n";
+            tab --;
+            ss << string(tab,'\t') << "})())";
+            return Visitor::visit(expr);
+        }
+    // make array
+        string mkaName ( ExprMakeArray * expr ) const {
+            return "__mka_" + to_string(expr->at.line);
+        }
+        virtual void preVisit ( ExprMakeArray * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "(([&]() -> " << describeCppType(expr->type,false,true) << " {\n";
+            tab ++;
+            ss << string(tab,'\t')<< describeCppType(expr->type,false,true) << " " << mkaName(expr)
+                << "; das_zero(" << mkaName(expr) << ");\n";
+        }
+        virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override {
+            Visitor::preVisitMakeArrayIndex(expr, index, init, lastField);
+            ss << string(tab,'\t') << mkaName(expr) << "(" << index << ",__context__) = ";
+        }
+        virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override {
+            ss << ";\n";
+            return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+        }
+        virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
+            ss << string(tab,'\t') << "return " << mkaName(expr)<< ";\n";
+            tab --;
+            ss << string(tab,'\t') << "})())";
+            return Visitor::visit(expr);
         }
     // ExprMakeBlock
         virtual void preVisit ( ExprMakeBlock * expr ) override {
