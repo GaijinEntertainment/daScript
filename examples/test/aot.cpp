@@ -5,216 +5,83 @@
 namespace das {
 
     namespace aot {
-        TypeInfo __type_info__33aa4c93 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("$::float4x4"), nullptr, nullptr, 0, nullptr, 14, 0x33aa4c93 };
-        TypeInfo * __tinfo_0[1] = { &__type_info__33aa4c93 };
+        TypeInfo __type_info__ec0ec894 = { Type::tUInt, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, 12, 0xec0ec894 };
+        TypeInfo * __tinfo_0[1] = { &__type_info__ec0ec894 };
 
-        TypeInfo * __tinfo_1[1] = { &__type_info__33aa4c93 };
-
-        TypeInfo __type_info__a7069c83 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 };
-        TypeInfo * __tinfo_2[3] = { &__type_info__a7069c83, &__type_info__33aa4c93, &__type_info__a7069c83 };
-
-        int32_t pass ( Context * __context__, int32_t a );
+        int32_t dict ( Context * __context__, TTable<char *,int32_t> & tab, TArray<char *> & src );
+        void makeRandomSequence ( Context * __context__, TArray<char *> & src );
+        void resize ( Context * __context__, TArray<char *> & Arr, int32_t newSize );
         bool test ( Context * __context__ );
-        void test_4x4 ( Context * __context__ );
-        void test_any ( Context * __context__, /* handled */ float3x4 & t );
-        void test_any ( Context * __context__, /* handled */ float4x4 & t );
-        bool test_r2v ( Context * __context__ );
 
-        int32_t pass ( Context * __context__, int32_t a )
+        int32_t dict ( Context * __context__, TTable<char *,int32_t> &  tab, TArray<char *> &  src )
         {
-            return a;
-        }
-
-        bool test ( Context * __context__ )
-        {
-            test_r2v(__context__);
-            test_4x4(__context__);
-            test_any(__context__,das_arg</* handled */ float4x4>::pass(/*c-tor*/ float4x4()));
-            test_any(__context__,das_arg</* handled */ float3x4>::pass(/*c-tor*/ float3x4()));
-            return true;
-        }
-
-        void test_4x4 ( Context * __context__ )
-        {
-            /* handled */ float4x4 t; das_zero(t);
-            das_index</* handled */ float4x4>::at(t,0,__context__) = float4(1,2,3,4);
-            das_index</* handled */ float4x4>::at(t,1,__context__) = float4(5,6,7,8);
-            das_index</* handled */ float4x4>::at(t,2,__context__) = float4(9,10,11,12);
-            das_index</* handled */ float4x4>::at(t,3,__context__) = float4(13,14,15,16);
-            DAS_ASSERT(SimPolicy<char *>::Equ(cast<char *>::from(das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_0, cast</* handled */ float4x4 &>::from(t)))),cast<char *>::from("[[ 1,2,3,4; 5,6,7,8; 9,10,11,12; 13,14,15,16]]"),*__context__));
+            builtin_table_clear(das_arg<TTable<char *,int32_t>>::pass(tab),__context__);
+            int32_t maxOcc = 0;
             {
-                bool __need_loop_39 = true;
-                das_iterator<range> __y_iterator(range(0,4));
-                int32_t y;
-                __need_loop_39 = __y_iterator.first(__context__,y) && __need_loop_39;
-                for ( ; __need_loop_39 ; __need_loop_39 = __y_iterator.next(__context__,y) )
+                bool __need_loop_18 = true;
+                das_iterator<TArray<char *>> __s_iterator(src);
+                char * * s;
+                __need_loop_18 = __s_iterator.first(__context__,s) && __need_loop_18;
+                for ( ; __need_loop_18 ; __need_loop_18 = __s_iterator.next(__context__,s) )
                 {
-                    {
-                        bool __need_loop_40 = true;
-                        das_iterator<range> __x_iterator(range(0,4));
-                        int32_t x;
-                        __need_loop_40 = __x_iterator.first(__context__,x) && __need_loop_40;
-                        for ( ; __need_loop_40 ; __need_loop_40 = __x_iterator.next(__context__,x) )
-                        {
-                            das_index<float4>::at(das_index</* handled */ float4x4>::at(t,y,__context__),x,__context__) = (x == y) ? 1 : 0;
-                        }
-                        __x_iterator.close(__context__,x);
-                    };
+                    maxOcc = SimPolicy<int32_t>::Max(++tab((*s),__context__),maxOcc,*__context__);
                 }
-                __y_iterator.close(__context__,y);
+                __s_iterator.close(__context__,s);
             };
-            t.m[0] /*x*/ = float4(1,2,3,4);
-            t.m[1] /*y*/ = float4(5,6,7,8);
-            t.m[2] /*z*/ = float4(9,10,11,12);
-            t.m[3] /*w*/ = float4(13,14,15,16);
-            DAS_ASSERT(SimPolicy<char *>::Equ(cast<char *>::from(das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_1, cast</* handled */ float4x4 &>::from(t)))),cast<char *>::from("[[ 1,2,3,4; 5,6,7,8; 9,10,11,12; 13,14,15,16]]"),*__context__));
-            float4x4_identity(das_arg</* handled */ float4x4>::pass(t));
-            bool ops = false;
-            das_try_recover(__context__, [&]()
-                            {
-                                das_index</* handled */ float4x4>::at(t,pass(__context__,4),__context__) = float4(0,0,0,0);
-                            }, [&]()
-                            {
-                                ops = true;
-                            });
-            DAS_ASSERT(ops);
+            return maxOcc;
         }
 
-        void test_any ( Context * __context__, /* handled */ float3x4 &  t )
+        void makeRandomSequence ( Context * __context__, TArray<char *> &  src )
         {
-            float3x4_identity(das_arg</* handled */ float3x4>::pass(t));
+            resize(__context__,das_arg<TArray<char *>>::pass(src),500000);
             {
-                bool __need_loop_68 = true;
-                das_iterator<range> __r_iterator(range(0,4));
-                int32_t r;
-                __need_loop_68 = __r_iterator.first(__context__,r) && __need_loop_68;
-                for ( ; __need_loop_68 ; __need_loop_68 = __r_iterator.next(__context__,r) )
+                bool __need_loop_11 = true;
+                das_iterator<range> __i_iterator(range(0,500000));
+                int32_t i;
+                __need_loop_11 = __i_iterator.first(__context__,i) && __need_loop_11;
+                for ( ; __need_loop_11 ; __need_loop_11 = __i_iterator.next(__context__,i) )
                 {
-                    das_index</* handled */ float3x4>::at(t,r,__context__) = float3(r);
+                    uint32_t num = ((0x1033c4d7u ^ uint32_t(i * 119)) % 0x7a120u);
+                    src(i,__context__) = das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_0, cast<uint32_t>::from(num)));
                 }
-                __r_iterator.close(__context__,r);
+                __i_iterator.close(__context__,i);
             };
-            {
-                bool __need_loop_71 = true;
-                das_iterator<range> __y_iterator(range(0,4));
-                int32_t y;
-                __need_loop_71 = __y_iterator.first(__context__,y) && __need_loop_71;
-                for ( ; __need_loop_71 ; __need_loop_71 = __y_iterator.next(__context__,y) )
-                {
-                    {
-                        bool __need_loop_72 = true;
-                        das_iterator<range> __x_iterator(range(0,3));
-                        int32_t x;
-                        __need_loop_72 = __x_iterator.first(__context__,x) && __need_loop_72;
-                        for ( ; __need_loop_72 ; __need_loop_72 = __x_iterator.next(__context__,x) )
-                        {
-                            das_index<float3>::at(das_index</* handled */ float3x4>::at(t,y,__context__),x,__context__) = (x == y) ? 1 : 0;
-                        }
-                        __x_iterator.close(__context__,x);
-                    };
-                }
-                __y_iterator.close(__context__,y);
-            };
-            bool ops = false;
-            das_try_recover(__context__, [&]()
-                            {
-                                das_index</* handled */ float3x4>::at(t,pass(__context__,4),__context__) = float3(0,0,0);
-                            }, [&]()
-                            {
-                                ops = true;
-                            });
-            DAS_ASSERT(ops);
         }
 
-        void test_any ( Context * __context__, /* handled */ float4x4 &  t )
+        void resize ( Context * __context__, TArray<char *> &  Arr, int32_t newSize )
         {
-            float4x4_identity(das_arg</* handled */ float4x4>::pass(t));
-            {
-                bool __need_loop_68 = true;
-                das_iterator<range> __r_iterator(range(0,4));
-                int32_t r;
-                __need_loop_68 = __r_iterator.first(__context__,r) && __need_loop_68;
-                for ( ; __need_loop_68 ; __need_loop_68 = __r_iterator.next(__context__,r) )
-                {
-                    das_index</* handled */ float4x4>::at(t,r,__context__) = float4(r);
-                }
-                __r_iterator.close(__context__,r);
-            };
-            {
-                bool __need_loop_71 = true;
-                das_iterator<range> __y_iterator(range(0,4));
-                int32_t y;
-                __need_loop_71 = __y_iterator.first(__context__,y) && __need_loop_71;
-                for ( ; __need_loop_71 ; __need_loop_71 = __y_iterator.next(__context__,y) )
-                {
-                    {
-                        bool __need_loop_72 = true;
-                        das_iterator<range> __x_iterator(range(0,4));
-                        int32_t x;
-                        __need_loop_72 = __x_iterator.first(__context__,x) && __need_loop_72;
-                        for ( ; __need_loop_72 ; __need_loop_72 = __x_iterator.next(__context__,x) )
-                        {
-                            das_index<float4>::at(das_index</* handled */ float4x4>::at(t,y,__context__),x,__context__) = (x == y) ? 1 : 0;
-                        }
-                        __x_iterator.close(__context__,x);
-                    };
-                }
-                __y_iterator.close(__context__,y);
-            };
-            bool ops = false;
-            das_try_recover(__context__, [&]()
-                            {
-                                das_index</* handled */ float4x4>::at(t,pass(__context__,4),__context__) = float4(0,0,0,0);
-                            }, [&]()
-                            {
-                                ops = true;
-                            });
-            DAS_ASSERT(ops);
+            builtin_array_resize(das_arg<TArray<char *>>::pass(Arr),newSize,8,__context__);
         }
 
-        bool test_r2v ( Context * __context__ )
-        {
-            /* handled */ float4x4 m; das_zero(m);
-            das_index</* handled */ float4x4>::at(m,0,__context__) = float4(1,2,3,4);
-            das_swizzle_ref<float,float4,1>::swizzle(das_index</* handled */ float4x4>::at(m,1,__context__)) /*y*/ = 6;
-            das_index</* handled */ float4x4>::at(m,2,__context__) = float4(5,6,7,8);
-            m.m[3] /*w*/ = float4(9,10,11,12);
-            das_swizzle_ref<float,float4,2>::swizzle(m.m[3] /*w*/) /*z*/ = 111;
-            DAS_ASSERT(SimPolicy<float4>::Equ(das_index</* handled */ float4x4>::at(m,0,__context__),float4(1,2,3,4),*__context__));
-            DAS_ASSERT(v_extract_y(das_index</* handled */ float4x4>::at(m,1,__context__)) /*y*/ == 6);
-            DAS_ASSERT(SimPolicy<float4>::Equ(das_index</* handled */ float4x4>::at(m,1,__context__),float4(0,6,0,0),*__context__));
-            DAS_ASSERT(SimPolicy<float4>::Equ(das_index</* handled */ float4x4>::at(m,2,__context__),float4(5,6,7,8),*__context__));
-            DAS_ASSERT(v_extract_z(m.m[3] /*w*/) /*z*/ == 111);
-            DAS_ASSERT(SimPolicy<float4>::Equ(m.m[3] /*w*/,float4(9,10,111,12),*__context__));
-            builtin_print(das_string_builder(__context__,SimNode_AotInterop<3>(__tinfo_2, cast<char *>::from("m="), cast</* handled */ float4x4 &>::from(m), cast<char *>::from("\n"))),__context__);
-            return true;
-        }
+        bool test ( Context * __context__ ) { das_stack_prologue __prologue(__context__,144,__LINE__);
+            {
+                TTable<char *,int32_t> tab; das_zero(tab);
+                TArray<char *> src; das_zero(src);
+                makeRandomSequence(__context__,das_arg<TArray<char *>>::pass(src));
+                builtin_profile(20,"dictionary",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
+                    dict(__context__,das_arg<TTable<char *,int32_t>>::pass(tab),das_arg<TArray<char *>>::pass(src));
+                })),__context__);
+                DAS_ASSERT(heap_depth(__context__) == 1);
+                return true;
+            }}
 
         void registerAot ( AotLibrary & aotLib )
         {
-            // pass
-            aotLib[0x7cee40be92f7b250] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<int32_t  ( Context * __context__, int32_t a ),pass>>();
+            // dict
+            aotLib[0xae931145262ae07a] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<int32_t  ( Context * __context__, TTable<char *,int32_t> & tab, TArray<char *> & src ),dict>>();
+            };
+            // makeRandomSequence
+            aotLib[0xe95eb3db2fdfd555] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<void  ( Context * __context__, TArray<char *> & src ),makeRandomSequence>>();
+            };
+            // resize
+            aotLib[0xe9cd57f4be1ff7f7] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<void  ( Context * __context__, TArray<char *> & Arr, int32_t newSize ),resize>>();
             };
             // test
-            aotLib[0x2dc28c4625a2adf5] = [&](Context & ctx){
+            aotLib[0xa64f158bcf3d1c9d] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<bool  ( Context * __context__ ),test>>();
-            };
-            // test_4x4
-            aotLib[0xe0f179c45d837e99] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<void  ( Context * __context__ ),test_4x4>>();
-            };
-            // test_any
-            aotLib[0x9ada529c42cdf44c] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<void  ( Context * __context__, /* handled */ float3x4 & t ),test_any>>();
-            };
-            // test_any
-            aotLib[0x921192e5ce9a10e6] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<void  ( Context * __context__, /* handled */ float4x4 & t ),test_any>>();
-            };
-            // test_r2v
-            aotLib[0x22ae33f40a8d16d8] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<bool  ( Context * __context__ ),test_r2v>>();
             };
         }
     }

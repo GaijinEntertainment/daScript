@@ -544,13 +544,13 @@ namespace das {
     // at
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
-            if ( !(expr->type->dim.size() || expr->type->isGoodArrayType() || expr->type->isGoodTableType()) ) {
+            if ( !(expr->subexpr->type->dim.size() || expr->subexpr->type->isGoodArrayType() || expr->subexpr->type->isGoodTableType()) ) {
                 ss << "das_index<" << describeCppType(expr->subexpr->type,false,true) << ">::at(";
             }
         }
         virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override {
             Visitor::preVisitAtIndex(expr, index);
-            if ( expr->type->dim.size() || expr->type->isGoodArrayType() || expr->type->isGoodTableType() ) {
+            if ( expr->subexpr->type->dim.size() || expr->subexpr->type->isGoodArrayType() || expr->subexpr->type->isGoodTableType() ) {
                 ss << "(";
             } else {
                 ss << ",";
