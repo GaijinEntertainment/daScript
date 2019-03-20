@@ -2355,7 +2355,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
             auto val = x->eval(context);                                \
-            return SimPolicy<CTYPE>::CALL(val,context);                 \
+            return cast_result(SimPolicy<CTYPE>::CALL(val,context));    \
         }                                                               \
     };
 
@@ -2368,7 +2368,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
             auto val = arguments[0]->eval(context);                     \
-            return SimPolicy<CTYPE>::CALL(val,context);                 \
+            return cast_result(SimPolicy<CTYPE>::CALL(val,context));    \
         }                                                               \
     };
 
@@ -2465,7 +2465,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {             \
             auto lv = l->eval(context);                                 \
             auto rv = r->eval(context);                                 \
-            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+            return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context));  \
         }                                                               \
     };
 
@@ -2479,7 +2479,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {             \
             auto lv = arguments[0]->eval(context);                      \
             auto rv = arguments[1]->eval(context);                      \
-            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+            return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context));  \
         }                                                               \
     };
 
@@ -2617,19 +2617,19 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
     };
 
-#define IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(CALL,CTYPE)                  \
-    template <>                                                         \
-    struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
-        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
-        virtual SimNode * visit ( SimVisitor & vis ) override {         \
-            return visitOp3(vis, #CALL);                                \
-        }                                                               \
-        virtual vec4f eval ( Context & context ) override {             \
-            auto a0 = arguments[0]->eval(context);                      \
-            auto a1 = arguments[1]->eval(context);                      \
-            auto a2 = arguments[2]->eval(context);                      \
-            return SimPolicy<CTYPE>::CALL(a0,a1,a2,context);            \
-        }                                                               \
+#define IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(CALL,CTYPE)                      \
+    template <>                                                             \
+    struct Sim_##CALL <CTYPE> : SimNode_CallBase {                          \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}        \
+        virtual SimNode * visit ( SimVisitor & vis ) override {             \
+            return visitOp3(vis, #CALL);                                    \
+        }                                                                   \
+        virtual vec4f eval ( Context & context ) override {                 \
+            auto a0 = arguments[0]->eval(context);                          \
+            auto a1 = arguments[1]->eval(context);                          \
+            auto a2 = arguments[2]->eval(context);                          \
+            return cast_result(SimPolicy<CTYPE>::CALL(a0,a1,a2,context));   \
+        }                                                                   \
     };
 
     // unary

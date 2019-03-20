@@ -210,32 +210,32 @@ namespace das {
             addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise2D", SideEffects::none);
             addExtern<DAS_BIND_FUN(uint_noise3D_int3)>(*this, lib, "uint_noise3D", SideEffects::none);
 
-            addExtern<DAS_BIND_FUN(dot2)>(*this, lib, "dot", SideEffects::none, "dot2");
-            addExtern<DAS_BIND_FUN(dot3)>(*this, lib, "dot", SideEffects::none, "dot3");
-            addExtern<DAS_BIND_FUN(dot4)>(*this, lib, "dot", SideEffects::none, "dot4");
+            addExternEx<float(float2,float2),DAS_BIND_FUN(dot2)>(*this, lib, "dot", SideEffects::none, "dot2");
+            addExternEx<float(float3,float3),DAS_BIND_FUN(dot3)>(*this, lib, "dot", SideEffects::none, "dot3");
+            addExternEx<float(float4,float4),DAS_BIND_FUN(dot4)>(*this, lib, "dot", SideEffects::none, "dot4");
 
-            addExtern<DAS_BIND_FUN(cross3)>(*this, lib, "cross", SideEffects::none, "cross3");
+            addExternEx<float3(float3,float3),DAS_BIND_FUN(cross3)>(*this, lib, "cross", SideEffects::none, "cross3");
 
             // addExtern<DAS_BIND_FUN(normalize2)>(*this, lib, "normalize", SideEffects::none);
-            addExtern<DAS_BIND_FUN(normalize3)>(*this, lib, "normalize", SideEffects::none, "normalize3");
-            addExtern<DAS_BIND_FUN(normalize4)>(*this, lib, "normalize", SideEffects::none, "normalize4");
+            addExternEx<float2(float2),DAS_BIND_FUN(normalize3)>(*this, lib, "normalize", SideEffects::none, "normalize3");
+            addExternEx<float3(float3),DAS_BIND_FUN(normalize4)>(*this, lib, "normalize", SideEffects::none, "normalize4");
 
-            addExtern<DAS_BIND_FUN(length2)>(*this, lib, "length", SideEffects::none, "length2");
-            addExtern<DAS_BIND_FUN(length3)>(*this, lib, "length", SideEffects::none, "length3");
-            addExtern<DAS_BIND_FUN(length4)>(*this, lib, "length", SideEffects::none, "length4");
-            addExtern<DAS_BIND_FUN(invlength2)>(*this, lib, "invLength", SideEffects::none,"invlength2");
-            addExtern<DAS_BIND_FUN(invlength3)>(*this, lib, "invLength", SideEffects::none,"invlength3");
-            addExtern<DAS_BIND_FUN(invlength4)>(*this, lib, "invLength", SideEffects::none,"invlength4");
-            addExtern<DAS_BIND_FUN(invlengthSq2)>(*this, lib, "invLengthSq", SideEffects::none, "invlengthSq2");
-            addExtern<DAS_BIND_FUN(invlengthSq3)>(*this, lib, "invLengthSq", SideEffects::none, "invlengthSq3");
-            addExtern<DAS_BIND_FUN(invlengthSq4)>(*this, lib, "invLengthSq", SideEffects::none, "invlengthSq4");
-            addExtern<DAS_BIND_FUN(lengthSq2)>(*this, lib, "lengthSq", SideEffects::none, "lengthSq2");
-            addExtern<DAS_BIND_FUN(lengthSq3)>(*this, lib, "lengthSq", SideEffects::none, "lengthSq3");
-            addExtern<DAS_BIND_FUN(lengthSq4)>(*this, lib, "lengthSq", SideEffects::none, "lengthSq4");
-            addExtern<DAS_BIND_FUN(distance3)>(*this, lib, "distance", SideEffects::none, "distance3");
-            addExtern<DAS_BIND_FUN(distanceSq3)>(*this, lib, "distanceSq", SideEffects::none, "distanceSq3");
-            addExtern<DAS_BIND_FUN(invdistance3)>(*this, lib, "invDistance", SideEffects::none, "invdistance3");
-            addExtern<DAS_BIND_FUN(invdistanceSq3)>(*this, lib, "invDistanceSq", SideEffects::none, "invdistanceSq3");
+            addExternEx<float(float2),DAS_BIND_FUN(length2)>(*this, lib, "length", SideEffects::none, "length2");
+            addExternEx<float(float3),DAS_BIND_FUN(length3)>(*this, lib, "length", SideEffects::none, "length3");
+            addExternEx<float(float4),DAS_BIND_FUN(length4)>(*this, lib, "length", SideEffects::none, "length4");
+            addExternEx<float(float2),DAS_BIND_FUN(invlength2)>(*this, lib, "invLength", SideEffects::none,"invlength2");
+            addExternEx<float(float3),DAS_BIND_FUN(invlength3)>(*this, lib, "invLength", SideEffects::none,"invlength3");
+            addExternEx<float(float4),DAS_BIND_FUN(invlength4)>(*this, lib, "invLength", SideEffects::none,"invlength4");
+            addExternEx<float(float2),DAS_BIND_FUN(invlengthSq2)>(*this, lib, "invLengthSq", SideEffects::none, "invlengthSq2");
+            addExternEx<float(float3),DAS_BIND_FUN(invlengthSq3)>(*this, lib, "invLengthSq", SideEffects::none, "invlengthSq3");
+            addExternEx<float(float4),DAS_BIND_FUN(invlengthSq4)>(*this, lib, "invLengthSq", SideEffects::none, "invlengthSq4");
+            addExternEx<float(float2),DAS_BIND_FUN(lengthSq2)>(*this, lib, "lengthSq", SideEffects::none, "lengthSq2");
+            addExternEx<float(float3),DAS_BIND_FUN(lengthSq3)>(*this, lib, "lengthSq", SideEffects::none, "lengthSq3");
+            addExternEx<float(float4),DAS_BIND_FUN(lengthSq4)>(*this, lib, "lengthSq", SideEffects::none, "lengthSq4");
+            addExternEx<float(float3,float3),DAS_BIND_FUN(distance3)>(*this, lib, "distance", SideEffects::none, "distance3");
+            addExternEx<float(float3,float3),DAS_BIND_FUN(distanceSq3)>(*this, lib, "distanceSq", SideEffects::none, "distanceSq3");
+            addExternEx<float(float3,float3),DAS_BIND_FUN(invdistance3)>(*this, lib, "invDistance", SideEffects::none, "invdistance3");
+            addExternEx<float(float3,float3),DAS_BIND_FUN(invdistanceSq3)>(*this, lib, "invDistanceSq", SideEffects::none, "invdistanceSq3");
 
             //double functions
             addExtern<DAS_BIND_FUN(dabs)>(*this, lib, "abs",     SideEffects::none, "dabs");
@@ -257,8 +257,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(sincosF)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosF");
             addExtern<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosD");
 
-            addExtern<DAS_BIND_FUN(reflect)>(*this, lib, "reflect", SideEffects::none);
-            addExtern<DAS_BIND_FUN(refract)>(*this, lib, "refract", SideEffects::modifyArgument);
+            addExternEx<float3(float3,float3),DAS_BIND_FUN(reflect)>(*this, lib, "reflect", SideEffects::none);
+            addExternEx<bool(float3,float3,float,float3&),DAS_BIND_FUN(refract)>(*this, lib, "refract", SideEffects::modifyArgument);
 
             addFunctionCommonConversion<int, float>  (*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);

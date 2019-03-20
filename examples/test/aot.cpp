@@ -61,7 +61,7 @@ namespace das {
                         for ( ; __need_loop_50 ; __need_loop_50 = __j_iterator.next(__context__,j) )
                         {
                             struct body * b2 = &(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/(j,__context__));
-                            float3 dx = (SimPolicy<float3>::Sub((*b).x,(*b2).x,*__context__));
+                            vec4f /*float3*/ dx = (SimPolicy<float3>::Sub((*b).x,(*b2).x,*__context__));
                             float inv_distance = invlength3(dx);
                             float mag = ((inv_distance * inv_distance) * inv_distance);
                             SimPolicy<float3>::SetSub((char *)&((*b).v),(SimPolicy<float3>::MulVecScal(dx,cast<float>::from(((*b2).mass * mag)),*__context__)),*__context__);
@@ -125,7 +125,7 @@ namespace das {
 
         void offset_momentum ( Context * __context__ )
         {
-            float3 px = 0;
+            vec4f /*float3*/ px = v_zero();
             {
                 bool __need_loop_42 = true;
                 das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/);

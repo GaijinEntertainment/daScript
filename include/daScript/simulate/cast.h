@@ -10,6 +10,11 @@ namespace das
     struct cast;
 
     template <typename TT>
+    __forceinline vec4f cast_result ( TT arg ) {
+        return cast<TT>::from(arg);
+    }
+
+    template <typename TT>
     struct cast <TT *> {
         static __forceinline TT * to ( vec4f a )               { return (TT *) v_extract_ptr(v_cast_vec4i((a))); }
         static __forceinline vec4f from ( TT * p )             { return v_cast_vec4f(v_splats_ptr((void *)p)); }
@@ -37,6 +42,12 @@ namespace das
     struct cast <const TT &> {
         static __forceinline const TT & to ( vec4f a )         { return *(const TT *) v_extract_ptr(v_cast_vec4i((a))); }
         static __forceinline vec4f from ( const TT & p )       { return v_cast_vec4f(v_splats_ptr((void *)&p)); }
+    };
+
+    template <>
+    struct cast <vec4f> {
+        static __forceinline vec4f to ( vec4f x )              { return x; }
+        static __forceinline vec4f from ( vec4f x )            { return x; }
     };
 
     template <>

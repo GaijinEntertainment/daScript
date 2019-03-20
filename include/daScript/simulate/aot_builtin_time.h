@@ -37,9 +37,8 @@ namespace das {
         static __forceinline bool Less  ( vec4f a, vec4f b, Context & ) {
             return to_time(a) < to_time(b);
         }
-        static __forceinline vec4f Sub  ( vec4f a, vec4f b, Context & ) {
-            double dt = difftime(to_time(a), to_time(b));
-            return cast<float>::from((float)dt);
+        static __forceinline float Sub  ( vec4f a, vec4f b, Context & ) {
+            return float(difftime(to_time(a), to_time(b)));
         }
     };
 

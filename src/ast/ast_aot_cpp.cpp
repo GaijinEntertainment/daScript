@@ -440,11 +440,27 @@ namespace das {
             }
             return Visitor::visit(let);
         }
+        bool isLocalVec ( const TypeDeclPtr & vtype ) const {
+            return vtype->dim.size()==0 && vtype->isVectorType() && !vtype->ref;
+        }
+        void describeLocalCppType ( const TypeDeclPtr & vtype ) {
+            if ( isLocalVec(vtype) ) {
+                if ( vtype->constant ) ss << "const ";
+                ss << "vec4f /*" << describeCppType(vtype,true) << "*/";
+            } else {
+                ss << describeCppType(vtype,true);
+            }
+        }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
-            ss << describeCppType(var->type,true) << " " << var->name;
+            describeLocalCppType(var->type);
+            ss << " " << var->name;
             if ( !var->init && var->type->canInitWithZero() ) {
-                ss << " = 0";
+                if ( isLocalVec(var->type) ) {
+                    ss << " = v_zero()";
+                } else {
+                    ss << " = 0";
+                }
             } else if ( !var->init && !var->type->canInitWithZero() ) {
                 ss << "; das_zero(" << var->name << ")";
             }
