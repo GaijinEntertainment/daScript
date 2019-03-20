@@ -55,7 +55,7 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
 MAKE_TYPE_FACTORY(Object, Object)
 MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
 
-int AddOne(int a) {
+__noinline int AddOne(int a) {
     return a+1;
 }
 

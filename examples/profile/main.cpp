@@ -4,6 +4,16 @@
 using namespace das;
 #include "test_profile.h"
 
+#define USE_AOT 1
+
+#if USE_AOT
+namespace das {
+    namespace aot {
+        void registerAot ( AotLibrary & aotLib );
+    }
+}
+#endif
+
 TextPrinter tout;
 bool unit_test ( const string & fn ) {
     auto access = make_shared<FsFileAccess>();
@@ -25,6 +35,12 @@ bool unit_test ( const string & fn ) {
                 }
                 return false;
             }
+#if USE_AOT
+            // now, what we get to do is to link AOT
+            AotLibrary aotLib;
+            das::aot::registerAot(aotLib);
+            program->linkCppAot(ctx, aotLib, tout);
+#endif
             // vector of 10000 objects
             vector<Object> objects;
             objects.resize(10000);
@@ -97,7 +113,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
 #if 1
-    unit_test(TEST_PATH "examples/profile/tests/nbodies.das");
+    unit_test(TEST_PATH "examples/profile/tests/native.das");
     Module::Shutdown();
     return 0;
 #endif

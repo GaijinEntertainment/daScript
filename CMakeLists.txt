@@ -311,6 +311,7 @@ examples/profile/main.cpp
 examples/common/fileAccess.h
 examples/profile/test_profile.cpp
 examples/profile/test_profile.h
+examples/profile/aot.cpp
 )
 list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)

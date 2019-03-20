@@ -1,5 +1,5 @@
 // options log=true, logNodes=true, printVarAccess=true, printRef=true
-
+// options logCpp=true
 require testProfile
 
 [sideeffects]
@@ -11,7 +11,9 @@ def testAdds()
 
 [export]
 def test()
+	let count = 0
     profile(20,"native loop") <|
-        testAdds()
+        count = testAdds()
+	assert(10000000==count)
     return true
 

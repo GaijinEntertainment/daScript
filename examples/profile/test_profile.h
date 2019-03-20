@@ -7,4 +7,6 @@ struct Object {
     das::float3   vel;
 };
 
-typedef vector<Object> ObjectArray;
+typedef std::vector<Object> ObjectArray;
+
+int AddOne(int a);
