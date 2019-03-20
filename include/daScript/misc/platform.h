@@ -34,7 +34,7 @@
     #define __forceinline inline __attribute__((always_inline))
 #endif
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(__clang__)
 __forceinline uint32_t __builtin_clz(uint32_t x) {
     unsigned long r = 0;
     _BitScanReverse(&r, x);
