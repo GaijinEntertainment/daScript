@@ -31,16 +31,20 @@ struct Sphere
     radius : float
     radius2 : float
     iRadius : float
+	pad1,pad2 : float
 
 struct Ray
     orig : float3
+	pad1 : float
     dir  : float3
+	pad2 : float
 
 def pointAt(ray:Ray const;t:float)
     return ray.orig + ray.dir*t
 
 struct Hit
     pos    : float3
+	pad    : float
     normal : float3
     t      : float
 
