@@ -160,8 +160,8 @@ namespace das {
             float halfHeight = SimPolicy<float>::Tan(theta / 2.f,*__context__);
             float halfWidth = (aspect * halfHeight);
             that.origin = lookFrom;
-            that.w = normalize4(SimPolicy<float3>::Sub(lookFrom,lookAt,*__context__));
-            that.u = normalize4(cross3(vup,that.w));
+            that.w = normalize3(SimPolicy<float3>::Sub(lookFrom,lookAt,*__context__));
+            that.u = normalize3(cross3(vup,that.w));
             that.v = cross3(that.w,that.u);
             that.lowerLeftCorner = SimPolicy<float3>::Sub((SimPolicy<float3>::Sub((SimPolicy<float3>::Sub(that.origin,(SimPolicy<float3>::MulScalVec(cast<float>::from((halfWidth * focusDist)),that.u,*__context__)),*__context__)),(SimPolicy<float3>::MulScalVec(cast<float>::from((halfHeight * focusDist)),that.v,*__context__)),*__context__)),(SimPolicy<float3>::MulScalVec(cast<float>::from(focusDist),that.w,*__context__)),*__context__);
             that.horizontal = SimPolicy<float3>::MulScalVec(cast<float>::from(((2.f * halfWidth) * focusDist)),that.u,*__context__);
@@ -184,7 +184,7 @@ namespace das {
             return (([&]() -> struct Ray {
                 struct Ray __mks_73; das_zero(__mks_73);
                 __mks_73.orig = (SimPolicy<float3>::Add(that.origin,offset,*__context__));
-                __mks_73.dir = normalize4(SimPolicy<float3>::Sub((SimPolicy<float3>::Sub(SimPolicy<float3>::MadS(that.vertical,cast<float>::from(t),SimPolicy<float3>::MadS(that.horizontal,cast<float>::from(s),that.lowerLeftCorner,*__context__),*__context__),that.origin,*__context__)),offset,*__context__));
+                __mks_73.dir = normalize3(SimPolicy<float3>::Sub((SimPolicy<float3>::Sub(SimPolicy<float3>::MadS(that.vertical,cast<float>::from(t),SimPolicy<float3>::MadS(that.horizontal,cast<float>::from(s),that.lowerLeftCorner,*__context__),*__context__),that.origin,*__context__)),offset,*__context__));
                 return __mks_73;
             })());
         }
@@ -285,13 +285,13 @@ namespace das {
                 scattered = (([&]() -> struct Ray {
                     struct Ray __mks_146; das_zero(__mks_146);
                     __mks_146.orig = rec.pos;
-                    __mks_146.dir = normalize4(SimPolicy<float3>::Sub(target,rec.pos,*__context__));
+                    __mks_146.dir = normalize3(SimPolicy<float3>::Sub(target,rec.pos,*__context__));
                     return __mks_146;
                 })());
                 attenuation = mat.albedo;
                 struct Sphere * s = &(das_global<TDim<struct Sphere,9>,352>(__context__) /*s_Spheres*/(8,__context__));
-                vec4f /*float3*/ sw = normalize4(SimPolicy<float3>::Sub((*s).center,rec.pos,*__context__));
-                vec4f /*float3*/ su = normalize4(cross3((SimPolicy<float>::Abs(v_extract_x(sw) /*x*/,*__context__) > 0.00999999978f) ? v_make_vec4f(0.f,1.f,0.f,0.f) : v_make_vec4f(1.f,0.f,0.f,0.f),sw));
+                vec4f /*float3*/ sw = normalize3(SimPolicy<float3>::Sub((*s).center,rec.pos,*__context__));
+                vec4f /*float3*/ su = normalize3(cross3((SimPolicy<float>::Abs(v_extract_x(sw) /*x*/,*__context__) > 0.00999999978f) ? v_make_vec4f(0.f,1.f,0.f,0.f) : v_make_vec4f(1.f,0.f,0.f,0.f),sw));
                 vec4f /*float3*/ sv = cross3(sw,su);
                 float cosAMax = SimPolicy<float>::Sqrt(SimPolicy<float>::Sat(1.f - (((*s).radius * (*s).radius) * invdistanceSq3(rec.pos,(*s).center)),*__context__),*__context__);
                 vec4f /*float4*/ eps = randomFloat4(cast_vec_ref<int4>::to(das_global<int4,0>(__context__) /*RAND_SEED*/));
@@ -311,7 +311,7 @@ namespace das {
                 })());
                 if ( hitWorld(__context__,das_arg<struct Ray>::pass(ray),0.00100000005f,10000000.f,das_arg<struct Hit>::pass(lightHit),hitID) & (hitID == 8) )
                 {
-                    vec4f /*float3*/ nl = ((dot3(rec.normal,r_in.dir) < 0.f) ? rec.normal : SimPolicy<float3>::Unm(rec.normal,*__context__));
+                    vec4f /*float3*/ nl = ((dot3(rec.normal,r_in.dir) < 0.f) ? vec4f(rec.normal) : SimPolicy<float3>::Unm(rec.normal,*__context__));
                     SimPolicy<float3>::SetAdd((char *)&(outLightE),(SimPolicy<float3>::MulVecScal((SimPolicy<float3>::Mul(mat.albedo,das_global<TDim<struct Material,9>,16>(__context__) /*s_SphereMats*/(8,__context__).emissive,*__context__)),cast<float>::from((SimPolicy<float>::Sat(dot3(l,nl),*__context__) * SimPolicy<float>::Mad(-2.f,cosAMax,2.f,*__context__))),*__context__)),*__context__);
                 };
                 return true;
@@ -322,7 +322,7 @@ namespace das {
                     scattered = (([&]() -> struct Ray {
                         struct Ray __mks_169; das_zero(__mks_169);
                         __mks_169.orig = rec.pos;
-                        __mks_169.dir = normalize4(SimPolicy<float3>::MadS(randomInUnitSphere(cast_vec_ref<int4>::to(das_global<int4,0>(__context__) /*RAND_SEED*/)),cast<float>::from(mat.roughness),refl,*__context__));
+                        __mks_169.dir = normalize3(SimPolicy<float3>::MadS(randomInUnitSphere(cast_vec_ref<int4>::to(das_global<int4,0>(__context__) /*RAND_SEED*/)),cast<float>::from(mat.roughness),refl,*__context__));
                         return __mks_169;
                     })());
                     attenuation = mat.albedo;
@@ -357,7 +357,7 @@ namespace das {
                             scattered = (([&]() -> struct Ray {
                                 struct Ray __mks_187; das_zero(__mks_187);
                                 __mks_187.orig = rec.pos;
-                                __mks_187.dir = normalize4(reflect(r_in.dir,rec.normal));
+                                __mks_187.dir = normalize3(reflect(r_in.dir,rec.normal));
                                 return __mks_187;
                             })());
                         }               else
@@ -365,7 +365,7 @@ namespace das {
                             scattered = (([&]() -> struct Ray {
                                 struct Ray __mks_189; das_zero(__mks_189);
                                 __mks_189.orig = rec.pos;
-                                __mks_189.dir = normalize4(refr);
+                                __mks_189.dir = normalize3(refr);
                                 return __mks_189;
                             })());
                         };
