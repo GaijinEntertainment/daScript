@@ -102,8 +102,8 @@ namespace das
         if ( info->enumType ) {
             hash_value(block, info->enumType);
         }
-        if ( info->annotation ) {
-            auto mangledName = info->annotation->getMangledName();
+        if ( info->annotation_or_name ) {
+            auto mangledName = Module::resolveAnnotation(info)->getMangledName();
             block.write(mangledName.c_str());
         }
         if ( info->firstType ) {

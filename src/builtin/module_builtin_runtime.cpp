@@ -4,8 +4,8 @@
 
 #include "daScript/ast/ast_interop.h"
 
-#include "daScript/simulate/runtime_array.h"
-#include "daScript/simulate/runtime_table.h"
+#include "daScript/simulate/aot_builtin.h"
+
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/bin_serializer.h"
@@ -98,8 +98,8 @@ namespace das
         return arr->capacity;
     }
 
-    void builtin_table_clear ( Table * arr, Context * context ) {
-        table_clear(*context, *arr);
+    void builtin_table_clear ( Table & arr, Context * context ) {
+        table_clear(*context, arr);
     }
 
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args ) {
@@ -133,7 +133,7 @@ namespace das
         addAnnotation(make_shared<UnsafeFunctionAnnotation>());
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
         addExtern<DAS_BIND_FUN(builtin_terminate)> (*this, lib, "terminate", SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk", SideEffects::modifyExternal);
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal);
@@ -151,7 +151,7 @@ namespace das
         // hash
         addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none);
         // table functions
-        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument);
+        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_table_clear");
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none);
         addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", SideEffects::none);
         addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock", SideEffects::modifyArgument);
@@ -164,7 +164,7 @@ namespace das
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile
-        addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal, "builtin_profile");
         addString(lib);
     }
 }

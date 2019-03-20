@@ -4,6 +4,16 @@
 using namespace das;
 #include "test_profile.h"
 
+#define USE_AOT 0
+
+#if USE_AOT
+namespace das {
+    namespace aot {
+        void registerAot ( AotLibrary & aotLib );
+    }
+}
+#endif
+
 TextPrinter tout;
 bool unit_test ( const string & fn ) {
     auto access = make_shared<FsFileAccess>();
@@ -25,6 +35,12 @@ bool unit_test ( const string & fn ) {
                 }
                 return false;
             }
+#if USE_AOT
+            // now, what we get to do is to link AOT
+            AotLibrary aotLib;
+            das::aot::registerAot(aotLib);
+            program->linkCppAot(ctx, aotLib, tout);
+#endif
             // vector of 10000 objects
             vector<Object> objects;
             objects.resize(10000);
@@ -86,6 +102,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
 }
 
 int main(int argc, const char * argv[]) {
+  _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
 #ifdef _MSC_VER
     #define    TEST_PATH "../"
 #else
@@ -95,8 +112,8 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
-#if 0
-    unit_test(TEST_PATH "examples/profile/tests/annotation.das");
+#if 1
+    unit_test(TEST_PATH "examples/profile/tests/nbodies.das");
     Module::Shutdown();
     return 0;
 #endif

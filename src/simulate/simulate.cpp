@@ -382,12 +382,19 @@ namespace das
             throw_error("stack overflow in the initialization script");
             return;
         }
-        for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
-            auto & pv = globalVariables[i];
-            if ( pv.init ) {
-                pv.init->eval(*this);
-            } else {
-                memset ( globals + pv.offset, 0, pv.size );
+        if ( aotInitScript ) {
+            vec4f args[1] = { cast<void *>::from(this) };
+            abiArg = args;
+            abiCMRES = nullptr;
+            aotInitScript->eval(*this);
+        } else {
+            for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
+                auto & pv = globalVariables[i];
+                if ( pv.init ) {
+                    pv.init->eval(*this);
+                } else {
+                    memset ( globals + pv.offset, 0, pv.size );
+                }
             }
         }
         stack.pop(EP,SP);

@@ -5,6 +5,8 @@
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/debug_print.h"
 
+#include "daScript/simulate/sim_policy.h"
+
 namespace das
 {
     // string operations
@@ -114,11 +116,23 @@ namespace das
     }
 
     string to_string_ex ( double dnum ) {
-        TextWriter ss;
-        ss << dnum;
-        if ( ss.str().find_first_of(".e")==string::npos )
-            ss << ".";
-        return ss.str();
+        char buffer[32];
+        memset(buffer, 0, sizeof(buffer));
+        snprintf(buffer, sizeof(buffer), "%.17g", dnum);
+        string stst(buffer);
+        if ( stst.find_first_of(".e")==string::npos )
+            stst += ".";
+        return stst;
+    }
+
+    string to_string_ex ( float dnum ) {
+        char buffer[32];
+        memset(buffer, 0, sizeof(buffer));
+        snprintf(buffer, sizeof(buffer), "%.9g", dnum);
+        string stst(buffer);
+        if ( stst.find_first_of(".e")==string::npos )
+            stst += ".";
+        return stst;
     }
 
     string reportError(const struct LineInfo & at, const string & message, CompilationError erc) {

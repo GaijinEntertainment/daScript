@@ -178,7 +178,7 @@ namespace das
     string debug_type ( TypeInfo * info ) {
         TextWriter stream;
         if ( info->type==Type::tHandle ) {
-            stream << info->annotation->name;
+            stream << Module::resolveAnnotation(info)->name;
         } else if ( info->type==Type::tStructure ) {
             stream << info->structType->name;
         } else if ( info->type==Type::tPointer ) {
@@ -197,7 +197,7 @@ namespace das
         for ( uint32_t i=0; i!=info->dimSize; ++i ) {
             stream << "[" << info->dim[i] << "]";
         }
-        if ( info->ref )
+        if ( info->flags & TypeInfo::flag_ref )
             stream << " &";
         return stream.str();
     }

@@ -5,7 +5,7 @@
 
 namespace das
 {
-    template  <typename FuncT, FuncT fn, typename SimNodeT>
+    template  <typename FuncT, FuncT fn, typename SimNodeT, typename FuncArgT>
     class ExternalFn : public BuiltInFunction {
 
         static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
@@ -23,9 +23,10 @@ namespace das
 #endif
 
     public:
-        ExternalFn(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
+        ExternalFn(const string & name, const ModuleLibrary & lib, const string & cppName = string())
+        : BuiltInFunction(name,cppName) {
             callBased = true;
-            using FunctionTrait = function_traits<FuncT>;
+            using FunctionTrait = function_traits<FuncArgT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
             using Indices = make_index_sequence<nargs>;
             using Arguments = typename FunctionTrait::arguments;
@@ -64,7 +65,8 @@ namespace das
     template  <typename RetT, typename ...Args>
     class InteropFnBase : public BuiltInFunction {
     public:
-        InteropFnBase(const string & name, const ModuleLibrary & lib) : BuiltInFunction(name) {
+        InteropFnBase(const string & name, const ModuleLibrary & lib, const string & cppName = string())
+            : BuiltInFunction(name,cppName) {
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
             for ( size_t argi=0; argi!=args.size(); ++argi ) {
                 auto arg = make_shared<Variable>();
@@ -83,8 +85,8 @@ namespace das
     template  <InteropFunction func, typename RetT, typename ...Args>
     class InteropFn : public InteropFnBase<RetT,Args...> {
     public:
-        InteropFn(const string & name, const ModuleLibrary & lib) 
-            : InteropFnBase<RetT,Args...>(name,lib) {
+        InteropFn(const string & name, const ModuleLibrary & lib, const string & cppName = string())
+            : InteropFnBase<RetT,Args...>(name,lib,cppName) {
             this->callBased = true;
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
@@ -94,16 +96,27 @@ namespace das
     };
 
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
-    __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags ) {
-        if ( !mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>>>(name,lib)->setSideEffects(seFlags)) ) {
+    __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
+                                  const string & cppName = string()) {
+        if ( !mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>, FuncT>>(name,lib,cppName)->setSideEffects(seFlags)) ) {
             DAS_FATAL_LOG("addExtern(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
             DAS_FATAL_ERROR;
         }
     }
 
+    template <typename FuncArgT, typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
+    __forceinline void addExternEx ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
+                                  const string & cppName = string()) {
+        if ( !mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>, FuncArgT>>(name,lib,cppName)->setSideEffects(seFlags)) ) {
+            DAS_FATAL_LOG("addExternEx(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
+            DAS_FATAL_ERROR;
+        }
+    }
+
     template <InteropFunction func, typename RetT, typename ...Args>
-    __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags ) {
-        if ( !mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib)->setSideEffects(seFlags)) ) {
+    __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
+                                   const string & cppName = string() ) {
+        if ( !mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib,cppName)->setSideEffects(seFlags)) ) {
             DAS_FATAL_LOG("addInterop(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
             DAS_FATAL_ERROR;
         }

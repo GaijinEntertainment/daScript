@@ -254,9 +254,10 @@ namespace das {
 
     // built-in function
 
-    BuiltInFunction::BuiltInFunction ( const string & fn ) {
+    BuiltInFunction::BuiltInFunction ( const string & fn, const string & fnCpp ) {
         builtIn = true;
         name = fn;
+        cppName = fnCpp;
     }
 
     // expression
@@ -1459,7 +1460,10 @@ namespace das {
             }
             ist.second = vis.visit(pst);
         }
+        // real things
+        vis.preVisitProgramBody(this);
         // globals
+        vis.preVisitGlobalLetBody(this);
         for ( auto & it : thisModule->globals ) {
             auto & var = it.second;
             vis.preVisitGlobalLet(var);
@@ -1470,6 +1474,7 @@ namespace das {
             }
             var = vis.visitGlobalLet(var);
         }
+        vis.visitGlobalLetBody(this);
         // generics
         if ( visitGenerics ) {
             for ( auto & fn : thisModule->generics ) {

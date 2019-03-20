@@ -90,6 +90,8 @@ namespace das
         bool canDelete() const;
         bool isPod() const;
         bool isWorkhorseType() const; // we can return this, or pass this
+        bool isPolicyType() const;
+        bool isVecPolicyType() const;
         bool isReturnType() const;
         bool isCtorType() const;
         bool isRange() const;
@@ -100,6 +102,7 @@ namespace das
         bool isVectorType() const;
         Type getVectorBaseType() const;
         int getVectorDim() const;
+        bool canInitWithZero() const;
         static Type getVectorType ( Type baseType, int dim );
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( const vector<uint8_t> & fields );
@@ -156,6 +159,8 @@ namespace das
     template<> struct ToBasicType<urange>       { enum { type = Type::tURange }; };
     template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
     template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
+    template<> struct ToBasicType<Array>        { enum { type = Type::tArray }; };
+    template<> struct ToBasicType<Table>        { enum { type = Type::tTable }; };
     template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
     template<> struct ToBasicType<Func>         { enum { type = Type::tFunction }; };
     template<> struct ToBasicType<Lambda>       { enum { type = Type::tLambda }; };
@@ -295,12 +300,16 @@ namespace das
         return typeFactory<TT>::make(ctx);
     }
 
-#define MAKE_TYPE_FACTORY(TYPE,CTYPE)                                        \
-    template <>                                                                \
+#define MAKE_TYPE_FACTORY(TYPE,CTYPE)                                       \
+    template <>                                                             \
     struct das::typeFactory<CTYPE> {                                        \
-        static das::TypeDeclPtr make(const das::ModuleLibrary & library ) {    \
-            return library.makeHandleType(#TYPE);                            \
-        }                                                                    \
+        static das::TypeDeclPtr make(const das::ModuleLibrary & library ) { \
+            return library.makeHandleType(#TYPE);                           \
+        }                                                                   \
+    };                                                                      \
+    template <>                                                             \
+    struct das::typeName<CTYPE> {                                           \
+        static string name() { return #CTYPE; }                             \
     };
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
@@ -337,7 +346,7 @@ namespace das
     };
 
     struct Annotation : BasicAnnotation, enable_shared_from_this<Annotation> {
-        Annotation ( const string & n ) : BasicAnnotation(n) {}
+        Annotation ( const string & n, const string & cpn = "" ) : BasicAnnotation(n,cpn) {}
         virtual ~Annotation() {}
         virtual void seal( Module * m ) { module = m; }
         virtual bool rtti_isHandledTypeAnnotation() const { return false; }
@@ -460,10 +469,11 @@ namespace das
     };
 
     struct TypeAnnotation : Annotation {
-        TypeAnnotation ( const string & n ) : Annotation(n) {}
+        TypeAnnotation ( const string & n, const string & cpn = "" ) : Annotation(n,cpn) {}
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const {
             DAS_ASSERTF(p, "can only clone real type %s", name.c_str());
             p->name = name;
+            p->cppName = cppName;
             return p;
         }
         virtual bool canMove() const { return true; }
@@ -482,6 +492,10 @@ namespace das
         virtual TypeDeclPtr makeSafeFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const { return nullptr; }
         virtual TypeDeclPtr makeIteratorType () const { return nullptr; }
+        // aot
+        virtual void aotPreVisitGetField ( TextWriter &, const string & ) { }
+        virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) { ss << "." << fieldName; }
+        // simulate
         virtual SimNode * simulateDelete ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateDeletePtr ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateCopy ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
@@ -902,7 +916,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isConstant() const override { return true; }
         Type    baseType;
-        vec4f  value;
+        vec4f   value;
       };
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -911,7 +925,7 @@ namespace das
     template <typename TT, typename ExprConstExt>
     struct ExprConstT : ExprConst {
         ExprConstT ( TT val, Type bt ) : ExprConst(bt) { value = cast<TT>::from(val); }
-        ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) { value = cast<TT>::from(val); }
+        ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) { value = v_zero(); *((TT *)&value) = val; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
             auto cexpr = clonePtr<ExprConstExt>(expr);
             Expression::clone(cexpr);
@@ -1446,6 +1460,7 @@ namespace das
         union {
             struct {
                 bool    builtIn : 1;
+                bool    policyBased : 1;
                 bool    callBased : 1;
                 bool    hasReturn: 1;
                 bool    copyOnReturn : 1;
@@ -1457,6 +1472,7 @@ namespace das
                 bool    knownSideEffects : 1;
                 bool    hasToRunAtCompileTime : 1;
                 bool    unsafe : 1;
+                bool    hasMakeBlock : 1;
             };
             uint32_t flags = 0;
         };
@@ -1472,7 +1488,9 @@ namespace das
 
     class BuiltInFunction : public Function {
     public:
-        BuiltInFunction ( const string & fn );
+        BuiltInFunction ( const string & fn, const string & fnCpp );
+    public:
+        string cppName;
     };
 
     struct Error {
@@ -1506,6 +1524,7 @@ namespace das
         bool compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
         static void Shutdown();
+        static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
     public:
         template <typename TT>
         __forceinline void addCall ( const string & fnName ) {
@@ -1609,6 +1628,10 @@ namespace das
         map<string,EnumInfo *>      emn2e;
     };
 
+    // this is how we make node
+    typedef function<SimNode * (Context &)> AotFactory;
+    typedef map<uint64_t,AotFactory> AotLibrary;
+
     class Program : public enable_shared_from_this<Program> {
     public:
         Program();
@@ -1643,12 +1666,16 @@ namespace das
         void allocateStack(TextWriter & logs);
         string dotGraph();
         bool simulate ( Context & context, TextWriter & logs );
+        void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
         void visit(Visitor & vis, bool visitGenerics = false);
+        void setPrintFlags();
+        void aotCpp ( TextWriter & logs );
+        void registerAotCpp ( TextWriter & logs, Context & context );
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {
@@ -1707,6 +1734,8 @@ namespace das
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
         virtual StructurePtr visit ( Structure * var ) { return var->shared_from_this(); }
+        // REAL THINGS (AFTER STRUCTS AND ENUMS)
+        virtual void preVisitProgramBody ( Program * prog ) {}
         // FUNCTON
         virtual void preVisit ( Function * ) {}
         virtual FunctionPtr visit ( Function * that ) { return that->shared_from_this(); }
@@ -1736,10 +1765,12 @@ namespace das
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) {}
         virtual ExpressionPtr visitLetInit ( ExprLet *, const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
         // GLOBAL LET
+        virtual void preVisitGlobalLetBody ( Program * prog ) {}
         virtual void preVisitGlobalLet ( const VariablePtr & ) {}
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) { return var; }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * ) {}
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
+        virtual void visitGlobalLetBody ( Program * prog ) {}
         // STRING BUILDER
         virtual void preVisit ( ExprStringBuilder * expr ) {}
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) {}

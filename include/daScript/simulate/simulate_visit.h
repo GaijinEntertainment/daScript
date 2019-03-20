@@ -145,7 +145,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_GetLocalR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(GetLocalR2V_TT);
+        V_OP_TT(GetLocalR2V);
         V_SP(stackTop);
         V_END();
     }
@@ -170,7 +170,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_CopyLocal2LocalT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(CopyLocal2LocalT);
+        V_OP_TT(CopyLocal2Local);
         V_SP_EX(stackTopLeft);
         V_SP_EX(stackTopRight);
         V_END();
@@ -179,7 +179,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_SetLocalRefT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(SetLocalRefT);
+        V_OP_TT(SetLocalRef);
         V_SP(stackTop);
         V_SUB(value);
         V_END();
@@ -188,7 +188,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_SetLocalValueT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(SetLocalValueT);
+        V_OP_TT(SetLocalValue);
         V_SP(stackTop);
         V_SUB(value);
         V_END();
@@ -197,7 +197,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_SetCMResRefT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(SetCMResRefT);
+        V_OP_TT(SetCMResRef);
         V_SP(offset);
         V_SUB(value);
         V_END();
@@ -206,7 +206,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_SetCMResValueT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(SetCMResValueT);
+        V_OP_TT(SetCMResValue);
         V_SP(offset);
         V_SUB(value);
         V_END();
@@ -215,7 +215,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_SetLocalRefRefOffT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(SetLocalRefRefOffT);
+        V_OP_TT(SetLocalRefRefOff);
         V_SP(stackTop);
         V_SP(offset);
         V_SUB(value);
@@ -225,7 +225,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_SetLocalValueRefOffT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(SetLocalValueRefOffT);
+        V_OP_TT(SetLocalValueRefOff);
         V_SP(stackTop);
         V_SP(offset);
         V_SUB(value);
@@ -323,7 +323,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_CopyRefValueT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(CopyRefValueT);
+        V_OP_TT(CopyRefValue);
         V_SUB(l);
         V_SUB(r);
         V_END();

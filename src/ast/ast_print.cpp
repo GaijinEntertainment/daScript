@@ -309,7 +309,7 @@ namespace das {
         }
         virtual void preVisitCatch ( ExprTryCatch * tc, Expression * block ) override {
             Visitor::preVisitCatch(tc, block);
-            ss << string(tab,'\t') << "catch\n";
+            ss << string(tab,'\t') << "recover\n";
         }
     // for
         virtual void preVisit ( ExprFor * ffor ) override {
@@ -703,6 +703,11 @@ namespace das {
         int					lastNewLine = -1;
         int                 tab = 0;
     };
+
+    void Program::setPrintFlags() {
+        SetPrinterFlags flags;
+        visit(flags);
+    }
 
     template <typename TT>
     __forceinline TextWriter&  print ( TextWriter& stream, const TT & value ) {

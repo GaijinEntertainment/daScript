@@ -3,6 +3,16 @@
 
 using namespace das;
 
+#define USE_AOT 0
+
+#if USE_AOT
+namespace das {
+    namespace aot {
+        void registerAot ( AotLibrary & aotLib );
+    }
+}
+#endif
+
 bool g_reportCompilationFailErrors = false;
 
 TextPrinter tout;
@@ -68,19 +78,23 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            Context ctxBase;
-            if ( !program->simulate(ctxBase, tout) ) {
+            Context ctx;
+            if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
                     tout << reportError(err.at, err.what, err.cerr );
                 }
                 return false;
             }
-            // note: copy of the context is here for testing purposes only
-            //          that way we test context-copying functionality every time
-            Context ctx(ctxBase);
+#if USE_AOT
+            // now, what we get to do is to link AOT
+            AotLibrary aotLib;
+            das::aot::registerAot(aotLib);
+            program->linkCppAot(ctx, aotLib, tout);
+#endif
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
+                ctx.runInitScript();    // this is here for testing purposes only
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
                 if ( auto ex = ctx.getException() ) {
                     tout << "exception: " << ex << "\n";
@@ -183,6 +197,7 @@ bool run_exception_tests( const string & path ) {
 }
 
 int main() {
+  _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
 #ifdef _MSC_VER
     #define    TEST_PATH "../"
 #else
@@ -198,8 +213,8 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    // unit_test(TEST_PATH "examples/test/hello_world.das");
-    unit_test(TEST_PATH "examples/test/unit_tests/handle.das");
+    unit_test(TEST_PATH "examples/test/hello_world.das");
+    // unit_test(TEST_PATH "examples/test/unit_tests/block.das");
     Module::Shutdown();
     return 0;
 #endif

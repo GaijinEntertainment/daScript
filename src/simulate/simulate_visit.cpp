@@ -345,7 +345,7 @@ namespace das {
 
     SimNode * SimNode_NullCoalescingRef::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(NullCoalescingRef);
+        V_OP(NullCoalescingRef);
         V_SUB(subexpr);
         V_SUB(value);
         V_END();
@@ -370,6 +370,13 @@ namespace das {
     SimNode * SimNode_ConstValue::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(ConstValue);
+        V_ARG(value);
+        V_END();
+    }
+
+    SimNode * SimNode_ConstString::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ConstString);
         V_ARG(value);
         V_END();
     }
@@ -558,7 +565,7 @@ namespace das {
         vis.op(op);
         V_SUB(arguments[0]);
         V_SUB(arguments[1]);
-        V_SUB(arguments[3]);
+        V_SUB(arguments[2]);
         V_END();
     }
 

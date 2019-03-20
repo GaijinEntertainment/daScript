@@ -2,7 +2,6 @@
 
 #include "daScript/simulate/simulate.h"
 
-
 namespace das {
 
     struct SimPrint : SimVisitor {
@@ -32,9 +31,14 @@ namespace das {
         virtual void cr () override {
             CR = true;
         }
-        virtual void op ( const char * name ) override {
+        virtual void op ( const char * name, size_t typeSize, const string & typeName ) override {
             SimVisitor::op(name);
             ss << name;
+            if ( !typeName.empty() ) {
+                ss << "_TT<" << typeName << ">";
+            } else if ( typeSize ) {
+                ss << "_TT<(" << typeSize << ")>";
+            }
         }
         virtual void sp ( uint32_t stackTop, const char * name ) override {
             SimVisitor::sp(stackTop,name);

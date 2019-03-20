@@ -794,6 +794,52 @@ namespace das
         }
     }
 
+    bool TypeDecl::canInitWithZero() const {
+        if ( dim.size() )
+            return false;
+        if ( isVectorType() )
+            return true;
+        switch ( baseType ) {
+            case Type::tBool:
+            case Type::tInt64:
+            case Type::tUInt64:
+            case Type::tInt:
+            case Type::tUInt:
+            case Type::tFloat:
+            case Type::tDouble:
+            case Type::tString:
+            case Type::tPointer:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool TypeDecl::isPolicyType() const {
+        if ( dim.size() )
+            return true;
+        switch ( baseType ) {
+            case Type::tVoid:
+            case Type::tEnumeration:
+            case Type::tBool:
+            case Type::tInt64:
+            case Type::tUInt64:
+            case Type::tInt:
+            case Type::tUInt:
+            case Type::tFloat:
+            case Type::tDouble:
+                return false;
+            default:
+                return true;
+        }
+    }
+
+    bool TypeDecl::isVecPolicyType() const {
+        if ( dim.size() )
+            return false;
+        return isPolicyType();
+    }
+
     bool TypeDecl::isReturnType() const {
         if ( isGoodBlockType() ) {
             return false;

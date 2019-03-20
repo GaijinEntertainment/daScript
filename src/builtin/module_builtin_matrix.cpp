@@ -8,6 +8,8 @@
 
 #include "daScript/simulate/simulate_visit_op.h"
 
+#include "daScript/simulate/aot_builtin_matrix.h"
+
 namespace das {
     template <typename VecT, int RowC>
     class MatrixAnnotation : public TypeAnnotation {
@@ -81,6 +83,14 @@ namespace das {
             pt->ref = true;
             return pt;
         }
+        // aot
+        virtual void aotPreVisitGetField ( TextWriter &, const string & ) override {
+
+        }
+        virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) override {
+            ss << ".m[" << TypeDecl::getMaskFieldIndex(fieldName[0]) << "]";
+        }
+        // simulate
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return context.code->makeNode<SimNode_CopyValue<ThisMatrix>>(at, l, r);
         }
@@ -258,10 +268,10 @@ namespace das {
         addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
         addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
         // 4x4
-        addExtern<DAS_BIND_FUN(float4x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument);
-        addExtern<DAS_BIND_FUN(float_4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation", SideEffects::none);
+        addExtern<DAS_BIND_FUN(float4x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument, "float4x4_identity");
+        addExtern<DAS_BIND_FUN(float_4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation", SideEffects::none, "float_4x4_translation");
         // 3x4
-        addExtern<DAS_BIND_FUN(float3x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument);
-        addExtern<DAS_BIND_FUN(float3x4_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*", SideEffects::none);
+        addExtern<DAS_BIND_FUN(float3x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument,"float3x4_identity");
+        addExtern<DAS_BIND_FUN(float3x4_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*", SideEffects::none,"float3x4_mul");
     }
 }

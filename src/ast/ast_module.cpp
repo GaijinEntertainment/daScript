@@ -4,6 +4,19 @@
 
 namespace das {
 
+    bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
+        auto at = name.find("::");
+        if ( at!=string::npos ) {
+            moduleName = name.substr(0,at);
+            funcName = name.substr(at+2);
+            return true;
+        } else {
+            moduleName = "*";
+            funcName = name;
+            return false;
+        }
+    }
+
     // ANNOTATION
 
     const AnnotationArgument * AnnotationArgumentList::find ( const string & name, Type type ) const {
@@ -22,6 +35,25 @@ namespace das {
 
     intptr_t Module::Karma = 0;
     Module * Module::modules = nullptr;
+
+    TypeAnnotation * Module::resolveAnnotation ( TypeInfo * info ) {
+        intptr_t ann = (intptr_t) (info->annotation_or_name);
+        if ( ann & 1 ) {
+            string name = (char *) ( ann & ~1 );
+            string moduleName, annName;
+            splitTypeName(name, moduleName, annName);
+            info->annotation_or_name = nullptr;
+            for ( auto pm = Module::modules; pm!=nullptr; pm=pm->next ) {
+                if ( pm->name == moduleName ) {
+                    if ( auto annT = pm->findAnnotation(annName) ) {
+                        info->annotation_or_name = (TypeAnnotation *) annT.get();
+                    }
+                    break;
+                }
+            }
+        }
+        return info->annotation_or_name;
+    }
 
     void Module::Shutdown() {
         auto m = modules;
@@ -240,19 +272,6 @@ namespace das {
 
 
     // MODULE LIBRARY
-
-    bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
-        auto at = name.find("::");
-        if ( at!=string::npos ) {
-            moduleName = name.substr(0,at);
-            funcName = name.substr(at+2);
-            return true;
-        } else {
-            moduleName = "*";
-            funcName = name;
-            return false;
-        }
-    }
 
     void ModuleLibrary::addBuiltInModule () {
         addModule(Module::require("$"));

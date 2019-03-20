@@ -58,6 +58,7 @@ src/ast/ast_typedecl.cpp
 src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
+src/ast/ast_aot_cpp.cpp
 src/ast/ast_plot.cpp
 src/ast/ast_infer_type.cpp
 src/ast/ast_allocate_stack.cpp
@@ -82,8 +83,6 @@ SOURCE_GROUP_FILES("ast" AST_SRC)
 SET(BUILTIN_SRC
 src/builtin/module_builtin.h
 src/builtin/module_builtin.cpp
-src/builtin/module_builtin.cpp.inc
-src/builtin/module_builtin_int64.cpp
 src/builtin/module_builtin_runtime.cpp
 src/builtin/module_builtin_vector.cpp
 src/builtin/module_builtin_matrix.cpp
@@ -100,6 +99,10 @@ list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 XXD(src/builtin/builtin.das)
 
+IF(MSVC)
+set_source_files_properties(src/builtin/module_builtin_vector.cpp PROPERTIES COMPILE_FLAGS /bigobj)
+ENDIF()
+
 SET(MISC_SRC
 include/daScript/misc/enums.h
 include/daScript/misc/function_traits.h
@@ -109,6 +112,7 @@ include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
 include/daScript/misc/rangetype.h
 include/daScript/misc/string_writer.h
+include/daScript/misc/type_name.h
 src/misc/string_writer.cpp
 )
 list(SORT MISC_SRC)
@@ -127,6 +131,7 @@ src/simulate/runtime_profile.cpp
 src/simulate/simulate.cpp
 src/simulate/simulate_visit.cpp
 src/simulate/simulate_print.cpp
+src/simulate/simulate_fn_hash.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h
@@ -153,6 +158,12 @@ include/daScript/simulate/for_each.h
 include/daScript/simulate/bind_enum.h
 include/daScript/simulate/bin_serializer.h
 src/simulate/bin_serializer.cpp
+include/daScript/simulate/aot.h
+include/daScript/simulate/aot_builtin.h
+include/daScript/simulate/aot_builtin_math.h
+include/daScript/simulate/aot_builtin_matrix.h
+include/daScript/simulate/aot_builtin_random.h
+include/daScript/simulate/aot_builtin_time.h
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
@@ -188,6 +199,7 @@ ADD_DEPENDENCIES(libDaScriptJson libDaScript)
 
 SET(PATH_TRACER_MAIN_SRC
 examples/pathTracer/main.cpp
+examples/pathTracer/aot.cpp
 examples/common/fileAccess.h
 examples/pathTracer/toy_path_tracer.das
 examples/pathTracer/toy_random.das
@@ -273,6 +285,7 @@ examples/common/fileAccess.h
 examples/test/test_handles.cpp
 examples/test/test_enum.cpp
 examples/test/module_unitTest.h
+examples/test/aot.cpp
 )
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)
@@ -298,6 +311,7 @@ examples/profile/main.cpp
 examples/common/fileAccess.h
 examples/profile/test_profile.cpp
 examples/profile/test_profile.h
+examples/profile/aot.cpp
 )
 list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)

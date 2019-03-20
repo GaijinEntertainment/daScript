@@ -15,6 +15,12 @@ namespace das
         __forceinline bool operator == ( const vec2<TT> & vec ) const {
             return x==vec.x && y==vec.y;
         }
+        __forceinline vec2() = default;
+        __forceinline vec2(const vec2 &) = default;
+        __forceinline vec2(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)) {}
+        __forceinline vec2(TT X, TT Y) : x(X), y(Y) {}
+        __forceinline vec2(TT t) : x(t), y(t) {}
+        __forceinline operator vec4f() const { return v_ldu_half((float *)this); };
     };
 
     template <typename TT>
@@ -28,6 +34,13 @@ namespace das
         __forceinline bool operator == ( const vec3<TT> & vec ) const {
             return x==vec.x && y==vec.y && z==vec.z;
         }
+        __forceinline vec3() = default;
+        __forceinline vec3(const vec3 &) = default;
+        __forceinline vec3(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)), z(v_extract_z(t)) {}
+        __forceinline vec3(TT X, TT Y, TT Z) : x(X), y(Y), z(Z) {}
+        __forceinline vec3(TT t) : x(t), y(t), z(t) {}
+        __forceinline operator vec4f() const { return v_ldu((float *)this); };
+
     };
 
     template <typename TT>
@@ -41,6 +54,12 @@ namespace das
         __forceinline bool operator == ( const vec4<TT> & vec ) const {
             return x==vec.x && y==vec.y && z==vec.z && w==vec.w;
         }
+        __forceinline vec4() = default;
+        __forceinline vec4(const vec4 &) = default;
+        __forceinline vec4(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)), z(v_extract_z(t)), w(v_extract_w(t)) {}
+        __forceinline vec4(TT X, TT Y, TT Z, TT W) : x(X), y(Y), z(Z), w(W) {}
+        __forceinline vec4(TT t) : x(t), y(t), z(t), w(t) {}
+        __forceinline operator vec4f() const { return v_ldu((float *)this); };
     };
 
     typedef vec2<float> float2;

@@ -79,7 +79,7 @@ namespace das {
         }
         info->type = type->baseType;
         info->dimSize = (uint32_t) type->dim.size();
-        info->annotation = type->annotation.get();
+        info->annotation_or_name = type->annotation.get();
         if ( info->dimSize ) {
             info->dim = (uint32_t *) debugInfo->allocate(sizeof(uint32_t) * info->dimSize );
             for ( uint32_t i=0; i != info->dimSize; ++i ) {
@@ -96,12 +96,17 @@ namespace das {
         } else {
             info->enumType = nullptr;
         }
-        info->ref = type->ref;
-        info->refType = type->isRefType();
+        info->flags = 0;
+        if (type->ref)
+            info->flags |= TypeInfo::flag_ref;
+        if (type->isRefType())
+            info->flags |= TypeInfo::flag_refType;
         if ( type->isRefType() )
-            info->ref = false;
-        info->canCopy = type->canCopy();
-        info->isPod = type->isPod();
+            info->flags &= ~TypeInfo::flag_ref;
+        if (type->canCopy())
+            info->flags |= TypeInfo::flag_canCopy;
+        if (type->isPod())
+            info->flags |= TypeInfo::flag_isPod;
         if ( type->firstType ) {
             info->firstType = makeTypeInfo(nullptr, type->firstType);
         } else {

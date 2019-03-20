@@ -349,7 +349,7 @@ namespace das
     template <typename OT>
     struct ManagedValueAnnotation : TypeAnnotation {
         static_assert(sizeof(OT)<=sizeof(vec4f), "value types have to fit in ABI");
-        ManagedValueAnnotation(const string & n) : TypeAnnotation(n) {}
+        ManagedValueAnnotation(const string & n, const string & cpn = string()) : TypeAnnotation(n,cpn) {}
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }

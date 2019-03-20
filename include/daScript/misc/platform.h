@@ -66,3 +66,5 @@ inline void das_aligned_free16(void *ptr) {return delete[] (vec4f*)ptr; }
 #ifndef DAS_ASSERTF
 #define DAS_ASSERTF(a, msg, ...)   assert(a && msg)
 #endif
+
+

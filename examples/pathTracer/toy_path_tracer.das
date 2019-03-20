@@ -1,4 +1,4 @@
-// options log=true, logNodes=true
+options logCpp=true
 
 require math
 require PathTracerHelper
@@ -31,16 +31,20 @@ struct Sphere
     radius : float
     radius2 : float
     iRadius : float
+	pad1,pad2 : float
 
 struct Ray
     orig : float3
+	pad1 : float
     dir  : float3
+	pad2 : float
 
 def pointAt(ray:Ray const;t:float)
     return ray.orig + ray.dir*t
 
 struct Hit
     pos    : float3
+	pad    : float
     normal : float3
     t      : float
 
@@ -53,25 +57,25 @@ struct Camera
     lensRadius      : float
 
 def Camera(lookFrom,lookAt,vup:float3;vfov,aspect,aperture,focusDist:float)
-    let this : Camera
-    this.lensRadius = aperture / 2.
+    let that : Camera
+    that.lensRadius = aperture / 2.
     let theta = vfov * PI / 180.
     let halfHeight = tan(theta / 2.)
     let halfWidth = aspect * halfHeight
-    this.origin = lookFrom
-    this.w = normalize(lookFrom - lookAt)
-    this.u = normalize(cross(vup, this.w))
-    this.v = cross(this.w, this.u)
-    this.lowerLeftCorner = this.origin - halfWidth*focusDist*this.u - halfHeight*focusDist*this.v - focusDist*this.w
-    this.horizontal = 2. * halfWidth * focusDist * this.u
-    this.vertical = 2. * halfHeight * focusDist * this.v
-    return this
+    that.origin = lookFrom
+    that.w = normalize(lookFrom - lookAt)
+    that.u = normalize(cross(vup, that.w))
+    that.v = cross(that.w, that.u)
+    that.lowerLeftCorner = that.origin - halfWidth*focusDist*that.u - halfHeight*focusDist*that.v - focusDist*that.w
+    that.horizontal = 2. * halfWidth * focusDist * that.u
+    that.vertical = 2. * halfHeight * focusDist * that.v
+    return that
 
-def getRay(this:Camera;s,t:float)
-    let rd = this.lensRadius * randomInUnitDisk(RAND_SEED)
-    let offset = mad(this.u,rd.x,this.v*rd.y)
-    return [[Ray orig = this.origin + offset,
-        dir = normalize(mad(this.vertical,t,mad(this.horizontal,s,this.lowerLeftCorner)) - this.origin - offset) ]]
+def getRay(that:Camera;s,t:float)
+    let rd = that.lensRadius * randomInUnitDisk(RAND_SEED)
+    let offset = mad(that.u,rd.x,that.v*rd.y)
+    return [[Ray orig = that.origin + offset,
+        dir = normalize(mad(that.vertical,t,mad(that.horizontal,s,that.lowerLeftCorner)) - that.origin - offset) ]]
 
 enum Type
     Lambert
@@ -129,9 +133,10 @@ def hitSpheres(r:Ray const;tMin,tMax:float;outHit:Hit)
                 hitT = t
         ++ i
     if id != -1
-        outHit = [[Hit pos = pointAt(r,hitT),
-            normal = (outHit.pos - s_Spheres[id].center) * s_Spheres[id].iRadius,
-            t = hitT]]
+        let atPos = pointAt(r,hitT)
+        outHit = [[Hit pos = atPos,
+            normal = (atPos - s_Spheres[id].center) * s_Spheres[id].iRadius,
+        t = hitT]]
     return id
 
 def hitWorld(r:Ray const;tMin,tMax:float;outHit:Hit;outID:int&)

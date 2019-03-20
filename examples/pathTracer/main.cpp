@@ -7,15 +7,25 @@
 using namespace std;
 using namespace das;
 
+#define USE_AOT 1
+
+#if USE_AOT
+namespace das {
+    namespace aot {
+        void registerAot ( AotLibrary & aotLib );
+    }
+}
+#endif
+
 uint8_t LinearToSRGB ( float x ) {
     x = max(x, 0.0f);
     x = max(1.055f * (float)pow(x, 0.416666667f) - 0.055f, 0.0f);
     return (uint8_t) min((unsigned int)(x * 255.9f), 255u);
 }
 
-void saveTga ( const char * fileName, Array * arr, int width, int height, Context * context ) {
-    if ( arr->size != uint32_t(width*height) ) {
-        context->throw_error_ex("back buffer size mismatch %ix%i vs %i", width, height, arr->size );
+void saveTga ( const char * fileName, Array & arr, int width, int height, Context * context ) {
+    if ( arr.size != uint32_t(width*height) ) {
+        context->throw_error_ex("back buffer size mismatch %ix%i vs %i", width, height, arr.size );
     }
     FILE * f = fopen ( fileName, "wb" );
     if ( !f ) {
@@ -36,7 +46,7 @@ void saveTga ( const char * fileName, Array * arr, int width, int height, Contex
         0 };
     fwrite ( header, 1, sizeof(header), f);
     unique_ptr<uint8_t[]> bytes ( new uint8_t[width * height * 4] );
-    float3 * bb = (float3 *) arr->data;
+    float3 * bb = (float3 *) arr.data;
     for ( int i=0; i != width*height; ++i ) {
         bytes[i*4+0] = LinearToSRGB(bb[i].z);
         bytes[i*4+1] = LinearToSRGB(bb[i].y);
@@ -90,6 +100,12 @@ bool unit_test ( const string & fn ) {
                 }
                 return false;
             }
+#if USE_AOT
+            // now, what we get to do is to link AOT
+            AotLibrary aotLib;
+            das::aot::registerAot(aotLib);
+            program->linkCppAot(ctx, aotLib, tout);
+#endif
 #if 1
             int width = 1280;
             int height = 720;
@@ -146,7 +162,7 @@ bool unit_test ( const string & fn ) {
                 << "took " << dta << " sec, "
                 << "total " << mrays << " mrays, "
                 << (mrays / dta) << " mrays/s\n";
-            saveTga("path_tracer.tga", &arr, width, height, &ctx);
+            saveTga("path_tracer.tga", arr, width, height, &ctx);
             return true;
 #else
             if ( auto fnTest = ctx.findFunction("test") ) {
@@ -175,7 +191,8 @@ bool unit_test ( const string & fn ) {
 
 
 int main() {
-#ifdef _MSC_VER
+  _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
+    #ifdef _MSC_VER
 #define    TEST_PATH "../"
 #else
 #define TEST_PATH "../../"

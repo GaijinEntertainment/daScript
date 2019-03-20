@@ -290,7 +290,7 @@ namespace das {
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr,var,last);
             if ( inStruct ) return;
-            auto sz = var->type->getSizeOf();
+            uint32_t sz = var->type->ref ? sizeof(void *) : var->type->getSizeOf();
             if ( var->aliasCMRES ) {
                 if ( log ) {
                     logs << "\tCR\t" << sz
@@ -330,6 +330,9 @@ namespace das {
             if ( log ) {
                 logs << "\t" << expr->stackTop << "\t" << sz
                 << "\tmake block " << expr->type->describe() << ", line " << expr->at.line << "\n";
+            }
+            if ( func ) {
+                func->hasMakeBlock = true;
             }
         }
     // ExprAscend

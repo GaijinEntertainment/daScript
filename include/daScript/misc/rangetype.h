@@ -7,6 +7,9 @@ namespace das
         TT  from;   //  [from,to) range
         TT  to;
 
+        RangeType() {}
+        RangeType( TT f, TT t ) : from(f), to(t) {}
+
         template <typename AP>
         __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const RangeType<TT> & vec) {
             stream << vec.from << "," << vec.to;

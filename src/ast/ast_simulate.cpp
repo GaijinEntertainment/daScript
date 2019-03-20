@@ -658,7 +658,7 @@ namespace das
 
     SimNode * ExprConstString::simulate (Context & context) const {
         char * str = context.code->allocateString(text);
-        return context.code->makeNode<SimNode_ConstValue>(at,cast<char *>::from(str));
+        return context.code->makeNode<SimNode_ConstString>(at,str);
     }
 
     SimNode * ExprStaticAssert::simulate (Context &) const {
@@ -1049,7 +1049,6 @@ namespace das
                 return context.code->makeNode<SimNode_Swizzle>(at, simV, fs);
             }
         } else {
-
             return trySimulate(context, 0, r2v ? type->baseType : Type::none);
         }
     }
@@ -1722,6 +1721,34 @@ namespace das
                 logs << "\n\n";
             }
         }
+        if (options.getOption("logCpp")) {
+            aotCpp(logs);
+            registerAotCpp(logs,context);
+        }
         return errors.size() == 0;
+    }
+
+    void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
+        for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
+            SimFunction & fn = context.functions[fni];
+            uint64_t semHash = getSemanticHash(fn.code);
+            auto it = aotLib.find(semHash);
+            if ( it != aotLib.end() ) {
+                fn.code = (it->second)(context);
+                logs << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+            } else {
+                 logs << "NOT FOUND " << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+            }
+        }
+        if ( context.totalVariables ) {
+            uint64_t semHash = context.getInitSemanticHash();
+            auto it = aotLib.find(semHash);
+            if ( it != aotLib.end() ) {
+                context.aotInitScript = (it->second)(context);
+                logs << "INIT SCRIPT AOT=0x" << HEX << semHash << DEC << "\n";
+            } else {
+                logs << "INIT SCRIPT NOT FOUND, AOT=0x" << HEX << semHash << DEC << "\n";
+            }
+        }
     }
 }

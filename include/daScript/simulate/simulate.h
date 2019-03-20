@@ -2,11 +2,11 @@
 
 #include <setjmp.h>
 #include "daScript/misc/vectypes.h"
+#include "daScript/misc/type_name.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/simulate/cast.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_info.h"
-#include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/heap.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
@@ -99,7 +99,7 @@ namespace das
     struct SimVisitor {
         virtual void preVisit ( SimNode * ) { }
         virtual void cr () {}
-        virtual void op ( const char * /* name */ ) {}
+        virtual void op ( const char * /* name */, size_t /* sz */ = 0, const string & /* TT */ = string() ) {}
         virtual void sp ( uint32_t /* stackTop */,  const char * /* op */ = "#sp" ) { }
         virtual void arg ( int32_t /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( uint32_t /* argV */,  const char * /* argN */  ) { }
@@ -113,6 +113,7 @@ namespace das
     };
 
     void printSimNode ( TextWriter & ss, SimNode * node );
+    uint64_t getSemanticHash ( SimNode * node );
 
     class Context {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
@@ -124,6 +125,8 @@ namespace das
         Context(const Context &);
         Context & operator = (const Context &) = delete;
         virtual ~Context();
+
+        uint64_t getInitSemanticHash();
 
         __forceinline void * getVariable ( int index ) const {
             return (uint32_t(index)<uint32_t(totalVariables)) ? (globals + globalVariables[index].offset) : nullptr;
@@ -277,7 +280,6 @@ namespace das
             if ( ba ) {
                 *ba = saveArguments;
             }
-            stack.pop(EP,SP);
             return result;
         }
 #ifdef _MSC_VER
@@ -323,7 +325,7 @@ namespace das
     public:
         vec4f *         abiArg;
         void *          abiCMRES;
-    protected:
+    public:
         const char *    exception = nullptr;
         string          lastError;
 #if !DAS_ENABLE_EXCEPTIONS
@@ -336,6 +338,7 @@ namespace das
         SimFunction * functions = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
+        SimNode * aotInitScript = nullptr;
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;
@@ -964,7 +967,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_StringBuilder ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
-        TypeInfo ** types;
     };
 
     // CAST
@@ -1714,6 +1716,16 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // CONST-VALUE
+    struct SimNode_ConstString : SimNode {
+        SimNode_ConstString(const LineInfo & at, char * c)
+            : SimNode(at), value(c) { }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f       eval ( Context & )      override { return cast<char *>::from(value); }
+        virtual char *      evalPtr(Context &)      override { return value; }
+        char * value;
+    };
+
+    // CONST-VALUE
     struct SimNode_ConstValue : SimNode {
         SimNode_ConstValue(const LineInfo & at, vec4f c)
             : SimNode(at), value(c) { }
@@ -2140,7 +2152,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ForWithIterator ( const LineInfo & at )
             : SimNode_ForWithIteratorBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
-            return visitFor(vis, total);
+            return visitFor(vis, totalCount);
         }
         virtual vec4f eval ( Context & context ) override {
             vec4f * pi[totalCount];
@@ -2343,7 +2355,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
             auto val = x->eval(context);                                \
-            return SimPolicy<CTYPE>::CALL(val,context);                 \
+            return cast_result(SimPolicy<CTYPE>::CALL(val,context));    \
         }                                                               \
     };
 
@@ -2356,7 +2368,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
             auto val = arguments[0]->eval(context);                     \
-            return SimPolicy<CTYPE>::CALL(val,context);                 \
+            return cast_result(SimPolicy<CTYPE>::CALL(val,context));    \
         }                                                               \
     };
 
@@ -2453,7 +2465,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {             \
             auto lv = l->eval(context);                                 \
             auto rv = r->eval(context);                                 \
-            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+            return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context));  \
         }                                                               \
     };
 
@@ -2467,7 +2479,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {             \
             auto lv = arguments[0]->eval(context);                      \
             auto rv = arguments[1]->eval(context);                      \
-            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+            return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context));  \
         }                                                               \
     };
 
@@ -2605,19 +2617,19 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
     };
 
-#define IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(CALL,CTYPE)                  \
-    template <>                                                         \
-    struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
-        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
-        virtual SimNode * visit ( SimVisitor & vis ) override {         \
-            return visitOp3(vis, #CALL);                                \
-        }                                                               \
-        virtual vec4f eval ( Context & context ) override {             \
-            auto a0 = arguments[0]->eval(context);                      \
-            auto a1 = arguments[1]->eval(context);                      \
-            auto a2 = arguments[2]->eval(context);                      \
-            return SimPolicy<CTYPE>::CALL(a0,a1,a2,context);            \
-        }                                                               \
+#define IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(CALL,CTYPE)                      \
+    template <>                                                             \
+    struct Sim_##CALL <CTYPE> : SimNode_CallBase {                          \
+        Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}        \
+        virtual SimNode * visit ( SimVisitor & vis ) override {             \
+            return visitOp3(vis, #CALL);                                    \
+        }                                                                   \
+        virtual vec4f eval ( Context & context ) override {                 \
+            auto a0 = arguments[0]->eval(context);                          \
+            auto a1 = arguments[1]->eval(context);                          \
+            auto a2 = arguments[2]->eval(context);                          \
+            return cast_result(SimPolicy<CTYPE>::CALL(a0,a1,a2,context));   \
+        }                                                                   \
     };
 
     // unary
