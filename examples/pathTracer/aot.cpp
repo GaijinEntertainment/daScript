@@ -6,6 +6,11 @@ void saveTga ( const char * fileName, das::Array & arr, int width, int height, d
 
 namespace das {
 
+    template <typename TT>
+    TT & cast_vec_ref ( vec4f & local ) {
+        return *(TT *)(&local);
+    }
+
     namespace aot {
         TypeInfo __type_info__f293c4e8 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, 12, 0xf293c4e8 };
         TypeInfo __type_info__a7069c83 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, 4, 0xa7069c83 };
@@ -40,7 +45,7 @@ namespace das {
         static_assert(sizeof(Hit)==28,"structure size mismatch with DAS");
 
         struct Material {
-            Type mtype;
+            enum Type mtype;
             float3 albedo;
             float3 emissive;
             float roughness;
@@ -161,8 +166,8 @@ namespace das {
             float halfHeight = SimPolicy<float>::Tan(theta / 2.f,*__context__);
             float halfWidth = (aspect * halfHeight);
             that.origin = lookFrom;
-            that.w = normalize3(SimPolicy<float3>::Sub(lookFrom,lookAt,*__context__));
-            that.u = normalize3(cross3(vup,that.w));
+            that.w = normalize4(SimPolicy<float3>::Sub(lookFrom,lookAt,*__context__));
+            that.u = normalize4(cross3(vup,that.w));
             that.v = cross3(that.w,that.u);
             that.lowerLeftCorner = SimPolicy<float3>::Sub((SimPolicy<float3>::Sub((SimPolicy<float3>::Sub(that.origin,(SimPolicy<float3>::MulScalVec(cast<float>::from((halfWidth * focusDist)),that.u,*__context__)),*__context__)),(SimPolicy<float3>::MulScalVec(cast<float>::from((halfHeight * focusDist)),that.v,*__context__)),*__context__)),(SimPolicy<float3>::MulScalVec(cast<float>::from(focusDist),that.w,*__context__)),*__context__);
             that.horizontal = SimPolicy<float3>::MulScalVec(cast<float>::from(((2.f * halfWidth) * focusDist)),that.u,*__context__);
@@ -180,12 +185,12 @@ namespace das {
 
         struct Ray getRay ( Context * __context__, struct Camera &  that, float s, float t )
         {
-            float3 rd = (SimPolicy<float3>::MulScalVec(cast<float>::from(that.lensRadius),randomInUnitDisk(das_global<int4,0>(__context__) /*RAND_SEED*/),*__context__));
-            float3 offset = SimPolicy<float3>::MadS(that.u,cast<float>::from(v_extract_x(rd) /*x*/),SimPolicy<float3>::MulVecScal(that.v,cast<float>::from(v_extract_y(rd) /*y*/),*__context__),*__context__);
+            vec4f /*float3*/ rd = (SimPolicy<float3>::MulScalVec(cast<float>::from(that.lensRadius),randomInUnitDisk(das_global<int4,0>(__context__) /*RAND_SEED*/),*__context__));
+            vec4f /*float3*/ offset = SimPolicy<float3>::MadS(that.u,cast<float>::from(v_extract_x(rd) /*x*/),SimPolicy<float3>::MulVecScal(that.v,cast<float>::from(v_extract_y(rd) /*y*/),*__context__),*__context__);
             return (([&]() -> struct Ray {
                 struct Ray __mks_73; das_zero(__mks_73);
                 __mks_73.orig = (SimPolicy<float3>::Add(that.origin,offset,*__context__));
-                __mks_73.dir = normalize3(SimPolicy<float3>::Sub((SimPolicy<float3>::Sub(SimPolicy<float3>::MadS(that.vertical,cast<float>::from(t),SimPolicy<float3>::MadS(that.horizontal,cast<float>::from(s),that.lowerLeftCorner,*__context__),*__context__),that.origin,*__context__)),offset,*__context__));
+                __mks_73.dir = normalize4(SimPolicy<float3>::Sub((SimPolicy<float3>::Sub(SimPolicy<float3>::MadS(that.vertical,cast<float>::from(t),SimPolicy<float3>::MadS(that.horizontal,cast<float>::from(s),that.lowerLeftCorner,*__context__),*__context__),that.origin,*__context__)),offset,*__context__));
                 return __mks_73;
             })());
         }
@@ -202,7 +207,7 @@ namespace das {
                 __need_loop_118 = __sph_iterator.first(__context__,sph) && __need_loop_118;
                 for ( ; __need_loop_118 ; __need_loop_118 = __sph_iterator.next(__context__,sph) )
                 {
-                    float3 co = (SimPolicy<float3>::Sub((*sph).center,r.orig,*__context__));
+                    vec4f /*float3*/ co = (SimPolicy<float3>::Sub((*sph).center,r.orig,*__context__));
                     float nb = dot3(co,r.dir);
                     float discr = SimPolicy<float>::Mad(nb,nb,(*sph).radius2 - lengthSq3(co),*__context__);
                     if ( discr > 0.f )
@@ -225,7 +230,7 @@ namespace das {
             };
             if ( id != -1 )
             {
-                float3 atPos = pointAt(__context__,r,hitT);
+                vec4f /*float3*/ atPos = pointAt(__context__,r,hitT);
                 outHit = (([&]() -> struct Hit {
                     struct Hit __mks_133; das_zero(__mks_133);
                     __mks_133.pos = atPos;
@@ -282,25 +287,25 @@ namespace das {
             outLightE = float3(0.f,0.f,0.f);
             if ( mat.mtype == Type::Lambert )
             {
-                float3 target = (SimPolicy<float3>::Add((SimPolicy<float3>::Add(rec.pos,rec.normal,*__context__)),randomUnitVector(das_global<int4,0>(__context__) /*RAND_SEED*/),*__context__));
+                vec4f /*float3*/ target = (SimPolicy<float3>::Add((SimPolicy<float3>::Add(rec.pos,rec.normal,*__context__)),randomUnitVector(das_global<int4,0>(__context__) /*RAND_SEED*/),*__context__));
                 scattered = (([&]() -> struct Ray {
                     struct Ray __mks_146; das_zero(__mks_146);
                     __mks_146.orig = rec.pos;
-                    __mks_146.dir = normalize3(SimPolicy<float3>::Sub(target,rec.pos,*__context__));
+                    __mks_146.dir = normalize4(SimPolicy<float3>::Sub(target,rec.pos,*__context__));
                     return __mks_146;
                 })());
                 attenuation = mat.albedo;
                 struct Sphere * s = &(das_global<TDim<struct Sphere,9>,352>(__context__) /*s_Spheres*/(8,__context__));
-                float3 sw = normalize3(SimPolicy<float3>::Sub((*s).center,rec.pos,*__context__));
-                float3 su = normalize3(cross3((SimPolicy<float>::Abs(v_extract_x(sw) /*x*/,*__context__) > 0.00999999978f) ? float3(0.f,1.f,0.f) : float3(1.f,0.f,0.f),sw));
-                float3 sv = cross3(sw,su);
+                vec4f /*float3*/ sw = normalize4(SimPolicy<float3>::Sub((*s).center,rec.pos,*__context__));
+                vec4f /*float3*/ su = normalize4(cross3((SimPolicy<float>::Abs(v_extract_x(sw) /*x*/,*__context__) > 0.00999999978f) ? float3(0.f,1.f,0.f) : float3(1.f,0.f,0.f),sw));
+                vec4f /*float3*/ sv = cross3(sw,su);
                 float cosAMax = SimPolicy<float>::Sqrt(SimPolicy<float>::Sat(1.f - (((*s).radius * (*s).radius) * invdistanceSq3(rec.pos,(*s).center)),*__context__),*__context__);
-                float4 eps = randomFloat4(das_global<int4,0>(__context__) /*RAND_SEED*/);
+                vec4f /*float4*/ eps = randomFloat4(das_global<int4,0>(__context__) /*RAND_SEED*/);
                 float cosA = (SimPolicy<float>::Mad(v_extract_x(eps) /*x*/,cosAMax,1.f,*__context__) - v_extract_x(eps) /*x*/);
                 float sinA = SimPolicy<float>::Sqrt(1.f - (cosA * cosA),*__context__);
                 float sinPhi = 0; float cosPhi = 0;
                 sincosF(6.28318548f * v_extract_y(eps) /*y*/,sinPhi,cosPhi);
-                float3 l = (SimPolicy<float3>::Add((SimPolicy<float3>::Add((SimPolicy<float3>::MulVecScal(su,cast<float>::from((cosPhi * sinA)),*__context__)),(SimPolicy<float3>::MulVecScal(sv,cast<float>::from((sinPhi * sinA)),*__context__)),*__context__)),(SimPolicy<float3>::MulVecScal(sw,cast<float>::from(cosA),*__context__)),*__context__));
+                vec4f /*float3*/ l = (SimPolicy<float3>::Add((SimPolicy<float3>::Add((SimPolicy<float3>::MulVecScal(su,cast<float>::from((cosPhi * sinA)),*__context__)),(SimPolicy<float3>::MulVecScal(sv,cast<float>::from((sinPhi * sinA)),*__context__)),*__context__)),(SimPolicy<float3>::MulVecScal(sw,cast<float>::from(cosA),*__context__)),*__context__));
                 struct Hit lightHit; das_zero(lightHit);
                 int32_t hitID = 0;
                 ++inoutRayCount;
@@ -312,18 +317,18 @@ namespace das {
                 })());
                 if ( hitWorld(__context__,das_arg<struct Ray>::pass(ray),0.00100000005f,10000000.f,das_arg<struct Hit>::pass(lightHit),hitID) & (hitID == 8) )
                 {
-                    float3 nl = ((dot3(rec.normal,r_in.dir) < 0.f) ? vec4f(rec.normal) : SimPolicy<float3>::Unm(rec.normal,*__context__));
+                    vec4f /*float3*/ nl = ((dot3(rec.normal,r_in.dir) < 0.f) ? vec4f(rec.normal) : SimPolicy<float3>::Unm(rec.normal,*__context__));
                     SimPolicy<float3>::SetAdd((char *)&(outLightE),(SimPolicy<float3>::MulVecScal((SimPolicy<float3>::Mul(mat.albedo,das_global<TDim<struct Material,9>,16>(__context__) /*s_SphereMats*/(8,__context__).emissive,*__context__)),cast<float>::from((SimPolicy<float>::Sat(dot3(l,nl),*__context__) * SimPolicy<float>::Mad(-2.f,cosAMax,2.f,*__context__))),*__context__)),*__context__);
                 };
                 return true;
             }    else
                 if ( mat.mtype == Type::Metal )
                 {
-                    float3 refl = reflect(r_in.dir,rec.normal);
+                    vec4f /*float3*/ refl = reflect(r_in.dir,rec.normal);
                     scattered = (([&]() -> struct Ray {
                         struct Ray __mks_169; das_zero(__mks_169);
                         __mks_169.orig = rec.pos;
-                        __mks_169.dir = normalize3(SimPolicy<float3>::MadS(randomInUnitSphere(das_global<int4,0>(__context__) /*RAND_SEED*/),cast<float>::from(mat.roughness),refl,*__context__));
+                        __mks_169.dir = normalize4(SimPolicy<float3>::MadS(randomInUnitSphere(das_global<int4,0>(__context__) /*RAND_SEED*/),cast<float>::from(mat.roughness),refl,*__context__));
                         return __mks_169;
                     })());
                     attenuation = mat.albedo;
@@ -332,11 +337,11 @@ namespace das {
                     if ( mat.mtype == Type::Dielectric )
                     {
                         attenuation = float3(1.f,1.f,1.f);
-                        float3 refr = 0;
+                        vec4f /*float3*/ refr = v_zero();
                         float reflProb = 0;
                         if ( dot3(r_in.dir,rec.normal) > 0.f )
                         {
-                            if ( refract(r_in.dir,SimPolicy<float3>::Unm(rec.normal,*__context__),mat.ri,refr) )
+                            if ( refract(r_in.dir,SimPolicy<float3>::Unm(rec.normal,*__context__),mat.ri,cast_vec_ref<float3>(refr)) )
                             {
                                 reflProb = schlick(__context__,mat.ri * dot3(r_in.dir,rec.normal),mat.ri);
                             }            else
@@ -345,7 +350,7 @@ namespace das {
                             };
                         }        else
                         {
-                            if ( refract(r_in.dir,rec.normal,1.f / mat.ri,refr) )
+                            if ( refract(r_in.dir,rec.normal,1.f / mat.ri,cast_vec_ref<float3>(refr)) )
                             {
                                 reflProb = schlick(__context__,-dot3(r_in.dir,rec.normal),mat.ri);
                             }            else
@@ -358,7 +363,7 @@ namespace das {
                             scattered = (([&]() -> struct Ray {
                                 struct Ray __mks_187; das_zero(__mks_187);
                                 __mks_187.orig = rec.pos;
-                                __mks_187.dir = normalize3(reflect(r_in.dir,rec.normal));
+                                __mks_187.dir = normalize4(reflect(r_in.dir,rec.normal));
                                 return __mks_187;
                             })());
                         }        else
@@ -366,7 +371,7 @@ namespace das {
                             scattered = (([&]() -> struct Ray {
                                 struct Ray __mks_189; das_zero(__mks_189);
                                 __mks_189.orig = rec.pos;
-                                __mks_189.dir = normalize3(refr);
+                                __mks_189.dir = normalize4(refr);
                                 return __mks_189;
                             })());
                         };
@@ -391,6 +396,41 @@ namespace das {
             return SimPolicy<float>::Lerp(r0,1.f,SimPolicy<float>::Pow(1.f - cosine,5.f,*__context__),*__context__);
         }
 
+        bool test ( Context * __context__ )
+        {
+            prepare(__context__);
+            TArray<float3> backbuffer; das_zero(backbuffer);
+            resize(__context__,das_arg<TArray<float3>>::pass(backbuffer),76800);
+            float s = 0.f;
+            int32_t totalRayCount = 0;
+            builtin_print("\ntracing...\n",__context__);
+            /* handled */ das::Time sw0 = /*c-tor*/ builtin_clock();
+            {
+                bool __need_loop_269 = true;
+                das_iterator<range> __i_iterator(range(0,16));
+                int32_t i;
+                __need_loop_269 = __i_iterator.first(__context__,i) && __need_loop_269;
+                for ( ; __need_loop_269 ; __need_loop_269 = __i_iterator.next(__context__,i) )
+                {
+                    int32_t rayCount = 0;
+                    draw(__context__,s,i,320,240,0,240,das_arg<TArray<float3>>::pass(backbuffer),rayCount);
+                    totalRayCount += rayCount;
+                    /* handled */ das::Time sw1 = /*c-tor*/ builtin_clock();
+                    s = SimPolicy<das::Time>::Sub(cast</* handled */ das::Time>::from(sw1),cast</* handled */ das::Time>::from(sw0),*__context__);
+                    int32_t frames = (i + 1);
+                    int32_t ms = int32_t((s / float(frames)) * 1000.f);
+                    float mrayS = ((float(totalRayCount) / s) * 9.99999997e-07f);
+                    float mrayFr = (float(rayCount) * 9.99999975e-06f);
+                    builtin_print(das_string_builder(__context__,SimNode_AotInterop<8>(__tinfo_0, cast<int32_t>::from(ms), cast<char *>::from("ms\t"), cast<float>::from(mrayS), cast<char *>::from(" Mrays/s\t"), cast<float>::from(mrayFr), cast<char *>::from(" Mrays/frame\tframes "), cast<int32_t>::from(frames), cast<char *>::from("\n"))),__context__);
+                }
+                __i_iterator.close(__context__,i);
+            };
+            /* handled */ das::Time sw1 = /*c-tor*/ builtin_clock();
+            builtin_print(das_string_builder(__context__,SimNode_AotInterop<3>(__tinfo_1, cast<char *>::from("tracer took "), cast<float>::from((SimPolicy<das::Time>::Sub(cast</* handled */ das::Time>::from(sw1),cast</* handled */ das::Time>::from(sw0),*__context__))), cast<char *>::from(" sec\n"))),__context__);
+            saveTga("path_tracer.tga",das_arg<TArray<float3>>::pass(backbuffer),320,240,__context__);
+            return true;
+        }
+
         float3 trace ( Context * __context__, struct Ray &  r, int32_t depth, int32_t & inoutRayCount, bool doMaterialE = true )
         {
             struct Hit rec; das_zero(rec);
@@ -399,11 +439,11 @@ namespace das {
             if ( hitWorld(__context__,das_arg<struct Ray>::pass(r),0.00100000005f,10000000.f,das_arg<struct Hit>::pass(rec),id) )
             {
                 struct Ray scattered; das_zero(scattered);
-                float3 attenuation = 0;
-                float3 lightE = 0;
+                vec4f /*float3*/ attenuation = v_zero();
+                vec4f /*float3*/ lightE = v_zero();
                 struct Material * mat = &(das_global<TDim<struct Material,9>,16>(__context__) /*s_SphereMats*/(id,__context__));
-                float3 matE = (*mat).emissive;
-                if ( (depth < 10) & scatter(__context__,das_arg<struct Material>::pass((*mat)),das_arg<struct Ray>::pass(r),das_arg<struct Hit>::pass(rec),attenuation,das_arg<struct Ray>::pass(scattered),lightE,inoutRayCount) )
+                vec4f /*float3*/ matE = (*mat).emissive;
+                if ( (depth < 10) & scatter(__context__,das_arg<struct Material>::pass((*mat)),das_arg<struct Ray>::pass(r),das_arg<struct Hit>::pass(rec),cast_vec_ref<float3>(attenuation),das_arg<struct Ray>::pass(scattered),cast_vec_ref<float3>(lightE),inoutRayCount) )
                 {
                     if ( !doMaterialE )
                     {
@@ -417,15 +457,15 @@ namespace das {
                 };
             }    else
             {
-                float3 t = SimPolicy<float3>::MadS(r.dir,cast<float>::from(0.5f),float3(1.f,1.f,1.f),*__context__);
+                vec4f /*float3*/ t = SimPolicy<float3>::MadS(r.dir,cast<float>::from(0.5f),float3(1.f,1.f,1.f),*__context__);
                 return SimPolicy<float3>::Lerp(float3(0.300000012f,0.300000012f,0.300000012f),float3(0.150000006f,0.210000008f,0.300000012f),t,*__context__);
             };
         }
 
         int32_t trace ( Context * __context__, int32_t screenWidth, int32_t screenHeight, int32_t frameCount, int32_t ymin, int32_t ymax, TArray<float3> &  backbuffer, struct Camera &  cam )
         {
-            float2 invWH = (SimPolicy<float2>::DivScalVec(cast<float>::from(1.f),float2(screenWidth,screenHeight),*__context__));
-            float3 lerpFac = float3(float(frameCount) / float(frameCount + 1));
+            vec4f /*float2*/ invWH = (SimPolicy<float2>::DivScalVec(cast<float>::from(1.f),float2(screenWidth,screenHeight),*__context__));
+            vec4f /*float3*/ lerpFac = float3(float(frameCount) / float(frameCount + 1));
             int32_t rayCount = 0;
             int32_t backbufferIdx = (ymin * screenWidth);
             {
@@ -443,7 +483,7 @@ namespace das {
                         __need_loop_224 = __x_iterator.first(__context__,x) && __need_loop_224;
                         for ( ; __need_loop_224 ; __need_loop_224 = __x_iterator.next(__context__,x) )
                         {
-                            float3 col = float3(0.f,0.f,0.f);
+                            vec4f /*float3*/ col = float3(0.f,0.f,0.f);
                             {
                                 bool __need_loop_226 = true;
                                 das_iterator<range> __s_iterator(range(0,4));
@@ -451,7 +491,7 @@ namespace das {
                                 __need_loop_226 = __s_iterator.first(__context__,s) && __need_loop_226;
                                 for ( ; __need_loop_226 ; __need_loop_226 = __s_iterator.next(__context__,s) )
                                 {
-                                    float2 uv = (SimPolicy<float2>::Mul((SimPolicy<float2>::Add(float2(x,y),das_swizzle_seq<float2,float4,0>::swizzle(randomFloat4(das_global<int4,0>(__context__) /*RAND_SEED*/)) /*xy*/,*__context__)),invWH,*__context__));
+                                    vec4f /*float2*/ uv = (SimPolicy<float2>::Mul((SimPolicy<float2>::Add(float2(x,y),das_swizzle_seq<float2,float4,0>::swizzle(randomFloat4(das_global<int4,0>(__context__) /*RAND_SEED*/)) /*xy*/,*__context__)),invWH,*__context__));
                                     SimPolicy<float3>::SetAdd((char *)&(col),trace(__context__,das_arg<struct Ray>::pass(getRay(__context__,das_arg<struct Camera>::pass(cam),v_extract_x(uv) /*x*/,v_extract_y(uv) /*y*/)),0,rayCount,true),*__context__);
                                 }
                                 __s_iterator.close(__context__,s);
@@ -513,6 +553,10 @@ namespace das {
             // schlick
             aotLib[0x4cefe96c46902f1f] = [&](Context & ctx){
                 return ctx.code->makeNode<SimNode_Aot<float  ( Context * __context__, float cosine, float ri ),schlick>>();
+            };
+            // test
+            aotLib[0x44970e159078c85e] = [&](Context & ctx){
+                return ctx.code->makeNode<SimNode_Aot<bool  ( Context * __context__ ),test>>();
             };
             // trace
             aotLib[0xb0b93da2c15e556f] = [&](Context & ctx){
