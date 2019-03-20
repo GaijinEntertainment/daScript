@@ -191,7 +191,7 @@ bool unit_test ( const string & fn ) {
 
 
 int main() {
-    _control87(_DN_FLUSH, _MCW_DN);
+  _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     #ifdef _MSC_VER
 #define    TEST_PATH "../"
 #else

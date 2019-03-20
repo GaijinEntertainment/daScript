@@ -86,6 +86,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
 }
 
 int main(int argc, const char * argv[]) {
+  _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
 #ifdef _MSC_VER
     #define    TEST_PATH "../"
 #else
