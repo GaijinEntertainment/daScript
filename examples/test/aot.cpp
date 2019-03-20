@@ -158,15 +158,15 @@ namespace das {
         }
 
         bool test ( Context * __context__ ) { das_stack_prologue __prologue(__context__,64,__LINE__);
-        {
-            offset_momentum(__context__);
-            energy(__context__);
-            builtin_profile(10,"n-bodies",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
-                nbodies(__context__,500000);
-            })),__context__);
-            energy(__context__);
-            return true;
-        }}
+            {
+                offset_momentum(__context__);
+                energy(__context__);
+                builtin_profile(10,"n-bodies",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
+                    nbodies(__context__,500000);
+                })),__context__);
+                energy(__context__);
+                return true;
+            }}
 
         void registerAot ( AotLibrary & aotLib )
         {
