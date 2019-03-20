@@ -136,34 +136,34 @@ namespace das
 #pragma warning(pop)
 #endif
 
-#define ADD_VEC_CTOR_1(VTYPE) \
-addFunction ( make_shared<BuiltInFn<SimNode_Zero,VTYPE>> (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,1>,VTYPE,float>>   (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,1>,VTYPE,int32_t>> (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,1>,VTYPE,uint32_t>>(#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,1>,VTYPE,int64_t>> (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,1>,VTYPE,uint64_t>>(#VTYPE,lib,"",false) );
+#define ADD_VEC_CTOR_1(VTYPE,VNAME) \
+addFunction ( make_shared<BuiltInFn<SimNode_Zero,VTYPE>> (#VTYPE,lib,"v_zero",false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,1>,VTYPE,float>>   (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,1>,VTYPE,int32_t>> (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,1>,VTYPE,uint32_t>>(#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,1>,VTYPE,int64_t>> (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,1>,VTYPE,uint64_t>>(#VTYPE,lib,VNAME,false) );
 
-#define ADD_VEC_CTOR_2(VTYPE) \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,2>,VTYPE,float,float>>      (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,2>,VTYPE,int32_t,int32_t>>  (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,2>,VTYPE,uint32_t,uint32_t>>(#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,2>,VTYPE,int64_t,int64_t>>  (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,2>,VTYPE,uint64_t,uint64_t>>(#VTYPE,lib,"",false) );
+#define ADD_VEC_CTOR_2(VTYPE,VNAME) \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,2>,VTYPE,float,float>>      (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,2>,VTYPE,int32_t,int32_t>>  (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,2>,VTYPE,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,2>,VTYPE,int64_t,int64_t>>  (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,2>,VTYPE,uint64_t,uint64_t>>(#VTYPE,lib,VNAME,false) );
 
-#define ADD_VEC_CTOR_3(VTYPE) \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,3>,VTYPE,float,float,float>>         (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,3>,VTYPE,int32_t,int32_t,int32_t>>   (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,3>,VTYPE,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,3>,VTYPE,int64_t,int64_t,int64_t>>   (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,3>,VTYPE,uint64_t,uint64_t,uint64_t>>(#VTYPE,lib,"",false) );
+#define ADD_VEC_CTOR_3(VTYPE,VNAME) \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,3>,VTYPE,float,float,float>>         (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,3>,VTYPE,int32_t,int32_t,int32_t>>   (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,3>,VTYPE,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,3>,VTYPE,int64_t,int64_t,int64_t>>   (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,3>,VTYPE,uint64_t,uint64_t,uint64_t>>(#VTYPE,lib,VNAME,false) );
 
-#define ADD_VEC_CTOR_4(VTYPE) \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,4>,VTYPE,float,float,float,float>>            (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,4>,VTYPE,int32_t,int32_t,int32_t,int32_t>>    (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,VTYPE,uint32_t,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,4>,VTYPE,int64_t,int64_t,int64_t,int64_t>>    (#VTYPE,lib,"",false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>,VTYPE,uint64_t,uint64_t,uint64_t,uint64_t>>(#VTYPE,lib,"",false) );
+#define ADD_VEC_CTOR_4(VTYPE,VNAME) \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,4>,VTYPE,float,float,float,float>>            (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,4>,VTYPE,int32_t,int32_t,int32_t,int32_t>>    (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,VTYPE,uint32_t,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,4>,VTYPE,int64_t,int64_t,int64_t,int64_t>>    (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>,VTYPE,uint64_t,uint64_t,uint64_t,uint64_t>>(#VTYPE,lib,VNAME,false) );
 
     // built-in numeric types
     template <typename TT>
@@ -220,24 +220,24 @@ addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>
         addFunctionBasic<float2>(*this,lib);
         addFunctionNumeric<float2>(*this,lib);
         addFunctionVecNumeric<float2,float>(*this,lib);
-        ADD_VEC_CTOR_1(float2);
-        ADD_VEC_CTOR_2(float2);
+        ADD_VEC_CTOR_1(float2,"v_splats");
+        ADD_VEC_CTOR_2(float2,"");
         addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float2, int2>>("float2",lib,"",false) );
         addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float2,uint2>>("float2",lib,"",false) );
         // float3
         addFunctionBasic<float3>(*this,lib);
         addFunctionNumeric<float3>(*this,lib);
         addFunctionVecNumeric<float3, float>(*this,lib);
-        ADD_VEC_CTOR_1(float3);
-        ADD_VEC_CTOR_3(float3);
+        ADD_VEC_CTOR_1(float3,"v_splats");
+        ADD_VEC_CTOR_3(float3,"");
         addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float3, int3>>("float3",lib,"",false) );
         addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float3,uint3>>("float3",lib,"",false) );
         // float4
         addFunctionBasic<float4>(*this,lib);
         addFunctionNumeric<float4>(*this,lib);
         addFunctionVecNumeric<float4, float>(*this,lib);
-        ADD_VEC_CTOR_1(float4);
-        ADD_VEC_CTOR_4(float4);
+        ADD_VEC_CTOR_1(float4,"v_splats");
+        ADD_VEC_CTOR_4(float4,"");
         addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float4, int4>>("float4",lib,"",false) );
         addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float4,uint4>>("float4",lib,"",false) );
         // int2
@@ -245,50 +245,50 @@ addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>
         addFunctionNumeric<int2>(*this,lib);
         addFunctionVecNumeric<int2, int32_t>(*this,lib);
         addFunctionVecBit<int2>(*this,lib);
-        ADD_VEC_CTOR_1(int2);
-        ADD_VEC_CTOR_2(int2);
+        ADD_VEC_CTOR_1(int2,"");
+        ADD_VEC_CTOR_2(int2,"");
         // int3
         addFunctionBasic<int3>(*this,lib);
         addFunctionNumeric<int3>(*this,lib);
         addFunctionVecNumeric<int3, int32_t>(*this,lib);
         addFunctionVecBit<int3>(*this,lib);
-        ADD_VEC_CTOR_1(int3);
-        ADD_VEC_CTOR_3(int3);
+        ADD_VEC_CTOR_1(int3,"");
+        ADD_VEC_CTOR_3(int3,"");
         // int4
         addFunctionBasic<int4>(*this,lib);
         addFunctionNumeric<int4>(*this,lib);
         addFunctionVecNumeric<int4,int32_t>(*this,lib);
         addFunctionVecBit<int4>(*this,lib);
-        ADD_VEC_CTOR_1(int4);
-        ADD_VEC_CTOR_4(int4);
+        ADD_VEC_CTOR_1(int4,"");
+        ADD_VEC_CTOR_4(int4,"");
         // uint2
         addFunctionBasic<uint2>(*this,lib);
         addFunctionNumeric<uint2>(*this,lib);
         addFunctionVecNumeric<uint2, uint32_t>(*this,lib);
         addFunctionVecBit<uint2>(*this,lib);
-        ADD_VEC_CTOR_1(uint2);
-        ADD_VEC_CTOR_2(uint2);
+        ADD_VEC_CTOR_1(uint2,"");
+        ADD_VEC_CTOR_2(uint2,"");
         // uint3
         addFunctionBasic<uint3>(*this,lib);
         addFunctionNumeric<uint3>(*this,lib);
         addFunctionVecNumeric<uint3,uint32_t>(*this,lib);
         addFunctionVecBit<uint3>(*this,lib);
-        ADD_VEC_CTOR_1(uint3);
-        ADD_VEC_CTOR_3(uint3);
+        ADD_VEC_CTOR_1(uint3,"");
+        ADD_VEC_CTOR_3(uint3,"");
         // uint4
         addFunctionBasic<uint4>(*this,lib);
         addFunctionNumeric<uint4>(*this,lib);
         addFunctionVecNumeric<uint4, uint32_t>(*this,lib);
         addFunctionVecBit<uint4>(*this,lib);
-        ADD_VEC_CTOR_1(uint4);
-        ADD_VEC_CTOR_4(uint4);
+        ADD_VEC_CTOR_1(uint4,"");
+        ADD_VEC_CTOR_4(uint4,"");
         // range
         addFunctionBasic<range>(*this,lib);
-        ADD_VEC_CTOR_1(range);
-        ADD_VEC_CTOR_2(range);
+        ADD_VEC_CTOR_1(range,"");
+        ADD_VEC_CTOR_2(range,"");
         // urange
         addFunctionBasic<urange>(*this,lib);
-        ADD_VEC_CTOR_1(urange);
-        ADD_VEC_CTOR_2(urange);
+        ADD_VEC_CTOR_1(urange,"");
+        ADD_VEC_CTOR_2(urange,"");
     }
 }

@@ -128,7 +128,7 @@ namespace das {
             }
         } else if ( baseType==Type::tEnumeration ) {
             if ( type->enumType ) {
-                stream << "enum " << type->enumType->name;
+                stream << "/*enum*/ " << type->enumType->name;
             } else {
                 stream << "/* unspecified enumeration */";
             }
@@ -443,6 +443,9 @@ namespace das {
         bool isLocalVec ( const TypeDeclPtr & vtype ) const {
             return vtype->dim.size()==0 && vtype->isVectorType() && !vtype->ref;
         }
+        bool isVecRef ( const TypeDeclPtr & vtype ) const {
+            return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
+        }
         void describeLocalCppType ( const TypeDeclPtr & vtype ) {
             if ( isLocalVec(vtype) ) {
                 if ( vtype->constant ) ss << "const ";
@@ -746,17 +749,17 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprConstFloat2 * c ) override {
             auto val = c->getValue();
-            ss << "float2(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f)";
+            ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f,0.f,0.f)";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat3 * c ) override {
             auto val = c->getValue();
-            ss << "float3(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f)";
+            ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f,0.f)";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat4 * c ) override {
             auto val = c->getValue();
-            ss << "float4(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f," << to_string_ex(val.w) << "f)";
+            ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f," << to_string_ex(val.w) << "f)";
             return Visitor::visit(c);
         }
     // ExprWhile
@@ -1069,6 +1072,8 @@ namespace das {
                 if ( needsArgPass(argType) ) {
                     ss << "das_arg<" << describeCppType(argType,false,true) << ">::pass(";
                 }
+            } else if (isVecRef(argType)) {
+                ss << "cast_vec_ref<" << describeCppType(argType,false,true,true) << ">::to(";
             }
             if ( isPolicyBasedCall(call) && policyArgNeedCast(call->type, argType) ) {
                 ss << "cast<" << describeCppType(argType,false,true,true) << ">::from(";
@@ -1087,6 +1092,8 @@ namespace das {
                 if ( needsArgPass(argType) ) {
                     ss << ")";
                 }
+            } else if (isVecRef(argType)) {
+                ss << ")";
             }
             if ( !last ) ss << ",";
             return Visitor::visitCallArg(call, arg, last);

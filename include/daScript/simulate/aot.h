@@ -58,6 +58,22 @@ namespace das {
     };
 
     template <typename TT>
+    struct cast_vec_ref {
+        static __forceinline TT & to(vec4f & x) {
+            return *(TT *)(&x);
+        }
+        static __forceinline TT & to(TT & x) {
+            return x;
+        }
+        static __forceinline const TT & to(const vec4f & x) {
+            return *(TT *)(&x);
+        }
+        static __forceinline const TT & to(const TT & x) {
+            return x;
+        }
+    };
+
+    template <typename TT>
     struct das_index;
 
     template <typename TT, typename VecT, uint32_t size>
