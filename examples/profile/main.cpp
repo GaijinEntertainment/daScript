@@ -113,7 +113,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
 #if 1
-    unit_test(TEST_PATH "examples/profile/tests/native.das");
+    unit_test(TEST_PATH "examples/profile/tests/particles.das");
     Module::Shutdown();
     return 0;
 #endif

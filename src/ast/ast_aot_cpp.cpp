@@ -231,9 +231,25 @@ namespace das {
         return ss.str();
     }
 
+    bool isLocalVec ( const TypeDeclPtr & vtype ) {
+        return vtype->dim.size()==0 && vtype->isVectorType() && !vtype->ref;
+    }
+    bool isVecRef ( const TypeDeclPtr & vtype ) {
+        return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
+    }
+    void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype ) {
+        if ( isLocalVec(vtype) ) {
+            if ( vtype->constant ) ss << "const ";
+            ss << "vec4f /*" << describeCppType(vtype,true) << "*/";
+        } else {
+            ss << describeCppType(vtype,true);
+        }
+    }
+
     string describeCppFunc ( Function * fn, bool needName = true ) {
         TextWriter ss;
-        ss << describeCppType(fn->result) << " ";
+        describeLocalCppType(ss,fn->result);
+        ss << " ";
         if ( needName ) {
             ss << fn->name;
         }
@@ -359,7 +375,9 @@ namespace das {
     // function
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
-            ss << "\n" << describeCppType(fn->result) << " " << fn->name << " ( Context * __context__";
+            ss << "\n";
+            describeLocalCppType(ss,fn->result);
+            ss << " " << fn->name << " ( Context * __context__";
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
             Visitor::preVisitFunctionBody(fn,expr);
@@ -440,23 +458,9 @@ namespace das {
             }
             return Visitor::visit(let);
         }
-        bool isLocalVec ( const TypeDeclPtr & vtype ) const {
-            return vtype->dim.size()==0 && vtype->isVectorType() && !vtype->ref;
-        }
-        bool isVecRef ( const TypeDeclPtr & vtype ) const {
-            return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
-        }
-        void describeLocalCppType ( const TypeDeclPtr & vtype ) {
-            if ( isLocalVec(vtype) ) {
-                if ( vtype->constant ) ss << "const ";
-                ss << "vec4f /*" << describeCppType(vtype,true) << "*/";
-            } else {
-                ss << describeCppType(vtype,true);
-            }
-        }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
-            describeLocalCppType(var->type);
+            describeLocalCppType(ss, var->type);
             ss << " " << var->name;
             if ( !var->init && var->type->canInitWithZero() ) {
                 if ( isLocalVec(var->type) ) {

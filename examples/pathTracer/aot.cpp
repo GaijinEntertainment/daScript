@@ -72,13 +72,13 @@ namespace das {
         int32_t hitSpheres ( Context * __context__, const struct Ray & r, float tMin, float tMax, struct Hit & outHit );
         bool hitWorld ( Context * __context__, const struct Ray & r, float tMin, float tMax, struct Hit & outHit, int32_t & outID );
         int32_t job ( Context * __context__, TArray<float3> & backbuffer, int32_t frameCount, int32_t width, int32_t height, int32_t ymin, int32_t ymax );
-        float3 pointAt ( Context * __context__, const struct Ray & ray, float t );
+        vec4f /*float3*/ pointAt ( Context * __context__, const struct Ray & ray, float t );
         void prepare ( Context * __context__ );
         void resize ( Context * __context__, TArray<float3> & Arr, int32_t newSize );
         bool scatter ( Context * __context__, const struct Material & mat, const struct Ray & r_in, struct Hit & rec, float3 & attenuation, struct Ray & scattered, float3 & outLightE, int32_t & inoutRayCount );
         float schlick ( Context * __context__, float cosine, float ri );
         bool test ( Context * __context__ );
-        float3 trace ( Context * __context__, struct Ray & r, int32_t depth, int32_t & inoutRayCount, bool doMaterialE );
+        vec4f /*float3*/ trace ( Context * __context__, struct Ray & r, int32_t depth, int32_t & inoutRayCount, bool doMaterialE );
         int32_t trace ( Context * __context__, int32_t screenWidth, int32_t screenHeight, int32_t frameCount, int32_t ymin, int32_t ymax, TArray<float3> & backbuffer, struct Camera & cam );
 
         void __init_script ( Context * __context__ )
@@ -255,7 +255,7 @@ namespace das {
             return totalRayCount;
         }
 
-        float3 pointAt ( Context * __context__, const struct Ray &  ray, float t )
+        vec4f /*float3*/ pointAt ( Context * __context__, const struct Ray &  ray, float t )
         {
             return SimPolicy<float3>::Add(ray.orig,(SimPolicy<float3>::MulVecScal(ray.dir,cast<float>::from(t),*__context__)),*__context__);
         }
@@ -320,7 +320,7 @@ namespace das {
                     SimPolicy<float3>::SetAdd((char *)&(outLightE),(SimPolicy<float3>::MulVecScal((SimPolicy<float3>::Mul(mat.albedo,das_global<TDim<struct Material,9>,16>(__context__) /*s_SphereMats*/(8,__context__).emissive,*__context__)),cast<float>::from((SimPolicy<float>::Sat(dot3(l,nl),*__context__) * SimPolicy<float>::Mad(-2.f,cosAMax,2.f,*__context__))),*__context__)),*__context__);
                 };
                 return true;
-            }       else
+            }    else
                 if ( mat.mtype == Type::Metal )
                 {
                     vec4f /*float3*/ refl = reflect(r_in.dir,rec.normal);
@@ -332,7 +332,7 @@ namespace das {
                     })());
                     attenuation = mat.albedo;
                     return dot3(scattered.dir,rec.normal) > 0.f;
-                }       else
+                }    else
                     if ( mat.mtype == Type::Dielectric )
                     {
                         attenuation = v_splats(1.f);
@@ -343,16 +343,16 @@ namespace das {
                             if ( refract(r_in.dir,SimPolicy<float3>::Unm(rec.normal,*__context__),mat.ri,cast_vec_ref<float3>::to(refr)) )
                             {
                                 reflProb = schlick(__context__,mat.ri * dot3(r_in.dir,rec.normal),mat.ri);
-                            }                       else
+                            }            else
                             {
                                 reflProb = 1.f;
                             };
-                        }               else
+                        }        else
                         {
                             if ( refract(r_in.dir,rec.normal,1.f / mat.ri,cast_vec_ref<float3>::to(refr)) )
                             {
                                 reflProb = schlick(__context__,-dot3(r_in.dir,rec.normal),mat.ri);
-                            }                       else
+                            }            else
                             {
                                 reflProb = 1.f;
                             };
@@ -365,7 +365,7 @@ namespace das {
                                 __mks_191.dir = normalize3(reflect(r_in.dir,rec.normal));
                                 return __mks_191;
                             })());
-                        }               else
+                        }        else
                         {
                             scattered = (([&]() -> struct Ray {
                                 struct Ray __mks_193; das_zero(__mks_193);
@@ -374,7 +374,7 @@ namespace das {
                                 return __mks_193;
                             })());
                         };
-                    }       else
+                    }    else
                     {
                         attenuation = v_make_vec4f(1.f,0.f,1.f,0.f);
                         scattered = (([&]() -> struct Ray {
@@ -385,7 +385,7 @@ namespace das {
                         })());
                         return false;
                     };
-                    return true;
+            return true;
         }
 
         float schlick ( Context * __context__, float cosine, float ri )
@@ -430,7 +430,7 @@ namespace das {
             return true;
         }
 
-        float3 trace ( Context * __context__, struct Ray &  r, int32_t depth, int32_t & inoutRayCount, bool doMaterialE = true )
+        vec4f /*float3*/ trace ( Context * __context__, struct Ray &  r, int32_t depth, int32_t & inoutRayCount, bool doMaterialE = true )
         {
             struct Hit rec; das_zero(rec);
             int32_t id = 0;
@@ -450,11 +450,11 @@ namespace das {
                     };
                     doMaterialE = (*mat).mtype != Type::Lambert;
                     return SimPolicy<float3>::Mad(attenuation,trace(__context__,das_arg<struct Ray>::pass(scattered),depth + 1,inoutRayCount,doMaterialE),SimPolicy<float3>::Add(matE,lightE,*__context__),*__context__);
-                }               else
+                }        else
                 {
                     return matE;
                 };
-            }       else
+            }    else
             {
                 vec4f /*float3*/ t = SimPolicy<float3>::MadS(r.dir,cast<float>::from(0.5f),v_splats(1.f),*__context__);
                 return SimPolicy<float3>::Lerp(v_splats(0.300000012f),v_make_vec4f(0.150000006f,0.210000008f,0.300000012f,0.f),t,*__context__);
@@ -535,7 +535,7 @@ namespace das {
             };
             // pointAt
             aotLib[0x7fd5c4075fc0027d] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<float3  ( Context * __context__, const struct Ray & ray, float t ),pointAt>>();
+                return ctx.code->makeNode<SimNode_Aot<vec4f /*float3*/  ( Context * __context__, const struct Ray & ray, float t ),pointAt>>();
             };
             // prepare
             aotLib[0x372873953b11625] = [&](Context & ctx){
@@ -559,7 +559,7 @@ namespace das {
             };
             // trace
             aotLib[0x52f3f757072e3b8f] = [&](Context & ctx){
-                return ctx.code->makeNode<SimNode_Aot<float3  ( Context * __context__, struct Ray & r, int32_t depth, int32_t & inoutRayCount, bool doMaterialE ),trace>>();
+                return ctx.code->makeNode<SimNode_Aot<vec4f /*float3*/  ( Context * __context__, struct Ray & r, int32_t depth, int32_t & inoutRayCount, bool doMaterialE ),trace>>();
             };
             // trace
             aotLib[0x348bd8fefb63b247] = [&](Context & ctx){
