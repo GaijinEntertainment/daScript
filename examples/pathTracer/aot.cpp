@@ -40,7 +40,7 @@ namespace das {
         static_assert(sizeof(Hit)==28,"structure size mismatch with DAS");
 
         struct Material {
-            enum Type mtype;
+            Type mtype;
             float3 albedo;
             float3 emissive;
             float roughness;

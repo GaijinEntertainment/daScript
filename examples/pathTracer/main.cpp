@@ -191,7 +191,8 @@ bool unit_test ( const string & fn ) {
 
 
 int main() {
-#ifdef _MSC_VER
+    _control87(_DN_FLUSH, _MCW_DN);
+    #ifdef _MSC_VER
 #define    TEST_PATH "../"
 #else
 #define TEST_PATH "../../"

@@ -1,73 +1,96 @@
-options logCpp=true, optimize=false
+options logCpp=true
+options indenting = 2
+require math
+//ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html
 
-def test_vec2(a:auto(vec2)!const !&)
-    let f2_x  = vec2(1,2)
-    let x : auto(numT) = f2_x[0]
-    assert("{f2_x}"=="1,2")
-    let f2_y = f2_x.yx
-    assert("{f2_y}"=="2,1")
-    f2_x.x = numT(3)
-    f2_x.y = numT(4)
-    assert("{f2_x}"=="3,4")
-    f2_x.xy = vec2(5,6)
-    assert("{f2_x}"=="5,6")
-    f2_y = f2_x.xy
-    assert("{f2_y}"=="5,6")
+let 
+  PI = 3.141592653589793
+let 
+  SOLAR_MASS = 4.*PI*PI
+let
+  DAYS_PER_YEAR = 365.24
 
-def test_vec3(a:auto(vec3)!const !&)
-    let f3_x  = vec3(1,2,3)
-    let x : auto(numT) = f3_x[0]
-    let y : auto(vec2) = f3_x.xy
-    assert("{f3_x}"=="1,2,3")
-    let f3_y = f3_x.zyx
-    assert("{f3_y}"=="3,2,1")
-    f3_x.x = numT(3)
-    f3_x.y = numT(4)
-    f3_x.z = numT(5)
-    assert("{f3_x}"=="3,4,5")
-    f3_x.xyz = vec3(5,6,7)
-    assert("{f3_x}"=="5,6,7")
-    f3_y = f3_x.xyz
-    assert("{f3_y}"=="5,6,7")
-    f3_x.xy = vec2(8,9)
-    assert("{f3_x}"=="8,9,7")
-    f3_x.yz = vec2(1,2)
-    assert("{f3_x}"=="8,1,2")
-    assert(f3_x.zx==vec2(2,8))
+struct body
+  x,v:float3
+  mass:float
+let 
+  bodies = [[body
+            /*sun*/
+              x=float3(0,0,0), v=float3(0,0,0), mass = SOLAR_MASS;
+            /*jupiter*/
+              x=float3(4.84143144246472090,-1.16032004402742839,-1.03622044471123109e-01),
+              v=float3(1.66007664274403694e-03 * DAYS_PER_YEAR, 7.69901118419740425e-03 * DAYS_PER_YEAR, -6.90460016972063023e-05 * DAYS_PER_YEAR),
+              mass = 9.54791938424326609e-04 * SOLAR_MASS;
+            /*saturn*/
+              x = float3(8.34336671824457987e+00, 4.12479856412430479e+00, -4.03523417114321381e-01),
+              v = float3( -2.76742510726862411e-03 * DAYS_PER_YEAR, 4.99852801234917238e-03 * DAYS_PER_YEAR, 2.30417297573763929e-05 * DAYS_PER_YEAR ),
+              mass = 2.85885980666130812e-04 * SOLAR_MASS;
+            /*uranus*/
+              x = float3( 1.28943695621391310e+01, -1.51111514016986312e+01, -2.23307578892655734e-01 ),
+              v = float3( 2.96460137564761618e-03 * DAYS_PER_YEAR, 2.37847173959480950e-03 * DAYS_PER_YEAR, -2.96589568540237556e-05 * DAYS_PER_YEAR ),
+              mass = 4.36624404335156298e-05 * SOLAR_MASS;
+            /*neptune*/
+              x = float3( 1.53796971148509165e+01, -2.59193146099879641e+01, 1.79258772950371181e-01 ),
+              v = float3( 2.68067772490389322e-03 * DAYS_PER_YEAR, 1.62824170038242295e-03 * DAYS_PER_YEAR, -9.51592254519715870e-05 * DAYS_PER_YEAR ),
+              mass = 5.15138902046611451e-05 * SOLAR_MASS
+            ]]
+let 
+  nbodies = 5
 
-def test_vec4(a:auto(vec4)!const !&)
-    let f4_x  = vec4(1,2,3,4)
-    let x : auto(numT) = f4_x[0]
-    let y : auto(vec2) = f4_x.xy
-    let z : auto(vec3) = f4_x.xyz
-    assert("{f4_x}"=="1,2,3,4")
-    let f4_y = f4_x.wzyx
-    assert("{f4_y}"=="4,3,2,1")
-    f4_x.x = numT(3)
-    f4_x.y = numT(4)
-    f4_x.z = numT(5)
-    f4_x.w = numT(6)
-    assert("{f4_x}"=="3,4,5,6")
-    f4_x.xyzw = vec4(5,6,7,8)
-    assert("{f4_x}"=="5,6,7,8")
-    f4_y = f4_x.xyzw
-    assert("{f4_y}"=="5,6,7,8")
-    f4_x.xyz = vec3(8,9,0)
-    assert("{f4_x}"=="8,9,0,8")
-    f4_x.yz = vec2(1,2)
-    assert("{f4_x}"=="8,1,2,8")
-    assert(f4_x.zx==vec2(2,8))
+def offset_momentum()
+  let px:float3
+  for b in bodies
+    px -= b.v * b.mass
+  bodies[0].v = px / SOLAR_MASS
+
+def advance()
+  let i = 0
+  for b in bodies
+    ++i
+    for j in range(i, nbodies)
+      let b2:body& = bodies[j]
+      let dx = b.x - b2.x
+      let inv_distance = invLength(dx)
+      let mag = inv_distance * inv_distance * inv_distance
+      b.v -= dx * (b2.mass*mag)
+      b2.v += dx * (b.mass*mag)
+    b.x += b.v
+
+def energy():float
+  let e = 0.0
+  let i = 0
+  for b in bodies
+    e += 0.5 * b.mass * lengthSq(b.v)
+    ++i
+    for j in range(i, nbodies)
+      let b2 = bodies[j]
+      e -= (b.mass * b2.mass) / distance(b.x, b2.x)
+  return e
+
+/*
+ * Rescale certain properties of bodies. That allows doing
+ * consequential advance()'s as if dt were equal to 1.0.
+ *
+ * When all advances done, rescale bodies back to obtain correct energy.
+ */
+def scale_bodies(scale) 
+  for b in bodies
+    b.mass *= scale*scale
+    b.v = b.v*scale
+
+def nbodies(n)
+  scale_bodies(0.01)
+  for i in range(0, n)
+    advance()
+  scale_bodies(1./0.01)
 
 [export]
-def test
-    test_vec2(float2())
-    test_vec3(float3())
-    test_vec4(float4())
-    test_vec2(int2())
-    test_vec3(int3())
-    test_vec4(int4())
-    test_vec2(uint2())
-    test_vec3(uint3())
-    test_vec4(uint4())
-    return true
-
+def test()
+  offset_momentum()
+  // print("\ninitial energy {energy()}\n")
+  energy()
+  profile(10, "n-bodies")  <|
+    nbodies(500000)
+  // print("\nresult energy {energy()}\n")
+  energy()
+  return true

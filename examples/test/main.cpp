@@ -197,6 +197,7 @@ bool run_exception_tests( const string & path ) {
 }
 
 int main() {
+    _control87(_DN_FLUSH, _MCW_DN);
 #ifdef _MSC_VER
     #define    TEST_PATH "../"
 #else

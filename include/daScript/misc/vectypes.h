@@ -15,12 +15,12 @@ namespace das
         __forceinline bool operator == ( const vec2<TT> & vec ) const {
             return x==vec.x && y==vec.y;
         }
-        vec2() = default;
-        vec2(const vec2 &) = default;
-        vec2(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)) {}
-        vec2(TT X, TT Y) : x(X), y(Y) {}
-        vec2(TT t) : x(t), y(t) {}
-        operator vec4f() const { return v_ldu_half((float *)this); };
+        __forceinline vec2() = default;
+        __forceinline vec2(const vec2 &) = default;
+        __forceinline vec2(vec4f t) { *(float2*)(&x) = *(float2 *)(&t); }
+        __forceinline vec2(TT X, TT Y) : x(X), y(Y) {}
+        __forceinline vec2(TT t) : x(t), y(t) {}
+        __forceinline operator vec4f() const { return v_ldu_half(&x); };
     };
 
     template <typename TT>
@@ -34,12 +34,12 @@ namespace das
         __forceinline bool operator == ( const vec3<TT> & vec ) const {
             return x==vec.x && y==vec.y && z==vec.z;
         }
-        vec3() = default;
-        vec3(const vec3 &) = default;
-        vec3(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)), z(v_extract_z(t)) {}
-        vec3(TT X, TT Y, TT Z) : x(X), y(Y), z(Z) {}
-        vec3(TT t) : x(t), y(t), z(t) {}
-        operator vec4f() const { return v_ldu((float *)this); };
+        __forceinline vec3() = default;
+        __forceinline vec3(const vec3 &) = default;
+        __forceinline vec3(vec4f t) { *(float3*)(&x) = *(float3 *)(&t); }
+        __forceinline vec3(TT X, TT Y, TT Z) : x(X), y(Y), z(Z) {}
+        __forceinline vec3(TT t) : x(t), y(t), z(t) {}
+        __forceinline operator vec4f() const { return v_ldu(&x); };
     };
 
     template <typename TT>
@@ -53,12 +53,12 @@ namespace das
         __forceinline bool operator == ( const vec4<TT> & vec ) const {
             return x==vec.x && y==vec.y && z==vec.z && w==vec.w;
         }
-        vec4() = default;
-        vec4(const vec4 &) = default;
-        vec4(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)), z(v_extract_z(t)), w(v_extract_w(t)) {}
-        vec4(TT X, TT Y, TT Z, TT W) : x(X), y(Y), z(Z), w(W) {}
-        vec4(TT t) : x(t), y(t), z(t), w(t) {}
-        operator vec4f() const { return v_ldu((float *)this); };
+        __forceinline vec4() = default;
+        __forceinline vec4(const vec4 &) = default;
+        __forceinline vec4(vec4f t) { *(float4*)(&x) = *(float4 *)(&t); }
+        __forceinline vec4(TT X, TT Y, TT Z, TT W) : x(X), y(Y), z(Z), w(W) {}
+        __forceinline vec4(TT t) : x(t), y(t), z(t), w(t) {}
+        __forceinline operator vec4f() const { return v_ldu(&x); };
     };
 
     typedef vec2<float> float2;
