@@ -97,7 +97,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
 #if 1
-    unit_test(TEST_PATH "examples/profile/tests/primes.das");
+    unit_test(TEST_PATH "examples/profile/tests/nbodies.das");
     Module::Shutdown();
     return 0;
 #endif
