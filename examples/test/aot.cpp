@@ -44,23 +44,34 @@ namespace das {
 
         void advance ( Context * __context__ )
         {
+            int32_t i = 0;
             {
-                struct body * __restrict bodies_start = &(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/(0,__context__));
-                struct body * __restrict bodies_end = bodies_start + 5;
-                for (  struct body * b = bodies_start; b!=bodies_end; ++b ) 
+                bool __need_loop_48 = true;
+                das_iterator<TDim<struct body,5>> __b_iterator(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/);
+                struct body * b;
+                __need_loop_48 = __b_iterator.first(__context__,b) && __need_loop_48;
+                for ( ; __need_loop_48 ; __need_loop_48 = __b_iterator.next(__context__,b) )
                 {
+                    ++i;
                     {
-                        for ( struct body *__restrict  b2 = b + 1; b2 != bodies_end; ++b2 )
+                        bool __need_loop_50 = true;
+                        das_iterator<range> __j_iterator(range(i,5));
+                        int32_t j;
+                        __need_loop_50 = __j_iterator.first(__context__,j) && __need_loop_50;
+                        for ( ; __need_loop_50 ; __need_loop_50 = __j_iterator.next(__context__,j) )
                         {
-                            vec4f dx = v_sub((*b).x,(*b2).x); 
+                            struct body * b2 = &(das_global<TDim<struct body,5>,16>(__context__) /*bodies*/(j,__context__));
+                            float3 dx = (SimPolicy<float3>::Sub((*b).x,(*b2).x,*__context__));
                             float inv_distance = invlength3(dx);
                             float mag = ((inv_distance * inv_distance) * inv_distance);
-                            (*b).v = v_sub((*b).v, v_mul(dx, v_splats((*b2).mass*mag)));
-                            (*b2).v = v_add((*b2).v, v_mul(dx, v_splats((*b).mass*mag)));
+                            SimPolicy<float3>::SetSub((char *)&((*b).v),(SimPolicy<float3>::MulVecScal(dx,cast<float>::from(((*b2).mass * mag)),*__context__)),*__context__);
+                            SimPolicy<float3>::SetAdd((char *)&((*b2).v),(SimPolicy<float3>::MulVecScal(dx,cast<float>::from(((*b).mass * mag)),*__context__)),*__context__);
                         }
+                        __j_iterator.close(__context__,j);
                     };
-                    (*b).x = v_add((*b).x, (*b).v);
+                    SimPolicy<float3>::SetAdd((char *)&((*b).x),(*b).v,*__context__);
                 }
+                __b_iterator.close(__context__,b);
             };
         }
 
@@ -146,15 +157,15 @@ namespace das {
         }
 
         bool test ( Context * __context__ ) { das_stack_prologue __prologue(__context__,64,__LINE__);
-        {
-            offset_momentum(__context__);
-            energy(__context__);
-            builtin_profile(10,"n-bodies",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
-                nbodies(__context__,500000);
-            })),__context__);
-            energy(__context__);
-            return true;
-        }}
+            {
+                offset_momentum(__context__);
+                energy(__context__);
+                builtin_profile(10,"n-bodies",das_arg<const Block /*void*/>::pass(das_make_block<void>(__context__,0,[&]()->void{
+                    nbodies(__context__,500000);
+                })),__context__);
+                energy(__context__);
+                return true;
+            }}
 
         void registerAot ( AotLibrary & aotLib )
         {
