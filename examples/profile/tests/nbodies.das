@@ -1,4 +1,5 @@
 // options logNodes=true
+// options logCpp=true
 options indenting = 2
 require math
 require testProfile
@@ -12,7 +13,9 @@ let
   DAYS_PER_YEAR = 365.24
 
 struct body
-  x,v:float3
+  x:float3
+  pad:float
+  v:float3
   mass:float
 let 
   bodies = [[body

@@ -1,14 +1,11 @@
 // options log = true, logNodes =true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
-
-options logCpp = true
+// options logCpp = true
 
 require testProfile
 
 struct NObject
     position : float3
-    pad1 : float
     velocity : float3
-    pad2 : float
 
 def update(a:NObject)
     a.position+=a.velocity

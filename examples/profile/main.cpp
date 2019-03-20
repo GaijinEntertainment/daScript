@@ -4,7 +4,7 @@
 using namespace das;
 #include "test_profile.h"
 
-#define USE_AOT 1
+#define USE_AOT 0
 
 #if USE_AOT
 namespace das {
@@ -113,7 +113,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
 #if 1
-    unit_test(TEST_PATH "examples/profile/tests/particles.das");
+    unit_test(TEST_PATH "examples/profile/tests/nbodies.das");
     Module::Shutdown();
     return 0;
 #endif
