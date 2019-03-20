@@ -82,43 +82,43 @@ namespace das {
             das_global<TDim<struct Material,9>,16>(__context__) = (([&]() -> TDim<struct Material,9> {
                 TDim<struct Material,9> __mks_102; das_zero(__mks_102);
                 __mks_102(0,__context__).mtype = Type::Lambert;
-                __mks_102(0,__context__).albedo = v_make_vec4f(0.800000012f,0.800000012f,0.800000012f,0.f);
-                __mks_102(0,__context__).emissive = v_make_vec4f(0.f,0.f,0.f,0.f);
+                __mks_102(0,__context__).albedo = v_splats(0.800000012f);
+                __mks_102(0,__context__).emissive = v_zero();
                 __mks_102(0,__context__).roughness = 0.f;
                 __mks_102(0,__context__).ri = 0.f;
                 __mks_102(1,__context__).mtype = Type::Lambert;
                 __mks_102(1,__context__).albedo = v_make_vec4f(0.800000012f,0.400000006f,0.400000006f,0.f);
-                __mks_102(1,__context__).emissive = v_make_vec4f(0.f,0.f,0.f,0.f);
+                __mks_102(1,__context__).emissive = v_zero();
                 __mks_102(1,__context__).roughness = 0.f;
                 __mks_102(1,__context__).ri = 0.f;
                 __mks_102(2,__context__).mtype = Type::Lambert;
                 __mks_102(2,__context__).albedo = v_make_vec4f(0.400000006f,0.800000012f,0.400000006f,0.f);
-                __mks_102(2,__context__).emissive = v_make_vec4f(0.f,0.f,0.f,0.f);
+                __mks_102(2,__context__).emissive = v_zero();
                 __mks_102(2,__context__).roughness = 0.f;
                 __mks_102(2,__context__).ri = 0.f;
                 __mks_102(3,__context__).mtype = Type::Metal;
                 __mks_102(3,__context__).albedo = v_make_vec4f(0.400000006f,0.400000006f,0.800000012f,0.f);
-                __mks_102(3,__context__).emissive = v_make_vec4f(0.f,0.f,0.f,0.f);
+                __mks_102(3,__context__).emissive = v_zero();
                 __mks_102(3,__context__).roughness = 0.f;
                 __mks_102(3,__context__).ri = 0.f;
                 __mks_102(4,__context__).mtype = Type::Metal;
                 __mks_102(4,__context__).albedo = v_make_vec4f(0.400000006f,0.800000012f,0.400000006f,0.f);
-                __mks_102(4,__context__).emissive = v_make_vec4f(0.f,0.f,0.f,0.f);
+                __mks_102(4,__context__).emissive = v_zero();
                 __mks_102(4,__context__).roughness = 0.f;
                 __mks_102(4,__context__).ri = 0.f;
                 __mks_102(5,__context__).mtype = Type::Metal;
                 __mks_102(5,__context__).albedo = v_make_vec4f(0.400000006f,0.800000012f,0.400000006f,0.f);
-                __mks_102(5,__context__).emissive = v_make_vec4f(0.f,0.f,0.f,0.f);
+                __mks_102(5,__context__).emissive = v_zero();
                 __mks_102(5,__context__).roughness = 0.200000003f;
                 __mks_102(5,__context__).ri = 0.f;
                 __mks_102(6,__context__).mtype = Type::Metal;
                 __mks_102(6,__context__).albedo = v_make_vec4f(0.400000006f,0.800000012f,0.400000006f,0.f);
-                __mks_102(6,__context__).emissive = v_make_vec4f(0.f,0.f,0.f,0.f);
+                __mks_102(6,__context__).emissive = v_zero();
                 __mks_102(6,__context__).roughness = 0.600000024f;
                 __mks_102(6,__context__).ri = 0.f;
                 __mks_102(7,__context__).mtype = Type::Dielectric;
-                __mks_102(7,__context__).albedo = v_make_vec4f(0.400000006f,0.400000006f,0.400000006f,0.f);
-                __mks_102(7,__context__).emissive = v_make_vec4f(0.f,0.f,0.f,0.f);
+                __mks_102(7,__context__).albedo = v_splats(0.400000006f);
+                __mks_102(7,__context__).emissive = v_zero();
                 __mks_102(7,__context__).roughness = 0.f;
                 __mks_102(7,__context__).ri = 1.5f;
                 __mks_102(8,__context__).mtype = Type::Lambert;
@@ -172,7 +172,7 @@ namespace das {
         void draw ( Context * __context__, float time, int32_t frameCount, int32_t screenWidth, int32_t screenHeight, int32_t ymin, int32_t ymax, TArray<float3> &  backbuffer, int32_t & outRayCount )
         {
             int32_t rayCount = 0;
-            struct Camera cam = Camera(__context__,v_make_vec4f(0.f,2.f,3.f,0.f),v_make_vec4f(0.f,0.f,0.f,0.f),v_make_vec4f(0.f,1.f,0.f,0.f),60.f,float(screenWidth) / float(screenHeight),0.100000001f,3.f);
+            struct Camera cam = Camera(__context__,v_make_vec4f(0.f,2.f,3.f,0.f),v_zero(),v_make_vec4f(0.f,1.f,0.f,0.f),60.f,float(screenWidth) / float(screenHeight),0.100000001f,3.f);
             rayCount += trace(__context__,screenWidth,screenHeight,frameCount,ymin,ymax,das_arg<TArray<float3>>::pass(backbuffer),das_arg<struct Camera>::pass(cam));
             outRayCount = rayCount;
         }
@@ -278,7 +278,7 @@ namespace das {
 
         bool scatter ( Context * __context__, const struct Material &  mat, const struct Ray &  r_in, struct Hit &  rec, float3 & attenuation, struct Ray &  scattered, float3 & outLightE, int32_t & inoutRayCount )
         {
-            outLightE = v_make_vec4f(0.f,0.f,0.f,0.f);
+            outLightE = v_zero();
             if ( mat.mtype == Type::Lambert )
             {
                 vec4f /*float3*/ target = (SimPolicy<float3>::Add((SimPolicy<float3>::Add(rec.pos,rec.normal,*__context__)),randomUnitVector(cast_vec_ref<int4>::to(das_global<int4,0>(__context__) /*RAND_SEED*/)),*__context__));
@@ -330,7 +330,7 @@ namespace das {
                 }       else
                     if ( mat.mtype == Type::Dielectric )
                     {
-                        attenuation = v_make_vec4f(1.f,1.f,1.f,0.f);
+                        attenuation = v_splats(1.f);
                         vec4f /*float3*/ refr = v_zero();
                         float reflProb = 0;
                         if ( dot3(r_in.dir,rec.normal) > 0.f )
@@ -374,8 +374,8 @@ namespace das {
                         attenuation = v_make_vec4f(1.f,0.f,1.f,0.f);
                         scattered = (([&]() -> struct Ray {
                             struct Ray __mks_192; das_zero(__mks_192);
-                            __mks_192.orig = v_make_vec4f(0.f,0.f,0.f,0.f);
-                            __mks_192.dir = v_make_vec4f(0.f,0.f,0.f,0.f);
+                            __mks_192.orig = v_zero();
+                            __mks_192.dir = v_zero();
                             return __mks_192;
                         })());
                         return false;
@@ -441,7 +441,7 @@ namespace das {
                 {
                     if ( !doMaterialE )
                     {
-                        matE = v_make_vec4f(0.f,0.f,0.f,0.f);
+                        matE = v_zero();
                     };
                     doMaterialE = (*mat).mtype != Type::Lambert;
                     return SimPolicy<float3>::Mad(attenuation,trace(__context__,das_arg<struct Ray>::pass(scattered),depth + 1,inoutRayCount,doMaterialE),SimPolicy<float3>::Add(matE,lightE,*__context__),*__context__);
@@ -451,8 +451,8 @@ namespace das {
                 };
             }       else
             {
-                vec4f /*float3*/ t = SimPolicy<float3>::MadS(r.dir,cast<float>::from(0.5f),v_make_vec4f(1.f,1.f,1.f,0.f),*__context__);
-                return SimPolicy<float3>::Lerp(v_make_vec4f(0.300000012f,0.300000012f,0.300000012f,0.f),v_make_vec4f(0.150000006f,0.210000008f,0.300000012f,0.f),t,*__context__);
+                vec4f /*float3*/ t = SimPolicy<float3>::MadS(r.dir,cast<float>::from(0.5f),v_splats(1.f),*__context__);
+                return SimPolicy<float3>::Lerp(v_splats(0.300000012f),v_make_vec4f(0.150000006f,0.210000008f,0.300000012f,0.f),t,*__context__);
             };
         }
 
@@ -477,7 +477,7 @@ namespace das {
                         __need_loop_224 = __x_iterator.first(__context__,x) && __need_loop_224;
                         for ( ; __need_loop_224 ; __need_loop_224 = __x_iterator.next(__context__,x) )
                         {
-                            vec4f /*float3*/ col = v_make_vec4f(0.f,0.f,0.f,0.f);
+                            vec4f /*float3*/ col = v_zero();
                             {
                                 bool __need_loop_226 = true;
                                 das_iterator<range> __s_iterator(range(0,4));

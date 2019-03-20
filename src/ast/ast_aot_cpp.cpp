@@ -749,17 +749,35 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprConstFloat2 * c ) override {
             auto val = c->getValue();
-            ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f,0.f,0.f)";
+            if (val.x == 0.0f && val.y == 0.0f ) {
+                ss << "v_zero()";
+            } else if (val.x == val.y ) {
+                ss << "v_splats(" << to_string_ex(val.x) << "f)";
+            } else {
+                ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f,0.f,0.f)";
+            }
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat3 * c ) override {
             auto val = c->getValue();
-            ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f,0.f)";
+            if (val.x == 0.0f && val.y == 0.0f && val.z == 0.0f) {
+                ss << "v_zero()";
+            } else if (val.x == val.y && val.x == val.z) {
+                ss << "v_splats(" << to_string_ex(val.x) << "f)";
+            } else {
+                ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f,0.f)";
+            }
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat4 * c ) override {
             auto val = c->getValue();
-            ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f," << to_string_ex(val.w) << "f)";
+            if (val.x == 0.0f && val.y == 0.0f && val.z == 0.0f && val.w == 0.0f ) {
+                ss << "v_zero()";
+            } else if (val.x == val.y && val.x == val.z && val.x == val.w ) {
+                ss << "v_splats(" << to_string_ex(val.x) << "f)";
+            } else {
+                ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f," << to_string_ex(val.w) << "f)";
+            }
             return Visitor::visit(c);
         }
     // ExprWhile
