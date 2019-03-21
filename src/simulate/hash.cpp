@@ -73,6 +73,17 @@ namespace das
 
     void hash_value ( HashBlock & block, TypeInfo * info );
 
+    void hash_value ( HashBlock & block,FuncInfo * fi ) {
+        block.write(fi->name);
+        for ( uint32_t i=0; i!=fi->argsSize; ++i ) {
+            auto ar = fi->args[i];
+            hash_value(block,ar);
+        }
+        block.write(&fi->argsSize, sizeof(uint32_t));
+        block.write(&fi->stackSize, sizeof(uint32_t));
+        hash_value(block,fi->result);
+    }
+
     void hash_value ( HashBlock & block, StructInfo * si ) {
         block.write(si->name);
         for ( uint32_t i=0; i!=si->fieldsSize; ++i ) {
@@ -130,6 +141,12 @@ namespace das
     }
 
     uint32_t hash_value ( EnumInfo * info ) {
+        HashBlock block;
+        hash_value(block, info);
+        return block.getHash();
+    }
+
+    uint32_t hash_value ( FuncInfo * info ) {
         HashBlock block;
         hash_value(block, info);
         return block.getHash();

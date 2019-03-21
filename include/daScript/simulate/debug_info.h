@@ -140,6 +140,7 @@ namespace das
         uint32_t    argsSize;
         uint32_t    stackSize;
         TypeInfo *  result;
+        uint32_t    hash;
     };
 
     string das_to_string ( Type t );

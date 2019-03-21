@@ -174,86 +174,162 @@ namespace das {
         return stream.str();
     }
 
-    void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info );
 
-    void describeCppVarInfo ( TextWriter & ss, VarInfo * info ) {
-        describeCppTypeInfo(ss, info);
-        ss << ", \"" << info->name << "\", ";
-        ss << info->offset;
+    class AotDebugInfoHelper : public DebugInfoHelper {
+    public:
 
-    }
-    void describeCppStructInfo ( TextWriter & ss, StructInfo * info ) {
-        ss << "{ ";
-        ss << "\"" << info->name << "\", ";
-        if ( info->fields ) {
-            ss << " { ";
+        string str() const {
+            TextWriter ss;
+            // extern declarations
+            for ( auto & ti : smn2s ) {
+                ss << "extern StructInfo " << structInfoName(ti.second) << ";\n";
+            }
+            for ( auto & ti : tmn2t ) {
+                ss << "extern TypeInfo " << typeInfoName(ti.second) << ";\n";
+            }
+            for ( auto & ti : vmn2v ) {
+                ss << "extern VarInfo " << varInfoName(ti.second) << ";\n";
+            }
+            for ( auto & ti : fmn2f ) {
+                ss << "extern FuncInfo " << funcInfoName(ti.second) << ";\n";
+            }
+            for ( auto & ti : emn2e ) {
+                ss << "extern EnumnInfo " << enumInfoName(ti.second) << ";\n";
+            }
+            ss << "\n";
+            for ( auto & ti : smn2s ) {
+                describeCppStructInfoFields(ss, ti.second);
+                ss << "StructInfo " << structInfoName(ti.second) << " = {";
+                describeCppStructInfo(ss, ti.second);
+                ss << " };\n";
+            }
+            for ( auto & ti : tmn2t ) {
+                ss << "TypeInfo " << typeInfoName(ti.second) << " = { ";
+                describeCppTypeInfo(ss, ti.second);
+                ss << " };\n";
+            }
+            ss << "\n";
+            return ss.str();
+        }
+
+        string enumInfoName ( EnumInfo * info ) const {
+            TextWriter ss;
+            ss << "__enum_info__" << HEX << info->hash << DEC;
+            return ss.str();
+        }
+
+        string funcInfoName ( FuncInfo * info ) const {
+            TextWriter ss;
+            ss << "__func_info__" << HEX << info->hash << DEC;
+            return ss.str();
+        }
+
+        string varInfoName ( VarInfo * info ) const {
+            TextWriter ss;
+            ss << "__var_info__" << HEX << info->hash << DEC;
+            return ss.str();
+        }
+
+        string structInfoName ( StructInfo * info ) const {
+            TextWriter ss;
+            ss << "__struct_info__" << HEX << info->hash << DEC;
+            return ss.str();
+        }
+
+        string typeInfoName ( TypeInfo * info ) const {
+            TextWriter ss;
+            ss << "__type_info__" << HEX << info->hash << DEC;
+            return ss.str();
+        }
+
+    protected:
+        void describeCppVarInfo ( TextWriter & ss, VarInfo * info ) const {
+            describeCppTypeInfo(ss, info);
+            ss << ", \"" << info->name << "\", ";
+            ss << info->offset;
+
+        }
+        void describeCppStructInfoFields ( TextWriter & ss, StructInfo * info ) const {
+            if ( !info->fields ) return;
+            for ( uint32_t fi=0; fi!=info->fieldsSize; ++fi ) {
+                ss << "VarInfo " << structInfoName(info) << "_field_" << fi << " =  { ";
+                describeCppVarInfo(ss, info->fields[fi]);
+                ss << " };\n";
+            }
+            ss << "VarInfo * " << structInfoName(info) << "_fields[" << info->fieldsSize << "] =  { ";
             for ( uint32_t fi=0; fi!=info->fieldsSize; ++fi ) {
                 if ( fi ) ss << ", ";
-                describeCppVarInfo(ss, info->fields[fi]);
+                ss << "&" << structInfoName(info) << "_field_" << fi;
             }
-            ss << " }, ";
-        } else {
-            ss << "nullptr, ";
+            ss << " };\n";
         }
-        ss << info->fieldsSize << ", ";
-        ss << info->size << ", ";
-        ss << info->initializer << ", ";
-        ss << "0x" << HEX << info->hash << DEC;
-        ss << " }";
-    }
-
-    void describeCppEnumInfo ( TextWriter & ss, EnumInfo * info ) {
-    }
-
-    void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info ) {
-        ss << "Type::" << das_to_cppCTypeString(info->type) << ", ";
-        if ( info->structType ) {
-            describeCppStructInfo(ss, info->structType);
-        } else {
-            ss << "nullptr";
-        }
-        ss << ", ";
-        if ( info->enumType ) {
-            describeCppEnumInfo(ss, info->enumType);
-        } else {
-            ss << "nullptr";
-        }
-        if ( info->annotation_or_name ) {
-            ss << ", DAS_MAKE_ANNOTATION(\"" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
-        } else {
-            ss << ", nullptr";
-        }
-        ss << ", ";
-        if ( info->firstType ) {
-            ss << "{ ";
-            describeCppTypeInfo(ss, info->firstType);
-            ss << " }";
-        } else {
-            ss << "nullptr";
-        }
-        ss << ", ";
-        if ( info->secondType ) {
-            ss << "{ ";
-            describeCppTypeInfo(ss, info->secondType);
-            ss << " }";
-        } else {
-            ss << "nullptr";
-        }
-        ss << ", " << info->dimSize;
-        ss << ", ";
-        if ( info->dimSize ) {
-            ss << "{";
-            for ( uint32_t i=0; i!=info->dimSize; ++i ) {
-                if ( i ) ss << ",";
-                ss << info->dim[i];
+        void describeCppStructInfo ( TextWriter & ss, StructInfo * info ) const {
+            ss << "\"" << info->name << "\", ";
+            if ( info->fields ) {
+                ss << structInfoName(info) << "_fields, ";
+            } else {
+                ss << "nullptr, ";
             }
-            ss << "}";
-        } else {
-            ss << "nullptr";
+            ss << info->fieldsSize << ", ";
+            ss << info->size << ", ";
+            ss << info->initializer << ", ";
+            ss << "0x" << HEX << info->hash << DEC;
         }
-        ss << ", " << info->flags;
-        ss << ", 0x" << HEX << info->hash << DEC;
-    }
+
+        void describeCppEnumInfo ( TextWriter & ss, EnumInfo * info ) const {
+        }
+
+        void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info ) const {
+            ss << "Type::" << das_to_cppCTypeString(info->type) << ", ";
+            if ( info->structType ) {
+                ss << "&" << structInfoName(info->structType);
+            } else {
+                ss << "nullptr";
+            }
+            ss << ", ";
+            if ( info->enumType ) {
+                describeCppEnumInfo(ss, info->enumType);
+            } else {
+                ss << "nullptr";
+            }
+            if ( info->annotation_or_name ) {
+                ss << ", DAS_MAKE_ANNOTATION(\"" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
+            } else {
+                ss << ", nullptr";
+            }
+            ss << ", ";
+            if ( info->firstType ) {
+                ss << "{ ";
+                describeCppTypeInfo(ss, info->firstType);
+                ss << " }";
+            } else {
+                ss << "nullptr";
+            }
+            ss << ", ";
+            if ( info->secondType ) {
+                ss << "{ ";
+                describeCppTypeInfo(ss, info->secondType);
+                ss << " }";
+            } else {
+                ss << "nullptr";
+            }
+            ss << ", " << info->dimSize;
+            ss << ", ";
+            if ( info->dimSize ) {
+                ss << "{";
+                for ( uint32_t i=0; i!=info->dimSize; ++i ) {
+                    if ( i ) ss << ",";
+                    ss << info->dim[i];
+                }
+                ss << "}";
+            } else {
+                ss << "nullptr";
+            }
+            ss << ", " << info->flags;
+            ss << ", 0x" << HEX << info->hash << DEC;
+        }
+
+    };
 
     bool isLocalVec ( const TypeDeclPtr & vtype ) {
         return vtype->dim.size()==0 && vtype->isVectorType() && !vtype->ref;
@@ -294,13 +370,15 @@ namespace das {
     class CppAot : public Visitor {
     public:
         CppAot () {}
-        string str() const { return sti.str() + ss.str(); };
+        string str() const {
+            return "\n" + helper.str() + sti.str() + ss.str();
+        };
     protected:
-        TextWriter      ss, sti;
-        int             lastNewLine = -1;
-        int             tab = 0;
-        int             debugInfoGlobal = 0;
-        set<uint32_t>   tinfo;
+        TextWriter          ss, sti;
+        int                 lastNewLine = -1;
+        int                 tab = 0;
+        int                 debugInfoGlobal = 0;
+        AotDebugInfoHelper  helper;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -914,25 +992,18 @@ namespace das {
             uint32_t nArgs = uint32_t(expr->elements.size());
             ss << "das_string_builder(__context__,SimNode_AotInterop<" << nArgs << ">(";
             if ( nArgs ) {
-                DebugInfoHelper helper;
                 vector<TypeInfo*> elInfo;
                 elInfo.reserve(expr->elements.size());
                 for ( auto & el : expr->elements ) {
                     TypeInfo * info = helper.makeTypeInfo(nullptr, el->type);
-                    if ( tinfo.find(info->hash)==tinfo.end() ) {
-                        tinfo.insert(info->hash);
-                        sti << "\nTypeInfo __type_info__" << HEX << info->hash << DEC << " = { ";
-                        describeCppTypeInfo(sti, info);
-                        sti << " };";
-                    }
                     elInfo.push_back(info);
                 }
                 string debug_info_name = "__tinfo_" + to_string(debugInfoGlobal++);
-                sti << "\nTypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
+                sti << "TypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
                 for ( size_t i=0; i!=elInfo.size(); ++i ) {
                     auto info = elInfo[i];
                     if ( i ) sti << ", ";
-                    sti << "&__type_info__" << HEX << info->hash << DEC;
+                    sti << "&" << helper.typeInfoName(info);
                 }
                 sti << " };\n";
                 ss << debug_info_name << ", ";
