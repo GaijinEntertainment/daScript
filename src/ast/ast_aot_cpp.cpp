@@ -11,6 +11,8 @@ namespace das {
         {   Type::alias,        "alias"  },
         {   Type::anyArgument,  "anyArgument"  },
         {   Type::tVoid,        "tVoid"  },
+        {   Type::tStructure,   "tStructure" },
+        {   Type::tPointer,     "tPointer" },
         {   Type::tBool,        "tBool"  },
         {   Type::tInt64,       "tInt64"  },
         {   Type::tUInt64,      "tUInt64"  },
@@ -172,14 +174,39 @@ namespace das {
         return stream.str();
     }
 
+    void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info );
+
+    void describeCppVarInfo ( TextWriter & ss, VarInfo * info ) {
+        describeCppTypeInfo(ss, info);
+        ss << ", \"" << info->name << "\", ";
+        ss << info->offset;
+
+    }
     void describeCppStructInfo ( TextWriter & ss, StructInfo * info ) {
+        ss << "{ ";
+        ss << "\"" << info->name << "\", ";
+        if ( info->fields ) {
+            ss << " { ";
+            for ( uint32_t fi=0; fi!=info->fieldsSize; ++fi ) {
+                if ( fi ) ss << ", ";
+                describeCppVarInfo(ss, info->fields[fi]);
+            }
+            ss << " }, ";
+        } else {
+            ss << "nullptr, ";
+        }
+        ss << info->fieldsSize << ", ";
+        ss << info->size << ", ";
+        ss << info->initializer << ", ";
+        ss << "0x" << HEX << info->hash << DEC;
+        ss << " }";
     }
 
     void describeCppEnumInfo ( TextWriter & ss, EnumInfo * info ) {
     }
 
     void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info ) {
-        ss << "{ Type::" << das_to_cppCTypeString(info->type) << ", ";
+        ss << "Type::" << das_to_cppCTypeString(info->type) << ", ";
         if ( info->structType ) {
             describeCppStructInfo(ss, info->structType);
         } else {
@@ -198,13 +225,17 @@ namespace das {
         }
         ss << ", ";
         if ( info->firstType ) {
+            ss << "{ ";
             describeCppTypeInfo(ss, info->firstType);
+            ss << " }";
         } else {
             ss << "nullptr";
         }
         ss << ", ";
         if ( info->secondType ) {
+            ss << "{ ";
             describeCppTypeInfo(ss, info->secondType);
+            ss << " }";
         } else {
             ss << "nullptr";
         }
@@ -222,21 +253,16 @@ namespace das {
         }
         ss << ", " << info->flags;
         ss << ", 0x" << HEX << info->hash << DEC;
-        ss << " }";
-    }
-
-    string describeCppTypeInfo ( TypeInfo * info ) {
-        TextWriter ss;
-        describeCppTypeInfo(ss,info);
-        return ss.str();
     }
 
     bool isLocalVec ( const TypeDeclPtr & vtype ) {
         return vtype->dim.size()==0 && vtype->isVectorType() && !vtype->ref;
     }
+
     bool isVecRef ( const TypeDeclPtr & vtype ) {
         return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
     }
+
     void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype ) {
         if ( isLocalVec(vtype) ) {
             if ( vtype->constant ) ss << "const ";
@@ -562,10 +588,14 @@ namespace das {
              if ( !noBracket(that) ) ss << "(";
             if ( isOpPolicy(that) ) {
                 auto pt = opPolicyBase(that);
+                if ( policyResultNeedCast(pt, that->type) ) {
+                    ss << "cast<" << describeCppType(that->type,false,true,true) << ">::to(";
+                }
                 outPolicy(pt);
                 ss << "::" << opPolicyName(that) << "(";
-                if ( that->left->type->ref ) ss << "(char *)&(";
-                if ( policyArgNeedCast(pt, that->left->type) ) {
+                if ( that->left->type->ref ) {
+                    ss << "(char *)&(";
+                } else if ( policyArgNeedCast(pt, that->left->type) ) {
                     ss << "cast<" << describeCppType(that->left->type,false,true,true) << ">::from(";
                 }
             }
@@ -574,8 +604,11 @@ namespace das {
             Visitor::preVisitRight(that,right);
             if ( isOpPolicy(that) ) {
                 auto pt = opPolicyBase(that);
-                if ( policyArgNeedCast(pt, that->left->type) )ss << ")";
-                if ( that->left->type->ref ) ss << ")";
+                if ( that->left->type->ref ) {
+                    ss << ")";
+                } else if ( policyArgNeedCast(pt, that->left->type) ) {
+                    ss << ")";
+                }
                 ss << ",";
                 if ( policyArgNeedCast(pt, that->right->type) ) {
                     ss << "cast<" << describeCppType(that->right->type,false,true,true) << ">::from(";
@@ -589,6 +622,9 @@ namespace das {
                 auto pt = opPolicyBase(that);
                 if ( policyArgNeedCast(pt, that->right->type) )ss << ")";
                 ss << ",*__context__)";
+                if ( policyResultNeedCast(pt, that->type) ) {
+                    ss << ")";
+                }
             }
             if ( !noBracket(that) ) ss << ")";
             return Visitor::visit(that);
@@ -885,9 +921,9 @@ namespace das {
                     TypeInfo * info = helper.makeTypeInfo(nullptr, el->type);
                     if ( tinfo.find(info->hash)==tinfo.end() ) {
                         tinfo.insert(info->hash);
-                        sti << "\nTypeInfo __type_info__" << HEX << info->hash << DEC << " = ";
+                        sti << "\nTypeInfo __type_info__" << HEX << info->hash << DEC << " = { ";
                         describeCppTypeInfo(sti, info);
-                        sti << ";";
+                        sti << " };";
                     }
                     elInfo.push_back(info);
                 }
@@ -1063,6 +1099,12 @@ namespace das {
                 return false;
             }
             return true;
+        }
+        bool policyResultNeedCast ( const TypeDeclPtr & polType, const TypeDeclPtr & resType ) {
+            if ( resType->isVoid() || resType->baseType==Type::tBool ) {
+                return false;
+            }
+            return policyArgNeedCast(polType, resType);
         }
         bool isPolicyBasedCall ( ExprCall * call ) {
             if ( call->func->builtIn ) {

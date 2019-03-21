@@ -837,6 +837,9 @@ namespace das
     bool TypeDecl::isVecPolicyType() const {
         if ( dim.size() )
             return false;
+        if ( baseType==Type::tString ) {
+            return false;
+        }
         return isPolicyType();
     }
 
