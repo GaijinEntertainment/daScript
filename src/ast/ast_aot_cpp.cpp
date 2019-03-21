@@ -601,12 +601,27 @@ namespace das {
         virtual void preVisitLeft  ( ExprOp3 * that, Expression * left ) override {
             Visitor::preVisitLeft(that,left);
             ss << " ? ";
+            auto argT = left->type;
+            if ( isLocalVec(argT) ) {
+                ss << "(vec4f)";
+            } else if ( isVecRef(argT) ) {
+                ss << "cast_vec_ref<" << describeCppType(argT,false,true,true) << ">::to";
+            }
+            ss << "(";
         }
         virtual void preVisitRight ( ExprOp3 * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
-            ss << " : ";
+            ss << ") : ";
+            auto argT = right->type;
+            if ( isLocalVec(argT) ) {
+                ss << "(vec4f)";
+            } else if ( isVecRef(argT) ) {
+                ss << "cast_vec_ref<" << describeCppType(argT,false,true,true) << ">::to";
+            }
+            ss << "(";
         }
         virtual ExpressionPtr visit ( ExprOp3 * that ) override {
+            ss << ")";
             if ( !noBracket(that) ) ss << ")";
             return Visitor::visit(that);
         }

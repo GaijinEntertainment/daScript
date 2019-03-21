@@ -296,7 +296,7 @@ namespace das {
                 attenuation = mat.albedo;
                 struct Sphere * s = &(das_global<TDim<struct Sphere,9>,352>(__context__) /*s_Spheres*/(8,__context__));
                 vec4f /*float3*/ sw = normalize3(SimPolicy<float3>::Sub((*s).center,rec.pos,*__context__));
-                vec4f /*float3*/ su = normalize3(cross3((SimPolicy<float>::Abs(v_extract_x(sw) /*x*/,*__context__) > 0.00999999978f) ? v_make_vec4f(0.f,1.f,0.f,0.f) : v_make_vec4f(1.f,0.f,0.f,0.f),sw));
+                vec4f /*float3*/ su = normalize3(cross3((SimPolicy<float>::Abs(v_extract_x(sw) /*x*/,*__context__) > 0.00999999978f) ? (vec4f)(v_make_vec4f(0.f,1.f,0.f,0.f)) : (vec4f)(v_make_vec4f(1.f,0.f,0.f,0.f)),sw));
                 vec4f /*float3*/ sv = cross3(sw,su);
                 float cosAMax = SimPolicy<float>::Sqrt(SimPolicy<float>::Sat(1.f - (((*s).radius * (*s).radius) * invdistanceSq3(rec.pos,(*s).center)),*__context__),*__context__);
                 vec4f /*float4*/ eps = randomFloat4(cast_vec_ref<int4>::to(das_global<int4,0>(__context__) /*RAND_SEED*/));
@@ -316,11 +316,11 @@ namespace das {
                 })());
                 if ( hitWorld(__context__,das_arg<struct Ray>::pass(ray),0.00100000005f,10000000.f,das_arg<struct Hit>::pass(lightHit),hitID) & (hitID == 8) )
                 {
-                    vec4f /*float3*/ nl = ((dot3(rec.normal,r_in.dir) < 0.f) ? vec4f(rec.normal) : SimPolicy<float3>::Unm(rec.normal,*__context__));
+                    vec4f /*float3*/ nl = ((dot3(rec.normal,r_in.dir) < 0.f) ? (vec4f)(rec.normal) : (vec4f)(SimPolicy<float3>::Unm(rec.normal,*__context__)));
                     SimPolicy<float3>::SetAdd((char *)&(outLightE),(SimPolicy<float3>::MulVecScal((SimPolicy<float3>::Mul(mat.albedo,das_global<TDim<struct Material,9>,16>(__context__) /*s_SphereMats*/(8,__context__).emissive,*__context__)),cast<float>::from((SimPolicy<float>::Sat(dot3(l,nl),*__context__) * SimPolicy<float>::Mad(-2.f,cosAMax,2.f,*__context__))),*__context__)),*__context__);
                 };
                 return true;
-            }       else
+            }    else
                 if ( mat.mtype == Type::Metal )
                 {
                     vec4f /*float3*/ refl = reflect(r_in.dir,rec.normal);
@@ -332,7 +332,7 @@ namespace das {
                     })());
                     attenuation = mat.albedo;
                     return dot3(scattered.dir,rec.normal) > 0.f;
-                }       else
+                }    else
                     if ( mat.mtype == Type::Dielectric )
                     {
                         attenuation = v_splats(1.f);
@@ -343,16 +343,16 @@ namespace das {
                             if ( refract(r_in.dir,SimPolicy<float3>::Unm(rec.normal,*__context__),mat.ri,cast_vec_ref<float3>::to(refr)) )
                             {
                                 reflProb = schlick(__context__,mat.ri * dot3(r_in.dir,rec.normal),mat.ri);
-                            }                       else
+                            }            else
                             {
                                 reflProb = 1.f;
                             };
-                        }               else
+                        }        else
                         {
                             if ( refract(r_in.dir,rec.normal,1.f / mat.ri,cast_vec_ref<float3>::to(refr)) )
                             {
                                 reflProb = schlick(__context__,-dot3(r_in.dir,rec.normal),mat.ri);
-                            }                       else
+                            }            else
                             {
                                 reflProb = 1.f;
                             };
@@ -365,7 +365,7 @@ namespace das {
                                 __mks_191.dir = normalize3(reflect(r_in.dir,rec.normal));
                                 return __mks_191;
                             })());
-                        }               else
+                        }        else
                         {
                             scattered = (([&]() -> struct Ray {
                                 struct Ray __mks_193; das_zero(__mks_193);
@@ -374,7 +374,7 @@ namespace das {
                                 return __mks_193;
                             })());
                         };
-                    }       else
+                    }    else
                     {
                         attenuation = v_make_vec4f(1.f,0.f,1.f,0.f);
                         scattered = (([&]() -> struct Ray {
@@ -385,7 +385,7 @@ namespace das {
                         })());
                         return false;
                     };
-                    return true;
+            return true;
         }
 
         float schlick ( Context * __context__, float cosine, float ri )
@@ -450,11 +450,11 @@ namespace das {
                     };
                     doMaterialE = (*mat).mtype != Type::Lambert;
                     return SimPolicy<float3>::Mad(attenuation,trace(__context__,das_arg<struct Ray>::pass(scattered),depth + 1,inoutRayCount,doMaterialE),SimPolicy<float3>::Add(matE,lightE,*__context__),*__context__);
-                }               else
+                }        else
                 {
                     return matE;
                 };
-            }       else
+            }    else
             {
                 vec4f /*float3*/ t = SimPolicy<float3>::MadS(r.dir,cast<float>::from(0.5f),v_splats(1.f),*__context__);
                 return SimPolicy<float3>::Lerp(v_splats(0.300000012f),v_make_vec4f(0.150000006f,0.210000008f,0.300000012f,0.f),t,*__context__);
