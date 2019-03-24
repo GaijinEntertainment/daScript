@@ -220,12 +220,18 @@ namespace das {
     }
 
     // load ( obj, bytesAt )
+    void _builtin_binary_load ( Context & context, TypeInfo* info, const char *data, uint32_t len, char *to)
+    {
+        if ( !(info->flags&info->flag_refType))
+            return;
+        BinDataSerialize reader(context, const_cast<char*>(data), len);
+        reader.walk(to, info);
+    }
+
     vec4f _builtin_binary_load ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         char * ba = cast<char *>::to(args[1]);
         StringHeader * hh = ((StringHeader *)ba) - 1;
-        BinDataSerialize reader(context, ba, hh->length);
-        auto info = call->types[0];
-        reader.walk(args[0], info);
+        _builtin_binary_load(context, call->types[0], ba, hh->length, cast<char *>::to(args[0]));
         return v_zero();
     }
 
