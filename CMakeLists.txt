@@ -140,6 +140,7 @@ src/simulate/heap.cpp
 include/daScript/simulate/debug_info.h
 include/daScript/simulate/interop.h
 include/daScript/simulate/runtime_string.h
+include/daScript/simulate/runtime_string_delete.h
 include/daScript/simulate/runtime_array.h
 include/daScript/simulate/runtime_table.h
 include/daScript/simulate/runtime_range.h

@@ -4,6 +4,7 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/debug_print.h"
+#include "daScript/simulate/runtime_string_delete.h"
 
 #include "daScript/simulate/sim_policy.h"
 
@@ -169,5 +170,15 @@ namespace das
             context.throw_error("can't allocate string builder result, out of heap");
         }
         return cast<char *>::from(pStr);
+    }
+
+    vec4f SimNode_DeleteString::eval ( Context & context ) {
+        char *string = (char*)(subexpr->evalPtr(context));
+        if (context.heap.isHeapPtr(string))
+        {
+          const uint32_t size = (((StringHeader*)string) - 1)->length + sizeof(StringHeader)+1;
+          context.heap.free(string - sizeof(StringHeader), size);
+        }
+        return v_zero();
     }
 }

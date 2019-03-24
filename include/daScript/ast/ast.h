@@ -12,6 +12,7 @@
 #include "daScript/ast/compilation_errors.h"
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/runtime_array.h"
+#include "daScript/simulate/runtime_string_delete.h"
 
 namespace das
 {

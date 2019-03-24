@@ -4,6 +4,7 @@
 #include "daScript/simulate/runtime_range.h"
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/runtime_array.h"
+#include "daScript/simulate/runtime_string_delete.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
 
@@ -658,6 +659,14 @@ namespace das {
         V_SUB(subexpr);
         V_ARG(total);
         V_ARG(stride);
+        V_END();
+    }
+
+    SimNode * SimNode_DeleteString::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(DeleteString);
+        V_SUB(subexpr);
+        V_ARG(total);
         V_END();
     }
 }
