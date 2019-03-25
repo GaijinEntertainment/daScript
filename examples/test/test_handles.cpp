@@ -217,7 +217,7 @@ vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {
     }
     return cast<char *>::from(data);
 }
-int g_st;
+int g_st = 0;
 int *getPtr() {return &g_st;}
 
 das::uint2 get_screen_dimensions() {return das::uint2{1280, 720};}

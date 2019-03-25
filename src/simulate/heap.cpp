@@ -79,11 +79,12 @@ namespace das {
     }
 
     bool HeapAllocator::isHeapPtr(const char *data) const {
-        if ( !isFastHeapPtr(data) ) {
-            for ( auto & it : bigAllocations ) {
-                if ( uintptr_t(data - it.first) < uintptr_t(it.second) ) {
-                    return true;
-                }
+        if ( isFastHeapPtr(data) ) {
+            return true;
+        }
+        for ( auto & it : bigAllocations ) {
+            if ( uintptr_t(data - it.first) < uintptr_t(it.second) ) {
+                return true;
             }
         }
         return false;

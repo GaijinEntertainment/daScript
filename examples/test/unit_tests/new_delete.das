@@ -1,7 +1,7 @@
 require UnitTest
-options logNodes=true
+// options logNodes=false
 
-/*struct SomethingSmall
+struct SomethingSmall
     a, b, c : int
 
 [unsafe]
@@ -78,26 +78,24 @@ def test_delete_struct_array_in_scope
     da_inscope(2)
     let w1 = heap_bytes_allocated()
     assert(w0==w1)
-*/
 
-[unsafe]
+[sideeffects,unsafe]
 def test_delete_string()
     let w0 = heap_bytes_allocated()
     let a = "{deref(getPtr())}"
-    print(a)
+    // assert(a=="0")
     delete a
     let w1 = heap_bytes_allocated()
-    //print("{w0}=={w1}\n")
+    assert(w0==w1)
 
 [export]
 def test
-/*    test_delete_struct_array_in_scope()
+    test_delete_struct_array_in_scope()
     test_delete_handle()
     test_delete_handle_array()
     test_delete_struct()
     test_delete_struct_array()
     test_delete_array()
     test_delete_table()
-*/
     test_delete_string()
     return true
