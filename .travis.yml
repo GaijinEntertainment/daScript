@@ -2,7 +2,7 @@
 # Licensed under the MIT license
 
 language: cpp
-dist: trusty
+dist: xenial
 
 addons:
   apt:
