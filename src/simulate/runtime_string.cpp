@@ -173,10 +173,12 @@ namespace das
     }
 
     vec4f SimNode_DeleteString::eval ( Context & context ) {
-        char * string = *((char**)(subexpr->evalPtr(context)));
-        if (context.heap.isHeapPtr(string)) {
-          const uint32_t size = (((StringHeader*)string) - 1)->length + sizeof(StringHeader)+1;
-          context.heap.free(string - sizeof(StringHeader), size);
+        char ** str = (char**)(subexpr->evalPtr(context));
+        char * string = *str;
+        if ( context.heap.isHeapPtr(string) ) {
+            const uint32_t size = (((StringHeader*)string) - 1)->length + sizeof(StringHeader)+1;
+            context.heap.free(string - sizeof(StringHeader), size);
+            *str = nullptr;
         }
         return v_zero();
     }

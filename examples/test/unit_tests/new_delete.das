@@ -87,6 +87,7 @@ def test_delete_string()
     delete a
     let w1 = heap_bytes_allocated()
     assert(w0==w1)
+    assert(a=="")
 
 [export]
 def test
