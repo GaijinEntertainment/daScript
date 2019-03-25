@@ -89,6 +89,14 @@ def test_delete_string()
     assert(w0==w1)
     assert(a=="")
 
+[sideeffects,unsafe]
+def test_delete_string_array()
+    let w0 = heap_bytes_allocated()
+    let a = [[string[3] "{deref(getPtr())}_1"; "{deref(getPtr())}_2"; "{deref(getPtr())}_3"]]
+    delete a
+    let w1 = heap_bytes_allocated()
+    assert(w0==w1)
+
 [export]
 def test
     test_delete_struct_array_in_scope()
@@ -99,4 +107,5 @@ def test
     test_delete_array()
     test_delete_table()
     test_delete_string()
+    test_delete_string_array()
     return true
