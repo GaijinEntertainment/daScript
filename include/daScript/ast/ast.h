@@ -1541,6 +1541,7 @@ namespace das
         map<string, TypeDeclPtr>                aliasTypes;
         map<string, AnnotationPtr>              handleTypes;
         map<string, StructurePtr>               structures;
+        vector<StructurePtr>                    structuresInOrder;
         map<string, EnumerationPtr>             enumerations;
         map<string, VariablePtr>                globals;
         map<string, FunctionPtr>                functions;          // mangled name 2 function name

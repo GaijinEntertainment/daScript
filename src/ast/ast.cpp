@@ -1448,8 +1448,8 @@ namespace das {
             ite.second = vis.visit(penum);
         }
         // structures
-        for ( auto & ist : thisModule->structures ) {
-            auto pst = ist.second.get();
+        for ( auto & ist : thisModule->structuresInOrder ) {
+            Structure * pst = ist.get();
             vis.preVisit(pst);
             for ( auto & fi : pst->fields ) {
                 vis.preVisitStructureField(pst, fi, &fi==&pst->fields.back());
@@ -1458,7 +1458,14 @@ namespace das {
                 }
                 vis.visitStructureField(pst, fi, &fi==&pst->fields.back());
             }
-            ist.second = vis.visit(pst);
+            StructurePtr pstn = vis.visit(pst);
+            if ( pstn.get() != pst ) {
+                assert(pstn->name==pst->name);
+                auto istm = thisModule->structures.find(pst->name);
+                assert ( istm!=thisModule->structures.end() );
+                istm->second = pstn;
+                ist = pstn;
+            }
         }
         // real things
         vis.preVisitProgramBody(this);

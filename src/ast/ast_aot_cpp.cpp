@@ -194,9 +194,15 @@ namespace das {
                 ss << "extern FuncInfo " << funcInfoName(ti.second) << ";\n";
             }
             for ( auto & ti : emn2e ) {
-                ss << "extern EnumnInfo " << enumInfoName(ti.second) << ";\n";
+                ss << "extern EnumInfo " << enumInfoName(ti.second) << ";\n";
             }
             ss << "\n";
+            for ( auto & ti : emn2e ) {
+                describeCppEnumInfoValues(ss, ti.second);
+                ss << "EnumInfo " << enumInfoName(ti.second) << " = { ";
+                describeCppEnumInfo(ss, ti.second);
+                ss << " };\n";
+            }
             for ( auto & ti : smn2s ) {
                 describeCppStructInfoFields(ss, ti.second);
                 ss << "StructInfo " << structInfoName(ti.second) << " = {";
@@ -276,7 +282,23 @@ namespace das {
             ss << "0x" << HEX << info->hash << DEC;
         }
 
+        void describeCppEnumInfoValues ( TextWriter & ss, EnumInfo * einfo ) const {
+            for ( uint32_t v=0; v!=einfo->totalValues; ++v ) {
+                auto val = einfo->values[v];
+                ss << "EnumValueInfo " << enumInfoName(einfo) << "_value_" << v << " = { \""
+                << val->name << "\", " << val->value << " };\n";
+            }
+            ss << "EnumValueInfo * " << enumInfoName(einfo) << "_values [] = { ";
+            for ( uint32_t v=0; v!=einfo->totalValues; ++v ) {
+                if ( v ) ss << ", ";
+                ss << "&" << enumInfoName(einfo) << "_value_" << v;
+            }
+            ss << " };\n";
+        }
+
         void describeCppEnumInfo ( TextWriter & ss, EnumInfo * info ) const {
+            ss << "\"" << info->name << "\", " << enumInfoName(info) << "_values, "
+                << info->totalValues << ", 0x" << HEX << info->hash << DEC;
         }
 
         void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info ) const {
@@ -288,7 +310,7 @@ namespace das {
             }
             ss << ", ";
             if ( info->enumType ) {
-                describeCppEnumInfo(ss, info->enumType);
+                ss << "&" << enumInfoName(info->enumType);
             } else {
                 ss << "nullptr";
             }
@@ -394,7 +416,7 @@ namespace das {
     // enumeration
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
-            ss << "\nenum class " << enu->name << "{\n";
+            ss << "\nenum class " << enu->name << " {\n";
         }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu, name, value, last);
@@ -432,6 +454,10 @@ namespace das {
         virtual StructurePtr visit ( Structure * that ) override {
             ss << "};\n";
             ss << "static_assert(sizeof(" << that->name << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
+            for ( auto & tf : that->fields ) {
+                ss << "static_assert(offsetof(" << that->name << "," << tf.name << ")=="
+                    << tf.offset << ",\"structure field offset mismatch with DAS\");\n";
+            }
             return Visitor::visit(that);
         }
     // program body

@@ -151,6 +151,8 @@ namespace das {
         auto it = structures.find(st->name);
         if ( it!=structures.end() && it->second==st ) {
             structures.erase(it);
+            auto itO = find ( structuresInOrder.begin(), structuresInOrder.end(), st );
+            structuresInOrder.erase(itO);
             return true;
         } else {
             return false;
@@ -160,6 +162,7 @@ namespace das {
     bool Module::addStructure ( const StructurePtr & st, bool canFail ) {
         if ( structures.insert(make_pair(st->name, st)).second ) {
             st->module = this;
+            structuresInOrder.push_back(st);
             return true;
         } else {
             if ( !canFail ) {

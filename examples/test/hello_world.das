@@ -1,61 +1,21 @@
 // options printRef = true, printVarAccess = true, log = true// , logOptimizationPasses = true
 options logCpp=true, optimize=false
 
-def strcat(a,b)
-	let c = a
-	c += b					// this will not prevent folding
-    return c
-
-def make_name(x)
-    return strcat("hello_",x)
-
-let
-    g_cond = true
-
-def make_another_name(x)
-	assert(x=="modify_arg")
-    if g_cond
-        print("{x}")// this will prevent folding
-	return x + "_ok"
-
-let
-    g_name = "_global_ok"
-
-def make_g_name(x)
-    return x + g_name
+enum Flags
+    flag_a = 1
+    flag_b = 2
 
 struct Foo
-	a : int = 19
-	b : float = 20.
+    flags : Flags
+    more_flags : Flags = Flags flag_a
+    i : int
 
-def up_foo(a)
-	a.a ++
-
-def name_foo()
-	let t = Foo()
-	up_foo(t)
-	return "{t}"		// this will fold
-
-def stil_not_writing(a:string&;b:string&)
-    assert(a=="blah")
-    assert(b=="_global_ok")
-    a = "it"
+struct Bar
+    f : Foo = Foo()
+    s : string = "text here"
 
 [export]
 def test
-    g_cond = false
-    let t = make_name("world")
-    assert("{t}"=="hello_world")
-	let q = make_another_name("modify_arg")
-	assert("{q}"=="modify_arg_ok")
-	let w = name_foo()
-	assert("{w}"=="[[ 20; 20]]")
-    let g = make_g_name("touch_global")
-    assert("{g}"=="touch_global_global_ok")
-    let T = "blah"
-    stil_not_writing(T,g_name)
-    assert(T=="it")
-    let tt = "_global_ok"
-    T = "blah"
-    stil_not_writing(T,tt)
+    let b = Bar()
+    print("b={b}\n")
     return true
