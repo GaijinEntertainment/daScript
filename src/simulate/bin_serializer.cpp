@@ -41,7 +41,7 @@ namespace das {
         }
         __forceinline void write ( void * data, uint32_t size ) {
             if ( bytesWritten + size > bytesAllocated ) {
-                uint32_t newSize = max ( bytesAllocated + bytesGrow, bytesWritten + size );
+                uint32_t newSize = das::max ( bytesAllocated + bytesGrow, bytesWritten + size );
                 bytesAt = context->heap.reallocate(bytesAt, bytesAllocated, newSize);
                 bytesAllocated = newSize;
             }

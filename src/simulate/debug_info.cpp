@@ -132,7 +132,7 @@ namespace das
     int getStructAlign ( StructInfo * info ) {
         int al = 0;
         for ( uint32_t i=0; i!=info->fieldsSize; ++i ) {
-            al = max ( al, getTypeAlign(info->fields[i]) );
+            al = das::max ( al, getTypeAlign(info->fields[i]) );
         }
         return al;
     }

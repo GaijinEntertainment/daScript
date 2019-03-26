@@ -116,7 +116,7 @@ namespace das {
     int Structure::getAlignOf() const {
         int align = 1;
         for ( const auto & fd : fields ) {
-            align = max ( fd.type->getAlignOf(), align );
+            align = das::max ( fd.type->getAlignOf(), align );
         }
         return align;
     }

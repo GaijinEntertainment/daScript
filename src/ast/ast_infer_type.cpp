@@ -331,7 +331,7 @@ namespace das {
 
         string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
             TextWriter ss;
-            size_t tot = min ( types.size(), pFn->arguments.size() );
+            size_t tot = das::min ( types.size(), pFn->arguments.size() );
             for (size_t ai = 0; ai != tot; ++ai) {
                 auto & arg = pFn->arguments[ai];
                 auto & passType = types[ai];

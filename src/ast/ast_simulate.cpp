@@ -1430,7 +1430,7 @@ namespace das
         for ( auto & src : sources ) {
             if ( !src->type ) continue;
             if ( src->type->isArray() ) {
-                fixedSize = min(fixedSize, src->type->dim.back());
+                fixedSize = das::min(fixedSize, src->type->dim.back());
                 fixedArrays = true;
             } else if ( src->type->isGoodArrayType() ) {
                 dynamicArrays = true;

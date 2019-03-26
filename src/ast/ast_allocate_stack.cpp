@@ -106,7 +106,7 @@ namespace das {
             stackTop = 0;
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
-            program->globalInitStackSize = max(program->globalInitStackSize, stackTop);
+            program->globalInitStackSize = das::max(program->globalInitStackSize, stackTop);
             return Visitor::visitGlobalLet(var);
         }
     // function
@@ -120,7 +120,7 @@ namespace das {
             }
         }
         virtual FunctionPtr visit ( Function * that ) override {
-            func->totalStackSize = max(func->totalStackSize, stackTop);
+            func->totalStackSize = das::max(func->totalStackSize, stackTop);
             // detecting fastcall
             if (!func->exports && !func->addr && func->totalStackSize == sizeof(Prologue)) {
                 if (func->body->rtti_isBlock()) {

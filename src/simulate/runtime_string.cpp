@@ -110,7 +110,7 @@ namespace das
                 col = 1;
             }
         }
-        text << string(max(COL-2,0), ' ') << "^" << "\n";
+        text << string(das::max(COL-2,0), ' ') << "^" << "\n";
 //        while ( *it!='\n' && it!=st.end() )
 //            text << *it++;
         return text.str();

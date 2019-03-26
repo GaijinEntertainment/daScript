@@ -19,7 +19,7 @@ namespace das {
 
     void HeapWriterPolicy::reserve(int newSize) {
         if (newSize > dataCapacity) {
-            int newCapacity = max(dataCapacity * 2, newSize);
+            int newCapacity = das::max(dataCapacity * 2, newSize);
             if (data) {
                 char * oldDataBase = data - sizeof(StringHeader);
                 char * newDataBase = (char *)heap->reallocate(oldDataBase,

@@ -52,8 +52,8 @@ namespace das
             return;
         }
         if ( newSize > arr.capacity ) {
-            uint32_t newCapacity = 1 << (32 - __builtin_clz (max(newSize,2u) - 1));
-            newCapacity = max(newCapacity, 16u);
+            uint32_t newCapacity = 1 << (32 - __builtin_clz (das::max(newSize,2u) - 1));
+            newCapacity = das::max(newCapacity, 16u);
             array_reserve(context, arr, newCapacity, stride);
         }
         if ( zero && newSize>arr.size )
