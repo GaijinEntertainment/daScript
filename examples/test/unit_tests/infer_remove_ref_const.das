@@ -3,20 +3,20 @@
 def logT(x:auto(numT)&)
     return typename(type numT)
 
-def logTNoRef(x:auto(numT)!&)
+def logTNoRef(x:auto(numT)delete &)
     return typename(type numT)
 
-def logTNoRefNoConst(x:auto(numT) !const !&)
+def logTNoRefNoConst(x:auto(numT) delete const&)
     return typename(type numT)
 
 def aliasLogT(x:auto(numT)&;y:numT)
     return typename(type numT)
 
-def aliasLogTNoRef(x:auto(numT);y:numT!&)
+def aliasLogTNoRef(x:auto(numT);y:numT delete &)
     let z : auto(passT) = y
     return typename(type passT)
 
-def aliasLogTNoRefNoConst(x:auto(numT);y:numT !const !&)
+def aliasLogTNoRefNoConst(x:auto(numT);y:numT delete const&)
     let z : auto(passT) = y
     return typename(type passT)
 

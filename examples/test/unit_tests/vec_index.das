@@ -1,4 +1,4 @@
-def test_vec2(a:auto(vec2)!const !&)
+def test_vec2(a:auto(vec2) delete const&)
     let f2_x  = vec2(1,2)
     let x : auto(numT) = f2_x[0]
     assert("{f2_x}"=="1,2")
@@ -20,7 +20,7 @@ def test_vec2(a:auto(vec2)!const !&)
     assert(oor)
 
 
-def test_vec3(a:auto(vec3)!const !&)
+def test_vec3(a:auto(vec3) delete const&)
     let f3_x  = vec3(1,2,3)
     let x : auto(numT) = f3_x[0]
     assert("{f3_x}"=="1,2,3")
@@ -42,7 +42,7 @@ def test_vec3(a:auto(vec3)!const !&)
         oor = true
     assert(oor)
 
-def test_vec4(a:auto(vec4)!const !&)
+def test_vec4(a:auto(vec4) delete const&)
     let f4_x  = vec4(1,2,3,4)
     let x : auto(numT) = f4_x[0]
     assert("{f4_x}"=="1,2,3,4")

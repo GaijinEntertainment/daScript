@@ -12,7 +12,7 @@ def newFooB(b:block<Foo>)
 def addBar(a,b:Foo)
     return a.bar + b.bar
 
-def makeSequence(base:auto(numT)!&;max)
+def makeSequence(base:auto(numT)delete &;max)
     let a : array<numT>
     resize(a, max+1-base)
     for t in a

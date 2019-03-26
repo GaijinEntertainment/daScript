@@ -1316,7 +1316,7 @@ type_declaration
         $typeDecl->removeConstant = false;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] '!' _CONST {
+    |   type_declaration[typeDecl] _DELETE _CONST {
         $typeDecl->constant = false;
         $typeDecl->removeConstant = true;
         $$ = $typeDecl;
@@ -1326,7 +1326,14 @@ type_declaration
         $typeDecl->removeRef = false;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] '!' '&' {
+    |   type_declaration[typeDecl] _DELETE '&' {
+        $typeDecl->ref = false;
+        $typeDecl->removeRef = true;
+        $$ = $typeDecl;
+    }
+    |   type_declaration[typeDecl] _DELETE _CONST '&' {
+        $typeDecl->constant = false;
+        $typeDecl->removeConstant = true;
         $typeDecl->ref = false;
         $typeDecl->removeRef = true;
         $$ = $typeDecl;
