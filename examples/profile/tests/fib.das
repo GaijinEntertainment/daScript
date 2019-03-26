@@ -18,33 +18,23 @@ def fibI(n)
         last = tmp
     return cur
 
-[sideeffects]
-def fibIU(n)
-    let last = 0
-    let cur = 1
-    for i in range(0, (n-1)/4)
-        let tmp1 = cur
-        cur += last
-        let tmp2 = cur
-        cur += tmp1
-        let tmp3 = cur
-        cur += tmp2
-        let tmp4 = cur
-        cur += tmp3
-        last = tmp4
-    return cur
-
 [export]
 def test()
+	let f1 = 0
     profile(20,"fibbonacci loop") <|
-        fibI(6511134)
-    profile(20,"fibbonacci loop, unrolled") <|
-        fibIU(6511134)
+        f1 = fibI(6511134)
+	assert(f1==1781508648)
+	let f3 = 0
     profile(20,"fibbonacci recursive") <|
-        fibR(31)
+        f3 = fibR(31)
+	assert(f3==1346269)
+	let f4 = 0
     profile(20,"fibbonacci loop c++") <|
-        testProfile::testFibI(6511134)
+        f4 = testProfile::testFibI(6511134)
+	assert(f4==1781508648)
+	let f5 = 0
     profile(20,"fibbonacci recursive c++") <|
-        testProfile::testFibR(31)
+        f5 = testProfile::testFibR(31)
+	assert(f5==1346269)
     return true
 

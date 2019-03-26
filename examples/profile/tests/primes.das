@@ -29,11 +29,17 @@ def primesI(n)
 
 [export]
 def test()
+	let f1 = 0
     profile(20,"primes loop") <|
-        primes(14000)
+        f1 = primes(14000)
+	assert(f1==1652)
+	let f2 = 0
     profile(20,"primes loop, inline") <|
-        primesI(14000)
+        f2 = primesI(14000)
+	assert(f2==1652)
+	let f3 = 0
     profile(20,"primes loop C++") <|
-        testProfile::testPrimes(14000)
+        f3 = testProfile::testPrimes(14000)
+	assert(f3==1652)
     return true
 

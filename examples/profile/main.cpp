@@ -110,7 +110,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
 #if 0
-    const char * TEST_NAME = TEST_PATH "examples/profile/tests/panic.das";
+    const char * TEST_NAME = TEST_PATH "examples/profile/tests/primes.das";
     tout << "\nINTERPRETED:\n";
     unit_test(TEST_NAME,false);
     tout << "\nAOT:\n";
