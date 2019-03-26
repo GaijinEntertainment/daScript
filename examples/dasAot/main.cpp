@@ -54,6 +54,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_PathTracerHelper);
+    NEED_MODULE(Module_TestProfile);
     bool compiled = compile(argv[1], argv[2], argv[3]);
     Module::Shutdown();
     return compiled ? 0 : -1;

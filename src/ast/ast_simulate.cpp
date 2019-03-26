@@ -1731,15 +1731,16 @@ namespace das
     }
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
+        bool logIt = options.getOption("logAot");
         for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
             SimFunction & fn = context.functions[fni];
             uint64_t semHash = getSemanticHash(fn.code);
             auto it = aotLib.find(semHash);
             if ( it != aotLib.end() ) {
                 fn.code = (it->second)(context);
-                logs << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+                if ( logIt ) logs << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
             } else {
-                 logs << "NOT FOUND " << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+                if ( logIt ) logs << "NOT FOUND " << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
             }
         }
         if ( context.totalVariables ) {
@@ -1747,9 +1748,9 @@ namespace das
             auto it = aotLib.find(semHash);
             if ( it != aotLib.end() ) {
                 context.aotInitScript = (it->second)(context);
-                logs << "INIT SCRIPT AOT=0x" << HEX << semHash << DEC << "\n";
+                if ( logIt ) logs << "INIT SCRIPT AOT=0x" << HEX << semHash << DEC << "\n";
             } else {
-                logs << "INIT SCRIPT NOT FOUND, AOT=0x" << HEX << semHash << DEC << "\n";
+                if ( logIt ) logs << "INIT SCRIPT NOT FOUND, AOT=0x" << HEX << semHash << DEC << "\n";
             }
         }
     }

@@ -193,8 +193,8 @@ SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
 
 include_directories(include lexer test)
 add_executable(dasAot ${DASAOT_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper)
-ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper)
+TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile)
+ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile)
 SETUP_CPP11(dasAot)
 
 MACRO(DAS_AOT input)
@@ -207,7 +207,6 @@ MACRO(DAS_AOT input)
         COMMAND dasAot ${input_src} ${input_src}.main.inc ${input_src}.register.inc
 		COMMENT "AOT precompiling ${input_src} absolute")
 ENDMACRO()
-
 
 # JSON
 
@@ -250,7 +249,7 @@ examples/pathTracer/toy_path_tracer.das.main.inc
 examples/pathTracer/toy_path_tracer.das.register.inc
 )
 SOURCE_GROUP_FILES("generated" PATH_TRACER_GEN_SRC)
-DAS_AOT("toy_path_tracer" examples/pathTracer/toy_path_tracer.das)
+DAS_AOT(examples/pathTracer/toy_path_tracer.das)
 
 include_directories(include pathTracer)
 add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} ${PATH_TRACER_GEN_SRC})
@@ -345,6 +344,18 @@ TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)
 
+# Profile module
+
+SET(PROFILE_MAIN_LIB_SRC
+examples/profile/test_profile.cpp
+examples/profile/test_profile.h
+)
+SOURCE_GROUP_FILES("source" PROFILE_MAIN_LIB_SRC)
+
+ADD_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
+SETUP_CPP11(libDaScriptProfile)
+ADD_DEPENDENCIES(libDaScriptProfile libDaScript)
+
 # Profile
 
 file(GLOB PROFILE_SRC
@@ -356,16 +367,28 @@ SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 SET(PROFILE_MAIN_SRC
 examples/profile/main.cpp
 examples/common/fileAccess.h
-examples/profile/test_profile.cpp
 examples/profile/test_profile.h
 examples/profile/aot.cpp
 )
 list(SORT PROFILE_MAIN_SRC)
-SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)
+SOURCE_GROUP_FILES("source" PROFILE_MAIN_SRC)
+
+SET(PROFILE_GENERATED_SRC
+examples/profile/tests/dict.das.main.inc
+examples/profile/tests/dict.das.register.inc
+examples/profile/tests/exp.das.main.inc
+examples/profile/tests/exp.das.register.inc
+examples/profile/tests/fib.das.main.inc
+examples/profile/tests/fib.das.register.inc
+)
+SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
+DAS_AOT(examples/profile/tests/dict.das)
+DAS_AOT(examples/profile/tests/exp.das)
+DAS_AOT(examples/profile/tests/fib.das)
 
 include_directories(include lexer)
-add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC})
-TARGET_LINK_LIBRARIES(daScriptProfile libDaScript)
-ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot)
+add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC})
+TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile)
+ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
 SETUP_CPP11(daScriptProfile)
 

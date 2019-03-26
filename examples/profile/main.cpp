@@ -4,18 +4,15 @@
 using namespace das;
 #include "test_profile.h"
 
-#define USE_AOT 0
-
-#if USE_AOT
 namespace das {
     namespace aot {
         void registerAot ( AotLibrary & aotLib );
     }
 }
-#endif
 
 TextPrinter tout;
-bool unit_test ( const string & fn ) {
+
+bool unit_test ( const string & fn, bool useAOT ) {
     auto access = make_shared<FsFileAccess>();
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
@@ -35,12 +32,12 @@ bool unit_test ( const string & fn ) {
                 }
                 return false;
             }
-#if USE_AOT
             // now, what we get to do is to link AOT
-            AotLibrary aotLib;
-            das::aot::registerAot(aotLib);
-            program->linkCppAot(ctx, aotLib, tout);
-#endif
+            if ( useAOT ) {
+                AotLibrary aotLib;
+                das::aot::registerAot(aotLib);
+                program->linkCppAot(ctx, aotLib, tout);
+            }
             // vector of 10000 objects
             vector<Object> objects;
             objects.resize(10000);
@@ -69,7 +66,7 @@ bool unit_test ( const string & fn ) {
     }
 }
 
-bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
+bool run_tests( const string & path, bool (*test_fn)(const string &, bool aot), bool useAot ) {
     vector<string> files;
 #ifdef _MSC_VER
     _finddata_t c_file;
@@ -96,7 +93,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
     sort(files.begin(),files.end());
     bool ok = true;
     for ( auto & fn : files ) {
-        ok = test_fn(fn) && ok;
+        ok = test_fn(fn,useAot) && ok;
     }
     return ok;
 }
@@ -112,17 +109,25 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
-#if 0
-    unit_test(TEST_PATH "examples/profile/tests/nbodies.das");
+#if 1
+    const char * TEST_NAME = TEST_PATH "examples/profile/tests/fib.das";
+    tout << "\nINTERPRETED:\n";
+    unit_test(TEST_NAME,false);
+    tout << "\nAOT:\n";
+    unit_test(TEST_NAME,true);
     Module::Shutdown();
     return 0;
 #endif
     // run tests
-    if (argc == 1)
-        run_tests(TEST_PATH "examples/profile/tests", unit_test);
+    if (argc == 1) {
+        tout << "\nINTERPRETED:\n";
+        run_tests(TEST_PATH "examples/profile/tests", unit_test, false);
+        tout << "\nAOT:\n";
+        run_tests(TEST_PATH "examples/profile/tests", unit_test, true);
+    }
     for ( int i=1; i!=argc; ++i ) {
         string path=argv[i];
-        unit_test(path);
+        unit_test(path,false);
     }
     // and done
     Module::Shutdown();

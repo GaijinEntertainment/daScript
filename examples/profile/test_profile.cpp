@@ -1,7 +1,6 @@
-#include "daScript/daScript.h"
+#include "test_profile.h"
 
 using namespace das;
-#include "test_profile.h"
 
 #ifndef _MSC_VER
 #define __noinline    __attribute__((noinline))
@@ -352,11 +351,11 @@ struct dictKeyHash {
 
 typedef unordered_map<char *, int32_t, dictKeyHash, dictKeyEqual> dict_hash_map;
 
-__noinline int testDict(Array * arr) {
+ int testDict(Array & arr) {
     dict_hash_map tab;
-    char ** data = (char **) arr->data;
+    char ** data = (char **) arr.data;
     int maxOcc = 0;
-    for ( uint32_t t = 0; t !=arr->size; ++t ) {
+    for ( uint32_t t = 0; t !=arr.size; ++t ) {
         maxOcc = max(++tab[data[t]], maxOcc);
     }
     return maxOcc;
