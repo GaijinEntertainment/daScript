@@ -15,4 +15,11 @@ int testDict(das::Array & arr);
 float testExpLoop(int count);
 int testFibR(int n);
 int testFibI(int n);
+void testNBodiesInit();
+void testNBodies(int32_t N);
+void testParticles(int count);
+void testParticlesI(int count);
+int testPrimes(int n);
+void testTryCatch(das::Context * context);
+
 
