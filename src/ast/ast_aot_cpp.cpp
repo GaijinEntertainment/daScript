@@ -1198,7 +1198,10 @@ namespace das {
             return true;
         }
         bool policyResultNeedCast ( const TypeDeclPtr & polType, const TypeDeclPtr & resType ) {
-            if ( resType->isVoid() || resType->baseType==Type::tBool ) {
+            if ( resType->isVoid() ) {
+                return false;
+            }
+            if ( !resType->isPolicyType() ) {
                 return false;
             }
             return policyArgNeedCast(polType, resType);
@@ -1361,7 +1364,7 @@ namespace das {
         return hash;
     }
 
-    void Program::registerAotCpp ( TextWriter & logs, Context & context ) {
+    void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers ) {
         vector<Function *> fnn; fnn.reserve(totalFunctions);
         for (auto & pm : library.modules) {
             for (auto & it : pm->functions) {
@@ -1371,7 +1374,9 @@ namespace das {
                 fnn.push_back(pfun.get());
             }
         }
-        logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
+        if ( headers ) {
+            logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
+        }
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             SimFunction * fn = context.getFunction(i);
             uint64_t semH = getSemanticHash(fn->code);
@@ -1381,16 +1386,20 @@ namespace das {
             if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
                 logs << "CMRES";
             }
-            logs << "<" << describeCppFunc(fnn[i],false) << "," << fn->name << ">>();\n\t};\n";
+            logs << "<" << describeCppFunc(fnn[i],false) << ",";
+            logs << fn->name << ">>();\n\t};\n";
         }
         if ( context.totalVariables ) {
             uint64_t semH = context.getInitSemanticHash();
             logs << "\t// [[ init script ]]\n";
             logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
-            logs << "<void (Context *), __init_script>>();\n\t};\n";
+            logs << "<void (Context *),";
+            logs << "__init_script>>();\n\t};\n";
         }
-        logs << "}\n";
+        if ( headers ) {
+            logs << "}\n";
+        }
     }
 
     void Program::aotCpp ( TextWriter & logs ) {

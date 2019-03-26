@@ -183,6 +183,32 @@ SETUP_CPP11(libDaScript)
 add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
 add_dependencies(libDaScript daScriptGenDir)
 
+# AOT compiler
+
+SET(DASAOT_MAIN_SRC
+examples/dasAot/main.cpp
+examples/common/fileAccess.h
+)
+SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
+
+include_directories(include lexer test)
+add_executable(dasAot ${DASAOT_MAIN_SRC} )
+TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper)
+ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper)
+SETUP_CPP11(dasAot)
+
+MACRO(DAS_AOT input)
+    get_filename_component(input_src ${input} ABSOLUTE)
+    get_filename_component(input_dir ${input_src} DIRECTORY)
+    get_filename_component(input_name ${input} NAME)
+	ADD_CUSTOM_COMMAND(
+		DEPENDS ${input_src}
+		OUTPUT ${input_src}.main.inc ${input_src}.register.inc
+        COMMAND dasAot ${input_src} ${input_src}.main.inc ${input_src}.register.inc
+		COMMENT "AOT precompiling ${input_src} absolute")
+ENDMACRO()
+
+
 # JSON
 
 SET(JSON_MAIN
@@ -196,23 +222,43 @@ ADD_LIBRARY(libDaScriptJson ${JSON_MAIN})
 SETUP_CPP11(libDaScriptJson)
 ADD_DEPENDENCIES(libDaScriptJson libDaScript)
 
+# PathTracer helper
+
+SET(PATH_TRACER_HELPER_MAIN_SRC
+examples/pathTracer/path_tracer_helper.h
+examples/pathTracer/path_tracer_helper.cpp
+)
+
+ADD_LIBRARY(libPathTracerHelper ${PATH_TRACER_HELPER_MAIN_SRC})
+SETUP_CPP11(libPathTracerHelper)
+ADD_DEPENDENCIES(libPathTracerHelper libDaScript)
+
 # PathTracer
 
 SET(PATH_TRACER_MAIN_SRC
 examples/pathTracer/main.cpp
-examples/pathTracer/aot.cpp
 examples/common/fileAccess.h
-examples/pathTracer/toy_path_tracer.das
+examples/pathTracer/path_tracer_helper.h
 examples/pathTracer/toy_random.das
+examples/pathTracer/toy_path_tracer.das
+examples/pathTracer/aot.cpp
 )
+SOURCE_GROUP_FILES("source" PATH_TRACER_MAIN_SRC)
+
+SET(PATH_TRACER_GEN_SRC
+examples/pathTracer/toy_path_tracer.das.main.inc
+examples/pathTracer/toy_path_tracer.das.register.inc
+)
+SOURCE_GROUP_FILES("generated" PATH_TRACER_GEN_SRC)
+DAS_AOT("toy_path_tracer" examples/pathTracer/toy_path_tracer.das)
 
 include_directories(include pathTracer)
-add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(pathTracer libDaScript)
+add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} ${PATH_TRACER_GEN_SRC})
+TARGET_LINK_LIBRARIES(pathTracer libDaScript libPathTracerHelper)
 IF (UNIX)
   TARGET_LINK_LIBRARIES(pathTracer pthread)
 ENDIF()
-ADD_DEPENDENCIES(pathTracer libDaScript)
+ADD_DEPENDENCIES(pathTracer libDaScript libPathTracerHelper)
 SETUP_CPP11(pathTracer)
 
 # JSON Example
@@ -236,6 +282,7 @@ SET(DASCRIPT_MAIN_SRC
 examples/daScript/main.cpp
 examples/common/fileAccess.h
 )
+SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
 include_directories(include lexer test)
 add_executable(daScript ${DASCRIPT_MAIN_SRC} )
@@ -302,7 +349,6 @@ SETUP_CPP11(daScriptTest)
 
 file(GLOB PROFILE_SRC
 "examples/profile/tests/*.das"
-"examples/profile/tests/*.inc"
 )
 list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)
@@ -318,8 +364,8 @@ list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("main" PROFILE_MAIN_SRC)
 
 include_directories(include lexer)
-add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} )
+add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC})
 TARGET_LINK_LIBRARIES(daScriptProfile libDaScript)
-ADD_DEPENDENCIES(daScriptProfile libDaScript)
+ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot)
 SETUP_CPP11(daScriptProfile)
 

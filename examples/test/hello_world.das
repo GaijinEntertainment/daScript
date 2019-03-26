@@ -1,21 +1,25 @@
-// options printRef = true, printVarAccess = true, log = true// , logOptimizationPasses = true
-options logCpp=true, optimize=false
+options log = true, logNodes = true, logStack = true
 
-enum Flags
-    flag_a = 1
-    flag_b = 2
+struct SomeEvent
+    pos:float3
 
-struct Foo
-    flags : Flags
-    more_flags : Flags = Flags flag_a
-    i : int
+def query(b:block<(eid:int;pos:float3&):void>)
+    let f : float3
+    f = float3(1)
+    invoke(b,1,f)
+    f = float3(2)
+    invoke(b,2,f)
+    f = float3(3)
+    invoke(b,3,f)
 
-struct Bar
-    f : Foo = Foo()
-    s : string = "text here"
+def some_es2()
+    let e:SomeEvent
+    query() <| $ (eid:int; pos:float3&)
+        e = [[SomeEvent pos=pos]]
+        print("send to {eid} {e.pos}\n")
+    print("{e}\n")
 
 [export]
 def test
-    let b = Bar()
-    print("b={b}\n")
+    some_es2()
     return true

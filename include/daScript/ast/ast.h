@@ -1677,7 +1677,7 @@ namespace das
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
         void aotCpp ( TextWriter & logs );
-        void registerAotCpp ( TextWriter & logs, Context & context );
+        void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {

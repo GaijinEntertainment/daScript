@@ -1,4 +1,4 @@
-options logCpp=true
+// options logCpp=true
 
 require math
 require PathTracerHelper
