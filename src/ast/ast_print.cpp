@@ -110,7 +110,24 @@ namespace das {
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
-            ss << "\t" << decl.name << " : " << decl.type->describe();
+            ss << "\t";
+            if ( decl.annotation.arguments.size() ) {
+                ss << "[";
+                int ai = 0;
+                for ( auto & arg : decl.annotation.arguments ) {
+                    if ( ai++ ) ss << ",";
+                    ss << arg.name << "=";
+                    switch ( arg.type ) {
+                        case Type::tInt:        ss << arg.iValue; break;
+                        case Type::tFloat:      ss << arg.fValue; break;
+                        case Type::tBool:       ss << (arg.bValue ? "true" : "false"); break;
+                        case Type::tString:     ss << "\"" << arg.sValue << "\""; break;
+                        default:    DAS_ASSERTF(false,"this type is not allowed in annotation");
+                    }
+                }
+                ss << "] ";
+            }
+            ss << decl.name << " : " << decl.type->describe();
             if ( decl.parentType ) {
                 ss << " /* from " << that->parent->name << " */";
             }

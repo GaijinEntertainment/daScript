@@ -334,7 +334,7 @@ examples/test/module_unitTest.h
 examples/test/aot.cpp
 )
 list(SORT TEST_MAIN_SRC)
-SOURCE_GROUP_FILES("main" TEST_MAIN_SRC)
+SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
 include_directories(include lexer test)
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}
