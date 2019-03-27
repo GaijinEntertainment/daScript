@@ -1238,7 +1238,7 @@ structure_declaration
                             auto ann = static_pointer_cast<StructureAnnotation>(pA->annotation);
                             string err;
                             if ( !ann->touch(pStruct, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                                das_yyerror("can't touch annotation\n" + err,
+                                das_yyerror("can't 'touch' with structure annotation\n" + err,
                                     tokAt(@loc), CompilationError::invalid_annotation);
                             }
                         } else if ( pA->annotation->rtti_isStructureTypeAnnotation() ) {
@@ -1257,6 +1257,7 @@ structure_declaration
                         }
                     }
                 }
+				swap ( pStruct->annotations, *$annL );
                 delete $annL;
             }
         }

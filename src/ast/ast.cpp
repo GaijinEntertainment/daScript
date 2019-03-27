@@ -58,6 +58,7 @@ namespace das {
         cs->at = at;
         cs->module = module;
         cs->genCtor = genCtor;
+        cs->annotations = annotations;
         return cs;
     }
 

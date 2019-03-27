@@ -2,6 +2,7 @@ options log = true
 
 require UnitTest
 
+// [checkRange(disable=true,dummy=true)]
 [checkRange]
 struct Foo
     [min=0,max=3] a:int = 1

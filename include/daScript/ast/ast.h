@@ -422,6 +422,7 @@ namespace das
         Module *                    module = nullptr;
         bool                        genCtor = false;
         Structure *                 parent = nullptr;
+        AnnotationList              annotations;
     };
 
     struct Variable : public enable_shared_from_this<Variable> {
@@ -521,7 +522,9 @@ namespace das
         StructureAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isStructureAnnotation() const override { return true; }
         virtual bool touch ( const StructurePtr & st, ModuleGroup & libGroup,
-                            const AnnotationArgumentList & args, string & err ) = 0;
+                            const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change structure here
+        virtual bool look (const StructurePtr & st, ModuleGroup & libGroup,
+            const AnnotationArgumentList & args, string & err ) = 0;                    // this one happens after infer. structure is read-only, or at-least infer-safe
     };
 
     // annotated structure

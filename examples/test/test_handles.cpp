@@ -51,26 +51,38 @@ struct IntFields {
 
 struct CheckRange : StructureAnnotation {
     CheckRange() : StructureAnnotation("checkRange") {}
-    virtual bool touch ( const StructurePtr & st, ModuleGroup &,
-                        const AnnotationArgumentList &, string & err ) override {
+    virtual bool touch(const StructurePtr & st, ModuleGroup &,
+        const AnnotationArgumentList & args, string & ) override {
+        // this is here for the 'example' purposes 
+        // lets add a sample 'dummy' field
+        if (args.getOption("dummy",false) && !st->findField("dummy")) {
+            st->fields.emplace_back("dummy", make_shared<TypeDecl>(Type::tInt), 
+                nullptr /*init*/, AnnotationArgumentList(), false /*move_to_init*/, LineInfo());
+        }
+        return true;
+    }
+    virtual bool look ( const StructurePtr & st, ModuleGroup &,
+                        const AnnotationArgumentList & args, string & err ) override {
         bool ok = true;
-        for ( auto & fd : st->fields ) {
-            if ( fd.type->isSimpleType(Type::tInt) && fd.annotation.arguments.size() ) {
-                int32_t val = 0;
-                int32_t minVal = INT32_MIN;
-                int32_t maxVal = INT32_MAX;
-                if ( fd.init && fd.init->rtti_isConstant() ) {
-                    val = static_pointer_cast<ExprConstInt>(fd.init)->getValue();
-                }
-                if ( auto minA = fd.annotation.find("min", Type::tInt) ) {
-                    minVal = minA->iValue;
-                }
-                if ( auto maxA = fd.annotation.find("max", Type::tInt) ) {
-                    maxVal = maxA->iValue;
-                }
-                if ( val<minVal || val>maxVal ) {
-                    err += fd.name + " out of annotated range [" + to_string(minVal) + ".." + to_string(maxVal) + "]\n";
-                    ok = false;
+        if (!args.getOption("disable", false)) {
+            for (auto & fd : st->fields) {
+                if (fd.type->isSimpleType(Type::tInt) && fd.annotation.arguments.size()) {
+                    int32_t val = 0;
+                    int32_t minVal = INT32_MIN;
+                    int32_t maxVal = INT32_MAX;
+                    if (fd.init && fd.init->rtti_isConstant()) {
+                        val = static_pointer_cast<ExprConstInt>(fd.init)->getValue();
+                    }
+                    if (auto minA = fd.annotation.find("min", Type::tInt)) {
+                        minVal = minA->iValue;
+                    }
+                    if (auto maxA = fd.annotation.find("max", Type::tInt)) {
+                        maxVal = maxA->iValue;
+                    }
+                    if (val<minVal || val>maxVal) {
+                        err += fd.name + " out of annotated range [" + to_string(minVal) + ".." + to_string(maxVal) + "]\n";
+                        ok = false;
+                    }
                 }
             }
         }

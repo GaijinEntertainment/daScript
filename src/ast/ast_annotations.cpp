@@ -12,7 +12,19 @@ namespace das
     protected:
         ProgramPtr  program;
     protected:
-        virtual void preVisit ( Function * fn ) {
+        virtual void preVisit ( Structure * var ) override { 
+            Visitor::preVisit(var);
+            for ( const auto & pA : var->annotations ) {
+                if (pA->annotation->rtti_isStructureAnnotation()) {
+                    auto sa = static_pointer_cast<StructureAnnotation>(pA->annotation);
+                    string err = "";
+                    if (!sa->look(var->shared_from_this(), *program->thisModuleGroup, pA->arguments, err)) {
+                        program->error("can't 'look' with structure annotation\n" + err, var->at, CompilationError::invalid_annotation);
+                    }
+                }
+            }
+        }
+        virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
             for ( const auto & an : fn->annotations ) {
                 auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
@@ -22,7 +34,7 @@ namespace das
                 }
             }
         }
-        virtual void preVisit ( ExprBlock * block ) {
+        virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
             for ( const auto & an : block->annotations ) {
                 auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
