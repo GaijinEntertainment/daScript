@@ -389,16 +389,18 @@ namespace das
     class Structure : public enable_shared_from_this<Structure> {
     public:
         struct FieldDeclaration {
-            string          name;
-            TypeDeclPtr     type;
-            ExpressionPtr   init;
-            bool            moveSemantic;
-            LineInfo        at;
-            int             offset = 0;
-            bool            parentType = false;
+            string                  name;
+            TypeDeclPtr             type;
+            ExpressionPtr           init;
+            AnnotationArgumentList  annotation;
+            bool                    moveSemantic;
+            LineInfo                at;
+            int                     offset = 0;
+            bool                    parentType = false;
             FieldDeclaration() = default;
-            FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i, bool ms, const LineInfo & a )
-                : name(n), type(t), init(i), moveSemantic(ms), at(a) {}
+            FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i,
+                             const AnnotationArgumentList & alist, bool ms, const LineInfo & a )
+                : name(n), type(t), init(i), annotation(alist), moveSemantic(ms), at(a) {}
         };
     public:
         Structure ( const string & n ) : name(n) {}

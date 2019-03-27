@@ -53,7 +53,7 @@ namespace das {
         auto cs = make_shared<Structure>(name);
         cs->fields.reserve(fields.size());
         for ( auto & fd : fields ) {
-            cs->fields.emplace_back(fd.name, fd.type, fd.init, fd.moveSemantic, fd.at);
+            cs->fields.emplace_back(fd.name, fd.type, fd.init, fd.annotation, fd.moveSemantic, fd.at);
         }
         cs->at = at;
         cs->module = module;

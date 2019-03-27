@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.2.4.  */
+/* A Bison parser, made by GNU Bison 3.2.1.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -33,8 +33,8 @@
 /* Undocumented macros, especially those whose name start with YY_,
    are private implementation details.  Do not rely on them.  */
 
-#ifndef YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED
-# define YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED
+#ifndef YY_DAS_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+# define YY_DAS_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
 /* Debug traces.  */
 #ifndef DAS_YYDEBUG
 # if defined YYDEBUG
@@ -51,7 +51,7 @@
 extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 2 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
+#line 2 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
@@ -67,13 +67,19 @@ extern int das_yydebug;
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
             : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
-        virtual ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
-        LineInfo        at;
-        vector<string>  *pNameList;
-        TypeDecl        *pTypeDecl;
-        Expression      *pInit;
-        bool            move_to_init = false;
-        bool            override = false;
+        virtual ~VariableDeclaration () {
+            delete pNameList;
+            delete pTypeDecl;
+            delete pInit;
+            if ( annotation ) delete annotation;
+        }
+        LineInfo                at;
+        vector<string>          *pNameList;
+        TypeDecl                *pTypeDecl;
+        Expression              *pInit;
+        bool                    move_to_init = false;
+        bool                    override = false;
+        AnnotationArgumentList  *annotation = nullptr;
     };
     
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
@@ -85,7 +91,7 @@ extern int das_yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 89 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.hpp" /* yacc.c:1906  */
+#line 95 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -206,7 +212,7 @@ extern int das_yydebug;
 
 union DAS_YYSTYPE
 {
-#line 59 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
+#line 65 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
 
     char                            ch;
     bool                            b;
@@ -231,7 +237,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 235 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.hpp" /* yacc.c:1906  */
+#line 241 "/Users/borisbatkin/work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
 };
 
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
@@ -258,4 +264,4 @@ extern DAS_YYSTYPE das_yylval;
 extern DAS_YYLTYPE das_yylloc;
 int das_yyparse (void);
 
-#endif /* !YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED  */
+#endif /* !YY_DAS_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */

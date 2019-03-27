@@ -73,12 +73,12 @@ namespace das {
         btd->baseType = Type::tFunction;
         auto thisArg = make_shared<TypeDecl>(pStruct);
         btd->argTypes.insert(btd->argTypes.begin(), thisArg);
-        pStruct->fields.emplace_back("__lambda", btd, nullptr, false, block->at);
+        pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
         for ( auto var : capt ) {
             auto td = make_shared<TypeDecl>(*var->type);
             td->ref = false;
             td->constant = false;
-            pStruct->fields.emplace_back(var->name, td, nullptr, false, var->at);
+            pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
         }
         return pStruct;
     }

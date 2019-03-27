@@ -14,13 +14,19 @@
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
             : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
-        virtual ~VariableDeclaration () { delete pNameList; delete pTypeDecl; delete pInit; }
-        LineInfo        at;
-        vector<string>  *pNameList;
-        TypeDecl        *pTypeDecl;
-        Expression      *pInit;
-        bool            move_to_init = false;
-        bool            override = false;
+        virtual ~VariableDeclaration () {
+            delete pNameList;
+            delete pTypeDecl;
+            delete pInit;
+            if ( annotation ) delete annotation;
+        }
+        LineInfo                at;
+        vector<string>          *pNameList;
+        TypeDecl                *pTypeDecl;
+        Expression              *pInit;
+        bool                    move_to_init = false;
+        bool                    override = false;
+        AnnotationArgumentList  *annotation = nullptr;
     };
     
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
@@ -156,6 +162,7 @@
 %type <s>               optional_structure_parent
 %type <aa>              annotation_argument
 %type <aaList>          annotation_argument_list
+%type <aaList>          optional_field_annotation
 %type <fa>              annotation_declaration
 %type <faList>          annotation_list
 %type <faList>          optional_annotation_list
@@ -990,14 +997,20 @@ expr
     }
     ;
 
+optional_field_annotation
+    :                                           { $$ = nullptr; }
+    |   '[' annotation_argument_list[alist] ']' { $$ = $alist; }
+    ;
+
 optional_override
     :               { $$ = false; }
     |   _OVERRIDE   { $$ = true; }
     ;
 
 structure_variable_declaration
-    :   optional_override[ovr] variable_declaration[decl] {
+    :   optional_field_annotation[alist] optional_override[ovr] variable_declaration[decl] {
         $decl->override = $ovr;
+        $decl->annotation = $alist;
         $$ = $decl;
     }
     ;
@@ -1201,7 +1214,9 @@ structure_declaration
                         } else {
                             auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                             auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
-                            pStruct->fields.emplace_back(name, td, init, pDecl->move_to_init, pDecl->at);
+                            pStruct->fields.emplace_back(name, td, init,
+                                pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
+                                pDecl->move_to_init, pDecl->at);
                         }
                     } else {
                         if ( pDecl->override ) {
