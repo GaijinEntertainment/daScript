@@ -225,6 +225,12 @@ namespace das
         return line!=info.line || column!=info.column;
     }
 
+    FileInfoPtr FileAccess::letGoOfFileInfo ( const string & fileName ) {
+        auto it = files.find(fileName);
+        if ( it == files.end() ) return nullptr;
+        return move(it->second);
+    }
+
     FileInfo * FileAccess::setFileInfo ( const string & fileName, FileInfoPtr && info ) {
         if ( files.find(fileName)!=files.end() ) return nullptr;
         files[fileName] = move(info);

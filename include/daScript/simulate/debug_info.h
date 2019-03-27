@@ -68,6 +68,7 @@ namespace das
         FileInfo * getFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
         void freeSourceData();
+        FileInfoPtr letGoOfFileInfo ( const string & fileName );
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:

@@ -1556,6 +1556,7 @@ namespace das
     private:
         Module * next = nullptr;
         static Module * modules;
+        unique_ptr<FileInfo>    ownFileInfo;
     };
 
     #define REGISTER_MODULE(ClassName) \
