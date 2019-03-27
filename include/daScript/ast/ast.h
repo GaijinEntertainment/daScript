@@ -352,6 +352,7 @@ namespace das
         virtual void seal( Module * m ) { module = m; }
         virtual bool rtti_isHandledTypeAnnotation() const { return false; }
         virtual bool rtti_isStructureAnnotation() const { return false; }
+        virtual bool rtti_isStructureTypeAnnotation() const { return false; }
         virtual bool rtti_isFunctionAnnotation() const { return false; }
         string describe() const { return name; }
         string getMangledName() const;
@@ -516,12 +517,19 @@ namespace das
         virtual void walk ( DataWalker &, void * ) { }
     };
 
+    struct StructureAnnotation : Annotation {
+        StructureAnnotation ( const string & n ) : Annotation(n) {}
+        virtual bool rtti_isStructureAnnotation() const override { return true; }
+        virtual bool touch ( const StructurePtr & st, ModuleGroup & libGroup,
+                            const AnnotationArgumentList & args, string & err ) = 0;
+    };
+
     // annotated structure
     //  needs to override
     //      create,clone, simulateGetField, simulateGetFieldR2V, SafeGetField, and SafeGetFieldPtr
     struct StructureTypeAnnotation : TypeAnnotation {
         StructureTypeAnnotation ( const string & n ) : TypeAnnotation(n) {}
-        virtual bool rtti_isStructureAnnotation() const override { return true; }
+        virtual bool rtti_isStructureTypeAnnotation() const override { return true; }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool canCopy() const override { return false; }
         virtual bool isPod() const override { return false; }

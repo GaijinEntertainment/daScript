@@ -1305,7 +1305,7 @@ namespace das {
     }
 
     bool Program::addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg ) {
-        if ( ann->rtti_isStructureAnnotation() ) {
+        if ( ann->rtti_isStructureTypeAnnotation() ) {
             auto annotation = static_pointer_cast<StructureTypeAnnotation>(ann->clone());
             annotation->name = st->name;
             string err;

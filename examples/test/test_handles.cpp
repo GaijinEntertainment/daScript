@@ -49,6 +49,35 @@ struct IntFields {
     map<string,int32_t> fields;
 };
 
+struct CheckRange : StructureAnnotation {
+    CheckRange() : StructureAnnotation("checkRange") {}
+    virtual bool touch ( const StructurePtr & st, ModuleGroup &,
+                        const AnnotationArgumentList &, string & err ) override {
+        bool ok = true;
+        for ( auto & fd : st->fields ) {
+            if ( fd.type->isSimpleType(Type::tInt) && fd.annotation.arguments.size() ) {
+                int32_t val = 0;
+                int32_t minVal = INT32_MIN;
+                int32_t maxVal = INT32_MAX;
+                if ( fd.init && fd.init->rtti_isConstant() ) {
+                    val = static_pointer_cast<ExprConstInt>(fd.init)->getValue();
+                }
+                if ( auto minA = fd.annotation.find("min", Type::tInt) ) {
+                    minVal = minA->iValue;
+                }
+                if ( auto maxA = fd.annotation.find("max", Type::tInt) ) {
+                    maxVal = maxA->iValue;
+                }
+                if ( val<minVal || val>maxVal ) {
+                    err += fd.name + " out of annotated range [" + to_string(minVal) + ".." + to_string(maxVal) + "]\n";
+                    ok = false;
+                }
+            }
+        }
+        return ok;
+    }
+};
+
 struct IntFieldsAnnotation : StructureTypeAnnotation {
 
     // NOTE - SafeGetFieldPtr is not necessary, since its Int always
@@ -228,6 +257,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     lib.addBuiltInModule();
     addEnumTest(lib);
     // structure annotations
+    addAnnotation(make_shared<CheckRange>());
     addAnnotation(make_shared<IntFieldsAnnotation>());
     // register types
     addAnnotation(make_shared<TestObjectFooAnnotation>(lib));

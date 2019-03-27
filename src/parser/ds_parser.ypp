@@ -1232,22 +1232,28 @@ structure_declaration
                 }
             }
             if ( $annL ) {
-                if ( $annL->size()!=1 ) {
-                    das_yyerror("structures are only allowed one annotation", tokAt(@loc),
-                        CompilationError::invalid_annotation);
-                } else {
-                    auto & annotation = $annL->back()->annotation;
-                    auto & args = $annL->back()->arguments;
-                    if ( !annotation->rtti_isStructureAnnotation() ) {
-                        das_yyerror("structures are only allowed structure annotation", tokAt(@loc),
-                            CompilationError::invalid_annotation);
-                    } else {
-                        if ( !g_Program->addStructureHandle(pStruct,
-                            static_pointer_cast<StructureTypeAnnotation>(annotation), args) ) {
-                                das_yyerror("handled structure is already defined "+pStruct->name,tokAt(@loc),
-                                CompilationError::structure_already_declared);
-                        } else {
-                            pStruct->module->removeStructure(pStruct);
+                for ( auto pA : *$annL ) {
+                    if ( pA->annotation ) {
+                        if ( pA->annotation->rtti_isStructureAnnotation() ) {
+                            auto ann = static_pointer_cast<StructureAnnotation>(pA->annotation);
+                            string err;
+                            if ( !ann->touch(pStruct, *g_Program->thisModuleGroup, pA->arguments, err) ) {
+                                das_yyerror("can't touch annotation\n" + err,
+                                    tokAt(@loc), CompilationError::invalid_annotation);
+                            }
+                        } else if ( pA->annotation->rtti_isStructureTypeAnnotation() ) {
+                            if ( $annL->size()!=1 ) {
+                                das_yyerror("structures are only allowed one structure type annotation", tokAt(@loc),
+                                    CompilationError::invalid_annotation);
+                            } else {
+                                if ( !g_Program->addStructureHandle(pStruct,
+                                    static_pointer_cast<StructureTypeAnnotation>(pA->annotation), pA->arguments) ) {
+                                        das_yyerror("handled structure is already defined "+pStruct->name,tokAt(@loc),
+                                        CompilationError::structure_already_declared);
+                                } else {
+                                    pStruct->module->removeStructure(pStruct);
+                                }
+                            }
                         }
                     }
                 }
