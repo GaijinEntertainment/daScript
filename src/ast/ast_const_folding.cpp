@@ -24,16 +24,6 @@ namespace das {
             Visitor::preVisit(expr);
             expr->noSideEffects = true;
         }
-    // sizeof
-        virtual void preVisit ( ExprSizeOf * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true;
-        }
-    // typename
-        virtual void preVisit ( ExprTypeName * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true;
-        }
     // find
         virtual void preVisit ( ExprFind * expr ) override {
             Visitor::preVisit(expr);
@@ -169,8 +159,6 @@ namespace das {
         constexpr; = nop
         assert(true,...) = nop
         hash(x) = ...
-        sizeof(...) -> const
-        typename(...) -> const
         no_side_effec_builtin(const...) -> const
         stringbuilder(const1,const2,...) -> stringbuilder(const12,...)
         stringbuilder(const) -> const
@@ -382,20 +370,6 @@ namespace das {
                 }
             }
             return Visitor::visit(expr);
-        }
-    // sizeof
-        virtual ExpressionPtr visit ( ExprSizeOf * expr ) override {
-            reportFolding();
-            auto ci = make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
-            ci->type = make_shared<TypeDecl>(Type::tInt);
-            return ci;
-        }
-    // typename
-        virtual ExpressionPtr visit ( ExprTypeName * expr ) override {
-            reportFolding();
-            auto cs = make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false));
-            cs->type = make_shared<TypeDecl>(Type::tString);
-            return cs;
         }
     // ExprInvoke
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {

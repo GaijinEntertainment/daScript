@@ -1,12 +1,12 @@
-expect 39901:2, 39902, 39903
+expect 39901:2, 39902:2
 
 def blah(a:auto(numt)&)
-    return sizeof(type numt)    // 39901: szieof(ref) is prohibited
+    return typeinfo(sizeof type numt)    // 39901: typeinfo(sizeof ref) is prohibited
 
 def test
-    sizeof(type int&)           // 39901: szieof(ref) is prohibited
+    typeinfo(sizeof type int&)           // 39901: typeinfo(sizeof ref) is prohibited
     let t = 1
     blah(t)
-    sizeof(type auto)           // 39902: sizeof(auto) is undefined
-    typename(type auto)         // 39903: typename(auto) is undefined
+    typeinfo(sizeof type auto)           // 39902: typeinfo(sizeof auto) is undefined
+    typeinfo(typename type auto)         // 39902: typeinfo(typename auto) is undefined
 

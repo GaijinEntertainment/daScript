@@ -51,24 +51,12 @@ namespace das {
             Visitor::preVisit(expr);
             expr->bottomLevel = true;
         }
-    // ExprSizeOf
-        virtual void preVisit ( ExprSizeOf * expr ) override {
+    // ExprTypeInfo
+        virtual void preVisit ( ExprTypeInfo * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->subexpr ) {
                 expr->subexpr->argLevel = true;
             }
-        }
-    // ExprTypeName
-        virtual void preVisit ( ExprTypeName * expr ) override {
-            Visitor::preVisit(expr);
-            if ( expr->subexpr ) {
-                expr->subexpr->argLevel = true;
-            }
-        }
-    // const
-        virtual ExpressionPtr visit ( ExprConst * c ) override {
-            c->bottomLevel = true;
-            return Visitor::visit(c);
         }
     };
 
@@ -654,27 +642,15 @@ namespace das {
             Visitor::preVisit(that);
             ss << "break";
         }
-    // sizeof
-        virtual void preVisit ( ExprSizeOf * expr ) override {
+    // typeinfo
+        virtual void preVisit ( ExprTypeInfo * expr ) override {
             Visitor::preVisit(expr);
-            ss << "sizeof(";
+            ss << "typeinfo(" << expr->trait << " ";
             if ( !expr->subexpr ) {
                 ss << "type " << *expr->typeexpr;
             }
         }
-        virtual ExpressionPtr visit ( ExprSizeOf * expr ) override {
-            ss << ")";
-            return Visitor::visit(expr);
-        }
-    // typename
-        virtual void preVisit ( ExprTypeName * expr ) override {
-            Visitor::preVisit(expr);
-            ss << "typename(";
-            if ( !expr->subexpr ) {
-                ss << "type " << *expr->typeexpr;
-            }
-        }
-        virtual ExpressionPtr visit ( ExprTypeName * expr ) override {
+        virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
             ss << ")";
             return Visitor::visit(expr);
         }

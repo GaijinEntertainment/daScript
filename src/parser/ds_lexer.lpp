@@ -219,11 +219,10 @@
 <normal>"null"                                          return _NULL;
 <normal>"return"                                        return _RETURN;
 <normal>"break"                                         return _BREAK;
-<normal>"typename"                                      return _TYPENAME;
+<normal>"typeinfo"                                      return _TYPEINFO;
 <normal>"type"                                          return _TYPE;
 <normal>"new"                                           return _NEWT;
 <normal>"delete"                                        return _DELETE;
-<normal>"sizeof"                                        return _SIZEOF;
 <normal>"true"                                          return _TRUE;
 <normal>"false"                                         return _FALSE;
 <normal>"auto"                                          return _TAUTO;

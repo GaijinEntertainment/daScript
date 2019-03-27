@@ -108,6 +108,8 @@ namespace das {
             info->flags |= TypeInfo::flag_canCopy;
         if (type->isPod())
             info->flags |= TypeInfo::flag_isPod;
+        if (type->isRawPod())
+            info->flags |= TypeInfo::flag_isRawPod;
         if ( type->firstType ) {
             info->firstType = makeTypeInfo(nullptr, type->firstType);
         } else {

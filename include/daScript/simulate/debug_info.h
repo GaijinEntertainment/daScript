@@ -93,7 +93,8 @@ namespace das
             flag_ref = 1<<0,
             flag_refType = 1<<1,
             flag_canCopy = 1<<2,
-            flag_isPod = 1<<3
+            flag_isPod = 1<<3,
+            flag_isRawPod = 1<<4
         };
         Type                type;
         StructInfo *        structType;

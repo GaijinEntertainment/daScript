@@ -505,16 +505,6 @@ namespace das {
             Visitor::preVisit(that);
             label(that, "break", "shape=Msquare");
         }
-        // sizeof
-        virtual void preVisit(ExprSizeOf * that) override {
-            Visitor::preVisit(that);
-            label(that, "sizeof " + that->typeexpr->describe());
-        }
-        // typename
-        virtual void preVisit(ExprTypeName * that) override {
-            Visitor::preVisit(that);
-            label(that, "typename " + that->typeexpr->describe());
-        }
         // make block
         virtual void preVisit(ExprMakeBlock * that) override {
             Visitor::preVisit(that);

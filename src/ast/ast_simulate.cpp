@@ -763,14 +763,10 @@ namespace das
         }
     }
 
-    SimNode * ExprSizeOf::simulate (Context & context) const {
-        uint32_t size = typeexpr->getSizeOf();
-        return context.code->makeNode<SimNode_ConstValue>(at,cast<uint32_t>::from(size));
-    }
-
-    SimNode * ExprTypeName::simulate (Context & context) const {
-        auto pName = context.code->allocateString(typeexpr->describe(false));
-        return context.code->makeNode<SimNode_ConstValue>(at,cast<char *>::from(pName));
+    SimNode * ExprTypeInfo::simulate (Context & context) const {
+        DAS_ASSERTF(0, "we should not even be here. typeinfo should resolve to const during infer pass.");
+        context.thisProgram->error("internal compilation error, generating typeinfo(...)", at);
+        return nullptr;
     }
     
     SimNode * ExprDelete::simulate (Context & context) const {

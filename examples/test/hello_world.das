@@ -1,16 +1,18 @@
-options log = true
+options log = true, optimize=false
 
-require UnitTest
-
-// [checkRange(disable=true,dummy=true)]
-[checkRange]
 struct Foo
-    [min=0,max=3] a:int = 1
-    [min=10,max=20] b:int = 2
-    [min=2] c:int
-
+    a:int
+    b:float
+    c:double
+    e:Foo?
+    // f:string
 
 [export]
 def test
-    let t : Foo
+    let f : Foo
+    let x = typeinfo(typename f)
+    let y = typeinfo(sizeof type Foo)
+    let z = typeinfo(typename type Foo)
+    let q = typeinfo(is_pod type Foo)
+    let qq = typeinfo(is_raw type Foo)
     return true

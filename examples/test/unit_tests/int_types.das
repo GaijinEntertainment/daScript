@@ -10,12 +10,12 @@ def test
     let uhu = 0x12345678u
     let uhl = 0x123456789abcdefl
     let uhlu = 0x123456789abcdefl
-    assert("{typename(i)}"=="int&")
-    assert("{typename(li)}"=="int64&")
-    assert("{typename(u)}"=="uint&")
-    assert("{typename(ul)}"=="uint64&")
-    assert("{typename(uh)}"=="uint&")
-    assert("{typename(uhu)}"=="uint&")
-    assert("{typename(uhl)}"=="uint64&")
-    assert("{typename(uhlu)}"=="uint64&")
+    assert("{typeinfo(typename i)}"=="int&")
+    assert("{typeinfo(typename li)}"=="int64&")
+    assert("{typeinfo(typename u)}"=="uint&")
+    assert("{typeinfo(typename ul)}"=="uint64&")
+    assert("{typeinfo(typename uh)}"=="uint&")
+    assert("{typeinfo(typename uhu)}"=="uint&")
+    assert("{typeinfo(typename uhl)}"=="uint64&")
+    assert("{typeinfo(typename uhlu)}"=="uint64&")
     return true

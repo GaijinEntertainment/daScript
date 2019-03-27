@@ -1,24 +1,24 @@
 // options log=true, logGenerics=false, optimize=true
 
 def logT(x:auto(numT)&)
-    return typename(type numT)
+    return typeinfo(typename type numT)
 
 def logTNoRef(x:auto(numT)delete &)
-    return typename(type numT)
+    return typeinfo(typename type numT)
 
 def logTNoRefNoConst(x:auto(numT) delete const&)
-    return typename(type numT)
+    return typeinfo(typename type numT)
 
 def aliasLogT(x:auto(numT)&;y:numT)
-    return typename(type numT)
+    return typeinfo(typename type numT)
 
 def aliasLogTNoRef(x:auto(numT);y:numT delete &)
     let z : auto(passT) = y
-    return typename(type passT)
+    return typeinfo(typename type passT)
 
 def aliasLogTNoRefNoConst(x:auto(numT);y:numT delete const&)
     let z : auto(passT) = y
-    return typename(type passT)
+    return typeinfo(typename type passT)
 
 [export]
 def test

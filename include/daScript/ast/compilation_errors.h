@@ -96,9 +96,9 @@ namespace das
     ,   not_expecting_return_value              =   32102       // def blah:void ... return 12
     ,   invalid_return_semantics                =   32103       // return <- required
 
-    ,   sizeof_reference                        =   39901       //  sizeof(type int&)
-    ,   sizeof_auto                             =   39902       //  sizeof(type auto)
-    ,   typename_auto                           =   39903       //  typename(type auto)
+    ,   typeinfo_reference                      =   39901       //  typeinfo(sizeof type int&)
+    ,   typeinfo_auto                           =   39902       //  typeinfo(typename type auto)
+    ,   typeinfo_undefined                      =   39903       //  typeinfo(??? ...)
 
 // logic errors
 

@@ -956,65 +956,57 @@ namespace das {
             valueType->constant = true;
             return Visitor::visit(expr);
         }
-    // ExprSizeOf
-        virtual ExpressionPtr visit ( ExprSizeOf * expr ) override {
+    // ExprTypeInfo
+        virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
             // check subexpression
             if ( expr->subexpr && expr->subexpr->type ) {
                 expr->typeexpr = make_shared<TypeDecl>(*expr->subexpr->type);
             }
             // verify
             if ( !expr->typeexpr ) {
-                error("sizeof(...) can't be infered", expr->at, CompilationError::type_not_found);
+                error("typeinfo(...) can't be infered", expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
+            auto nErrors = program->errors.size();
             if ( expr->typeexpr->isAlias() ) {
                 if ( auto eT = inferAlias(expr->typeexpr) ) {
                     expr->typeexpr = eT;
                     reportGenericInfer();
-                } else {
-                    error("udefined type " + expr->typeexpr->describe(),
-                          expr->at, CompilationError::type_not_found);
-                }
-            }
-            if ( expr->typeexpr->ref ) {
-                error("sizeof(ref) is prohibited, " + expr->typeexpr->describe(),
-                      expr->at,CompilationError::sizeof_reference);
-            } else if ( expr->typeexpr->isAuto() ) {
-                error("sizeof(auto) is undefined, " + expr->typeexpr->describe(),
-                      expr->at, CompilationError::sizeof_auto);
-            }
-            verifyType(expr->typeexpr);
-            // infer
-            expr->type = make_shared<TypeDecl>(Type::tInt);
-            return Visitor::visit(expr);
-        }
-    // ExprTypeName
-        virtual ExpressionPtr visit ( ExprTypeName * expr ) override {
-            // check subexpression
-            if ( expr->subexpr && expr->subexpr->type ) {
-                expr->typeexpr = make_shared<TypeDecl>(*expr->subexpr->type);
-            }
-            // verify
-            if ( !expr->typeexpr ) {
-                error("typename(...) can't be infered", expr->at, CompilationError::type_not_found);
-                return Visitor::visit(expr);
-            }
-            if ( expr->typeexpr->isAlias() ) {
-                if ( auto eT = inferAlias(expr->typeexpr) ) {
-                    expr->typeexpr = eT;
-                    reportGenericInfer();
+                    return Visitor::visit(expr);
                 } else {
                     error("udefined type " + expr->typeexpr->describe(),
                           expr->at, CompilationError::type_not_found);
                 }
             }
             if ( expr->typeexpr->isAuto() ) {
-                error("typename(auto) is undefined, " + expr->typeexpr->describe(),
-                      expr->at, CompilationError::typename_auto);
+                error("typeinfo(... auto) is undefined, " + expr->typeexpr->describe(),
+                      expr->at, CompilationError::typeinfo_auto);
             }
             verifyType(expr->typeexpr);
+            if ( nErrors==program->errors.size() ) {
+                if ( expr->trait=="sizeof" ) {
+                    if ( expr->typeexpr->ref ) {
+                        error("typeinfo(sizeof ref) is prohibited, " + expr->typeexpr->describe(),
+                              expr->at,CompilationError::typeinfo_reference);
+                    } else {
+                        reportGenericInfer();
+                        return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
+                    }
+                } else if ( expr->trait=="typename" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false));
+                } else if ( expr->trait=="is_pod" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPod());
+                } else if ( expr->trait=="is_raw" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRawPod());
+                } else {
+                    error("typeinfo(" + expr->trait + " ...) is undefined, " + expr->typeexpr->describe(),
+                          expr->at, CompilationError::typeinfo_undefined);
+                }
+            }
             // infer
-            expr->type = make_shared<TypeDecl>(Type::tString);
             return Visitor::visit(expr);
         }
     // ExprDelete

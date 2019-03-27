@@ -2,8 +2,8 @@
 
 def verifyIdentity(mat:auto(mat))
     let v : auto(vec) = mat[0]
-    let col = sizeof(type vec) / 4
-    let row = sizeof(type mat) / col / 4
+    let col = typeinfo(sizeof type vec) / 4
+    let row = typeinfo(sizeof type mat) / col / 4
     for y in range(0,row)
         for x in range(0,col)
             let t = x==y ? 1.0 : 0.0
@@ -11,8 +11,8 @@ def verifyIdentity(mat:auto(mat))
 
 def verifySequence(mat:auto(mat))
     let v : auto(vec) = mat[0]
-    let col = sizeof(type vec) / 4
-    let row = sizeof(type mat) / col / 4
+    let col = typeinfo(sizeof type vec) / 4
+    let row = typeinfo(sizeof type mat) / col / 4
     let t = 1.0
     for y in range(0,row)
         for x in range(0,col)
@@ -20,8 +20,8 @@ def verifySequence(mat:auto(mat))
 
 def verifyRows(mat:auto(mat))
     let v : auto(vec) = mat[0]
-    let col = sizeof(type vec) / 4
-    let row = sizeof(type mat) / col / 4
+    let col = typeinfo(sizeof type vec) / 4
+    let row = typeinfo(sizeof type mat) / col / 4
     for y in range(0,row)
         for x in range(0,col)
             assert(mat[y][x]==float(y))
@@ -59,8 +59,8 @@ def pass(a)
 
 def test_any(t:auto(mat))
     let v : auto(vec) = t[0]
-    let col = sizeof(type vec) / 4
-    let row = sizeof(type mat) / col / 4
+    let col = typeinfo(sizeof type vec) / 4
+    let row = typeinfo(sizeof type mat) / col / 4
     identity(t)
     verifyIdentity(t)
     for r in range(0,row)

@@ -102,6 +102,14 @@ namespace das {
         return true;
     }
 
+    bool Structure::isRawPod() const {
+        for ( const auto & fd : fields ) {
+            if ( !fd.type->isRawPod() )
+                return false;
+        }
+        return true;
+    }
+
     int Structure::getSizeOf() const {
         int size = 0;
         for ( const auto & fd : fields ) {
@@ -470,9 +478,9 @@ namespace das {
         return cexpr;
     }
 
-    // ExprSizeOf
+    // ExprTypeInfo
 
-    ExpressionPtr ExprSizeOf::visit(Visitor & vis) {
+    ExpressionPtr ExprTypeInfo::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( subexpr ) {
             subexpr = subexpr->visit(vis);
@@ -480,29 +488,10 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprSizeOf::clone( const ExpressionPtr & expr ) const {
-        auto cexpr = clonePtr<ExprSizeOf>(expr);
+    ExpressionPtr ExprTypeInfo::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprTypeInfo>(expr);
         Expression::clone(cexpr);
-        if ( subexpr )
-            cexpr->subexpr = subexpr->clone();
-        if ( typeexpr )
-            cexpr->typeexpr = typeexpr;
-        return cexpr;
-    }
-
-    // ExprTypeName
-
-    ExpressionPtr ExprTypeName::visit(Visitor & vis) {
-        vis.preVisit(this);
-        if ( subexpr ) {
-            subexpr = subexpr->visit(vis);
-        }
-        return vis.visit(this);
-    }
-
-    ExpressionPtr ExprTypeName::clone( const ExpressionPtr & expr ) const {
-        auto cexpr = clonePtr<ExprTypeName>(expr);
-        Expression::clone(cexpr);
+        cexpr->trait = trait;
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
         if ( typeexpr )

@@ -4,24 +4,24 @@ struct Foo
     bar : int
 
 def testInfT(a:auto(numT))
-    return typename(type numT)
+    return typeinfo(typename type numT)
 
 def testVarRefT(a)
-    return typename(a)
+    return typeinfo(typename a)
 
 def testVarValT(a)
-    return typename(a+0)
+    return typeinfo(typename a+0)
 
 def arrType(a:array<auto(arrT)>)
-    return typename(type arrT)
+    return typeinfo(typename type arrT)
 
 def tabTypes(a:table<auto(key),auto(value)>)
-    return typename(type key) + ":" + typename(type value)
+    return typeinfo(typename type key) + ":" + typeinfo(typename type value)
 
 [export]
 def test:bool
     let x : auto(numT)  = 3
-    assert(typename(type numT)=="int")
+    assert(typeinfo(typename type numT)=="int")
     assert(testInfT(3)=="int")
     assert(testVarRefT(3)=="int&")
     assert(testVarValT(3)=="int")

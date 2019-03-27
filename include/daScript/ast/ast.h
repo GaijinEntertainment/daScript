@@ -90,6 +90,7 @@ namespace das
         bool canMove() const;
         bool canDelete() const;
         bool isPod() const;
+        bool isRawPod() const;
         bool isWorkhorseType() const; // we can return this, or pass this
         bool isPolicyType() const;
         bool isVecPolicyType() const;
@@ -412,6 +413,7 @@ namespace das
         int getAlignOf() const;
         bool canCopy() const;
         bool isPod() const;
+        bool isRawPod() const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
@@ -484,6 +486,7 @@ namespace das
         virtual bool canMove() const { return true; }
         virtual bool canCopy() const { return true; }
         virtual bool isPod() const { return true; }
+        virtual bool isRawPod() const { return true; }
         virtual bool isRefType() const { return false; }
         virtual bool isLocal() const { return false; }
         virtual bool canNew() const { return false; }
@@ -536,6 +539,7 @@ namespace das
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool canCopy() const override { return false; }
         virtual bool isPod() const override { return false; }
+        virtual bool isRawPod() const override { return false; }
         virtual bool isRefType() const override { return false; }
         virtual bool create ( const shared_ptr<Structure> & st, const AnnotationArgumentList & /*args*/, string & /*err*/ ) {
             structureType = st;
@@ -1270,28 +1274,16 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
     };
 
-    struct ExprSizeOf : Expression {
-        ExprSizeOf () = default;
-        ExprSizeOf ( const LineInfo & a, const ExpressionPtr & s )
-            : Expression(a), subexpr(s) {}
-        ExprSizeOf ( const LineInfo & a, const TypeDeclPtr & d )
-            : Expression(a), typeexpr(d) {}
+    struct ExprTypeInfo : Expression {
+        ExprTypeInfo () = default;
+        ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s )
+            : Expression(a), trait(tr), subexpr(s) {}
+        ExprTypeInfo ( const LineInfo & a, const string & tr, const TypeDeclPtr & d )
+            : Expression(a), trait(tr), typeexpr(d) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        ExpressionPtr   subexpr;
-        TypeDeclPtr     typeexpr;
-    };
-
-    struct ExprTypeName : Expression {
-        ExprTypeName () = default;
-        ExprTypeName ( const LineInfo & a, const ExpressionPtr & s )
-            : Expression(a), subexpr(s) {}
-        ExprTypeName ( const LineInfo & a, const TypeDeclPtr & d )
-            : Expression(a), typeexpr(d) {}
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
-        virtual ExpressionPtr visit(Visitor & vis) override;
+        string          trait;
         ExpressionPtr   subexpr;
         TypeDeclPtr     typeexpr;
     };
@@ -1902,8 +1894,7 @@ namespace das
         VISIT_EXPR(ExprLooksLikeCall)
         VISIT_EXPR(ExprMakeBlock)
         VISIT_EXPR(ExprMakeLambda)
-        VISIT_EXPR(ExprSizeOf)
-        VISIT_EXPR(ExprTypeName)
+        VISIT_EXPR(ExprTypeInfo)
         VISIT_EXPR(ExprCall)
         VISIT_EXPR(ExprIfThenElse)
         VISIT_EXPR(ExprWith)
