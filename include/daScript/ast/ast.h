@@ -1276,16 +1276,17 @@ namespace das
 
     struct ExprTypeInfo : Expression {
         ExprTypeInfo () = default;
-        ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s )
-            : Expression(a), trait(tr), subexpr(s) {}
-        ExprTypeInfo ( const LineInfo & a, const string & tr, const TypeDeclPtr & d )
-            : Expression(a), trait(tr), typeexpr(d) {}
+        ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s, const string & stt="" )
+            : Expression(a), trait(tr), subexpr(s), subtrait(stt) {}
+        ExprTypeInfo ( const LineInfo & a, const string & tr, const TypeDeclPtr & d, const string & stt="" )
+            : Expression(a), trait(tr), typeexpr(d), subtrait(stt) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
         string          trait;
         ExpressionPtr   subexpr;
         TypeDeclPtr     typeexpr;
+        string          subtrait;
     };
 
     struct ExprAscend : Expression {

@@ -492,6 +492,7 @@ namespace das {
         auto cexpr = clonePtr<ExprTypeInfo>(expr);
         Expression::clone(cexpr);
         cexpr->trait = trait;
+        cexpr->subtrait = subtrait;
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
         if ( typeexpr )

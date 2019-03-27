@@ -759,9 +759,19 @@ expr_type_info
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,ExpressionPtr($subexpr));
             delete $trait;
     }
+    |   _TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>' expr[subexpr] ')' {
+            $$ = new ExprTypeInfo(tokAt(@loc),*$trait,ExpressionPtr($subexpr),*$subtrait);
+            delete $trait;
+            delete $subtrait;
+    }
     |   _TYPEINFO[loc] '(' NAME[trait] _TYPE type_declaration[decl] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl));
             delete $trait;
+    }
+    |   _TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>'_TYPE type_declaration[decl] ')' {
+            $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl),*$subtrait);
+            delete $trait;
+            delete $subtrait;
     }
     ;
 

@@ -1001,7 +1001,32 @@ namespace das {
                 } else if ( expr->trait=="is_raw" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRawPod());
-                } else {
+                } else if ( expr->trait=="is_struct" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isStructure());
+                } else if ( expr->trait=="is_ref" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRef());
+                } else if ( expr->trait=="is_const" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isConst());
+                } else if ( expr->trait=="is_pointer" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPointer());
+                } else if ( expr->trait=="has_field" ) {
+                    if ( expr->typeexpr->isStructure() ) {
+                        reportGenericInfer();
+                        return make_shared<ExprConstBool>(expr->at, expr->typeexpr->structType->findField(expr->subtrait));
+                    } else if ( expr->typeexpr->isHandle() ) {
+                        reportGenericInfer();
+                        auto ft = expr->typeexpr->annotation->makeFieldType(expr->subtrait);
+                        return make_shared<ExprConstBool>(expr->at, ft!=nullptr);
+                    } else {
+                        error("typeinfo(has_field<" + expr->subtrait
+                              + "> ...) is only defined for structures and handled types, "
+                                + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
+                    }
+                }else {
                     error("typeinfo(" + expr->trait + " ...) is undefined, " + expr->typeexpr->describe(),
                           expr->at, CompilationError::typeinfo_undefined);
                 }
