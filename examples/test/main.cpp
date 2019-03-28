@@ -208,13 +208,13 @@ int main() {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_UnitTest);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/global.das");
+    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/invalid_return_type_mix.das");
     Module::Shutdown();
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/hello_world.das");
-    // unit_test(TEST_PATH "examples/test/unit_tests/new_delete.das");
+    // unit_test(TEST_PATH "examples/test/hello_world.das");
+    unit_test(TEST_PATH "examples/test/unit_tests/new_with_init.das");
     Module::Shutdown();
     return 0;
 #endif

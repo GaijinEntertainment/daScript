@@ -1,5 +1,7 @@
 options log = true
 
+require math
+
 struct Foo
     a,b : int
 

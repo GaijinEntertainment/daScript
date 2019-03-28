@@ -1612,7 +1612,7 @@ namespace das {
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
                 // lets try to fold it
-                if ( enableInferTimeFolding ) {
+                if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
                     if ( auto se = getConstExpr(expr->subexpr.get()) ) {
                         reportGenericInfer();
                         expr->subexpr = se;
@@ -1652,7 +1652,7 @@ namespace das {
                 if ( !expr->func->arguments[1]->type->isRef() )
                     expr->right = Expression::autoDereference(expr->right);
                 // lets try to fold it
-                if ( enableInferTimeFolding ) {
+                if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
                     auto lcc = getConstExpr(expr->left.get());
                     auto rcc = getConstExpr(expr->right.get());
                     if ( lcc && rcc ) {
@@ -1848,6 +1848,9 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprIfThenElse
+        bool isConstExprFunc(Function * fun) const {
+            return (fun->sideEffectFlags == 0) && (fun->builtIn) && (fun->result->isFoldable());
+        }
         ExpressionPtr getConstExpr ( Expression * expr ) {
             if ( expr->rtti_isConstant() && expr->type && expr->type->isFoldable() ) {
                 return expr->shared_from_this();
@@ -2230,6 +2233,19 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             expr->func = inferFunctionCall(expr).get();
+            if (enableInferTimeFolding && expr->func && isConstExprFunc(expr->func)) {
+                vector<ExpressionPtr> cargs; cargs.reserve(expr->arguments.size());
+                for (auto & arg : expr->arguments) {
+                    if ( auto carg = getConstExpr(arg.get()) ) {
+                        cargs.push_back(carg);
+                    } else {
+                        return Visitor::visit(expr);
+                    }
+                }
+                reportGenericInfer();
+                swap(cargs, expr->arguments);
+                return evalAndFold(expr);
+            }
             return Visitor::visit(expr);
         }
     // ExprKeys

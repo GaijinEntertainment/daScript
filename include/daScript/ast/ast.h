@@ -1057,7 +1057,7 @@ namespace das
     };
 
     struct ExprConstFloat3 : ExprConstT<float3,ExprConstFloat3> {
-        ExprConstFloat3(float3 i = float3())  : ExprConstT(i,Type::tFloat) {}
+        ExprConstFloat3(float3 i = float3())  : ExprConstT(i,Type::tFloat3) {}
         ExprConstFloat3(const LineInfo & a, float3 i)  : ExprConstT(a,i,Type::tFloat3) {}
     };
 
