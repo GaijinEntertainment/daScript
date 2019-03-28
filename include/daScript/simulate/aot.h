@@ -262,6 +262,27 @@ namespace das {
     };
 
     template <typename TT>
+    struct das_iterator<vector<TT>> {
+        __forceinline das_iterator(vector<TT> & r) {
+            array_start = r.data();
+            array_end = array_start + r.size();
+        }
+        __forceinline bool first ( Context *, TT * & i ) {
+            i = array_start;
+            return i!=array_end;
+        }
+        __forceinline bool next  ( Context *, TT * & i ) {
+            i++;
+            return i!=array_end;
+        }
+        __forceinline void close ( Context *, TT * & i ) {
+            i = nullptr;
+        }
+        TT *            array_start;
+        TT *            array_end;
+    };
+
+    template <typename TT>
     struct cast_aot_arg {
         static __forceinline TT to ( Context &, vec4f x ) {
             return cast<TT>::to(x);

@@ -22,4 +22,9 @@ void testParticlesI(int count);
 int testPrimes(int n);
 void testTryCatch(das::Context * context);
 
+void updateObject(Object & obj);
+void updateTest(ObjectArray & objects);
+void update10000(ObjectArray & objects, das::Context * context);
+void update10000ks(ObjectArray & objects, das::Context * context);
+
 

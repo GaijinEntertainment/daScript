@@ -28,7 +28,7 @@ namespace das {
             #include "tests/primes.das.main.inc"
         }
         namespace profile_aos {
-            // #include "tests/aos.das.main.inc"
+            #include "tests/aos.das.main.inc"
         }
         namespace profile_panic {
             #include "tests/panic.das.main.inc"
@@ -57,7 +57,7 @@ namespace das {
                 #include "tests/primes.das.register.inc"
             }
             {   using namespace profile_aos;
-                // #include "tests/aos.das.register.inc"
+                #include "tests/aos.das.register.inc"
             }
             {   using namespace profile_panic;
                 #include "tests/panic.das.register.inc"

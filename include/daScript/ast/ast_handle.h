@@ -42,6 +42,7 @@ namespace das
         };
         struct StructureField {
             string      name;
+            string      cppName;
             TypeDeclPtr decl;
             uint32_t    offset;
             function<SimNode * (FactoryNodeType,Context &,const LineInfo &, const ExpressionPtr &)>   factory;
@@ -139,12 +140,21 @@ namespace das
                 }
             };
         }
-        void addFieldEx ( const string & na, off_t offset, TypeDeclPtr pT ) {
+        virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) override { 
+            auto it = fields.find(fieldName);
+            if (it != fields.end()) {
+                ss << "." << it->second.cppName;
+            } else {
+                ss << "." << fieldName << " /*undefined */";
+            }
+        }
+        void addFieldEx ( const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT ) {
             auto & field = fields[na];
             if ( field.decl ) {
                 DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
                 DAS_FATAL_ERROR;
             }
+            field.cppName = cppNa;
             field.decl = pT;
             field.offset = offset;
             auto baseType = field.decl->baseType;
@@ -174,8 +184,8 @@ namespace das
             };
         }
         template <typename TT, off_t off>
-        __forceinline void addField ( const string & na ) {
-            addFieldEx ( na, off, makeType<TT>(*mlib) );
+        __forceinline void addField ( const string & na, const string & cppNa = "" ) {
+            addFieldEx ( na, cppNa.empty() ? na : cppNa, off, makeType<TT>(*mlib) );
         }
         virtual void walk ( DataWalker & walker, void * data ) override {
             if ( !sti ) {

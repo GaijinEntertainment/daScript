@@ -46,8 +46,8 @@ void update10000ks ( ObjectArray & objects, Context * context ) {
 
 struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
     ObjectStructureTypeAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Object",ml) {
-        addField<DAS_BIND_MANAGED_FIELD(pos)>("position");
-        addField<DAS_BIND_MANAGED_FIELD(vel)>("velocity");
+        addField<DAS_BIND_MANAGED_FIELD(pos)>("position","pos");
+        addField<DAS_BIND_MANAGED_FIELD(vel)>("velocity","vel");
     }
 };
 
@@ -629,8 +629,8 @@ public:
         addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib));
         // register functions
         addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none);
-        addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(updateTest)>(*this,lib,"interopUpdateTest",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal,"updateObject");
+        addExtern<DAS_BIND_FUN(updateTest)>(*this,lib,"interopUpdateTest",SideEffects::modifyExternal,"updateTest");
         addExtern<DAS_BIND_FUN(update10000)>(*this,lib,"update10000",SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(update10000ks)>(*this,lib,"update10000ks",SideEffects::modifyExternal);
         // es
