@@ -28,14 +28,13 @@ namespace das {
 
     // type inference
 
-    class InferTypes : public Visitor {
+    class InferTypes : public FoldingVisitor {
     public:
-        InferTypes( const ProgramPtr & prog ) {
-            program = prog;
+        InferTypes( const ProgramPtr & prog ) : FoldingVisitor(prog ) {
+            enableInferTimeFolding = prog->options.getOption("inferTimeFolding",true);
         }
         bool finished() const { return !needRestart; }
     protected:
-        ProgramPtr              program;
         FunctionPtr             func;
         vector<VariablePtr>     local;
         vector<ExpressionPtr>   loop;
@@ -46,6 +45,7 @@ namespace das {
         size_t                  fieldOffset = 0;
         bool                    needRestart = false;
         uint32_t                newLambdaIndex = 1;
+        bool                    enableInferTimeFolding;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -1611,6 +1611,14 @@ namespace das {
                 expr->type = make_shared<TypeDecl>(*expr->func->result);
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
+                // lets try to fold it
+                if ( enableInferTimeFolding ) {
+                    if ( auto se = getConstExpr(expr->subexpr.get()) ) {
+                        reportGenericInfer();
+                        expr->subexpr = se;
+                        return evalAndFold(expr);
+                    }
+                }
             }
             return Visitor::visit(expr);
         }
@@ -1643,6 +1651,17 @@ namespace das {
                     expr->left = Expression::autoDereference(expr->left);
                 if ( !expr->func->arguments[1]->type->isRef() )
                     expr->right = Expression::autoDereference(expr->right);
+                // lets try to fold it
+                if ( enableInferTimeFolding ) {
+                    auto lcc = getConstExpr(expr->left.get());
+                    auto rcc = getConstExpr(expr->right.get());
+                    if ( lcc && rcc ) {
+                        reportGenericInfer();
+                        expr->left = lcc;
+                        expr->right = rcc;
+                        return evalAndFold(expr);
+                    }
+                }
             }
             return Visitor::visit(expr);
         }
@@ -1667,6 +1686,19 @@ namespace das {
                 }
                 expr->type = make_shared<TypeDecl>(*expr->left->type);
                 expr->type->constant |= expr->right->type->constant;
+                // lets try to fold it
+                if ( enableInferTimeFolding ) {
+                    auto ccc = getConstExpr(expr->subexpr.get());
+                    auto lcc = getConstExpr(expr->left.get());
+                    auto rcc = getConstExpr(expr->right.get());
+                    if ( ccc && lcc && rcc ) {
+                        reportGenericInfer();
+                        expr->subexpr = ccc;
+                        expr->left = lcc;
+                        expr->right = rcc;
+                        return evalAndFold(expr);
+                    }
+                }
             }
             return Visitor::visit(expr);
         }
@@ -1816,14 +1848,51 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprIfThenElse
+        ExpressionPtr getConstExpr ( Expression * expr ) {
+            if ( expr->rtti_isConstant() && expr->type && expr->type->isFoldable() ) {
+                return expr->shared_from_this();
+            }
+            if ( expr->rtti_isR2V() ) {
+                auto r2v = static_cast<ExprRef2Value *>(expr);
+                return getConstExpr(r2v->subexpr.get());
+            }
+            if ( expr->rtti_isVar() ) { // global variable which happens to be constant
+                auto var = static_cast<ExprVar *>(expr);
+                auto variable = var->variable;
+                if ( variable && variable->init && variable->type->isConst() && variable->type->isFoldable() ) {
+                    if ( !var->local && !var->argument && !var->block ) {
+                        if ( variable->init->rtti_isConstant() ) {
+                            return variable->init;
+                        }
+                    }
+                }
+            }
+            return nullptr;
+        }
+
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
-            if ( !expr->cond->type ) return Visitor::visit(expr);
+            if ( !expr->cond->type ) {
+                return Visitor::visit(expr);
+            }
             // infer
             if ( !expr->cond->type->isSimpleType(Type::tBool) ) {
                 error("if-then-else condition must be boolean", expr->at, CompilationError::condition_must_be_bool);
+                return Visitor::visit(expr);
             }
             if ( expr->cond->type->isRef() ) {
                 expr->cond = Expression::autoDereference(expr->cond);
+            }
+            // now, for the static if
+            if ( enableInferTimeFolding ) {
+                if ( auto constCond = getConstExpr(expr->cond.get()) ) {
+                    reportGenericInfer();
+                    auto condR = static_pointer_cast<ExprConstBool>(constCond)->getValue();
+                    if ( condR ) {
+                        return expr->if_true;
+                    } else {
+                        return expr->if_false;
+                    }
+                }
             }
             return Visitor::visit(expr);
         }

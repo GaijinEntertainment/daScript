@@ -575,6 +575,7 @@ namespace das
         virtual bool rtti_isBlock() const { return false; }
         virtual bool rtti_isWith() const { return false; }
         virtual bool rtti_isVar() const { return false; }
+        virtual bool rtti_isR2V() const { return false; }
         virtual bool rtti_isCast() const { return false; }
         virtual bool rtti_isField() const { return false; }
         virtual bool rtti_isSwizzle() const { return false; }
@@ -620,6 +621,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode * GetR2V ( Context & context, const LineInfo & a, const TypeDeclPtr & type, SimNode * expr );
+        virtual bool rtti_isR2V() const override { return true; }
         ExpressionPtr   subexpr;
     };
 
@@ -1910,7 +1912,6 @@ namespace das
 #pragma clang diagnostic pop
 #endif
 
-
     class OptVisitor : public Visitor {
     public:
         bool didAnything () const { return anyFolding; }
@@ -1918,6 +1919,21 @@ namespace das
         void reportFolding();
     private:
         bool anyFolding = false;
+    };
+
+    class FoldingVisitor : public OptVisitor {
+    public:
+        FoldingVisitor( const ProgramPtr & prog ) : program(prog) {}
+    protected:
+        Context         ctx;
+        ProgramPtr      program;
+    protected:
+        vec4f eval ( Expression * expr, bool & failed );
+        ExpressionPtr evalAndFold ( Expression * expr );
+        ExpressionPtr evalAndFoldString ( Expression * expr );
+        bool isSameFoldValue ( const TypeDeclPtr & t, vec4f a, vec4f b ) const {
+            return memcmp(&a,&b,t->getSizeOf()) == 0;
+        }
     };
 
     template <typename TT>

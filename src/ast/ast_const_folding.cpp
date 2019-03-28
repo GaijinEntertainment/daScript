@@ -91,64 +91,53 @@ namespace das {
         }
     };
 
-    class FoldingVisitor : public OptVisitor {
-    public:
-        FoldingVisitor( const ProgramPtr & prog ) {
-            program = prog;
+    vec4f FoldingVisitor::eval ( Expression * expr, bool & failed ) {
+        ctx.restart();
+        auto node = expr->simulate(ctx);
+        ctx.restart();
+        vec4f result = ctx.evalWithCatch(node);
+        if ( ctx.getException() ) {
+            failed = true;
+            return v_zero();
+        } else {
+            failed = false;
+            return result;
         }
-    protected:
-        Context         ctx;
-        ProgramPtr      program;
-    protected:
-        vec4f eval ( Expression * expr, bool & failed ) {
-            ctx.restart();
-            auto node = expr->simulate(ctx);
-            ctx.restart();
-            vec4f result = ctx.evalWithCatch(node);
-            if ( ctx.getException() ) {
-                failed = true;
-                return v_zero();
-            } else {
-                failed = false;
-                return result;
-            }
+    }
+
+    ExpressionPtr FoldingVisitor::evalAndFold ( Expression * expr ) {
+        if ( expr->type->baseType == Type::tString ) return evalAndFoldString(expr);
+        if ( expr->rtti_isConstant() ) return expr->shared_from_this();
+        bool failed;
+        vec4f value = eval(expr, failed);
+        if ( !failed ) {
+            auto sim = Program::makeConst(expr->at, expr->type, value);
+            sim->type = make_shared<TypeDecl>(*expr->type);
+            sim->constexpression = true;
+            reportFolding();
+            return sim;
+        } else {
+            return expr->shared_from_this();
         }
-        ExpressionPtr evalAndFold ( Expression * expr ) {
-            if ( expr->type->baseType == Type::tString ) return evalAndFoldString(expr);
-            if ( expr->rtti_isConstant() ) return expr->shared_from_this();
-            bool failed;
-            vec4f value = eval(expr, failed);
-            if ( !failed ) {
-                auto sim = Program::makeConst(expr->at, expr->type, value);
-                sim->type = make_shared<TypeDecl>(*expr->type);
-                sim->constexpression = true;
-                reportFolding();
-                return sim;
-            } else {
-                return expr->shared_from_this();
-            }
+    }
+
+    ExpressionPtr FoldingVisitor::evalAndFoldString ( Expression * expr ) {
+        if ( expr->rtti_isStringConstant() ) return expr->shared_from_this();
+        bool failed;
+        vec4f value = eval(expr, failed);
+        if ( !failed ) {
+            DebugInfoHelper helper(ctx.debugInfo);
+            auto pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
+            auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
+            auto sim = make_shared<ExprConstString>(expr->at, res);
+            sim->type = make_shared<TypeDecl>(Type::tString);
+            sim->constexpression = true;
+            reportFolding();
+            return sim;
+        } else {
+            return expr->shared_from_this();
         }
-        ExpressionPtr evalAndFoldString ( Expression * expr ) {
-            if ( expr->rtti_isStringConstant() ) return expr->shared_from_this();
-            bool failed;
-            vec4f value = eval(expr, failed);
-            if ( !failed ) {
-                DebugInfoHelper helper(ctx.debugInfo);
-                auto pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
-                auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
-                auto sim = make_shared<ExprConstString>(expr->at, res);
-                sim->type = make_shared<TypeDecl>(Type::tString);
-                sim->constexpression = true;
-                reportFolding();
-                return sim;
-            } else {
-                return expr->shared_from_this();
-            }
-        }
-        bool isSameFoldValue ( const TypeDeclPtr & t, vec4f a, vec4f b ) const {
-            return memcmp(&a,&b,t->getSizeOf()) == 0;
-        }
-    };
+    }
 
     /*
         op1 constexpr = op1(constexpr)

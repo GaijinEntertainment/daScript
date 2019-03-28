@@ -1,5 +1,3 @@
-options log = true
-
 struct Foo
     a,b : int
 
@@ -27,3 +25,4 @@ def test
     else
         badly = broken  // this will be compiled out, so as long as there are no syntax errors...
     return true
+
