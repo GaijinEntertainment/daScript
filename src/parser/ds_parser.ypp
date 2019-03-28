@@ -54,6 +54,7 @@
     
     void das_yyerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
     void das_yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
+	void das_checkName(const string & name, const LineInfo &at);
     int yylex();
     void yybegin(const char * str);
 %}
@@ -467,7 +468,10 @@ optional_function_type
     ;
 
 function_name
-    :   NAME[name]        { $$ = $name; }
+    :   NAME[name]        { 
+		das_checkName(*$name,tokAt(@name));
+		$$ = $name; 
+	}
     |   _OPERATOR '!'     { $$ = new string("!"); }
     |   _OPERATOR '~'     { $$ = new string("~"); }
     |   _OPERATOR ADDEQU  { $$ = new string("+="); }
@@ -1116,6 +1120,7 @@ enum_list
         $$ = new Enumeration();
     }
     |   enum_list[pE] NAME[name] ';' {
+		das_checkName(*$name,tokAt(@name));
         if ( !$pE->add(*$name) ) {
             das_yyerror("enumeration alread declared " + *$name, tokAt(@name),
                 CompilationError::enumeration_value_already_declared);
@@ -1124,6 +1129,7 @@ enum_list
         $$ = $pE;
     }
     |   enum_list[pE] NAME[name] '=' INTEGER[value] ';' {
+		das_checkName(*$name,tokAt(@name));
         if ( !$pE->add(*$name,$value) ) {
             das_yyerror("enumeration value alread declared " + *$name, tokAt(@name),
                 CompilationError::enumeration_value_already_declared);
@@ -1135,6 +1141,7 @@ enum_list
 
 alias_declaration
     :   _TYPEDEF[loc] NAME[name] '=' type_declaration[tdecl] {
+		das_checkName(*$name,tokAt(@name));
         $tdecl->alias = *$name;
         if ( !g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
             das_yyerror("type alias is already defined "+*$name,tokAt(@loc),
@@ -1146,6 +1153,7 @@ alias_declaration
 
 enum_declaration
     :   _ENUM[loc] NAME[name] '{' enum_list[pE] '}' {
+		das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
         pEnum->at = tokAt(@loc);
         pEnum->name = *$name; 
@@ -1164,6 +1172,7 @@ optional_structure_parent
 
 structure_name
     : NAME[name] optional_structure_parent[parent] {
+		das_checkName(*$name,tokAt(@name));
         StructurePtr pStruct;
         if ( $parent ) {
             auto structs = g_Program->findStructure(*$parent);
@@ -1267,12 +1276,14 @@ structure_declaration
 
 variable_name_list
     :   NAME[name]  {
+		das_checkName(*$name,tokAt(@name));
         auto pSL = new vector<string>();
         pSL->push_back(*$name);
         $$ = pSL;
         delete $name;
     }
     |   variable_name_list[list] ',' NAME[name] {
+		das_checkName(*$name,tokAt(@name));
         $list->push_back(*$name);
         $$ = $list;
         delete $name;
@@ -1318,6 +1329,7 @@ auto_type_declaration
         $$->at = tokAt(@loc);
     }
     |   _TAUTO[loc] '(' NAME[alias] ')'  {
+		das_checkName(*$alias,tokAt(@alias));
         $$ = new TypeDecl(Type::autoinfer);
         $$->at = tokAt(@loc);
         $$->alias = *$alias;
@@ -1499,6 +1511,12 @@ make_dim_decl
     ;
 
 %%
+
+void das_checkName(const string & name, const LineInfo &at) {
+	if ( name.length()>=2 && name[0]=='_' && name[1]=='_' ) {
+		g_Program->error("names starting with __ are reserved, " + name,at,CompilationError::invalid_name);
+	}
+}
 
 void das_yyerror(const string & error, const LineInfo & at, CompilationError cerr) {
     g_Program->error(error,at,cerr);

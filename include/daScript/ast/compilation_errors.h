@@ -35,6 +35,7 @@ namespace das
     ,   invalid_initialization_type             =   30113       //  int a = "b"
     ,   invalid_with_type                       =   30114       //  with int
     ,   invalid_override                        =   30115       //  override new_field:blah, or old_field:blah without override
+    ,   invalid_name                            =   30116       //  __anything
 
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)

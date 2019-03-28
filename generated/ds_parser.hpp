@@ -211,7 +211,7 @@ extern int das_yydebug;
 
 union DAS_YYSTYPE
 {
-#line 65 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
+#line 66 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
 
     char                            ch;
     bool                            b;
