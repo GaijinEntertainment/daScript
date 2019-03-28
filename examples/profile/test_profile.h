@@ -27,4 +27,9 @@ void updateTest(ObjectArray & objects);
 void update10000(ObjectArray & objects, das::Context * context);
 void update10000ks(ObjectArray & objects, das::Context * context);
 
+void initEsComponents();
+void verifyEsComponents();
+void testEsUpdate(char * pass, das::Context * ctx);
+uint32_t queryEs(const das::Block & block, das::Context * context);
+
 

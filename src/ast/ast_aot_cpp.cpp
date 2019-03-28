@@ -547,6 +547,14 @@ namespace das {
             ss << "{\n";
             tab ++;
         }
+        virtual void preVisitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override {
+            Visitor::preVisitBlockArgumentInit(block, var, init);
+            ss << " /* ";
+        }
+        virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override { 
+            ss << " */ ";
+            return Visitor::visitBlockArgumentInit(block, var, init);
+        }
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockExpression(block, expr);
             ss << string(tab,'\t');
@@ -1127,7 +1135,9 @@ namespace das {
                 ss << "," << describeCppType(arg->type);
             }
             ss << ">(__context__," << block->stackTop << ",[&](";
+            int ai = 0;
             for ( auto & arg : block->arguments ) {
+                if (ai++) ss << ", ";
                 ss << describeCppType(arg->type) << " " << arg->name;
             }
             ss << ")->" << describeCppType(block->returnType);
@@ -1139,7 +1149,7 @@ namespace das {
     // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
-            if ( call->name=="assert" ) {
+            if (call->name == "assert") {
                 if ( call->arguments.size()==1 ) ss << "DAS_ASSERT((";
                 else ss << "DAS_ASSERTF((";
             } else if ( call->name=="invoke" ) {

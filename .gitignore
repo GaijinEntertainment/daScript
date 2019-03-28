@@ -31,3 +31,5 @@ examples/profile/tests/aos.das.main.inc
 examples/profile/tests/panic.das.register.inc
 examples/profile/tests/panic.das.main.inc
 examples/profile/tests/exp.das.main.inc
+examples/profile/tests/annotation.das.register.inc
+examples/profile/tests/annotation.das.main.inc

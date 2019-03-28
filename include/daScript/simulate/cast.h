@@ -10,6 +10,9 @@ namespace das
     struct cast;
 
     template <typename TT>
+    struct cast <const TT> : cast<TT> {};
+
+    template <typename TT>
     __forceinline vec4f cast_result ( TT arg ) {
         return cast<TT>::from(arg);
     }

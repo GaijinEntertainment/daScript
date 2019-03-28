@@ -311,6 +311,13 @@ namespace das
             if ( na=="length" ) return make_shared<TypeDecl>(Type::tInt);
             return nullptr;
         }
+        virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) override { 
+            if ( fieldName=="length" ) {
+                ss << ".size()";
+            } else {
+                ss << "." << fieldName << " /*undefined */";
+            }
+        }
         virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
         virtual TypeDeclPtr makeIteratorType () const override { return make_shared<TypeDecl>(*vecType); }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,

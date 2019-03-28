@@ -482,10 +482,10 @@ namespace das {
     };
 
     template <typename ...argType>
-    struct das_make_block<void,argType...> : Block, SimNode {
+    struct das_make_block<void,argType...> : Block, SimNode_ClosureBlock {
         typedef function < void ( argType... ) > BlockFn;
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, BlockFn && func )
-        : SimNode(LineInfo()), blockFunction(func) {
+            : SimNode_ClosureBlock(LineInfo(),false,0), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;

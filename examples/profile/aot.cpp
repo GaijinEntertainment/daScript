@@ -30,6 +30,9 @@ namespace das {
         namespace profile_aos {
             #include "tests/aos.das.main.inc"
         }
+        namespace profile_annotation {
+            #include "tests/annotation.das.main.inc"
+        }
         namespace profile_panic {
             #include "tests/panic.das.main.inc"
         }
@@ -58,6 +61,10 @@ namespace das {
             }
             {   using namespace profile_aos;
                 #include "tests/aos.das.register.inc"
+            }
+            {   using namespace profile_annotation;
+                // for now it compiles, but does not work due to annotation data
+                // #include "tests/annotation.das.register.inc"
             }
             {   using namespace profile_panic;
                 #include "tests/panic.das.register.inc"

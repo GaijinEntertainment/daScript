@@ -222,7 +222,7 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
     return true;
 }
 
-uint32_t EsRunBlock ( Context & context, Block block, const vector<EsComponent> & components, uint32_t totalComponents ) {
+uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsComponent> & components, uint32_t totalComponents ) {
     auto * closure = (SimNode_ClosureBlock *) block.body;
     EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
     if ( !table ) {
@@ -323,8 +323,8 @@ void testEsUpdate ( char * pass, Context * ctx ) {
     }
 }
 
-uint32_t queryEs (Block * block, Context * context) {
-    return EsRunBlock(*context, *block, g_components, g_total);
+uint32_t queryEs (const Block & block, Context * context) {
+    return EsRunBlock(*context, block, g_components, g_total);
 }
 #if DAS_USE_EASTL
 #include <EASTL/unordered_map.h>
