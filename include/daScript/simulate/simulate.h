@@ -2288,9 +2288,15 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+#if !_TARGET_64BIT && !defined(__clang__) && (_MSC_VER <= 1900)
+#define _msc_inline_bug __declspec(noinline)
+#else
+#define _msc_inline_bug __forceinline
+#endif
+
 #define DEFINE_POLICY(CALL) template <typename SimPolicy> struct Sim_##CALL;
 
-#define IMPLEMENT_OP1_POLICY(CALL,TYPE,CTYPE)                           \
+#define IMPLEMENT_OP1_POLICY_BASE(CALL,TYPE,CTYPE,INLINE)               \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
         DAS_NODE(TYPE,CTYPE);                                           \
@@ -2298,11 +2304,13 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
             return visitOp1(vis, #CALL);                                \
         }                                                               \
-        __forceinline CTYPE compute ( Context & context ) {             \
+        INLINE CTYPE compute ( Context & context ) {             \
             auto val = x->eval##TYPE(context);                          \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
     };
+
+#define IMPLEMENT_OP1_POLICY(CALL,TYPE,CTYPE) IMPLEMENT_OP1_POLICY_BASE(CALL,TYPE,CTYPE,__forceinline)
 
 #define IMPLEMENT_OP1_FUNCTION_POLICY(CALL,TYPE,CTYPE)                  \
     template <>                                                         \
@@ -2332,7 +2340,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
     };
 
-#define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE)                       \
+#define IMPLEMENT_OP1_SET_POLICY_BASE(CALL,TYPE,CTYPE,INLINE)           \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op1 {                           \
         DAS_NODE(TYPE,CTYPE);                                           \
@@ -2340,11 +2348,13 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
             return visitOp1(vis, #CALL);                                \
         }                                                               \
-        __forceinline CTYPE compute ( Context & context ) {             \
+        INLINE CTYPE compute ( Context & context ) {             \
             auto val = (CTYPE *) x->evalPtr(context);                   \
             return SimPolicy<CTYPE>::CALL(*val,context);                \
         }                                                               \
     };
+
+#define IMPLEMENT_OP1_SET_POLICY(CALL,TYPE,CTYPE) IMPLEMENT_OP1_SET_POLICY_BASE(CALL,TYPE,CTYPE, __forceinline)
 
 #define IMPLEMENT_OP1_EVAL_POLICY(CALL,CTYPE)                           \
     template <>                                                         \
@@ -2375,8 +2385,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define DEFINE_OP1_NUMERIC_INTEGER(CALL)                \
     IMPLEMENT_OP1_POLICY(CALL,Int,int32_t);             \
     IMPLEMENT_OP1_POLICY(CALL,UInt,uint32_t);           \
-    IMPLEMENT_OP1_POLICY(CALL,Int64,int64_t);           \
-    IMPLEMENT_OP1_POLICY(CALL,UInt64,uint64_t);         \
+    IMPLEMENT_OP1_POLICY_BASE(CALL,Int64,int64_t,_msc_inline_bug);           \
+    IMPLEMENT_OP1_POLICY_BASE(CALL,UInt64,uint64_t,_msc_inline_bug);         \
 
 #define DEFINE_OP1_NUMERIC(CALL);                       \
     DEFINE_OP1_NUMERIC_INTEGER(CALL);                   \
@@ -2386,15 +2396,15 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define DEFINE_OP1_SET_NUMERIC_INTEGER(CALL)            \
     IMPLEMENT_OP1_SET_POLICY(CALL,Int,int32_t);         \
     IMPLEMENT_OP1_SET_POLICY(CALL,UInt,uint32_t);       \
-    IMPLEMENT_OP1_SET_POLICY(CALL,Int64,int64_t);       \
-    IMPLEMENT_OP1_SET_POLICY(CALL,UInt64,uint64_t);     \
+    IMPLEMENT_OP1_SET_POLICY_BASE(CALL,Int64,int64_t,_msc_inline_bug);       \
+    IMPLEMENT_OP1_SET_POLICY_BASE(CALL,UInt64,uint64_t,_msc_inline_bug);     \
 
 #define DEFINE_OP1_SET_NUMERIC(CALL);                   \
     DEFINE_OP1_SET_NUMERIC_INTEGER(CALL);               \
     IMPLEMENT_OP1_SET_POLICY(CALL,Double,double);       \
     IMPLEMENT_OP1_SET_POLICY(CALL,Float,float);
 
-#define IMPLEMENT_OP2_POLICY(CALL,TYPE,CTYPE)                           \
+#define IMPLEMENT_OP2_POLICY_BASE(CALL,TYPE,CTYPE, INLINE)              \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         DAS_NODE(TYPE,CTYPE);                                           \
@@ -2402,12 +2412,14 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
             return visitOp2(vis, #CALL);                                \
         }                                                               \
-        __forceinline CTYPE compute ( Context & context ) {             \
+        INLINE CTYPE compute ( Context & context ) {             \
             auto lv = l->eval##TYPE(context);                           \
             auto rv = r->eval##TYPE(context);                           \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
         }                                                               \
     };
+
+#define IMPLEMENT_OP2_POLICY(CALL,TYPE,CTYPE) IMPLEMENT_OP2_POLICY_BASE(CALL,TYPE,CTYPE, __forceinline)
 
 #define IMPLEMENT_OP2_FUNCTION_POLICY(CALL,TYPE,CTYPE)                  \
     template <>                                                         \
@@ -2424,7 +2436,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }                                                               \
     };
 
-#define IMPLEMENT_OP2_SET_POLICY(CALL,TYPE,CTYPE)                       \
+#define IMPLEMENT_OP2_SET_POLICY_BASE(CALL,TYPE,CTYPE, INLINE)                       \
     template <>                                                         \
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         DAS_NODE(TYPE,CTYPE);                                           \
@@ -2432,13 +2444,15 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
             return visitOp2(vis, #CALL);                                \
         }                                                               \
-        __forceinline CTYPE compute ( Context & context ) {             \
+        INLINE CTYPE compute ( Context & context ) {             \
             auto lv = (CTYPE *) l->evalPtr(context);                    \
             auto rv = r->eval##TYPE(context);                           \
             SimPolicy<CTYPE>::CALL(*lv,rv,context);                     \
             return CTYPE();                                             \
         }                                                               \
     };
+
+#define IMPLEMENT_OP2_SET_POLICY(CALL,TYPE,CTYPE) IMPLEMENT_OP2_SET_POLICY_BASE(CALL,TYPE,CTYPE, __forceinline)
 
 #define IMPLEMENT_OP2_BOOL_POLICY(CALL,TYPE,CTYPE)                      \
     template <>                                                         \
@@ -2516,8 +2530,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define DEFINE_OP2_NUMERIC_INTEGER(CALL)                \
     IMPLEMENT_OP2_POLICY(CALL,Int,int32_t);             \
     IMPLEMENT_OP2_POLICY(CALL,UInt,uint32_t);           \
-    IMPLEMENT_OP2_POLICY(CALL,Int64,int64_t);           \
-    IMPLEMENT_OP2_POLICY(CALL,UInt64,uint64_t);         \
+    IMPLEMENT_OP2_POLICY_BASE(CALL,Int64,int64_t, _msc_inline_bug);           \
+    IMPLEMENT_OP2_POLICY_BASE(CALL,UInt64,uint64_t, _msc_inline_bug);         \
 
 #define DEFINE_OP2_NUMERIC(CALL);                       \
     DEFINE_OP2_NUMERIC_INTEGER(CALL);                   \
@@ -2549,8 +2563,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define DEFINE_OP2_SET_NUMERIC_INTEGER(CALL)            \
     IMPLEMENT_OP2_SET_POLICY(CALL,Int,int32_t);         \
     IMPLEMENT_OP2_SET_POLICY(CALL,UInt,uint32_t);       \
-    IMPLEMENT_OP2_SET_POLICY(CALL,Int64,int64_t);       \
-    IMPLEMENT_OP2_SET_POLICY(CALL,UInt64,uint64_t);     \
+    IMPLEMENT_OP2_SET_POLICY_BASE(CALL,Int64,int64_t,_msc_inline_bug);       \
+    IMPLEMENT_OP2_SET_POLICY_BASE(CALL,UInt64,uint64_t,_msc_inline_bug);     \
 
 #define DEFINE_OP2_SET_NUMERIC(CALL);                   \
     DEFINE_OP2_SET_NUMERIC_INTEGER(CALL);               \
