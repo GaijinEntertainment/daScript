@@ -18,7 +18,7 @@ namespace das {
     template <typename VecT, int rowC>
     struct typeName<Matrix<VecT,rowC>> {
         static string name() {
-            return "Matrix<" + typeName<VecT>::name() + "," + std::to_string(rowC) + ">";
+            return "Matrix<" + typeName<VecT>::name() + "," + to_string(rowC) + ">";
         }
     };
 }
