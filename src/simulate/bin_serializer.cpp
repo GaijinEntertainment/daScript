@@ -125,7 +125,7 @@ namespace das {
                 read ( data, length );
                 data[length] = 0;
             } else {
-                uint32_t length = stringLength(*context, data);
+                uint32_t length = stringLengthSafe(*context, data);
                 save ( length );
                 write ( data, length );
             }
