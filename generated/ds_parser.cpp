@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.2.2.  */
+/* A Bison parser, made by GNU Bison 3.2.4.  */
 
 /* Bison implementation for Yacc-like parsers in C
 
@@ -47,7 +47,7 @@
 #define YYBISON 1
 
 /* Bison version.  */
-#define YYBISON_VERSION "3.2.2"
+#define YYBISON_VERSION "3.2.4"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -96,7 +96,7 @@
     int yylex();
     void yybegin(const char * str);
 
-#line 100 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:338  */
+#line 100 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:338  */
 # ifndef YY_NULLPTR
 #  if defined __cplusplus
 #   if 201103L <= __cplusplus
@@ -119,8 +119,8 @@
 
 /* In a future release of Bison, this section will be replaced
    by #include "ds_parser.hpp".  */
-#ifndef YY_DAS_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
-# define YY_DAS_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+#ifndef YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED
+# define YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED
 /* Debug traces.  */
 #ifndef DAS_YYDEBUG
 # if defined YYDEBUG
@@ -177,7 +177,7 @@ extern int das_yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 181 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:353  */
+#line 181 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:353  */
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -185,66 +185,66 @@ extern int das_yydebug;
   enum das_yytokentype
   {
     LEXER_ERROR = 258,
-    _STRUCT = 259,
-    _LET = 260,
-    _DEF = 261,
-    _WHILE = 262,
-    _IF = 263,
-    _ELSE = 264,
-    _FOR = 265,
-    _CATCH = 266,
-    _TRUE = 267,
-    _FALSE = 268,
-    _NEWT = 269,
-    _TYPEINFO = 270,
-    _TYPE = 271,
-    _IN = 272,
-    _ELIF = 273,
-    _ARRAY = 274,
-    _RETURN = 275,
-    _NULL = 276,
-    _BREAK = 277,
-    _TRY = 278,
-    _OPTIONS = 279,
-    _TABLE = 280,
-    _EXPECT = 281,
-    _CONST = 282,
-    _REQUIRE = 283,
-    _OPERATOR = 284,
-    _ENUM = 285,
-    _FINALLY = 286,
-    _DELETE = 287,
-    _DEREF = 288,
-    _SCOPE = 289,
-    _TYPEDEF = 290,
-    _WITH = 291,
-    _CAST = 292,
-    _OVERRIDE = 293,
-    _UPCAST = 294,
-    _TBOOL = 295,
-    _TVOID = 296,
-    _TSTRING = 297,
-    _TAUTO = 298,
-    _TINT = 299,
-    _TINT2 = 300,
-    _TINT3 = 301,
-    _TINT4 = 302,
-    _TUINT = 303,
-    _TUINT2 = 304,
-    _TUINT3 = 305,
-    _TUINT4 = 306,
-    _TFLOAT = 307,
-    _TFLOAT2 = 308,
-    _TFLOAT3 = 309,
-    _TFLOAT4 = 310,
-    _TRANGE = 311,
-    _TURANGE = 312,
-    _TBLOCK = 313,
-    _TINT64 = 314,
-    _TUINT64 = 315,
-    _TDOUBLE = 316,
-    _TFUNCTION = 317,
-    _TLAMBDA = 318,
+    DAS_STRUCT = 259,
+    DAS_LET = 260,
+    DAS_DEF = 261,
+    DAS_WHILE = 262,
+    DAS_IF = 263,
+    DAS_ELSE = 264,
+    DAS_FOR = 265,
+    DAS_CATCH = 266,
+    DAS_TRUE = 267,
+    DAS_FALSE = 268,
+    DAS_NEWT = 269,
+    DAS_TYPEINFO = 270,
+    DAS_TYPE = 271,
+    DAS_IN = 272,
+    DAS_ELIF = 273,
+    DAS_ARRAY = 274,
+    DAS_RETURN = 275,
+    DAS_NULL = 276,
+    DAS_BREAK = 277,
+    DAS_TRY = 278,
+    DAS_OPTIONS = 279,
+    DAS_TABLE = 280,
+    DAS_EXPECT = 281,
+    DAS_CONST = 282,
+    DAS_REQUIRE = 283,
+    DAS_OPERATOR = 284,
+    DAS_ENUM = 285,
+    DAS_FINALLY = 286,
+    DAS_DELETE = 287,
+    DAS_DEREF = 288,
+    DAS_SCOPE = 289,
+    DAS_TYPEDEF = 290,
+    DAS_WITH = 291,
+    DAS_CAST = 292,
+    DAS_OVERRIDE = 293,
+    DAS_UPCAST = 294,
+    DAS_TBOOL = 295,
+    DAS_TVOID = 296,
+    DAS_TSTRING = 297,
+    DAS_TAUTO = 298,
+    DAS_TINT = 299,
+    DAS_TINT2 = 300,
+    DAS_TINT3 = 301,
+    DAS_TINT4 = 302,
+    DAS_TUINT = 303,
+    DAS_TUINT2 = 304,
+    DAS_TUINT3 = 305,
+    DAS_TUINT4 = 306,
+    DAS_TFLOAT = 307,
+    DAS_TFLOAT2 = 308,
+    DAS_TFLOAT3 = 309,
+    DAS_TFLOAT4 = 310,
+    DAS_TRANGE = 311,
+    DAS_TURANGE = 312,
+    DAS_TBLOCK = 313,
+    DAS_TINT64 = 314,
+    DAS_TUINT64 = 315,
+    DAS_TDOUBLE = 316,
+    DAS_TFUNCTION = 317,
+    DAS_TLAMBDA = 318,
     ADDEQU = 319,
     SUBEQU = 320,
     DIVEQU = 321,
@@ -322,7 +322,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 326 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:353  */
+#line 326 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:353  */
 };
 
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
@@ -349,7 +349,7 @@ extern DAS_YYSTYPE das_yylval;
 extern DAS_YYLTYPE das_yylloc;
 int das_yyparse (void);
 
-#endif /* !YY_DAS_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */
+#endif /* !YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED  */
 
 
 
@@ -690,19 +690,22 @@ static const yytype_uint16 yyrline[] =
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
 {
-  "$end", "error", "$undefined", "LEXER_ERROR", "_STRUCT", "_LET", "_DEF",
-  "_WHILE", "_IF", "_ELSE", "_FOR", "_CATCH", "_TRUE", "_FALSE", "_NEWT",
-  "_TYPEINFO", "_TYPE", "_IN", "_ELIF", "_ARRAY", "_RETURN", "_NULL",
-  "_BREAK", "_TRY", "_OPTIONS", "_TABLE", "_EXPECT", "_CONST", "_REQUIRE",
-  "_OPERATOR", "_ENUM", "_FINALLY", "_DELETE", "_DEREF", "_SCOPE",
-  "_TYPEDEF", "_WITH", "_CAST", "_OVERRIDE", "_UPCAST", "_TBOOL", "_TVOID",
-  "_TSTRING", "_TAUTO", "_TINT", "_TINT2", "_TINT3", "_TINT4", "_TUINT",
-  "_TUINT2", "_TUINT3", "_TUINT4", "_TFLOAT", "_TFLOAT2", "_TFLOAT3",
-  "_TFLOAT4", "_TRANGE", "_TURANGE", "_TBLOCK", "_TINT64", "_TUINT64",
-  "_TDOUBLE", "_TFUNCTION", "_TLAMBDA", "ADDEQU", "SUBEQU", "DIVEQU",
-  "MULEQU", "MODEQU", "ANDEQU", "OREQU", "XOREQU", "SHL", "SHR", "ADDADD",
-  "SUBSUB", "LEEQU", "SHLEQU", "SHREQU", "GREQU", "EQUEQU", "NOTEQU",
-  "RARROW", "LARROW", "QQ", "QDOT", "LPIPE", "LBPIPE", "RPIPE", "INTEGER",
+  "$end", "error", "$undefined", "LEXER_ERROR", "DAS_STRUCT", "DAS_LET",
+  "DAS_DEF", "DAS_WHILE", "DAS_IF", "DAS_ELSE", "DAS_FOR", "DAS_CATCH",
+  "DAS_TRUE", "DAS_FALSE", "DAS_NEWT", "DAS_TYPEINFO", "DAS_TYPE",
+  "DAS_IN", "DAS_ELIF", "DAS_ARRAY", "DAS_RETURN", "DAS_NULL", "DAS_BREAK",
+  "DAS_TRY", "DAS_OPTIONS", "DAS_TABLE", "DAS_EXPECT", "DAS_CONST",
+  "DAS_REQUIRE", "DAS_OPERATOR", "DAS_ENUM", "DAS_FINALLY", "DAS_DELETE",
+  "DAS_DEREF", "DAS_SCOPE", "DAS_TYPEDEF", "DAS_WITH", "DAS_CAST",
+  "DAS_OVERRIDE", "DAS_UPCAST", "DAS_TBOOL", "DAS_TVOID", "DAS_TSTRING",
+  "DAS_TAUTO", "DAS_TINT", "DAS_TINT2", "DAS_TINT3", "DAS_TINT4",
+  "DAS_TUINT", "DAS_TUINT2", "DAS_TUINT3", "DAS_TUINT4", "DAS_TFLOAT",
+  "DAS_TFLOAT2", "DAS_TFLOAT3", "DAS_TFLOAT4", "DAS_TRANGE", "DAS_TURANGE",
+  "DAS_TBLOCK", "DAS_TINT64", "DAS_TUINT64", "DAS_TDOUBLE",
+  "DAS_TFUNCTION", "DAS_TLAMBDA", "ADDEQU", "SUBEQU", "DIVEQU", "MULEQU",
+  "MODEQU", "ANDEQU", "OREQU", "XOREQU", "SHL", "SHR", "ADDADD", "SUBSUB",
+  "LEEQU", "SHLEQU", "SHREQU", "GREQU", "EQUEQU", "NOTEQU", "RARROW",
+  "LARROW", "QQ", "QDOT", "LPIPE", "LBPIPE", "RPIPE", "INTEGER",
   "LONG_INTEGER", "UNSIGNED_INTEGER", "UNSIGNED_LONG_INTEGER", "FLOAT",
   "DOUBLE", "NAME", "BEGIN_STRING", "STRING_CHARACTER", "END_STRING",
   "BEGIN_STRING_EXPR", "END_STRING_EXPR", "','", "'='", "'?'", "':'",
@@ -2217,343 +2220,343 @@ yydestruct (const char *yymsg, int yytype, YYSTYPE *yyvaluep, YYLTYPE *yylocatio
           case 95: /* NAME  */
 #line 91 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2221 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2224 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 136: /* character_sequence  */
 #line 91 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2227 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2230 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 137: /* string_constant  */
 #line 91 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2233 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2236 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 138: /* string_builder_body  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2239 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2242 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 139: /* string_builder  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2245 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2248 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 147: /* expression_else  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2251 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2254 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 148: /* expression_if_then_else  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2257 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2260 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 149: /* expression_for_loop  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2263 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2266 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 150: /* expression_while_loop  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2269 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2272 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 151: /* expression_with  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2275 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2278 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 152: /* annotation_argument  */
 #line 97 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).aa); }
-#line 2281 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2284 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 153: /* annotation_argument_list  */
 #line 98 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).aaList); }
-#line 2287 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2290 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 154: /* annotation_declaration_name  */
 #line 91 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2293 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2296 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 155: /* annotation_declaration  */
 #line 99 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).fa); }
-#line 2299 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2302 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 156: /* annotation_list  */
 #line 100 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).faList); }
-#line 2305 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2308 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 157: /* optional_annotation_list  */
 #line 100 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).faList); }
-#line 2311 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2314 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 158: /* optional_function_argument_list  */
 #line 94 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { deleteVariableDeclarationList(((*yyvaluep).pVarDeclList)); }
-#line 2317 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2320 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 159: /* optional_function_type  */
 #line 95 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pTypeDecl); }
-#line 2323 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2326 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 160: /* function_name  */
 #line 91 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2329 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2332 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 162: /* expression_block  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2335 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2338 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 163: /* expression_any  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2341 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2344 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 164: /* expressions  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2347 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2350 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 165: /* expr_pipe  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2353 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2356 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 166: /* name_in_namespace  */
 #line 91 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2359 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2362 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 167: /* expression_delete  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2365 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2368 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 168: /* expr_new  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2371 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2374 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 169: /* expression_break  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2377 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2380 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 170: /* expression_return  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2383 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2386 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 171: /* expression_try_catch  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2389 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2392 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 173: /* expression_let  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2395 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2398 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 174: /* expr_cast  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2401 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2404 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 175: /* expr_type_info  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2407 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2410 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 176: /* expr_list  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2413 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2416 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 177: /* expr_block  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2419 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2422 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 178: /* expr_numeric_const  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2425 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2428 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 179: /* expr_assign  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2431 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2434 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 180: /* expr_method_call  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2437 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2440 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 181: /* expr  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2443 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2446 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 182: /* optional_field_annotation  */
 #line 98 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).aaList); }
-#line 2449 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2452 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 184: /* structure_variable_declaration  */
 #line 93 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pVarDecl); }
-#line 2455 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2458 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 185: /* struct_variable_declaration_list  */
 #line 94 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { deleteVariableDeclarationList(((*yyvaluep).pVarDeclList)); }
-#line 2461 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2464 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 186: /* variable_declaration_list  */
 #line 94 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { deleteVariableDeclarationList(((*yyvaluep).pVarDeclList)); }
-#line 2467 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2470 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 187: /* function_argument_list  */
 #line 94 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { deleteVariableDeclarationList(((*yyvaluep).pVarDeclList)); }
-#line 2473 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2476 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 189: /* variable_declaration  */
 #line 93 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pVarDecl); }
-#line 2479 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2482 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 190: /* let_variable_declaration  */
 #line 93 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pVarDecl); }
-#line 2485 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2488 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 192: /* enum_list  */
 #line 102 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pEnum); }
-#line 2491 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2494 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 195: /* optional_structure_parent  */
 #line 91 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2497 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2500 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 198: /* variable_name_list  */
 #line 92 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pNameList); }
-#line 2503 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2506 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 200: /* structure_type_declaration  */
 #line 95 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pTypeDecl); }
-#line 2509 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2512 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 201: /* auto_type_declaration  */
 #line 95 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pTypeDecl); }
-#line 2515 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2518 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 202: /* type_declaration  */
 #line 95 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pTypeDecl); }
-#line 2521 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2524 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 203: /* make_decl  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2527 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2530 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 204: /* make_struct_fields  */
 #line 101 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pMakeStruct); }
-#line 2533 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2536 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 205: /* make_struct_dim  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2539 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2542 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 206: /* make_struct_decl  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2545 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2548 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 207: /* make_dim  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2551 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2554 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 208: /* make_dim_decl  */
 #line 96 "src/parser/ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2557 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1254  */
+#line 2560 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1254  */
         break;
 
 
@@ -2841,19 +2844,19 @@ yyreduce:
         case 11:
 #line 245 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string(); }
-#line 2845 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2848 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 12:
 #line 246 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = (yyvsp[-1].s); *(yyvsp[-1].s) += (yyvsp[0].ch); }
-#line 2851 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2854 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 13:
 #line 250 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = (yyvsp[-1].s); }
-#line 2857 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2860 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 14:
@@ -2861,7 +2864,7 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprStringBuilder();
     }
-#line 2865 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2868 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 15:
@@ -2872,7 +2875,7 @@ yyreduce:
         static_cast<ExprStringBuilder *>((yyvsp[-1].pExpression))->elements.push_back(sc);
         (yyval.pExpression) = (yyvsp[-1].pExpression);
     }
-#line 2876 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2879 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 16:
@@ -2882,7 +2885,7 @@ yyreduce:
         static_cast<ExprStringBuilder *>((yyvsp[-3].pExpression))->elements.push_back(se);
         (yyval.pExpression) = (yyvsp[-3].pExpression);
     }
-#line 2886 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2889 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 17:
@@ -2900,7 +2903,7 @@ yyreduce:
             (yyval.pExpression) = (yyvsp[-1].pExpression);
         }
     }
-#line 2904 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2907 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 18:
@@ -2923,7 +2926,7 @@ yyreduce:
 		}
 		delete (yyvsp[0].aaList);
 	}
-#line 2927 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2930 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 22:
@@ -2935,7 +2938,7 @@ yyreduce:
         }
         delete (yyvsp[0].s);
     }
-#line 2939 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2942 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 26:
@@ -2943,7 +2946,7 @@ yyreduce:
     {
         g_Program->expectErrors[CompilationError((yyvsp[0].i))] ++;
     }
-#line 2947 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2950 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 27:
@@ -2951,19 +2954,19 @@ yyreduce:
     {
         g_Program->expectErrors[CompilationError((yyvsp[-2].i))] += (yyvsp[0].i);
     }
-#line 2955 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2958 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 28:
 #line 345 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = nullptr; }
-#line 2961 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2964 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 29:
 #line 346 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 2967 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2970 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 30:
@@ -2972,7 +2975,7 @@ yyreduce:
         (yyval.pExpression) = new ExprIfThenElse(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-2].pExpression)),
             ExpressionPtr((yyvsp[-1].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 2976 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2979 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 31:
@@ -2981,7 +2984,7 @@ yyreduce:
         (yyval.pExpression) = new ExprIfThenElse(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-2].pExpression)),
             ExpressionPtr((yyvsp[-1].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 2985 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 2988 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 32:
@@ -2995,7 +2998,7 @@ yyreduce:
         ((ExprBlock *)(yyvsp[0].pExpression))->inTheLoop = true;
         (yyval.pExpression) = pFor;
     }
-#line 2999 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3002 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 33:
@@ -3007,7 +3010,7 @@ yyreduce:
         ((ExprBlock *)(yyvsp[0].pExpression))->inTheLoop = true;
         (yyval.pExpression) = pWhile;
     }
-#line 3011 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3014 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 34:
@@ -3018,43 +3021,43 @@ yyreduce:
         pWith->body = ExpressionPtr((yyvsp[0].pExpression));
         (yyval.pExpression) = pWith;
     }
-#line 3022 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3025 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 35:
 #line 392 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s)); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
-#line 3028 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3031 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 36:
 #line 393 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s)); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
-#line 3034 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3037 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 37:
 #line 394 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),(yyvsp[0].i)); delete (yyvsp[-2].s); }
-#line 3040 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3043 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 38:
 #line 395 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),float((yyvsp[0].fd))); delete (yyvsp[-2].s); }
-#line 3046 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3049 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 39:
 #line 396 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),true); delete (yyvsp[-2].s); }
-#line 3052 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3055 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 40:
 #line 397 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),false); delete (yyvsp[-2].s); }
-#line 3058 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3061 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 41:
@@ -3064,7 +3067,7 @@ yyreduce:
         (yyval.aaList)->arguments.push_back(*(yyvsp[0].aa));
         delete (yyvsp[0].aa);
     }
-#line 3068 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3071 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 42:
@@ -3074,19 +3077,19 @@ yyreduce:
             (yyval.aaList)->arguments.push_back(*(yyvsp[0].aa));
             delete (yyvsp[0].aa);
     }
-#line 3078 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3081 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 43:
 #line 414 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = (yyvsp[0].s); }
-#line 3084 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3087 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 44:
 #line 415 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("require"); }
-#line 3090 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3093 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 45:
@@ -3098,7 +3101,7 @@ yyreduce:
         }
         delete (yyvsp[0].s);
     }
-#line 3102 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3105 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 46:
@@ -3112,7 +3115,7 @@ yyreduce:
         delete (yyvsp[-1].aaList);
         delete (yyvsp[-3].s);
     }
-#line 3116 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3119 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 47:
@@ -3121,7 +3124,7 @@ yyreduce:
             (yyval.faList) = new AnnotationList();
             (yyval.faList)->push_back(AnnotationDeclarationPtr((yyvsp[0].fa)));
     }
-#line 3125 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3128 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 48:
@@ -3130,37 +3133,37 @@ yyreduce:
         (yyval.faList) = (yyvsp[-2].faList);
         (yyval.faList)->push_back(AnnotationDeclarationPtr((yyvsp[0].fa)));
     }
-#line 3134 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3137 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 49:
 #line 449 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.faList) = nullptr; }
-#line 3140 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3143 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 50:
 #line 450 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.faList) = (yyvsp[-1].faList); }
-#line 3146 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3149 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 51:
 #line 454 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pVarDeclList) = nullptr; }
-#line 3152 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3155 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 52:
 #line 455 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pVarDeclList) = nullptr; }
-#line 3158 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3161 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 53:
 #line 456 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pVarDeclList) = (yyvsp[-1].pVarDeclList); }
-#line 3164 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3167 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 54:
@@ -3169,7 +3172,7 @@ yyreduce:
         (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
         (yyval.pTypeDecl)->at = LineInfo(g_FileAccessStack.back(), yylloc.first_column,yylloc.first_line);
     }
-#line 3173 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3176 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 55:
@@ -3178,7 +3181,7 @@ yyreduce:
         (yyval.pTypeDecl) = (yyvsp[0].pTypeDecl);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 3182 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3185 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 56:
@@ -3187,199 +3190,199 @@ yyreduce:
 		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
 		(yyval.s) = (yyvsp[0].s); 
 	}
-#line 3191 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3194 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 57:
 #line 475 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("!"); }
-#line 3197 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3200 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 58:
 #line 476 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("~"); }
-#line 3203 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3206 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 59:
 #line 477 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("+="); }
-#line 3209 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3212 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 60:
 #line 478 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("-="); }
-#line 3215 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3218 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 61:
 #line 479 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("*="); }
-#line 3221 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3224 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 62:
 #line 480 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("/="); }
-#line 3227 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3230 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 63:
 #line 481 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("%="); }
-#line 3233 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3236 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 64:
 #line 482 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("&="); }
-#line 3239 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3242 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 65:
 #line 483 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("|="); }
-#line 3245 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3248 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 66:
 #line 484 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("^="); }
-#line 3251 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3254 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 67:
 #line 485 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("+"); }
-#line 3257 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3260 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 68:
 #line 486 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("-"); }
-#line 3263 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3266 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 69:
 #line 487 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("*"); }
-#line 3269 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3272 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 70:
 #line 488 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("/"); }
-#line 3275 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3278 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 71:
 #line 489 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("%"); }
-#line 3281 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3284 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 72:
 #line 490 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("<"); }
-#line 3287 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3290 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 73:
 #line 491 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string(">"); }
-#line 3293 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3296 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 74:
 #line 492 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("=="); }
-#line 3299 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3302 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 75:
 #line 493 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("!="); }
-#line 3305 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3308 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 76:
 #line 494 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("<="); }
-#line 3311 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3314 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 77:
 #line 495 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string(">="); }
-#line 3317 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3320 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 78:
 #line 496 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("&"); }
-#line 3323 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3326 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 79:
 #line 497 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("|"); }
-#line 3329 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3332 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 80:
 #line 498 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("^"); }
-#line 3335 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3338 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 81:
 #line 499 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("++"); }
-#line 3341 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3344 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 82:
 #line 500 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("--"); }
-#line 3347 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3350 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 83:
 #line 501 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("+++"); }
-#line 3353 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3356 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 84:
 #line 502 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("---"); }
-#line 3359 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3362 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 85:
 #line 503 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("<<"); }
-#line 3365 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3368 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 86:
 #line 504 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string(">>"); }
-#line 3371 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3374 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 87:
 #line 505 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string("<<="); }
-#line 3377 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3380 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 88:
 #line 506 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = new string(">>="); }
-#line 3383 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3386 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 89:
@@ -3449,7 +3452,7 @@ yyreduce:
         }
         delete (yyvsp[-3].s);
     }
-#line 3453 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3456 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 90:
@@ -3457,7 +3460,7 @@ yyreduce:
     {
         (yyval.pExpression) = (yyvsp[-1].pExpression);
     }
-#line 3461 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3464 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 91:
@@ -3469,79 +3472,79 @@ yyreduce:
         (yyval.pExpression) = (yyvsp[-5].pExpression);
         delete (yyvsp[-1].pExpression);
     }
-#line 3473 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3476 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 92:
 #line 592 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = nullptr; }
-#line 3479 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3482 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 93:
 #line 593 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3485 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3488 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 94:
 #line 594 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 3491 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3494 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 95:
 #line 595 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 3497 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3500 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 96:
 #line 596 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3503 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3506 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 97:
 #line 597 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3509 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3512 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 98:
 #line 598 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3515 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3518 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 99:
 #line 599 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3521 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3524 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 100:
 #line 600 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 3527 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3530 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 101:
 #line 601 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 3533 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3536 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 102:
 #line 602 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3539 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3542 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 103:
 #line 603 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3545 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3548 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 104:
@@ -3550,7 +3553,7 @@ yyreduce:
         (yyval.pExpression) = new ExprBlock();
         (yyval.pExpression)->at = tokAt((yyloc));
     }
-#line 3554 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3557 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 105:
@@ -3561,7 +3564,7 @@ yyreduce:
             static_cast<ExprBlock*>((yyvsp[-1].pExpression))->list.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         }
     }
-#line 3565 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3568 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 106:
@@ -3569,7 +3572,7 @@ yyreduce:
     {
         delete (yyvsp[-1].pExpression); (yyval.pExpression) = nullptr; YYABORT;
     }
-#line 3573 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3576 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 107:
@@ -3585,13 +3588,13 @@ yyreduce:
             (yyval.pExpression) = (yyvsp[-2].pExpression);
         }
     }
-#line 3589 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3592 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 108:
 #line 637 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = (yyvsp[0].s); }
-#line 3595 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3598 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 109:
@@ -3602,13 +3605,13 @@ yyreduce:
             delete (yyvsp[0].s);
             (yyval.s) = (yyvsp[-2].s);
         }
-#line 3606 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3609 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 110:
 #line 644 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { *(yyvsp[0].s) = "::" + *(yyvsp[0].s); (yyval.s) = (yyvsp[0].s); }
-#line 3612 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3615 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 111:
@@ -3616,7 +3619,7 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprDelete(tokAt((yylsp[-1])), ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 3620 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3623 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 112:
@@ -3624,7 +3627,7 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprNew(tokAt((yylsp[-1])),TypeDeclPtr((yyvsp[0].pTypeDecl)),false);
     }
-#line 3628 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3631 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 113:
@@ -3632,7 +3635,7 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprNew(tokAt((yylsp[-3])),TypeDeclPtr((yyvsp[-2].pTypeDecl)),true);
     }
-#line 3636 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3639 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 114:
@@ -3641,7 +3644,7 @@ yyreduce:
         auto pNew = new ExprNew(tokAt((yylsp[-4])),TypeDeclPtr((yyvsp[-3].pTypeDecl)),true);
         (yyval.pExpression) = parseFunctionArguments(pNew,(yyvsp[-1].pExpression));
     }
-#line 3645 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3648 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 115:
@@ -3649,13 +3652,13 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprAscend(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 3653 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3656 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 116:
 #line 670 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprBreak(tokAt((yylsp[0]))); }
-#line 3659 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3662 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 117:
@@ -3663,7 +3666,7 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprReturn(tokAt((yylsp[0])),nullptr);
     }
-#line 3667 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3670 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 118:
@@ -3671,7 +3674,7 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprReturn(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 3675 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3678 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 119:
@@ -3681,7 +3684,7 @@ yyreduce:
         pRet->moveSemantics = true;
         (yyval.pExpression) = pRet;
     }
-#line 3685 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3688 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 120:
@@ -3689,19 +3692,19 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprTryCatch(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 3693 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3696 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 121:
 #line 694 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.b) = false; }
-#line 3699 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3702 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 122:
 #line 695 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.b) = true; }
-#line 3705 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3708 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 123:
@@ -3732,7 +3735,7 @@ yyreduce:
         deleteVariableDeclarationList((yyvsp[-2].pVarDeclList));
         (yyval.pExpression) = pLet;
     }
-#line 3736 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3739 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 124:
@@ -3762,7 +3765,7 @@ yyreduce:
         delete (yyvsp[0].pVarDecl);
         (yyval.pExpression) = pLet;
     }
-#line 3766 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3769 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 125:
@@ -3770,7 +3773,7 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprCast(tokAt((yylsp[-4])),ExpressionPtr((yyvsp[0].pExpression)),TypeDeclPtr((yyvsp[-2].pTypeDecl)));
     }
-#line 3774 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3777 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 126:
@@ -3778,7 +3781,7 @@ yyreduce:
     {
         (yyval.pExpression) = new ExprCast(tokAt((yylsp[-4])),ExpressionPtr((yyvsp[0].pExpression)),TypeDeclPtr((yyvsp[-2].pTypeDecl)), true);
     }
-#line 3782 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3785 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 127:
@@ -3787,7 +3790,7 @@ yyreduce:
             (yyval.pExpression) = new ExprTypeInfo(tokAt((yylsp[-4])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[-1].pExpression)));
             delete (yyvsp[-2].s);
     }
-#line 3791 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3794 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 128:
@@ -3797,7 +3800,7 @@ yyreduce:
             delete (yyvsp[-5].s);
             delete (yyvsp[-3].s);
     }
-#line 3801 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3804 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 129:
@@ -3806,7 +3809,7 @@ yyreduce:
             (yyval.pExpression) = new ExprTypeInfo(tokAt((yylsp[-5])),*(yyvsp[-3].s),TypeDeclPtr((yyvsp[-1].pTypeDecl)));
             delete (yyvsp[-3].s);
     }
-#line 3810 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3813 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 130:
@@ -3816,7 +3819,7 @@ yyreduce:
             delete (yyvsp[-6].s);
             delete (yyvsp[-4].s);
     }
-#line 3820 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3823 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 131:
@@ -3824,7 +3827,7 @@ yyreduce:
     {
         (yyval.pExpression) = (yyvsp[0].pExpression);
     }
-#line 3828 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3831 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 132:
@@ -3832,7 +3835,7 @@ yyreduce:
     {
             (yyval.pExpression) = new ExprSequence(tokAt((yylsp[-2])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 3836 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3839 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 133:
@@ -3842,7 +3845,7 @@ yyreduce:
         (yyval.pExpression) = new ExprMakeBlock(tokAt((yylsp[0])),ExpressionPtr((yyvsp[0].pExpression)));
         closure->returnType = make_shared<TypeDecl>(Type::autoinfer);
     }
-#line 3846 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3849 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 134:
@@ -3894,115 +3897,115 @@ yyreduce:
             delete (yyvsp[-3].faList);
         }
     }
-#line 3898 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3901 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 135:
 #line 848 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprConstInt(tokAt((yylsp[0])),(int32_t)(yyvsp[0].i)); }
-#line 3904 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3907 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 136:
 #line 849 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprConstUInt(tokAt((yylsp[0])),(uint32_t)(yyvsp[0].ui)); }
-#line 3910 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3913 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 137:
 #line 850 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprConstInt64(tokAt((yylsp[0])),(int64_t)(yyvsp[0].i64)); }
-#line 3916 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3919 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 138:
 #line 851 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprConstUInt64(tokAt((yylsp[0])),(uint64_t)(yyvsp[0].ui64)); }
-#line 3922 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3925 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 139:
 #line 852 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprConstFloat(tokAt((yylsp[0])),(float)(yyvsp[0].fd)); }
-#line 3928 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3931 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 140:
 #line 853 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprConstDouble(tokAt((yylsp[0])),(double)(yyvsp[0].d)); }
-#line 3934 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3937 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 141:
 #line 857 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3940 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3943 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 142:
 #line 858 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprCopy(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression))); }
-#line 3946 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3949 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 143:
 #line 859 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"&=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 3952 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3955 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 144:
 #line 860 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"|=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 3958 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3961 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 145:
 #line 861 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"^=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 3964 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3967 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 146:
 #line 862 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"+=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 3970 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3973 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 147:
 #line 863 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"-=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 3976 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3979 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 148:
 #line 864 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"*=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 3982 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3985 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 149:
 #line 865 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"/=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 3988 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3991 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 150:
 #line 866 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"%=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 3994 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 3997 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 151:
 #line 867 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4000 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4003 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 152:
 #line 868 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">>=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4006 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4009 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 153:
@@ -4012,7 +4015,7 @@ yyreduce:
         delete (yyvsp[-2].s);
         (yyval.pExpression) = pInvoke;
     }
-#line 4016 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4019 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 154:
@@ -4024,229 +4027,229 @@ yyreduce:
         delete (yyvsp[-3].s);
         (yyval.pExpression) = pInvoke;
     }
-#line 4028 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4031 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 155:
 #line 888 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprConstPtr(tokAt((yylsp[0])),nullptr); }
-#line 4034 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4037 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 156:
 #line 889 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprVar(tokAt((yylsp[0])),*(yyvsp[0].s)); delete (yyvsp[0].s); }
-#line 4040 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4043 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 157:
 #line 890 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4046 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4049 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 158:
 #line 891 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4052 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4055 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 159:
 #line 892 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4058 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4061 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 160:
 #line 893 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprConstBool(tokAt((yylsp[0])),true); }
-#line 4064 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4067 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 161:
 #line 894 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprConstBool(tokAt((yylsp[0])),false); }
-#line 4070 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4073 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 162:
 #line 895 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"!",ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4076 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4079 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 163:
 #line 896 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"~",ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4082 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4085 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 164:
 #line 897 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"+",ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4088 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4091 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 165:
 #line 898 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"-",ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4094 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4097 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 166:
 #line 899 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprMove(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4100 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4103 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 167:
 #line 900 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<<", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4106 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4109 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 168:
 #line 901 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">>", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4112 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4115 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 169:
 #line 902 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"+", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4118 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4121 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 170:
 #line 903 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"-", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4124 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4127 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 171:
 #line 904 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"*", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4130 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4133 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 172:
 #line 905 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"/", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4136 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4139 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 173:
 #line 906 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"%", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4142 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4145 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 174:
 #line 907 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4148 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4151 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 175:
 #line 908 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4154 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4157 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 176:
 #line 909 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"==", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4160 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4163 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 177:
 #line 910 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"!=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4166 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4169 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 178:
 #line 911 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4172 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4175 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 179:
 #line 912 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4178 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4181 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 180:
 #line 913 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"&", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4184 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4187 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 181:
 #line 914 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"|", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4190 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4193 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 182:
 #line 915 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"^", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4196 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4199 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 183:
 #line 916 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"++", ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4202 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4205 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 184:
 #line 917 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"--", ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4208 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4211 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 185:
 #line 918 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[0])),"+++", ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4214 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4217 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 186:
 #line 919 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[0])),"---", ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4220 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4223 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 187:
 #line 920 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 4226 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4229 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 188:
 #line 921 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprAt(tokAt((yylsp[-2])), ExpressionPtr((yyvsp[-3].pExpression)), ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4232 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4235 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 189:
 #line 922 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprField(tokAt((yylsp[-1])), ExpressionPtr((yyvsp[-2].pExpression)), *(yyvsp[0].s)); delete (yyvsp[0].s); }
-#line 4238 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4241 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 190:
 #line 923 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprSafeField(tokAt((yylsp[-1])), ExpressionPtr((yyvsp[-2].pExpression)), *(yyvsp[0].s)); delete (yyvsp[0].s); }
-#line 4244 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4247 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 191:
 #line 924 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprAddr(tokAt((yylsp[-1])),*(yyvsp[0].s)); delete (yyvsp[0].s); }
-#line 4250 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4253 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 192:
@@ -4255,7 +4258,7 @@ yyreduce:
             (yyval.pExpression) = g_Program->makeCall(tokAt((yylsp[-2])),*(yyvsp[-2].s));
             delete (yyvsp[-2].s);
         }
-#line 4259 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4262 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 193:
@@ -4264,7 +4267,7 @@ yyreduce:
             (yyval.pExpression) = parseFunctionArguments(g_Program->makeCall(tokAt((yylsp[-3])),*(yyvsp[-3].s)),(yyvsp[-1].pExpression));
             delete (yyvsp[-3].s);
         }
-#line 4268 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4271 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 194:
@@ -4272,7 +4275,7 @@ yyreduce:
     {
         (yyval.pExpression) = g_Program->makeCall(tokAt((yylsp[-2])),das_to_string((yyvsp[-2].type)));
     }
-#line 4276 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4279 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 195:
@@ -4280,31 +4283,31 @@ yyreduce:
     {
             (yyval.pExpression) = parseFunctionArguments(g_Program->makeCall(tokAt((yylsp[-3])),das_to_string((yyvsp[-3].type))),(yyvsp[-1].pExpression));
         }
-#line 4284 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4287 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 196:
 #line 939 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprPtr2Ref(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4290 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4293 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 197:
 #line 940 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprMakeLambda(tokAt((yylsp[-2]))); }
-#line 4296 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4299 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 198:
 #line 941 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprMakeLambda(tokAt((yylsp[-3])), ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4302 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4305 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 199:
 #line 942 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = new ExprNullCoalescing(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4308 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4311 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 200:
@@ -4312,37 +4315,37 @@ yyreduce:
     {
             (yyval.pExpression) = new ExprOp3(tokAt((yylsp[-3])),"?",ExpressionPtr((yyvsp[-4].pExpression)),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
         }
-#line 4316 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4319 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 201:
 #line 946 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4322 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4325 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 202:
 #line 947 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4328 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4331 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 203:
 #line 948 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4334 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4337 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 204:
 #line 949 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4340 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4343 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 205:
 #line 950 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4346 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4349 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 206:
@@ -4357,7 +4360,7 @@ yyreduce:
             (yyval.pExpression) = (yyvsp[-2].pExpression);
         }
     }
-#line 4361 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4364 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 207:
@@ -4372,7 +4375,7 @@ yyreduce:
             (yyval.pExpression) = (yyvsp[0].pExpression);
         }
     }
-#line 4376 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4379 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 208:
@@ -4408,31 +4411,31 @@ yyreduce:
         delete (yyvsp[-1].s);
         delete (yyvsp[0].s);
     }
-#line 4412 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4415 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 209:
 #line 1005 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.aaList) = nullptr; }
-#line 4418 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4421 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 210:
 #line 1006 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.aaList) = (yyvsp[-1].aaList); }
-#line 4424 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4427 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 211:
 #line 1010 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.b) = false; }
-#line 4430 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4433 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 212:
 #line 1011 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.b) = true; }
-#line 4436 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4439 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 213:
@@ -4442,7 +4445,7 @@ yyreduce:
         (yyvsp[0].pVarDecl)->annotation = (yyvsp[-2].aaList);
         (yyval.pVarDecl) = (yyvsp[0].pVarDecl);
     }
-#line 4446 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4449 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 214:
@@ -4450,7 +4453,7 @@ yyreduce:
     {
         (yyval.pVarDeclList) = new vector<VariableDeclaration*>();
     }
-#line 4454 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4457 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 215:
@@ -4459,43 +4462,43 @@ yyreduce:
         (yyval.pVarDeclList) = (yyvsp[-2].pVarDeclList);
         (yyvsp[-2].pVarDeclList)->push_back((yyvsp[-1].pVarDecl));
     }
-#line 4463 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4466 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 216:
 #line 1033 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pVarDeclList) = new vector<VariableDeclaration*>(); (yyval.pVarDeclList)->push_back((yyvsp[0].pVarDecl)); }
-#line 4469 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4472 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 217:
 #line 1034 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pVarDeclList) = (yyvsp[-2].pVarDeclList); (yyvsp[-2].pVarDeclList)->push_back((yyvsp[0].pVarDecl)); }
-#line 4475 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4478 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 218:
 #line 1038 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pVarDeclList) = new vector<VariableDeclaration*>(); (yyval.pVarDeclList)->push_back((yyvsp[0].pVarDecl)); }
-#line 4481 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4484 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 219:
 #line 1039 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pVarDeclList) = (yyvsp[-2].pVarDeclList); (yyvsp[-2].pVarDeclList)->push_back((yyvsp[0].pVarDecl)); }
-#line 4487 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4490 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 220:
 #line 1043 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.b) = false; }
-#line 4493 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4496 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 221:
 #line 1044 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.b) = true; }
-#line 4499 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4502 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 222:
@@ -4504,7 +4507,7 @@ yyreduce:
         auto autoT = new TypeDecl(Type::autoinfer);
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[0])),(yyvsp[0].pNameList),autoT,nullptr);
     }
-#line 4508 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4511 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 223:
@@ -4512,7 +4515,7 @@ yyreduce:
     {
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-2])),(yyvsp[-2].pNameList),(yyvsp[0].pTypeDecl),nullptr);
     }
-#line 4516 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4519 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 224:
@@ -4521,7 +4524,7 @@ yyreduce:
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-4])),(yyvsp[-4].pNameList),(yyvsp[-2].pTypeDecl),(yyvsp[0].pExpression));
         (yyval.pVarDecl)->move_to_init = (yyvsp[-1].b);
     }
-#line 4525 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4528 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 225:
@@ -4531,7 +4534,7 @@ yyreduce:
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-2])),(yyvsp[-2].pNameList),typeDecl,(yyvsp[0].pExpression));
         (yyval.pVarDecl)->move_to_init = (yyvsp[-1].b);
     }
-#line 4535 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4538 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 226:
@@ -4541,7 +4544,7 @@ yyreduce:
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-2])),(yyvsp[-2].pNameList),typeDecl,(yyvsp[0].pExpression));
         (yyval.pVarDecl)->move_to_init = (yyvsp[-1].b);
     }
-#line 4545 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4548 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 227:
@@ -4549,7 +4552,7 @@ yyreduce:
     {
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-3])),(yyvsp[-3].pNameList),(yyvsp[-1].pTypeDecl),nullptr);
     }
-#line 4553 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4556 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 228:
@@ -4558,7 +4561,7 @@ yyreduce:
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-5])),(yyvsp[-5].pNameList),(yyvsp[-3].pTypeDecl),(yyvsp[-1].pExpression));
         (yyval.pVarDecl)->move_to_init = (yyvsp[-2].b);
     }
-#line 4562 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4565 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 229:
@@ -4567,7 +4570,7 @@ yyreduce:
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-4])),(yyvsp[-4].pNameList),(yyvsp[-2].pTypeDecl),(yyvsp[0].pExpression));
         (yyval.pVarDecl)->move_to_init = (yyvsp[-1].b);
     }
-#line 4571 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4574 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 230:
@@ -4577,7 +4580,7 @@ yyreduce:
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-3])),(yyvsp[-3].pNameList),typeDecl,(yyvsp[-1].pExpression));
         (yyval.pVarDecl)->move_to_init = (yyvsp[-2].b);
     }
-#line 4581 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4584 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 231:
@@ -4587,7 +4590,7 @@ yyreduce:
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-2])),(yyvsp[-2].pNameList),typeDecl,(yyvsp[0].pExpression));
         (yyval.pVarDecl)->move_to_init = (yyvsp[-1].b);
     }
-#line 4591 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4594 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 232:
@@ -4612,7 +4615,7 @@ yyreduce:
         }
         deleteVariableDeclarationList((yyvsp[-1].pVarDeclList));
     }
-#line 4616 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4619 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 233:
@@ -4620,7 +4623,7 @@ yyreduce:
     {
         (yyval.pEnum) = new Enumeration();
     }
-#line 4624 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4627 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 234:
@@ -4634,7 +4637,7 @@ yyreduce:
         delete (yyvsp[-1].s);
         (yyval.pEnum) = (yyvsp[-2].pEnum);
     }
-#line 4638 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4641 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 235:
@@ -4648,7 +4651,7 @@ yyreduce:
         delete (yyvsp[-3].s);
         (yyval.pEnum) = (yyvsp[-4].pEnum);
     }
-#line 4652 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4655 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 236:
@@ -4662,7 +4665,7 @@ yyreduce:
         }
         delete (yyvsp[-2].s);
     }
-#line 4666 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4669 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 237:
@@ -4678,19 +4681,19 @@ yyreduce:
         }
 		delete (yyvsp[-3].s);
     }
-#line 4682 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4685 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 238:
 #line 1169 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = nullptr; }
-#line 4688 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4691 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 239:
 #line 1170 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.s) = (yyvsp[0].s); }
-#line 4694 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4697 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 240:
@@ -4730,7 +4733,7 @@ yyreduce:
         }
         delete (yyvsp[-1].s);
     }
-#line 4734 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4737 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 241:
@@ -4798,7 +4801,7 @@ yyreduce:
         }
         deleteVariableDeclarationList((yyvsp[-1].pVarDeclList));
     }
-#line 4802 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4805 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 242:
@@ -4810,7 +4813,7 @@ yyreduce:
         (yyval.pNameList) = pSL;
         delete (yyvsp[0].s);
     }
-#line 4814 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4817 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 243:
@@ -4821,127 +4824,127 @@ yyreduce:
         (yyval.pNameList) = (yyvsp[-2].pNameList);
         delete (yyvsp[0].s);
     }
-#line 4825 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4828 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 244:
 #line 1294 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tBool; }
-#line 4831 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4834 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 245:
 #line 1295 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tString; }
-#line 4837 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4840 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 246:
 #line 1296 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tInt; }
-#line 4843 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4846 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 247:
 #line 1297 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tInt64; }
-#line 4849 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4852 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 248:
 #line 1298 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tInt2; }
-#line 4855 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4858 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 249:
 #line 1299 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tInt3; }
-#line 4861 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4864 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 250:
 #line 1300 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tInt4; }
-#line 4867 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4870 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 251:
 #line 1301 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tUInt; }
-#line 4873 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4876 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 252:
 #line 1302 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tUInt64; }
-#line 4879 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4882 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 253:
 #line 1303 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tUInt2; }
-#line 4885 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4888 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 254:
 #line 1304 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tUInt3; }
-#line 4891 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4894 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 255:
 #line 1305 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tUInt4; }
-#line 4897 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4900 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 256:
 #line 1306 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tFloat; }
-#line 4903 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4906 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 257:
 #line 1307 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tFloat2; }
-#line 4909 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4912 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 258:
 #line 1308 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tFloat3; }
-#line 4915 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4918 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 259:
 #line 1309 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tFloat4; }
-#line 4921 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4924 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 260:
 #line 1310 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tVoid; }
-#line 4927 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4930 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 261:
 #line 1311 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tRange; }
-#line 4933 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4936 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 262:
 #line 1312 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tURange; }
-#line 4939 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4942 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 263:
 #line 1313 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.type) = Type::tDouble; }
-#line 4945 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4948 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 264:
@@ -4953,7 +4956,7 @@ yyreduce:
         }
         delete (yyvsp[0].s);
     }
-#line 4957 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4960 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 265:
@@ -4962,7 +4965,7 @@ yyreduce:
         (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 4966 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4969 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 266:
@@ -4974,25 +4977,25 @@ yyreduce:
         (yyval.pTypeDecl)->alias = *(yyvsp[-1].s);
         delete (yyvsp[-1].s);
     }
-#line 4978 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4981 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 267:
 #line 1341 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pTypeDecl) = new TypeDecl((yyvsp[0].type)); (yyval.pTypeDecl)->at = tokAt((yylsp[0])); }
-#line 4984 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4987 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 268:
 #line 1342 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pTypeDecl) = (yyvsp[0].pTypeDecl); }
-#line 4990 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4993 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 269:
 #line 1343 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pTypeDecl) = (yyvsp[0].pTypeDecl); }
-#line 4996 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 4999 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 270:
@@ -5001,7 +5004,7 @@ yyreduce:
         (yyvsp[-3].pTypeDecl)->dim.push_back((yyvsp[-1].i));
         (yyval.pTypeDecl) = (yyvsp[-3].pTypeDecl);
     }
-#line 5005 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5008 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 271:
@@ -5011,7 +5014,7 @@ yyreduce:
         (yyvsp[-1].pTypeDecl)->removeConstant = false;
         (yyval.pTypeDecl) = (yyvsp[-1].pTypeDecl);
     }
-#line 5015 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5018 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 272:
@@ -5021,7 +5024,7 @@ yyreduce:
         (yyvsp[-2].pTypeDecl)->removeConstant = true;
         (yyval.pTypeDecl) = (yyvsp[-2].pTypeDecl);
     }
-#line 5025 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5028 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 273:
@@ -5031,7 +5034,7 @@ yyreduce:
         (yyvsp[-1].pTypeDecl)->removeRef = false;
         (yyval.pTypeDecl) = (yyvsp[-1].pTypeDecl);
     }
-#line 5035 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5038 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 274:
@@ -5041,7 +5044,7 @@ yyreduce:
         (yyvsp[-2].pTypeDecl)->removeRef = true;
         (yyval.pTypeDecl) = (yyvsp[-2].pTypeDecl);
     }
-#line 5045 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5048 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 275:
@@ -5053,7 +5056,7 @@ yyreduce:
         (yyvsp[-3].pTypeDecl)->removeRef = true;
         (yyval.pTypeDecl) = (yyvsp[-3].pTypeDecl);
     }
-#line 5057 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5060 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 276:
@@ -5062,7 +5065,7 @@ yyreduce:
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer);
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5066 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5069 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 277:
@@ -5072,7 +5075,7 @@ yyreduce:
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5076 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5079 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 278:
@@ -5083,7 +5086,7 @@ yyreduce:
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
         (yyval.pTypeDecl)->secondType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5087 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5090 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 279:
@@ -5092,7 +5095,7 @@ yyreduce:
         (yyval.pTypeDecl) = new TypeDecl(Type::tBlock);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 5096 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5099 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 280:
@@ -5102,7 +5105,7 @@ yyreduce:
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5106 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5109 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 281:
@@ -5116,7 +5119,7 @@ yyreduce:
             deleteVariableDeclarationList((yyvsp[-2].pVarDeclList));
         }
     }
-#line 5120 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5123 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 282:
@@ -5125,7 +5128,7 @@ yyreduce:
         (yyval.pTypeDecl) = new TypeDecl(Type::tFunction);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 5129 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5132 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 283:
@@ -5135,7 +5138,7 @@ yyreduce:
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5139 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5142 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 284:
@@ -5149,7 +5152,7 @@ yyreduce:
             deleteVariableDeclarationList((yyvsp[-2].pVarDeclList));
         }
     }
-#line 5153 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5156 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 285:
@@ -5158,7 +5161,7 @@ yyreduce:
         (yyval.pTypeDecl) = new TypeDecl(Type::tLambda);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 5162 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5165 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 286:
@@ -5168,7 +5171,7 @@ yyreduce:
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5172 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5175 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 287:
@@ -5182,19 +5185,19 @@ yyreduce:
             deleteVariableDeclarationList((yyvsp[-2].pVarDeclList));
         }
     }
-#line 5186 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5189 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 288:
 #line 1447 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 5192 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5195 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 289:
 #line 1448 "src/parser/ds_parser.ypp" /* yacc.c:1645  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 5198 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5201 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 290:
@@ -5206,7 +5209,7 @@ yyreduce:
         msd->push_back(mfd);
         (yyval.pMakeStruct) = msd;
     }
-#line 5210 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5213 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 291:
@@ -5217,7 +5220,7 @@ yyreduce:
         ((MakeStruct *)(yyvsp[-4].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-4].pMakeStruct);
     }
-#line 5221 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5224 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 292:
@@ -5227,7 +5230,7 @@ yyreduce:
         msd->structs.push_back(MakeStructPtr((yyvsp[0].pMakeStruct)));
         (yyval.pExpression) = msd;
     }
-#line 5231 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5234 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 293:
@@ -5236,7 +5239,7 @@ yyreduce:
         ((ExprMakeStructure *) (yyvsp[-2].pExpression))->structs.push_back(MakeStructPtr((yyvsp[0].pMakeStruct)));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 5240 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5243 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 294:
@@ -5246,7 +5249,7 @@ yyreduce:
         (yyvsp[-2].pExpression)->at = tokAt((yylsp[-5]));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 5250 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5253 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 295:
@@ -5257,7 +5260,7 @@ yyreduce:
         (yyvsp[-2].pExpression)->at = tokAt((yylsp[-7]));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 5261 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5264 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 296:
@@ -5267,7 +5270,7 @@ yyreduce:
         mka->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = mka;
     }
-#line 5271 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5274 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 297:
@@ -5276,7 +5279,7 @@ yyreduce:
         ((ExprMakeArray *) (yyvsp[-2].pExpression))->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 5280 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5283 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
   case 298:
@@ -5286,11 +5289,11 @@ yyreduce:
        (yyvsp[-2].pExpression)->at = tokAt((yylsp[-5]));
        (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 5290 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5293 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
     break;
 
 
-#line 5294 "C:/Users/Boris/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1645  */
+#line 5297 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.cpp" /* yacc.c:1645  */
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires

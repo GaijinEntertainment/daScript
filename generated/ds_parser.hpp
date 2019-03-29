@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.2.2.  */
+/* A Bison parser, made by GNU Bison 3.2.4.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -33,8 +33,8 @@
 /* Undocumented macros, especially those whose name start with YY_,
    are private implementation details.  Do not rely on them.  */
 
-#ifndef YY_DAS_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
-# define YY_DAS_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+#ifndef YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED
+# define YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED
 /* Debug traces.  */
 #ifndef DAS_YYDEBUG
 # if defined YYDEBUG
@@ -91,7 +91,7 @@ extern int das_yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 95 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
+#line 95 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.hpp" /* yacc.c:1906  */
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -99,66 +99,66 @@ extern int das_yydebug;
   enum das_yytokentype
   {
     LEXER_ERROR = 258,
-    _STRUCT = 259,
-    _LET = 260,
-    _DEF = 261,
-    _WHILE = 262,
-    _IF = 263,
-    _ELSE = 264,
-    _FOR = 265,
-    _CATCH = 266,
-    _TRUE = 267,
-    _FALSE = 268,
-    _NEWT = 269,
-    _TYPEINFO = 270,
-    _TYPE = 271,
-    _IN = 272,
-    _ELIF = 273,
-    _ARRAY = 274,
-    _RETURN = 275,
-    _NULL = 276,
-    _BREAK = 277,
-    _TRY = 278,
-    _OPTIONS = 279,
-    _TABLE = 280,
-    _EXPECT = 281,
-    _CONST = 282,
-    _REQUIRE = 283,
-    _OPERATOR = 284,
-    _ENUM = 285,
-    _FINALLY = 286,
-    _DELETE = 287,
-    _DEREF = 288,
-    _SCOPE = 289,
-    _TYPEDEF = 290,
-    _WITH = 291,
-    _CAST = 292,
-    _OVERRIDE = 293,
-    _UPCAST = 294,
-    _TBOOL = 295,
-    _TVOID = 296,
-    _TSTRING = 297,
-    _TAUTO = 298,
-    _TINT = 299,
-    _TINT2 = 300,
-    _TINT3 = 301,
-    _TINT4 = 302,
-    _TUINT = 303,
-    _TUINT2 = 304,
-    _TUINT3 = 305,
-    _TUINT4 = 306,
-    _TFLOAT = 307,
-    _TFLOAT2 = 308,
-    _TFLOAT3 = 309,
-    _TFLOAT4 = 310,
-    _TRANGE = 311,
-    _TURANGE = 312,
-    _TBLOCK = 313,
-    _TINT64 = 314,
-    _TUINT64 = 315,
-    _TDOUBLE = 316,
-    _TFUNCTION = 317,
-    _TLAMBDA = 318,
+    DAS_STRUCT = 259,
+    DAS_LET = 260,
+    DAS_DEF = 261,
+    DAS_WHILE = 262,
+    DAS_IF = 263,
+    DAS_ELSE = 264,
+    DAS_FOR = 265,
+    DAS_CATCH = 266,
+    DAS_TRUE = 267,
+    DAS_FALSE = 268,
+    DAS_NEWT = 269,
+    DAS_TYPEINFO = 270,
+    DAS_TYPE = 271,
+    DAS_IN = 272,
+    DAS_ELIF = 273,
+    DAS_ARRAY = 274,
+    DAS_RETURN = 275,
+    DAS_NULL = 276,
+    DAS_BREAK = 277,
+    DAS_TRY = 278,
+    DAS_OPTIONS = 279,
+    DAS_TABLE = 280,
+    DAS_EXPECT = 281,
+    DAS_CONST = 282,
+    DAS_REQUIRE = 283,
+    DAS_OPERATOR = 284,
+    DAS_ENUM = 285,
+    DAS_FINALLY = 286,
+    DAS_DELETE = 287,
+    DAS_DEREF = 288,
+    DAS_SCOPE = 289,
+    DAS_TYPEDEF = 290,
+    DAS_WITH = 291,
+    DAS_CAST = 292,
+    DAS_OVERRIDE = 293,
+    DAS_UPCAST = 294,
+    DAS_TBOOL = 295,
+    DAS_TVOID = 296,
+    DAS_TSTRING = 297,
+    DAS_TAUTO = 298,
+    DAS_TINT = 299,
+    DAS_TINT2 = 300,
+    DAS_TINT3 = 301,
+    DAS_TINT4 = 302,
+    DAS_TUINT = 303,
+    DAS_TUINT2 = 304,
+    DAS_TUINT3 = 305,
+    DAS_TUINT4 = 306,
+    DAS_TFLOAT = 307,
+    DAS_TFLOAT2 = 308,
+    DAS_TFLOAT3 = 309,
+    DAS_TFLOAT4 = 310,
+    DAS_TRANGE = 311,
+    DAS_TURANGE = 312,
+    DAS_TBLOCK = 313,
+    DAS_TINT64 = 314,
+    DAS_TUINT64 = 315,
+    DAS_TDOUBLE = 316,
+    DAS_TFUNCTION = 317,
+    DAS_TLAMBDA = 318,
     ADDEQU = 319,
     SUBEQU = 320,
     DIVEQU = 321,
@@ -236,7 +236,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 240 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
+#line 240 "D:/common_info/GaijinGitHub/daScript/generated/ds_parser.hpp" /* yacc.c:1906  */
 };
 
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
@@ -263,4 +263,4 @@ extern DAS_YYSTYPE das_yylval;
 extern DAS_YYLTYPE das_yylloc;
 int das_yyparse (void);
 
-#endif /* !YY_DAS_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */
+#endif /* !YY_DAS_YY_D_COMMON_INFO_GAIJINGITHUB_DASCRIPT_GENERATED_DS_PARSER_HPP_INCLUDED  */

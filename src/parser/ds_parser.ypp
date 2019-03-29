@@ -104,23 +104,23 @@
 %token  LEXER_ERROR
 
 /* keywords */
-%token  _STRUCT     _LET        _DEF        _WHILE
-%token  _IF         _ELSE       _FOR        _CATCH
-%token  _TRUE       _FALSE       _NEWT      _TYPEINFO
-%token  _TYPE       _IN         _ELIF       _ARRAY
-%token  _RETURN     _NULL       _BREAK      _TRY
-%token  _OPTIONS    _TABLE      _EXPECT     _CONST
-%token  _REQUIRE    _OPERATOR   _ENUM       _FINALLY
-%token  _DELETE     _DEREF      _SCOPE      _TYPEDEF
-%token  _WITH       _CAST       _OVERRIDE   _UPCAST
+%token  DAS_STRUCT     DAS_LET        DAS_DEF        DAS_WHILE
+%token  DAS_IF         DAS_ELSE       DAS_FOR        DAS_CATCH
+%token  DAS_TRUE       DAS_FALSE      DAS_NEWT       DAS_TYPEINFO
+%token  DAS_TYPE       DAS_IN         DAS_ELIF       DAS_ARRAY
+%token  DAS_RETURN     DAS_NULL       DAS_BREAK      DAS_TRY
+%token  DAS_OPTIONS    DAS_TABLE      DAS_EXPECT     DAS_CONST
+%token  DAS_REQUIRE    DAS_OPERATOR   DAS_ENUM       DAS_FINALLY
+%token  DAS_DELETE     DAS_DEREF      DAS_SCOPE      DAS_TYPEDEF
+%token  DAS_WITH       DAS_CAST       DAS_OVERRIDE   DAS_UPCAST
 
 /* basic types */
-%token  _TBOOL       _TVOID       _TSTRING     _TAUTO
-%token  _TINT        _TINT2       _TINT3       _TINT4
-%token  _TUINT       _TUINT2      _TUINT3      _TUINT4
-%token  _TFLOAT      _TFLOAT2     _TFLOAT3     _TFLOAT4
-%token  _TRANGE      _TURANGE     _TBLOCK      _TINT64
-%token  _TUINT64     _TDOUBLE	  _TFUNCTION   _TLAMBDA
+%token  DAS_TBOOL       DAS_TVOID       DAS_TSTRING     DAS_TAUTO
+%token  DAS_TINT        DAS_TINT2       DAS_TINT3       DAS_TINT4
+%token  DAS_TUINT       DAS_TUINT2      DAS_TUINT3      DAS_TUINT4
+%token  DAS_TFLOAT      DAS_TFLOAT2     DAS_TFLOAT3     DAS_TFLOAT4
+%token  DAS_TRANGE      DAS_TURANGE     DAS_TBLOCK      DAS_TINT64
+%token  DAS_TUINT64     DAS_TDOUBLE	    DAS_TFUNCTION   DAS_TLAMBDA
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -284,7 +284,7 @@ string_builder
     ;
 
 options_declaration
-	:	_OPTIONS	annotation_argument_list[list] {
+	:	DAS_OPTIONS	annotation_argument_list[list] {
 		if ( g_Program->options.arguments.size() ) {
 			g_Program->options.arguments.insert ( g_Program->options.arguments.begin(),
                 $list->arguments.begin(), $list->arguments.end() );
@@ -305,7 +305,7 @@ options_declaration
 	;
 
 require_declaration
-    :   _REQUIRE require_list
+    :   DAS_REQUIRE require_list
     ;
 
 require_list
@@ -324,7 +324,7 @@ require_module
     ;
 
 expect_declaration
-    :   _EXPECT expect_list
+    :   DAS_EXPECT expect_list
     ;
 
 expect_list
@@ -342,23 +342,23 @@ expect_error
     ;
 
 expression_else
-    :                                                   { $$ = nullptr; }
-    |   _ELSE expression_block[block]                   { $$ = $block; }
-    |   _ELIF[loc] expr[cond] expression_block[block] expression_else[then] {
+    :                                                      { $$ = nullptr; }
+    |   DAS_ELSE expression_block[block]                   { $$ = $block; }
+    |   DAS_ELIF[loc] expr[cond] expression_block[block] expression_else[then] {
         $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
     }
     ;
 
 expression_if_then_else
-    :   _IF[loc] expr[cond] expression_block[block] expression_else[then] {
+    :   DAS_IF[loc] expr[cond] expression_block[block] expression_else[then] {
         $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
     }
     ;
 
 expression_for_loop
-    :   _FOR[loc] variable_name_list[iters] _IN expr_list[srcs] expression_block[block] {
+    :   DAS_FOR[loc] variable_name_list[iters] DAS_IN expr_list[srcs] expression_block[block] {
         auto pFor = new ExprFor(tokAt(@loc));
         pFor->iterators = *$iters;
         delete $iters;
@@ -370,7 +370,7 @@ expression_for_loop
     ;
 
 expression_while_loop
-    :   _WHILE[loc] expr[condition] expression_block[block] {
+    :   DAS_WHILE[loc] expr[condition] expression_block[block] {
         auto pWhile = new ExprWhile(tokAt(@loc));
         pWhile->cond = ExpressionPtr($condition);
         pWhile->body = ExpressionPtr($block);
@@ -380,7 +380,7 @@ expression_while_loop
     ;
 
 expression_with
-    :   _WITH[loc] expr[with] expression_block[block] {
+    :   DAS_WITH[loc] expr[with] expression_block[block] {
         auto pWith = new ExprWith(tokAt(@loc));
         pWith->with = ExpressionPtr($with);
         pWith->body = ExpressionPtr($block);
@@ -393,8 +393,8 @@ annotation_argument
     |   NAME[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value); delete $value; delete $name; }
     |   NAME[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value); delete $name; }
     |   NAME[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value)); delete $name; }
-    |   NAME[name] '=' _TRUE                    { $$ = new AnnotationArgument(*$name,true); delete $name; }
-    |   NAME[name] '=' _FALSE                   { $$ = new AnnotationArgument(*$name,false); delete $name; }
+    |   NAME[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true); delete $name; }
+    |   NAME[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false); delete $name; }
     ;
 
 annotation_argument_list
@@ -412,7 +412,7 @@ annotation_argument_list
 
 annotation_declaration_name
     :   name_in_namespace[name]     { $$ = $name; }
-    |   _REQUIRE                    { $$ = new string("require"); }
+    |   DAS_REQUIRE                 { $$ = new string("require"); }
     ;
 
 annotation_declaration
@@ -472,42 +472,42 @@ function_name
 		das_checkName(*$name,tokAt(@name));
 		$$ = $name; 
 	}
-    |   _OPERATOR '!'     { $$ = new string("!"); }
-    |   _OPERATOR '~'     { $$ = new string("~"); }
-    |   _OPERATOR ADDEQU  { $$ = new string("+="); }
-    |   _OPERATOR SUBEQU  { $$ = new string("-="); }
-    |   _OPERATOR MULEQU  { $$ = new string("*="); }
-    |   _OPERATOR DIVEQU  { $$ = new string("/="); }
-    |   _OPERATOR MODEQU  { $$ = new string("%="); }
-    |   _OPERATOR ANDEQU  { $$ = new string("&="); }
-    |   _OPERATOR OREQU   { $$ = new string("|="); }
-    |   _OPERATOR XOREQU  { $$ = new string("^="); }
-    |   _OPERATOR '+'     { $$ = new string("+"); }
-    |   _OPERATOR '-'     { $$ = new string("-"); }
-    |   _OPERATOR '*'     { $$ = new string("*"); }
-    |   _OPERATOR '/'     { $$ = new string("/"); }
-    |   _OPERATOR '%'     { $$ = new string("%"); }
-    |   _OPERATOR '<'     { $$ = new string("<"); }
-    |   _OPERATOR '>'     { $$ = new string(">"); }
-    |   _OPERATOR EQUEQU  { $$ = new string("=="); }
-    |   _OPERATOR NOTEQU  { $$ = new string("!="); }
-    |   _OPERATOR LEEQU   { $$ = new string("<="); }
-    |   _OPERATOR GREQU   { $$ = new string(">="); }
-    |   _OPERATOR '&'     { $$ = new string("&"); }
-    |   _OPERATOR '|'     { $$ = new string("|"); }
-    |   _OPERATOR '^'     { $$ = new string("^"); }
-    |   ADDADD _OPERATOR  { $$ = new string("++"); }
-    |   SUBSUB _OPERATOR  { $$ = new string("--"); }
-    |   _OPERATOR ADDADD  { $$ = new string("+++"); }
-    |   _OPERATOR SUBSUB  { $$ = new string("---"); }
-    |   _OPERATOR SHL     { $$ = new string("<<"); }
-    |   _OPERATOR SHR     { $$ = new string(">>"); }
-    |   _OPERATOR SHLEQU  { $$ = new string("<<="); }
-    |   _OPERATOR SHREQU  { $$ = new string(">>="); }
+    |   DAS_OPERATOR '!'     { $$ = new string("!"); }
+    |   DAS_OPERATOR '~'     { $$ = new string("~"); }
+    |   DAS_OPERATOR ADDEQU  { $$ = new string("+="); }
+    |   DAS_OPERATOR SUBEQU  { $$ = new string("-="); }
+    |   DAS_OPERATOR MULEQU  { $$ = new string("*="); }
+    |   DAS_OPERATOR DIVEQU  { $$ = new string("/="); }
+    |   DAS_OPERATOR MODEQU  { $$ = new string("%="); }
+    |   DAS_OPERATOR ANDEQU  { $$ = new string("&="); }
+    |   DAS_OPERATOR OREQU   { $$ = new string("|="); }
+    |   DAS_OPERATOR XOREQU  { $$ = new string("^="); }
+    |   DAS_OPERATOR '+'     { $$ = new string("+"); }
+    |   DAS_OPERATOR '-'     { $$ = new string("-"); }
+    |   DAS_OPERATOR '*'     { $$ = new string("*"); }
+    |   DAS_OPERATOR '/'     { $$ = new string("/"); }
+    |   DAS_OPERATOR '%'     { $$ = new string("%"); }
+    |   DAS_OPERATOR '<'     { $$ = new string("<"); }
+    |   DAS_OPERATOR '>'     { $$ = new string(">"); }
+    |   DAS_OPERATOR EQUEQU  { $$ = new string("=="); }
+    |   DAS_OPERATOR NOTEQU  { $$ = new string("!="); }
+    |   DAS_OPERATOR LEEQU   { $$ = new string("<="); }
+    |   DAS_OPERATOR GREQU   { $$ = new string(">="); }
+    |   DAS_OPERATOR '&'     { $$ = new string("&"); }
+    |   DAS_OPERATOR '|'     { $$ = new string("|"); }
+    |   DAS_OPERATOR '^'     { $$ = new string("^"); }
+    |   ADDADD DAS_OPERATOR  { $$ = new string("++"); }
+    |   SUBSUB DAS_OPERATOR  { $$ = new string("--"); }
+    |   DAS_OPERATOR ADDADD  { $$ = new string("+++"); }
+    |   DAS_OPERATOR SUBSUB  { $$ = new string("---"); }
+    |   DAS_OPERATOR SHL     { $$ = new string("<<"); }
+    |   DAS_OPERATOR SHR     { $$ = new string(">>"); }
+    |   DAS_OPERATOR SHLEQU  { $$ = new string("<<="); }
+    |   DAS_OPERATOR SHREQU  { $$ = new string(">>="); }
     ;
 
 function_declaration
-    :   optional_annotation_list[annL] _DEF[loc] function_name[name]
+    :   optional_annotation_list[annL] DAS_DEF[loc] function_name[name]
             optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         auto pFunction = make_shared<Function>();
         pFunction->at = tokAt(@loc);
@@ -579,7 +579,7 @@ expression_block
     :   '{' expressions[block] '}' {
         $$ = $block;
     }
-    |   '{' expressions[block] '}' _FINALLY '{' expressions[final] '}' {
+    |   '{' expressions[block] '}' DAS_FINALLY '{' expressions[final] '}' {
         auto pB = (ExprBlock *) $block;
         auto pF = (ExprBlock *) $final;
         swap ( pB->finalList, pF->list );
@@ -645,39 +645,39 @@ name_in_namespace
     ;
 
 expression_delete
-    :   _DELETE[loc] expr[subexpr] {
+    :   DAS_DELETE[loc] expr[subexpr] {
         $$ = new ExprDelete(tokAt(@loc), ExpressionPtr($subexpr));
     }
     ;
 
 expr_new
-    :   _NEWT[loc] type_declaration[typeDecl]   {
+    :   DAS_NEWT[loc] type_declaration[typeDecl]   {
         $$ = new ExprNew(tokAt(@loc),TypeDeclPtr($typeDecl),false);
     }
-    |   _NEWT[loc] type_declaration[typeDecl] '(' ')'   {
+    |   DAS_NEWT[loc] type_declaration[typeDecl] '(' ')'   {
         $$ = new ExprNew(tokAt(@loc),TypeDeclPtr($typeDecl),true);
     }
-    |   _NEWT[loc] type_declaration[typeDecl] '(' expr_list[arguments] ')'   {
+    |   DAS_NEWT[loc] type_declaration[typeDecl] '(' expr_list[arguments] ')'   {
         auto pNew = new ExprNew(tokAt(@loc),TypeDeclPtr($typeDecl),true);
         $$ = parseFunctionArguments(pNew,$arguments);
     }
-    |   _NEWT[loc] make_decl[md] {
+    |   DAS_NEWT[loc] make_decl[md] {
         $$ = new ExprAscend(tokAt(@loc),ExpressionPtr($md));
     }
     ;
 
 expression_break
-    :   _BREAK[loc] { $$ = new ExprBreak(tokAt(@loc)); }
+    :   DAS_BREAK[loc] { $$ = new ExprBreak(tokAt(@loc)); }
     ;
 
 expression_return
-    :   _RETURN[loc] {
+    :   DAS_RETURN[loc] {
         $$ = new ExprReturn(tokAt(@loc),nullptr);
     }
-    |   _RETURN[loc] expr[subexpr] {
+    |   DAS_RETURN[loc] expr[subexpr] {
         $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr));
     }
-    |   _RETURN[loc] LARROW expr[subexpr] {
+    |   DAS_RETURN[loc] LARROW expr[subexpr] {
         auto pRet = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr));
         pRet->moveSemantics = true;
         $$ = pRet;
@@ -685,18 +685,18 @@ expression_return
     ;
 
 expression_try_catch
-    :   _TRY[loc] expression_block[tryBlock] _CATCH expression_block[catchBlock] {
+    :   DAS_TRY[loc] expression_block[tryBlock] DAS_CATCH expression_block[catchBlock] {
         $$ = new ExprTryCatch(tokAt(@loc),ExpressionPtr($tryBlock),ExpressionPtr($catchBlock));
     }
     ;
 
 let_scope
     :               { $$ = false; }
-    |   _IN _SCOPE  { $$ = true; }
+    |   DAS_IN DAS_SCOPE  { $$ = true; }
     ;
 
 expression_let
-    :   _LET '(' variable_declaration_list[list] ')' expression_block[subexpr] {
+    :   DAS_LET '(' variable_declaration_list[list] ')' expression_block[subexpr] {
         auto pLet = new ExprLet();
         pLet->subexpr = ExpressionPtr($subexpr);
         for ( auto pDecl : *$list ) {
@@ -722,7 +722,7 @@ expression_let
         deleteVariableDeclarationList($list);
         $$ = pLet;
     }
-    |   _LET[loc] let_scope[inScope] let_variable_declaration[decl] {
+    |   DAS_LET[loc] let_scope[inScope] let_variable_declaration[decl] {
         auto pLet = new ExprLet();
         pLet->scoped = false;
         pLet->inScope = $inScope;
@@ -750,29 +750,29 @@ expression_let
     ;
 
 expr_cast
-    :   _CAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
+    :   DAS_CAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
         $$ = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
     }
-    |   _UPCAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
+    |   DAS_UPCAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
         $$ = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl), true);
     }
     ;
 
 expr_type_info
-    :   _TYPEINFO[loc] '(' NAME[trait] expr[subexpr] ')' {
+    :   DAS_TYPEINFO[loc] '(' NAME[trait] expr[subexpr] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,ExpressionPtr($subexpr));
             delete $trait;
     }
-    |   _TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>' expr[subexpr] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,ExpressionPtr($subexpr),*$subtrait);
             delete $trait;
             delete $subtrait;
     }
-    |   _TYPEINFO[loc] '(' NAME[trait] _TYPE type_declaration[decl] ')' {
+    |   DAS_TYPEINFO[loc] '(' NAME[trait] DAS_TYPE type_declaration[decl] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl));
             delete $trait;
     }
-    |   _TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>'_TYPE type_declaration[decl] ')' {
+    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>'DAS_TYPE type_declaration[decl] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl),*$subtrait);
             delete $trait;
             delete $subtrait;
@@ -885,13 +885,13 @@ expr_method_call
     ;
 
 expr
-    :   _NULL[loc]                            { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
+    :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
     |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
     |   expr_numeric_const[nc]                { $$ = $nc; }
     |   string_builder[sb]                    { $$ = $sb; }
     |   make_decl[md]                         { $$ = $md; }
-    |   _TRUE[loc]                            { $$ = new ExprConstBool(tokAt(@loc),true); }
-    |   _FALSE[loc]                           { $$ = new ExprConstBool(tokAt(@loc),false); }
+    |   DAS_TRUE[loc]                         { $$ = new ExprConstBool(tokAt(@loc),true); }
+    |   DAS_FALSE[loc]                        { $$ = new ExprConstBool(tokAt(@loc),false); }
     |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),"!",ExpressionPtr($subexpr)); }
     |   '~'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),"~",ExpressionPtr($subexpr)); }
     |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),"+",ExpressionPtr($subexpr)); }
@@ -936,10 +936,10 @@ expr
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
             $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),das_to_string($type)),$arguments);
         }
-    |   _DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
-    |   _TLAMBDA[loc] '(' ')'                   { $$ = new ExprMakeLambda(tokAt(@loc)); }
-    |   _TLAMBDA[loc] '(' expr[subexpr] ')'     { $$ = new ExprMakeLambda(tokAt(@loc), ExpressionPtr($subexpr)); }
-    |   expr[subexpr] QQ[loc] expr[dval]        { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
+    |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   DAS_TLAMBDA[loc] '(' ')'                   { $$ = new ExprMakeLambda(tokAt(@loc)); }
+    |   DAS_TLAMBDA[loc] '(' expr[subexpr] ')'     { $$ = new ExprMakeLambda(tokAt(@loc), ExpressionPtr($subexpr)); }
+    |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
             $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
         }
@@ -1008,7 +1008,7 @@ optional_field_annotation
 
 optional_override
     :               { $$ = false; }
-    |   _OVERRIDE   { $$ = true; }
+    |   DAS_OVERRIDE   { $$ = true; }
     ;
 
 structure_variable_declaration
@@ -1093,7 +1093,7 @@ let_variable_declaration    /* let x; is prohibited. this one can't have uniniti
     ;
 
 global_let
-    :   _LET '{' struct_variable_declaration_list[list] '}' {
+    :   DAS_LET '{' struct_variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {
@@ -1140,7 +1140,7 @@ enum_list
     ;
 
 alias_declaration
-    :   _TYPEDEF[loc] NAME[name] '=' type_declaration[tdecl] {
+    :   DAS_TYPEDEF[loc] NAME[name] '=' type_declaration[tdecl] {
 		das_checkName(*$name,tokAt(@name));
         $tdecl->alias = *$name;
         if ( !g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
@@ -1152,7 +1152,7 @@ alias_declaration
     ;
 
 enum_declaration
-    :   _ENUM[loc] NAME[name] '{' enum_list[pE] '}' {
+    :   DAS_ENUM[loc] NAME[name] '{' enum_list[pE] '}' {
 		das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
         pEnum->at = tokAt(@loc);
@@ -1209,7 +1209,7 @@ structure_name
     ;
 
 structure_declaration
-    : optional_annotation_list[annL] _STRUCT[loc] structure_name[ps] '{' struct_variable_declaration_list[list] '}' {
+    : optional_annotation_list[annL] DAS_STRUCT[loc] structure_name[ps] '{' struct_variable_declaration_list[list] '}' {
         if ( $ps ) {
             auto pStruct = $ps->shared_from_this();
             pStruct->at = tokAt(@loc);
@@ -1291,26 +1291,26 @@ variable_name_list
     ;
 
 basic_type_declaration
-    :   _TBOOL       { $$ = Type::tBool; }
-    |   _TSTRING     { $$ = Type::tString; }
-    |   _TINT        { $$ = Type::tInt; }
-    |   _TINT64      { $$ = Type::tInt64; }
-    |   _TINT2       { $$ = Type::tInt2; }
-    |   _TINT3       { $$ = Type::tInt3; }
-    |   _TINT4       { $$ = Type::tInt4; }
-    |   _TUINT       { $$ = Type::tUInt; }
-    |   _TUINT64     { $$ = Type::tUInt64; }
-    |   _TUINT2      { $$ = Type::tUInt2; }
-    |   _TUINT3      { $$ = Type::tUInt3; }
-    |   _TUINT4      { $$ = Type::tUInt4; }
-    |   _TFLOAT      { $$ = Type::tFloat; }
-    |   _TFLOAT2     { $$ = Type::tFloat2; }
-    |   _TFLOAT3     { $$ = Type::tFloat3; }
-    |   _TFLOAT4     { $$ = Type::tFloat4; }
-    |   _TVOID       { $$ = Type::tVoid; }
-    |   _TRANGE      { $$ = Type::tRange; }
-    |   _TURANGE     { $$ = Type::tURange; }
-    |   _TDOUBLE     { $$ = Type::tDouble; }
+    :   DAS_TBOOL       { $$ = Type::tBool; }
+    |   DAS_TSTRING     { $$ = Type::tString; }
+    |   DAS_TINT        { $$ = Type::tInt; }
+    |   DAS_TINT64      { $$ = Type::tInt64; }
+    |   DAS_TINT2       { $$ = Type::tInt2; }
+    |   DAS_TINT3       { $$ = Type::tInt3; }
+    |   DAS_TINT4       { $$ = Type::tInt4; }
+    |   DAS_TUINT       { $$ = Type::tUInt; }
+    |   DAS_TUINT64     { $$ = Type::tUInt64; }
+    |   DAS_TUINT2      { $$ = Type::tUInt2; }
+    |   DAS_TUINT3      { $$ = Type::tUInt3; }
+    |   DAS_TUINT4      { $$ = Type::tUInt4; }
+    |   DAS_TFLOAT      { $$ = Type::tFloat; }
+    |   DAS_TFLOAT2     { $$ = Type::tFloat2; }
+    |   DAS_TFLOAT3     { $$ = Type::tFloat3; }
+    |   DAS_TFLOAT4     { $$ = Type::tFloat4; }
+    |   DAS_TVOID       { $$ = Type::tVoid; }
+    |   DAS_TRANGE      { $$ = Type::tRange; }
+    |   DAS_TURANGE     { $$ = Type::tURange; }
+    |   DAS_TDOUBLE     { $$ = Type::tDouble; }
     ;
 
 structure_type_declaration
@@ -1324,11 +1324,11 @@ structure_type_declaration
     ;
 
 auto_type_declaration
-    :   _TAUTO[loc] {
+    :   DAS_TAUTO[loc] {
         $$ = new TypeDecl(Type::autoinfer);
         $$->at = tokAt(@loc);
     }
-    |   _TAUTO[loc] '(' NAME[alias] ')'  {
+    |   DAS_TAUTO[loc] '(' NAME[alias] ')'  {
 		das_checkName(*$alias,tokAt(@alias));
         $$ = new TypeDecl(Type::autoinfer);
         $$->at = tokAt(@loc);
@@ -1345,12 +1345,12 @@ type_declaration
         $typeDecl->dim.push_back($dimSize);
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] _CONST {
+    |   type_declaration[typeDecl] DAS_CONST {
         $typeDecl->constant = true;
         $typeDecl->removeConstant = false;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] _DELETE _CONST {
+    |   type_declaration[typeDecl] DAS_DELETE DAS_CONST {
         $typeDecl->constant = false;
         $typeDecl->removeConstant = true;
         $$ = $typeDecl;
@@ -1360,12 +1360,12 @@ type_declaration
         $typeDecl->removeRef = false;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] _DELETE '&' {
+    |   type_declaration[typeDecl] DAS_DELETE '&' {
         $typeDecl->ref = false;
         $typeDecl->removeRef = true;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] _DELETE _CONST '&' {
+    |   type_declaration[typeDecl] DAS_DELETE DAS_CONST '&' {
         $typeDecl->constant = false;
         $typeDecl->removeConstant = true;
         $typeDecl->ref = false;
@@ -1376,27 +1376,27 @@ type_declaration
         $$ = new TypeDecl(Type::tPointer);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   _ARRAY[loc] '<' type_declaration[typeDecl] '>' {
+    |   DAS_ARRAY[loc] '<' type_declaration[typeDecl] '>' {
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   _TABLE[loc] '<' type_declaration[keyTypeDecl] ',' type_declaration[valueTypeDecl] '>' {
+    |   DAS_TABLE[loc] '<' type_declaration[keyTypeDecl] ',' type_declaration[valueTypeDecl] '>' {
         $$ = new TypeDecl(Type::tTable);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($keyTypeDecl);
         $$->secondType = TypeDeclPtr($valueTypeDecl);
     }
-    |   _TBLOCK[loc] {
+    |   DAS_TBLOCK[loc] {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
     }
-    |   _TBLOCK[loc] '<' type_declaration[blockType] '>' {
+    |   DAS_TBLOCK[loc] '<' type_declaration[blockType] '>' {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   _TBLOCK[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+    |   DAS_TBLOCK[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
@@ -1405,16 +1405,16 @@ type_declaration
             deleteVariableDeclarationList($list);
         }
     }
-    |   _TFUNCTION[loc] {
+    |   DAS_TFUNCTION[loc] {
         $$ = new TypeDecl(Type::tFunction);
         $$->at = tokAt(@loc);
     }
-    |   _TFUNCTION[loc] '<' type_declaration[blockType] '>' {
+    |   DAS_TFUNCTION[loc] '<' type_declaration[blockType] '>' {
         $$ = new TypeDecl(Type::tFunction);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   _TFUNCTION[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+    |   DAS_TFUNCTION[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
         $$ = new TypeDecl(Type::tFunction);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
@@ -1423,16 +1423,16 @@ type_declaration
             deleteVariableDeclarationList($list);
         }
     }
-    |   _TLAMBDA[loc] {
+    |   DAS_TLAMBDA[loc] {
         $$ = new TypeDecl(Type::tLambda);
         $$->at = tokAt(@loc);
     }
-    |   _TLAMBDA[loc] '<' type_declaration[blockType] '>' {
+    |   DAS_TLAMBDA[loc] '<' type_declaration[blockType] '>' {
         $$ = new TypeDecl(Type::tLambda);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   _TLAMBDA[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+    |   DAS_TLAMBDA[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
         $$ = new TypeDecl(Type::tLambda);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
