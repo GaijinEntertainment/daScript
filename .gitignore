@@ -39,3 +39,5 @@ examples/test/unit_tests/auto_infer.das.main.inc
 examples/test/unit_tests/auto_infer.das.register.inc
 examples/test/unit_tests/new_delete.das.main.inc
 examples/test/unit_tests/new_delete.das.register.inc
+examples/test/unit_tests/new_and_init.das.main.inc
+examples/test/unit_tests/new_and_init.das.register.inc

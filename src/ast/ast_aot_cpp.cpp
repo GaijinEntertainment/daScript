@@ -627,12 +627,18 @@ namespace das {
             if ( var->type->ref ) {
                 ss << "&(";
             }
+            if ( expr->type->isPointer() && (!expr->type->firstType || expr->type->firstType->isVoid()) ) {
+                ss << "(" << describeCppType(var->type) << ")(";
+            }
         }
-        virtual ExpressionPtr visitLetInit ( ExprLet * let , const VariablePtr & var, Expression * that ) override {
+        virtual ExpressionPtr visitLetInit ( ExprLet * let , const VariablePtr & var, Expression * expr ) override {
+            if ( expr->type->isPointer() && (!expr->type->firstType || expr->type->firstType->isVoid()) ) {
+                ss << ")";
+            }
             if ( var->type->ref ) {
                 ss << ")";
             }
-            return Visitor::visitLetInit(let, var, that);
+            return Visitor::visitLetInit(let, var, expr);
         }
     // copy
         virtual void preVisitRight ( ExprCopy * that, Expression * right ) override {
@@ -1028,25 +1034,29 @@ namespace das {
             return Visitor::visit(expr);
         }
     // string builder
+        string outputCallTypeInfo ( uint32_t nArgs, vector<ExpressionPtr> & elements ) {
+            vector<TypeInfo*> elInfo;
+            elInfo.reserve(elements.size());
+            for ( auto & el : elements ) {
+                TypeInfo * info = helper.makeTypeInfo(nullptr, el->type);
+                elInfo.push_back(info);
+            }
+            string debug_info_name = "__tinfo_" + to_string(debugInfoGlobal++);
+            sti << "TypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
+            for ( size_t i=0; i!=elInfo.size(); ++i ) {
+                auto info = elInfo[i];
+                if ( i ) sti << ", ";
+                sti << "&" << helper.typeInfoName(info);
+            }
+            sti << " };\n";
+            return debug_info_name;
+        }
         virtual void preVisit ( ExprStringBuilder * expr ) override {
             Visitor::preVisit(expr);
             uint32_t nArgs = uint32_t(expr->elements.size());
             ss << "das_string_builder(__context__,SimNode_AotInterop<" << nArgs << ">(";
             if ( nArgs ) {
-                vector<TypeInfo*> elInfo;
-                elInfo.reserve(expr->elements.size());
-                for ( auto & el : expr->elements ) {
-                    TypeInfo * info = helper.makeTypeInfo(nullptr, el->type);
-                    elInfo.push_back(info);
-                }
-                string debug_info_name = "__tinfo_" + to_string(debugInfoGlobal++);
-                sti << "TypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
-                for ( size_t i=0; i!=elInfo.size(); ++i ) {
-                    auto info = elInfo[i];
-                    if ( i ) sti << ", ";
-                    sti << "&" << helper.typeInfoName(info);
-                }
-                sti << " };\n";
+                auto debug_info_name = outputCallTypeInfo(nArgs, expr->elements);
                 ss << debug_info_name << ", ";
             }
         }
@@ -1291,10 +1301,25 @@ namespace das {
                     outPolicy(call->type);
                     ss << "::";
                 }
+                if ( bif->interopFn ) {
+                    ss << "das_call_interop<";
+                    ss << describeCppType(call->func->result);
+                    ss << ">::call(&";
+                }
                 if ( bif->cppName.empty() ) {
-                    ss << bif->name << "(";
+                    ss << bif->name;
                 } else {
-                    ss << bif->cppName << "(";
+                    ss << bif->cppName;
+                }
+                if ( bif->interopFn ) {
+                    uint32_t nArgs = (uint32_t) call->arguments.size();
+                    ss << ",__context__,SimNode_AotInterop<" << nArgs << ">(";
+                    if ( nArgs ) {
+                        auto debug_info_name = outputCallTypeInfo(nArgs, call->arguments);
+                        ss << debug_info_name << ",";
+                    }
+                } else {
+                    ss << "(";
                 }
             } else {
                 // TODO: support 'hybrid' calls here
@@ -1312,7 +1337,9 @@ namespace das {
             });
             DAS_ASSERT(it != call->arguments.end());
             auto argType = (*it)->type;
-            if ( arg->type->isRefType() ) {
+            if ( call->func->interopFn ) {
+                ss << "cast<" << describeCppType(argType) << ">::from(";
+            } else if ( arg->type->isRefType() ) {
                 if ( needsArgPass(argType) ) {
                     ss << "das_arg<" << describeCppType(argType,false,true) << ">::pass(";
                 }
@@ -1332,7 +1359,9 @@ namespace das {
             if ( isPolicyBasedCall(call) && policyArgNeedCast(call->type, argType) ) {
                 ss << ")";
             }
-            if ( arg->type->isRefType() ) {
+            if ( call->func->interopFn ) {
+                ss << ")";
+            } else if ( arg->type->isRefType() ) {
                 if ( needsArgPass(argType) ) {
                     ss << ")";
                 }
@@ -1343,6 +1372,9 @@ namespace das {
             return Visitor::visitCallArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprCall * call ) override {
+            if ( call->func->interopFn ) {
+                ss << ")";
+            }
             if ( isPolicyBasedCall(call) ) {
                 ss << ",*__context__";
             }

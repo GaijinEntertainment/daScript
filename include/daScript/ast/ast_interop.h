@@ -88,6 +88,7 @@ namespace das
         InteropFn(const string & name, const ModuleLibrary & lib, const string & cppName = string())
             : InteropFnBase<RetT,Args...>(name,lib,cppName) {
             this->callBased = true;
+            this->interopFn = true;
         }
         virtual SimNode * makeSimNode ( Context & context ) override {
             const char * fnName = context.code->allocateName(this->name);

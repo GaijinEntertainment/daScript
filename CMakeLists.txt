@@ -348,6 +348,7 @@ SET(TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/array.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/auto_infer.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/new_delete.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/new_and_init.das TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 include_directories(include lexer test)

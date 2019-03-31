@@ -669,5 +669,20 @@ namespace das {
         __context__->throwBuf = JB;
 #endif
     }
+
+    template <typename TT>
+    struct das_call_interop {
+        static __forceinline TT call ( InteropFunction * func, Context * __context__, const SimNode_AotInteropBase & node ) {
+            vec4f result = (*func) ( *__context__, (SimNode_CallBase *)&node, node.argumentValues );
+            return cast<TT>::to(result);
+        }
+    };
+
+    template<>
+    struct das_call_interop<void> {
+        static __forceinline void call ( InteropFunction * func, Context * __context__, const SimNode_AotInteropBase & node ) {
+            (*func) ( *__context__, (SimNode_CallBase *)&node, node.argumentValues );
+        }
+    };
 }
 

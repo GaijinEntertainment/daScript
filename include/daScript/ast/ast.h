@@ -1472,6 +1472,7 @@ namespace das
                 bool    builtIn : 1;
                 bool    policyBased : 1;
                 bool    callBased : 1;
+                bool    interopFn : 1;
                 bool    hasReturn: 1;
                 bool    copyOnReturn : 1;
                 bool    moveOnReturn : 1;

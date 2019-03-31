@@ -214,7 +214,7 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/unit_tests/new_delete.das");
+    unit_test(TEST_PATH "examples/test/unit_tests/new_and_init.das");
     Module::Shutdown();
     return 0;
 #endif

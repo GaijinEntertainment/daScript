@@ -10,3 +10,5 @@ struct TestObjectFoo {
 };
 
 int *getPtr();
+
+vec4f new_and_init ( das::Context & context, das::SimNode_CallBase * call, vec4f * );
