@@ -174,7 +174,8 @@ bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
     struct dirent *ent;
     if ((dir = opendir (path.c_str())) != NULL) {
         while ((ent = readdir (dir)) != NULL) {
-            if ( strstr(ent->d_name,".das") ) {
+            const char * atDas = strstr(ent->d_name,".das");
+            if ( atDas && strcmp(atDas,".das")==0 ) {
                 ok = test_fn(path + "/" + ent->d_name) && ok;
             }
         }

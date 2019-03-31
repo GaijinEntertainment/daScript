@@ -10,7 +10,7 @@ namespace das
             program = prog;
         }
     protected:
-        ProgramPtr  program;
+        ProgramPtr          program;
     protected:
         virtual void preVisit ( Structure * var ) override { 
             Visitor::preVisit(var);
@@ -36,17 +36,24 @@ namespace das
         }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
-            for ( const auto & an : block->annotations ) {
-                auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
-                string err = "";
-                if ( !fna->finalize(block, *program->thisModuleGroup, an->arguments, program->options, err) ) {
-                    program->error("can't finalize annotation\n" + err, block->at, CompilationError::invalid_annotation);
+            if ( block->annotations.size() ) {
+                for ( const auto & an : block->annotations ) {
+                    auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
+                    string err = "";
+                    if ( !fna->finalize(block, *program->thisModuleGroup, an->arguments, program->options, err) ) {
+                        program->error("can't finalize annotation\n" + err, block->at, CompilationError::invalid_annotation);
+                    }
                 }
+                block->annotationDataIndex = (int32_t) program->annotationData.size();
+                program->annotationData.push_back(block->annotationData);
+            } else {
+                block->annotationDataIndex = -1;
             }
         }
     };
 
     void Program::finalizeAnnotations() {
+        annotationData.clear();
         FinAnnotationVisitor fin(shared_from_this());
         visit(fin);
     }

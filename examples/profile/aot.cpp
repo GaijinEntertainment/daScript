@@ -63,8 +63,7 @@ namespace das {
                 #include "tests/aos.das.register.inc"
             }
             {   using namespace profile_annotation;
-                // for now it compiles, but does not work due to annotation data
-                // #include "tests/annotation.das.register.inc"
+                #include "tests/annotation.das.register.inc"
             }
             {   using namespace profile_panic;
                 #include "tests/panic.das.register.inc"

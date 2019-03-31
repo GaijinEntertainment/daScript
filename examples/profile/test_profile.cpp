@@ -306,8 +306,7 @@ void verifyEsComponents() {
         npos.x = apos.x + avel.x * t;
         npos.y = apos.y + avel.y * t;
         npos.z = apos.z + avel.z * t;
-        auto GP = g_pos[i];
-        assert(GP.x==npos.x && GP.y==npos.y && GP.z==npos.z );
+        DAS_ASSERT(g_pos[i].x==npos.x && g_pos[i].y==npos.y && g_pos[i].z==npos.z );
     }
 }
 

@@ -1134,7 +1134,13 @@ namespace das {
             for ( auto & arg : block->arguments ) {
                 ss << "," << describeCppType(arg->type);
             }
-            ss << ">(__context__," << block->stackTop << ",[&](";
+            ss << ">(__context__," << block->stackTop << ",";
+            if ( block->annotationDataIndex != -1 ) {
+                ss << "__context__->annotationData[" << block->annotationDataIndex << "u]";
+            } else {
+                ss << "0";
+            }
+            ss << ",[&](";
             int ai = 0;
             for ( auto & arg : block->arguments ) {
                 if (ai++) ss << ", ";

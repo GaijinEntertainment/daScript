@@ -464,10 +464,10 @@ namespace das {
     };
 
     template <typename resType, typename ...argType>
-    struct das_make_block : Block, SimNode {
+    struct das_make_block : Block, SimNode_ClosureBlock {
         typedef function < resType ( argType... ) > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, BlockFn && func )
-        : SimNode(LineInfo()), blockFunction(func) {
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
@@ -484,8 +484,8 @@ namespace das {
     template <typename ...argType>
     struct das_make_block<void,argType...> : Block, SimNode_ClosureBlock {
         typedef function < void ( argType... ) > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, BlockFn && func )
-            : SimNode_ClosureBlock(LineInfo(),false,0), blockFunction(func) {
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
@@ -501,10 +501,10 @@ namespace das {
     };
 
     template <>
-    struct das_make_block<void> : Block, SimNode {
+    struct das_make_block<void> : Block, SimNode_ClosureBlock {
         typedef function < void () > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, BlockFn && func )
-            : SimNode(LineInfo()), blockFunction(func) {
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;

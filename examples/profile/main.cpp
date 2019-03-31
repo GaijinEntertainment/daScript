@@ -83,7 +83,8 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool aot), 
     struct dirent *ent;
     if ((dir = opendir (path.c_str())) != NULL) {
         while ((ent = readdir (dir)) != NULL) {
-            if ( strstr(ent->d_name,".das") ) {
+            const char * atDas = strstr(ent->d_name,".das");
+            if ( atDas && strcmp(atDas,".das")==0 ) {
                 files.push_back(path + "/" + ent->d_name);
             }
         }

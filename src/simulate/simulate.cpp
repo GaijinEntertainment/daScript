@@ -354,6 +354,7 @@ namespace das
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;
         // globals
+        annotationData = ctx.annotationData;
         globalsSize = ctx.globalsSize;
         globalInitStackSize = ctx.globalInitStackSize;
         globalVariables = ctx.globalVariables;

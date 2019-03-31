@@ -317,6 +317,7 @@ namespace das
         }
 
     public:
+        uint64_t *                  annotationData = nullptr;
         HeapAllocator               heap;
         char *                      globals = nullptr;
         shared_ptr<NodeAllocator>   code;

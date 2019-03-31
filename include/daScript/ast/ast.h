@@ -704,7 +704,8 @@ namespace das
         vector<VariablePtr>     arguments;
         uint32_t                stackTop = 0;
         AnnotationList          annotations;
-        uint64_t                annotationData = 0;   // to be filled with annotation
+        uint64_t                annotationData = 0;         // to be filled with annotation
+        int32_t                 annotationDataIndex = -1;
         union {
             struct {
                 bool            isClosure : 1;
@@ -1710,6 +1711,7 @@ namespace das
         vector<Error>               errors;
         bool                        failToCompile = false;
         uint32_t                    globalInitStackSize = 0;
+        vector<uint64_t>            annotationData;
     public:
         map<CompilationError,int>   expectErrors;
     public:

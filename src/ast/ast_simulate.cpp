@@ -1700,6 +1700,13 @@ namespace das
                 gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
             }
         }
+        if ( annotationData.size() ) {
+            uint32_t ads = (uint32_t) (annotationData.size() * sizeof(uint64_t));
+            uint64_t * pads = context.annotationData = (uint64_t*) context.code->allocate(ads);
+            for ( auto ann : annotationData ) {
+                *pads++ = ann;
+            }
+        }
         context.globalInitStackSize = globalInitStackSize;
         context.simEnd();
         context.restart();

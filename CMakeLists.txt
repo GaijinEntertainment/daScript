@@ -203,6 +203,7 @@ MACRO(DAS_AOT input genList)
     get_filename_component(input_name ${input} NAME)
 	ADD_CUSTOM_COMMAND(
 		DEPENDS ${input_src}
+        DEPENDS dasAot
 		OUTPUT ${input_src}.main.inc ${input_src}.register.inc
         COMMAND dasAot ${input_src} ${input_src}.main.inc ${input_src}.register.inc
 		COMMENT "AOT precompiling ${input_src} absolute")
