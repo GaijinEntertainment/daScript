@@ -1,3 +1,4 @@
+#include "unitTest.h"
 #include "module_unitTest.h"
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
@@ -9,12 +10,6 @@ Point3 getSamplePoint3() {return Point3{0,1,2};}
 Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y, a.z + a.z }; }
 
 //sample of your engine annotated struct
-struct TestObjectFoo {
-    int fooData;
-    int propAdd13() {
-        return fooData + 13;
-    }
-};
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 
 struct TestObjectBar {

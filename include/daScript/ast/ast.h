@@ -1769,6 +1769,7 @@ namespace das
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) {}
         virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
         virtual void preVisitBlockFinal ( ExprBlock * block ) {}
+        virtual void visitBlockFinal ( ExprBlock * block ) {}
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) {}
         virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
         // LET

@@ -636,6 +636,7 @@ namespace das {
                     subexpr = vis.visitBlockFinalExpression(this, subexpr.get());
                 if ( subexpr ) ++it; else it = finalList.erase(it);
             }
+            vis.visitBlockFinal(this);
         }
         return vis.visit(this);
     }

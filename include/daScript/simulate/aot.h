@@ -129,23 +129,29 @@ namespace das {
     struct TDim {
         enum { capacity = size };
         TT  data[size];
+        __forceinline TT & operator [] ( int32_t index ) {
+            return data[index];
+        }
+        __forceinline const TT & operator [] ( int32_t index ) const {
+            return data[index];
+        }
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) __context__->throw_error("index out of range");
-            return ((TT *)data)[index];
+            return data[index];
         }
         __forceinline const TT & operator () ( int32_t index, Context * __context__ ) const {
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) __context__->throw_error("index out of range");
-            return ((TT *)data)[index];
+            return data[index];
         }
         __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
             if ( idx>=size ) __context__->throw_error("index out of range");
-            return ((TT *)data)[index];
+            return data[index];
         }
         __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
             if ( idx>=size ) __context__->throw_error("index out of range");
-            return ((TT *)data)[index];
+            return data[index];
         }
     };
 
@@ -161,6 +167,12 @@ namespace das {
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;
             lock = arr.lock; arr.lock = 0;
+        }
+        __forceinline TT & operator [] ( int32_t index ) {
+            return ((TT *)data)[index];
+        }
+        __forceinline const TT & operator [] ( int32_t index ) const {
+            return ((TT *)data)[index];
         }
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
@@ -281,6 +293,113 @@ namespace das {
         TT *            array_start;
         TT *            array_end;
     };
+
+    template <typename TT>
+    struct das_new {
+        static __forceinline TT * make ( Context * __context__ ) {
+            char * data = __context__->heap.allocate( sizeof(TT) );
+            memset ( data, 0, sizeof(TT) );
+            return (TT *) data;
+        }
+    };
+
+    template <typename TT, int d0 = 0, int d1 = 0, int d2 = 0>
+    struct das_new_dim;
+
+    template <typename TT, int d>
+    struct das_new_dim<TT,d,0,0> {
+        static __forceinline TDim<TT *,d> make ( Context * __context__ ) {
+            TDim<TT *,d> res;
+            for ( int i=0; i!=d; ++i ) {
+                res[i] = das_new<TT>::make(__context__);
+            }
+            return res;
+        }
+    };
+
+    template <typename TT>
+    struct das_delete_ptr;
+
+    template <typename TT>
+    struct das_delete_ptr<TT *> {
+        static __forceinline void clear ( Context * __context__, TT * ptr ) {
+            __context__->heap.free((char *)ptr, sizeof(TT));
+        }
+    };
+
+    template <>
+    struct das_delete_ptr<char *> {
+        static __forceinline void clear ( Context * __context__, char * string ) {
+            if ( __context__->heap.isHeapPtr(string) ) {
+                auto header = ((StringHeader *) string) - 1;
+                const uint32_t size = header->length + sizeof(StringHeader) + 1;
+                __context__->heap.free((char *)header, size);
+            }
+        }
+    };
+
+    template <typename TT>
+    struct das_delete;
+
+    template <typename TT>
+    struct das_delete<TT *> {
+        static __forceinline void clear ( Context * __context__, TT * & ptr ) {
+            das_delete_ptr<TT *>::clear(__context__,ptr);
+            ptr = nullptr;
+        }
+    };
+
+    template <typename TT, uint32_t size>
+    struct das_delete<TDim<TT,size>> {
+        static __forceinline void clear ( Context * __context__, TDim<TT,size> & dim ) {
+            for ( uint32_t i=size; i!=0; --i ) {
+                das_delete<TT>::clear(__context__,dim[i-1]);
+            }
+        }
+    };
+
+    template <typename TT>
+    struct das_delete<TArray<TT>> {
+        static __forceinline void clear ( Context * __context__, TArray<TT> & dim ) {
+            if ( dim.data ) {
+                if ( !dim.lock ) {
+                    uint32_t oldSize = dim.capacity*sizeof(TT);
+                    __context__->heap.free(dim.data, oldSize);
+                } else {
+                    __context__->throw_error("deleting locked array");
+                }
+            }
+            memset ( &dim, 0, sizeof(TArray<TT>) );
+        }
+    };
+
+    template <typename TKey, typename TVal>
+    struct das_delete<TTable<TKey,TVal>> {
+        static __forceinline void clear ( Context * __context__, TTable<TKey,TVal> & tab ) {
+            if ( tab.data ) {
+                if ( !tab.lock ) {
+                    uint32_t oldSize = tab.capacity*(sizeof(TKey)+sizeof(TVal)+sizeof(uint32_t));
+                    __context__->heap.free(tab.data, oldSize);
+                } else {
+                    __context__->throw_error("deleting locked table");
+                }
+            }
+            memset ( &tab, 0, sizeof(TTable<TKey,TVal>) );
+        }
+    };
+
+    template <typename TT>
+    struct das_finally {
+        TT finalizer;
+        __forceinline das_finally ( TT && fn ) : finalizer(fn) {}
+        __forceinline ~das_finally () { finalizer(); }
+    };
+
+    template <typename TT>
+    TT & das_deref ( Context * __context__, TT * ptr ) {
+        if ( !ptr ) __context__->throw_error("dereferencing null pointer");
+        return *ptr;
+    }
 
     template <typename TT>
     struct cast_aot_arg {

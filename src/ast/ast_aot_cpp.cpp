@@ -568,9 +568,12 @@ namespace das {
             ss << string(tab,'\t') << "}";
             return Visitor::visit(block);
         }
+        string finallyName ( ExprBlock * block ) const {
+            return "__finally_" + to_string(block->at.line);
+        }
         virtual void preVisitBlockFinal ( ExprBlock * block ) override {
             Visitor::preVisitBlockFinal(block);
-            ss << string(tab-1,'\t') << "/* finally */\n";
+            ss << string(tab-1,'\t') << "/* finally */ auto " << finallyName(block) << " = das_finally([&](){\n";
         }
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockFinalExpression(block, expr);
@@ -579,6 +582,10 @@ namespace das {
         virtual ExpressionPtr visitBlockFinalExpression ( ExprBlock * block, Expression * that ) override {
             ss << ";"; newLine();
             return Visitor::visitBlockFinalExpression(block, that);
+        }
+        virtual void visitBlockFinal ( ExprBlock * block ) override {
+            ss << string(tab-1,'\t') << "/* end finally */ });\n";
+            Visitor::visitBlockFinal(block);
         }
     // let
         virtual void preVisit ( ExprLet * let ) override {
@@ -843,7 +850,7 @@ namespace das {
             if ( c->getValue() ) {
                 ss << "((void *) 0x" << HEX << intptr_t(c->getValue()) << DEC << ")";
             } else {
-                ss << "null";
+                ss << "nullptr";
             }
             return Visitor::visit(c);
         }
@@ -1046,7 +1053,6 @@ namespace das {
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
             Visitor::preVisitStringBuilderElement(sb, expr, last);
             ss << "cast<" << describeCppType(expr->type) << ">::from(";
-
         }
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
             ss << ")";
@@ -1072,18 +1078,38 @@ namespace das {
             ss << ")";
             return Visitor::visit(tc);
         }
-        // new
+    // ptr2ref
+        virtual void preVisit ( ExprPtr2Ref * ptr2ref ) override {
+            Visitor::preVisit(ptr2ref);
+            ss << "das_deref(__context__,";
+        }
+        virtual ExpressionPtr visit ( ExprPtr2Ref * ptr2ref ) override {
+            ss << ")";
+            return Visitor::visit(ptr2ref);
+        }
+    // delete
+        virtual void preVisit ( ExprDelete * edel ) override {
+            Visitor::preVisit(edel);
+            ss << "das_delete<";
+            ss <<  describeCppType(edel->subexpr->type,false,true,true);
+            ss << ">::clear(__context__,";
+        }
+        virtual ExpressionPtr visit ( ExprDelete * edel ) override {
+            ss << ")";
+            return Visitor::visit(edel);
+        }
+    // new
         virtual void preVisit ( ExprNew * enew ) override {
             Visitor::preVisit(enew);
             if ( enew->type->dim.size() ) {
                 ss << "das_new_dim<";
-                ss << enew->typeexpr->describe();
+                ss << describeCppType(enew->type->firstType,false,true,true);
                 for ( auto dd : enew->type->dim ) {
                     ss << "," << uint32_t(dd);
                 }
                 ss << ">::make(__context__";
             } else {
-                ss << "das_new<" << enew->typeexpr->describe();
+                ss << "das_new<" << describeCppType(enew->type->firstType,false,true,true);
                 ss << ">::make(__context__";
             }
         }

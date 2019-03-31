@@ -9,8 +9,8 @@ namespace das {
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * );
     void builtin_stackwalk ( Context * context);
     void builtin_terminate ( Context * context );
-    int builtin_table_size ( const Table * arr );
-    int builtin_table_capacity ( const Table * arr );
+    int builtin_table_size ( const Table & arr );
+    int builtin_table_capacity ( const Table & arr );
     void builtin_table_clear ( Table & arr, Context * context );
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args );
     uint32_t heap_bytes_allocated ( Context * context );

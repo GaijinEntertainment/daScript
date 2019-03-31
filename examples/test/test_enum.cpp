@@ -1,3 +1,4 @@
+#include "unitTest.h"
 #include "module_unitTest.h"
 
 using namespace das;

@@ -844,6 +844,7 @@ namespace das
             case Type::tUInt:
             case Type::tFloat:
             case Type::tDouble:
+            case Type::tPointer:
                 return false;
             default:
                 return true;

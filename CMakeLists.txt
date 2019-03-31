@@ -193,8 +193,8 @@ SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
 
 include_directories(include lexer test)
 add_executable(dasAot ${DASAOT_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile)
-ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile)
+TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest)
+ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest)
 SETUP_CPP11(dasAot)
 
 MACRO(DAS_AOT input genList)
@@ -289,6 +289,20 @@ TARGET_LINK_LIBRARIES(daScript libDaScript)
 ADD_DEPENDENCIES(daScript libDaScript)
 SETUP_CPP11(daScript)
 
+# Test module
+
+SET(TEST_MAIN_LIB_SRC
+examples/test/test_handles.cpp
+examples/test/test_enum.cpp
+examples/test/module_unitTest.h
+examples/test/unitTest.h
+)
+SOURCE_GROUP_FILES("source" TEST_MAIN_LIB_SRC)
+
+ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
+SETUP_CPP11(libDaScriptTest)
+ADD_DEPENDENCIES(libDaScriptTest libDaScript)
+
 # Test
 
 file(GLOB UNIT_TEST_SRC
@@ -324,9 +338,7 @@ SOURCE_GROUP_FILES("examples/test/mix" MIX_TEST_SRC)
 SET(TEST_MAIN_SRC
 examples/test/main.cpp
 examples/common/fileAccess.h
-examples/test/test_handles.cpp
-examples/test/test_enum.cpp
-examples/test/module_unitTest.h
+examples/test/unitTest.h
 examples/test/aot.cpp
 )
 list(SORT TEST_MAIN_SRC)
@@ -335,13 +347,14 @@ SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 SET(TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/array.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/auto_infer.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/new_delete.das TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 include_directories(include lexer test)
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
-ADD_DEPENDENCIES(daScriptTest libDaScript)
+TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest)
+ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest)
 SETUP_CPP11(daScriptTest)
 
 # Profile module

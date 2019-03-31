@@ -90,12 +90,12 @@ namespace das
         context->throw_error("terminate");
     }
 
-    int builtin_table_size ( const Table * arr ) {
-        return arr->size;
+    int builtin_table_size ( const Table & arr ) {
+        return arr.size;
     }
 
-    int builtin_table_capacity ( const Table * arr ) {
-        return arr->capacity;
+    int builtin_table_capacity ( const Table & arr ) {
+        return arr.capacity;
     }
 
     void builtin_table_clear ( Table & arr, Context * context ) {
@@ -152,8 +152,8 @@ namespace das
         addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none);
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_table_clear");
-        addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none);
-        addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", SideEffects::none);
+        addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none, "builtin_table_size");
+        addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", SideEffects::none, "builtin_table_capacity");
         addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock", SideEffects::modifyArgument);
         addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock", SideEffects::modifyArgument);
         // table expressions
