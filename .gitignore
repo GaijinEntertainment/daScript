@@ -33,3 +33,7 @@ examples/profile/tests/panic.das.main.inc
 examples/profile/tests/exp.das.main.inc
 examples/profile/tests/annotation.das.register.inc
 examples/profile/tests/annotation.das.main.inc
+examples/test/unit_tests/array.das.main.inc
+examples/test/unit_tests/array.das.register.inc
+examples/test/unit_tests/auto_infer.das.main.inc
+examples/test/unit_tests/auto_infer.das.register.inc

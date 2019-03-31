@@ -1,4 +1,4 @@
-// options optimize=true, log=true
+// options optimize=false, log=true
 
 struct Foo
     bar : int

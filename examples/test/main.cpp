@@ -3,7 +3,7 @@
 
 using namespace das;
 
-#define USE_AOT 0
+#define USE_AOT 1
 
 #if USE_AOT
 namespace das {
@@ -214,8 +214,7 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/hello_world.das");
-    // unit_test(TEST_PATH "examples/test/unit_tests/new_with_init.das");
+    unit_test(TEST_PATH "examples/test/unit_tests/auto_infer.das");
     Module::Shutdown();
     return 0;
 #endif

@@ -189,7 +189,7 @@ namespace das {
         TTable(TTable && arr ) { moveT(arr); }
         TTable & operator = ( TTable & arr ) { moveT(arr); return *this; }
         TTable & operator = ( TTable && arr ) { moveT(arr); return *this; }
-        __forceinline void moveA ( Table & arr ) {
+        __forceinline void moveT ( Table & arr ) {
             data = arr.data; arr.data = 0;
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;

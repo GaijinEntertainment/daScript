@@ -293,35 +293,30 @@ SETUP_CPP11(daScript)
 
 file(GLOB UNIT_TEST_SRC
 "examples/test/unit_tests/*.das"
-"examples/test/unit_tests/*.inc"
 )
 list(SORT UNIT_TEST_SRC)
 SOURCE_GROUP_FILES("examples/test/unit" UNIT_TEST_SRC)
 
 file(GLOB COMPILATION_FAIL_TEST_SRC
 "examples/test/compilation_fail_tests/*.das"
-"examples/test/compilation_fail_tests/*.inc"
 )
 list(SORT COMPILATION_FAIL_TEST_SRC)
 SOURCE_GROUP_FILES("examples/test/compilation fail" COMPILATION_FAIL_TEST_SRC)
 
 file(GLOB OPTIMIZATION_SRC
 "examples/test/optimizations/*.das"
-"examples/test/optimizations/*.inc"
 )
 list(SORT OPTIMIZATION_SRC)
 SOURCE_GROUP_FILES("examples/test/optimizations" OPTIMIZATION_SRC)
 
 file(GLOB RUNTIME_ERRORS_SRC
 "examples/test/runtime_errors/*.das"
-"examples/test/runtime_errors/*.inc"
 )
 list(SORT RUNTIME_ERRORS_SRC)
 SOURCE_GROUP_FILES("examples/test/runtime_errors" RUNTIME_ERRORS_SRC)
 
 file(GLOB MIX_TEST_SRC
 "examples/test/*.das"
-"examples/test/*.inc"
 )
 list(SORT MIX_TEST_SRC)
 SOURCE_GROUP_FILES("examples/test/mix" MIX_TEST_SRC)
@@ -337,9 +332,14 @@ examples/test/aot.cpp
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
+SET(TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/array.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/auto_infer.das TEST_GENERATED_SRC)
+SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
+
 include_directories(include lexer test)
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}
-    ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC})
+    ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC})
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript)
 ADD_DEPENDENCIES(daScriptTest libDaScript)
 SETUP_CPP11(daScriptTest)

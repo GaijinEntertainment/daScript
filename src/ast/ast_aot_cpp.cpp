@@ -1072,6 +1072,29 @@ namespace das {
             ss << ")";
             return Visitor::visit(tc);
         }
+        // new
+        virtual void preVisit ( ExprNew * enew ) override {
+            Visitor::preVisit(enew);
+            if ( enew->type->dim.size() ) {
+                ss << "das_new_dim<";
+                ss << enew->typeexpr->describe();
+                for ( auto dd : enew->type->dim ) {
+                    ss << "," << uint32_t(dd);
+                }
+                ss << ">::make(__context__";
+            } else {
+                ss << "das_new<" << enew->typeexpr->describe();
+                ss << ">::make(__context__";
+            }
+        }
+        virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg, bool last ) override {
+            ss << ",";
+            return Visitor::visitNewArg(call, arg, last);
+        }
+        virtual ExpressionPtr visit ( ExprNew * enew ) override {
+            ss << ")";
+            return Visitor::visit(enew);
+        }
     // make structure
         string mksName ( ExprMakeStructure * expr ) const {
             return "__mks_" + to_string(expr->at.line);
