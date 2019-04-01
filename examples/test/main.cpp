@@ -165,7 +165,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
     string findPath = path + "/*.das";
     if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
         do {
-            ok = test_fn(path + "/" + c_file.name) && ok;
+            ok = test_fn(path + "/" + c_file.name, useAot) && ok;
         } while (_findnext(hFile, &c_file) == 0);
     }
     _findclose(hFile);

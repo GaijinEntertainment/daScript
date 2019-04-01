@@ -437,7 +437,7 @@ __noinline void testTryCatch(Context * context) {
         int fail = 0;
         for (int i = 0; i != 2000; ++i) {
             try {
-                if (i < 0 || i>=1000) throw std::runtime_error("range check error");
+                if (i < 0 || i>=1000) throw das::runtime_error("range check error");
                 cnt += arr[i];
             }
             catch (...) {

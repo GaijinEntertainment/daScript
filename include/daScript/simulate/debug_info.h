@@ -113,6 +113,25 @@ namespace das
     struct VarInfo : TypeInfo {
         char *      name;
         uint32_t    offset;
+#ifdef _MSC_VER
+        VarInfo() = default;
+        VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name, 
+                TypeInfo * _firstType, TypeInfo * _secondType, uint32_t _dimSize, uint32_t * _dim, uint32_t _flags,
+                uint32_t _hash, const char * _name, uint32_t _offset ) {
+                type               = _type;
+                structType         = _structType;
+                enumType           = _enumType;
+                annotation_or_name = _annotation_or_name;
+                firstType          = _firstType;
+                secondType         = _secondType;
+                dimSize            = _dimSize;
+                dim                = _dim;
+                flags              = _flags;
+                hash               = _hash;
+                name               = (char *) _name;
+                offset             = _offset;
+        }
+#endif
     };
 
     struct StructInfo {

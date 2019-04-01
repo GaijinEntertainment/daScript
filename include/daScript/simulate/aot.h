@@ -389,12 +389,20 @@ namespace das {
         }
     };
 
+#ifdef _MSC_VER
+    struct das_finally {
+        das::function<void()> finalizer;
+        __forceinline das_finally ( das::function<void()> && fn ) : finalizer(fn) {}
+        __forceinline ~das_finally () { finalizer(); }
+    };
+#else
     template <typename TT>
     struct das_finally {
         TT finalizer;
         __forceinline das_finally ( TT && fn ) : finalizer(fn) {}
         __forceinline ~das_finally () { finalizer(); }
     };
+#endif
 
     template <typename TT>
     TT & das_deref ( Context * __context__, TT * ptr ) {
