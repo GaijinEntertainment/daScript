@@ -3,21 +3,17 @@
 
 using namespace das;
 
-#define USE_AOT 0
-
-#if USE_AOT
 namespace das {
     namespace aot {
         void registerAot ( AotLibrary & aotLib );
     }
 }
-#endif
 
 bool g_reportCompilationFailErrors = false;
 
 TextPrinter tout;
 
-bool compilation_fail_test ( const string & fn ) {
+bool compilation_fail_test ( const string & fn, bool ) {
     tout << fn << " ";
     auto fAccess = make_shared<FsFileAccess>();
     ModuleGroup dummyLibGroup;
@@ -66,7 +62,7 @@ bool compilation_fail_test ( const string & fn ) {
     }
 }
 
-bool unit_test ( const string & fn ) {
+bool unit_test ( const string & fn, bool useAot ) {
     tout << fn << " ";
     auto fAccess = make_shared<FsFileAccess>();
     ModuleGroup dummyLibGroup;
@@ -86,12 +82,12 @@ bool unit_test ( const string & fn ) {
                 }
                 return false;
             }
-#if USE_AOT
-            // now, what we get to do is to link AOT
-            AotLibrary aotLib;
-            das::aot::registerAot(aotLib);
-            program->linkCppAot(ctx, aotLib, tout);
-#endif
+            if ( useAot ) {
+                // now, what we get to do is to link AOT
+                AotLibrary aotLib;
+                das::aot::registerAot(aotLib);
+                program->linkCppAot(ctx, aotLib, tout);
+            }
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 ctx.runInitScript();    // this is here for testing purposes only
@@ -104,7 +100,7 @@ bool unit_test ( const string & fn ) {
                     tout << "failed\n";
                     return false;
                 }
-                tout << "ok\n";
+                tout << (useAot ? "ok AOT\n" : "ok\n");
                 return true;
             } else {
                 tout << "function 'test' not found\n";
@@ -116,7 +112,7 @@ bool unit_test ( const string & fn ) {
     }
 }
 
-bool exception_test ( const string & fn ) {
+bool exception_test ( const string & fn, bool useAot ) {
     tout << fn << " ";
     auto fAccess = make_shared<FsFileAccess>();
     ModuleGroup dummyLibGroup;
@@ -136,11 +132,17 @@ bool exception_test ( const string & fn ) {
                 }
                 return false;
             }
+            if ( useAot ) {
+                // now, what we get to do is to link AOT
+                AotLibrary aotLib;
+                das::aot::registerAot(aotLib);
+                program->linkCppAot(ctx, aotLib, tout);
+            }
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 ctx.evalWithCatch(fnTest, nullptr);
                 if ( auto ex = ctx.getException() ) {
-                    tout << "ok\n";
+                    tout << (useAot ? "ok AOT\n" : "ok\n");
                     return true;
                 }
                 tout << "failed, finished without exception\n";
@@ -155,7 +157,7 @@ bool exception_test ( const string & fn ) {
     }
 }
 
-bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
+bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot), bool useAot ) {
 #ifdef _MSC_VER
     bool ok = true;
     _finddata_t c_file;
@@ -176,7 +178,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
         while ((ent = readdir (dir)) != NULL) {
             const char * atDas = strstr(ent->d_name,".das");
             if ( atDas && strcmp(atDas,".das")==0 ) {
-                ok = test_fn(path + "/" + ent->d_name) && ok;
+                ok = test_fn(path + "/" + ent->d_name, useAot) && ok;
             }
         }
         closedir (dir);
@@ -186,15 +188,15 @@ bool run_tests( const string & path, bool (*test_fn)(const string &) ) {
 }
 
 bool run_unit_tests( const string & path ) {
-    return run_tests(path, unit_test);
+    return run_tests(path, unit_test, false) && run_tests(path, unit_test, true);
 }
 
 bool run_compilation_fail_tests( const string & path ) {
-    return run_tests(path, compilation_fail_test);
+    return run_tests(path, compilation_fail_test, false);
 }
 
 bool run_exception_tests( const string & path ) {
-    return run_tests(path, exception_test);
+    return run_tests(path, exception_test, false) && run_tests(path, exception_test, true);
 }
 
 int main() {

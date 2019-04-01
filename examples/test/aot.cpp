@@ -15,6 +15,9 @@ namespace das {
         namespace test_bin_serializer {
             #include "unit_tests/bin_serializer.das.main.inc"
         }
+        namespace test_block {
+            #include "unit_tests/block.das.main.inc"
+        }
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
         }
@@ -31,6 +34,9 @@ namespace das {
             }
             {   using namespace test_bin_serializer;
                 #include "unit_tests/bin_serializer.das.register.inc"
+            }
+            {   using namespace test_block;
+                #include "unit_tests/block.das.register.inc"
             }
             {   using namespace test_new_delete;
                 #include "unit_tests/new_delete.das.register.inc"
