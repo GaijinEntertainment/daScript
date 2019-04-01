@@ -50,7 +50,7 @@ namespace das {
         vector<FunctionPtr>     extraFunctions;
     protected:
         string generateNewLambdaName(const LineInfo & at) {
-            return "#lambda#" + to_string(at.line) + "#" + to_string(newLambdaIndex++);
+            return "__lambda__" + to_string(at.line) + "_" + to_string(newLambdaIndex++);
         }
         void pushVarStack() {
             varStack.push_back(local.size());

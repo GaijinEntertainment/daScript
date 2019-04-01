@@ -18,6 +18,9 @@ namespace das {
         namespace test_block {
             #include "unit_tests/block.das.main.inc"
         }
+        namespace test_block_access_function_arg {
+            // #include "unit_tests/block_access_function_arg.das.main.inc"
+        }
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
         }
@@ -37,6 +40,9 @@ namespace das {
             }
             {   using namespace test_block;
                 #include "unit_tests/block.das.register.inc"
+            }
+            {   using namespace test_block_access_function_arg;
+                // #include "unit_tests/block_access_function_arg.das.register.inc"
             }
             {   using namespace test_new_delete;
                 #include "unit_tests/new_delete.das.register.inc"

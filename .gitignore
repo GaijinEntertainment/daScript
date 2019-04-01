@@ -47,3 +47,5 @@ examples/profile/tests/make_struct.das.main.inc
 examples/profile/tests/make_struct.das.register.inc
 examples/test/unit_tests/block.das.main.inc
 examples/test/unit_tests/block.das.register.inc
+examples/test/unit_tests/block_access_function_arg.das.main.inc
+examples/test/unit_tests/block_access_function_arg.das.register.inc

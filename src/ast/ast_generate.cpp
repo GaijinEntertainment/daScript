@@ -42,7 +42,7 @@ namespace das {
     }
 
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block, const StructurePtr & ls ) {
-        auto lfn = lambdaName + "#def";
+        auto lfn = lambdaName + "__def";
         auto pFunc = make_shared<Function>();
         pFunc->at = block->at;
         pFunc->name = lfn;
