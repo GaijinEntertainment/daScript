@@ -17,6 +17,8 @@ namespace das
 
     struct Func {
         int32_t     index;
+        Func() = default;
+        Func(int32_t idx) : index(idx) {}
         __forceinline bool operator == ( const Func & b ) const {
             return index == b.index;
         }
@@ -27,6 +29,8 @@ namespace das
     static_assert(sizeof(Func)==sizeof(int32_t), "has to be castable");
 
     struct Lambda {
+        Lambda() = default;
+        Lambda(void * ptr) : capture(ptr) {}
         void *      capture;
         __forceinline bool operator == ( const Lambda & b ) const {
             return capture == b.capture;

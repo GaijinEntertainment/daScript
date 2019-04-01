@@ -591,6 +591,112 @@ namespace das {
         }
     };
 
+    template <typename TT, typename AT, bool moveIt = false>
+    struct das_ascend {
+        static __forceinline TT * make(Context * __context__,const AT & init) {
+            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)) ) {
+                memcpy(ptr, &init, sizeof(AT));
+                if (moveIt) {
+                    memset((char *)&init, 0, sizeof(AT));
+                }
+                return (TT *) ptr;
+            } else {
+                __context__->throw_error("out of heap");
+                return nullptr;
+            }
+        }
+    };
+
+    template <typename AT>
+    struct das_ascend<Lambda,AT,false> {
+        static __forceinline Lambda make(Context * __context__,const AT & init) {
+            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)) ) {
+                memcpy(ptr, &init, sizeof(AT));
+                return Lambda(ptr);
+            } else {
+                __context__->throw_error("out of heap");
+                return Lambda(nullptr);
+            }
+        }
+    };
+
+    template <typename ResType>
+    struct das_invoke_function {
+        static __forceinline ResType invoke ( Context * __context__, const Func & blk ) {
+            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            vec4f result = __context__->call(simFunc, nullptr, 0);
+            return cast<ResType>::to(result);
+        }
+        template <typename ...ArgType>
+        static __forceinline ResType invoke ( Context * __context__, const Func & blk, ArgType ...arg ) {
+            vec4f arguments [] = { cast<ArgType>::from(arg)... };
+            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            vec4f result = __context__->call(simFunc, arguments, 0);
+            return cast<ResType>::to(result);
+        }
+    };
+
+    template <>
+    struct das_invoke_function<void> {
+        static __forceinline void invoke ( Context * __context__, const Func & blk ) {
+            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            __context__->call(simFunc, nullptr, 0);
+        }
+        template <typename ...ArgType>
+        static __forceinline void invoke ( Context * __context__, const Func & blk, ArgType ...arg ) {
+            vec4f arguments [] = { cast<ArgType>::from(arg)... };
+            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            __context__->call(simFunc, arguments, 0);
+        }
+    };
+
+    template <typename ResType>
+    struct das_invoke_lambda {
+        static __forceinline ResType invoke ( Context * __context__, const Lambda & blk ) {
+            int32_t * fnIndex = (int32_t *)blk.capture;
+            if (!fnIndex) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            vec4f result = __context__->call(simFunc, nullptr, 0);
+            return cast<ResType>::to(result);
+        }
+        template <typename ...ArgType>
+        static __forceinline ResType invoke ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
+            vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
+            int32_t * fnIndex = (int32_t *)blk.capture;
+            if (!fnIndex) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            vec4f result = __context__->call(simFunc, arguments, 0);
+            return cast<ResType>::to(result);
+        }
+    };
+
+    template <>
+    struct das_invoke_lambda<void> {
+        static __forceinline void invoke ( Context * __context__, const Lambda & blk ) {
+            int32_t * fnIndex = (int32_t *)blk.capture;
+            if (!fnIndex) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            vec4f result = __context__->call(simFunc, nullptr, 0);
+        }
+        template <typename ...ArgType>
+        static __forceinline void invoke ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
+            vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
+            int32_t * fnIndex = (int32_t *)blk.capture;
+            if (!fnIndex) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            __context__->call(simFunc, arguments, 0);
+        }
+    };
+
+
     template <typename resType, typename ...argType>
     struct das_make_block : Block, SimNode_ClosureBlock {
         typedef function < resType ( argType... ) > BlockFn;

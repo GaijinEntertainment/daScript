@@ -1099,6 +1099,14 @@ namespace das {
             ss << ")";
             return Visitor::visit(ptr2ref);
         }
+    // addr
+        virtual void preVisit ( ExprAddr * expr ) override {
+            if (expr->func) {
+                ss << "Func(" << (expr->func->index + 1) << ")";
+            } else {
+                ss << "Func(0 /*nullptr*/)";
+            }
+        }
     // delete
         virtual void preVisit ( ExprDelete * edel ) override {
             Visitor::preVisit(edel);
@@ -1109,6 +1117,20 @@ namespace das {
         virtual ExpressionPtr visit ( ExprDelete * edel ) override {
             ss << ")";
             return Visitor::visit(edel);
+        }
+    // ascend
+        virtual void preVisit ( ExprAscend * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->ascType ) {
+                ss << "das_ascend<" << describeCppType(expr->type,false,true,true) << "," 
+                    << describeCppType(expr->subexpr->type,false,true,true) << ">::make(__context__,";
+            } else {
+                ss << "das_ascend /* untyped */ ";
+            }
+        }
+        virtual ExpressionPtr visit ( ExprAscend * expr ) override {
+            ss << ")";
+            return Visitor::visit(expr);
         }
     // new
         virtual void preVisit ( ExprNew * enew ) override {
@@ -1220,7 +1242,13 @@ namespace das {
                 if ( call->arguments.size()==1 ) ss << "DAS_ASSERT((";
                 else ss << "DAS_ASSERTF((";
             } else if ( call->name=="invoke" ) {
-                ss << "das_invoke<" << describeCppType(call->type) << ">::invoke";
+                
+                auto bt = call->arguments[0]->type->baseType;
+                if (bt == Type::tBlock) ss << "das_invoke";
+                else if (bt == Type::tLambda) ss << "das_invoke_lambda";
+                else if (bt == Type::tFunction) ss << "das_invoke_function";
+                else ss << "das_invoke /*unknown*/";
+                ss << "<" << describeCppType(call->type) << ">::invoke";
                 if ( call->arguments.size()>1 ) {
                     ss << "<";
                     for ( const auto & arg : call->arguments ) {
