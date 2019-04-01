@@ -113,7 +113,6 @@ namespace das
     struct VarInfo : TypeInfo {
         char *      name;
         uint32_t    offset;
-#ifdef _MSC_VER
         VarInfo() = default;
         VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name, 
                 TypeInfo * _firstType, TypeInfo * _secondType, uint32_t _dimSize, uint32_t * _dim, uint32_t _flags,
@@ -131,7 +130,6 @@ namespace das
                 name               = (char *) _name;
                 offset             = _offset;
         }
-#endif
     };
 
     struct StructInfo {
