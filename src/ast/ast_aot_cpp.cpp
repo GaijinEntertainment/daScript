@@ -177,7 +177,16 @@ namespace das {
 
     class AotDebugInfoHelper : public DebugInfoHelper {
     public:
-
+        void writeDim ( TextWriter & ss, TypeInfo * info ) const {
+            if ( info->dimSize ) {
+                ss << "uint32_t " << typeInfoName(info) << "_dim[" << info->dimSize << "] = {";
+                for ( uint32_t i=0; i!=info->dimSize; ++i ) {
+                    if ( i ) ss << ",";
+                    ss << info->dim[i];
+                }
+                ss << "};\n";
+            }
+        }
         string str() const {
             TextWriter ss;
             // extern declarations
@@ -189,6 +198,7 @@ namespace das {
             }
             for ( auto & ti : vmn2v ) {
                 ss << "extern VarInfo " << varInfoName(ti.second) << ";\n";
+                writeDim(ss, ti.second);
             }
             for ( auto & ti : fmn2f ) {
                 ss << "extern FuncInfo " << funcInfoName(ti.second) << ";\n";
@@ -213,6 +223,7 @@ namespace das {
                 ss << "TypeInfo " << typeInfoName(ti.second) << " = { ";
                 describeCppTypeInfo(ss, ti.second);
                 ss << " };\n";
+                writeDim(ss, ti.second);
             }
             ss << "\n";
             return ss.str();
@@ -321,29 +332,20 @@ namespace das {
             }
             ss << ", ";
             if ( info->firstType ) {
-                ss << "{ ";
-                describeCppTypeInfo(ss, info->firstType);
-                ss << " }";
+                ss << "&" << typeInfoName(info->firstType);
             } else {
                 ss << "nullptr";
             }
             ss << ", ";
             if ( info->secondType ) {
-                ss << "{ ";
-                describeCppTypeInfo(ss, info->secondType);
-                ss << " }";
+                ss << "&" << typeInfoName(info->secondType);
             } else {
                 ss << "nullptr";
             }
             ss << ", " << info->dimSize;
             ss << ", ";
             if ( info->dimSize ) {
-                ss << "{";
-                for ( uint32_t i=0; i!=info->dimSize; ++i ) {
-                    if ( i ) ss << ",";
-                    ss << info->dim[i];
-                }
-                ss << "}";
+                ss << typeInfoName(info) << "_dim";
             } else {
                 ss << "nullptr";
             }
@@ -1338,7 +1340,11 @@ namespace das {
             DAS_ASSERT(it != call->arguments.end());
             auto argType = (*it)->type;
             if ( call->func->interopFn ) {
-                ss << "cast<" << describeCppType(argType) << ">::from(";
+                ss << "cast<" << describeCppType(argType);
+                if ( argType->isRefType() && !argType->ref ) {
+                    ss << " &";
+                }
+                ss << ">::from(";
             } else if ( arg->type->isRefType() ) {
                 if ( needsArgPass(argType) ) {
                     ss << "das_arg<" << describeCppType(argType,false,true) << ">::pass(";

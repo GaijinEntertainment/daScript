@@ -53,10 +53,7 @@ namespace das {
         sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->fieldsSize );
         for ( uint32_t i=0; i!=sti->fieldsSize; ++i ) {
             auto & var = st.fields[i];
-            VarInfo * vi = debugInfo->makeNode<VarInfo>();
-            makeTypeInfo(vi, var.type);
-            vi->name = debugInfo->allocateName(var.name);
-            vi->offset = st.fields[i].offset;
+            VarInfo * vi = makeVariableDebugInfo(st, var);
             sti->fields[i] = vi;
         }
         sti->initializer = -1;
@@ -122,6 +119,18 @@ namespace das {
         }
         info->hash = hash_value(info);
         return info;
+    }
+
+    VarInfo * DebugInfoHelper::makeVariableDebugInfo ( const Structure & st, const Structure::FieldDeclaration & var ) {
+        string mangledName = st.getMangledName() + " field " + var.name;
+        auto it = vmn2v.find(mangledName);
+        if ( it!=vmn2v.end() ) return it->second;
+        VarInfo * vi = debugInfo->makeNode<VarInfo>();
+        makeTypeInfo(vi, var.type);
+        vi->name = debugInfo->allocateName(var.name);
+        vi->offset = var.offset;
+        vmn2v[mangledName] = vi;
+        return vi;
     }
 
     VarInfo * DebugInfoHelper::makeVariableDebugInfo ( const Variable & var ) {

@@ -7,6 +7,7 @@
 #include "daScript/simulate/aot_builtin_matrix.h"
 #include "daScript/simulate/aot_builtin_random.h"
 #include "daScript/simulate/aot_builtin_time.h"
+#include "daScript/simulate/bin_serializer.h"
 
 namespace das {
 

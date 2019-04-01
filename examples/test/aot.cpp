@@ -12,6 +12,9 @@ namespace das {
         namespace test_auto_infer {
             #include "unit_tests/auto_infer.das.main.inc"
         }
+        namespace test_bin_serializer {
+            #include "unit_tests/bin_serializer.das.main.inc"
+        }
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
         }
@@ -25,6 +28,9 @@ namespace das {
             }
             {   using namespace test_auto_infer;
                 #include "unit_tests/auto_infer.das.register.inc"
+            }
+            {   using namespace test_bin_serializer;
+                #include "unit_tests/bin_serializer.das.register.inc"
             }
             {   using namespace test_new_delete;
                 #include "unit_tests/new_delete.das.register.inc"

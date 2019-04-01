@@ -41,3 +41,5 @@ examples/test/unit_tests/new_delete.das.main.inc
 examples/test/unit_tests/new_delete.das.register.inc
 examples/test/unit_tests/new_and_init.das.main.inc
 examples/test/unit_tests/new_and_init.das.register.inc
+examples/test/unit_tests/bin_serializer.das.main.inc
+examples/test/unit_tests/bin_serializer.das.register.inc
