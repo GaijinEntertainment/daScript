@@ -381,7 +381,13 @@ namespace das {
         }
         ss << " ( Context * __context__";
         for ( auto & var : fn->arguments ) {
-            ss << ", " << describeCppType(var->type) << " ";
+            ss << ", ";
+            if (isLocalVec(var->type)) {
+                describeLocalCppType(ss, var->type);
+            } else {
+                ss << describeCppType(var->type);
+            }
+            ss << " ";
             if ( var->type->isRefType() ) {
                 ss << "& ";
             }
@@ -522,8 +528,13 @@ namespace das {
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
             // arg
-            ss << ", " << describeCppType(arg->type);
-            if ( arg->type->isRefType() ) {
+            ss << ", ";
+            if (isLocalVec(arg->type)) {
+                describeLocalCppType(ss, arg->type);
+            } else {
+                ss << describeCppType(arg->type);
+            }
+            if (arg->type->isRefType()) {
                 ss << " & ";
             }
             ss << " " << arg->name;
@@ -1227,7 +1238,12 @@ namespace das {
             int ai = 0;
             for ( auto & arg : block->arguments ) {
                 if (ai++) ss << ", ";
-                ss << describeCppType(arg->type) << " " << arg->name;
+                if (isLocalVec(arg->type)) {
+                    describeLocalCppType(ss, arg->type);
+                } else {
+                    ss << describeCppType(arg->type);
+                }
+                ss << " " << arg->name;
             }
             ss << ")->" << describeCppType(block->returnType);
         }
