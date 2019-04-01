@@ -246,6 +246,12 @@ namespace das
         return v_zero();
     }
 
+    vec4f SimNode_ReturnConstString::eval ( Context & context ) {
+        context.abiResult() = cast<char *>::from(value);
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return v_zero();
+    }
+
     vec4f SimNode_ReturnRefAndEval::eval ( Context & context ) {
         auto pl = context.abiCopyOrMoveResult();
         DAS_ASSERT(pl);

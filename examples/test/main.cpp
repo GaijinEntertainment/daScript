@@ -216,7 +216,7 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/unit_tests/block_access_function_arg.das",true);
+    unit_test(TEST_PATH "examples/test/unit_tests/auto_infer.das",true);
     Module::Shutdown();
     return 0;
 #endif

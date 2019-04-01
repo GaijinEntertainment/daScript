@@ -1310,7 +1310,7 @@ namespace das
             if (subexpr->type->isSimpleType(Type::tString)) {
                 auto cVal = static_pointer_cast<ExprConstString>(subexpr);
                 char * str = context.code->allocateString(cVal->text);
-                return context.code->makeNode<SimNode_ReturnConst>(at, cast<char *>::from(str));
+                return context.code->makeNode<SimNode_ReturnConstString>(at, str);
             } else {
                 auto cVal = static_pointer_cast<ExprConst>(subexpr);
                 return context.code->makeNode<SimNode_ReturnConst>(at, cVal->value);
@@ -1734,7 +1734,7 @@ namespace das
     }
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
-        bool logIt = options.getOption("logAot");
+        bool logIt = options.getOption("logAot",false);
         for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
             SimFunction & fn = context.functions[fni];
             uint64_t semHash = getSemanticHash(fn.code);

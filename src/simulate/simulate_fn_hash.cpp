@@ -4,6 +4,12 @@
 
 namespace das {
 
+#if 1
+#define debug_hash  sizeof
+#else
+#define debug_hash  printf
+#endif
+
     struct SimFnHashVisitor :  SimVisitor {
         // 64 bit FNV1a
         const uint64_t fnv_prime = 1099511628211ul;
@@ -13,14 +19,14 @@ namespace das {
             while ( size-- ) {
                 offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
             }
-            // printf("%llx", offset_basis);
+            debug_hash("%llx", offset_basis);
         }
         __forceinline void write ( const void * pb ) {
             const uint8_t * block = (const uint8_t *) pb;
             for (; *block; block++) {
                 offset_basis = ( offset_basis ^ *block ) * fnv_prime;
             }
-            // printf("[%s] %llx ", (const char *) pb, offset_basis);
+            debug_hash("[%s] %llx ", (const char *) pb, offset_basis);
         }
         __forceinline uint64_t getHash() const  {
             return (offset_basis <= 1) ? fnv_prime : offset_basis;
@@ -73,8 +79,10 @@ namespace das {
     };
 
     uint64_t getSemanticHash ( SimNode * node ) {
+        debug_hash("\n");
         SimFnHashVisitor hashV;
         node->visit(hashV);
+        debug_hash("\n");
         return hashV.getHash();
     }
 }

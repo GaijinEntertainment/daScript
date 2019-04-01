@@ -11,6 +11,8 @@
 
 namespace das {
 
+    #define DAS_AOT_HYBRID  1
+
     #define DAS_MAKE_ANNOTATION(name)   ((TypeAnnotation*)(intptr_t(name)|1))
 
     template <typename TT>
@@ -410,6 +412,35 @@ namespace das {
         return *ptr;
     }
 
+    template <typename TT, typename AT, bool moveIt = false>
+    struct das_ascend {
+        static __forceinline TT * make(Context * __context__,const AT & init) {
+            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)) ) {
+                memcpy(ptr, &init, sizeof(AT));
+                if (moveIt) {
+                    memset((char *)&init, 0, sizeof(AT));
+                }
+                return (TT *) ptr;
+            } else {
+                __context__->throw_error("out of heap");
+                return nullptr;
+            }
+        }
+    };
+
+    template <typename AT>
+    struct das_ascend<Lambda,AT,false> {
+        static __forceinline Lambda make(Context * __context__,const AT & init) {
+            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)) ) {
+                memcpy(ptr, &init, sizeof(AT));
+                return Lambda(ptr);
+            } else {
+                __context__->throw_error("out of heap");
+                return Lambda(nullptr);
+            }
+        }
+    };
+
     template <typename TT>
     struct cast_aot_arg {
         static __forceinline TT to ( Context &, vec4f x ) {
@@ -565,6 +596,90 @@ namespace das {
         char * EP, * SP;
     };
 
+    template <typename resType, typename ...argType>
+    struct das_make_block : Block, SimNode_ClosureBlock {
+        typedef function < resType ( argType... ) > BlockFn;
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            stackOffset = context->stack.spi();
+            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+            body = this;
+            functionArguments = context->abiArguments();
+        };
+        virtual vec4f eval ( Context & context ) override {
+            vec4f ** arguments = (vec4f **)(context.stack.bottom() + argumentsOffset);
+            vec4f * arg = *arguments;
+            return cast<resType>::from ( blockFunction ( cast<argType>::to(*arg++)... ) );
+        }
+        BlockFn blockFunction;
+    };
+
+    template <typename ...argType>
+    struct das_make_block<void,argType...> : Block, SimNode_ClosureBlock {
+        typedef function < void ( argType... ) > BlockFn;
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            stackOffset = context->stack.spi();
+            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+            body = this;
+            functionArguments = context->abiArguments();
+        };
+        virtual vec4f eval ( Context & context ) override {
+            vec4f ** arguments = (vec4f **)(context.stack.bottom() + argumentsOffset);
+            vec4f * arg = *arguments;
+            blockFunction ( cast<argType>::to(*arg++)... );
+            return v_zero();
+        }
+        BlockFn blockFunction;
+    };
+
+    template <>
+    struct das_make_block<void> : Block, SimNode_ClosureBlock {
+        typedef function < void () > BlockFn;
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            stackOffset = context->stack.spi();
+            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+            body = this;
+            functionArguments = context->abiArguments();
+        };
+        virtual vec4f eval ( Context & ) override {
+            blockFunction ( );
+            return v_zero();
+        }
+        BlockFn blockFunction;
+    };
+
+#if !DAS_AOT_HYBRID
+
+    template <typename ResType>
+    struct das_invoke {
+        static __forceinline ResType invoke ( Context * __context__, const Block & blk ) {
+            auto block = (das_make_block<ResType> *)&blk;
+            return (block->blockFunction)();
+        }
+        template <typename ...ArgType>
+        static __forceinline ResType invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
+            auto block = (das_make_block<ResType,ArgType...> *)&blk;
+            return (block->blockFunction)(arg...);
+        }
+    };
+
+    template <>
+    struct das_invoke<void> {
+        static __forceinline void invoke ( Context * __context__, const Block & blk ) {
+            auto block = (das_make_block<void> *)&blk;
+            (block->blockFunction)();
+        }
+        template <typename ...ArgType>
+        static __forceinline void invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
+            auto block = (das_make_block<void,ArgType...> *)&blk;
+            (block->blockFunction)(arg...);
+        }
+    };
+
+#else
+
     template <typename ResType>
     struct das_invoke {
         static __forceinline ResType invoke ( Context * __context__, const Block & blk ) {
@@ -591,34 +706,7 @@ namespace das {
         }
     };
 
-    template <typename TT, typename AT, bool moveIt = false>
-    struct das_ascend {
-        static __forceinline TT * make(Context * __context__,const AT & init) {
-            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)) ) {
-                memcpy(ptr, &init, sizeof(AT));
-                if (moveIt) {
-                    memset((char *)&init, 0, sizeof(AT));
-                }
-                return (TT *) ptr;
-            } else {
-                __context__->throw_error("out of heap");
-                return nullptr;
-            }
-        }
-    };
-
-    template <typename AT>
-    struct das_ascend<Lambda,AT,false> {
-        static __forceinline Lambda make(Context * __context__,const AT & init) {
-            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)) ) {
-                memcpy(ptr, &init, sizeof(AT));
-                return Lambda(ptr);
-            } else {
-                __context__->throw_error("out of heap");
-                return Lambda(nullptr);
-            }
-        }
-    };
+#endif
 
     template <typename ResType>
     struct das_invoke_function {
@@ -696,60 +784,6 @@ namespace das {
         }
     };
 
-
-    template <typename resType, typename ...argType>
-    struct das_make_block : Block, SimNode_ClosureBlock {
-        typedef function < resType ( argType... ) > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-            body = this;
-            functionArguments = context->abiArguments();
-        };
-        virtual vec4f eval ( Context & context ) override {
-            vec4f ** arguments = (vec4f **)(context.stack.bottom() + argumentsOffset);
-            vec4f * arg = *arguments;
-            return cast<resType>::from ( blockFunction ( cast<argType>::to(*arg++)... ) );
-        }
-        BlockFn blockFunction;
-    };
-
-    template <typename ...argType>
-    struct das_make_block<void,argType...> : Block, SimNode_ClosureBlock {
-        typedef function < void ( argType... ) > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-            body = this;
-            functionArguments = context->abiArguments();
-        };
-        virtual vec4f eval ( Context & context ) override {
-            vec4f ** arguments = (vec4f **)(context.stack.bottom() + argumentsOffset);
-            vec4f * arg = *arguments;
-            blockFunction ( cast<argType>::to(*arg++)... );
-            return v_zero();
-        }
-        BlockFn blockFunction;
-    };
-
-    template <>
-    struct das_make_block<void> : Block, SimNode_ClosureBlock {
-        typedef function < void () > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-            body = this;
-            functionArguments = context->abiArguments();
-        };
-        virtual vec4f eval ( Context & ) override {
-            blockFunction ( );
-            return v_zero();
-        }
-        BlockFn blockFunction;
-    };
 
     template <typename TA, typename TB>
     __forceinline void das_try_recover ( Context * __context__, TA && try_block, TB && catch_block ) {
