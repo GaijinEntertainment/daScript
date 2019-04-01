@@ -399,6 +399,7 @@ DAS_AOT(examples/profile/tests/primes.das PROFILE_GENERATED_SRC)
 DAS_AOT(examples/profile/tests/aos.das PROFILE_GENERATED_SRC)
 DAS_AOT(examples/profile/tests/panic.das PROFILE_GENERATED_SRC)
 DAS_AOT(examples/profile/tests/annotation.das PROFILE_GENERATED_SRC)
+DAS_AOT(examples/profile/tests/make_struct.das PROFILE_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 
 include_directories(include lexer)

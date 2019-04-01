@@ -36,6 +36,9 @@ namespace das {
         namespace profile_panic {
             #include "tests/panic.das.main.inc"
         }
+        namespace profile_make_struct {
+            #include "tests/make_struct.das.main.inc"
+        }
         void registerAot(AotLibrary & aotLib)
         {
             {   using namespace profile_dict;
@@ -67,6 +70,9 @@ namespace das {
             }
             {   using namespace profile_panic;
                 #include "tests/panic.das.register.inc"
+            }
+            {   using namespace profile_make_struct;
+                #include "tests/make_struct.das.register.inc"
             }
         }
     }

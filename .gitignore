@@ -43,3 +43,5 @@ examples/test/unit_tests/new_and_init.das.main.inc
 examples/test/unit_tests/new_and_init.das.register.inc
 examples/test/unit_tests/bin_serializer.das.main.inc
 examples/test/unit_tests/bin_serializer.das.register.inc
+examples/profile/tests/make_struct.das.main.inc
+examples/profile/tests/make_struct.das.register.inc
