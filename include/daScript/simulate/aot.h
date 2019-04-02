@@ -804,7 +804,7 @@ namespace das {
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f result = __context__->call(simFunc, nullptr, 0);
+            __context__->call(simFunc, nullptr, 0);
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
