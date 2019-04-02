@@ -1233,8 +1233,11 @@ namespace das {
         virtual void preVisit ( ExprMakeBlock * expr ) override {
             Visitor::preVisit(expr);
             auto block = static_pointer_cast<ExprBlock>(expr->block);
-            ss << "das_make_block<";
-            ss << describeCppType(block->returnType);
+            ss << "das_make_block";
+            if ( block->returnType->isRefType() && !block->returnType->ref ) {
+                ss << "_cmres";
+            }
+            ss << "<" << describeCppType(block->returnType);
             for ( auto & arg : block->arguments ) {
                 ss << "," << describeCppType(arg->type);
             }
@@ -1268,13 +1271,14 @@ namespace das {
                 if ( call->arguments.size()==1 ) ss << "DAS_ASSERT((";
                 else ss << "DAS_ASSERTF((";
             } else if ( call->name=="invoke" ) {
-                
                 auto bt = call->arguments[0]->type->baseType;
                 if (bt == Type::tBlock) ss << "das_invoke";
                 else if (bt == Type::tLambda) ss << "das_invoke_lambda";
                 else if (bt == Type::tFunction) ss << "das_invoke_function";
                 else ss << "das_invoke /*unknown*/";
+                ExprInvoke * einv = static_cast<ExprInvoke *>(call);
                 ss << "<" << describeCppType(call->type) << ">::invoke";
+                if ( einv->isCopyOrMove() ) ss << "_cmres";
                 if ( call->arguments.size()>1 ) {
                     ss << "<";
                     for ( const auto & arg : call->arguments ) {

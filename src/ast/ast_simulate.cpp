@@ -696,7 +696,7 @@ namespace das
 
     bool ExprInvoke::isCopyOrMove() const {
         auto blockT = arguments[0]->type;
-        return blockT->firstType && blockT->firstType->isRefType();
+        return blockT->firstType && blockT->firstType->isRefType() && !blockT->firstType->ref;
     }
 
     SimNode * ExprInvoke::simulate (Context & context) const {

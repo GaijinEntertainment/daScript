@@ -4,6 +4,15 @@
 
 #include "test_profile.h"
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4100)    // unreferenced formal parameter
+#elif defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wwritable-strings"
+#endif
+
 namespace das {
     namespace aot {
         namespace profile_dict {
@@ -77,3 +86,9 @@ namespace das {
         }
     }
 }
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#elif defined(__clang__)
+#pragma clang diagnostic pop
+#endif

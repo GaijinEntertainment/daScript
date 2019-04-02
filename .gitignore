@@ -51,3 +51,5 @@ examples/test/unit_tests/block_access_function_arg.das.main.inc
 examples/test/unit_tests/block_access_function_arg.das.register.inc
 examples/test/unit_tests/cast.das.main.inc
 examples/test/unit_tests/cast.das.register.inc
+examples/test/unit_tests/copy_and_move_on_return.das.main.inc
+examples/test/unit_tests/copy_and_move_on_return.das.register.inc

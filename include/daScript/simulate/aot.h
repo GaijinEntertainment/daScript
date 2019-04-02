@@ -11,8 +11,6 @@
 
 namespace das {
 
-    #define DAS_AOT_HYBRID  1
-
     #define DAS_MAKE_ANNOTATION(name)   ((TypeAnnotation*)(intptr_t(name)|1))
 
     template <typename TT>
@@ -683,38 +681,28 @@ namespace das {
         BlockFn blockFunction;
     };
 
-#if !DAS_AOT_HYBRID
+    template <typename resType, typename ...argType>
+    struct das_make_block_cmres : Block, SimNode_ClosureBlock {
+        typedef function < resType ( argType... ) > BlockFn;
+        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+            : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            stackOffset = context->stack.spi();
+            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+            body = this;
+            functionArguments = context->abiArguments();
+        };
+        virtual vec4f eval ( Context & context ) override {
+            auto ba = (BlockArguments *) ( context.stack.bottom() + argumentsOffset );
+            vec4f * arg = ba->arguments;
+            resType * result = (resType *) ba->copyOrMoveResult;
+            *result = blockFunction ( cast<argType>::to(*arg++)... );
+        }
+        BlockFn blockFunction;
+    };
 
     template <typename ResType>
     struct das_invoke {
-        static __forceinline ResType invoke ( Context * __context__, const Block & blk ) {
-            auto block = (das_make_block<ResType> *)&blk;
-            return (block->blockFunction)();
-        }
-        template <typename ...ArgType>
-        static __forceinline ResType invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
-            auto block = (das_make_block<ResType,ArgType...> *)&blk;
-            return (block->blockFunction)(arg...);
-        }
-    };
-
-    template <>
-    struct das_invoke<void> {
-        static __forceinline void invoke ( Context * __context__, const Block & blk ) {
-            auto block = (das_make_block<void> *)&blk;
-            (block->blockFunction)();
-        }
-        template <typename ...ArgType>
-        static __forceinline void invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
-            auto block = (das_make_block<void,ArgType...> *)&blk;
-            (block->blockFunction)(arg...);
-        }
-    };
-
-#else
-
-    template <typename ResType>
-    struct das_invoke {
+        // vector cast
         static __forceinline ResType invoke ( Context * __context__, const Block & blk ) {
             vec4f result = __context__->invoke(blk, nullptr, nullptr);
             return cast<ResType>::to(result);
@@ -724,6 +712,19 @@ namespace das {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             vec4f result = __context__->invoke(blk, arguments, nullptr);
             return cast<ResType>::to(result);
+        }
+        // cmres
+        static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk ) {
+            ResType result;
+            __context__->invoke(blk, nullptr, &result);
+            return result;
+        }
+        template <typename ...ArgType>
+        static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk, ArgType ...arg ) {
+            vec4f arguments [] = { cast<ArgType>::from(arg)... };
+            ResType result;
+            __context__->invoke(blk, arguments, &result);
+            return result;
         }
     };
 
@@ -738,8 +739,6 @@ namespace das {
             __context__->invoke(blk, arguments, nullptr);
         }
     };
-
-#endif
 
     template <typename ResType>
     struct das_invoke_function {
