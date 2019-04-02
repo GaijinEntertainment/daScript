@@ -25,6 +25,7 @@ namespace das {
         a = b;
         memset(&b, 0, sizeof(TT));
     }
+    
 
     template <typename TT, int offset>
     __forceinline TT & das_global ( Context * __context__ ) {
@@ -73,6 +74,38 @@ namespace das {
         }
         static __forceinline const TT & to(const TT & x) {
             return x;
+        }
+    };
+
+    template <typename TT>
+    struct das_cast {
+        template <typename QQ>
+        static __forceinline TT & cast ( QQ & expr ) {
+            return reinterpret_cast<TT&>(expr);
+        }
+    };
+
+    template <typename TT>
+    struct das_cast<TT *> {
+        template <typename QQ>
+        static __forceinline TT * cast ( QQ * expr ) {
+            return reinterpret_cast<TT *>(expr);
+        }
+    };
+
+    template <typename TT>
+    struct das_upcast {
+        template <typename QQ>
+        static __forceinline TT & cast ( QQ & expr ) {
+            return expr;
+        }
+    };
+
+    template <typename TT>
+    struct das_upcast<TT *> {
+        template <typename QQ>
+        static __forceinline TT * cast ( QQ * expr ) {
+            return static_cast<TT *>(expr);
         }
     };
 

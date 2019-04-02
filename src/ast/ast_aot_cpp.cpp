@@ -1118,6 +1118,16 @@ namespace das {
                 ss << "Func(0 /*nullptr*/)";
             }
         }
+    // cast
+        virtual void preVisit ( ExprCast * expr ) override {
+            Visitor::preVisit(expr);
+            ss << (expr->upcast ? "das_upcast" : "das_cast")
+                << "<" << describeCppType(expr->castType) << ">::cast(";
+        }
+        virtual ExpressionPtr visit ( ExprCast * expr ) override {
+            ss << ")";
+            return Visitor::visit(expr);
+        }
     // delete
         virtual void preVisit ( ExprDelete * edel ) override {
             Visitor::preVisit(edel);
