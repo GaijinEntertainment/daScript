@@ -399,7 +399,7 @@ namespace das {
 
     class CppAot : public Visitor {
     public:
-        CppAot () {}
+        CppAot ( const ProgramPtr & prog ) : program(prog) {}
         string str() const {
             return "\n" + helper.str() + sti.str() + ss.str();
         };
@@ -409,6 +409,7 @@ namespace das {
         int                 tab = 0;
         int                 debugInfoGlobal = 0;
         AotDebugInfoHelper  helper;
+        ProgramPtr          program;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -1294,6 +1295,9 @@ namespace das {
                     for ( const auto & arg : call->arguments ) {
                         if ( arg!=call->arguments.front() ) {
                             ss << describeCppType(arg->type);
+                            if ( arg->type->isRefType() && !arg->type->ref ) {
+                                ss << ", ";
+                            }
                             if ( arg!=call->arguments.back() ) {
                                 ss << ",";
                             }
@@ -1360,6 +1364,12 @@ namespace das {
             }
             return false;
         }
+        bool isHybridCall ( Function * func ) const {
+            if ( func->builtIn ) return false;
+            if ( func->module == program->thisModule.get() ) return false;
+            // TODO: flags?
+            return true;
+        }
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
             if ( call->func->builtIn ) {
@@ -1392,9 +1402,29 @@ namespace das {
                     ss << "(";
                 }
             } else {
-                // TODO: support 'hybrid' calls here
-                ss << call->name << "(__context__";
-                if  ( call->arguments.size() ) ss << ",";
+                if ( isHybridCall(call->func) ) {
+                    ss << "das_invoke_function<" << describeCppType(call->type) << ">::invoke";
+                    if ( call->func->result->isRefType() && !call->func->result->ref ) {
+                        ss << "_cmres";
+                    }
+                    if ( call->arguments.size()>1 ) {
+                        ss << "<";
+                        for ( const auto & arg : call->arguments ) {
+                            ss << describeCppType(arg->type);
+                            if ( arg->type->isRefType() && !arg->type->ref ) {
+                                ss << " &";
+                            }
+                            if ( arg!=call->arguments.back() ) {
+                                ss << ",";
+                            }
+                        }
+                        ss << ">(__context__,";
+                        ss << "Func(" << (call->func->index+1) << "/* " << call->name << " */),";
+                    }
+                } else {
+                    ss << call->name << "(__context__";
+                    if  ( call->arguments.size() ) ss << ",";
+                }
             }
         }
         bool needsArgPass ( const TypeDeclPtr & argType ) const {
@@ -1549,6 +1579,8 @@ namespace das {
             logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
         }
         for ( int i=0; i!=context.totalFunctions; ++i ) {
+            if ( fnn[i]->module != thisModule.get() )
+                continue;
             SimFunction * fn = context.getFunction(i);
             uint64_t semH = getSemanticHash(fn->code);
             logs << "\t// " << fn->name << "\n";
@@ -1586,7 +1618,7 @@ namespace das {
         }, "*");
         if (any) stream << "\n";
         */
-        CppAot aotVisitor;
+        CppAot aotVisitor(shared_from_this());
         visit(aotVisitor);
         logs << aotVisitor.str();
     }

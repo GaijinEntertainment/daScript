@@ -40,7 +40,7 @@ namespace das {
             #include "unit_tests/ctor.das.main.inc"
         }
         namespace test_dasstring {
-           // #include "unit_tests/das_string.das.main.inc"
+           #include "unit_tests/das_string.das.main.inc"
         }
 
         namespace test_new_delete {
@@ -76,7 +76,7 @@ namespace das {
                 #include "unit_tests/ctor.das.register.inc"
             }
             {   using namespace test_dasstring;
-                // #include "unit_tests/das_string.das.register.inc"
+                #include "unit_tests/das_string.das.register.inc"
             }
 
             {   using namespace test_new_delete;
