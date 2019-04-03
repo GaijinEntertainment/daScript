@@ -57,3 +57,5 @@ examples/test/unit_tests/ctor.das.main.inc
 examples/test/unit_tests/ctor.das.register.inc
 examples/test/unit_tests/das_string.das.main.inc
 examples/test/unit_tests/das_string.das.register.inc
+examples/test/unit_tests/deref_ptr_fun.das.main.inc
+examples/test/unit_tests/deref_ptr_fun.das.register.inc

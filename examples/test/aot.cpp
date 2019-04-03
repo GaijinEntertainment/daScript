@@ -42,6 +42,9 @@ namespace das {
         namespace test_dasstring {
            #include "unit_tests/das_string.das.main.inc"
         }
+        namespace test_deref_ptr_fun {
+            #include "unit_tests/deref_ptr_fun.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -77,6 +80,9 @@ namespace das {
             }
             {   using namespace test_dasstring;
                 #include "unit_tests/das_string.das.register.inc"
+            }
+            {   using namespace test_deref_ptr_fun;
+                #include "unit_tests/deref_ptr_fun.das.register.inc"
             }
 
             {   using namespace test_new_delete;
