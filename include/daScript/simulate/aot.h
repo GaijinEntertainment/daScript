@@ -7,6 +7,7 @@
 #include "daScript/simulate/aot_builtin_matrix.h"
 #include "daScript/simulate/aot_builtin_random.h"
 #include "daScript/simulate/aot_builtin_time.h"
+#include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/bin_serializer.h"
 
 namespace das {
@@ -696,6 +697,7 @@ namespace das {
             vec4f * arg = ba->arguments;
             resType * result = (resType *) ba->copyOrMoveResult;
             *result = blockFunction ( cast<argType>::to(*arg++)... );
+            return cast<void *>::from(result);
         }
         BlockFn blockFunction;
     };

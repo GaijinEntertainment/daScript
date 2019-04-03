@@ -53,3 +53,7 @@ examples/test/unit_tests/cast.das.main.inc
 examples/test/unit_tests/cast.das.register.inc
 examples/test/unit_tests/copy_and_move_on_return.das.main.inc
 examples/test/unit_tests/copy_and_move_on_return.das.register.inc
+examples/test/unit_tests/ctor.das.main.inc
+examples/test/unit_tests/ctor.das.register.inc
+examples/test/unit_tests/das_string.das.main.inc
+examples/test/unit_tests/das_string.das.register.inc

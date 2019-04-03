@@ -100,9 +100,9 @@ namespace das {
             stream << " */";
         } else if ( baseType==Type::tHandle ) {
             if ( type->annotation->cppName.empty() ) {
-                stream << "/* handled */ " << type->annotation->name;
+                stream << type->annotation->name;
             } else {
-                stream << "/* handled */ " << type->annotation->cppName;
+                stream << type->annotation->cppName;
             }
         } else if ( baseType==Type::tArray ) {
             if ( type->firstType ) {
@@ -1075,7 +1075,11 @@ namespace das {
         }
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
             Visitor::preVisitStringBuilderElement(sb, expr, last);
-            ss << "cast<" << describeCppType(expr->type) << ">::from(";
+            ss << "cast<" << describeCppType(expr->type);
+            if ( expr->type->isRefType() && !expr->type->ref ) {
+                ss << " &";
+            }
+            ss << ">::from(";
         }
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
             ss << ")";
@@ -1240,6 +1244,9 @@ namespace das {
             ss << "<" << describeCppType(block->returnType);
             for ( auto & arg : block->arguments ) {
                 ss << "," << describeCppType(arg->type);
+                if ( arg->type->isRefType() && !arg->type->ref ) {
+                    ss << " &";
+                }
             }
             ss << ">(__context__," << block->stackTop << ",";
             if ( block->annotationDataIndex != -1 ) {
@@ -1255,6 +1262,9 @@ namespace das {
                     describeLocalCppType(ss, arg->type);
                 } else {
                     ss << describeCppType(arg->type);
+                    if ( arg->type->isRefType() && !arg->type->ref ) {
+                        ss << " &";
+                    }
                 }
                 ss << " " << arg->name;
             }
@@ -1268,8 +1278,8 @@ namespace das {
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
             if (call->name == "assert") {
-                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT((";
-                else ss << "DAS_ASSERTF((";
+                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT(";
+                else ss << "DAS_ASSERTF(";
             } else if ( call->name=="invoke" ) {
                 auto bt = call->arguments[0]->type->baseType;
                 if (bt == Type::tBlock) ss << "das_invoke";
@@ -1300,7 +1310,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprLooksLikeCall * call ) override {
             if ( call->name=="assert" ) {
-                ss << "))"; // ts macro
+                ss << ")"; // ts macro
             } else {
                 ss << ")";
             }

@@ -165,6 +165,7 @@ include/daScript/simulate/aot_builtin_math.h
 include/daScript/simulate/aot_builtin_matrix.h
 include/daScript/simulate/aot_builtin_random.h
 include/daScript/simulate/aot_builtin_time.h
+include/daScript/simulate/aot_builtin_string.h
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
@@ -352,6 +353,9 @@ DAS_AOT(examples/test/unit_tests/block.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/block_access_function_arg.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/cast.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/copy_and_move_on_return.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/ctor.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/das_string.das TEST_GENERATED_SRC)
+
 DAS_AOT(examples/test/unit_tests/new_delete.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/new_and_init.das TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)

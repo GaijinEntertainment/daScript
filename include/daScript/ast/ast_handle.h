@@ -8,7 +8,7 @@ namespace das
     #define DAS_BIND_MANAGED_PROP(FIELDNAME)    DAS_BIND_PROP(ManagedType,FIELDNAME)
 
     struct DasStringTypeAnnotation : TypeAnnotation {
-        DasStringTypeAnnotation() : TypeAnnotation("das_string") {}
+        DasStringTypeAnnotation() : TypeAnnotation("das_string","das::string") {}
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool isRefType() const override { return true; }
         virtual bool isLocal() const override { return false; }

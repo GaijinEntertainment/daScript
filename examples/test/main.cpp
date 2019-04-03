@@ -216,7 +216,7 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/unit_tests/copy_and_move_on_return.das",true);
+    unit_test(TEST_PATH "examples/test/unit_tests/das_string.das",true);
     Module::Shutdown();
     return 0;
 #endif

@@ -1,3 +1,5 @@
+// options logCpp=true
+
 require UnitTest
 
 [export]

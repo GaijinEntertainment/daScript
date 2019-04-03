@@ -36,6 +36,12 @@ namespace das {
         namespace test_copy_and_move_on_return {
             #include "unit_tests/copy_and_move_on_return.das.main.inc"
         }
+        namespace test_ctor {
+            #include "unit_tests/ctor.das.main.inc"
+        }
+        namespace test_dasstring {
+           // #include "unit_tests/das_string.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -65,6 +71,12 @@ namespace das {
             }
             {   using namespace test_copy_and_move_on_return;
                 #include "unit_tests/copy_and_move_on_return.das.register.inc"
+            }
+            {   using namespace test_ctor;
+                #include "unit_tests/ctor.das.register.inc"
+            }
+            {   using namespace test_dasstring;
+                // #include "unit_tests/das_string.das.register.inc"
             }
 
             {   using namespace test_new_delete;

@@ -229,11 +229,11 @@ void testFields ( Context * ctx ) {
     assert(t==8);
 }
 
-inline void test_das_string(Block * block, Context * context) {
+void test_das_string(const Block & block, Context * context) {
     string str = "test_das_string";
     vec4f args[1];
     args[0] = cast<void *>::from(&str);
-    context->invoke(*block, args, nullptr);
+    context->invoke(block, args, nullptr);
     if (str != "out_of_it") context->throw_error("test string mismatch");
 }
 
