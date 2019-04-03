@@ -45,6 +45,9 @@ namespace das {
         namespace test_deref_ptr_fun {
             #include "unit_tests/deref_ptr_fun.das.main.inc"
         }
+        namespace test_dynamic_array {
+            #include "unit_tests/dynamic_array.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -83,6 +86,9 @@ namespace das {
             }
             {   using namespace test_deref_ptr_fun;
                 #include "unit_tests/deref_ptr_fun.das.register.inc"
+            }
+            {   using namespace test_dynamic_array;
+                #include "unit_tests/dynamic_array.das.register.inc"
             }
 
             {   using namespace test_new_delete;
