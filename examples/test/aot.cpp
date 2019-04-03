@@ -48,6 +48,9 @@ namespace das {
         namespace test_dynamic_array {
             #include "unit_tests/dynamic_array.das.main.inc"
         }
+        namespace test_enumdas {
+            #include "unit_tests/enum.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -89,6 +92,9 @@ namespace das {
             }
             {   using namespace test_dynamic_array;
                 #include "unit_tests/dynamic_array.das.register.inc"
+            }
+            {   using namespace test_enumdas;
+                #include "unit_tests/enum.das.register.inc"
             }
 
             {   using namespace test_new_delete;

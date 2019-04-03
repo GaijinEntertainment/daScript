@@ -61,3 +61,5 @@ examples/test/unit_tests/deref_ptr_fun.das.main.inc
 examples/test/unit_tests/deref_ptr_fun.das.register.inc
 examples/test/unit_tests/dynamic_array.das.main.inc
 examples/test/unit_tests/dynamic_array.das.register.inc
+examples/test/unit_tests/enum.das.main.inc
+examples/test/unit_tests/enum.das.register.inc
