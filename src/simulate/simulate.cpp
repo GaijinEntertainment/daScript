@@ -213,7 +213,7 @@ namespace das
         for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
             list[i++]->eval(context);
         }
-        return subexpr ? subexpr->eval(context) : v_zero();
+        return v_zero();
     }
 
     // SimNode_While

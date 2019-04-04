@@ -1,5 +1,6 @@
-expect 30203    // local_variable_already_declared
+expect 30305    
 
 def test
-    let(a,a:int)
-        debug(a)
+    let a : int
+    let a : int // 30305: local variable a is shadowed by another local variable a : int at line 4
+    debug(a)

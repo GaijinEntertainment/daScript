@@ -7,7 +7,9 @@ def take_int(b:block<int>):int
     return invoke(b)
 
 def test:bool
-    let(a:int;b:float)
+    if true
+        let a:int
+        let b:float
         take_any({ a++; })
         while true
             take_any() <|

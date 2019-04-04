@@ -1099,11 +1099,8 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode * simulateInit(Context & context, const VariablePtr & var, bool local);
         static vector<SimNode *> simulateInit(Context & context, const ExprLet * pLet);
-        virtual uint32_t getEvalFlags() const override;
         virtual bool rtti_isLet() const override { return true; }
         vector<VariablePtr>     variables;
-        ExpressionPtr           subexpr;
-        bool                    scoped = true;
         bool                    inScope = false;
     };
 
@@ -1778,7 +1775,6 @@ namespace das
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) {}
         virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
         // LET
-        virtual void preVisitLetStack ( ExprLet * ) {}
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) {}
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) { return var; }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) {}

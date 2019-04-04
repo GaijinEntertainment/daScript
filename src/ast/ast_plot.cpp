@@ -170,7 +170,6 @@ namespace das {
             Visitor::preVisit(let);
             subgraph(let, "let", let_subgraph_color);
             label(let, "let", "shape=box");
-            if (let->subexpr) connect_block(let, let->subexpr.get());
         }
         virtual void preVisitLet(ExprLet * let, const VariablePtr & var, bool last) override {
             Visitor::preVisitLet(let, var, last);

@@ -18,9 +18,9 @@ def set_default_ball(b:Ball)
     b.radius=5.0
 
 def make_default_ball:Ball?
-    let(b:Ball?=new Ball)
-        set_default_ball(deref(b))
-        return b
+    let b:Ball?=new Ball
+    set_default_ball(deref(b))
+    return b
 
 def verify_default_ball(b:Ball)
     assert(b.position==float3(1.0,2.0,3.0))
@@ -47,11 +47,15 @@ let
 
 [export]
 def test:bool
-    let ( b:Ball? = new Ball )
+    if true
+        let b:Ball? = new Ball
         b.position = float3(1.0,2.0,3.0)
         b.radius = 5.0
         verify_default_ball(deref(b))
-        let ( xb, qb:Ball; qc:Ball? = b; qd:Ball? = new Ball )
+        if true
+            let xb, qb:Ball
+            let qc:Ball? = b
+            let qd:Ball? = new Ball
             qb = deref(qc)
             verify_default_ball(qb)
             verify_default_ball(deref(qc))
@@ -65,9 +69,11 @@ def test:bool
             assert(qd!=qc)
             xb = qb
             verify_default_ball(xb)
-    let ( b:Ball? = make_default_ball() )
+    if true
+        let b:Ball? = make_default_ball()
         verify_default_ball(deref(b))
-    let(dummy:int)
+    if true
+        let dummy:int
         glob?.l2?.l3?.a ?? dummy = 1
         assert(dummy==1)
         glob = new L1

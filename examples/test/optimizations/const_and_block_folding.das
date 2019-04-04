@@ -9,24 +9,25 @@ def var_two_plus_two : int
     return x + y
 
 def var_op3_two_plus_two(cond:bool) : int
-    let ( x, y : int = 2 )
-        return (cond ? x : y) + 2
+    let x, y : int = 2
+    return (cond ? x : y) + 2
 
 def var_op3_arg_two_plus_two(cond:bool) : int
-    let ( x, y : int = 2; cc : bool = cond )
-        return (cc ? x : y) + 2
+    let x, y : int = 2
+    let cc : bool = cond
+    return (cc ? x : y) + 2
 
 def test_dead_code(X:int):int
-    let ( x : int = X )
-        while x < 5
-            x ++
-            break
-            static_assert(false,"fail to eliminate dead code after break")
-        if true
-            return x--
-            static_assert(false,"fail to eliminate dead code after return")
-        else
-            static_assert(false,"fail to eliminate dead code in the if")
+    let x : int = X
+    while x < 5
+        x ++
+        break
+        static_assert(false,"fail to eliminate dead code after break")
+    if true
+        return x--
+        static_assert(false,"fail to eliminate dead code after return")
+    else
+        static_assert(false,"fail to eliminate dead code in the if")
 
 def test_empty_if(cond:bool)
     if cond
@@ -42,9 +43,9 @@ def test:bool
     else
         3 + ( 2>3 ? 0 : 1 )
     // static_assert(false,"this static assert always fails")
-    let ( x,y:int = 3 )
-        x
-        x + y
-        hash(x) + hash(y)
+    let x,y:int = 3
+    x
+    x + y
+    hash(x) + hash(y)
     return true
 

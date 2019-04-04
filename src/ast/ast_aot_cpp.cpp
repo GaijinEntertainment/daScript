@@ -421,35 +421,25 @@ namespace das {
         }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
-            if ( !let->scoped ) { // TODO: disable scoped let, otherwise never move them up
-                ExprBlock * varblock = stack.back();
-                if (varblock->finalList.size()) {    // only move from the block with finally
-                    ExprBlock * block = nullptr;
-                    for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
-                        ExprBlock * pb = *it;
-                        if (pb->isClosure) {
-                            block = pb;
-                            break;
-                        }
-                        if (!(pb->inTheLoop && pb->finalList.size())) {
-                            block = pb;
-                            break;
-                        }
+            if (stack.back()->finalList.size()) {    // only move from the block with finally
+                ExprBlock * block = nullptr;
+                for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+                    ExprBlock * pb = *it;
+                    if (pb->isClosure) {
+                        block = pb;
+                        break;
                     }
-                    if (block != varblock) {
-                        auto & ren = variables[block];
-                        auto it = find_if(ren.begin(), ren.end(), [&](Variable * vit) {
-                            return (vit->name == var->name);
-                        });
-                        if (it != ren.end()) {
-                            string newName = "__rename_" + var->name + "_block_" + to_string(varblock->at.line);
-                            rename[var.get()] = newName;
-                        }
+                    if (!(pb->inTheLoop && pb->finalList.size())) {
+                        block = pb;
+                        break;
                     }
-                    variables[block].push_back(var.get());
-                    moved.insert(var.get());
                 }
+                variables[block].push_back(var.get());
+                moved.insert(var.get());
             }
+            // always rename
+            string newName = "__" + var->name + "_rename_at_" + to_string(var->at.line);
+            rename[var.get()] = newName;
         }
 
     public:
@@ -662,7 +652,7 @@ namespace das {
         }
         virtual void preVisitBlockFinal ( ExprBlock * block ) override {
             Visitor::preVisitBlockFinal(block);
-            ss << string(tab-1,'\t') << "/* finally */ auto " << finallyName(block) << "([&](){\n";
+            ss << string(tab-1,'\t') << "/* finally */ auto " << finallyName(block) << "= das_finally([&](){\n";
         }
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockFinalExpression(block, expr);
@@ -677,21 +667,6 @@ namespace das {
             Visitor::visitBlockFinal(block);
         }
     // let
-        virtual void preVisit ( ExprLet * let ) override {
-            Visitor::preVisit(let);
-            if ( let->subexpr ) {
-                ss << "{ /* let */\n";
-                tab ++;
-                ss << string(tab,'\t');
-            }
-        }
-        virtual ExpressionPtr visit ( ExprLet * let ) override {
-            if ( let->subexpr ) {
-                tab --;
-                ss << "\n" << string(tab,'\t') << "}";
-            }
-            return Visitor::visit(let);
-        }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
             if ( !collector.isMoved(var) ) {
@@ -710,7 +685,7 @@ namespace das {
             }
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-            if ( let->scoped || !last ) ss << "; ";
+            if ( !last ) ss << "; ";
             return Visitor::visitLet(let, var, last);
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {

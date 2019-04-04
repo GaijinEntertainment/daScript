@@ -14,7 +14,8 @@ def join(a:array<auto>)
 
 def test
     madd(1,2,3)             // 30304: no matching generic function (2 candidates)
-    let ( x : array<int>; y : array<float> )
-        let tx = join(x)
-        let ty = join(y)
+    let x : array<int>
+    let y : array<float>
+    let tx = join(x)
+    let ty = join(y)
     return true

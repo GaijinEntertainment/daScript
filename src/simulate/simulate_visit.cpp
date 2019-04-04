@@ -476,7 +476,6 @@ namespace das {
         V_OP(Let);
         V_BLOCK();
         V_FINAL();
-        V_SUB_OPT(subexpr);
         V_END();
     }
 

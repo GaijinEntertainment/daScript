@@ -4,18 +4,19 @@ def charg(t:int):int
 
 [export]
 def test:bool
-	let(x:int=1;y:int)
-		y=charg(x)
-		assert(x==1 & y==2)
+	let x = 1
+    let y:int
+    y=charg(x)
+    assert(x==1 & y==2)
     // cond
-    let(a,b,c:int)
-        true ? a : b = 1            // true returns left
-        assert(a==1 & b==0)
-        false ? a : b = 2           // false returns right
-        assert(a==1 & b==2)
-        true ? (c++) : (c--)      // only one siede is calculated
-        assert(c==1)
-        false ? (c--) : (c++)     // only one side
-        assert(c==2)
+    let a,b,c:int
+    true ? a : b = 1            // true returns left
+    assert(a==1 & b==0)
+    false ? a : b = 2           // false returns right
+    assert(a==1 & b==2)
+    true ? (c++) : (c--)      // only one siede is calculated
+    assert(c==1)
+    false ? (c--) : (c++)     // only one side
+    assert(c==2)
     return true
 

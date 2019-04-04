@@ -435,7 +435,7 @@ namespace das {
 
     template <typename TT>
     __forceinline das_final_call<TT> das_finally(TT && fn) {
-        return das_final_call<TT>(forward(fn));
+        return das_final_call<TT>(move(fn));
     }
 
     template <typename TT>

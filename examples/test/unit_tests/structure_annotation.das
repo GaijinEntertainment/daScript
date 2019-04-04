@@ -8,13 +8,12 @@ struct Fields
 
 [export]
 def testFields(x:Fields?):int
-    let(t:int)
-        t = 0
-        t += x?.a ?? 0
-        t += x?.b ?? 0
-        t += x?.c ?? 0
-        t += x?.d ?? 0
-        return t
+    let t = 0
+    t += x?.a ?? 0
+    t += x?.b ?? 0
+    t += x?.c ?? 0
+    t += x?.d ?? 0
+    return t
 
 [export]
 def test:bool

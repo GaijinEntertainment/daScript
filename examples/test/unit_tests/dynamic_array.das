@@ -5,7 +5,9 @@ def pass_array ( arr )
 
 [export]
 def test
-    let ( arr:array<int>; arr2:array<int>; val2:int=2 )
+    if true
+        let arr,arr2:array<int>
+        let val2 = 2
         assert(length(arr)==0,"array starts at 0 length")
         push(arr,1)
         push(arr,val2)
@@ -26,9 +28,9 @@ def test
         arr2 <- arr
         assert(length(arr)==0)
         assert(length(arr2)==4)
-        let ( index:int = 0 )
-            while index < 4
-                arr2[index++]++
+        let index = 0
+        while index < 4
+            arr2[index++]++
         arr <- arr2
         assert(length(arr2)==0)
         assert(length(arr)==4)

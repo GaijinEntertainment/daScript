@@ -41,33 +41,48 @@ def passThrough(a:int? const):int?
     return a            // invalid return type, const       (30102)
 
 def test
-    let(a:array<int> const)
+    if true
+        let a:array<int> const
         a[0] = 5        // can't write to constant value    (30504)
-    let(an:Foo)
+    if true
+        let an:Foo
         an.a = 1
         an.b = 2        // can't write to constant value    (30504)
-    let(ac:Foo const)
+    if true
+        let ac:Foo const
         ac.a = 3        // can't write to constant value    (30504)
         ac.b = 4        // can't write to constant value    (30504)
-    let(pa:Foo const?;pb:Foo?)
+    if true
+        let pa:Foo const?
+        let pb:Foo?
         setFoo(deref(pa))    // no matching function             (30304)
         setFoo(deref(pb))
         setFooPtr(pa)   // no matching function             (30304)
         setFooPtr(pb)
-    let(a:table<string,int>;b:table<string,int> const)
+    if true
+        let a:table<string,int>
+        let b:table<string,int> const
         a["key"]++
         b["key"]++      // no matching operator             (30303)
-    let(a:int?;b:int const?)
+    if true
+        let a:int?
+        let b:int const?
         a = b
-    let(a,b:table<string,int>;c:table<string,int> const;d:int)
+    if true
+        let a,b:table<string,int>
+        let c:table<string,int> const
+        let d:int
         a = b           // this type can't be copied        (30507)
         a <- b
         c <- a          // can't move to constant           (30505)
         c <- d          // can only move same type          (30303)
-    let(a,b:int)
+    if true
+        let a,b:int
         a <- b          
         a = b
-    let(a: ::TestObjectFoo;b:UnitTest::TestObjectFoo)
+    if true
+        let a : ::TestObjectFoo
+        let b : UnitTest::TestObjectFoo
         a = b           // not the same type
 
 

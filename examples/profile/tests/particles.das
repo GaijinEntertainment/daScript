@@ -38,13 +38,13 @@ def init(objects:array<NObject>)
 def test()
     let objects:array<NObject>
     init(objects)
-    let(total=20)
-        profile(total,"particles kinematics") <|
-            testSim2(objects,100)
-        profile(total,"particles kinematics, inlined") <|
-            testSim2I(objects,100)
-        profile(total,"particles kinematics, C++") <|
-            testProfile::testParticles(100)
-        profile(total,"particles kinematics, inlined C++") <|
-            testProfile::testParticlesI(100)
+    let total=20
+    profile(total,"particles kinematics") <|
+        testSim2(objects,100)
+    profile(total,"particles kinematics, inlined") <|
+        testSim2I(objects,100)
+    profile(total,"particles kinematics, C++") <|
+        testProfile::testParticles(100)
+    profile(total,"particles kinematics, inlined C++") <|
+        testProfile::testParticlesI(100)
     return true

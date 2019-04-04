@@ -8,16 +8,17 @@ struct Foo
     b:Bar?
 
 def test
-    let(a:int)          // can't dereference not a pointer
-        debug(deref(a))
-    let(a:void?)        // can't dereference void pointer
-        debug(deref(a))
-    let(a:int)
-        debug(a ?? 0)   // can't dereference non-pointer
-    let(a:void?)
-        debug(a ?? 0)   // can't dereference void pointer
-    let(a:int?)
-        debug(a ?? 1.0) // default value type mismatch
-    let(a:Foo?;b:Foo const)
-        debug(a ?? b)   // const matters
+    let a:int          // can't dereference not a pointer
+    debug(deref(a))
+    let b:void?        // can't dereference void pointer
+    debug(deref(b))
+    let c:int
+    debug(c ?? 0)   // can't dereference non-pointer
+    let d:void?
+    debug(d ?? 0)   // can't dereference void pointer
+    let e:int?
+    debug(e ?? 1.0) // default value type mismatch
+    let f:Foo?
+    let g:Foo const
+    debug(f ?? g)   // const matters
 

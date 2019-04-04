@@ -1071,9 +1071,6 @@ namespace das {
             var = vis.visitLet(this, var, var==variables.back());
             if ( var ) ++it; else it = variables.erase(it);
         }
-        vis.preVisitLetStack(this);
-        if ( subexpr )
-            subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
 
@@ -1082,9 +1079,6 @@ namespace das {
         Expression::clone(cexpr);
         for ( auto & var : variables )
             cexpr->variables.push_back(var->clone());
-        if ( subexpr )
-            cexpr->subexpr = subexpr->clone();
-        cexpr->scoped = scoped;
         cexpr->inScope = inScope;
         return cexpr;
     }
@@ -1096,10 +1090,6 @@ namespace das {
             }
         }
         return nullptr;
-    }
-
-    uint32_t ExprLet::getEvalFlags() const {
-        return subexpr ? subexpr->getEvalFlags() : 0;
     }
 
     // ExprLooksLikeCall

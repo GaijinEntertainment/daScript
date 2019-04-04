@@ -1908,7 +1908,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Let ( const LineInfo & at ) : SimNode_Block(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
-        SimNode * subexpr = nullptr;
     };
 
     // IF-THEN-ELSE (also Cond)

@@ -2009,9 +2009,6 @@ namespace das {
     // ExprLet
         virtual void preVisit ( ExprLet * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->scoped ) {
-                pushVarStack();
-            }
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
@@ -2106,9 +2103,6 @@ namespace das {
             return Visitor::visitLetInit(expr, var, init);
         }
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
-            if ( expr->scoped ) {
-                popVarStack();
-            }
             if ( expr->inScope ) {
                 expr->inScope = false;
                 reportGenericInfer();

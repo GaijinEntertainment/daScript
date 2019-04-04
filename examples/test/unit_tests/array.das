@@ -2,16 +2,16 @@
 // options log=true, optimize=false
 
 def make_test_array(a:array<int>;extra:int=0)
-    let i:int=0
+    let i=0
     resize(a,10)
     for x in a
         x = i++ + extra
 
 def verify_test_array(a:array<int>;extra:int=0)
     assert(length(a)==10)
-    let(i:int=0)
-        for x in a
-            assert(x==(extra+i++))
+    let i=0
+    for x in a
+        assert(x==(extra+i++))
 
 def pass_array ( arr:array<int> )
     push(arr,4)
@@ -50,9 +50,9 @@ def testIntArray
     arr2 <- arr
     assert(length(arr)==0)
     assert(length(arr2)==4)
-    let ( index:int = 0 )
-        while index < 4
-            arr2[index++]++
+    let index = 0
+    while index < 4
+        arr2[index++]++
     verifyIntArray(arr2,2,4,0)
     arr <- arr2
     verifyIntArray(arr,2,4,0)
@@ -75,19 +75,23 @@ def testIntArray
 
 [export]
 def test:bool
-    let(a:array<int>)
+    if true
+        let a:array<int>
         make_test_array(a)
         verify_test_array(a)
         make_test_array(a,13)
         verify_test_array(a,13)
         make_test_array(a)
         verify_test_array(a)
-        let(b:array<int> <- a)
+        if true
+            let b:array<int> <- a
             assert(length(a)==0)
             verify_test_array(b)
             a <- b
         verify_test_array(a)
-    let(a,b:array<int>;i:int=0)
+    if true
+        let a,b:array<int>
+        let i = 0
         resize(a,10)
         resize(b,10)
         for l,r in a,b
@@ -106,7 +110,9 @@ def test:bool
                 assert(l>r)
                 i++
         assert(i==5)
-    let(a:array<int>[10]; i:int=0)
+    if true
+        let a:array<int>[10]
+        let i = 0
         for b in a
             make_test_array(b,i++)
         i = 0

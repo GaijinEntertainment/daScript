@@ -6,16 +6,16 @@ def twice(b:block)
     invoke(b)
 
 def twice_good(b:block<int>):int
-    let(t:int)
-        t += invoke(b)
-        t += invoke(b)
-        return t
+    let t = 0
+    t += invoke(b)
+    t += invoke(b)
+    return t
 
 [sideeffects]
 def crapOnStack
-    let(a:int[20])
-        for b in a
-            b = 13
+    let a:int[20]
+    for b in a
+        b = 13
 
 def func1(b:block)
     crapOnStack()
@@ -45,7 +45,9 @@ def radd(ext:int&;b:block<(arg:int&):int>):int
 
 [export]
 def test:bool
-    let(a,b:int=0)
+    if true
+        let a = 0
+        let b = 0
         twice({ a++; })
         assert(a==2)
         b = twice_good() <| { return a++; }
@@ -56,7 +58,9 @@ def test:bool
         b = twice_good({ return ++a; })
         assert(a==8)
         assert(b==(7+8))
-    let(x,y:int=0)
+    if true
+        let x = 0
+        let y = 0
         func1() <|
             x += 1
             y += 2
@@ -67,9 +71,9 @@ def test:bool
                 x++
                 y += 4
         assert(x==3 & y==9)
-    let(res,v1:int)
-        v1 = 1
-        res = badd(1000,$(a1:int):int{ return v1++ + a1; })
+    if true
+        let v1 = 1
+        let res = badd(1000,$(a1:int):int{ return v1++ + a1; })
         assert(res==1001)
         res = badd(1000) <| $(a1:int):int{ return v1 + a1; }
         assert(res==1002)

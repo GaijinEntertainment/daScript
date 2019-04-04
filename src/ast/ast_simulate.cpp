@@ -961,11 +961,9 @@ namespace das
         for ( auto & node : lis ) {
             if ( node->rtti_isLet()) {
                 shared_ptr<ExprLet> pLet = static_pointer_cast<ExprLet>(node);
-                if (!pLet->subexpr) {
-                    auto letInit = ExprLet::simulateInit(context, pLet.get());
-                    simlist.insert(simlist.end(), letInit.begin(), letInit.end());
-                    continue;
-                }
+                auto letInit = ExprLet::simulateInit(context, pLet.get());
+                simlist.insert(simlist.end(), letInit.begin(), letInit.end());
+                continue;
             }
             if ( auto simE = node->simulate(context) ) {
                 simlist.push_back(simE);
@@ -1601,7 +1599,6 @@ namespace das
         let->list = (SimNode **) context.code->allocate(let->total * sizeof(SimNode*));
         auto simList = ExprLet::simulateInit(context, this);
         copy(simList.data(), simList.data() + simList.size(), let->list);
-        let->subexpr = subexpr ? subexpr->simulate(context) : nullptr;
         return let;
     }
 

@@ -11,5 +11,5 @@ def oops(a:auto(SomeType))
 def test
     new Foo                 // 30301: undefined type Foo
     oops(1)
-    let ( t: FooBar )
-        oops(t)
+    let t: FooBar
+    oops(t)

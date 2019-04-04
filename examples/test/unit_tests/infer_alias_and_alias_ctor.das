@@ -8,10 +8,10 @@ def join(a:array<auto(numt)>)
 
 [export]
 def test:bool
-    let ( a:array<float> )
-        push(a,1.0)
-        push(a,2.0)
-        push(a,3.0)
-        let t = join(a)
-        assert(t==6.0)
+    let a:array<float>
+    push(a,1.0)
+    push(a,2.0)
+    push(a,3.0)
+    let t = join(a)
+    assert(t==6.0)
     return true

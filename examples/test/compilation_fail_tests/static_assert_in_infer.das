@@ -13,9 +13,9 @@ def join(a:array<auto(numt)>)
     return fold(a,b)
 
 def test(msg)
-    let ( a:array<uint64> )
-        let q = join(a)
-        return string(q) + msg
+    let a:array<uint64>
+    let q = join(a)
+    return string(q) + msg
 
 def test:bool
     print(test("this"))

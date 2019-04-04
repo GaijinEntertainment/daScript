@@ -696,35 +696,8 @@ let_scope
     ;
 
 expression_let
-    :   DAS_LET '(' variable_declaration_list[list] ')' expression_block[subexpr] {
+    :   DAS_LET[loc] let_scope[inScope] let_variable_declaration[decl] {
         auto pLet = new ExprLet();
-        pLet->subexpr = ExpressionPtr($subexpr);
-        for ( auto pDecl : *$list ) {
-            if ( pDecl->pTypeDecl ) {
-                for ( const auto & name : *pDecl->pNameList ) {
-                    if ( !pLet->find(name) ) {
-                        VariablePtr pVar = make_shared<Variable>();
-                        pVar->name = name;
-                        pVar->at = pDecl->at;
-                        pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
-                        if ( pDecl->pInit ) {
-                            pVar->init = pDecl->pInit->clone();
-                            pVar->move_to_init = pDecl->move_to_init;
-                        }
-                        pLet->variables.push_back(pVar);
-                    } else {
-                        das_yyerror("local variable is already declared " + name,tokAt(@list),
-                            CompilationError::local_variable_already_declared);
-                    }
-                }
-            }
-        }
-        deleteVariableDeclarationList($list);
-        $$ = pLet;
-    }
-    |   DAS_LET[loc] let_scope[inScope] let_variable_declaration[decl] {
-        auto pLet = new ExprLet();
-        pLet->scoped = false;
         pLet->inScope = $inScope;
         if ( $decl->pTypeDecl ) {
             for ( const auto & name : *$decl->pNameList ) {

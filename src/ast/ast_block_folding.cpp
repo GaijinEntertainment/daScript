@@ -125,7 +125,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprLet * let ) override {
             if ( let->variables.size()==0 ) {
                 reportFolding();
-                return let->subexpr;
+                return nullptr;
             }
             return Visitor::visit(let);
         }
