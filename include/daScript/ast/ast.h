@@ -692,6 +692,7 @@ namespace das
         virtual uint32_t getEvalFlags() const override;
         uint32_t getFinallyEvalFlags() const;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        void visitFinally(Visitor & vis);
         virtual bool rtti_isBlock() const override { return true; }
         VariablePtr findArgument(const string & name);
         vector<SimNode *> collectExpressions ( Context & context, const vector<ExpressionPtr> & list ) const;
@@ -713,6 +714,8 @@ namespace das
                 bool            copyOnReturn : 1;
                 bool            moveOnReturn : 1;
                 bool            inTheLoop : 1;
+                bool            finallyBeforeBody : 1;
+                bool            finallyDisabled : 1;
             };
             uint32_t            blockFlags = 0;
         };

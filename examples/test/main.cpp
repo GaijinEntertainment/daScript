@@ -216,7 +216,8 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    unit_test(TEST_PATH "examples/test/unit_tests/das_string.das",true);
+    unit_test(TEST_PATH "examples/test/unit_tests/finally.das",false);
+    unit_test(TEST_PATH "examples/test/unit_tests/finally.das",true);
     Module::Shutdown();
     return 0;
 #endif

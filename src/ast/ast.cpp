@@ -603,6 +603,21 @@ namespace das {
         return eT;
     }
 
+    void ExprBlock::visitFinally(Visitor & vis) {
+        if ( !finalList.empty() && !finallyDisabled ) {
+            vis.preVisitBlockFinal(this);
+            for ( auto it = finalList.begin(); it!=finalList.end(); ) {
+                auto & subexpr = *it;
+                vis.preVisitBlockFinalExpression(this, subexpr.get());
+                subexpr = subexpr->visit(vis);
+                if ( subexpr )
+                    subexpr = vis.visitBlockFinalExpression(this, subexpr.get());
+                if ( subexpr ) ++it; else it = finalList.erase(it);
+            }
+            vis.visitBlockFinal(this);
+        }
+    }
+
     ExpressionPtr ExprBlock::visit(Visitor & vis) {
         vis.preVisit(this);
         for ( auto it = arguments.begin(); it != arguments.end(); ) {
@@ -618,6 +633,9 @@ namespace das {
             arg = vis.visitBlockArgument(this, arg, arg==arguments.back());
             if ( arg ) ++it; else it = arguments.erase(it);
         }
+        if ( finallyBeforeBody ) {
+            visitFinally(vis);
+        }
         for ( auto it = list.begin(); it!=list.end(); ) {
             auto & subexpr = *it;
             vis.preVisitBlockExpression(this, subexpr.get());
@@ -626,17 +644,8 @@ namespace das {
                 subexpr = vis.visitBlockExpression(this, subexpr.get());
             if ( subexpr ) ++it; else it = list.erase(it);
         }
-        if ( !finalList.empty() ) {
-            vis.preVisitBlockFinal(this);
-            for ( auto it = finalList.begin(); it!=finalList.end(); ) {
-                auto & subexpr = *it;
-                vis.preVisitBlockFinalExpression(this, subexpr.get());
-                subexpr = subexpr->visit(vis);
-                if ( subexpr )
-                    subexpr = vis.visitBlockFinalExpression(this, subexpr.get());
-                if ( subexpr ) ++it; else it = finalList.erase(it);
-            }
-            vis.visitBlockFinal(this);
+        if ( !finallyBeforeBody ) {
+            visitFinally(vis);
         }
         return vis.visit(this);
     }

@@ -20,14 +20,24 @@ def test_for_finally
     let t : int[10]
     let count = 0
     for x in range(0,10)
-        t[x] = x+1
+        let uno = one()
+        t[x] = x+uno
         if x==5
             break
     finally
         t[9] = 13
-        count ++
+        count += uno
     assert(count==1 & t[9]==13)
     return true
+
+let
+    ONE = 1
+
+[sideeffects]
+def one
+    ONE = 1
+    assert(ONE==1)
+    return ONE
 
 [sideeffects]
 def test_while_finally
@@ -35,12 +45,13 @@ def test_while_finally
     let count = 0
     let x = 0
     while x != 10
-        t[x] = x+1
+        let uno = one()
+        t[x] = x+uno
         if x==5
             break
         ++x
     finally
-        t[9] = 13
+        t[9] = 12 + uno
         count ++
     assert(count==1 & t[9]==13)
     return true

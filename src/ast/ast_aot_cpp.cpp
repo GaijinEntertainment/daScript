@@ -363,12 +363,14 @@ namespace das {
         return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
     }
 
-    void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype ) {
+    void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, bool skipConst = false ) {
         if ( isLocalVec(vtype) ) {
-            if ( vtype->constant ) ss << "const ";
+            if ( !skipConst ) {
+                if ( vtype->constant ) ss << "const ";
+            }
             ss << "vec4f /*" << describeCppType(vtype,true) << "*/";
         } else {
-            ss << describeCppType(vtype,true);
+            ss << describeCppType(vtype,true,false,skipConst);
         }
     }
 
@@ -397,19 +399,62 @@ namespace das {
         return ss.str();
     }
 
+    class BlockVariableCollector : public Visitor {
+    public:
+        BlockVariableCollector() {}
+        virtual void preVisit ( ExprBlock * block ) override {
+            Visitor::preVisit(block);
+            stack.push_back(block);
+        }
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            stack.pop_back();
+            return Visitor::visit(block);
+        }
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(let, var, last);
+            if ( !let->scoped ) {
+                ExprBlock * block = nullptr;
+                for ( auto it = stack.rbegin(); it!=stack.rend(); ++it ) {
+                    ExprBlock * pb = *it;
+                    if ( !(pb->inTheLoop && pb->finalList.size()) ) {
+                        block = pb;
+                        break;
+                    }
+                }
+                ExprBlock * varblock = stack.back();
+                if ( block != varblock ) {
+                    string newName = "__rename_" + var->name + "_block_" + to_string(varblock->at.line);
+                    rename[var.get()] = newName;
+                }
+                variables[block].push_back(var.get());
+            }
+        }
+        string getVarName ( Variable * var ) const {
+            auto it = rename.find(var);
+            return it==rename.end() ? var->name : it->second;
+        }
+        string getVarName ( const VariablePtr & var ) const {
+            return getVarName(var.get());
+        }
+        vector<ExprBlock *>                 stack;
+        map<ExprBlock *,vector<Variable *>> variables;
+        map<Variable *,string>              rename;
+    };
+
     class CppAot : public Visitor {
     public:
-        CppAot ( const ProgramPtr & prog ) : program(prog) {}
+        CppAot ( const ProgramPtr & prog, BlockVariableCollector & cl ) : program(prog), collector(cl) {}
         string str() const {
             return "\n" + helper.str() + sti.str() + ss.str();
         };
     protected:
-        TextWriter          ss, sti;
-        int                 lastNewLine = -1;
-        int                 tab = 0;
-        int                 debugInfoGlobal = 0;
-        AotDebugInfoHelper  helper;
-        ProgramPtr          program;
+        TextWriter                  ss, sti;
+        int                         lastNewLine = -1;
+        int                         tab = 0;
+        int                         debugInfoGlobal = 0;
+        AotDebugInfoHelper          helper;
+        ProgramPtr                  program;
+        BlockVariableCollector &    collector;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -558,8 +603,17 @@ namespace das {
     // block
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
+            block->finallyBeforeBody = true;
+            block->finallyDisabled = block->inTheLoop;
             ss << "{\n";
             tab ++;
+            // pre-declare variables
+            auto & vars = collector.variables[block];
+            for ( auto & var : vars ) {
+                ss << string(tab,'\t');
+                describeLocalCppType(ss, var->type, true);
+                ss << " " << collector.getVarName(var) << ";\n";
+            }
         }
         virtual void preVisitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override {
             Visitor::preVisitBlockArgumentInit(block, var, init);
@@ -580,6 +634,8 @@ namespace das {
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             tab --;
             ss << string(tab,'\t') << "}";
+            block->finallyBeforeBody = false;
+            block->finallyDisabled = false;
             return Visitor::visit(block);
         }
         string finallyName ( ExprBlock * block ) const {
@@ -587,7 +643,7 @@ namespace das {
         }
         virtual void preVisitBlockFinal ( ExprBlock * block ) override {
             Visitor::preVisitBlockFinal(block);
-            ss << string(tab-1,'\t') << "/* finally */ auto " << finallyName(block) << " = das_finally([&](){\n";
+            ss << string(tab-1,'\t') << "/* finally */ das_finally " << finallyName(block) << "([&](){\n";
         }
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockFinalExpression(block, expr);
@@ -619,16 +675,18 @@ namespace das {
         }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
-            describeLocalCppType(ss, var->type);
-            ss << " " << var->name;
+            if ( let->scoped ) {
+                describeLocalCppType(ss, var->type);
+                ss << " " << collector.getVarName(var) << "; ";
+            }
             if ( !var->init && var->type->canInitWithZero() ) {
                 if ( isLocalVec(var->type) ) {
-                    ss << " = v_zero()";
+                    ss << collector.getVarName(var) << " = v_zero()";
                 } else {
-                    ss << " = 0";
+                    ss << collector.getVarName(var) << " = 0";
                 }
             } else if ( !var->init && !var->type->canInitWithZero() ) {
-                ss << "; das_zero(" << var->name << ")";
+                ss << "das_zero(" << collector.getVarName(var) << ")";
             }
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
@@ -637,7 +695,7 @@ namespace das {
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
-            ss << " = ";
+            ss << collector.getVarName(var) << " = ";
             if ( var->type->ref ) {
                 ss << "&(";
             }
@@ -814,9 +872,9 @@ namespace das {
     // var
         virtual ExpressionPtr visit ( ExprVar * var ) override {
             if ( var->local && var->variable->type->ref ) {
-                ss << "(*" << var->name << ")";
+                ss << "(*" << collector.getVarName(var->variable) << ")";
             } else if ( var->block || var->local || var->argument) {
-                ss << var->name;
+                ss << collector.getVarName(var->variable);
             } else {
                 ss << "das_global<" << describeCppType(var->variable->type,false,true)
                     << "," << int32_t(var->variable->stackTop) << ">(__context__) /*" << var->name << "*/";
@@ -977,12 +1035,31 @@ namespace das {
     // ExprWhile
         virtual void preVisit ( ExprWhile * wh ) override {
             Visitor::preVisit(wh);
+            if ( wh->body->rtti_isBlock() ) {
+                auto * block = static_cast<ExprBlock *>(wh->body.get());
+                if ( !block->finalList.empty() ) {
+                    ss << "{\n";
+                    tab ++;
+                    block->visitFinally(*this);
+                    ss << string(tab,'\t');
+                }
+            }
             ss << "while ( ";
         }
         virtual void preVisitWhileBody ( ExprWhile * wh, Expression * body ) override {
             Visitor::preVisitWhileBody(wh,body);
             ss << " )\n";
             ss << string(tab,'\t');
+        }
+        virtual ExpressionPtr visit ( ExprWhile * wh ) override {
+            if ( wh->body->rtti_isBlock() ) {
+                auto * block = static_cast<ExprBlock *>(wh->body.get());
+                if ( !block->finalList.empty() ) {
+                    tab --;
+                    ss << "\n" << string(tab,'\t') << "}";
+                }
+            }
+            return Visitor::visit(wh);
         }
     // if then else
         virtual void preVisit ( ExprIfThenElse * ifte ) override {
@@ -996,7 +1073,7 @@ namespace das {
         }
         virtual void preVisitElseBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitElseBlock(ifte, block);
-            ss << string(tab,'\t') << "else\n";
+            ss << " else ";
         }
     // swizzle
         virtual void preVisit ( ExprSwizzle * expr ) override {
@@ -1279,8 +1356,8 @@ namespace das {
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
             if (call->name == "assert") {
-                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT(";
-                else ss << "DAS_ASSERTF(";
+                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT((";
+                else ss << "DAS_ASSERTF((";
             } else if ( call->name=="invoke" ) {
                 auto bt = call->arguments[0]->type->baseType;
                 if (bt == Type::tBlock) ss << "das_invoke";
@@ -1309,12 +1386,18 @@ namespace das {
             } else ss << call->name << "(";
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
-            if ( !last ) ss << ",";
+            if ( !last ) {
+                if (call->name == "assert") {
+                    ss << "),(";
+                } else {
+                    ss << ",";
+                }
+            }
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprLooksLikeCall * call ) override {
             if ( call->name=="assert" ) {
-                ss << ")"; // ts macro
+                ss << "))"; // ts macro
             } else {
                 ss << ")";
             }
@@ -1502,6 +1585,12 @@ namespace das {
         virtual void preVisitForBody ( ExprFor * ffor, Expression * body ) override {
             Visitor::preVisitForBody(ffor, body);
             auto nl = needLoopName(ffor);
+            if ( body->rtti_isBlock() ) {
+                auto * block = static_cast<ExprBlock *>(body);
+                if ( !block->finalList.empty() ) {
+                    block->visitFinally(*this);
+                }
+            }
             ss << string(tab,'\t') << "for ( ; " << nl << " ; " << nl << " = ";
             for ( auto & var : ffor->iteratorVariables ) {
                 if (var != ffor->iteratorVariables.front()) {
@@ -1618,7 +1707,9 @@ namespace das {
         }, "*");
         if (any) stream << "\n";
         */
-        CppAot aotVisitor(shared_from_this());
+        BlockVariableCollector collector;
+        visit(collector);
+        CppAot aotVisitor(shared_from_this(),collector);
         visit(aotVisitor);
         logs << aotVisitor.str();
     }

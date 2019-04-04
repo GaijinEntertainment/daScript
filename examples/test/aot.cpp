@@ -51,6 +51,9 @@ namespace das {
         namespace test_enumdas {
             #include "unit_tests/enum.das.main.inc"
         }
+        namespace test_finally {
+            #include "unit_tests/finally.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -95,6 +98,9 @@ namespace das {
             }
             {   using namespace test_enumdas;
                 #include "unit_tests/enum.das.register.inc"
+            }
+            {   using namespace test_finally;
+                #include "unit_tests/finally.das.register.inc"
             }
 
             {   using namespace test_new_delete;
