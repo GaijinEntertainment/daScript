@@ -363,14 +363,12 @@ namespace das {
         return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
     }
 
-    void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, bool skipConst = false ) {
+    void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype ) {
         if ( isLocalVec(vtype) ) {
-            if ( !skipConst ) {
-                if ( vtype->constant ) ss << "const ";
-            }
+            if ( vtype->constant ) ss << "const ";
             ss << "vec4f /*" << describeCppType(vtype,true) << "*/";
         } else {
-            ss << describeCppType(vtype,true,false,skipConst);
+            ss << describeCppType(vtype,true,false);
         }
     }
 
@@ -406,29 +404,6 @@ namespace das {
             Visitor::preVisit(block);
             stack.push_back(block);
         }
-        virtual ExpressionPtr visit ( ExprBlock * block ) override {
-            stack.pop_back();
-            return Visitor::visit(block);
-        }
-        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-            Visitor::preVisitLet(let, var, last);
-            if ( !let->scoped ) {
-                ExprBlock * block = nullptr;
-                for ( auto it = stack.rbegin(); it!=stack.rend(); ++it ) {
-                    ExprBlock * pb = *it;
-                    if ( !(pb->inTheLoop && pb->finalList.size()) ) {
-                        block = pb;
-                        break;
-                    }
-                }
-                ExprBlock * varblock = stack.back();
-                if ( block != varblock ) {
-                    string newName = "__rename_" + var->name + "_block_" + to_string(varblock->at.line);
-                    rename[var.get()] = newName;
-                }
-                variables[block].push_back(var.get());
-            }
-        }
         string getVarName ( Variable * var ) const {
             auto it = rename.find(var);
             return it==rename.end() ? var->name : it->second;
@@ -436,9 +411,53 @@ namespace das {
         string getVarName ( const VariablePtr & var ) const {
             return getVarName(var.get());
         }
+        __forceinline bool isMoved(const VariablePtr & var) const {
+            return moved.find(var.get()) != moved.end();
+        }
+    protected:
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            stack.pop_back();
+            return Visitor::visit(block);
+        }
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(let, var, last);
+            if ( !let->scoped ) { // TODO: disable scoped let, otherwise never move them up
+                ExprBlock * varblock = stack.back();
+                if (varblock->finalList.size()) {    // only move from the block with finally
+                    ExprBlock * block = nullptr;
+                    for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+                        ExprBlock * pb = *it;
+                        if (pb->isClosure) {
+                            block = pb;
+                            break;
+                        }
+                        if (!(pb->inTheLoop && pb->finalList.size())) {
+                            block = pb;
+                            break;
+                        }
+                    }
+                    if (block != varblock) {
+                        auto & ren = variables[block];
+                        auto it = find_if(ren.begin(), ren.end(), [&](Variable * vit) {
+                            return (vit->name == var->name);
+                        });
+                        if (it != ren.end()) {
+                            string newName = "__rename_" + var->name + "_block_" + to_string(varblock->at.line);
+                            rename[var.get()] = newName;
+                        }
+                    }
+                    variables[block].push_back(var.get());
+                    moved.insert(var.get());
+                }
+            }
+        }
+
+    public:
         vector<ExprBlock *>                 stack;
         map<ExprBlock *,vector<Variable *>> variables;
+    protected:
         map<Variable *,string>              rename;
+        set<Variable *>                     moved;
     };
 
     class CppAot : public Visitor {
@@ -611,7 +630,7 @@ namespace das {
             auto & vars = collector.variables[block];
             for ( auto & var : vars ) {
                 ss << string(tab,'\t');
-                describeLocalCppType(ss, var->type, true);
+                describeLocalCppType(ss, var->type);
                 ss << " " << collector.getVarName(var) << ";\n";
             }
         }
@@ -675,18 +694,19 @@ namespace das {
         }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
-            if ( let->scoped ) {
+            if ( !collector.isMoved(var) ) {
                 describeLocalCppType(ss, var->type);
-                ss << " " << collector.getVarName(var) << "; ";
+                ss << " ";
             }
+            ss << collector.getVarName(var);
             if ( !var->init && var->type->canInitWithZero() ) {
                 if ( isLocalVec(var->type) ) {
-                    ss << collector.getVarName(var) << " = v_zero()";
+                    ss << " = v_zero()";
                 } else {
-                    ss << collector.getVarName(var) << " = 0";
+                    ss << " = 0";
                 }
             } else if ( !var->init && !var->type->canInitWithZero() ) {
-                ss << "das_zero(" << collector.getVarName(var) << ")";
+                ss << "; das_zero(" << collector.getVarName(var) << ")";
             }
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
@@ -695,7 +715,7 @@ namespace das {
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
-            ss << collector.getVarName(var) << " = ";
+            ss << " = ";
             if ( var->type->ref ) {
                 ss << "&(";
             }
@@ -873,8 +893,10 @@ namespace das {
         virtual ExpressionPtr visit ( ExprVar * var ) override {
             if ( var->local && var->variable->type->ref ) {
                 ss << "(*" << collector.getVarName(var->variable) << ")";
-            } else if ( var->block || var->local || var->argument) {
+            } else if ( var->local ) {
                 ss << collector.getVarName(var->variable);
+            } else if ( var->block || var->argument) {
+                ss << var->variable->name;
             } else {
                 ss << "das_global<" << describeCppType(var->variable->type,false,true)
                     << "," << int32_t(var->variable->stackTop) << ">(__context__) /*" << var->name << "*/";
