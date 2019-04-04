@@ -643,7 +643,7 @@ namespace das {
         }
         virtual void preVisitBlockFinal ( ExprBlock * block ) override {
             Visitor::preVisitBlockFinal(block);
-            ss << string(tab-1,'\t') << "/* finally */ das_finally " << finallyName(block) << "([&](){\n";
+            ss << string(tab-1,'\t') << "/* finally */ auto " << finallyName(block) << "([&](){\n";
         }
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockFinalExpression(block, expr);

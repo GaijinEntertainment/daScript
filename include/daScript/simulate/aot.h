@@ -423,20 +423,20 @@ namespace das {
         }
     };
 
-#ifdef _MSC_VER
-    struct das_finally {
-        das::function<void()> finalizer;
-        __forceinline das_finally ( das::function<void()> && fn ) : finalizer(fn) {}
-        __forceinline ~das_finally () { finalizer(); }
-    };
-#else
     template <typename TT>
-    struct das_finally {
+    struct das_final_call {
         TT finalizer;
-        __forceinline das_finally ( TT && fn ) : finalizer(fn) {}
-        __forceinline ~das_finally () { finalizer(); }
+        das_final_call() = delete;
+        das_final_call(das_final_call &) = delete;
+        das_final_call & operator = (das_final_call &) = delete;
+        __forceinline das_final_call ( TT && fn ) : finalizer(fn) {}
+        __forceinline ~das_final_call () { finalizer(); }
     };
-#endif
+
+    template <typename TT>
+    __forceinline das_final_call<TT> das_finally(TT && fn) {
+        return das_final_call<TT>(forward(fn));
+    }
 
     template <typename TT>
     TT & das_deref ( Context * __context__, TT * ptr ) {
