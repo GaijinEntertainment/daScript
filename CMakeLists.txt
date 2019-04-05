@@ -360,6 +360,7 @@ DAS_AOT(examples/test/unit_tests/dynamic_array.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/enum.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/finally.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/foo_bar.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/for-loop.das TEST_GENERATED_SRC)
 
 DAS_AOT(examples/test/unit_tests/new_delete.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/new_and_init.das TEST_GENERATED_SRC)
