@@ -566,6 +566,10 @@ namespace das {
             ss << " = ";
         }
     // function
+        virtual bool canVisitFunction ( Function * fun ) override {
+            if ( fun->noAot ) return false;
+            return true;
+        }
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
             ss << "\n";
@@ -1444,10 +1448,10 @@ namespace das {
             }
             return false;
         }
-        bool isHybridCall ( Function * func ) const {
+        bool isHybridCall ( Function * func ) {
             if ( func->builtIn ) return false;
+            if ( func->noAot ) return true;
             if ( func->module == program->thisModule.get() ) return false;
-            // TODO: flags?
             return true;
         }
         virtual void preVisit ( ExprCall * call ) override {
@@ -1500,6 +1504,9 @@ namespace das {
                         }
                         ss << ">(__context__,";
                         ss << "Func(" << (call->func->index+1) << "/* " << call->name << " */),";
+                    } else {
+                        ss << "(__context__,";
+                        ss << "Func(" << (call->func->index+1) << "/* " << call->name << " */)";
                     }
                 } else {
                     ss << call->name << "(__context__";
@@ -1666,6 +1673,8 @@ namespace das {
         }
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             if ( fnn[i]->module != thisModule.get() )
+                continue;
+            if ( fnn[i]->noAot )
                 continue;
             SimFunction * fn = context.getFunction(i);
             uint64_t semH = getSemanticHash(fn->code);

@@ -63,6 +63,14 @@ namespace das
         };
     };
 
+    struct NoAotFunctionAnnotation : MarkFunctionAnnotation {
+        NoAotFunctionAnnotation() : MarkFunctionAnnotation("noaot") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->noAot = true;
+            return true;
+        };
+    };
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -131,6 +139,7 @@ namespace das
         addAnnotation(make_shared<SideEffectsFunctionAnnotation>());
         addAnnotation(make_shared<RunAtCompileTimeFunctionAnnotation>());
         addAnnotation(make_shared<UnsafeFunctionAnnotation>());
+        addAnnotation(make_shared<NoAotFunctionAnnotation>());
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");

@@ -1484,6 +1484,7 @@ namespace das
                 bool    hasToRunAtCompileTime : 1;
                 bool    unsafe : 1;
                 bool    hasMakeBlock : 1;
+                bool    noAot : 1;
             };
             uint32_t flags = 0;
         };
@@ -1740,6 +1741,8 @@ namespace das
       virtual ~Visitor() {}
 
     public:
+        // what do we visit
+        virtual bool canVisitFunction ( Function * fun ) { return true; }
         // ENUMERATOIN
         virtual void preVisit ( Enumeration * enu ) { }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) { }

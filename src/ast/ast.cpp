@@ -1484,7 +1484,9 @@ namespace das {
         // functions
         for ( auto & fn : thisModule->functions ) {
             if ( !fn.second->builtIn ) {
-                fn.second = fn.second->visit(vis);
+                if ( vis.canVisitFunction(fn.second.get()) ) {
+                    fn.second = fn.second->visit(vis);
+                }
             }
         }
     }
