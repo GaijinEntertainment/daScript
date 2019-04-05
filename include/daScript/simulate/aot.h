@@ -336,6 +336,12 @@ namespace das {
             memset ( data, 0, sizeof(TT) );
             return (TT *) data;
         }
+        template <typename QQ>
+        static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
+            TT * data = (TT *) __context__->heap.allocate( sizeof(TT) );
+            *data = init();
+            return data;
+        }
     };
 
     template <typename TT, int d0 = 0, int d1 = 0, int d2 = 0>
@@ -347,6 +353,14 @@ namespace das {
             TDim<TT *,d> res;
             for ( int i=0; i!=d; ++i ) {
                 res[i] = das_new<TT>::make(__context__);
+            }
+            return res;
+        }
+        template <typename QQ>
+        static __forceinline TDim<TT *,d> make_and_init ( Context * __context__, QQ && init ) {
+            TDim<TT *,d> res;
+            for ( int i=0; i!=d; ++i ) {
+                res[i] = das_new<TT>::make_and_init(__context__,init);
             }
             return res;
         }

@@ -1,4 +1,5 @@
 // options logInferPasses=true
+// options logCpp = true
 
 struct Foo
     i : int = 5

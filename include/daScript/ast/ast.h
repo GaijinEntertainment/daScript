@@ -1324,30 +1324,33 @@ namespace das
         bool            upcast = false;
     };
 
-    struct ExprNew : ExprLooksLikeCall {
+    struct ExprCallOrNew : ExprLooksLikeCall {
+        ExprCallOrNew () = default;
+        ExprCallOrNew ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) { }
+        Function *      func = nullptr;
+        uint32_t        stackTop = 0;
+    };
+
+    struct ExprNew : ExprCallOrNew {
         ExprNew() = default;
         ExprNew ( const LineInfo & a, TypeDeclPtr t, bool ini )
-            : ExprLooksLikeCall(a,"new"), typeexpr(t), initializer(ini) {}
+            : ExprCallOrNew(a,"new"), typeexpr(t), initializer(ini) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        Function *      func = nullptr;
         TypeDeclPtr     typeexpr;
-        uint32_t        stackTop = 0;
         bool            initializer = false;
     };
 
-    struct ExprCall : ExprLooksLikeCall {
+    struct ExprCall : ExprCallOrNew {
         ExprCall () = default;
-        ExprCall ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) { }
+        ExprCall ( const LineInfo & a, const string & n ) : ExprCallOrNew(a,n) { }
         virtual bool rtti_isCall() const override { return true; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode_CallBase * simulateCall (const FunctionPtr & func, const ExprLooksLikeCall * expr,
             Context & context, SimNode_CallBase * pCall);
-        Function *      func = nullptr;
-        uint32_t        stackTop = 0;
         bool            doesNotNeedSp = false;
     };
 

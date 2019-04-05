@@ -1245,18 +1245,44 @@ namespace das {
                 for ( auto dd : enew->type->dim ) {
                     ss << "," << uint32_t(dd);
                 }
-                ss << ">::make(__context__";
+                if ( enew->initializer ) {
+                    ss << ">::make_and_init(__context__,[&](){ return ";
+                    CallOrNew_preVisit(enew);
+                } else {
+                    ss << ">::make(__context__";
+                }
             } else {
                 ss << "das_new<" << describeCppType(enew->type->firstType,false,true,true);
-                ss << ">::make(__context__";
+                if ( enew->initializer ) {
+                    ss << ">::make_and_init(__context__,[&](){ return ";
+                    CallOrNew_preVisit(enew);
+                } else {
+                    ss << ">::make(__context__";
+                }
             }
         }
-        virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg, bool last ) override {
-            ss << ",";
-            return Visitor::visitNewArg(call, arg, last);
+        virtual void preVisitNewArg ( ExprNew * enew, Expression * arg, bool last ) override {
+            Visitor::preVisitNewArg(enew, arg, last);
+            if ( enew->initializer ) {
+                CallOrNew_visitCallArg(enew, arg, last);
+            }
+        }
+        virtual ExpressionPtr visitNewArg ( ExprNew * enew, Expression * arg, bool last ) override {
+            if ( enew->initializer ) {
+                CallOrNew_visitCallArg(enew, arg, last);
+            } else {
+                DAS_ASSERT(0 && "we should not even be here. we are visiting arguments of a new, but it has no initializer???");
+                ss << ",";
+            }
+            return Visitor::visitNewArg(enew, arg, last);
         }
         virtual ExpressionPtr visit ( ExprNew * enew ) override {
-            ss << ")";
+            if ( enew->initializer ) {
+                CallOrNew_visit(enew);
+                ss << "; })";
+            } else {
+                ss << ")";
+            }
             return Visitor::visit(enew);
         }
     // make structure
@@ -1439,7 +1465,7 @@ namespace das {
             }
             return policyArgNeedCast(polType, resType);
         }
-        bool isPolicyBasedCall ( ExprCall * call ) {
+        bool isPolicyBasedCall ( ExprCallOrNew * call ) {
             if ( call->func->builtIn ) {
                 auto bif = static_cast<BuiltInFunction *>(call->func);
                 if ( bif->policyBased ) {
@@ -1454,7 +1480,10 @@ namespace das {
             if ( func->module == program->thisModule.get() ) return false;
             return true;
         }
-        virtual void preVisit ( ExprCall * call ) override {
+        bool needsArgPass ( const TypeDeclPtr & argType ) const {
+            return !argType->constant;
+        }
+        void CallOrNew_preVisit ( ExprCallOrNew * call ) {
             Visitor::preVisit(call);
             if ( call->func->builtIn ) {
                 auto bif = static_cast<BuiltInFunction *>(call->func);
@@ -1509,16 +1538,12 @@ namespace das {
                         ss << "Func(" << (call->func->index+1) << "/* " << call->name << " */)";
                     }
                 } else {
-                    ss << call->name << "(__context__";
+                    ss << call->func->name << "(__context__";
                     if  ( call->arguments.size() ) ss << ",";
                 }
             }
         }
-        bool needsArgPass ( const TypeDeclPtr & argType ) const {
-            return !argType->constant;
-        }
-        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
-            Visitor::preVisitCallArg(call, arg, last);
+        void CallOrNew_preVisitCallArg ( ExprCallOrNew * call, Expression * arg, bool ) {
             auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
                 return a.get() == arg;
             });
@@ -1541,7 +1566,7 @@ namespace das {
                 ss << "cast<" << describeCppType(argType,false,true,true) << ">::from(";
             }
         }
-        virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+        void CallOrNew_visitCallArg ( ExprCallOrNew * call, Expression * arg, bool last ) {
             auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
                 return a.get() == arg;
             });
@@ -1560,9 +1585,8 @@ namespace das {
                 ss << ")";
             }
             if ( !last ) ss << ",";
-            return Visitor::visitCallArg(call, arg, last);
         }
-        virtual ExpressionPtr visit ( ExprCall * call ) override {
+        void CallOrNew_visit ( ExprCallOrNew * call ) {
             if ( call->func->interopFn ) {
                 ss << ")";
             }
@@ -1570,6 +1594,21 @@ namespace das {
                 ss << ",*__context__";
             }
             ss << ")";
+        }
+        virtual void preVisit ( ExprCall * call ) override {
+            Visitor::preVisit(call);
+            CallOrNew_preVisit(call);
+        }
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            Visitor::preVisitCallArg(call, arg, last);
+            CallOrNew_preVisitCallArg(call, arg, last);
+        }
+        virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            CallOrNew_visitCallArg(call, arg, last);
+            return Visitor::visitCallArg(call, arg, last);
+        }
+        virtual ExpressionPtr visit ( ExprCall * call ) override {
+            CallOrNew_visit(call);
             return Visitor::visit(call);
         }
     // for
