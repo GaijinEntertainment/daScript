@@ -60,6 +60,9 @@ namespace das {
         namespace test_for_loop {
             #include "unit_tests/for-loop.das.main.inc"
         }
+        namespace test_func_addr {
+            #include "unit_tests/func_addr.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -113,6 +116,9 @@ namespace das {
             }
             {   using namespace test_for_loop;
                 #include "unit_tests/for-loop.das.register.inc"
+            }
+            {   using namespace test_func_addr;
+                #include "unit_tests/func_addr.das.register.inc"
             }
 
             {   using namespace test_new_delete;

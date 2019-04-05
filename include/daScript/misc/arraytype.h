@@ -19,6 +19,12 @@ namespace das
         int32_t     index;
         Func() = default;
         Func(int32_t idx) : index(idx) {}
+        __forceinline bool operator == ( void * ptr ) const {
+            return !ptr && (index==0);
+        }
+        __forceinline bool operator != ( void * ptr ) const {
+            return ptr || index;
+        }
         __forceinline bool operator == ( const Func & b ) const {
             return index == b.index;
         }
