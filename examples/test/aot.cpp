@@ -54,6 +54,9 @@ namespace das {
         namespace test_finally {
             #include "unit_tests/finally.das.main.inc"
         }
+        namespace test_foo_bar {
+            #include "unit_tests/foo_bar.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -101,6 +104,9 @@ namespace das {
             }
             {   using namespace test_finally;
                 #include "unit_tests/finally.das.register.inc"
+            }
+            {   using namespace test_foo_bar;
+                #include "unit_tests/foo_bar.das.register.inc"
             }
 
             {   using namespace test_new_delete;
