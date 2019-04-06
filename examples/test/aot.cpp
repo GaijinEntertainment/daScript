@@ -75,6 +75,9 @@ namespace das {
         namespace test_infer_alias_and_alias_ctor {
             #include "unit_tests/infer_alias_and_alias_ctor.das.main.inc"
         }
+        namespace test_infer_alias_argument {
+            #include "unit_tests/infer_alias_argument.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -143,6 +146,9 @@ namespace das {
             }
             {   using namespace test_infer_alias_and_alias_ctor;
                 #include "unit_tests/infer_alias_and_alias_ctor.das.register.inc"
+            }
+            {   using namespace test_infer_alias_argument;
+                #include "unit_tests/infer_alias_argument.das.register.inc"
             }
 
             {   using namespace test_new_delete;
