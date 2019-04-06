@@ -81,6 +81,12 @@ namespace das {
         namespace test_infer_remove_ref_const {
             #include "unit_tests/infer_remove_ref_const.das.main.inc"
         }
+        namespace test_int2_crash {
+            #include "unit_tests/int2_crash.das.main.inc"
+        }
+        namespace test_int_types {
+            #include "unit_tests/int_types.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -155,6 +161,12 @@ namespace das {
             }
             {   using namespace test_infer_remove_ref_const;
                 #include "unit_tests/infer_remove_ref_const.das.register.inc"
+            }
+            {   using namespace test_int2_crash;
+                #include "unit_tests/int2_crash.das.register.inc"
+            }
+            {   using namespace test_int_types;
+                #include "unit_tests/int_types.das.register.inc"
             }
 
             {   using namespace test_new_delete;

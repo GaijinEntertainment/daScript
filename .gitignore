@@ -83,3 +83,7 @@ examples/test/unit_tests/infer_alias_argument.das.main.inc
 examples/test/unit_tests/infer_alias_argument.das.register.inc
 examples/test/unit_tests/infer_remove_ref_const.das.main.inc
 examples/test/unit_tests/infer_remove_ref_const.das.register.inc
+examples/test/unit_tests/int2_crash.das.main.inc
+examples/test/unit_tests/int2_crash.das.register.inc
+examples/test/unit_tests/int_types.das.main.inc
+examples/test/unit_tests/int_types.das.register.inc
