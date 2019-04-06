@@ -75,3 +75,5 @@ examples/test/unit_tests/global.das.main.inc
 examples/test/unit_tests/global.das.register.inc
 examples/test/unit_tests/handle.das.main.inc
 examples/test/unit_tests/handle.das.register.inc
+examples/test/unit_tests/include.das.main.inc
+examples/test/unit_tests/include.das.register.inc
