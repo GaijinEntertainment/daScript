@@ -93,6 +93,9 @@ namespace das {
         namespace test_local_reference {
             #include "unit_tests/local_reference.das.main.inc"
         }
+        namespace test_make_local {
+            #include "unit_tests/make_local.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -179,6 +182,9 @@ namespace das {
             }
             {   using namespace test_local_reference;
                 #include "unit_tests/local_reference.das.register.inc"
+            }
+            {   using namespace test_make_local;
+                #include "unit_tests/make_local.das.register.inc"
             }
 
             {   using namespace test_new_delete;
