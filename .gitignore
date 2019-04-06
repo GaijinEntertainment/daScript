@@ -87,3 +87,5 @@ examples/test/unit_tests/int2_crash.das.main.inc
 examples/test/unit_tests/int2_crash.das.register.inc
 examples/test/unit_tests/int_types.das.main.inc
 examples/test/unit_tests/int_types.das.register.inc
+examples/test/unit_tests/lambda.das.main.inc
+examples/test/unit_tests/lambda.das.register.inc

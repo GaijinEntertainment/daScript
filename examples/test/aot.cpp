@@ -87,6 +87,9 @@ namespace das {
         namespace test_int_types {
             #include "unit_tests/int_types.das.main.inc"
         }
+        namespace test_lambda {
+            #include "unit_tests/lambda.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -167,6 +170,9 @@ namespace das {
             }
             {   using namespace test_int_types;
                 #include "unit_tests/int_types.das.register.inc"
+            }
+            {   using namespace test_lambda;
+                #include "unit_tests/lambda.das.register.inc"
             }
 
             {   using namespace test_new_delete;
