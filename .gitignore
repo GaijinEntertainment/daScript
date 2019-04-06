@@ -81,3 +81,5 @@ examples/test/unit_tests/infer_alias_and_alias_ctor.das.main.inc
 examples/test/unit_tests/infer_alias_and_alias_ctor.das.register.inc
 examples/test/unit_tests/infer_alias_argument.das.main.inc
 examples/test/unit_tests/infer_alias_argument.das.register.inc
+examples/test/unit_tests/infer_remove_ref_const.das.main.inc
+examples/test/unit_tests/infer_remove_ref_const.das.register.inc

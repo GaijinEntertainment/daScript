@@ -78,6 +78,9 @@ namespace das {
         namespace test_infer_alias_argument {
             #include "unit_tests/infer_alias_argument.das.main.inc"
         }
+        namespace test_infer_remove_ref_const {
+            #include "unit_tests/infer_remove_ref_const.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -149,6 +152,9 @@ namespace das {
             }
             {   using namespace test_infer_alias_argument;
                 #include "unit_tests/infer_alias_argument.das.register.inc"
+            }
+            {   using namespace test_infer_remove_ref_const;
+                #include "unit_tests/infer_remove_ref_const.das.register.inc"
             }
 
             {   using namespace test_new_delete;
