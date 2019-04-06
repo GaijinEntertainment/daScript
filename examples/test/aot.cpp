@@ -66,6 +66,9 @@ namespace das {
         namespace test_global {
             #include "unit_tests/global.das.main.inc"
         }
+        namespace test_handle {
+            #include "unit_tests/handle.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -125,6 +128,9 @@ namespace das {
             }
             {   using namespace test_global;
                 #include "unit_tests/global.das.register.inc"
+            }
+            {   using namespace test_handle;
+                #include "unit_tests/handle.das.register.inc"
             }
 
             {   using namespace test_new_delete;

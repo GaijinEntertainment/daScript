@@ -363,6 +363,7 @@ DAS_AOT(examples/test/unit_tests/foo_bar.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/for-loop.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/func_addr.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/global.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/handle.das TEST_GENERATED_SRC)
 
 DAS_AOT(examples/test/unit_tests/new_delete.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/new_and_init.das TEST_GENERATED_SRC)

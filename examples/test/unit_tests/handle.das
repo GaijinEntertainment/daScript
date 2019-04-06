@@ -7,6 +7,7 @@ struct TestObjectBarNative
     fooPtr:TestObjectFooNative?
     barData:float
 
+[sideeffects]
 def test_native
     let a:TestObjectFooNative?
     let b:TestObjectBarNative?
@@ -28,6 +29,7 @@ def test_native
     b?.fooPtr?.fooData ?? idummy = 4
     assert(b.fooPtr.fooData==4 & idummy==3)
 
+[noaot]
 def test_handled
     let a:TestObjectFoo?
     let b:TestObjectBar?

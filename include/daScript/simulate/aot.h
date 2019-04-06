@@ -109,6 +109,42 @@ namespace das {
     };
 
     template <typename TT>
+    struct das_null_coalescing {
+        static __forceinline TT get ( TT * ptr, TT value ) {
+            return ptr ? *ptr : value;
+        }
+    };
+
+    template <typename TT>
+    struct das_null_coalescing<TT &> {
+        static __forceinline TT & get ( TT * ptr, TT & value ) {
+            return ptr ? *ptr : value;
+        }
+    };
+
+    template <typename TT, typename RR, RR TT::*Member>
+    struct das_safe_navigation {
+        static __forceinline RR * get ( TT * ptr ) {
+            if ( ptr ) {
+                return &(ptr->*Member);
+            } else {
+                return nullptr;
+            }
+        }
+    };
+
+    template <typename TT, typename RR, RR TT::*Member>
+    struct das_safe_navigation_ptr {
+        static __forceinline RR get ( TT * ptr ) {
+            if ( ptr ) {
+                return ptr->*Member;
+            } else {
+                return nullptr;
+            }
+        }
+    };
+
+    template <typename TT>
     struct das_index;
 
     template <typename TT, typename VecT, uint32_t size>

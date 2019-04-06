@@ -882,6 +882,45 @@ namespace das {
             }
             return Visitor::visit(var);
         }
+    // null coaelescing
+        virtual void preVisit ( ExprNullCoalescing * nc ) override {
+            Visitor::preVisit(nc);
+            ss << "das_null_coalescing<" << describeCppType(nc->defaultValue->type) << ">::get(";
+        }
+        virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * nc, Expression * expr ) override {
+            Visitor::preVisitNullCoaelescingDefault(nc,expr);
+            ss << ",";
+        }
+        virtual ExpressionPtr visit ( ExprNullCoalescing * nc ) override {
+            ss << ")";
+            return Visitor::visit(nc);
+        }
+    // safe field
+        virtual void preVisit ( ExprSafeField * field ) override {
+            Visitor::preVisit(field);
+            ss << "das_safe_navigation";
+            if ( field->skipQQ ) ss << "_ptr";
+            ss << "<" << describeCppType(field->value->type->firstType) << ",";
+            if ( field->skipQQ ) {
+                ss << describeCppType(field->type);
+            } else {
+                ss << describeCppType(field->type->firstType);
+            }
+            ss << ",&" << field->value->type->firstType->structType->name << "::" << field->name <<  ">::get(";
+            /*
+            if ( field->value->type->isHandle() ) {
+                field->value->type->annotation->aotPreVisitGetField(ss, field->name);
+            }
+            */
+        }
+        virtual ExpressionPtr visit ( ExprSafeField * field ) override {
+            /*
+            if ( field->value->type->isHandle() ) {
+                field->value->type->annotation->aotVisitGetField(ss, field->name);
+            } */
+            ss << ")";
+            return Visitor::visit(field);
+        }
     // field
         virtual void preVisit ( ExprField * field ) override {
             Visitor::preVisit(field);
