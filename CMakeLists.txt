@@ -371,6 +371,7 @@ DAS_AOT(examples/test/unit_tests/infer_remove_ref_const.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/int2_crash.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/int_types.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/lambda.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/local_reference.das TEST_GENERATED_SRC)
 
 DAS_AOT(examples/test/unit_tests/new_delete.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/new_and_init.das TEST_GENERATED_SRC)
