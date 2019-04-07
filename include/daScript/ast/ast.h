@@ -803,13 +803,33 @@ namespace das
         bool skipQQ = false;
     };
 
-    struct ExprOp : Expression {
-        ExprOp () = default;
-        ExprOp ( const LineInfo & a, const string & o ) : Expression(a), op(o) {}
+    struct ExprLooksLikeCall : Expression {
+        ExprLooksLikeCall () = default;
+        ExprLooksLikeCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        string      op;
-        Function *  func = nullptr;   // always built-in function
-        uint32_t    stackTop = 0;
+        void autoDereference();
+        virtual SimNode * simulate (Context &) const override { return nullptr; }
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        string describe() const;
+        virtual bool rtti_isCallLikeExpr() const override { return true; }
+        string                  name;
+        vector<ExpressionPtr>   arguments;
+        bool                    argumentsFailedToInfer = false;
+    };
+    typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
+
+    struct ExprCallFunc : ExprLooksLikeCall {
+        ExprCallFunc () = default;
+        ExprCallFunc ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) { }
+        Function *      func = nullptr;
+        uint32_t        stackTop = 0;
+    };
+
+    struct ExprOp : ExprCallFunc {
+        ExprOp () = default;
+        ExprOp ( const LineInfo & a, const string & o ) : ExprCallFunc(a,o), op(o) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        string  op;
     };
 
     // unary    !subexpr
@@ -1140,21 +1160,6 @@ namespace das
         ExpressionPtr   with, body;
     };
 
-    struct ExprLooksLikeCall : Expression {
-        ExprLooksLikeCall () = default;
-        ExprLooksLikeCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        void autoDereference();
-        virtual SimNode * simulate (Context &) const override { return nullptr; }
-        virtual ExpressionPtr visit(Visitor & vis) override;
-        string describe() const;
-        virtual bool rtti_isCallLikeExpr() const override { return true; }
-        string                  name;
-        vector<ExpressionPtr>   arguments;
-        bool                    argumentsFailedToInfer = false;
-    };
-    typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
-
     template <typename TT>
     struct ExprLikeCall : ExprLooksLikeCall {
         ExprLikeCall () = default;
@@ -1324,17 +1329,10 @@ namespace das
         bool            upcast = false;
     };
 
-    struct ExprCallOrNew : ExprLooksLikeCall {
-        ExprCallOrNew () = default;
-        ExprCallOrNew ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) { }
-        Function *      func = nullptr;
-        uint32_t        stackTop = 0;
-    };
-
-    struct ExprNew : ExprCallOrNew {
+    struct ExprNew : ExprCallFunc {
         ExprNew() = default;
         ExprNew ( const LineInfo & a, TypeDeclPtr t, bool ini )
-            : ExprCallOrNew(a,"new"), typeexpr(t), initializer(ini) {}
+            : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1342,9 +1340,9 @@ namespace das
         bool            initializer = false;
     };
 
-    struct ExprCall : ExprCallOrNew {
+    struct ExprCall : ExprCallFunc {
         ExprCall () = default;
-        ExprCall ( const LineInfo & a, const string & n ) : ExprCallOrNew(a,n) { }
+        ExprCall ( const LineInfo & a, const string & n ) : ExprCallFunc(a,n) { }
         virtual bool rtti_isCall() const override { return true; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;

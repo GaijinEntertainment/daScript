@@ -96,6 +96,9 @@ namespace das {
         namespace test_make_local {
             #include "unit_tests/make_local.das.main.inc"
         }
+        namespace test_mat_crash {
+            #include "unit_tests/mat_crash.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -185,6 +188,9 @@ namespace das {
             }
             {   using namespace test_make_local;
                 #include "unit_tests/make_local.das.register.inc"
+            }
+            {   using namespace test_mat_crash;
+                #include "unit_tests/mat_crash.das.register.inc"
             }
 
             {   using namespace test_new_delete;
