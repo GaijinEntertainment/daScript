@@ -1,6 +1,6 @@
 #include "daScript/misc/platform.h"
 
-#include "daScript/simulate/simulate.h"
+#include "daScript/ast/ast.h"
 
 namespace das {
 
@@ -81,6 +81,22 @@ namespace das {
     uint64_t getSemanticHash ( SimNode * node ) {
         debug_hash("\n");
         SimFnHashVisitor hashV;
+        node->visit(hashV);
+        debug_hash("\n");
+        return hashV.getHash();
+    }
+
+    uint64_t getFunctionHash ( Function * fun, SimNode * node ) {
+        debug_hash("\n");
+        SimFnHashVisitor hashV;
+        // append return type and result type
+        string resT = fun->result->describe();
+        hashV.write(resT.c_str(), resT.length());
+        for ( auto & arg : fun->arguments ) {
+            string argT = arg->type->describe();
+            hashV.write(argT.c_str(), argT.length());
+        }
+        // append code
         node->visit(hashV);
         debug_hash("\n");
         return hashV.getHash();

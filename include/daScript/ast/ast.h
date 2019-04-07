@@ -1499,6 +1499,8 @@ namespace das
         vector<InferHistory> inferStack;
     };
 
+    uint64_t getFunctionHash ( Function * fun, SimNode * node );
+
     class BuiltInFunction : public Function {
     public:
         BuiltInFunction ( const string & fn, const string & fnCpp );

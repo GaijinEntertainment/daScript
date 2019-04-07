@@ -1,5 +1,7 @@
  // options log = true, logNodes =true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
 
+// options logAot=true, logNodes=true
+
 struct Foo
 	t : bool
 	v : int3 = int3(1,2,3)

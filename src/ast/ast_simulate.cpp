@@ -1732,15 +1732,29 @@ namespace das
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
         bool logIt = options.getOption("logAot",false);
+
+        // make list of functions
+        vector<Function *> fnn; fnn.reserve(totalFunctions);
+        for (auto & pm : library.modules) {
+            for (auto & it : pm->functions) {
+                auto pfun = it.second;
+                if (pfun->index < 0 || !pfun->used)
+                    continue;
+                fnn.push_back(pfun.get());
+            }
+        }
+
         for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
-            SimFunction & fn = context.functions[fni];
-            uint64_t semHash = getSemanticHash(fn.code);
-            auto it = aotLib.find(semHash);
-            if ( it != aotLib.end() ) {
-                fn.code = (it->second)(context);
-                if ( logIt ) logs << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
-            } else {
-                if ( logIt ) logs << "NOT FOUND " << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+            if ( !fnn[fni]->noAot ) {
+                SimFunction & fn = context.functions[fni];
+                uint64_t semHash = getFunctionHash(fnn[fni], fn.code);
+                auto it = aotLib.find(semHash);
+                if ( it != aotLib.end() ) {
+                    fn.code = (it->second)(context);
+                    if ( logIt ) logs << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+                } else {
+                    if ( logIt ) logs << "NOT FOUND " << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
+                }
             }
         }
         if ( context.totalVariables ) {

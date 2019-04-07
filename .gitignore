@@ -95,3 +95,5 @@ examples/test/unit_tests/make_local.das.main.inc
 examples/test/unit_tests/make_local.das.register.inc
 examples/test/unit_tests/mat_crash.das.main.inc
 examples/test/unit_tests/mat_crash.das.register.inc
+examples/test/unit_tests/mat_ctors.das.main.inc
+examples/test/unit_tests/mat_ctors.das.register.inc

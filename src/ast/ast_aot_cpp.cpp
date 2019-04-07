@@ -1642,7 +1642,10 @@ namespace das {
             if ( call->func->interopFn ) {
                 ss << ")";
             }
-            if ( isPolicyBasedCall(call) ) {
+            if ( !call->arguments.size() && call->type->baseType==Type::tHandle ) {
+                // c-tor?
+                ss << "/*end-c-tor*/";
+            } else if ( isPolicyBasedCall(call) ) {
                 ss << ",*__context__";
             }
             ss << ")";
@@ -1768,7 +1771,7 @@ namespace das {
             if ( fnn[i]->noAot )
                 continue;
             SimFunction * fn = context.getFunction(i);
-            uint64_t semH = getSemanticHash(fn->code);
+            uint64_t semH = getFunctionHash(fnn[i], fn->code);
             logs << "\t// " << fn->name << "\n";
             logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
