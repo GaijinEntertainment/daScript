@@ -207,8 +207,8 @@ namespace das {
 
             addExtern<DAS_BIND_FUN(uint32_hash)>(*this, lib, "uint32_hash", SideEffects::none);
             addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise1D", SideEffects::none);
-            addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise2D", SideEffects::none);
-            addExtern<DAS_BIND_FUN(uint_noise3D_int3)>(*this, lib, "uint_noise3D", SideEffects::none);
+            addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise2D", SideEffects::none, "uint_noise2D_int2");
+            addExtern<DAS_BIND_FUN(uint_noise3D_int3)>(*this, lib, "uint_noise3D", SideEffects::none, "uint_noise3D_int3");
 
             addExternEx<float(float2,float2),DAS_BIND_FUN(dot2)>(*this, lib, "dot", SideEffects::none, "dot2");
             addExternEx<float(float3,float3),DAS_BIND_FUN(dot3)>(*this, lib, "dot", SideEffects::none, "dot3");

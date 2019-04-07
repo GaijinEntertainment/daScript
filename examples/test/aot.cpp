@@ -102,6 +102,9 @@ namespace das {
         namespace test_mat_ctors {
             #include "unit_tests/mat_ctors.das.main.inc"
         }
+        namespace test_math {
+            #include "unit_tests/math.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -197,6 +200,9 @@ namespace das {
             }
             {   using namespace test_mat_ctors;
                 #include "unit_tests/mat_ctors.das.register.inc"
+            }
+            {   using namespace test_math;
+                #include "unit_tests/math.das.register.inc"
             }
 
             {   using namespace test_new_delete;
