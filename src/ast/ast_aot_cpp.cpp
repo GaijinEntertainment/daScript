@@ -559,6 +559,9 @@ namespace das {
             return Visitor::visit(enu);
         }
     // strcuture
+        virtual bool canVisitStructureFieldInit ( Structure * ) override {
+            return false;
+        }
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             ss << "\nstruct " << that->name << " {\n";
@@ -569,16 +572,9 @@ namespace das {
             if ( decl.parentType ) {
                 ss << " /* from " << that->parent->name << " */";
             }
-            if ( decl.init ) {
-                ss << " /* = ";
-            }
         }
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
-            if ( decl.init ) {
-                ss << " */\n";
-            } else {
-                ss << "\n";
-            }
+            ss << "\n";
             Visitor::visitStructureField(var, decl, last);
         }
         virtual StructurePtr visit ( Structure * that ) override {

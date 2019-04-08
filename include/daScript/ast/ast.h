@@ -1746,6 +1746,7 @@ namespace das
     public:
         // what do we visit
         virtual bool canVisitFunction ( Function * fun ) { return true; }
+        virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }
         // ENUMERATOIN
         virtual void preVisit ( Enumeration * enu ) { }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) { }

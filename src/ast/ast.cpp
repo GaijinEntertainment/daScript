@@ -1444,7 +1444,7 @@ namespace das {
             vis.preVisit(pst);
             for ( auto & fi : pst->fields ) {
                 vis.preVisitStructureField(pst, fi, &fi==&pst->fields.back());
-                if ( fi.init ) {
+                if ( fi.init && vis.canVisitStructureFieldInit(pst) ) {
                     fi.init = fi.init->visit(vis);
                 }
                 vis.visitStructureField(pst, fi, &fi==&pst->fields.back());

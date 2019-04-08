@@ -107,3 +107,7 @@ examples/test/unit_tests/new_with_init.das.main.inc
 examples/test/unit_tests/new_with_init.das.register.inc
 examples/test/unit_tests/operator_overload.das.main.inc
 examples/test/unit_tests/operator_overload.das.register.inc
+examples/test/unit_tests/operators.das.main.inc
+examples/test/unit_tests/operators.das.register.inc
+examples/test/unit_tests/override.das.main.inc
+examples/test/unit_tests/override.das.register.inc

@@ -79,7 +79,11 @@ namespace das {
     template <typename TT>
     struct das_cast {
         template <typename QQ>
-        static __forceinline TT & cast ( QQ & expr ) {
+        static __forceinline TT & cast ( const QQ & expr ) {
+            return reinterpret_cast<TT&>(expr);
+        }
+        template <typename QQ>
+        static __forceinline TT & cast ( QQ && expr ) {
             return reinterpret_cast<TT&>(expr);
         }
     };
@@ -95,8 +99,8 @@ namespace das {
     template <typename TT>
     struct das_upcast {
         template <typename QQ>
-        static __forceinline TT & cast ( QQ & expr ) {
-            return expr;
+        static __forceinline TT & cast ( const QQ & expr ) {
+            return reinterpret_cast<TT &>(const_cast<QQ &>(expr));
         }
     };
 

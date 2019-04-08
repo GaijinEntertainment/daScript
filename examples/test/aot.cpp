@@ -123,7 +123,12 @@ namespace das {
         namespace test_operator_overload {
             #include "unit_tests/operator_overload.das.main.inc"
         }
-
+        namespace test_operators {
+            #include "unit_tests/operators.das.main.inc"
+        }
+        namespace test_override {
+            #include "unit_tests/override.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -234,6 +239,12 @@ namespace das {
             }
             {   using namespace test_operator_overload;
                 #include "unit_tests/operator_overload.das.register.inc"
+            }
+            {   using namespace test_operators;
+                #include "unit_tests/operators.das.register.inc"
+            }
+            {   using namespace test_override;
+                #include "unit_tests/override.das.register.inc"
             }
         }
     }
