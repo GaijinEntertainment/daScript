@@ -1,6 +1,6 @@
 // options log=true,optimize=true,logOptimizationPasses=false
 
-options logCpp=true
+// options logCpp=true
 
 [export]
 def test:bool
