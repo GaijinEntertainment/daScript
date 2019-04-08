@@ -376,6 +376,7 @@ DAS_AOT(examples/test/unit_tests/make_local.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/mat_crash.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/mat_ctors.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/math.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/method_semantic.das TEST_GENERATED_SRC)
 
 DAS_AOT(examples/test/unit_tests/new_delete.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/new_and_init.das TEST_GENERATED_SRC)

@@ -372,31 +372,6 @@ namespace das {
         }
     }
 
-    string describeCppFunc ( Function * fn, bool needName = true ) {
-        TextWriter ss;
-        describeLocalCppType(ss,fn->result);
-        ss << " ";
-        if ( needName ) {
-            ss << fn->name;
-        }
-        ss << " ( Context * __context__";
-        for ( auto & var : fn->arguments ) {
-            ss << ", ";
-            if (isLocalVec(var->type)) {
-                describeLocalCppType(ss, var->type);
-            } else {
-                ss << describeCppType(var->type);
-            }
-            ss << " ";
-            if ( var->type->isRefType() ) {
-                ss << "& ";
-            }
-            ss << var->name;
-        }
-        ss << " )";
-        return ss.str();
-    }
-
     class BlockVariableCollector : public Visitor {
     public:
         BlockVariableCollector() {}
@@ -419,6 +394,34 @@ namespace das {
             stack.pop_back();
             return Visitor::visit(block);
         }
+        bool needRenaming ( Variable * ) const {
+            // TODO: check if it indeed needs renaming
+            return true;
+        }
+        void renameVariable ( Variable * var ) {
+            if ( needRenaming(var) ) {
+                string newName = "__" + var->name + "_rename_at_" + to_string(var->at.line);
+                rename[var] = newName;
+            }
+        }
+    // for loop
+        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitFor(expr,var,last);
+            for ( auto & var : expr->iteratorVariables ) {
+                renameVariable(var.get());
+            }
+        }
+    // block argument
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitBlockArgument(block, var, lastArg);
+            renameVariable(var.get());
+        }
+    // functon argument
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitArgument(fn, var, lastArg);
+            renameVariable(var.get());
+        }
+    // let
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
             if (stack.back()->finalList.size()) {    // only move from the block with finally
@@ -437,9 +440,7 @@ namespace das {
                 variables[block].push_back(var.get());
                 moved.insert(var.get());
             }
-            // always rename
-            string newName = "__" + var->name + "_rename_at_" + to_string(var->at.line);
-            rename[var.get()] = newName;
+            renameVariable(var.get());
         }
 
     public:
@@ -449,6 +450,33 @@ namespace das {
         map<Variable *,string>              rename;
         set<Variable *>                     moved;
     };
+
+    string describeCppFunc ( Function * fn, BlockVariableCollector * collector, bool needName = true ) {
+        TextWriter ss;
+        describeLocalCppType(ss,fn->result);
+        ss << " ";
+        if ( needName ) {
+            ss << fn->name;
+        }
+        ss << " ( Context * __context__";
+        for ( auto & var : fn->arguments ) {
+            ss << ", ";
+            if (isLocalVec(var->type)) {
+                describeLocalCppType(ss, var->type);
+            } else {
+                ss << describeCppType(var->type);
+            }
+            ss << " ";
+            if ( var->type->isRefType() ) {
+                ss << "& ";
+            }
+            if ( collector ) {
+                ss << collector->getVarName(var);
+            }
+        }
+        ss << " )";
+        return ss.str();
+    }
 
     class CppAot : public Visitor {
     public:
@@ -530,7 +558,7 @@ namespace das {
             for ( auto & fnI : prog->thisModule->functions ) {
                 auto & fn = fnI.second;
                 if ( !fn->builtIn ) {
-                    ss << describeCppFunc(fn.get()) << ";\n";
+                    ss << describeCppFunc(fn.get(),&collector) << ";\n";
                 }
             }
             ss << "\n";
@@ -596,7 +624,7 @@ namespace das {
             if (arg->type->isRefType()) {
                 ss << " & ";
             }
-            ss << " " << arg->name;
+            ss << " " << collector.getVarName(arg);
         }
         virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & arg, Expression * expr ) override {
             Visitor::preVisitArgumentInit(fn,arg,expr);
@@ -885,10 +913,8 @@ namespace das {
         virtual ExpressionPtr visit ( ExprVar * var ) override {
             if ( var->local && var->variable->type->ref ) {
                 ss << "(*" << collector.getVarName(var->variable) << ")";
-            } else if ( var->local ) {
+            } else if ( var->local || var->block || var->argument ) {
                 ss << collector.getVarName(var->variable);
-            } else if ( var->block || var->argument) {
-                ss << var->variable->name;
             } else {
                 ss << "das_global<" << describeCppType(var->variable->type,false,true)
                     << "," << int32_t(var->variable->stackTop) << ">(__context__) /*" << var->name << "*/";
@@ -1423,7 +1449,7 @@ namespace das {
                         ss << " &";
                     }
                 }
-                ss << " " << arg->name;
+                ss << " " << collector.getVarName(arg);
             }
             ss << ")->" << describeCppType(block->returnType);
         }
@@ -1452,7 +1478,7 @@ namespace das {
                         if ( arg!=call->arguments.front() ) {
                             ss << describeCppType(arg->type);
                             if ( arg->type->isRefType() && !arg->type->ref ) {
-                                ss << ", ";
+                                ss << " &";
                             }
                             if ( arg!=call->arguments.back() ) {
                                 ss << ",";
@@ -1464,7 +1490,30 @@ namespace das {
                 ss << "(__context__,";
             } else ss << call->name << "(";
         }
+        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
+            Visitor::preVisitLooksLikeCallArg(call, arg, last);
+            if ( call->name=="invoke" ) {
+                auto argType = arg->type;
+                if ( arg->type->isRefType() ) {
+                    if ( needsArgPass(argType) ) {
+                        ss << "das_arg<" << describeCppType(argType,false,true) << ">::pass(";
+                    }
+                } else if (isVecRef(argType)) {
+                    ss << "cast_vec_ref<" << describeCppType(argType,false,true,true) << ">::to(";
+                }
+            }
+        }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
+            if ( call->name=="invoke" ) {
+                auto argType = arg->type;
+                if ( arg->type->isRefType() ) {
+                    if ( needsArgPass(argType) ) {
+                        ss << ")";
+                    }
+                } else if (isVecRef(argType)) {
+                    ss << ")";
+                }
+            }
             if ( !last ) {
                 if (call->name == "assert") {
                     ss << "),(";
@@ -1477,7 +1526,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprLooksLikeCall * call ) override {
             if ( call->name=="assert" ) {
                 ss << "))"; // ts macro
-            } else {
+            } else if ( call->name=="invoke" ){
                 ss << ")";
             }
             return Visitor::visit(call);
@@ -1694,7 +1743,7 @@ namespace das {
                 if (var != ffor->iteratorVariables.front()) {
                     ss << " && ";
                 }
-                ss << forSrcName(var->name) << ".next(__context__," << var->name << ")";
+                ss << forSrcName(var->name) << ".next(__context__," << collector.getVarName(var) << ")";
             }
             ss << " )\n";
             ss << string(tab,'\t');
@@ -1721,17 +1770,17 @@ namespace das {
             ss << ");\n";
             auto & var = ffor->iteratorVariables[idx];
             // source
-            ss << string(tab,'\t') << describeCppType(var->type,true) << " " << var->name << ";\n";
+            ss << string(tab,'\t') << describeCppType(var->type,true) << " " << collector.getVarName(var) << ";\n";
             // loop
             auto nl = needLoopName(ffor);
             ss << string(tab,'\t') << nl << " = " << forSrcName(var->name)
-                << ".first(__context__," << var->name << ") && " << nl << ";\n";
+                << ".first(__context__," << collector.getVarName(var) << ") && " << nl << ";\n";
             return Visitor::visitForSource(ffor, that, last);
         }
         virtual ExpressionPtr visit ( ExprFor * ffor ) override {
             ss << "\n";
             for ( auto & var : ffor->iteratorVariables ) {
-                ss << string(tab,'\t') << forSrcName(var->name) << ".close(__context__," << var->name << ");\n";
+                ss << string(tab,'\t') << forSrcName(var->name) << ".close(__context__," << collector.getVarName(var) << ");\n";
             }
             tab --;
             ss << string(tab,'\t') << "}";
@@ -1778,7 +1827,7 @@ namespace das {
             if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
                 logs << "CMRES";
             }
-            logs << "<" << describeCppFunc(fnn[i],false) << ",";
+            logs << "<" << describeCppFunc(fnn[i],nullptr,false) << ",";
             logs << fn->name << ">>();\n\t};\n";
         }
         if ( context.totalVariables ) {
