@@ -132,6 +132,9 @@ namespace das {
         namespace test_return_reference {
             #include "unit_tests/return_reference.das.main.inc"
         }
+        namespace test_rpipe {
+            #include "unit_tests/rpipe.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -251,6 +254,9 @@ namespace das {
             }
             {   using namespace test_return_reference;
                 #include "unit_tests/return_reference.das.register.inc"
+            }
+            {   using namespace test_rpipe;
+                #include "unit_tests/rpipe.das.register.inc"
             }
         }
     }

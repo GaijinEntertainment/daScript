@@ -385,6 +385,7 @@ DAS_AOT(examples/test/unit_tests/operator_overload.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/operators.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/override.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/return_reference.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/rpipe.das TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 include_directories(include lexer test)
