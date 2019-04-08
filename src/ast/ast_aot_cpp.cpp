@@ -592,7 +592,7 @@ namespace das {
             ss << "\n";
             for ( auto & fnI : prog->thisModule->functions ) {
                 auto & fn = fnI.second;
-                if ( !fn->builtIn ) {
+                if ( !fn->builtIn && !fn->noAot ) {
                     ss << describeCppFunc(fn.get(),&collector) << ";\n";
                 }
             }

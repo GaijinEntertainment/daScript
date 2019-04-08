@@ -6,7 +6,7 @@ require UnitTest
 struct Fields
     a,b,c,d:int
 
-[export]
+[export,noaot]
 def testFields(x:Fields?):int
     let t = 0
     t += x?.a ?? 0

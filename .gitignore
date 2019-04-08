@@ -123,3 +123,5 @@ examples/test/unit_tests/string_builder.das.main.inc
 examples/test/unit_tests/string_builder.das.register.inc
 examples/test/unit_tests/struct.das.main.inc
 examples/test/unit_tests/struct.das.register.inc
+examples/test/unit_tests/structure_annotation.das.main.inc
+examples/test/unit_tests/structure_annotation.das.register.inc

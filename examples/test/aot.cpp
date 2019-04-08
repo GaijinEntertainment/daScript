@@ -147,6 +147,9 @@ namespace das {
         namespace test_structure {
             #include "unit_tests/struct.das.main.inc"
         }
+        namespace test_structure_annotation {
+            #include "unit_tests/structure_annotation.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -281,6 +284,9 @@ namespace das {
             }
             {   using namespace test_structure;
                 #include "unit_tests/struct.das.register.inc"
+            }
+            {   using namespace test_structure_annotation;
+                #include "unit_tests/structure_annotation.das.register.inc"
             }
         }
     }
