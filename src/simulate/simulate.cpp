@@ -94,6 +94,14 @@ namespace das
 
     // SimNode_Debug
 
+    void das_debug ( Context * context, TypeInfo * typeInfo, const char * FILE, int LINE, vec4f res, const char * message ) {
+        TextWriter ssw;
+        if ( message ) ssw << message << " ";
+        ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger)
+        << " at " << FILE << ":" << LINE << "\n";
+        context->to_out(ssw.str().c_str());
+    }
+
     vec4f SimNode_Debug::eval ( Context & context ) {
         vec4f res = subexpr->eval(context);
         TextWriter ssw;

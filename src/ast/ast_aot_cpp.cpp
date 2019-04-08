@@ -1505,10 +1505,34 @@ namespace das {
             ss << ")";
             return Visitor::visit(expr);
         }
+
+/*
+ vector<TypeInfo*> elInfo;
+ elInfo.reserve(elements.size());
+ for ( auto & el : elements ) {
+ TypeInfo * info = helper.makeTypeInfo(nullptr, el->type);
+ elInfo.push_back(info);
+ }
+ string debug_info_name = "__tinfo_" + to_string(debugInfoGlobal++);
+ sti << "TypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
+ for ( size_t i=0; i!=elInfo.size(); ++i ) {
+ auto info = elInfo[i];
+ if ( i ) sti << ", ";
+ sti << "&" << helper.typeInfoName(info);
+ }
+ sti << " };\n";
+ return debug_info_name;
+ */
+
     // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
-            if (call->name == "assert") {
+            if (call->name == "debug" ) {
+                auto argType = call->arguments[0]->type;
+                TypeInfo * info = helper.makeTypeInfo(nullptr, argType);
+                ss << "das_debug(__context__,&" << helper.typeInfoName(info) << ",__FILE__,__LINE__,";
+                ss << "cast<" << describeCppType(argType) << ">::from(";
+            } else if (call->name == "assert") {
                 if ( call->arguments.size()==1 ) ss << "DAS_ASSERT((";
                 else ss << "DAS_ASSERTF((";
             } else if ( call->name=="invoke" ) {
@@ -1563,7 +1587,7 @@ namespace das {
                 }
             }
             if ( !last ) {
-                if (call->name == "assert") {
+                if (call->name == "assert" || call->name=="debug") {
                     ss << "),(";
                 } else {
                     ss << ",";
@@ -1572,9 +1596,9 @@ namespace das {
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprLooksLikeCall * call ) override {
-            if ( call->name=="assert" ) {
-                ss << "))"; // ts macro
-            } else if ( call->name=="invoke" ){
+            if ( call->name=="assert" || call->name=="debug" ) {
+                ss << "))"; 
+            } else {
                 ss << ")";
             }
             return Visitor::visit(call);

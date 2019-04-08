@@ -138,6 +138,9 @@ namespace das {
         namespace test_static_if {
             #include "unit_tests/static_if.das.main.inc"
         }
+        namespace test_string {
+            #include "unit_tests/string.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -263,6 +266,9 @@ namespace das {
             }
             {   using namespace test_static_if;
                 #include "unit_tests/static_if.das.register.inc"
+            }
+            {   using namespace test_string;
+                #include "unit_tests/string.das.register.inc"
             }
         }
     }
