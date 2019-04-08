@@ -108,6 +108,9 @@ namespace das {
         namespace test_method_semantic {
             #include "unit_tests/method_semantic.das.main.inc"
         }
+        namespace test_module {
+            #include "unit_tests/module.das.main.inc"
+        }
 
         namespace test_new_delete {
             #include "unit_tests/new_delete.das.main.inc"
@@ -209,6 +212,9 @@ namespace das {
             }
             {   using namespace test_method_semantic;
                 #include "unit_tests/method_semantic.das.register.inc"
+            }
+            {   using namespace test_module;
+                #include "unit_tests/module.das.register.inc"
             }
 
             {   using namespace test_new_delete;

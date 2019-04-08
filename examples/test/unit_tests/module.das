@@ -1,3 +1,5 @@
+options optimize=false
+
 require math
 require foo_bar
 // require not_a_require

@@ -101,3 +101,5 @@ examples/test/unit_tests/math.das.main.inc
 examples/test/unit_tests/math.das.register.inc
 examples/test/unit_tests/method_semantic.das.main.inc
 examples/test/unit_tests/method_semantic.das.register.inc
+examples/test/unit_tests/module.das.main.inc
+examples/test/unit_tests/module.das.register.inc
