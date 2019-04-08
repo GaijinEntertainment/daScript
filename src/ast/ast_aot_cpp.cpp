@@ -804,8 +804,12 @@ namespace das {
             else return that->right->type;
         }
         string opPolicyName ( ExprOp * that ) {
-            auto bfn = static_cast<BuiltInFunction *>(that->func);
-            return bfn->cppName.empty() ? bfn->name : bfn->cppName;
+            if ( that->func->builtIn ) {
+                auto bfn = static_cast<BuiltInFunction *>(that->func);
+                return bfn->cppName.empty() ? bfn->name : bfn->cppName;
+            } else {
+                return "/* NotAPolicy */";
+            }
         }
         virtual void preVisit ( ExprOp2 * that ) override {
             Visitor::preVisit(that);
