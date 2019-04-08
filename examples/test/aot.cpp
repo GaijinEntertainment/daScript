@@ -129,6 +129,9 @@ namespace das {
         namespace test_override {
             #include "unit_tests/override.das.main.inc"
         }
+        namespace test_return_reference {
+            #include "unit_tests/return_reference.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -245,6 +248,9 @@ namespace das {
             }
             {   using namespace test_override;
                 #include "unit_tests/override.das.register.inc"
+            }
+            {   using namespace test_return_reference;
+                #include "unit_tests/return_reference.das.register.inc"
             }
         }
     }

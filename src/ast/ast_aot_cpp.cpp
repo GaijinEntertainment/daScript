@@ -363,12 +363,12 @@ namespace das {
         return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
     }
 
-    void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype ) {
+    void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, bool substituteRef = true ) {
         if ( isLocalVec(vtype) ) {
             if ( vtype->constant ) ss << "const ";
-            ss << "vec4f /*" << describeCppType(vtype,true) << "*/";
+            ss << "vec4f /*" << describeCppType(vtype,substituteRef) << "*/";
         } else {
-            ss << describeCppType(vtype,true,false);
+            ss << describeCppType(vtype,substituteRef,false);
         }
     }
 
@@ -492,7 +492,7 @@ namespace das {
 
     string describeCppFunc ( Function * fn, BlockVariableCollector * collector, bool needName = true ) {
         TextWriter ss;
-        describeLocalCppType(ss,fn->result);
+        describeLocalCppType(ss,fn->result,false);
         ss << " ";
         if ( needName ) {
             ss << aotFuncName(fn);
@@ -636,7 +636,7 @@ namespace das {
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
             ss << "\n";
-            describeLocalCppType(ss,fn->result);
+            describeLocalCppType(ss,fn->result,false);
             ss << " " << aotFuncName(fn) << " ( Context * __context__";
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
