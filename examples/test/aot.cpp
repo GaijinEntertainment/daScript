@@ -120,6 +120,10 @@ namespace das {
         namespace test_new_with_init {
             #include "unit_tests/new_with_init.das.main.inc"
         }
+        namespace test_operator_overload {
+            #include "unit_tests/operator_overload.das.main.inc"
+        }
+
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -227,6 +231,9 @@ namespace das {
             }
             {   using namespace test_new_with_init;
                 #include "unit_tests/new_with_init.das.register.inc"
+            }
+            {   using namespace test_operator_overload;
+                #include "unit_tests/operator_overload.das.register.inc"
             }
         }
     }

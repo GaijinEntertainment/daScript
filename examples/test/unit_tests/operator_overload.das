@@ -1,8 +1,4 @@
-// TODO:
-//  when we can return & and when we can do return-by-copy and return-by-move
-//  then we can do proper operators
-
-options logCpp=true
+// options logCpp=true
 
 struct iVec2
     x,y:int

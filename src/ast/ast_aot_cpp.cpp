@@ -372,6 +372,45 @@ namespace das {
         }
     }
 
+    string aotFuncNameEx ( const string & funcName ) {
+        string name;
+        bool prefix = false;
+        for ( char ch : funcName ) {
+            if ( isalnum(ch) || ch=='_' ) {
+                name += ch;
+            } else {
+                prefix = true;
+                switch ( ch ) {
+                    case '=':   name += "Equ"; break;
+                    case '+':   name += "Add"; break;
+                    case '-':   name += "Sub"; break;
+                    case '*':   name += "Mul"; break;
+                    case '/':   name += "Div"; break;
+                    case '%':   name += "Mod"; break;
+                    case '&':   name += "And"; break;
+                    case '|':   name += "Or"; break;
+                    case '^':   name += "Xor"; break;
+                    case '?':   name += "Qmark"; break;
+                    case '~':   name += "Tilda"; break;
+                    case '!':   name += "Excl"; break;
+                    case '>':   name += "Greater"; break;
+                    case '<':   name += "Less"; break;
+                    default:
+                        name += "_0x";
+                        name += '0' + (ch>>4);
+                        name += '0' + (ch & 0x0f);
+                        name += "_";
+                        break;
+                }
+            }
+        }
+        return prefix ? ("_Func" + name) : name;
+    }
+
+    string aotFuncName ( Function * func ) {
+        return aotFuncNameEx(func->name);
+    }
+
     class BlockVariableCollector : public Visitor {
     public:
         BlockVariableCollector() {}
@@ -456,7 +495,7 @@ namespace das {
         describeLocalCppType(ss,fn->result);
         ss << " ";
         if ( needName ) {
-            ss << fn->name;
+            ss << aotFuncName(fn);
         }
         ss << " ( Context * __context__";
         for ( auto & var : fn->arguments ) {
@@ -602,7 +641,7 @@ namespace das {
             Visitor::preVisit(fn);
             ss << "\n";
             describeLocalCppType(ss,fn->result);
-            ss << " " << fn->name << " ( Context * __context__";
+            ss << " " << aotFuncName(fn) << " ( Context * __context__";
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
             Visitor::preVisitFunctionBody(fn,expr);
@@ -772,7 +811,12 @@ namespace das {
         }
         virtual void preVisit ( ExprOp1 * that ) override {
             Visitor::preVisit(that);
-            if ( isOpPolicy(that) ){
+            if ( !that->func->builtIn || that->func->callBased ) {
+                that->arguments.clear();
+                that->arguments.push_back(that->subexpr);
+                CallFunc_preVisit(that);
+                CallFunc_preVisitCallArg(that, that->subexpr.get(), true);
+            } else if ( isOpPolicy(that) ){
                 outPolicy(that->subexpr->type);
                 ss << "::" << opPolicyName(that) << "(";
             } else {
@@ -783,7 +827,11 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit ( ExprOp1 * that ) override {
-            if ( isOpPolicy(that) ){
+            if ( !that->func->builtIn || that->func->callBased ) {
+                CallFunc_visitCallArg(that, that->subexpr.get(), true);
+                CallFunc_visit(that);
+                that->arguments.clear();
+            } else if ( isOpPolicy(that) ){
                 ss << ",*__context__)";
             } else {
                 if ( that->op=="+++" || that->op=="---" ) {
@@ -814,7 +862,7 @@ namespace das {
         virtual void preVisit ( ExprOp2 * that ) override {
             Visitor::preVisit(that);
             if ( !noBracket(that) ) ss << "(";
-            if ( that->func->callBased ) {
+            if ( !that->func->builtIn || that->func->callBased ) {
                 that->arguments.clear();
                 that->arguments.push_back(that->left);
                 that->arguments.push_back(that->right);
@@ -836,7 +884,7 @@ namespace das {
         }
         virtual void preVisitRight ( ExprOp2 * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
-            if ( that->func->callBased ) {
+            if ( !that->func->builtIn || that->func->callBased ) {
                 CallFunc_visitCallArg(that, that->left.get(), false);
                 CallFunc_preVisitCallArg(that, that->right.get(), true);
             } else if ( isOpPolicy(that) ) {
@@ -855,7 +903,7 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit ( ExprOp2 * that ) override {
-            if ( that->func->callBased ) {
+            if ( !that->func->builtIn || that->func->callBased ) {
                 CallFunc_visitCallArg(that, that->right.get(), true);
                 CallFunc_visit(that);
                 that->arguments.clear();
@@ -1643,7 +1691,7 @@ namespace das {
                         ss << "Func(" << (call->func->index+1) << "/* " << call->name << " */)";
                     }
                 } else {
-                    ss << call->func->name << "(__context__";
+                    ss << aotFuncName(call->func) << "(__context__";
                     if  ( call->arguments.size() ) ss << ",";
                 }
             }
@@ -1825,14 +1873,14 @@ namespace das {
                 continue;
             SimFunction * fn = context.getFunction(i);
             uint64_t semH = getFunctionHash(fnn[i], fn->code);
-            logs << "\t// " << fn->name << "\n";
+            logs << "\t// " << aotFuncName(fnn[i]) << "\n";
             logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
             if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
                 logs << "CMRES";
             }
             logs << "<" << describeCppFunc(fnn[i],nullptr,false) << ",";
-            logs << fn->name << ">>();\n\t};\n";
+            logs << aotFuncName(fnn[i]) << ">>();\n\t};\n";
         }
         if ( context.totalVariables ) {
             uint64_t semH = context.getInitSemanticHash();
@@ -1849,17 +1897,6 @@ namespace das {
 
     void Program::aotCpp ( TextWriter & logs ) {
         setPrintFlags();
-        /*
-        bool any = false;
-        program.library.foreach([&](Module * pm) {
-            if ( !pm->name.empty() && pm->name!="$" ) {
-                stream << "require " << pm->name << "\n";
-                any = true;
-            }
-            return true;
-        }, "*");
-        if (any) stream << "\n";
-        */
         BlockVariableCollector collector;
         visit(collector);
         CppAot aotVisitor(shared_from_this(),collector);

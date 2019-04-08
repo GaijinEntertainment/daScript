@@ -381,6 +381,7 @@ DAS_AOT(examples/test/unit_tests/module.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/new_and_init.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/new_delete.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/new_with_init.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/operator_overload.das TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 include_directories(include lexer test)
