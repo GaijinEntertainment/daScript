@@ -135,6 +135,9 @@ namespace das {
         namespace test_rpipe {
             #include "unit_tests/rpipe.das.main.inc"
         }
+        namespace test_static_if {
+            #include "unit_tests/static_if.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -257,6 +260,9 @@ namespace das {
             }
             {   using namespace test_rpipe;
                 #include "unit_tests/rpipe.das.register.inc"
+            }
+            {   using namespace test_static_if;
+                #include "unit_tests/static_if.das.register.inc"
             }
         }
     }

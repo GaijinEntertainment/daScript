@@ -115,3 +115,5 @@ examples/test/unit_tests/return_reference.das.main.inc
 examples/test/unit_tests/return_reference.das.register.inc
 examples/test/unit_tests/rpipe.das.main.inc
 examples/test/unit_tests/rpipe.das.register.inc
+examples/test/unit_tests/static_if.das.main.inc
+examples/test/unit_tests/static_if.das.register.inc
