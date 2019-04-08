@@ -111,13 +111,16 @@ namespace das {
         namespace test_module {
             #include "unit_tests/module.das.main.inc"
         }
-
-        namespace test_new_delete {
-            #include "unit_tests/new_delete.das.main.inc"
-        }
         namespace test_new_and_init {
             #include "unit_tests/new_and_init.das.main.inc"
         }
+        namespace test_new_delete {
+            #include "unit_tests/new_delete.das.main.inc"
+        }
+        namespace test_new_with_init {
+            #include "unit_tests/new_with_init.das.main.inc"
+        }
+
         void registerAot ( AotLibrary & aotLib )
         {
             {   using namespace test_array;
@@ -216,12 +219,14 @@ namespace das {
             {   using namespace test_module;
                 #include "unit_tests/module.das.register.inc"
             }
-
+            {   using namespace test_new_and_init;
+                #include "unit_tests/new_and_init.das.register.inc"
+            }
             {   using namespace test_new_delete;
                 #include "unit_tests/new_delete.das.register.inc"
             }
-            {   using namespace test_new_and_init;
-                #include "unit_tests/new_and_init.das.register.inc"
+            {   using namespace test_new_with_init;
+                #include "unit_tests/new_with_init.das.register.inc"
             }
         }
     }
