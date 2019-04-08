@@ -119,3 +119,5 @@ examples/test/unit_tests/static_if.das.main.inc
 examples/test/unit_tests/static_if.das.register.inc
 examples/test/unit_tests/string.das.main.inc
 examples/test/unit_tests/string.das.register.inc
+examples/test/unit_tests/string_builder.das.main.inc
+examples/test/unit_tests/string_builder.das.register.inc
