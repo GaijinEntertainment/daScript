@@ -389,6 +389,7 @@ DAS_AOT(examples/test/unit_tests/rpipe.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/static_if.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/string.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/string_builder.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/struct.das TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 include_directories(include lexer test)

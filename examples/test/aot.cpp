@@ -144,6 +144,9 @@ namespace das {
         namespace test_string_builder {
             #include "unit_tests/string_builder.das.main.inc"
         }
+        namespace test_structure {
+            #include "unit_tests/struct.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -275,6 +278,9 @@ namespace das {
             }
             {   using namespace test_string_builder;
                 #include "unit_tests/string_builder.das.register.inc"
+            }
+            {   using namespace test_structure;
+                #include "unit_tests/struct.das.register.inc"
             }
         }
     }
