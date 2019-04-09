@@ -1222,7 +1222,14 @@ namespace das {
                     << describeCppType(expr->value->type,false,true) << ","
                     << int32_t(expr->fields[0]) << ">::swizzle(";
                 } else {
-                    ss << "das_swizzle(";
+                    ss << "das_swizzle<"
+                        << describeCppType(expr->type,false,true) << ","
+                        << describeCppType(expr->value->type,false,true);
+                    for ( size_t i=0; i!=expr->fields.size(); ++i ) {
+                        ss << ",";
+                        ss << int32_t(expr->fields[i]);
+                    }
+                    ss << ">::swizzle(";
                 }
             }
         }

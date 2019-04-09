@@ -5,6 +5,30 @@
 namespace das
 {
     template <typename TT>
+    struct vec_extract {
+        static __forceinline TT x ( vec4f t ) { return v_extract_x(t); }
+        static __forceinline TT y ( vec4f t ) { return v_extract_y(t); }
+        static __forceinline TT z ( vec4f t ) { return v_extract_z(t); }
+        static __forceinline TT w ( vec4f t ) { return v_extract_w(t); }
+    };
+
+    template <>
+    struct vec_extract<int32_t> {
+        static __forceinline int32_t x ( vec4f t ) { return v_extract_xi(v_cast_vec4i(t)); }
+        static __forceinline int32_t y ( vec4f t ) { return v_extract_yi(v_cast_vec4i(t)); }
+        static __forceinline int32_t z ( vec4f t ) { return v_extract_zi(v_cast_vec4i(t)); }
+        static __forceinline int32_t w ( vec4f t ) { return v_extract_wi(v_cast_vec4i(t)); }
+    };
+
+    template <>
+    struct vec_extract<uint32_t> {
+        static __forceinline uint32_t x ( vec4f t ) { return v_extract_xi(v_cast_vec4i(t)); }
+        static __forceinline uint32_t y ( vec4f t ) { return v_extract_yi(v_cast_vec4i(t)); }
+        static __forceinline uint32_t z ( vec4f t ) { return v_extract_zi(v_cast_vec4i(t)); }
+        static __forceinline uint32_t w ( vec4f t ) { return v_extract_wi(v_cast_vec4i(t)); }
+    };
+
+    template <typename TT>
     struct vec2 {
         TT   x, y;
         template <typename AP>
@@ -17,7 +41,7 @@ namespace das
         }
         __forceinline vec2() = default;
         __forceinline vec2(const vec2 &) = default;
-        __forceinline vec2(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)) {}
+        __forceinline vec2(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)) {}
         __forceinline vec2(TT X, TT Y) : x(X), y(Y) {}
         __forceinline vec2(TT t) : x(t), y(t) {}
         __forceinline operator vec4f() const { return v_ldu_half((float *)this); };
@@ -36,7 +60,7 @@ namespace das
         }
         __forceinline vec3() = default;
         __forceinline vec3(const vec3 &) = default;
-        __forceinline vec3(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)), z(v_extract_z(t)) {}
+        __forceinline vec3(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)), z(vec_extract<TT>::z(t)) {}
         __forceinline vec3(TT X, TT Y, TT Z) : x(X), y(Y), z(Z) {}
         __forceinline vec3(TT t) : x(t), y(t), z(t) {}
         __forceinline operator vec4f() const { return v_ldu((float *)this); };
@@ -56,7 +80,7 @@ namespace das
         }
         __forceinline vec4() = default;
         __forceinline vec4(const vec4 &) = default;
-        __forceinline vec4(vec4f t) : x(v_extract_x(t)), y(v_extract_y(t)), z(v_extract_z(t)), w(v_extract_w(t)) {}
+        __forceinline vec4(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)), z(vec_extract<TT>::z(t)), w(vec_extract<TT>::w(t)) {}
         __forceinline vec4(TT X, TT Y, TT Z, TT W) : x(X), y(Y), z(Z), w(W) {}
         __forceinline vec4(TT t) : x(t), y(t), z(t), w(t) {}
         __forceinline operator vec4f() const { return v_ldu((float *)this); };

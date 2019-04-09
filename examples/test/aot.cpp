@@ -150,6 +150,9 @@ namespace das {
         namespace test_structure_annotation {
             #include "unit_tests/structure_annotation.das.main.inc"
         }
+        namespace test_swizze {
+            #include "unit_tests/swizze.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -287,6 +290,9 @@ namespace das {
             }
             {   using namespace test_structure_annotation;
                 #include "unit_tests/structure_annotation.das.register.inc"
+            }
+            {   using namespace test_swizze;
+                #include "unit_tests/swizze.das.register.inc"
             }
         }
     }

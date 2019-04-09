@@ -50,15 +50,61 @@ namespace das {
 
     template <typename ResT,typename VecT, int index>
     struct das_swizzle_ref {
-        static ResT & swizzle ( VecT & val ) {
+        static __forceinline ResT & swizzle ( VecT & val ) {
+            return  *((ResT *)((&val.x) + index));
+        }
+        static __forceinline ResT & swizzle ( vec4f & valV ) {
+            VecT & val = *((VecT *)&valV);
             return  *((ResT *)((&val.x) + index));
         }
     };
 
     template <typename ResT,typename VecT, int index>
     struct das_swizzle_seq {
-        static const ResT & swizzle ( const VecT & val ) {
+        static __forceinline const ResT & swizzle ( const VecT & val ) {
             return  *((const ResT *)((&val.x) + index));
+        }
+    };
+
+    template <typename ResT,typename VecT, int f0, int f1, int f2 = 0, int f3 = 0>
+    struct das_swizzle {
+        static __forceinline ResT swizzle ( const VecT & val ) {
+            ResT res;
+            res.x = *((&val.x) + f0);
+            res.y = *((&val.x) + f1);
+            res.z = *((&val.x) + f2);
+            res.w = *((&val.x) + f3);
+            return res;
+        }
+        static __forceinline ResT swizzle ( vec4f valT ) {
+            return swizzle(*((VecT *)&valT));
+        }
+    };
+
+    template <typename ResT,typename VecT, int f0, int f1, int f2>
+    struct das_swizzle<ResT,VecT,f0,f1,f2,0> {
+        static __forceinline ResT swizzle ( const VecT & val ) {
+            ResT res;
+            res.x = *((&val.x) + f0);
+            res.y = *((&val.x) + f1);
+            res.z = *((&val.x) + f2);
+            return res;
+        }
+        static __forceinline ResT swizzle ( vec4f valT ) {
+            return swizzle(*((VecT *)&valT));
+        }
+    };
+
+    template <typename ResT,typename VecT, int f0, int f1>
+    struct das_swizzle<ResT,VecT,f0,f1,0,0> {
+        static __forceinline ResT swizzle ( const VecT & val ) {
+            ResT res;
+            res.x = *((&val.x) + f0);
+            res.y = *((&val.x) + f1);
+            return res;
+        }
+        static __forceinline ResT swizzle ( vec4f valT ) {
+            return swizzle(*((VecT *)&valT));
         }
     };
 
