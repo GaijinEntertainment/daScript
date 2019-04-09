@@ -169,6 +169,9 @@ install(
     LIBRARY
         DESTINATION
             ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME
+        DESTINATION
+            ${CMAKE_INSTALL_BINDIR}
     PUBLIC_HEADER
         DESTINATION
             ${CMAKE_INSTALL_INCLUDEDIR}/uriparser
