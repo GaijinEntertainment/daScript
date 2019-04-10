@@ -141,3 +141,11 @@ examples/test/unit_tests/typename.das.main.inc
 examples/test/unit_tests/typename.das.register.inc
 examples/test/unit_tests/types.das.main.inc
 examples/test/unit_tests/types.das.register.inc
+examples/test/unit_tests/vec_ctors.das.main.inc
+examples/test/unit_tests/vec_ctors.das.register.inc
+examples/test/unit_tests/vec_index.das.main.inc
+examples/test/unit_tests/vec_index.das.register.inc
+examples/test/unit_tests/vec_swizzle.das.main.inc
+examples/test/unit_tests/vec_swizzle.das.register.inc
+examples/test/unit_tests/with.das.main.inc
+examples/test/unit_tests/with.das.register.inc
