@@ -408,7 +408,11 @@ namespace das {
     }
 
     string aotFuncName ( Function * func ) {
-        return aotFuncNameEx(func->name);
+        if ( func->hash ) {
+            return aotFuncNameEx(func->name) + "_" + to_string(func->hash);
+        } else {
+            return aotFuncNameEx(func->name);
+        }
     }
 
     class BlockVariableCollector : public Visitor {
@@ -1915,7 +1919,7 @@ namespace das {
             if ( fnn[i]->noAot )
                 continue;
             SimFunction * fn = context.getFunction(i);
-            uint64_t semH = getFunctionHash(fnn[i], fn->code);
+            uint64_t semH = fnn[i]->hash;
             logs << "\t// " << aotFuncName(fnn[i]) << "\n";
             logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
@@ -1938,7 +1942,19 @@ namespace das {
         }
     }
 
-    void Program::aotCpp ( TextWriter & logs ) {
+    void Program::aotCpp ( Context & context, TextWriter & logs ) {
+        // compute semantic hash for each used function
+        int fni = 0;
+        for (auto & pm : library.modules) {
+            for (auto & it : pm->functions) {
+                auto pfun = it.second;
+                if (pfun->index < 0 || !pfun->used)
+                    continue;
+                SimFunction * fn = context.getFunction(fni);
+                pfun->hash = getFunctionHash(pfun.get(), fn->code);
+                fni++;
+            }
+        }
         setPrintFlags();
         BlockVariableCollector collector;
         visit(collector);

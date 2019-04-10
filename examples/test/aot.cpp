@@ -175,7 +175,7 @@ namespace das {
             #include "unit_tests/types.das.main.inc"
         }
         namespace test_vec_ctors {
-            // #include "unit_tests/vec_ctors.das.main.inc"
+            #include "unit_tests/vec_ctors.das.main.inc"
         }
         namespace test_vec_index {
             // #include "unit_tests/vec_index.das.main.inc"
@@ -349,7 +349,7 @@ namespace das {
                 #include "unit_tests/types.das.register.inc"
             }
             {   using namespace test_vec_ctors;
-                // #include "unit_tests/vec_ctors.das.register.inc"
+                #include "unit_tests/vec_ctors.das.register.inc"
             }
             {   using namespace test_vec_index;
                 // #include "unit_tests/vec_index.das.register.inc"

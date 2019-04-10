@@ -35,7 +35,7 @@ bool compile ( const string & fn, const string & mainInc, const string & registe
             }
             // AOT time
             TextWriter mainTw, registerTw;
-            program->aotCpp(mainTw);
+            program->aotCpp(ctx, mainTw);
             program->registerAotCpp(registerTw, ctx, false);
             // and save
             return saveToFile(mainInc, mainTw.str()) && saveToFile(registerInc, registerTw.str());

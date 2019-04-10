@@ -1724,7 +1724,7 @@ namespace das
             }
         }
         if (options.getOption("logCpp")) {
-            aotCpp(logs);
+            aotCpp(context,logs);
             registerAotCpp(logs,context);
         }
         return errors.size() == 0;

@@ -1497,6 +1497,7 @@ namespace das
             InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
         };
         vector<InferHistory> inferStack;
+        uint64_t hash = 0;
     };
 
     uint64_t getFunctionHash ( Function * fun, SimNode * node );
@@ -1692,7 +1693,7 @@ namespace das
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
-        void aotCpp ( TextWriter & logs );
+        void aotCpp ( Context & context, TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
     public:
         template <typename TT>
