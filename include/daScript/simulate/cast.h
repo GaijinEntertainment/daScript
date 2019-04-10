@@ -7,6 +7,35 @@
 namespace das
 {
     template <typename TT>
+    struct das_alias;
+
+    template <typename PT, typename VT>
+    struct das_alias_ref {
+        static __forceinline VT & from ( PT & value ) {
+            return *((VT *)&value);
+        }
+        static __forceinline VT from ( const PT & value ) {
+            return *((VT *)&value);
+        }
+        static __forceinline PT & to ( VT & value ) {
+            return *((PT *)&value);
+        }
+        static __forceinline PT to ( const VT & value ) {
+            return *((PT *)&value);
+        }
+    };
+
+    template <typename PT, typename VT>
+    struct das_alias_vec : das_alias_ref<PT,VT> {
+        static __forceinline PT & to ( vec4f & value ) {
+            return *((PT *)&value);
+        }
+        static __forceinline PT to ( vec4f value ) {
+            return *((PT *)&value);
+        }
+    };
+
+    template <typename TT>
     struct cast;
 
     template <typename TT>

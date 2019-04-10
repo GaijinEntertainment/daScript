@@ -127,6 +127,7 @@ namespace das
                 bool    constant : 1;
                 bool    removeRef : 1;
                 bool    removeConstant : 1;
+                bool    aotAlias : 1;
             };
             uint32_t flags = 0;
         };

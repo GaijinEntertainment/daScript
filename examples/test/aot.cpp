@@ -166,7 +166,7 @@ namespace das {
             #include "unit_tests/try-catch.das.main.inc"
         }
         namespace test_typeAlias {
-            // #include "unit_tests/typeAlias.das.main.inc"
+            #include "unit_tests/typeAlias.das.main.inc"
         }
         namespace test_typename {
             #include "unit_tests/typename.das.main.inc"
@@ -340,7 +340,7 @@ namespace das {
                 #include "unit_tests/try-catch.das.register.inc"
             }
             {   using namespace test_typeAlias;
-                // #include "unit_tests/typeAlias.das.register.inc"
+                #include "unit_tests/typeAlias.das.register.inc"
             }
             {   using namespace test_typename;
                 #include "unit_tests/typename.das.register.inc"

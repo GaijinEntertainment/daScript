@@ -1685,6 +1685,9 @@ namespace das {
         }
         void CallFunc_preVisit ( ExprCallFunc * call ) {
             Visitor::preVisit(call);
+            if ( call->func->result->aotAlias ) {
+                ss << "das_alias<" << call->func->result->alias << ">::from(";
+            }
             if ( call->func->builtIn ) {
                 auto bif = static_cast<BuiltInFunction *>(call->func);
                 if ( !call->arguments.size() && call->type->baseType==Type::tHandle ) {
@@ -1749,6 +1752,10 @@ namespace das {
             });
             DAS_ASSERT(it != call->arguments.end());
             auto argType = (*it)->type;
+            auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
+            if ( funArgType->aotAlias ) {
+                ss << "das_alias<" << funArgType->alias << ">::to(";
+            }
             if ( call->func->interopFn ) {
                 ss << "cast<" << describeCppType(argType);
                 if ( argType->isRefType() && !argType->ref ) {
@@ -1784,6 +1791,8 @@ namespace das {
             } else if (isVecRef(argType)) {
                 ss << ")";
             }
+            auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
+            if ( funArgType->aotAlias ) ss << ")";
             if ( !last ) ss << ",";
         }
         void CallFunc_visit ( ExprCallFunc * call ) {
@@ -1797,6 +1806,9 @@ namespace das {
                 ss << ",*__context__";
             }
             ss << ")";
+            if ( call->func->result->aotAlias ) {
+                ss << ")";
+            }
         }
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);

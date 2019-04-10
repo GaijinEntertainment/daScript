@@ -2,8 +2,17 @@
 #include "module_unitTest.h"
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
-template<> struct das::ToBasicType<Point3>        { enum { type = das::Type::tFloat3 }; };
 template<> struct das::cast <Point3>  : cast_fVec<Point3> {};
+
+template <>
+struct typeFactory<Point3> {
+    static TypeDeclPtr make(const ModuleLibrary &) {
+        auto t = make_shared<TypeDecl>(Type::tFloat3);
+        t->alias = "Point3";
+        t->aotAlias = true;
+        return t;
+    }
+};
 
 //sample of your engine annotated struct
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
