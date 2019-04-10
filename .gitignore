@@ -137,3 +137,5 @@ examples/test/unit_tests/try-catch.das.main.inc
 examples/test/unit_tests/try-catch.das.register.inc
 examples/test/unit_tests/typeAlias.das.main.inc
 examples/test/unit_tests/typeAlias.das.register.inc
+examples/test/unit_tests/typename.das.main.inc
+examples/test/unit_tests/typename.das.register.inc

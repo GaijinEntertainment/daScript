@@ -168,6 +168,9 @@ namespace das {
         namespace test_typeAlias {
             // #include "unit_tests/typeAlias.das.main.inc"
         }
+        namespace test_typename {
+            #include "unit_tests/typename.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -323,6 +326,9 @@ namespace das {
             }
             {   using namespace test_typeAlias;
                 // #include "unit_tests/typeAlias.das.register.inc"
+            }
+            {   using namespace test_typename;
+                #include "unit_tests/typename.das.register.inc"
             }
         }
     }
