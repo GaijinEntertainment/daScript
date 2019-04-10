@@ -136,7 +136,7 @@ namespace das {
             }
         } else if ( baseType==Type::tIterator ) {
             if ( type->firstType ) {
-                stream << "TIterator<" << describeCppType(type->firstType) << ">";
+                stream << "TIterator<" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << ">";
             } else {
                 stream << "Iterator";
             }
@@ -775,9 +775,17 @@ namespace das {
             return Visitor::visitLetInit(let, var, expr);
         }
     // copy
+        virtual void preVisit ( ExprCopy * that ) override {
+            Visitor::preVisit(that);
+            ss << "das_copy(";
+        }
         virtual void preVisitRight ( ExprCopy * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
-            ss << " = ";
+            ss << ",";
+        }
+        virtual ExpressionPtr visit ( ExprCopy * that ) override {
+            ss << ")";
+            return Visitor::visit(that);
         }
     // move
         virtual void preVisit ( ExprMove * that ) override {
@@ -1542,6 +1550,14 @@ namespace das {
             } else if (call->name == "assert") {
                 if ( call->arguments.size()==1 ) ss << "DAS_ASSERT((";
                 else ss << "DAS_ASSERTF((";
+            } else if (call->name == "erase") {
+                ss << "__builtin_table_erase(__context__,";
+            } else if (call->name == "find") {
+                ss << "__builtin_table_find(__context__,";
+            } else if (call->name == "keys") {
+                ss << "__builtin_table_keys(__context__,";
+            } else if (call->name == "values") {
+                ss << "__builtin_table_values(__context__,";
             } else if ( call->name=="invoke" ) {
                 auto bt = call->arguments[0]->type->baseType;
                 if (bt == Type::tBlock) ss << "das_invoke";
@@ -1836,7 +1852,7 @@ namespace das {
                 }
             }
             auto & var = ffor->iteratorVariables[idx];
-            ss << string(tab,'\t') << "das_iterator<" << describeCppType(ffor->sources[idx]->type,false,true)
+            ss << string(tab,'\t') << "das_iterator<" << describeCppType(ffor->sources[idx]->type,true,true,true)
                 << "> " << forSrcName(var->name) << "(";
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
@@ -1849,7 +1865,7 @@ namespace das {
             ss << ");\n";
             auto & var = ffor->iteratorVariables[idx];
             // source
-            ss << string(tab,'\t') << describeCppType(var->type,true) << " " << collector.getVarName(var) << ";\n";
+            ss << string(tab,'\t') << describeCppType(var->type,true,false,true) << " " << collector.getVarName(var) << ";\n";
             // loop
             auto nl = needLoopName(ffor);
             ss << string(tab,'\t') << nl << " = " << forSrcName(var->name)

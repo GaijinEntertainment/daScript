@@ -2,7 +2,7 @@
 def test : bool
     let tab:table<string,int>
     let i,del:int
-    let total:int=1000
+    let total:int=32
     assert(!erase(tab,"0"))
     i = 0
     while i!=total

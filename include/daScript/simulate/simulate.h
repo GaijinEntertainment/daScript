@@ -2132,7 +2132,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     struct Iterator {
-          virtual ~Iterator() {}
+        virtual ~Iterator() {}
         virtual bool first ( Context & context, IteratorContext & itc ) = 0;
         virtual bool next  ( Context & context, IteratorContext & itc ) = 0;
         virtual void close ( Context & context, IteratorContext & itc ) = 0;    // can't throw

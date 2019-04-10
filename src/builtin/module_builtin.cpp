@@ -232,11 +232,11 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addFunctionBasic<char *>(*this,lib);
         addFunctionOrdered<char *>(*this,lib);
         addFunctionConcat<char *>(*this,lib);
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t>>    ("string",lib,"das_to_string",false) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t>>   ("string",lib,"das_to_string",false) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int64_t>,   char *,int64_t>>    ("string",lib,"das_to_string",false) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint64_t>,  char *,uint64_t>>   ("string",lib,"das_to_string",false) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float>>      ("string",lib,"das_to_string",false) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t,Context *>>    ("string",lib,"das_lexical_cast",false) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t,Context *>>   ("string",lib,"das_lexical_cast",false) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int64_t>,   char *,int64_t,Context *>>    ("string",lib,"das_lexical_cast",false) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint64_t>,  char *,uint64_t,Context *>>   ("string",lib,"das_lexical_cast",false) );
+        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float,Context *>>      ("string",lib,"das_lexical_cast",false) );
         // VECTOR & MATRIX TYPES
         addVectorTypes(lib);
         addMatrixTypes(lib);

@@ -26,7 +26,11 @@ namespace das {
         a = b;
         memset(&b, 0, sizeof(TT));
     }
-    
+
+    template <typename TT, typename QQ>
+    __forceinline void das_copy ( TT & a, QQ b ) {
+        a = b;
+    }
 
     template <typename TT, int offset>
     __forceinline TT & das_global ( Context * __context__ ) {
@@ -697,6 +701,17 @@ namespace das {
         }
     };
 
+    template <typename TT>
+    __forceinline char * das_lexical_cast ( TT x, Context * __context__ ) {
+        StringBuilderWriter writer(__context__->heap);
+        writer << x;
+        auto pStr = writer.c_str();
+        if ( !pStr ) {
+            __context__->throw_error("can't allocate string builder result, out of heap");
+        }
+        return pStr;
+    }
+
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
         StringBuilderWriter writer(__context__->heap);
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
@@ -969,5 +984,86 @@ namespace das {
             (*func) ( *__context__, (SimNode_CallBase *)&node, node.argumentValues );
         }
     };
+
+    template <typename TT>
+    struct TIterator  {
+        Table * pTable = nullptr;
+        char *  table_data = nullptr;
+        char *  table_end = nullptr;
+        __forceinline TIterator ( Table * tab, char * data ) {
+            pTable = tab;
+            table_data = data;
+        }
+        __forceinline size_t nextValid ( size_t index ) const {
+            for (; index < pTable->capacity; index++)
+                if (pTable->hashes[index] > HASH_KILLED32)
+                    break;
+            return index;
+        }
+        __forceinline bool first ( Context & context, TT * & value ) {
+            table_lock(context, *pTable);
+            size_t index = nextValid(0);
+            table_end  = table_data + pTable->capacity * sizeof(TT);
+            char * data = table_data + index * sizeof(TT);
+            value  = (TT *) data;
+            return (bool) pTable->size;
+        }
+        __forceinline bool next  ( Context &, TT * & value ) {
+            char * data = (char *) value;
+            size_t index = nextValid((data - table_data) / sizeof(TT) + 1 );
+            data = table_data + index * sizeof(TT);
+            value = (TT *) data;
+            return data != table_end;
+        }
+        __forceinline void close ( Context & context ) {
+            table_unlock(context, *pTable);
+        }
+    };
+
+    template <typename TT>
+    struct das_iterator <TIterator<TT>> {
+        __forceinline das_iterator(TIterator<TT> * r) {
+            that = r;
+        }
+        __forceinline ~das_iterator() {
+            delete that;
+            that = nullptr;
+        }
+        __forceinline bool first ( Context * context, TT * & i ) {
+            return that->first(*context, i);
+        }
+        __forceinline bool next  ( Context * context, TT * & i ) {
+            return that->next(*context,i);
+        }
+        __forceinline void close ( Context * context, TT * & ) {
+            that->close(*context);
+        }
+        TIterator<TT> * that = nullptr;
+    };
+
+    template <typename TK, typename TV>
+    TIterator<TK> * __builtin_table_keys ( Context * context, TTable<TK,TV> & tab) {
+        return new TIterator<TK>(&tab, tab.keys);
+    }
+
+    template <typename TK, typename TV>
+    TIterator<TV> * __builtin_table_values ( Context * context, TTable<TK,TV> & tab) {
+        return new TIterator<TV>(&tab, tab.data);
+    }
+
+    template <typename TK, typename TV>
+    TV * __builtin_table_find ( Context * context, TTable<TK, TV> & tab, const TK & key ) {
+        auto hfn = hash_function(*context, key);
+        TableHash<TK> thh(context,sizeof(TV));
+        int index = thh.find(tab, key, hfn);
+        return (TV *) ( index!=-1 ? tab.data + index * sizeof(TV) : nullptr );
+    }
+
+    template <typename TK, typename TV>
+    bool __builtin_table_erase ( Context * context, TTable<TK,TV> & tab, const TK & key ) {
+        auto hfn = hash_function(*context, key);
+        TableHash<TK> thh(context,sizeof(TV));
+        return thh.erase(tab, key, hfn) != -1;
+    }
 }
 

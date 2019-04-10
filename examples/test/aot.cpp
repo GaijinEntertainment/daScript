@@ -153,6 +153,9 @@ namespace das {
         namespace test_swizze {
             #include "unit_tests/swizze.das.main.inc"
         }
+        namespace test_table {
+            #include "unit_tests/table.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -293,6 +296,9 @@ namespace das {
             }
             {   using namespace test_swizze;
                 #include "unit_tests/swizze.das.register.inc"
+            }
+            {   using namespace test_table;
+                #include "unit_tests/table.das.register.inc"
             }
         }
     }

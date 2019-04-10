@@ -15,6 +15,9 @@ namespace  das {
                 auto arg = make_shared<Variable>();
                 arg->name = "arg" + to_string(argi);
                 arg->type = args[argi];
+                if ( arg->type->baseType==Type::fakeContext ) {
+                    arg->init = make_shared<ExprFakeContext>(at);
+                }
                 this->arguments.push_back(arg);
             }
             // copy on return and move on return

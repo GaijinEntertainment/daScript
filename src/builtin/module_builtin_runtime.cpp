@@ -125,12 +125,12 @@ namespace das
       return (int32_t) context->heap.buddyChunksCount();
     }
 
-    void builtin_table_lock ( Table * arr, Context * context ) {
-        table_lock(*context, *arr);
+    void builtin_table_lock ( Table & arr, Context * context ) {
+        table_lock(*context, arr);
     }
 
-    void builtin_table_unlock ( Table * arr, Context * context ) {
-        table_unlock(*context, *arr);
+    void builtin_table_unlock ( Table & arr, Context * context ) {
+        table_unlock(*context, arr);
     }
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
@@ -163,8 +163,8 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_table_clear");
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none, "builtin_table_size");
         addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", SideEffects::none, "builtin_table_capacity");
-        addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock", SideEffects::modifyArgument);
-        addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock", SideEffects::modifyArgument);
+        addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock", SideEffects::modifyArgument, "builtin_table_lock");
+        addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock", SideEffects::modifyArgument, "builtin_table_unlock");
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprFind>("__builtin_table_find");
