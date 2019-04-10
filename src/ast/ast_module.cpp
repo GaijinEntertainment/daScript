@@ -4,7 +4,7 @@
 
 namespace das {
 
-    intptr_t ModuleKarma = 0;
+    unsigned ModuleKarma = 0;
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
         auto at = name.find("::");
