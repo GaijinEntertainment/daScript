@@ -5,7 +5,7 @@ let
     g_var_f:float=3.14
     g_var_s:string="blah"
 
-def test_global
+def test_global_var
     assert(g_var_i==1)
     g_var_i = g_var_i + 1
     assert(g_var_i==2)
@@ -16,7 +16,7 @@ def test_global
     g_var_s += "_blah"
     assert(g_var_s == "blah_blah")
 
-def test_local
+def test_local_var
     let l_var_i:int=1
     let l_var_f:float=3.14
     let l_var_s:string="blah"
@@ -44,7 +44,7 @@ def test_arg(a_var_i:int=1;a_var_f:float=3.14;a_var_s:string="blah")
 def test_block_invoke(b:block<(b_var_i:int;b_var_f:float;b_var_s:string):void>)
     invoke(b,1,3.14,"blah")
 
-def test_block
+def test_block_var
     test_block_invoke() <| $ (b_var_i:int;b_var_f:float;b_var_s:string)
         assert(b_var_i==1)
         b_var_i = b_var_i + 1
@@ -58,7 +58,8 @@ def test_block
 
 [export]
 def test:bool
-    test_local()
-    test_global()
+    test_local_var()
+    test_global_var()
     test_arg()
+    test_block_var()
     return true

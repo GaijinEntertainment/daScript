@@ -139,3 +139,5 @@ examples/test/unit_tests/typeAlias.das.main.inc
 examples/test/unit_tests/typeAlias.das.register.inc
 examples/test/unit_tests/typename.das.main.inc
 examples/test/unit_tests/typename.das.register.inc
+examples/test/unit_tests/types.das.main.inc
+examples/test/unit_tests/types.das.register.inc
