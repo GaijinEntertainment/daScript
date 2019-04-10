@@ -156,6 +156,9 @@ namespace das {
         namespace test_table {
             #include "unit_tests/table.das.main.inc"
         }
+        namespace test_test_bool_if {
+            #include "unit_tests/test_bool_if.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -299,6 +302,9 @@ namespace das {
             }
             {   using namespace test_table;
                 #include "unit_tests/table.das.register.inc"
+            }
+            {   using namespace test_test_bool_if;
+                #include "unit_tests/test_bool_if.das.register.inc"
             }
         }
     }
