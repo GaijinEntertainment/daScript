@@ -181,7 +181,7 @@ namespace das {
             #include "unit_tests/vec_index.das.main.inc"
         }
         namespace test_vec_swizzle {
-            // #include "unit_tests/vec_swizzle.das.main.inc"
+            #include "unit_tests/vec_swizzle.das.main.inc"
         }
         namespace test_with {
             #include "unit_tests/with.das.main.inc"
@@ -355,7 +355,7 @@ namespace das {
                 #include "unit_tests/vec_index.das.register.inc"
             }
             {   using namespace test_vec_swizzle;
-                // #include "unit_tests/vec_swizzle.das.register.inc"
+                #include "unit_tests/vec_swizzle.das.register.inc"
             }
             {   using namespace test_with;
                 #include "unit_tests/with.das.register.inc"
