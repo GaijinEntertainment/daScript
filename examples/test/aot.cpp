@@ -159,6 +159,9 @@ namespace das {
         namespace test_test_bool_if {
             #include "unit_tests/test_bool_if.das.main.inc"
         }
+        namespace test_time {
+            #include "unit_tests/time.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -305,6 +308,9 @@ namespace das {
             }
             {   using namespace test_test_bool_if;
                 #include "unit_tests/test_bool_if.das.register.inc"
+            }
+            {   using namespace test_time;
+                #include "unit_tests/time.das.register.inc"
             }
         }
     }

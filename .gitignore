@@ -131,3 +131,5 @@ examples/test/unit_tests/table.das.main.inc
 examples/test/unit_tests/table.das.register.inc
 examples/test/unit_tests/test_bool_if.das.main.inc
 examples/test/unit_tests/test_bool_if.das.register.inc
+examples/test/unit_tests/time.das.main.inc
+examples/test/unit_tests/time.das.register.inc
