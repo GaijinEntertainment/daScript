@@ -4,6 +4,8 @@
 
 namespace das {
 
+    intptr_t ModuleKarma = 0;
+
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
         auto at = name.find("::");
         if ( at!=string::npos ) {
@@ -33,7 +35,6 @@ namespace das {
 
     // MODULE
 
-    intptr_t Module::Karma = 0;
     Module * Module::modules = nullptr;
 
     TypeAnnotation * Module::resolveAnnotation ( TypeInfo * info ) {
