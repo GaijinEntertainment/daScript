@@ -165,6 +165,9 @@ namespace das {
         namespace test_try_catch {
             #include "unit_tests/try-catch.das.main.inc"
         }
+        namespace test_typeAlias {
+            // #include "unit_tests/typeAlias.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -317,6 +320,9 @@ namespace das {
             }
             {   using namespace test_try_catch;
                 #include "unit_tests/try-catch.das.register.inc"
+            }
+            {   using namespace test_typeAlias;
+                // #include "unit_tests/typeAlias.das.register.inc"
             }
         }
     }

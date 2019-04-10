@@ -2,12 +2,8 @@
 #include "module_unitTest.h"
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
-struct Point3 { float x, y, z; };
 template<> struct das::ToBasicType<Point3>        { enum { type = das::Type::tFloat3 }; };
 template<> struct das::cast <Point3>  : cast_fVec<Point3> {};
-
-Point3 getSamplePoint3() {return Point3{0,1,2};}
-Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y, a.z + a.z }; }
 
 //sample of your engine annotated struct
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
