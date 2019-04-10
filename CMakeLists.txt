@@ -395,6 +395,7 @@ DAS_AOT(examples/test/unit_tests/swizze.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/table.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/test_bool_if.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/time.das TEST_GENERATED_SRC)
+DAS_AOT(examples/test/unit_tests/try-catch.das TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 include_directories(include lexer test)

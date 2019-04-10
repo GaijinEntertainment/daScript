@@ -162,6 +162,9 @@ namespace das {
         namespace test_time {
             #include "unit_tests/time.das.main.inc"
         }
+        namespace test_try_catch {
+            #include "unit_tests/try-catch.das.main.inc"
+        }
 
         void registerAot ( AotLibrary & aotLib )
         {
@@ -311,6 +314,9 @@ namespace das {
             }
             {   using namespace test_time;
                 #include "unit_tests/time.das.register.inc"
+            }
+            {   using namespace test_try_catch;
+                #include "unit_tests/try-catch.das.register.inc"
             }
         }
     }
