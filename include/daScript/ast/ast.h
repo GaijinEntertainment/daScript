@@ -1566,8 +1566,6 @@ namespace das
         mutable map<string, ExprCallFactory>    callThis;
         string  name;
         bool    builtIn = false;
-    public:
-        static intptr_t Karma;
     private:
         Module * next = nullptr;
         static Module * modules;
@@ -1585,10 +1583,6 @@ namespace das
             static Namespace::ClassName * module_##ClassName = new Namespace::ClassName(); \
             return module_##ClassName; \
         }
-
-    #define NEED_MODULE(ClassName) \
-        extern das::Module * register_##ClassName (); \
-        das::Module::Karma += intptr_t(register_##ClassName());
 
     class ModuleLibrary {
         friend class Module;
