@@ -366,7 +366,7 @@ namespace das
             auto resN = rightType.annotation->simulateCopy(context, at, left, right);
             if ( !resN ) {
                 context.thisProgram->error("integration error, simulateCopy returned null",
-                                           at, CompilationError::missing_node );
+                    at, CompilationError::missing_node );
             }
             return resN;
         } else {
