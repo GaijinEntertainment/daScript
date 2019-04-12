@@ -23,6 +23,13 @@ namespace das
                 dw.String(pss);
             }
         }
+        virtual bool canCopy() const override { return true; }
+        virtual bool canMove() const override { return true; }
+        virtual size_t getAlignOf() const override { return alignof(string);}
+        virtual size_t getSizeOf() const override { return sizeof(string);}
+        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+            return context.code->makeNode<SimNode_CopyRefValueT<string>>(at, l, r);
+        }
     };
 
     template <typename OT>

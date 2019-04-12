@@ -356,19 +356,19 @@ namespace das
         // now, to the regular copy
         auto left = lE->simulate(context);
         auto right = rE->simulate(context);
-        if ( rightType.isRef() ) {
-            if ( rightType.isWorkhorseType() ) {
-                return context.code->makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
-            } else {
-                return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
-            }
-        } else if ( rightType.isHandle() ) {
+        if ( rightType.isHandle() ) {
             auto resN = rightType.annotation->simulateCopy(context, at, left, right);
             if ( !resN ) {
                 context.thisProgram->error("integration error, simulateCopy returned null",
                                            at, CompilationError::missing_node );
             }
             return resN;
+        } else if ( rightType.isRef() ) {
+            if ( rightType.isWorkhorseType() ) {
+                return context.code->makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
+            } else {
+                return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
+            }
         } else {
             return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
