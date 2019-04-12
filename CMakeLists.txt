@@ -346,6 +346,11 @@ examples/test/aot.cpp
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
+IF(MSVC)
+set_source_files_properties(examples/test/aot.cpp PROPERTIES COMPILE_FLAGS /bigobj)
+ENDIF()
+
+
 SET(TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/array.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/auto_infer.das TEST_GENERATED_SRC)

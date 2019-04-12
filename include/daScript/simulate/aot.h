@@ -533,7 +533,7 @@ namespace das {
     struct das_final_call {
         TT finalizer;
         das_final_call() = delete;
-        das_final_call(das_final_call &) = delete;
+        das_final_call(das_final_call &) = default;
         das_final_call & operator = (das_final_call &) = delete;
         __forceinline das_final_call ( TT && fn ) : finalizer(fn) {}
         __forceinline ~das_final_call () { finalizer(); }

@@ -450,8 +450,8 @@ namespace das {
     // for loop
         virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitFor(expr,var,last);
-            for ( auto & var : expr->iteratorVariables ) {
-                renameVariable(var.get());
+            for ( auto & varr : expr->iteratorVariables ) {
+                renameVariable(varr.get());
             }
         }
     // block argument
@@ -1228,6 +1228,7 @@ namespace das {
                     ss << "v_extract_" << mask[expr->fields[0]];
                     if ( expr->type->baseType!=Type::tFloat ) ss << "i";
                     ss << "(";
+                    if (expr->type->baseType != Type::tFloat) ss << "v_cast_vec4i(";
                 } else if ( TypeDecl::isSequencialMask(expr->fields) ) {
                     ss << "das_swizzle_seq<"
                     << describeCppType(expr->type,false,true) << ","
@@ -1250,6 +1251,7 @@ namespace das {
                 ss << ")";
             } else {
                 if ( expr->fields.size()==1 ) {
+                    if (expr->type->baseType != Type::tFloat) ss << ")";
                     ss << ")";
                 } else if ( TypeDecl::isSequencialMask(expr->fields) ) {
                     ss << ")";
