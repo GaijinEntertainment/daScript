@@ -50,7 +50,7 @@ namespace das
                 } else if ( result->canMove() ) {
                     copyOnReturn = false;
                     moveOnReturn = true;
-                } else {
+                } else if ( !result->isRef() ) {
                     DAS_FATAL_LOG("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
                     DAS_FATAL_ERROR;
                 }
