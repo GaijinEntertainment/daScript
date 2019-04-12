@@ -881,6 +881,16 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
     };
 
+    // this clones one object to the other
+    struct ExprClone : ExprOp2 {
+        ExprClone () = default;
+        ExprClone ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
+        : ExprOp2(a, ":=", l, r) {};
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+    };
+
     // this only exists during parsing, and can't be
     // and this is why it does not have CLONE
     struct ExprSequence : ExprOp2 {
@@ -1816,6 +1826,8 @@ namespace das
         virtual void preVisitRight ( ExprCopy *, Expression * ) {}
         // MOVE
         virtual void preVisitRight ( ExprMove *, Expression * ) {}
+        // CLONE
+        virtual void preVisitRight ( ExprClone *, Expression * ) {}
         // WITH
         virtual void preVisitWithBody ( ExprWith *, Expression * ) {}
         // WHILE
@@ -1875,6 +1887,7 @@ namespace das
         VISIT_EXPR(ExprOp3)
         VISIT_EXPR(ExprCopy)
         VISIT_EXPR(ExprMove)
+        VISIT_EXPR(ExprClone)
         VISIT_EXPR(ExprTryCatch)
         VISIT_EXPR(ExprReturn)
         VISIT_EXPR(ExprBreak)

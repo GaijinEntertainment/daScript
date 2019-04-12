@@ -92,7 +92,7 @@ namespace das {
         }
         // simulate
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.code->makeNode<SimNode_CopyValue<ThisMatrix>>(at, l, r);
+            return context.code->makeNode<SimNode_CopyRefValueT<ThisMatrix>>(at, l, r);
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context,
                                             const LineInfo & at, const ExpressionPtr & value ) const override {

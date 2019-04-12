@@ -128,6 +128,7 @@
 %token  ADDADD      SUBSUB      LEEQU       SHLEQU      SHREQU
 %token  GREQU       EQUEQU      NOTEQU      RARROW      LARROW
 %token  QQ          QDOT        LPIPE       LBPIPE      RPIPE
+%token  CLONEEQU
 
 %token<i>       INTEGER
 %token<i64>     LONG_INTEGER
@@ -829,6 +830,8 @@ expr_numeric_const
 expr_assign
     :   expr[ex]                             { $$ = $ex; }
     |   expr[left] '='[loc]    expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] CLONEEQU[loc] expr[right] { $$ = new ExprClone(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] ANDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"&=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] OREQU[loc] expr[right]    { $$ = new ExprOp2(tokAt(@loc),"|=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] XOREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"^=", ExpressionPtr($left), ExpressionPtr($right)); }
@@ -869,7 +872,6 @@ expr
     |   '~'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),"~",ExpressionPtr($subexpr)); }
     |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),"+",ExpressionPtr($subexpr)); }
     |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),"-",ExpressionPtr($subexpr)); }
-    |   expr[left] LARROW[loc] expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] SHL[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"<<", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] SHR[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),">>", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '+'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+", ExpressionPtr($left), ExpressionPtr($right)); }

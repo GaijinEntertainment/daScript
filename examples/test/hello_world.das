@@ -1,15 +1,12 @@
-options log = true, logCpp = true
+options log = true
 
-[sideeffects]
-def printA
-    print("A\n")
-
-[sideeffects,noaot]
-def printB
-    print("B\n")
+struct Foo
+    a : int
+    b : float
 
 [export]
 def test
-    printA()
-    printB()
+    let x = [[ Foo[3] a=1,b=2.0; a=2,b=3.0; a=3,b=4.0 ]]
+    let y : Foo[3]
+    y = x
     return true

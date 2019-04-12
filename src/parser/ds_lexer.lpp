@@ -326,6 +326,7 @@
 <normal>"\<\|"                              return LPIPE;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\."                              return QDOT;
+<normal>"\:\="                              return CLONEEQU;
 <normal>"\-\>"                              return RARROW;
 <normal>"\<\-"                              return LARROW;
 <normal>"\+\="                              return ADDEQU;

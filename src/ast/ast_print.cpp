@@ -617,7 +617,7 @@ namespace das {
             if ( !noBracket(that) ) ss << ")";
             return Visitor::visit(that);
         }
-    // copy & move
+    // copy & move, clone
         virtual void preVisitRight ( ExprCopy * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
             ss << " = ";
@@ -625,6 +625,10 @@ namespace das {
         virtual void preVisitRight ( ExprMove * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
             ss << " <- ";
+        }
+        virtual void preVisitRight ( ExprClone * that, Expression * right ) override {
+            Visitor::preVisitRight(that,right);
+            ss << " := ";
         }
     // return
         virtual void preVisit ( ExprReturn * expr ) override {

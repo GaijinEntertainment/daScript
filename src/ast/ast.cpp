@@ -872,6 +872,22 @@ namespace das {
         return cexpr;
     }
 
+    // ExprClone
+
+    ExpressionPtr ExprClone::visit(Visitor & vis) {
+        vis.preVisit(this);
+        left = left->visit(vis);
+        vis.preVisitRight(this, right.get());
+        right = right->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprClone::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprClone>(expr);
+        ExprOp2::clone(cexpr);
+        return cexpr;
+    }
+
     // ExprCopy
 
     ExpressionPtr ExprCopy::visit(Visitor & vis) {

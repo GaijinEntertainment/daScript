@@ -23,8 +23,8 @@ namespace das
                 dw.String(pss);
             }
         }
-        virtual bool canCopy() const override { return true; }
-        virtual bool canMove() const override { return true; }
+        virtual bool canCopy() const override { return false; }
+        virtual bool canMove() const override { return false; }
         virtual size_t getAlignOf() const override { return alignof(string);}
         virtual size_t getSizeOf() const override { return sizeof(string);}
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
