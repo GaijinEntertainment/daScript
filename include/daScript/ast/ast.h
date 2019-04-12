@@ -484,8 +484,8 @@ namespace das
             p->cppName = cppName;
             return p;
         }
-        virtual bool canMove() const { return true; }
-        virtual bool canCopy() const { return true; }
+        virtual bool canMove() const { return false; }
+        virtual bool canCopy() const { return false; }
         virtual bool isPod() const { return true; }
         virtual bool isRawPod() const { return true; }
         virtual bool isRefType() const { return false; }

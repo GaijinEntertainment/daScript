@@ -64,7 +64,9 @@ namespace das
         virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
         virtual size_t getAlignOf() const override { return ManagedStructureAlignof<ManagedType>::alignment; }
         virtual bool isRefType() const override { return true; }
-        virtual bool isLocal() const override { return true; }
+        virtual bool canMove() const override { return false; }
+        virtual bool canCopy() const override { return false; }
+        virtual bool isLocal() const override { return false; }
         virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
             auto it = fields.find(na);
             if ( it!=fields.end() ) {
@@ -314,6 +316,9 @@ namespace das
         virtual bool isRefType() const override { return true; }
         virtual bool isIndexable ( const TypeDeclPtr & indexType ) const override { return indexType->isIndex(); }
         virtual bool isIterable ( ) const override { return true; }
+        virtual bool canMove() const override { return false; }
+        virtual bool canCopy() const override { return false; }
+        virtual bool isLocal() const override { return false; }
         virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
             if ( na=="length" ) return make_shared<TypeDecl>(Type::tInt);
             return nullptr;
@@ -375,8 +380,11 @@ namespace das
         static_assert(sizeof(OT)<=sizeof(vec4f), "value types have to fit in ABI");
         ManagedValueAnnotation(const string & n, const string & cpn = string()) : TypeAnnotation(n,cpn) {}
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
+        virtual bool canMove() const override { return true; }
+        virtual bool canCopy() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }
+        virtual size_t getAlignOf() const override { return alignof(OT); }
         virtual bool isRefType() const override { return false; }
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return context.code->makeNode<SimNode_CopyValue<OT>>(at, l, r);

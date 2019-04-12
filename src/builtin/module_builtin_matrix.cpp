@@ -43,15 +43,11 @@ namespace das {
         virtual bool rtti_isHandledTypeAnnotation() const override {
             return true;
         }
-        virtual bool isRefType() const override {
-            return true;
-        }
-        virtual bool isLocal() const override {
-            return true;
-        }
-        virtual bool canNew() const override {
-            return true;
-        }
+        virtual bool isRefType() const override { return true; }
+        virtual bool isLocal() const override { return true; }
+        virtual bool canMove() const override { return true; }
+        virtual bool canCopy() const override { return true; }
+        virtual bool canNew() const override { return true; }
         virtual bool isIndexable ( const TypeDeclPtr & decl ) const override {
             return decl->isIndex();
         }

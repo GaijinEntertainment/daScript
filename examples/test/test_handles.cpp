@@ -28,6 +28,7 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
         addProperty<DAS_BIND_MANAGED_PROP(propAdd13)>("propAdd13");
     }
+    virtual bool isLocal() const { return true; }
 };
 
 struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
@@ -35,6 +36,7 @@ struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
         addField<DAS_BIND_MANAGED_FIELD(fooPtr)>("fooPtr");
         addField<DAS_BIND_MANAGED_FIELD(barData)>("barData");
     }
+    virtual bool isLocal() const { return true; }
 };
 
 void testFoo ( TestObjectFoo & foo ) {
