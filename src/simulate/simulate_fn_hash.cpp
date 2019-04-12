@@ -91,10 +91,10 @@ namespace das {
         SimFnHashVisitor hashV;
         // append return type and result type
         string resT = fun->result->describe();
-        hashV.write(resT.c_str(), resT.length());
+        hashV.write(resT.c_str(), uint32_t(resT.length()));
         for ( auto & arg : fun->arguments ) {
             string argT = arg->type->describe();
-            hashV.write(argT.c_str(), argT.length());
+            hashV.write(argT.c_str(), uint32_t(argT.length()));
         }
         // append code
         node->visit(hashV);

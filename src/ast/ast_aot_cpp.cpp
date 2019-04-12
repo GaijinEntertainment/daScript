@@ -1932,7 +1932,7 @@ namespace das {
                 continue;
             if ( fnn[i]->noAot )
                 continue;
-            SimFunction * fn = context.getFunction(i);
+            // SimFunction * fn = context.getFunction(i);
             uint64_t semH = fnn[i]->hash;
             logs << "\t// " << aotFuncName(fnn[i]) << "\n";
             logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";

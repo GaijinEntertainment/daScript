@@ -516,10 +516,10 @@ void advancev(int nbodies, struct planet * __restrict bodies, float dt)
         }
     } while(++b != be);
 
-    for (struct planet *__restrict b = bodies; b != be; ++b)
+    for (struct planet *__restrict bB = bodies; bB != be; ++bB)
     {
-        vec4f bx = v_ld(&b->x), bv = v_ld(&b->vx);
-        v_st(&b->x, v_madd(vdt, bv, bx));
+        vec4f bx = v_ld(&bB->x), bv = v_ld(&b->vx);
+        v_st(&bB->x, v_madd(vdt, bv, bx));
     }
 }
 

@@ -533,14 +533,16 @@ namespace das {
     struct das_final_call {
         TT finalizer;
         das_final_call() = delete;
-        das_final_call(das_final_call &) = default;
-        das_final_call & operator = (das_final_call &) = delete;
-        __forceinline das_final_call ( TT && fn ) : finalizer(fn) {}
+        das_final_call(const das_final_call &) = delete;
+        das_final_call & operator = (const das_final_call &) = delete;
+        das_final_call & operator = (das_final_call &&) = delete;
+        das_final_call(das_final_call &&) = default;
+        __forceinline das_final_call ( TT && fn ) : finalizer(move(fn)) {}
         __forceinline ~das_final_call () { finalizer(); }
     };
 
     template <typename TT>
-    __forceinline das_final_call<TT> das_finally(TT && fn) {
+    inline das_final_call<TT> das_finally(TT && fn) {
         return das_final_call<TT>(move(fn));
     }
 
@@ -618,6 +620,14 @@ namespace das {
         }
     };
 
+    template <typename Result>
+    struct ImplAotStaticFunctionCMRES {
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline Result call(FunctionType && fn, Context & ctx, index_sequence<I...> ) {
+            return fn( cast_aot_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, ctx.abiArguments()[ I ? I-1 : 0 ] )... );
+        }
+    };
+
     template <typename FuncT, FuncT fn>
     struct SimNode_Aot : SimNode_CallBase {
         const char * extFnName = nullptr;
@@ -637,14 +647,6 @@ namespace das {
             context.abiArg = aa;
             context.abiResult() = res;
             return res;
-        }
-    };
-
-    template <typename Result>
-    struct ImplAotStaticFunctionCMRES {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline Result call(FunctionType && fn, Context & ctx, index_sequence<I...> ) {
-            return fn( cast_aot_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, ctx.abiArguments()[ I ? I-1 : 0 ] )... );
         }
     };
 
@@ -755,10 +757,47 @@ namespace das {
             body = this;
             functionArguments = context->abiArguments();
         };
+        template <size_t... I>
+        __forceinline resType callBlockFunction(vec4f * args, index_sequence<I...>) {
+            return blockFunction((cast<argType>::to(args[I]))...);
+        }
         virtual vec4f eval ( Context & context ) override {
             vec4f ** arguments = (vec4f **)(context.stack.bottom() + argumentsOffset);
-            vec4f * arg = *arguments;
-            return cast<resType>::from ( blockFunction ( cast<argType>::to(*arg++)... ) );
+            using Indices = make_index_sequence<sizeof...(argType)>;
+            return cast<resType>::from ( callBlockFunction(*arguments, Indices()) );
+        }
+        BlockFn blockFunction;
+    };
+
+    template <typename resType>
+    struct das_make_block<resType> : Block, SimNode_ClosureBlock {
+        typedef function < resType () > BlockFn;
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+            : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            stackOffset = context->stack.spi();
+            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+            body = this;
+            functionArguments = context->abiArguments();
+        };
+        virtual vec4f eval ( Context & ) override {
+            return cast<resType>::from(blockFunction());
+        }
+        BlockFn blockFunction;
+    };
+
+    template <>
+    struct das_make_block<void> : Block, SimNode_ClosureBlock {
+        typedef function < void () > BlockFn;
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+            : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            stackOffset = context->stack.spi();
+            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+            body = this;
+            functionArguments = context->abiArguments();
+        };
+        virtual vec4f eval ( Context & ) override {
+            blockFunction ( );
+            return v_zero();
         }
         BlockFn blockFunction;
     };
@@ -773,27 +812,14 @@ namespace das {
             body = this;
             functionArguments = context->abiArguments();
         };
+        template <size_t... I>
+        __forceinline void callBlockFunction(vec4f * args, index_sequence<I...>) {
+            blockFunction((cast<argType>::to(args[I]))...);
+        }
         virtual vec4f eval ( Context & context ) override {
             vec4f ** arguments = (vec4f **)(context.stack.bottom() + argumentsOffset);
-            vec4f * arg = *arguments;
-            blockFunction ( cast<argType>::to(*arg++)... );
-            return v_zero();
-        }
-        BlockFn blockFunction;
-    };
-
-    template <>
-    struct das_make_block<void> : Block, SimNode_ClosureBlock {
-        typedef function < void () > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-            body = this;
-            functionArguments = context->abiArguments();
-        };
-        virtual vec4f eval ( Context & ) override {
-            blockFunction ( );
+            using Indices = make_index_sequence<sizeof...(argType)>;
+            callBlockFunction(*arguments, Indices());
             return v_zero();
         }
         BlockFn blockFunction;
@@ -809,11 +835,34 @@ namespace das {
             body = this;
             functionArguments = context->abiArguments();
         };
+        template <size_t... I>
+        __forceinline resType callBlockFunction(vec4f * args, index_sequence<I...>) {
+            return blockFunction((cast<argType>::to(args[I]))...);
+        }
         virtual vec4f eval ( Context & context ) override {
             auto ba = (BlockArguments *) ( context.stack.bottom() + argumentsOffset );
-            vec4f * arg = ba->arguments;
             resType * result = (resType *) ba->copyOrMoveResult;
-            *result = blockFunction ( cast<argType>::to(*arg++)... );
+            using Indices = make_index_sequence<sizeof...(argType)>;
+            *result = callBlockFunction(ba->arguments, Indices());
+            return cast<void *>::from(result);
+        }
+        BlockFn blockFunction;
+    };
+
+    template <typename resType>
+    struct das_make_block_cmres<resType> : Block, SimNode_ClosureBlock {
+        typedef function < resType () > BlockFn;
+        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+            : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            stackOffset = context->stack.spi();
+            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+            body = this;
+            functionArguments = context->abiArguments();
+        };
+        virtual vec4f eval ( Context & context ) override {
+            auto ba = (BlockArguments *) ( context.stack.bottom() + argumentsOffset );
+            resType * result = (resType *) ba->copyOrMoveResult;
+            *result = blockFunction();
             return cast<void *>::from(result);
         }
         BlockFn blockFunction;
@@ -935,9 +984,13 @@ namespace das {
         }
     };
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4611)   // interaction between '_setjmp' and C++ object destruction is non-portable
+#endif
 
     template <typename TA, typename TB>
-    __forceinline void das_try_recover ( Context * __context__, TA && try_block, TB && catch_block ) {
+    inline void das_try_recover ( Context * __context__, TA && try_block, TB && catch_block ) {
         auto aa = __context__->abiArg; auto acm = __context__->abiCMRES;
         char * EP, * SP;
         __context__->stack.watermark(EP,SP);
@@ -969,6 +1022,10 @@ namespace das {
         __context__->throwBuf = JB;
 #endif
     }
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
     template <typename TT>
     struct das_call_interop {
@@ -1042,12 +1099,12 @@ namespace das {
     };
 
     template <typename TK, typename TV>
-    TIterator<TK> * __builtin_table_keys ( Context * context, TTable<TK,TV> & tab) {
+    TIterator<TK> * __builtin_table_keys ( Context *, TTable<TK,TV> & tab) {
         return new TIterator<TK>(&tab, tab.keys);
     }
 
     template <typename TK, typename TV>
-    TIterator<TV> * __builtin_table_values ( Context * context, TTable<TK,TV> & tab) {
+    TIterator<TV> * __builtin_table_values ( Context *, TTable<TK,TV> & tab) {
         return new TIterator<TV>(&tab, tab.data);
     }
 
