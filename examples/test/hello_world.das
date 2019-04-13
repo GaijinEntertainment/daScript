@@ -1,4 +1,4 @@
-// options log = true, logInferPasses=true
+options log = true // , logInferPasses=true
 
 struct Foo
     a : int
@@ -16,6 +16,9 @@ def test_clone_struct
     for t in range(0,3)
         x.b[t] = t
     y := x
+    x.a = 6
+    for t in range(0,3)
+        x.b[t] = t + 1
     assert(y.a==5)
     for t in range(0,3)
         assert(y.b[t]==t)
@@ -28,6 +31,8 @@ def test_clone_array
         x[t] = t
     y := x
     for t in range(0,3)
+        x[t] = t + 1
+    for t in range(0,3)
         assert(y[t]==t)
 
 [sideeffects]
@@ -36,6 +41,8 @@ def test_clone_table
     for t in range(0,3)
         x[t] = string(t)
     y := x
+    for t in range(0,3)
+        x[t] = string(t+1)
     assert(length(y)==3)
     for t in range(0,3)
         assert(y[t]==string(t))
