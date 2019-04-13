@@ -218,7 +218,7 @@ typedef struct URI_TYPE(QueryListStruct) {
  * @since 0.3.0
  * @deprecated Deprecated since 0.9.0, please migrate to uriParseSingleUriExA (with "Single").
  */
-int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
+URI_PUBLIC int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
 
 
@@ -238,7 +238,7 @@ int URI_FUNC(ParseUriEx)(URI_TYPE(ParserState) * state,
  * @since 0.3.0
  * @deprecated Deprecated since 0.9.0, please migrate to uriParseSingleUriA (with "Single").
  */
-int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
+URI_PUBLIC int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
 		const URI_CHAR * text);
 
 
@@ -260,8 +260,8 @@ int URI_FUNC(ParseUri)(URI_TYPE(ParserState) * state,
  * @see uriToStringA
  * @since 0.9.0
  */
-int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
-		const URI_CHAR ** errorPos);
+URI_PUBLIC int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri,
+		const URI_CHAR * text, const URI_CHAR ** errorPos);
 
 
 
@@ -285,7 +285,7 @@ int URI_FUNC(ParseSingleUri)(URI_TYPE(Uri) * uri, const URI_CHAR * text,
  * @see uriToStringA
  * @since 0.9.0
  */
-int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
+URI_PUBLIC int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		const URI_CHAR ** errorPos);
 
@@ -311,7 +311,7 @@ int URI_FUNC(ParseSingleUriEx)(URI_TYPE(Uri) * uri,
  * @see uriToStringA
  * @since 0.9.0
  */
-int URI_FUNC(ParseSingleUriExMm)(URI_TYPE(Uri) * uri,
+URI_PUBLIC int URI_FUNC(ParseSingleUriExMm)(URI_TYPE(Uri) * uri,
 		const URI_CHAR * first, const URI_CHAR * afterLast,
 		const URI_CHAR ** errorPos, UriMemoryManager * memory);
 
@@ -328,7 +328,7 @@ int URI_FUNC(ParseSingleUriExMm)(URI_TYPE(Uri) * uri,
  * @see uriFreeUriMembersMmA
  * @since 0.3.0
  */
-void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
+URI_PUBLIC void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
 
 
 
@@ -344,7 +344,7 @@ void URI_FUNC(FreeUriMembers)(URI_TYPE(Uri) * uri);
  * @see uriFreeUriMembersA
  * @since 0.9.0
  */
-int URI_FUNC(FreeUriMembersMm)(URI_TYPE(Uri) * uri,
+URI_PUBLIC int URI_FUNC(FreeUriMembersMm)(URI_TYPE(Uri) * uri,
 		UriMemoryManager * memory);
 
 
@@ -368,7 +368,7 @@ int URI_FUNC(FreeUriMembersMm)(URI_TYPE(Uri) * uri,
  * @see uriUnescapeInPlaceExA
  * @since 0.5.2
  */
-URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
+URI_PUBLIC URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
 		const URI_CHAR * inAfterLast, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
 
@@ -392,7 +392,7 @@ URI_CHAR * URI_FUNC(EscapeEx)(const URI_CHAR * inFirst,
  * @see uriUnescapeInPlaceA
  * @since 0.5.0
  */
-URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
+URI_PUBLIC URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
 
 
@@ -414,7 +414,7 @@ URI_CHAR * URI_FUNC(Escape)(const URI_CHAR * in, URI_CHAR * out,
  * @see uriEscapeExA
  * @since 0.5.0
  */
-const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
+URI_PUBLIC const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
 		UriBool plusToSpace, UriBreakConversion breakConversion);
 
 
@@ -437,7 +437,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlaceEx)(URI_CHAR * inout,
  * @see uriEscapeA
  * @since 0.3.0
  */
-const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
+URI_PUBLIC const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
 
 
 
@@ -458,7 +458,7 @@ const URI_CHAR * URI_FUNC(UnescapeInPlace)(URI_CHAR * inout);
  * @see uriAddBaseUriExMmA
  * @since 0.4.0
  */
-int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
+URI_PUBLIC int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
 		const URI_TYPE(Uri) * absoluteBase);
 
@@ -481,7 +481,7 @@ int URI_FUNC(AddBaseUri)(URI_TYPE(Uri) * absoluteDest,
  * @see uriAddBaseUriExMmA
  * @since 0.8.1
  */
-int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
+URI_PUBLIC int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
 		const URI_TYPE(Uri) * absoluteBase,
 		UriResolutionOptions options);
@@ -506,7 +506,7 @@ int URI_FUNC(AddBaseUriEx)(URI_TYPE(Uri) * absoluteDest,
  * @see uriAddBaseUriExA
  * @since 0.9.0
  */
-int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absoluteDest,
+URI_PUBLIC int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absoluteDest,
 		const URI_TYPE(Uri) * relativeSource,
 		const URI_TYPE(Uri) * absoluteBase,
 		UriResolutionOptions options, UriMemoryManager * memory);
@@ -535,7 +535,7 @@ int URI_FUNC(AddBaseUriExMm)(URI_TYPE(Uri) * absoluteDest,
  * @see uriAddBaseUriExMmA
  * @since 0.5.2
  */
-int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
+URI_PUBLIC int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absoluteSource,
 		const URI_TYPE(Uri) * absoluteBase,
 		UriBool domainRootMode);
@@ -564,7 +564,7 @@ int URI_FUNC(RemoveBaseUri)(URI_TYPE(Uri) * dest,
  * @see uriAddBaseUriExMmA
  * @since 0.9.0
  */
-int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
+URI_PUBLIC int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
 		const URI_TYPE(Uri) * absoluteSource,
 		const URI_TYPE(Uri) * absoluteBase,
 		UriBool domainRootMode, UriMemoryManager * memory);
@@ -582,7 +582,8 @@ int URI_FUNC(RemoveBaseUriMm)(URI_TYPE(Uri) * dest,
  *
  * @since 0.4.0
  */
-UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
+URI_PUBLIC UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a,
+		const URI_TYPE(Uri) * b);
 
 
 
@@ -598,7 +599,7 @@ UriBool URI_FUNC(EqualsUri)(const URI_TYPE(Uri) * a, const URI_TYPE(Uri) * b);
  * @see uriToStringA
  * @since 0.5.0
  */
-int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
+URI_PUBLIC int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
 		int * charsRequired);
 
 
@@ -616,7 +617,8 @@ int URI_FUNC(ToStringCharsRequired)(const URI_TYPE(Uri) * uri,
  * @see uriToStringCharsRequiredA
  * @since 0.4.0
  */
-int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars, int * charsWritten);
+URI_PUBLIC int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri,
+		int maxChars, int * charsWritten);
 
 
 
@@ -633,7 +635,8 @@ int URI_FUNC(ToString)(URI_CHAR * dest, const URI_TYPE(Uri) * uri, int maxChars,
  * @since 0.5.0
  * @deprecated Deprecated since 0.9.0, please migrate to uriNormalizeSyntaxMaskRequiredExA (with "Ex").
  */
-unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
+URI_PUBLIC unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(
+		const URI_TYPE(Uri) * uri);
 
 
 
@@ -650,8 +653,8 @@ unsigned int URI_FUNC(NormalizeSyntaxMaskRequired)(const URI_TYPE(Uri) * uri);
  * @see uriNormalizeSyntaxMaskRequiredA
  * @since 0.9.0
  */
-int URI_FUNC(NormalizeSyntaxMaskRequiredEx)(const URI_TYPE(Uri) * uri,
-		unsigned int * outMask);
+URI_PUBLIC int URI_FUNC(NormalizeSyntaxMaskRequiredEx)(
+		const URI_TYPE(Uri) * uri, unsigned int * outMask);
 
 
 
@@ -672,7 +675,8 @@ int URI_FUNC(NormalizeSyntaxMaskRequiredEx)(const URI_TYPE(Uri) * uri,
  * @see uriNormalizeSyntaxMaskRequiredA
  * @since 0.5.0
  */
-int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
+URI_PUBLIC int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri,
+		unsigned int mask);
 
 
 
@@ -693,8 +697,8 @@ int URI_FUNC(NormalizeSyntaxEx)(URI_TYPE(Uri) * uri, unsigned int mask);
  * @see uriNormalizeSyntaxMaskRequiredA
  * @since 0.9.0
  */
-int URI_FUNC(NormalizeSyntaxExMm)(URI_TYPE(Uri) * uri, unsigned int mask,
-		UriMemoryManager * memory);
+URI_PUBLIC int URI_FUNC(NormalizeSyntaxExMm)(URI_TYPE(Uri) * uri,
+		unsigned int mask, UriMemoryManager * memory);
 
 
 
@@ -713,7 +717,7 @@ int URI_FUNC(NormalizeSyntaxExMm)(URI_TYPE(Uri) * uri, unsigned int mask,
  * @see uriNormalizeSyntaxMaskRequiredA
  * @since 0.5.0
  */
-int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
+URI_PUBLIC int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
 
 
 
@@ -735,7 +739,7 @@ int URI_FUNC(NormalizeSyntax)(URI_TYPE(Uri) * uri);
  * @see uriWindowsFilenameToUriStringA
  * @since 0.5.2
  */
-int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
+URI_PUBLIC int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
 		URI_CHAR * uriString);
 
 
@@ -758,7 +762,7 @@ int URI_FUNC(UnixFilenameToUriString)(const URI_CHAR * filename,
  * @see uriUnixFilenameToUriStringA
  * @since 0.5.2
  */
-int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
+URI_PUBLIC int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
 		URI_CHAR * uriString);
 
 
@@ -777,7 +781,7 @@ int URI_FUNC(WindowsFilenameToUriString)(const URI_CHAR * filename,
  * @see uriUriStringToWindowsFilenameA
  * @since 0.5.2
  */
-int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
+URI_PUBLIC int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
 		URI_CHAR * filename);
 
 
@@ -796,7 +800,7 @@ int URI_FUNC(UriStringToUnixFilename)(const URI_CHAR * uriString,
  * @see uriUriStringToUnixFilenameA
  * @since 0.5.2
  */
-int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
+URI_PUBLIC int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
 		URI_CHAR * filename);
 
 
@@ -815,8 +819,8 @@ int URI_FUNC(UriStringToWindowsFilename)(const URI_CHAR * uriString,
  * @see uriComposeQueryA
  * @since 0.7.0
  */
-int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
-		int * charsRequired);
+URI_PUBLIC int URI_FUNC(ComposeQueryCharsRequired)(
+		const URI_TYPE(QueryList) * queryList, int * charsRequired);
 
 
 
@@ -835,7 +839,8 @@ int URI_FUNC(ComposeQueryCharsRequired)(const URI_TYPE(QueryList) * queryList,
  * @see uriComposeQueryExA
  * @since 0.7.0
  */
-int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
+URI_PUBLIC  int URI_FUNC(ComposeQueryCharsRequiredEx)(
+		const URI_TYPE(QueryList) * queryList,
 		int * charsRequired, UriBool spaceToPlus, UriBool normalizeBreaks);
 
 
@@ -862,7 +867,7 @@ int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
  * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
-int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
+URI_PUBLIC int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten);
 
 
@@ -889,7 +894,7 @@ int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
  * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
-int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
+URI_PUBLIC int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
 		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
 
@@ -915,7 +920,7 @@ int URI_FUNC(ComposeQueryEx)(URI_CHAR * dest,
  * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
-int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
+URI_PUBLIC int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
 		const URI_TYPE(QueryList) * queryList);
 
 
@@ -940,7 +945,7 @@ int URI_FUNC(ComposeQueryMalloc)(URI_CHAR ** dest,
  * @see uriDissectQueryMallocExMmA
  * @since 0.7.0
  */
-int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
+URI_PUBLIC int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
 		const URI_TYPE(QueryList) * queryList,
 		UriBool spaceToPlus, UriBool normalizeBreaks);
 
@@ -966,7 +971,7 @@ int URI_FUNC(ComposeQueryMallocEx)(URI_CHAR ** dest,
  * @see uriDissectQueryMallocExMmA
  * @since 0.9.0
  */
-int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
+URI_PUBLIC int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
 		const URI_TYPE(QueryList) * queryList,
 		UriBool spaceToPlus, UriBool normalizeBreaks,
 		UriMemoryManager * memory);
@@ -991,8 +996,8 @@ int URI_FUNC(ComposeQueryMallocExMm)(URI_CHAR ** dest,
  * @see uriFreeQueryListMmA
  * @since 0.7.0
  */
-int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
-		const URI_CHAR * first, const URI_CHAR * afterLast);
+URI_PUBLIC int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest,
+		int * itemCount, const URI_CHAR * first, const URI_CHAR * afterLast);
 
 
 
@@ -1014,8 +1019,8 @@ int URI_FUNC(DissectQueryMalloc)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * @see uriFreeQueryListA
  * @since 0.7.0
  */
-int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
-		const URI_CHAR * first, const URI_CHAR * afterLast,
+URI_PUBLIC int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest,
+		int * itemCount, const URI_CHAR * first, const URI_CHAR * afterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion);
 
 
@@ -1039,8 +1044,8 @@ int URI_FUNC(DissectQueryMallocEx)(URI_TYPE(QueryList) ** dest, int * itemCount,
  * @see uriFreeQueryListMmA
  * @since 0.9.0
  */
-int URI_FUNC(DissectQueryMallocExMm)(URI_TYPE(QueryList) ** dest, int * itemCount,
-		const URI_CHAR * first, const URI_CHAR * afterLast,
+URI_PUBLIC int URI_FUNC(DissectQueryMallocExMm)(URI_TYPE(QueryList) ** dest,
+		int * itemCount, const URI_CHAR * first, const URI_CHAR * afterLast,
 		UriBool plusToSpace, UriBreakConversion breakConversion,
 		UriMemoryManager * memory);
 
@@ -1055,7 +1060,7 @@ int URI_FUNC(DissectQueryMallocExMm)(URI_TYPE(QueryList) ** dest, int * itemCoun
  * @see uriFreeQueryListMmA
  * @since 0.7.0
  */
-void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
+URI_PUBLIC void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
 
 
 
@@ -1070,7 +1075,7 @@ void URI_FUNC(FreeQueryList)(URI_TYPE(QueryList) * queryList);
  * @see uriFreeQueryListA
  * @since 0.9.0
  */
-int URI_FUNC(FreeQueryListMm)(URI_TYPE(QueryList) * queryList,
+URI_PUBLIC int URI_FUNC(FreeQueryListMm)(URI_TYPE(QueryList) * queryList,
 		UriMemoryManager * memory);
 
 

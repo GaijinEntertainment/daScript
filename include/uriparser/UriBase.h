@@ -97,6 +97,23 @@
 
 
 
+/* Import/export decorator */
+#if defined(URI_LIBRARY_BUILD)
+# if defined(_MSC_VER)
+#  define URI_PUBLIC __declspec(dllexport)
+# else
+#  define URI_PUBLIC
+# endif
+#else
+# if defined(_MSC_VER)
+#  define URI_PUBLIC __declspec(dllimport)
+# else
+#  define URI_PUBLIC
+# endif
+#endif
+
+
+
 typedef int UriBool; /**< Boolean type */
 
 #define URI_TRUE     1
@@ -283,7 +300,7 @@ typedef enum UriResolutionOptionsEnum {
  * @see UriMemoryManager
  * @since 0.9.0
  */
-int uriCompleteMemoryManager(UriMemoryManager * memory,
+URI_PUBLIC int uriCompleteMemoryManager(UriMemoryManager * memory,
 		UriMemoryManager * backend);
 
 
@@ -302,7 +319,7 @@ int uriCompleteMemoryManager(UriMemoryManager * memory,
  * @see UriMemoryManager
  * @since 0.9.0
  */
-void * uriEmulateCalloc(UriMemoryManager * memory,
+URI_PUBLIC void * uriEmulateCalloc(UriMemoryManager * memory,
 		size_t nmemb, size_t size);
 
 
@@ -322,7 +339,7 @@ void * uriEmulateCalloc(UriMemoryManager * memory,
  * @see UriMemoryManager
  * @since 0.9.0
  */
-void * uriEmulateReallocarray(UriMemoryManager * memory,
+URI_PUBLIC void * uriEmulateReallocarray(UriMemoryManager * memory,
 		void * ptr, size_t nmemb, size_t size);
 
 
@@ -347,7 +364,7 @@ void * uriEmulateReallocarray(UriMemoryManager * memory,
  * @see UriMemoryManager
  * @since 0.9.0
  */
-int uriTestMemoryManager(UriMemoryManager * memory);
+URI_PUBLIC int uriTestMemoryManager(UriMemoryManager * memory);
 
 
 

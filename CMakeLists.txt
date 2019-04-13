@@ -143,6 +143,7 @@ set_property(
         PUBLIC_HEADER "${API_HEADER_FILES}"
 )
 
+target_compile_definitions(uriparser PRIVATE -DURI_LIBRARY_BUILD)
 if(NOT URIPARSER_BUILD_CHAR)
     target_compile_definitions(uriparser PUBLIC -DURI_NO_ANSI)
 endif()
