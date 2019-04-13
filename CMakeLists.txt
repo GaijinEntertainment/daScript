@@ -46,6 +46,7 @@ set(URIPARSER_SO_CURRENT    1)
 set(URIPARSER_SO_REVISION  24)
 set(URIPARSER_SO_AGE        0)
 
+include(CheckCCompilerFlag)
 include(CheckFunctionExists)
 include(CheckLibraryExists)
 include(CheckSymbolExists)
@@ -86,6 +87,19 @@ if(MSVC AND URIPARSER_MSVC_RUNTIME)
         string(REGEX REPLACE "/M[DT]d?" ${URIPARSER_MSVC_RUNTIME} ${_ref} "${${_ref}}")
     endforeach()
 endif()
+
+#
+# Compiler checks
+#
+set(URIPARSER_EXTRA_COMPILE_FLAGS)
+
+check_c_compiler_flag("-fvisibility=hidden" URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
+if(URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
+    set(URIPARSER_EXTRA_COMPILE_FLAGS "${URIPARSER_EXTRA_COMPILE_FLAGS} -fvisibility=hidden")
+endif()
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${URIPARSER_EXTRA_COMPILE_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${URIPARSER_EXTRA_COMPILE_FLAGS}")
 
 #
 # config.h
@@ -152,6 +166,9 @@ if(NOT URIPARSER_BUILD_CHAR)
 endif()
 if(NOT URIPARSER_BUILD_WCHAR_T)
     target_compile_definitions(uriparser PUBLIC -DURI_NO_UNICODE)
+endif()
+if(URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
+    target_compile_definitions(uriparser PRIVATE -DURI_VISIBILITY)
 endif()
 
 target_include_directories(uriparser
@@ -228,7 +245,18 @@ if(URIPARSER_BUILD_TESTS)
         test/MemoryManagerSuite.cpp
         test/test.cpp
         test/VersionSuite.cpp
+
+        # These library code files have non-public symbols that the test suite
+        # needs to link to, so they appear here as well:
+        ${API_HEADER_FILES}
+        ${LIBRARY_CODE_FILES}
     )
+
+    target_compile_definitions(testrunner PRIVATE -DURI_LIBRARY_BUILD)
+
+    if(URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
+        target_compile_definitions(testrunner PRIVATE -DURI_VISIBILITY)
+    endif()
 
     if(MSVC)
         target_compile_definitions(testrunner PRIVATE -D_CRT_SECURE_NO_WARNINGS)
@@ -239,11 +267,11 @@ if(URIPARSER_BUILD_TESTS)
     )
 
     target_include_directories(testrunner PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}  # for config.h
     )
 
     target_link_libraries(testrunner PUBLIC
-        uriparser
         ${GTEST_BOTH_LIBRARIES}
     )
 

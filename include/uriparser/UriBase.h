@@ -101,6 +101,8 @@
 #if defined(URI_LIBRARY_BUILD)
 # if defined(_MSC_VER)
 #  define URI_PUBLIC __declspec(dllexport)
+# elif defined(URI_VISIBILITY)
+#  define URI_PUBLIC __attribute__ ((visibility("default")))
 # else
 #  define URI_PUBLIC
 # endif
