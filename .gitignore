@@ -7,6 +7,7 @@
 /cmake_install.cmake
 /CTestTestfile.cmake
 /googletest-release-1.8.1/
+/install_manifest.txt
 /liburiparser.a
 /liburiparser.pc
 /liburiparser.so*
