@@ -238,10 +238,13 @@ void testFields ( Context * ctx ) {
 
 void test_das_string(const Block & block, Context * context) {
     string str = "test_das_string";
-    vec4f args[1];
+    string str2;
+    vec4f args[2];
     args[0] = cast<void *>::from(&str);
+    args[1] = cast<void *>::from(&str2);
     context->invoke(block, args, nullptr);
     if (str != "out_of_it") context->throw_error("test string mismatch");
+    if (str2 != "test_das_string") context->throw_error("test string clone mismatch");
 }
 
 vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {

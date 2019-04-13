@@ -149,3 +149,5 @@ examples/test/unit_tests/vec_swizzle.das.main.inc
 examples/test/unit_tests/vec_swizzle.das.register.inc
 examples/test/unit_tests/with.das.main.inc
 examples/test/unit_tests/with.das.register.inc
+examples/test/unit_tests/clone.das.main.inc
+examples/test/unit_tests/clone.das.register.inc

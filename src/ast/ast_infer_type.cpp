@@ -1772,20 +1772,19 @@ namespace das {
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
                 } else if ( cloneType->isStructure() ) {
+                  reportGenericInfer();
                     auto stt = cloneType->structType;
                     if ( !hasClone(cloneType) ) {
                         auto clf = makeClone(stt);
                         extraFunctions.push_back(clf);
-                        reportGenericInfer();
-                    } else {
-                        reportGenericInfer();
-                        auto cloneFn = make_shared<ExprCall>(expr->at, "clone");
-                        cloneFn->arguments.push_back(expr->left->clone());
-                        cloneFn->arguments.push_back(expr->right->clone());
-                        return ExpressionPtr(cloneFn);
+
                     }
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "clone");
+                    cloneFn->arguments.push_back(expr->left->clone());
+                    cloneFn->arguments.push_back(expr->right->clone());
+                    return ExpressionPtr(cloneFn);
                 } else {
-                    error("this type can't be cloned", expr->at, CompilationError::cant_copy);
+                    error("this type can't be cloned (" + cloneType->describe() + ")", expr->at, CompilationError::cant_copy);
                 }
             }
             return Visitor::visit(expr);

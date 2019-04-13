@@ -76,3 +76,4 @@ def test
     test_clone_struct()
     test_clone_complex()
     return true
+

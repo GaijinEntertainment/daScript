@@ -37,6 +37,9 @@ namespace das {
         namespace test_cast {
             #include "unit_tests/cast.das.main.inc"
         }
+        namespace test_clone {
+            #include "unit_tests/clone.das.main.inc"
+        }
         namespace test_copy_and_move_on_return {
             #include "unit_tests/copy_and_move_on_return.das.main.inc"
         }
@@ -210,6 +213,9 @@ namespace das {
             }
             {   using namespace test_cast;
                 #include "unit_tests/cast.das.register.inc"
+            }
+            {   using namespace test_clone;
+                #include "unit_tests/clone.das.register.inc"
             }
             {   using namespace test_copy_and_move_on_return;
                 #include "unit_tests/copy_and_move_on_return.das.register.inc"

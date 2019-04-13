@@ -25,7 +25,7 @@ namespace das
         }
         virtual bool canCopy() const override { return false; }
         virtual bool canMove() const override { return false; }
-        virtual bool canClone() const override { return false; }
+        virtual bool canClone() const override { return true; }
         virtual size_t getAlignOf() const override { return alignof(string);}
         virtual size_t getSizeOf() const override { return sizeof(string);}
         virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
