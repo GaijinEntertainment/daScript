@@ -55,7 +55,7 @@ namespace das
         FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
         virtual void freeSourceData() { }
         virtual ~FileInfo() { freeSourceData(); }
-        const char *          name = nullptr;
+        string                name;
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
     };

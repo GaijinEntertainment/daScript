@@ -262,6 +262,11 @@ namespace das {
             Visitor::preVisit(expr);
             propagateWrite(expr->left.get());
         }
+    // ExprClone
+        virtual void preVisit ( ExprClone * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->left.get());
+        }
     // Op1
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);

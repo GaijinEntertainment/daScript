@@ -791,6 +791,19 @@ namespace das {
             ss << ")";
             return Visitor::visit(that);
         }
+    // clone
+        virtual void preVisit ( ExprClone * that ) override {
+            Visitor::preVisit(that);
+            ss << "das_clone(";
+        }
+        virtual void preVisitRight ( ExprClone * that, Expression * right ) override {
+            Visitor::preVisitRight(that,right);
+            ss << ",";
+        }
+        virtual ExpressionPtr visit ( ExprClone * that ) override {
+            ss << ")";
+            return Visitor::visit(that);
+        }
     // move
         virtual void preVisit ( ExprMove * that ) override {
             Visitor::preVisit(that);

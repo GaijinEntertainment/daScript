@@ -213,15 +213,15 @@ namespace das
     }
 
     bool LineInfo::operator < ( const LineInfo & info ) const {
-        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) < 0 ) return true;
+        if ( fileInfo && info.fileInfo && fileInfo->name<info.fileInfo->name ) return true;
         return (line==info.line) ? column<info.column : line<info.line;
     }
     bool LineInfo::operator == ( const LineInfo & info ) const {
-        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) != 0 ) return false;
+        if ( fileInfo && info.fileInfo && fileInfo->name==info.fileInfo->name ) return false;
         return line==info.line && column==info.column;
     }
     bool LineInfo::operator != ( const LineInfo & info ) const {
-        if ( fileInfo && info.fileInfo && strcmp(fileInfo->name, info.fileInfo->name) != 0 ) return true;
+        if ( fileInfo && info.fileInfo && fileInfo->name!=info.fileInfo->name ) return true;
         return line!=info.line || column!=info.column;
     }
 

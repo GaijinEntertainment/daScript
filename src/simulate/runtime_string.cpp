@@ -139,7 +139,7 @@ namespace das
     string reportError(const struct LineInfo & at, const string & message, CompilationError erc) {
         return reportError(
                 at.fileInfo ? at.fileInfo->source : nullptr,
-                at.fileInfo ? at.fileInfo->name : nullptr,
+                at.fileInfo ? at.fileInfo->name.c_str() : nullptr,
                 at.line, at.column, message, erc );
     }
 

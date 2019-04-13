@@ -1283,7 +1283,16 @@ namespace das
     }
 
     SimNode * ExprClone::simulate (Context & context) const {
-        auto retN = nullptr; makeMove(at,context,left,right);
+        SimNode * retN = nullptr;
+        if ( left->type->isHandle() ) {
+            auto lN = left->simulate(context);
+            auto rN = right->simulate(context);
+            retN = left->type->annotation->simulateClone(context, at, lN, rN);
+        } else if ( left->type->canCopy() ) {
+            retN = makeCopy(at, context, left, right );
+        } else {
+            retN = nullptr;
+        }
         if ( !retN ) {
             context.thisProgram->error("internal compilation error, can't generate clone", at);
         }

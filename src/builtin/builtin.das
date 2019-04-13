@@ -38,5 +38,15 @@ def binary_save(obj; subexpr:block<(data:string):void>)
 def binary_load(obj; data:string)
   _builtin_binary_load(obj,data)
 
+def clone(a:array<auto(TT)>;b:array<TT>)
+  resize(a,length(b))
+  for aV,bV in a,b
+    aV := bV
+
+def clone(a:table<auto(KT),auto(VT)>;b:table<KT,VT>)
+  clear(a)
+  for k,v in keys(b),values(b)
+    a[k] := v
+
 options indenting = 0
 

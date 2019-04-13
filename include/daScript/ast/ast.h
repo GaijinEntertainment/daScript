@@ -88,6 +88,7 @@ namespace das
         string describe ( bool extra = true ) const;
         bool canCopy() const;
         bool canMove() const;
+        bool canClone() const;
         bool canDelete() const;
         bool isPod() const;
         bool isRawPod() const;
@@ -413,6 +414,7 @@ namespace das
         int getSizeOf() const;
         int getAlignOf() const;
         bool canCopy() const;
+        bool canClone() const;
         bool isPod() const;
         bool isRawPod() const;
         string describe() const { return name; }
@@ -486,8 +488,9 @@ namespace das
         }
         virtual bool canMove() const { return false; }
         virtual bool canCopy() const { return false; }
-        virtual bool isPod() const { return true; }
-        virtual bool isRawPod() const { return true; }
+        virtual bool canClone() const { return false; }
+        virtual bool isPod() const { return false; }
+        virtual bool isRawPod() const { return false; }
         virtual bool isRefType() const { return false; }
         virtual bool isLocal() const { return false; }
         virtual bool canNew() const { return false; }
@@ -508,6 +511,7 @@ namespace das
         virtual SimNode * simulateDelete ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateDeletePtr ( Context &, const LineInfo &, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateCopy ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateClone ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateRef2Value ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetField ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
         virtual SimNode * simulateGetFieldR2V ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
@@ -1236,6 +1240,7 @@ namespace das
         ExprTableKeysOrValues ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
             auto cexpr = clonePtr<ExprTableKeysOrValues<It,SimNodeT,first>>(expr);
+            ExprLooksLikeCall::clone(cexpr);
             return cexpr;
         }
         virtual SimNode * simulate (Context & context) const override {

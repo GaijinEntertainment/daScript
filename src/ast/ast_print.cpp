@@ -46,6 +46,12 @@ namespace das {
             if ( expr->topLevel || expr->argLevel )
                 expr->right->argLevel = true;
         }
+    // ExprClone
+        virtual void preVisit ( ExprClone * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->topLevel || expr->argLevel )
+                expr->right->argLevel = true;
+        }
     // ExprVar
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);

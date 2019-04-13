@@ -481,6 +481,12 @@ namespace das {
             connect(that->left, that);
             connect(that->right, that);
         }
+        virtual void preVisit(ExprClone * that) override {
+            Visitor::preVisit(that);
+            label(that, ":=", "shape=box");
+            connect(that->left, that);
+            connect(that->right, that);
+        }
         virtual void preVisit(ExprMove * that) override {
             Visitor::preVisit(that);
             label(that, "<-", "shape=box");

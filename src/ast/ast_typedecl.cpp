@@ -275,6 +275,16 @@ namespace das
         return true;
     }
 
+    bool TypeDecl::canClone() const {
+        if ( baseType==Type::tHandle )
+            return annotation->canClone();
+        if ( baseType==Type::tStructure && structType )
+            return structType->canClone();
+        if ( baseType==Type::tBlock )
+            return false;
+        return true;
+    }
+
     bool TypeDecl::canCopy() const {
         if ( baseType==Type::tHandle )
             return annotation->canCopy();

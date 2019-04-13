@@ -48,6 +48,8 @@ namespace das {
         virtual bool canMove() const override { return true; }
         virtual bool canCopy() const override { return true; }
         virtual bool canNew() const override { return true; }
+        virtual bool isPod() const override { return true; }
+        virtual bool isRawPod() const override { return true; }
         virtual bool isIndexable ( const TypeDeclPtr & decl ) const override {
             return decl->isIndex();
         }

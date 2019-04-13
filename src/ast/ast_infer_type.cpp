@@ -1279,7 +1279,7 @@ namespace das {
             auto seT = expr->subexpr->type;
             auto ixT = expr->index->type;
             if ( seT->isGoodTableType() ) {
-                if ( !seT->firstType->isSameType(*ixT) ) {
+                if ( !seT->firstType->isSameType(*ixT,false,false) ) {
                     error("table index type mismatch, (" + expr->index->type->describe() + ") vs (" +
                           ixT->describe() + ")", expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
@@ -1713,7 +1713,7 @@ namespace das {
             } else if ( expr->left->type->constant ) {
                 error("can't move to a constant value", expr->at, CompilationError::cant_move_to_const);
             } else if ( !expr->left->type->canMove() ) {
-                error("this type can't be moved", expr->at, CompilationError::cant_move);
+                error("this type can't be moved, use clone (:=) instead", expr->at, CompilationError::cant_move);
             }
             expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
@@ -1731,10 +1731,44 @@ namespace das {
                 error("can't write to a constant value", expr->at, CompilationError::cant_write_to_const);
             }
             if ( !expr->left->type->canCopy() ) {
-                error("this type can't be copied, use move (<-) instead", expr->at, CompilationError::cant_copy);
+                error("this type can't be copied, use move (<-) or clone (:=) instead", expr->at, CompilationError::cant_copy);
             }
             expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
+        }
+    // ExprClone
+        virtual ExpressionPtr visit ( ExprClone * expr ) override {
+            if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
+            // infer
+            if ( !expr->left->type->isSameType(*expr->right->type,false,false) ) {
+                error("can only clone the same type " + expr->left->type->describe() + " vs " + expr->right->type->describe(),
+                      expr->at, CompilationError::operator_not_found);
+            } else if ( !expr->left->type->isRef() ) {
+                error("can only clone to a reference", expr->at, CompilationError::cant_write_to_non_reference);
+            } else if ( expr->left->type->constant ) {
+                error("can't write to a constant value", expr->at, CompilationError::cant_write_to_const);
+            } else if ( !expr->left->type->canClone() ) {
+                error("this type can't be cloned", expr->at, CompilationError::cant_copy);
+            } else {
+                auto cloneType = expr->left->type;
+                if ( cloneType->isHandle() ) {
+                    expr->type = make_shared<TypeDecl>();  // we return nothing
+                    return Visitor::visit(expr);
+                } else if ( cloneType->canCopy() ) {
+                    reportGenericInfer();
+                    return make_shared<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
+                } else if ( cloneType->isGoodArrayType() || cloneType->isGoodTableType() ) {
+                    reportGenericInfer();
+                    auto cloneFn = program->makeCall(expr->at, "clone");
+                    cloneFn->arguments.push_back(expr->left->clone());
+                    cloneFn->arguments.push_back(expr->right->clone());
+                    return ExpressionPtr(cloneFn);
+                } else if ( cloneType->isStructure() ) {
+                    error("clone structure is not supported YET", expr->at, CompilationError::cant_copy);
+                } else {
+                    error("this type can't be cloned", expr->at, CompilationError::cant_copy);
+                }
+            }
         }
     // ExprTryCatch
         // do nothing
