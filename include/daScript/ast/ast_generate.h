@@ -5,12 +5,17 @@
 namespace das {
     /*
      def STRUCT_NAME
-        let t : STRUCT_TYPE
-        t.field1 = init1
-        t.field2 = init2
-        return t
+        return [[STRUCT_NAME field1=init1, field2=init2, ...]]
      */
     FunctionPtr makeConstructor ( Structure * str );
+
+    /*
+     def clone(a,b:STRUCT_NAME)
+        a.f1 := b.f1
+        a.f2 := b.f2
+        ...
+    */
+    FunctionPtr makeClone ( Structure * str );
 
     /*
         delete var

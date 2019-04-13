@@ -401,6 +401,14 @@ namespace das {
             return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
         }
 
+        bool hasClone ( const TypeDeclPtr & st ) const {
+            vector<TypeDeclPtr> argDummy;
+            argDummy.push_back(make_shared<TypeDecl>(*st));
+            argDummy.push_back(make_shared<TypeDecl>(*st));
+            auto fnlist = findMatchingFunctions("clone", argDummy);
+            return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
+        }
+
         ExprWith * hasMatchingWith ( const string & fieldName ) const {
             for ( auto it=with.rbegin(); it!=with.rend(); ++it ) {
                 auto eW = *it;
@@ -1759,16 +1767,28 @@ namespace das {
                     return make_shared<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
                 } else if ( cloneType->isGoodArrayType() || cloneType->isGoodTableType() ) {
                     reportGenericInfer();
-                    auto cloneFn = program->makeCall(expr->at, "clone");
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
                 } else if ( cloneType->isStructure() ) {
-                    error("clone structure is not supported YET", expr->at, CompilationError::cant_copy);
+                    auto stt = cloneType->structType;
+                    if ( !hasClone(cloneType) ) {
+                        auto clf = makeClone(stt);
+                        extraFunctions.push_back(clf);
+                        reportGenericInfer();
+                    } else {
+                        reportGenericInfer();
+                        auto cloneFn = make_shared<ExprCall>(expr->at, "clone");
+                        cloneFn->arguments.push_back(expr->left->clone());
+                        cloneFn->arguments.push_back(expr->right->clone());
+                        return ExpressionPtr(cloneFn);
+                    }
                 } else {
                     error("this type can't be cloned", expr->at, CompilationError::cant_copy);
                 }
             }
+            return Visitor::visit(expr);
         }
     // ExprTryCatch
         // do nothing

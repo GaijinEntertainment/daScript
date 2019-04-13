@@ -41,6 +41,38 @@ namespace das {
         return fn;
     }
 
+    // def clone(a,b:structure)
+    //  a.f1 := b.f1
+    //  a.f2 := b.f2
+    //  ...
+    FunctionPtr makeClone ( Structure * str ) {
+        auto varA = make_shared<Variable>();
+        varA->name = "a";
+        varA->type = make_shared<TypeDecl>(str->shared_from_this());
+        varA->at = str->at;
+        auto varB = make_shared<Variable>();
+        varB->name = "b";
+        varB->type = make_shared<TypeDecl>(str->shared_from_this());
+        varB->at = str->at;
+        auto fn = make_shared<Function>();
+        fn->name = "clone";
+        fn->at = str->at;
+        fn->result = make_shared<TypeDecl>();
+        fn->arguments.push_back(varA);
+        fn->arguments.push_back(varB);
+        auto block = make_shared<ExprBlock>();
+        for ( auto & fi : str->fields ) {
+            auto lA = make_shared<ExprVar>(fi.at, "a");
+            auto lAdotF = make_shared<ExprField>(fi.at, lA, fi.name);
+            auto lB = make_shared<ExprVar>(fi.at, "b");
+            auto lBdotF = make_shared<ExprField>(fi.at, lB, fi.name);
+            auto cl = make_shared<ExprClone>(fi.at, lAdotF, lBdotF);
+            block->list.push_back(cl);
+        }
+        fn->body = block;
+        return fn;
+    }
+
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block, const StructurePtr & ls ) {
         auto lfn = lambdaName + "__def";
         auto pFunc = make_shared<Function>();
