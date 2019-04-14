@@ -105,9 +105,7 @@ set(API_HEADER_FILES
     include/uriparser/Uri.h
     include/uriparser/UriIp4.h
 )
-
-add_library(uriparser
-    ${API_HEADER_FILES}
+set(LIBRARY_CODE_FILES
     src/UriCommon.c
     src/UriCommon.h
     src/UriCompare.c
@@ -128,6 +126,11 @@ add_library(uriparser
     src/UriRecompose.c
     src/UriResolve.c
     src/UriShorten.c
+)
+
+add_library(uriparser
+    ${API_HEADER_FILES}
+    ${LIBRARY_CODE_FILES}
 )
 
 if(NOT MSVC)
