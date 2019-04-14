@@ -48,5 +48,8 @@ def clone(a:table<auto(KT),auto(VT)>;b:table<KT,VT>)
   for k,v in keys(b),values(b)
     a[k] := v
 
+def clone(a:das_string;b:string const)
+  set(a,b)
+
 options indenting = 0
 

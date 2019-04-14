@@ -401,10 +401,10 @@ namespace das {
             return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
         }
 
-        bool hasClone ( const TypeDeclPtr & st ) const {
+        bool hasClone ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
             vector<TypeDeclPtr> argDummy;
-            argDummy.push_back(make_shared<TypeDecl>(*st));
-            argDummy.push_back(make_shared<TypeDecl>(*st));
+            argDummy.push_back(make_shared<TypeDecl>(*left));
+            argDummy.push_back(make_shared<TypeDecl>(*right));
             auto fnlist = findMatchingFunctions("clone", argDummy);
             return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
         }
@@ -1747,6 +1747,13 @@ namespace das {
     // ExprClone
         virtual ExpressionPtr visit ( ExprClone * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
+            // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
+            if ( hasClone(expr->left->type, expr->right->type) ) {
+                auto cloneFn = make_shared<ExprCall>(expr->at, "clone");
+                cloneFn->arguments.push_back(expr->left->clone());
+                cloneFn->arguments.push_back(expr->right->clone());
+                return ExpressionPtr(cloneFn);
+            }
             // infer
             if ( !expr->left->type->isSameType(*expr->right->type,false,false) ) {
                 error("can only clone the same type " + expr->left->type->describe() + " vs " + expr->right->type->describe(),
@@ -1772,12 +1779,11 @@ namespace das {
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
                 } else if ( cloneType->isStructure() ) {
-                  reportGenericInfer();
+                    reportGenericInfer();
                     auto stt = cloneType->structType;
-                    if ( !hasClone(cloneType) ) {
+                    if ( !hasClone(cloneType,cloneType) ) {
                         auto clf = makeClone(stt);
                         extraFunctions.push_back(clf);
-
                     }
                     auto cloneFn = make_shared<ExprCall>(expr->at, "clone");
                     cloneFn->arguments.push_back(expr->left->clone());

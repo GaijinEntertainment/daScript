@@ -5,7 +5,7 @@ require UnitTest
 [export]
 def test
 	test_das_string() <| $(s,s2:das_string)
-        s2 := s
+        s2 := "test_das_string"
 		assert("{s}"=="test_das_string")
 		assert(string(s)=="test_das_string")
 		peek(s) <| $(st:string)
