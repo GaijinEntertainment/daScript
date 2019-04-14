@@ -1557,6 +1557,7 @@ namespace das
         static Module * require ( const string & name );
         static void Shutdown();
         static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
+        virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}
     public:
         template <typename TT>
         __forceinline void addCall ( const string & fnName ) {
