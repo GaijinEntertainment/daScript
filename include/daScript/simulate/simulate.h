@@ -358,12 +358,12 @@ namespace das
     EVAL_NODE(Double,double);       \
     EVAL_NODE(Bool,bool);
 
-#define DAS_NODE(TYPE,CTYPE)                                    \
-    virtual vec4f eval ( Context & context ) override {        \
-        return cast<CTYPE>::from(compute(context));             \
-    }                                                           \
-    virtual CTYPE eval##TYPE ( Context & context ) override {   \
-        return compute(context);                                \
+#define DAS_NODE(TYPE,CTYPE)                                         \
+    virtual vec4f eval ( das::Context & context ) override {         \
+        return das::cast<CTYPE>::from(compute(context));             \
+    }                                                                \
+    virtual CTYPE eval##TYPE ( das::Context & context ) override {   \
+        return compute(context);                                     \
     }
 
 #define DAS_PTR_NODE    DAS_NODE(Ptr,char *)
