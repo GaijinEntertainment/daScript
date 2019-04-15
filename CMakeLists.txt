@@ -160,18 +160,18 @@ set_property(
         PUBLIC_HEADER "${API_HEADER_FILES}"
 )
 
-target_compile_definitions(uriparser PRIVATE -DURI_LIBRARY_BUILD)
+target_compile_definitions(uriparser PRIVATE URI_LIBRARY_BUILD)
 if (NOT BUILD_SHARED_LIBS)
-    target_compile_definitions(uriparser PUBLIC -DURI_STATIC_BUILD)
+    target_compile_definitions(uriparser PUBLIC URI_STATIC_BUILD)
 endif()
 if(NOT URIPARSER_BUILD_CHAR)
-    target_compile_definitions(uriparser PUBLIC -DURI_NO_ANSI)
+    target_compile_definitions(uriparser PUBLIC URI_NO_ANSI)
 endif()
 if(NOT URIPARSER_BUILD_WCHAR_T)
-    target_compile_definitions(uriparser PUBLIC -DURI_NO_UNICODE)
+    target_compile_definitions(uriparser PUBLIC URI_NO_UNICODE)
 endif()
 if(URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
-    target_compile_definitions(uriparser PRIVATE -DURI_VISIBILITY)
+    target_compile_definitions(uriparser PRIVATE URI_VISIBILITY)
 endif()
 
 target_include_directories(uriparser
@@ -255,10 +255,10 @@ if(URIPARSER_BUILD_TESTS)
         ${LIBRARY_CODE_FILES}
     )
 
-    target_compile_definitions(testrunner PRIVATE -DURI_LIBRARY_BUILD)
+    target_compile_definitions(testrunner PRIVATE URI_LIBRARY_BUILD)
 
     if(URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
-        target_compile_definitions(testrunner PRIVATE -DURI_VISIBILITY)
+        target_compile_definitions(testrunner PRIVATE URI_VISIBILITY)
     endif()
 
     if(MSVC)
