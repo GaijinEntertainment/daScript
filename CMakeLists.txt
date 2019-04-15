@@ -255,11 +255,7 @@ if(URIPARSER_BUILD_TESTS)
         ${LIBRARY_CODE_FILES}
     )
 
-    target_compile_definitions(testrunner PRIVATE URI_LIBRARY_BUILD)
-
-    if(URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
-        target_compile_definitions(testrunner PRIVATE URI_VISIBILITY)
-    endif()
+    target_compile_definitions(testrunner PRIVATE URI_STATIC_BUILD)
 
     if(MSVC)
         target_compile_definitions(testrunner PRIVATE -D_CRT_SECURE_NO_WARNINGS)
