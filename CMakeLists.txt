@@ -394,6 +394,7 @@ message("=======================================================================
 message("")
 message("Configuration")
 message("  Prefix ............... ${CMAKE_INSTALL_PREFIX}")
+message("  Shared libraries ..... ${BUILD_SHARED_LIBS}")
 message("  Code for char * ...... ${URIPARSER_BUILD_CHAR}")
 message("  Code for wchar_t * ... ${URIPARSER_BUILD_WCHAR_T}")
 message("  Tools ................ ${URIPARSER_BUILD_TOOLS}")
