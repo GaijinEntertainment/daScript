@@ -161,6 +161,9 @@ set_property(
 )
 
 target_compile_definitions(uriparser PRIVATE -DURI_LIBRARY_BUILD)
+if (NOT BUILD_SHARED_LIBS)
+    target_compile_definitions(uriparser PUBLIC -DURI_STATIC_BUILD)
+endif()
 if(NOT URIPARSER_BUILD_CHAR)
     target_compile_definitions(uriparser PUBLIC -DURI_NO_ANSI)
 endif()
