@@ -47,6 +47,7 @@ namespace das {
         virtual bool isLocal() const override { return true; }
         virtual bool canMove() const override { return true; }
         virtual bool canCopy() const override { return true; }
+        virtual bool canClone() const override { return true; }
         virtual bool canNew() const override { return true; }
         virtual bool isPod() const override { return true; }
         virtual bool isRawPod() const override { return true; }
@@ -91,6 +92,9 @@ namespace das {
         }
         // simulate
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+            return context.code->makeNode<SimNode_CopyRefValueT<ThisMatrix>>(at, l, r);
+        }
+        virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return context.code->makeNode<SimNode_CopyRefValueT<ThisMatrix>>(at, l, r);
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context,

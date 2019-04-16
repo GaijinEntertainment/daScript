@@ -126,14 +126,16 @@ namespace das
             }
         };
         template <typename FunT, FunT PROP>
-        void addProperty ( const string & na ) {
+        void addProperty ( const string & na, const string & cppNa="" ) {
             auto & field = fields[na];
             if ( field.decl ) {
                 DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
                 DAS_FATAL_ERROR;
             }
             using resultType = decltype((((ManagedType *)0)->*PROP)());
+            field.cppName = (cppNa.empty() ? na : cppNa) + "()";
             field.decl = makeType<resultType>(*mlib);
+            DAS_ASSERTF ( !(field.decl->isRefType() && !field.decl->ref), "property can't be CMRES, in %s", field.decl->describe().c_str() );
             field.offset = -1U;
             field.factory = [](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
                 switch ( nt ) {
