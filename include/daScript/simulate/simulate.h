@@ -2268,7 +2268,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             bool needLoop = true;
             SimNode ** __restrict tail = list + total;
             needLoop = sources->first(context, (char *)&ph) && needLoop;
-            if ( context.stopFlags ) goto loopend;
+            if ( context.stopFlags || !needLoop) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
                 *pi = ph;
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
