@@ -35,6 +35,17 @@ bool compile ( const string & fn, const string & mainInc, const string & registe
             }
             // AOT time
             TextWriter mainTw, registerTw;
+            // lets comment on required modules
+            program->library.foreach([&](Module * mod){
+                if ( mod->name=="" ) {
+                    // nothing, its main program module. i.e ::
+                } else if ( mod->name=="$" ) {
+                    mainTw << " // require builtin\n";
+                } else {
+                    mainTw << " // require " << mod->name << "\n";
+                }
+                return true;
+            },"*");
             program->aotCpp(ctx, mainTw);
             program->registerAotCpp(registerTw, ctx, false);
             // and save
