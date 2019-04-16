@@ -317,12 +317,12 @@ namespace das
         }
 
     public:
-        uint64_t *                  annotationData = nullptr;
-        HeapAllocator               heap;
-        char *                      globals = nullptr;
-        shared_ptr<NodeAllocator>   code;
-        shared_ptr<NodeAllocator>   debugInfo;
-        StackAllocator              stack;
+        uint64_t *                      annotationData = nullptr;
+        HeapAllocator                   heap;
+        char *                          globals = nullptr;
+        shared_ptr<NodeAllocator>       code;
+        shared_ptr<DebugInfoAllocator>  debugInfo;
+        StackAllocator                  stack;
     public:
         vec4f *         abiArg;
         void *          abiCMRES;
@@ -1644,11 +1644,15 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <bool move>
     struct SimNode_Ascend : SimNode {
         DAS_PTR_NODE;
-        SimNode_Ascend ( const LineInfo & at, SimNode * se, uint32_t b )
-            : SimNode(at), subexpr(se), bytes(b) {}
+        SimNode_Ascend ( const LineInfo & at, SimNode * se, uint32_t b, TypeInfo * ti )
+            : SimNode(at), subexpr(se), bytes(b), typeInfo(ti) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
+            if ( char * ptr = (char *) context.heap.allocate(bytes + (typeInfo ? 16 : 0)) ) {
+                if ( typeInfo ) {
+                    *((TypeInfo **)ptr) = typeInfo;
+                    ptr += 16;
+                }
                 auto src = subexpr->evalPtr(context);
                 memcpy ( ptr, src, bytes );
                 if ( move ) {
@@ -1662,16 +1666,21 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         SimNode *   subexpr;
         uint32_t    bytes;
+        TypeInfo *  typeInfo;
     };
 
     template <bool move>
     struct SimNode_AscendAndRef : SimNode {
         DAS_PTR_NODE;
-        SimNode_AscendAndRef ( const LineInfo & at, SimNode * se, uint32_t b, uint32_t sp )
-            : SimNode(at), subexpr(se), bytes(b), stackTop(sp) {}
+        SimNode_AscendAndRef ( const LineInfo & at, SimNode * se, uint32_t b, uint32_t sp, TypeInfo * ti )
+            : SimNode(at), subexpr(se), bytes(b), stackTop(sp), typeInfo(ti) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
+            if ( char * ptr = (char *) context.heap.allocate(bytes + (typeInfo ? 16 : 0)) ) {
+                if ( typeInfo ) {
+                    *((TypeInfo **)ptr) = typeInfo;
+                    ptr += 16;
+                }
                 memset ( ptr, 0, bytes );
                 char ** pRef = (char **)(context.stack.sp()+stackTop);
                 *pRef = ptr;
@@ -1685,6 +1694,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode *   subexpr;
         uint32_t    bytes;
         uint32_t    stackTop;
+        TypeInfo *  typeInfo;
     };
 
     template <int argCount>

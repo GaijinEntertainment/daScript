@@ -118,6 +118,7 @@ namespace das {
             info->secondType = nullptr;
         }
         info->hash = hash_value(info);
+        debugInfo->lookup[info->hash] = info;
         return info;
     }
 

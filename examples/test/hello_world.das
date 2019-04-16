@@ -1,93 +1,35 @@
+// options log = true
+
+let
+    network : string
+
+struct Message
+    cnt : lambda<(arg:int):int>
+
+def send(t:lambda<(arg:int):int>)
+    let msg = [[Message cnt=t]]
+    binary_save(msg) <| $(data)
+        network = data
+
+def recv
+    let t : Message
+    binary_load(t, network)
+    return t.cnt
+
 [export]
-def test:bool
-    // 1 variable
-    if true
-        let a:int[10]
-        let i:int=0
-        for l in a
-            l = i
-            i++
-        assert(i==10)
-        i = 0
-        for l in a
-            assert(l==i)
-            i++
-    // 1 variable array
-    if true
-        let a:array<int>
-        let i:int=0
-        resize(a,13)
-        for l in a
-            l = i++
-        assert(i==13)
-        i = 0
-        for l in a
-            assert(l==i)
-            i++
-    // 2 variable, array
-    if true
-        let a,b:int[10]
-        let i:int=0
-        for l,r in a,b
-            r = i*2-5
-            l = i++
-        assert(i==10)
-        i = 0
-        for l,r in a,b
-            assert(r==i*2-5)
-            assert(l==i++)
-        i = 0
-        for l,r in a,b
-            if l>r
-                assert(l>r)
-                i++
-        assert(i==5)
-    // 2 variable, hybrid
-    if true
-        let a:array<int>
-        let b:int[10]
-        let i:int=0
-        resize(a,4)
-        for l,r in a,b
-            assert(i<4)
-            r = i*2-5
-            l = i++
-        assert(i==4)
-        i = 0
-        for l,r in a,b
-            assert(r==i*2-5)
-            assert(l==i++)
-        assert(i==4)
-        i = 0
-        for l,r in a,b
-            if l>r
-                assert(l>r)
-                i++
-        assert(i==4)
-    // 1 variable, range
-    if true
-        let i:int=0
-        for a in range(0,10)
-            assert(a==i++)
-        assert(i==10)
-    // 2 variable, range hybrid
-    if true
-        let b:int[10]
-        let i:int=0
-        for l,r in range(0,10),b    // note, this one is optimized out
-            r = i++*2-5
-        assert(i==10)
-        i = 0
-        for l,r in range(0,10),b
-            assert(r==i*2-5)
-            assert(l==i++)
-        i = 0
-        for l,r in range(0,10),b
-            if l>r
-                assert(l>r)
-                i++
-        assert(i==5)
+def test
+    let CNT = 0
+    let counter = lambda() <| $ (extra:int) : int
+        return CNT++ + extra
+    let x = invoke(counter,13)
+    CNT = 100500
+    let y = invoke(counter,13)
+	assert(x==13 & y==14)
+    send(counter)
+    let net_counter = recv()
+    let z = invoke(net_counter,13)
+    assert(z==15)
+    x = invoke(counter,13)
+    assert(x==15)
     return true
-
-
 

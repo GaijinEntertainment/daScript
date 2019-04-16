@@ -123,6 +123,7 @@ namespace das
             case tVoid:         return 1;
             case tBlock:        return alignof(Block);
             case tFunction:     return alignof(Func);
+            case tLambda:       return alignof(Lambda);
             default:
                 DAS_ASSERTF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
                 return 0;

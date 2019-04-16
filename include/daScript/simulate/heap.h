@@ -200,4 +200,9 @@ namespace das {
             }
         }
     };
+
+    class DebugInfoAllocator : public NodeAllocator {
+    public:
+        map<uint32_t,TypeInfo *>    lookup;
+    };
 }

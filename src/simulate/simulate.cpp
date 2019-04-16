@@ -359,7 +359,7 @@ namespace das
 
     Context::Context() : stack(16*1024) {
         code = make_shared<NodeAllocator>();
-        debugInfo = make_shared<NodeAllocator>();
+        debugInfo = make_shared<DebugInfoAllocator>();
     }
 
     Context::Context(const Context & ctx) : stack(16*1024) {

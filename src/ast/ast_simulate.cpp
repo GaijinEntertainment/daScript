@@ -821,10 +821,14 @@ namespace das
     SimNode * ExprAscend::simulate (Context & context) const {
         auto se = subexpr->simulate(context);
         auto bytes = subexpr->type->getSizeOf();
+        TypeInfo * typeInfo = nullptr;
+        if ( needTypeInfo ) {
+            typeInfo = context.thisHelper->makeTypeInfo(nullptr, subexpr->type);
+        }
         if ( useStackRef ) {
-            return context.code->makeNode<SimNode_AscendAndRef<false>>(at, se, bytes, stackTop);
+            return context.code->makeNode<SimNode_AscendAndRef<false>>(at, se, bytes, stackTop, typeInfo);
         } else {
-            return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes);
+            return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes, typeInfo);
         }
     }
 

@@ -197,6 +197,26 @@ namespace das {
         virtual void WalkBlock ( Block * ) override {
             error("binary serialization of blocks is not supported");
         }
+        virtual void WalkFunction ( Func * func ) override {
+            serialize(func->index);
+        }
+        virtual void WalkLambda ( Lambda * lambda ) override {
+            TypeInfo * info = nullptr;
+            if ( reading ) {
+                uint32_t hash = 0;
+                serialize(hash);
+                info = context->debugInfo->lookup[hash];    // TODO: verify if there is capture, all that
+                DAS_ASSERTF(info,"type info not found. how did we get type, which is not in the typeinfo hash?");
+                char * ptr = context->heap.allocate(getTypeSize(info) + 16);
+                *((TypeInfo **)ptr) = info;
+                ptr += 16;
+                lambda->capture = ptr;
+            } else {
+                info = *((TypeInfo **) (((char *)lambda->capture)-16));
+                serialize(info->hash);
+            }
+            walk ( (char *) lambda->capture, info );
+        }
     };
 
     // save ( obj, block<(bytesAt)> )
@@ -220,9 +240,8 @@ namespace das {
     }
 
     // load ( obj, bytesAt )
-    void _builtin_binary_load ( Context & context, TypeInfo* info, const char *data, uint32_t len, char *to)
-    {
-        if ( !(info->flags&info->flag_refType))
+    void _builtin_binary_load ( Context & context, TypeInfo* info, const char *data, uint32_t len, char *to) {
+        if ( !(info->flags&(TypeInfo::flag_refType | TypeInfo::flag_ref)) )
             return;
         BinDataSerialize reader(context, const_cast<char*>(data), len);
         reader.walk(to, info);

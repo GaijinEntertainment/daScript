@@ -117,6 +117,7 @@ namespace das {
 
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const set<VariablePtr> & capt ) {
         auto asc = new ExprAscend();
+        asc->needTypeInfo = true;
         auto makeS = make_shared<ExprMakeStructure>();
         makeS->makeType = make_shared<TypeDecl>(ls);
         auto ms = make_shared<MakeStruct>();

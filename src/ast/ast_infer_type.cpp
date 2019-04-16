@@ -1038,7 +1038,10 @@ namespace das {
                 } else if ( expr->trait=="is_ref" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRef());
-                } else if ( expr->trait=="is_const" ) {
+                } else if ( expr->trait=="is_ref_type" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRefType());
+                }else if ( expr->trait=="is_const" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isConst());
                 } else if ( expr->trait=="is_pointer" ) {

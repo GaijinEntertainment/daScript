@@ -1331,7 +1331,8 @@ namespace das
         uint32_t        stackTop = 0;
         union {
             struct {
-                bool    useStackRef;
+                bool    useStackRef : 1;
+                bool    needTypeInfo : 1;
             };
             uint32_t    ascendFlags = 0;
         };
@@ -1645,8 +1646,8 @@ namespace das
 
     class DebugInfoHelper {
     public:
-        DebugInfoHelper () { debugInfo = make_shared<NodeAllocator>(); }
-        DebugInfoHelper ( const shared_ptr<NodeAllocator> & di ) : debugInfo(di) {}
+        DebugInfoHelper () { debugInfo = make_shared<DebugInfoAllocator>(); }
+        DebugInfoHelper ( const shared_ptr<DebugInfoAllocator> & di ) : debugInfo(di) {}
     public:
         TypeInfo * makeTypeInfo ( TypeInfo * info, const TypeDeclPtr & type );
         VarInfo * makeVariableDebugInfo ( const Variable & var );
@@ -1655,13 +1656,13 @@ namespace das
         FuncInfo * makeFunctionDebugInfo ( const Function & fn );
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
     public:
-        shared_ptr<NodeAllocator>   debugInfo;
+        shared_ptr<DebugInfoAllocator>  debugInfo;
     protected:
-        map<string,StructInfo *>    smn2s;
-        map<string,TypeInfo *>      tmn2t;
-        map<string,VarInfo *>       vmn2v;
-        map<string,FuncInfo *>      fmn2f;
-        map<string,EnumInfo *>      emn2e;
+        map<string,StructInfo *>        smn2s;
+        map<string,TypeInfo *>          tmn2t;
+        map<string,VarInfo *>           vmn2v;
+        map<string,FuncInfo *>          fmn2f;
+        map<string,EnumInfo *>          emn2e;
     };
 
     // this is how we make node
