@@ -5,7 +5,7 @@
 #include "unitTest.h"
 
 // this is how we disable AOT
-#if 1
+#if 0
 
 namespace das {
     namespace aot {

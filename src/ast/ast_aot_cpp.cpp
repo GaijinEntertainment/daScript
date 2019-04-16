@@ -1405,9 +1405,18 @@ namespace das {
     // ascend
         virtual void preVisit ( ExprAscend * expr ) override {
             Visitor::preVisit(expr);
+            TypeInfo * info = nullptr;
+            if ( expr->needTypeInfo ) {
+                info = helper.makeTypeInfo(nullptr, expr->subexpr->type);
+            }
             if ( expr->ascType ) {
                 ss << "das_ascend<" << describeCppType(expr->type,false,true,true) << "," 
                     << describeCppType(expr->subexpr->type,false,true,true) << ">::make(__context__,";
+                if ( info ) {
+                    ss << "&" << helper.typeInfoName(info) << ",";
+                } else {
+                    ss << "nullptr,";
+                }
             } else {
                 ss << "das_ascend /* untyped */ ";
             }
@@ -1559,24 +1568,6 @@ namespace das {
             ss << ")";
             return Visitor::visit(expr);
         }
-
-/*
- vector<TypeInfo*> elInfo;
- elInfo.reserve(elements.size());
- for ( auto & el : elements ) {
- TypeInfo * info = helper.makeTypeInfo(nullptr, el->type);
- elInfo.push_back(info);
- }
- string debug_info_name = "__tinfo_" + to_string(debugInfoGlobal++);
- sti << "TypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
- for ( size_t i=0; i!=elInfo.size(); ++i ) {
- auto info = elInfo[i];
- if ( i ) sti << ", ";
- sti << "&" << helper.typeInfoName(info);
- }
- sti << " };\n";
- return debug_info_name;
- */
 
     // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {

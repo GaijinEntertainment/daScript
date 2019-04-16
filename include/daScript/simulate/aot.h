@@ -554,8 +554,12 @@ namespace das {
 
     template <typename TT, typename AT, bool moveIt = false>
     struct das_ascend {
-        static __forceinline TT * make(Context * __context__,const AT & init) {
-            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)) ) {
+        static __forceinline TT * make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
+            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)+ (typeInfo ? 16 : 0)) ) {
+                if ( typeInfo ) {
+                    *((TypeInfo **)ptr) = typeInfo;
+                    ptr += 16;
+                }
                 memcpy(ptr, &init, sizeof(AT));
                 if (moveIt) {
                     memset((char *)&init, 0, sizeof(AT));
@@ -570,8 +574,12 @@ namespace das {
 
     template <typename AT>
     struct das_ascend<Lambda,AT,false> {
-        static __forceinline Lambda make(Context * __context__,const AT & init) {
-            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)) ) {
+        static __forceinline Lambda make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
+            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)+ (typeInfo ? 16 : 0)) ) {
+                if ( typeInfo ) {
+                    *((TypeInfo **)ptr) = typeInfo;
+                    ptr += 16;
+                }
                 memcpy(ptr, &init, sizeof(AT));
                 return Lambda(ptr);
             } else {
@@ -1043,7 +1051,7 @@ namespace das {
     };
 
     template <>
-    struct das_iterator <Iterator> {
+    struct das_iterator <Iterator *> {
         __forceinline das_iterator(Iterator * r) {
             that = r;
         }
