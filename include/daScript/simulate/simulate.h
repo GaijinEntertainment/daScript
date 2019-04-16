@@ -2062,8 +2062,53 @@ SIM_NODE_AT_VECTOR(Float, float)
                 }
                 return v_zero();
             }
-            auto value = (pv->*PROP)();
-            return cast<CTYPE>::from(value);
+            return cast<CTYPE>::from((pv->*PROP)());
+        }
+        SimNode * subexpr;
+    };
+
+    template <typename OT, typename Fun, Fun PROP, bool SAFE, typename CTYPE>
+    struct SimNode_PropertyImpl<OT,Fun,PROP,SAFE,CTYPE *> : SimNode {
+        DAS_PTR_NODE;
+        SimNode_PropertyImpl(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP("PropertyImpl_Ptr");
+            V_SUB_OPT(subexpr);
+            V_END();
+        }
+        __forceinline char * compute(Context & context) {
+            auto pv = (OT *) subexpr->evalPtr(context);
+            if ( !pv ) {
+                if ( !SAFE ) {
+                    context.throw_error_at(debugInfo,"Property, dereferencing null pointer");
+                }
+                return nullptr;
+            }
+            return (char *) (pv->*PROP)();
+        }
+        SimNode * subexpr;
+    };
+
+    template <typename OT, typename Fun, Fun PROP, bool SAFE, typename CTYPE>
+    struct SimNode_PropertyImpl<OT,Fun,PROP,SAFE,CTYPE &> : SimNode {
+        DAS_PTR_NODE;
+        SimNode_PropertyImpl(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP("PropertyImpl_Ref");
+            V_SUB_OPT(subexpr);
+            V_END();
+        }
+        __forceinline char * compute(Context & context) {
+            auto pv = (OT *) subexpr->evalPtr(context);
+            if ( !pv ) {
+                if ( !SAFE ) {
+                    context.throw_error_at(debugInfo,"Property, dereferencing null pointer");
+                }
+                return nullptr;
+            }
+            return (char *) &((pv->*PROP)());
         }
         SimNode * subexpr;
     };
@@ -2098,8 +2143,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     IMPLEMENT_PROPERTY(Int64,   int64_t);
     IMPLEMENT_PROPERTY(UInt64,  uint64_t);
     IMPLEMENT_PROPERTY(Float,   float);
-    IMPLEMENT_PROPERTY(Ptr,     char *);
-
+    
     template <typename OT, typename FunT, FunT PROPT, bool SAFET>
     struct SimNode_Property : SimNode_PropertyImpl<OT, FunT, PROPT, SAFET, decltype((((OT *)0)->*PROPT)())> {
         using returnType = decltype((((OT *)0)->*PROPT)());

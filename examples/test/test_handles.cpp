@@ -16,11 +16,6 @@ struct typeFactory<Point3> {
 
 //sample of your engine annotated struct
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
-
-struct TestObjectBar {
-    TestObjectFoo * fooPtr;
-    float           barData;
-};
 MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
@@ -35,6 +30,8 @@ struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
     TestObjectBarAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectBar", ml) {
         addField<DAS_BIND_MANAGED_FIELD(fooPtr)>("fooPtr");
         addField<DAS_BIND_MANAGED_FIELD(barData)>("barData");
+        addProperty<DAS_BIND_MANAGED_PROP(getFoo)>("getFoo");
+        addProperty<DAS_BIND_MANAGED_PROP(getFooPtr)>("getFooPtr");
     }
     virtual bool isLocal() const { return true; }
 };

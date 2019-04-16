@@ -1,3 +1,5 @@
+// options logNodes=true
+
 require UnitTest
 
 struct TestObjectFooNative
@@ -52,6 +54,8 @@ def test_handled
     assert(b.fooPtr.fooData==4 & idummy==3)
     a.fooData = 7
     assert(a.propAdd13==20)
+    assert(b.getFoo.fooData==7)
+    assert(deref(b.getFooPtr).fooData==7)
 
 [export]
 def test:bool

@@ -19,6 +19,13 @@ struct TestObjectFoo {
     }
 };
 
+struct TestObjectBar {
+    TestObjectFoo * fooPtr;
+    float           barData;
+    TestObjectFoo & getFoo() { return *fooPtr; }
+    TestObjectFoo * getFooPtr() { return fooPtr; }
+};
+
 int *getPtr();
 
 void testFields ( das::Context * ctx );
