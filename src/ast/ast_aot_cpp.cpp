@@ -1018,7 +1018,18 @@ namespace das {
             } else {
                 ss << describeCppType(field->type->firstType);
             }
-            ss << ",&" << field->value->type->firstType->structType->name << "::" << field->name <<  ">::get(";
+            auto vtype = field->value->type->firstType;
+            if ( vtype->isHandle() ) {
+                ss << ",&";
+                if ( vtype->annotation->cppName.empty() ) {
+                    ss << vtype->annotation->name;
+                } else {
+                    ss << vtype->annotation->cppName;
+                }
+            } else {
+                ss << ",&" << vtype->structType->name;
+            }
+            ss << "::" << field->name <<  ">::get(";
             /*
             if ( field->value->type->isHandle() ) {
                 field->value->type->annotation->aotPreVisitGetField(ss, field->name);
@@ -1038,6 +1049,10 @@ namespace das {
             Visitor::preVisit(field);
             if ( field->value->type->isHandle() ) {
                 field->value->type->annotation->aotPreVisitGetField(ss, field->name);
+            } else if ( field->value->type->baseType==Type::tPointer ) {
+                if ( field->value->type->firstType->isHandle() ) {
+                    field->value->type->firstType->annotation->aotPreVisitGetFieldPtr(ss, field->name);
+                }
             }
         }
         virtual ExpressionPtr visit ( ExprField * field ) override {
@@ -1045,7 +1060,12 @@ namespace das {
                 field->value->type->annotation->aotVisitGetField(ss, field->name);
                 ss << " /*" << field->name << "*/";
             } else if ( field->value->type->baseType==Type::tPointer ) {
-                 ss << "->" << field->name;
+                if ( field->value->type->firstType->isHandle() ) {
+                    field->value->type->firstType->annotation->aotVisitGetFieldPtr(ss, field->name);
+                    ss << " /*" << field->name << "*/";
+                } else {
+                    ss << "->" << field->name;
+                }
             } else {
                 ss << "." << field->name;
             }

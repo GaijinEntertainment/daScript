@@ -84,11 +84,11 @@ namespace das {
             return pt;
         }
         // aot
-        virtual void aotPreVisitGetField ( TextWriter &, const string & ) override {
-
-        }
         virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) override {
             ss << ".m[" << TypeDecl::getMaskFieldIndex(fieldName[0]) << "]";
+        }
+        virtual void aotVisitGetFieldPtr ( TextWriter & ss, const string & fieldName ) override {
+            ss << "->m[" << TypeDecl::getMaskFieldIndex(fieldName[0]) << "]";
         }
         // simulate
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {

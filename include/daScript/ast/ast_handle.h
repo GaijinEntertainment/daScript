@@ -160,6 +160,14 @@ namespace das
                 ss << "." << fieldName << " /*undefined */";
             }
         }
+        virtual void aotVisitGetFieldPtr ( TextWriter & ss, const string & fieldName ) override {
+            auto it = fields.find(fieldName);
+            if (it != fields.end()) {
+                ss << "->" << it->second.cppName;
+            } else {
+                ss << "->" << fieldName << " /*undefined */";
+            }
+        }
         void addFieldEx ( const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT ) {
             auto & field = fields[na];
             if ( field.decl ) {
