@@ -271,39 +271,29 @@ namespace das
     };
 
     struct TableIterator : Iterator {
-        size_t nextValid ( Table * tab, size_t index ) const;
-        virtual bool first ( Context & context, IteratorContext & itc ) override;
-        virtual bool next  ( Context & context, IteratorContext & itc ) override;
-        virtual void close ( Context & context, IteratorContext & itc ) override;
-        virtual char * getData ( Table * tab ) const = 0;
-        SimNode *   source;
-        uint32_t    stride;
+        TableIterator ( Table * tab, uint32_t st ) : table(tab), stride(st) {}
+        size_t nextValid ( size_t index ) const;
+        virtual bool first ( Context & context, char * value ) override;
+        virtual bool next  ( Context & context, char * value ) override;
+        virtual void close ( Context & context, char * value ) override;
+        virtual char * getData () const = 0;
+        Table *     table;
+        uint32_t    stride = 0;
+        char *      table_end = nullptr;
     };
 
     struct TableKeysIterator : TableIterator {
-        virtual char * getData ( Table * tab ) const override;
+        TableKeysIterator ( Table * tab, uint32_t st ) : TableIterator(tab,st) {}
+        virtual char * getData ( ) const override;
     };
 
     struct TableValuesIterator : TableIterator {
-        virtual char * getData ( Table * tab ) const override;
+        TableValuesIterator ( Table * tab, uint32_t st ) : TableIterator(tab,st) {}
+        virtual char * getData ( ) const override;
     };
 
-    template <typename IterType>
-    struct SimNode_TableIterator : SimNode {
-        SimNode_TableIterator(const LineInfo & at, SimNode * sk, uint32_t stride)
-            : SimNode(at) { subexpr.source = sk; subexpr.stride = stride; }
-        virtual SimNode * visit ( SimVisitor & vis ) override {
-            V_BEGIN();
-            V_OP(TableIterator);
-            V_SUB(subexpr.source);
-            V_ARG(subexpr.stride);
-            V_END();
-        }
-        virtual vec4f eval ( Context & ) override {
-            return cast<Iterator *>::from(&subexpr);
-        }
-        IterType   subexpr;
-    };
+    Iterator * builtin_table_keys ( Table & tab, int32_t stride, Context * __context__ );
+    Iterator * builtin_table_values ( Table & tab, int32_t stride, Context * __context__ );
 
     struct SimNode_DeleteTable : SimNode_Delete {
         SimNode_DeleteTable ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t va )

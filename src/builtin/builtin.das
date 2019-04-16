@@ -51,5 +51,11 @@ def clone(a:table<auto(KT),auto(VT)>;b:table<KT,VT>)
 def clone(a:das_string;b:string const)
   set(a,b)
 
+def keys(a:table<auto(keyT),auto(valT)>) : iterator<keyT & const>
+  return __builtin_table_keys(a,typeinfo(sizeof type keyT))
+
+def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
+  return __builtin_table_values(a,typeinfo(sizeof type valT))
+
 options indenting = 0
 

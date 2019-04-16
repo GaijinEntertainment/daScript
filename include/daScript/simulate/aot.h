@@ -1042,71 +1042,29 @@ namespace das {
         }
     };
 
-    template <typename TT>
-    struct TIterator  {
-        Table * pTable = nullptr;
-        char *  table_data = nullptr;
-        char *  table_end = nullptr;
-        __forceinline TIterator ( Table * tab, char * data ) {
-            pTable = tab;
-            table_data = data;
-        }
-        __forceinline size_t nextValid ( size_t index ) const {
-            for (; index < pTable->capacity; index++)
-                if (pTable->hashes[index] > HASH_KILLED32)
-                    break;
-            return index;
-        }
-        __forceinline bool first ( Context & context, TT * & value ) {
-            table_lock(context, *pTable);
-            size_t index = nextValid(0);
-            table_end  = table_data + pTable->capacity * sizeof(TT);
-            char * data = table_data + index * sizeof(TT);
-            value  = (TT *) data;
-            return (bool) pTable->size;
-        }
-        __forceinline bool next  ( Context &, TT * & value ) {
-            char * data = (char *) value;
-            size_t index = nextValid((data - table_data) / sizeof(TT) + 1 );
-            data = table_data + index * sizeof(TT);
-            value = (TT *) data;
-            return data != table_end;
-        }
-        __forceinline void close ( Context & context ) {
-            table_unlock(context, *pTable);
-        }
-    };
-
-    template <typename TT>
-    struct das_iterator <TIterator<TT>> {
-        __forceinline das_iterator(TIterator<TT> * r) {
+    template <>
+    struct das_iterator <Iterator> {
+        __forceinline das_iterator(Iterator * r) {
             that = r;
         }
         __forceinline ~das_iterator() {
-            delete that;
-            that = nullptr;
+            // delete that;
+            // that = nullptr;
         }
+        template <typename TT>
         __forceinline bool first ( Context * context, TT * & i ) {
-            return that->first(*context, i);
+            return that->first(*context, (char *)&i);
         }
+        template <typename TT>
         __forceinline bool next  ( Context * context, TT * & i ) {
-            return that->next(*context,i);
+            return that->next(*context,(char *)&i);
         }
-        __forceinline void close ( Context * context, TT * & ) {
-            that->close(*context);
+        template <typename TT>
+        __forceinline void close ( Context * context, TT * & i ) {
+            that->close(*context,(char *)&i);
         }
-        TIterator<TT> * that = nullptr;
+        Iterator * that = nullptr;
     };
-
-    template <typename TK, typename TV>
-    TIterator<TK> * __builtin_table_keys ( Context *, TTable<TK,TV> & tab) {
-        return new TIterator<TK>(&tab, tab.keys);
-    }
-
-    template <typename TK, typename TV>
-    TIterator<TV> * __builtin_table_values ( Context *, TTable<TK,TV> & tab) {
-        return new TIterator<TV>(&tab, tab.data);
-    }
 
     template <typename TK, typename TV>
     TV * __builtin_table_find ( Context * context, TTable<TK, TV> & tab, const TK & key ) {

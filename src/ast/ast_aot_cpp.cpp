@@ -136,9 +136,9 @@ namespace das {
             }
         } else if ( baseType==Type::tIterator ) {
             if ( type->firstType ) {
-                stream << "TIterator<" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << ">";
+                stream << "Iterator * /*" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "*/";
             } else {
-                stream << "Iterator";
+                stream << "Iterator *";
             }
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
             if ( !type->constant && type->baseType==Type::tBlock ) {

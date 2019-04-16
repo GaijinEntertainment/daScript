@@ -139,9 +139,6 @@ namespace das {
                 auto nc = (ExprNullCoalescing *) expr;
                 propagateRead(nc->subexpr.get());
                 propagateRead(nc->defaultValue.get());
-            } else if ( expr->rtti_isValues() ) {
-                auto vs = (ExprValues *) expr;
-                propagateRead(vs->arguments[0].get());
             } else if ( expr->rtti_isCast() ) {
                 auto ca = (ExprCast *) expr;
                 propagateRead(ca->subexpr.get());
@@ -177,9 +174,6 @@ namespace das {
                 auto nc = (ExprNullCoalescing *) expr;
                 propagateWrite(nc->subexpr.get());
                 propagateWrite(nc->defaultValue.get());
-            } else if ( expr->rtti_isValues() ) {
-                auto vs = (ExprValues *) expr;
-                propagateWrite(vs->arguments[0].get());
             } else if ( expr->rtti_isCast() ) {
                 auto ca = (ExprCast *) expr;
                 propagateWrite(ca->subexpr.get());

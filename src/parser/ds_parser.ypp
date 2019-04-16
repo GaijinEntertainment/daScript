@@ -113,6 +113,7 @@
 %token  DAS_REQUIRE    DAS_OPERATOR   DAS_ENUM       DAS_FINALLY
 %token  DAS_DELETE     DAS_DEREF      DAS_SCOPE      DAS_TYPEDEF
 %token  DAS_WITH       DAS_CAST       DAS_OVERRIDE   DAS_UPCAST
+%token  DAS_ITERATOR
 
 /* basic types */
 %token  DAS_TBOOL       DAS_TVOID       DAS_TSTRING     DAS_TAUTO
@@ -1361,6 +1362,11 @@ type_declaration
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($keyTypeDecl);
         $$->secondType = TypeDeclPtr($valueTypeDecl);
+    }
+    |   DAS_ITERATOR[loc] '<' type_declaration[itTypeDecl] '>' {
+        $$ = new TypeDecl(Type::tIterator);
+        $$->at = tokAt(@loc);
+        $$->firstType = TypeDeclPtr($itTypeDecl);
     }
     |   DAS_TBLOCK[loc] {
         $$ = new TypeDecl(Type::tBlock);

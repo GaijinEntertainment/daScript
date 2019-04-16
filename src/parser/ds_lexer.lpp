@@ -213,6 +213,7 @@
 <normal>"expect"                                        return DAS_EXPECT;
 <normal>"table"                                         return DAS_TABLE;
 <normal>"array"                                         return DAS_ARRAY;
+<normal>"iterator"                                      return DAS_ITERATOR;
 <normal>"in"                                            return DAS_IN;
 <normal>"deref"                                         return DAS_DEREF;
 <normal>"scope"                                         return DAS_SCOPE;

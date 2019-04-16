@@ -29,16 +29,6 @@ namespace das {
             Visitor::preVisit(expr);
             expr->noSideEffects = true;
         }
-    // keys
-        virtual void preVisit ( ExprKeys * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true;
-        }
-    // values
-        virtual void preVisit ( ExprValues * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true;
-        }
     // variable
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);

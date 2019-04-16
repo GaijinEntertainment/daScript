@@ -662,6 +662,9 @@ namespace das
         } else  if ( baseType==Type::tPointer ) {
             if ( firstType )
                 return firstType->isAlias();
+        } else  if ( baseType==Type::tIterator ) {
+            if ( firstType )
+                return firstType->isAlias();
         } else if ( baseType==Type::tArray ) {
             if ( firstType )
                 return firstType->isAlias();

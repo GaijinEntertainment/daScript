@@ -61,34 +61,43 @@ namespace das
     };
 
     struct GoodArrayIterator : Iterator {
-        virtual bool first ( Context & context, IteratorContext & itc ) override;
-        virtual bool next  ( Context & context, IteratorContext & itc ) override;
-        virtual void close ( Context & context, IteratorContext & itc ) override;
-        SimNode *   source;
+        GoodArrayIterator ( Array * arr, uint32_t st ) : array(arr), stride(st) {}
+        virtual bool first ( Context & context, char * value ) override;
+        virtual bool next  ( Context & context, char * value ) override;
+        virtual void close ( Context & context, char * value ) override;
+        Array *     array;
         uint32_t    stride;
+        char *      array_end = nullptr;
     };
 
-    struct SimNode_GoodArrayIterator : SimNode, GoodArrayIterator {
+    struct SimNode_GoodArrayIterator : SimNode {
         SimNode_GoodArrayIterator ( const LineInfo & at, SimNode * s, uint32_t st )
-            : SimNode(at) { source = s; stride = st; }
+            : SimNode(at), source(s), stride(st) { }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
+        SimNode *   source;
+        uint32_t    stride;
     };
 
     struct FixedArrayIterator : Iterator {
-        virtual bool first ( Context & context, IteratorContext & itc ) override;
-        virtual bool next  ( Context & context, IteratorContext & itc ) override;
-        virtual void close ( Context & context, IteratorContext & itc ) override;
+        FixedArrayIterator ( char * d, uint32_t sz, uint32_t st ) : data(d), size(sz), stride(st) {}
+        virtual bool first ( Context & context, char * value ) override;
+        virtual bool next  ( Context & context, char * value ) override;
+        virtual void close ( Context & context, char * value ) override;
+        char *      data;
+        uint32_t    size;
+        uint32_t    stride;
+        char *      fixed_array_end = nullptr;
+    };
+
+    struct SimNode_FixedArrayIterator : SimNode {
+        SimNode_FixedArrayIterator ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t st )
+            : SimNode(at), source(s), size(sz), stride(st) { }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode *   source;
         uint32_t    size;
         uint32_t    stride;
-    };
-
-    struct SimNode_FixedArrayIterator : SimNode, FixedArrayIterator {
-        SimNode_FixedArrayIterator ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t st )
-            : SimNode(at) { source = s; size = sz; stride = st; }
-        virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
     };
 
     template <int totalCount>

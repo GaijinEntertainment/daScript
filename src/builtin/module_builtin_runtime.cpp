@@ -165,11 +165,11 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", SideEffects::none, "builtin_table_capacity");
         addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock", SideEffects::modifyArgument, "builtin_table_lock");
         addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock", SideEffects::modifyArgument, "builtin_table_unlock");
+        addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys", SideEffects::modifyArgument, "builtin_table_keys");
+        addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values", SideEffects::modifyArgument, "builtin_table_values");
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprFind>("__builtin_table_find");
-        addCall<ExprKeys>("keys");
-        addCall<ExprValues>("values");
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile

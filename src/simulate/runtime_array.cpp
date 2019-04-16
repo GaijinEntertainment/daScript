@@ -63,54 +63,63 @@ namespace das
 
     // GoodArrayIterator
 
-    bool GoodArrayIterator::first ( Context & context, IteratorContext & itc )  {
+    bool GoodArrayIterator::first ( Context & context, char * _value )  {
+        char ** value = (char **) _value;
+        array_lock(context, *array);
+        char * data    = array->data;
+        *value         = data;
+        array_end      = data + array->size * stride;
+        return (bool) array->size;
+    }
+
+    bool GoodArrayIterator::next  ( Context &, char * _value )  {
+        char ** value = (char **) _value;
+        char * data = *value + stride;
+        *value = data;
+        return data != array_end;
+    }
+
+    void GoodArrayIterator::close ( Context & context, char * _value )  {
+        char ** value = (char **) _value;
+        *value = nullptr;
+        array_unlock(context, *array);
+    }
+
+    vec4f SimNode_GoodArrayIterator::eval ( Context & context ) {
         vec4f ll = source->eval(context);
-        auto pArray = cast<Array *>::to(ll);
-        array_lock(context, *pArray);
-        char * data    = pArray->data;
-        itc.value      = cast<char *>::from(data);
-        itc.array_end  = data + pArray->size * stride;
-        itc.array      = pArray;
-        return (bool) pArray->size;
-    }
-
-    bool GoodArrayIterator::next  ( Context &, IteratorContext & itc )  {
-        char * data = cast<char *>::to(itc.value) + stride;
-        itc.value = cast<char *>::from(data);
-        return data != itc.array_end;
-    }
-
-    void GoodArrayIterator::close ( Context & context, IteratorContext & itc )  {
-        if ( itc.array ) {
-            array_unlock(context, *itc.array);
-        }
-    }
-
-    vec4f SimNode_GoodArrayIterator::eval ( Context & ) {
-        return cast<Iterator *>::from(static_cast<GoodArrayIterator *>(this));
+        Array * arr = cast<Array *>::to(ll);
+        char * iter = context.heap.allocate(sizeof(GoodArrayIterator));
+        new (iter) GoodArrayIterator(arr, stride);
+        return cast<char *>::from(iter);
     }
 
     // FixedArrayIterator
 
-    bool FixedArrayIterator::first ( Context & context, IteratorContext & itc )  {
-        vec4f ll = source->eval(context);
-        char * data = cast<char *>::to(ll);
-        itc.value = cast<char *>::from(data);
-        itc.fixed_array_end = data + size*stride;
+    bool FixedArrayIterator::first ( Context &, char * _value )  {
+        char ** value = (char **) _value;
+        *value = data;
+        fixed_array_end = data + size*stride;
         return (bool) size;
     }
 
-    bool FixedArrayIterator::next  ( Context & , IteratorContext & itc )  {
-        char * data = cast<char *>::to(itc.value) + stride;
-        itc.value = cast<char *>::from(data);
-        return data != itc.fixed_array_end;
+    bool FixedArrayIterator::next  ( Context & , char * _value )  {
+        char ** value = (char **) _value;
+        char * data = *value + stride;
+        *value = data;
+        return data != fixed_array_end;
     }
 
-    void FixedArrayIterator::close ( Context &, IteratorContext &  )  {
+    void FixedArrayIterator::close ( Context &, char * _value )  {
+        char ** value = (char **) _value;
+        *value = nullptr;
     }
 
-    vec4f SimNode_FixedArrayIterator::eval ( Context & ) {
-        return cast<Iterator *>::from(static_cast<FixedArrayIterator *>(this));
+    vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {
+        vec4f ll = source->eval(context);
+        char * data = cast<char *>::to(ll);
+        char * iter = context.heap.allocate(sizeof(GoodArrayIterator));
+        new (iter) FixedArrayIterator(data, size, stride);
+        return cast<char *>::from(iter);
     }
 
     // delete

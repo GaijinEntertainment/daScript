@@ -2154,32 +2154,11 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // iterator
 
-    struct IteratorContext {
-        vec4f value;
-        union {
-            vec4f tail;
-            struct {
-                char *  table_end;
-                Table * table;
-            };
-            struct {
-                char *  array_end;
-                Array * array;
-            };
-            struct {
-                char *  fixed_array_end;
-            };
-            struct {
-                int32_t range_to;
-            };
-        };
-    };
-
     struct Iterator {
         virtual ~Iterator() {}
-        virtual bool first ( Context & context, IteratorContext & itc ) = 0;
-        virtual bool next  ( Context & context, IteratorContext & itc ) = 0;
-        virtual void close ( Context & context, IteratorContext & itc ) = 0;    // can't throw
+        virtual bool first ( Context & context, char * value ) = 0;
+        virtual bool next  ( Context & context, char * value ) = 0;
+        virtual void close ( Context & context, char * value ) = 0;    // can't throw
     };
 
     struct SimNode_ForBase : SimNode_Block {
@@ -2216,31 +2195,31 @@ SIM_NODE_AT_VECTOR(Float, float)
                 vec4f ll = source_iterators[t]->eval(context);
                 sources[t] = cast<Iterator *>::to(ll);
             }
-            IteratorContext ph[totalCount];
+            vec4f ph[totalCount];
             bool needLoop = true;
             SimNode ** __restrict tail = list + total;
             for ( int t=0; t!=totalCount; ++t ) {
-                needLoop = sources[t]->first(context, ph[t]) && needLoop;
+                needLoop = sources[t]->first(context, (char *)(ph+t)) && needLoop;
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
                 for ( int t=0; t!=totalCount; ++t ){
-                    *pi[t] = ph[t].value;
+                    *pi[t] = ph[t];
                 }
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
                     if (context.stopFlags) goto loopend;
                 }
                 for ( int t=0; t!=totalCount; ++t ){
-                    if ( !sources[t]->next(context, ph[t]) ) goto loopend;
+                    if ( !sources[t]->next(context, (char *)(ph+t)) ) goto loopend;
                     if ( context.stopFlags ) goto loopend;
                 }
             }
         loopend:
             evalFinal(context);
             for ( int t=0; t!=totalCount; ++t ) {
-                sources[t]->close(context, ph[t]);
+                sources[t]->close(context, (char *)(ph+t));
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
@@ -2275,23 +2254,23 @@ SIM_NODE_AT_VECTOR(Float, float)
             Iterator * sources;
             vec4f ll = source_iterators[0]->eval(context);
             sources = cast<Iterator *>::to(ll);
-            IteratorContext ph;
+            vec4f ph;
             bool needLoop = true;
             SimNode ** __restrict tail = list + total;
-            needLoop = sources->first(context, ph) && needLoop;
+            needLoop = sources->first(context, (char *)&ph) && needLoop;
             if ( context.stopFlags ) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
-                *pi = ph.value;
+                *pi = ph;
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
                     if (context.stopFlags) goto loopend;
                 }
-                if ( !sources->next(context, ph) ) goto loopend;
+                if ( !sources->next(context, (char *)&ph) ) goto loopend;
                 if ( context.stopFlags ) goto loopend;
             }
         loopend:
             evalFinal(context);
-            sources->close(context, ph);
+            sources->close(context, (char *)&ph);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }

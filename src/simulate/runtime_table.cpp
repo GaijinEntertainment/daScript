@@ -29,50 +29,59 @@ namespace das
 
     // TableIterator
 
-    size_t TableIterator::nextValid ( Table * tab, size_t index ) const {
-        for (; index < tab->capacity; index++)
-            if (tab->hashes[index] > HASH_KILLED32)
+    size_t TableIterator::nextValid ( size_t index ) const {
+        for (; index < table->capacity; index++)
+            if (table->hashes[index] > HASH_KILLED32)
                 break;
         return index;
     }
 
-    bool TableIterator::first ( Context & context, IteratorContext & itc ) {
-        vec4f ll = source->eval(context);
-        auto pTable = cast<Table *>::to(ll);
-        table_lock(context, *pTable);
-        size_t index = nextValid(pTable, 0);
-        char * data    = getData(pTable);
-        itc.value      = cast<char *>::from(data + index * stride);
-        itc.table_end  = data + pTable->capacity * stride;
-        itc.table      = pTable;
-        return (bool) pTable->size;
+    bool TableIterator::first ( Context & context, char * _value ) {
+        char ** value = (char **)_value;
+        table_lock(context, *table);
+        size_t index = nextValid(0);
+        char * data    = getData();
+        *value         = data + index * stride;
+        table_end      = data + table->capacity * stride;
+        return (bool) table->size;
     }
 
-    bool TableIterator::next  ( Context &, IteratorContext & itc ) {
-        char * data = cast<char *>::to(itc.value);
-        char * tableData = getData(itc.table);
-        size_t index = nextValid(itc.table, (data - tableData) / stride + 1 );
+    bool TableIterator::next  ( Context &, char * _value ) {
+        char ** value = (char **) _value;
+        char * data = *value;
+        char * tableData = getData();
+        size_t index = nextValid((data-tableData)/stride+1);
         data = tableData + index * stride;
-        itc.value = cast<char *>::from(data);
-        return data != itc.table_end;
+        *value = data;
+        return data != table_end;
     }
 
-    void TableIterator::close ( Context & context, IteratorContext & itc ) {
-        if ( itc.table ) {
-            table_unlock(context, *itc.table);
-        }
+    void TableIterator::close ( Context & context, char * _value ) {
+        char ** value = (char **) _value;
+        *value = nullptr;
+        table_unlock(context, *table);
     }
 
-    // TableKeysIterator
+    // keys and values
 
-    char * TableKeysIterator::getData ( Table * tab ) const {
-        return tab->keys;
+    char * TableKeysIterator::getData ( ) const {
+        return table->keys;
     }
 
-    // TableValuesIterator
+    char * TableValuesIterator::getData ( ) const {
+        return table->data;
+    }
 
-    char * TableValuesIterator::getData ( Table * tab ) const {
-        return tab->data;
+    Iterator * builtin_table_keys ( Table & tab, int32_t stride, Context * __context__ ) {
+        char * iter = __context__->heap.allocate(sizeof(TableKeysIterator));
+        new (iter) TableKeysIterator(&tab, stride);
+        return (Iterator *) iter;
+    }
+
+    Iterator * builtin_table_values ( Table & tab, int32_t stride, Context * __context__ ) {
+        char * iter = __context__->heap.allocate(sizeof(TableKeysIterator));
+        new (iter) TableValuesIterator(&tab, stride);
+        return (Iterator *) iter;
     }
 
     // delete

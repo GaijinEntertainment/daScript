@@ -5,17 +5,20 @@
 namespace das
 {
     struct RangeIterator : Iterator {
-        virtual bool first ( Context & context, IteratorContext & itc ) override;
-        virtual bool next  ( Context & context, IteratorContext & itc ) override;
-        virtual void close ( Context & context, IteratorContext & itc ) override;
-        SimNode * subexpr;
+        RangeIterator ( const range & r ) : rng(r) {}
+        virtual bool first ( Context & context, char * value ) override;
+        virtual bool next  ( Context & context, char * value ) override;
+        virtual void close ( Context & context, char * value ) override;
+        range   rng;
+        int32_t range_to;
     };
 
-    struct SimNode_RangeIterator : SimNode, RangeIterator {
-            SimNode_RangeIterator ( const LineInfo & at, SimNode * rng )
-            : SimNode(at) { subexpr = rng; }
+    struct SimNode_RangeIterator : SimNode {
+        SimNode_RangeIterator ( const LineInfo & at, SimNode * rng )
+            : SimNode(at), subexpr(rng) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
+        SimNode * subexpr;
     };
 
     struct SimNode_ForRange : SimNode_ForBase  {

@@ -90,7 +90,11 @@ namespace das {
                     }
                     verifyType(ptrType);
                 }
-            } else if ( decl->baseType==Type::tArray ) {
+            } else if ( decl->baseType==Type::tIterator ) {
+                if ( auto ptrType = decl->firstType ) {
+                    verifyType(ptrType);
+                }
+            }else if ( decl->baseType==Type::tArray ) {
                 if ( auto arrayType = decl->firstType ) {
                     if ( arrayType->ref ) {
                         error("can't declare an array of references",arrayType->at,CompilationError::invalid_array_type);
@@ -140,6 +144,9 @@ namespace das {
                     return aT;
                 }
             }
+            if ( auto rT = fptr->result->findAlias(name,true) ) {
+                return rT;
+            }
             for ( auto & gvKV : program->thisModule->globals ) {
                 auto & gvar = gvKV.second;
                 if ( auto vT = gvar->type->findAlias(name,false) ) {
@@ -163,6 +170,9 @@ namespace das {
                     if ( auto aT = arg->type->findAlias(name) ) {
                         return aT;
                     }
+                }
+                if ( auto rT = func->result->findAlias(name,true) ) {
+                    return rT;
                 }
             }
             for ( auto & gvKV : program->thisModule->globals ) {
@@ -194,6 +204,11 @@ namespace das {
             }
             auto resT = make_shared<TypeDecl>(*decl);
             if ( decl->baseType==Type::tPointer ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferAlias(decl->firstType,fptr);
+                    if ( !resT->firstType ) return nullptr;
+                }
+            } if ( decl->baseType==Type::tIterator ) {
                 if ( decl->firstType ) {
                     resT->firstType = inferAlias(decl->firstType,fptr);
                     if ( !resT->firstType ) return nullptr;
@@ -618,6 +633,14 @@ namespace das {
                     reportGenericInfer();
                 } else if ( !func->result->isVoid() ){
                     error("function does not return a value", func->at, CompilationError::expecting_return_value);
+                }
+            }
+            if  ( func->result->isAlias() ) {
+                if ( auto aT = inferAlias(func->result) ) {
+                    func->result = aT;
+                    reportGenericInfer();
+                } else {
+                    error("undefined type " + func->result->describe(), func->at, CompilationError::type_not_found );
                 }
             }
             verifyType(func->result);
@@ -2299,48 +2322,6 @@ namespace das {
                 swap(cargs, expr->arguments);
                 return evalAndFold(expr);
             }
-            return Visitor::visit(expr);
-        }
-    // ExprKeys
-        virtual ExpressionPtr visit ( ExprKeys * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
-            if ( expr->arguments.size()!=1 ) {
-                error("expecting Keys(table)", expr->at);
-                return Visitor::visit(expr);
-            }
-            // infer
-            auto tableType = expr->arguments[0]->type;
-            if ( !tableType->isGoodTableType() ) {
-                error("must be fully qualified table", expr->at);
-                return Visitor::visit(expr);
-            }
-            auto iterType = tableType->firstType;
-            expr->arguments[0]->type->constant = true;
-            expr->type = make_shared<TypeDecl>(Type::tIterator);
-            expr->type->firstType = make_shared<TypeDecl>(*iterType);
-            expr->type->firstType->ref = true;
-            expr->type->firstType->constant = true;
-            return Visitor::visit(expr);
-        }
-    // ExprValues
-        virtual ExpressionPtr visit ( ExprValues * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
-            if ( expr->arguments.size()!=1 ) {
-                error("expecting Values(table)", expr->at);
-                return Visitor::visit(expr);
-            }
-            // infer
-            auto tableType = expr->arguments[0]->type;
-            if ( !tableType->isGoodTableType() ) {
-                error("must be fully qualified table", expr->at);
-                return Visitor::visit(expr);
-            }
-            auto iterType = tableType->secondType;
-            expr->arguments[0]->type->constant = true;
-            expr->type = make_shared<TypeDecl>(Type::tIterator);
-            expr->type->firstType = make_shared<TypeDecl>(*iterType);
-            expr->type->firstType->ref = true;
-            expr->type->firstType->constant = false;
             return Visitor::visit(expr);
         }
     // StringBuilder

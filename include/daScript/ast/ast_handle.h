@@ -290,31 +290,40 @@ namespace das
             }
         };
         struct VectorIterator : Iterator {
-            virtual bool first ( Context & context, IteratorContext & itc ) override {
-                vec4f ll = source->eval(context);
-                VectorType * pArray = cast<VectorType *>::to(ll);
-                char * data    = (char *) pArray->data();
-                uint32_t size = (uint32_t) pArray->size();
-                itc.value      = cast<char *>::from(data);
-                itc.array_end  = data + size * sizeof(OT);
-                itc.array      = nullptr;
+            VectorIterator  ( VectorType * ar ) : array(ar) {}
+            virtual bool first ( Context &, char * _value ) override {
+                char ** value = (char **) _value;
+                char * data     = (char *) array->data();
+                uint32_t size   = (uint32_t) array->size();
+                *value          = data;
+                array_end       = data + size * sizeof(OT);
                 return (bool) size;
             }
-            virtual bool next  ( Context &, IteratorContext & itc ) override {
-                char * data = cast<char *>::to(itc.value) + sizeof(OT);
-                itc.value = cast<char *>::from(data);
-                return data != itc.array_end;
+            virtual bool next  ( Context &, char * _value ) override {
+                char ** value = (char **) _value;
+                char * data = *value + sizeof(OT);
+                *value = data;
+                return data != array_end;
             }
-            virtual void close ( Context &, IteratorContext & ) override {
+            virtual void close ( Context &, char * _value ) override {
+                char ** value = (char **) _value;
+                *value = nullptr;
+            }
+            VectorType * array;
+            char * array_end = nullptr;
+        };
+        struct SimNode_VectorIterator : SimNode {
+            SimNode_VectorIterator ( const LineInfo & at, SimNode * s )
+                : SimNode(at), source(s) { }
+            virtual vec4f eval ( Context & context ) override {
+                vec4f ll = source->eval(context);
+                VectorType * array = cast<VectorType *>::to(ll);
+                char * iter = context.heap.allocate(sizeof(VectorIterator));
+                new (iter) VectorIterator(array);
+                return cast<char *>::from(iter);
             }
             SimNode *   source;
-        };
-        struct SimNode_VectorIterator : SimNode, VectorIterator {
-            SimNode_VectorIterator ( const LineInfo & at, SimNode * s )
-                : SimNode(at) { VectorIterator::source = s;}
-            virtual vec4f eval ( Context & ) override {
-                return cast<Iterator *>::from(static_cast<VectorIterator *>(this));
-            }
+
         };
         ManagedVectorAnnotation(const string & n, ModuleLibrary & lib)
             : TypeAnnotation(n) {

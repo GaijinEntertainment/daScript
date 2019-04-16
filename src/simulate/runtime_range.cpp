@@ -4,25 +4,29 @@
 
 namespace das
 {
-    bool RangeIterator::first ( Context & context, IteratorContext & itc ) {
+    bool RangeIterator::first ( Context &, char * _value ) {
+        int32_t * value = (int32_t *) _value;
+        *value      = rng.from;
+        range_to    = rng.to;
+        return (rng.from!=rng.to);
+    }
+
+    bool RangeIterator::next  ( Context &, char * _value ) {
+        int32_t * value = (int32_t *) _value;
+        int32_t nextValue = *value + 1;
+        *value = nextValue;
+        return (nextValue != range_to);
+    }
+
+    void RangeIterator::close ( Context &, char * ) {
+    }
+
+    vec4f SimNode_RangeIterator::eval ( Context & context ) {
         vec4f ll = subexpr->eval(context);
-        range r = cast<range>::to(ll);  // does not matter if its range or urange, hence only one type
-        itc.value    = cast<int32_t>::from(r.from);
-        itc.range_to = r.to;
-        return (r.from!=r.to);
-    }
-
-    bool RangeIterator::next  ( Context &, IteratorContext & itc ) {
-        int32_t nextValue = cast<int32_t>::to(itc.value) + 1;
-        itc.value = cast<int32_t>::from(nextValue);
-        return (nextValue != itc.range_to);
-    }
-
-    void RangeIterator::close ( Context &, IteratorContext & ) {
-    }
-
-    vec4f SimNode_RangeIterator::eval ( Context & ) {
-        return cast<Iterator *>::from(static_cast<RangeIterator *>(this));
+        range r = cast<range>::to(ll);
+        char * iter = context.heap.allocate(sizeof(RangeIterator));
+        new (iter) RangeIterator(r);
+        return cast<char *>::from(iter);
     }
 
     vec4f SimNode_ForRange::eval ( Context & context ) {

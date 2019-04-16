@@ -4,6 +4,18 @@
 
 #include "unitTest.h"
 
+// this is how we disable AOT
+#if 1
+
+namespace das {
+    namespace aot {
+        void registerAot ( AotLibrary & ) {
+        }
+    }
+}
+
+#else
+
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable:4100)   // unreferenced formal parameter
@@ -378,5 +390,7 @@ namespace das {
 #pragma warning(pop)
 #elif defined(__clang__)
 #pragma clang diagnostic pop
+#endif
+
 #endif
 

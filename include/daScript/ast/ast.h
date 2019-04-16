@@ -216,6 +216,23 @@ namespace das
     };
 
     template <>
+    struct typeFactory<Iterator *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tIterator);
+            return t;
+        }
+    };
+
+    template <>
+    struct typeFactory<const Iterator *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tIterator);
+            t->constant = true;
+            return t;
+        }
+    };
+
+    template <>
     struct typeFactory<Table *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
             auto t = make_shared<TypeDecl>(Type::tTable);
@@ -1255,19 +1272,6 @@ namespace das
         virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
 
-    struct ExprKeys : ExprTableKeysOrValues<ExprKeys,SimNode_TableIterator<TableKeysIterator>,true> {
-        ExprKeys() = default;
-        ExprKeys ( const LineInfo & a, const string & n )
-            : ExprTableKeysOrValues<ExprKeys,SimNode_TableIterator<TableKeysIterator>,true>(a, n) {}
-    };
-
-    struct ExprValues : ExprTableKeysOrValues<ExprValues,SimNode_TableIterator<TableValuesIterator>,false> {
-        ExprValues() = default;
-        ExprValues ( const LineInfo & a, const string & n )
-            : ExprTableKeysOrValues<ExprValues,SimNode_TableIterator<TableValuesIterator>,false>(a, n) {}
-        virtual bool rtti_isValues() const override { return true; }
-    };
-
     template <typename It, typename SimNodeT>
     struct ExprArrayCallWithSizeOrIndex : ExprLooksLikeCall {
         ExprArrayCallWithSizeOrIndex() = default;
@@ -1876,8 +1880,6 @@ namespace das
         VISIT_EXPR(ExprStaticAssert)
         VISIT_EXPR(ExprDebug)
         VISIT_EXPR(ExprInvoke)
-        VISIT_EXPR(ExprKeys)
-        VISIT_EXPR(ExprValues)
         VISIT_EXPR(ExprErase)
         VISIT_EXPR(ExprFind)
         VISIT_EXPR(ExprAscend)
