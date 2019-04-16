@@ -207,7 +207,9 @@ namespace das {
                 serialize(hash);
                 info = context->debugInfo->lookup[hash];    // TODO: verify if there is capture, all that
                 DAS_ASSERTF(info,"type info not found. how did we get type, which is not in the typeinfo hash?");
-                char * ptr = context->heap.allocate(getTypeSize(info) + 16);
+                uint32_t size = getTypeSize(info) + 16;
+                char * ptr = context->heap.allocate(size);
+                memset ( ptr, 0, size );
                 *((TypeInfo **)ptr) = info;
                 ptr += 16;
                 lambda->capture = ptr;
