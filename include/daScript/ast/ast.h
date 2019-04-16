@@ -502,8 +502,8 @@ namespace das
         virtual size_t getAlignOf() const { return 1; }
         virtual TypeDeclPtr makeFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeSafeFieldType ( const string & ) const { return nullptr; }
-        virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const { return nullptr; }
-        virtual TypeDeclPtr makeIteratorType () const { return nullptr; }
+        virtual TypeDeclPtr makeIndexType ( const ExpressionPtr & /*src*/, const ExpressionPtr & /*idx*/ ) const { return nullptr; }
+        virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & /*src*/ ) const { return nullptr; }
         // aot
         virtual void aotPreVisitGetField ( TextWriter &, const string & ) { }
         virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) { ss << "." << fieldName; }
@@ -522,7 +522,7 @@ namespace das
                                          const ExpressionPtr &, const ExpressionPtr &, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateGetAtR2V ( Context &, const LineInfo &, const TypeDeclPtr &,
                                             const ExpressionPtr &, const ExpressionPtr &, uint32_t ) const { return nullptr; }
-        virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
         virtual void walk ( DataWalker &, void * ) { }
     };
 

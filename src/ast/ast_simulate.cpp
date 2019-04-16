@@ -1477,7 +1477,7 @@ namespace das
                     result->source_iterators[t] = sources[t]->type->annotation->simulateGetIterator(
                          context,
                          sources[t]->at,
-                         sources[t]->simulate(context)
+                         sources[t]
                     );
                     if ( !result ) {
                         context.thisProgram->error("integration error, simulateGetIterator returned null",

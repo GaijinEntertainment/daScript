@@ -204,7 +204,7 @@ namespace das {
             return false;
         }
 
-        virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override {
+        virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & ) const override {
             return makeJsValuePtr();
         }
 

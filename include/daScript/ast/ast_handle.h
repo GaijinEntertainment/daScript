@@ -331,8 +331,12 @@ namespace das
                 ss << "." << fieldName << " /*undefined */";
             }
         }
-        virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & ) const override { return make_shared<TypeDecl>(*vecType); }
-        virtual TypeDeclPtr makeIteratorType () const override { return make_shared<TypeDecl>(*vecType); }
+        virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & ) const override {
+            return make_shared<TypeDecl>(*vecType);
+        }
+        virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & ) const override {
+            return make_shared<TypeDecl>(*vecType);
+        }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
             return context.code->makeNode<SimNode_AtStdVector>(at,
@@ -340,7 +344,8 @@ namespace das
                                                                idx->simulate(context),
                                                                ofs);
         }
-        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
+        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, const ExpressionPtr & src ) const override {
+            auto rv = src->simulate(context);
             return context.code->makeNode<SimNode_VectorIterator>(at, rv);
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context,

@@ -74,7 +74,8 @@ namespace das {
             auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
             return make_shared<TypeDecl>(bt);
         }
-        virtual TypeDeclPtr makeIndexType ( TypeDeclPtr & decl ) const override {
+        virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & idx ) const override {
+            auto decl = idx->type;
             if ( !decl->isIndex() ) return nullptr;
             auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
             auto pt = make_shared<TypeDecl>(bt);

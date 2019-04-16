@@ -1300,7 +1300,7 @@ namespace das {
                     error("handle does not support this index type", expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
-                expr->type = seT->annotation->makeIndexType(ixT);
+                expr->type = seT->annotation->makeIndexType(expr->subexpr, expr->index);
                 expr->type->constant |= seT->constant;
             } else {
                 if ( !ixT->isIndex() ) {
@@ -2048,7 +2048,7 @@ namespace das {
                     pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
                     pVar->type->ref = false;
                 } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
-                    pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIteratorType());
+                    pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIteratorType(src));
                 } else {
                     error("unsupported iteration type for the loop variable " + pVar->name, expr->at);
                     return;
