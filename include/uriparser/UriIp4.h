@@ -81,6 +81,12 @@ extern "C" {
 
 
 
+#ifndef URI_DOXYGEN
+# include "UriBase.h"
+#endif
+
+
+
 /**
  * Converts a IPv4 text representation into four bytes.
  *
@@ -89,7 +95,7 @@ extern "C" {
  * @param afterLast    Position to stop parsing at
  * @return Error code or 0 on success
  */
-int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
+URI_PUBLIC int URI_FUNC(ParseIpFourAddress)(unsigned char * octetOutput,
 		const URI_CHAR * first, const URI_CHAR * afterLast);
 
 

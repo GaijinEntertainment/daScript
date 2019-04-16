@@ -110,7 +110,7 @@ int URI_FUNC(ComposeQueryCharsRequiredEx)(const URI_TYPE(QueryList) * queryList,
 
 
 int URI_FUNC(ComposeQuery)(URI_CHAR * dest,
-						   const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten) {
+		const URI_TYPE(QueryList) * queryList, int maxChars, int * charsWritten) {
 	const UriBool spaceToPlus = URI_TRUE;
 	const UriBool normalizeBreaks = URI_TRUE;
 

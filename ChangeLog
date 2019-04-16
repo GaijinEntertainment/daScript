@@ -9,6 +9,9 @@ NOTE: uriparser is looking for help with a few things:
       Thanks to Jørgen Ibsen for the report!
   * Fixed: Link errors on Haiku regarding function inet_ntop (GitHub #45)
       Thanks to Schrijvers Luc for the patch!
+  * Fixed: Mark API functions with __declspec(dllexport) and
+      __declspec(dllimport) in *.h files for Visual Studio
+  * Improved: Use -fvisibility=hidden by default with supporting compilers
   * Changed: Migrated from GNU Autotools to CMake (GitHub #17, #47, #56, #59)
       Thanks for their support with the CMake migration to:
       - David Demelier

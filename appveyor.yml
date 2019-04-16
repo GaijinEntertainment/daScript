@@ -85,7 +85,6 @@ before_build:
 # NOTE: GTEST_ROOT is relative to source CMakeLists.txt, not the build directory
   - cmake
       -G "%CMAKE_GENERATOR%"
-      -DBUILD_SHARED_LIBS=OFF
       -DGTEST_ROOT=googletest-release-%GTEST_VERSION%/googletest
       -DURIPARSER_BUILD_DOCS=OFF
       -DURIPARSER_MSVC_RUNTIME=/MT

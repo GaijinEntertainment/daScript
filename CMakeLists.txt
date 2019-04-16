@@ -46,6 +46,7 @@ set(URIPARSER_SO_CURRENT    1)
 set(URIPARSER_SO_REVISION  24)
 set(URIPARSER_SO_AGE        0)
 
+include(CheckCCompilerFlag)
 include(CheckFunctionExists)
 include(CheckLibraryExists)
 include(CheckSymbolExists)
@@ -88,6 +89,19 @@ if(MSVC AND URIPARSER_MSVC_RUNTIME)
 endif()
 
 #
+# Compiler checks
+#
+set(URIPARSER_EXTRA_COMPILE_FLAGS)
+
+check_c_compiler_flag("-fvisibility=hidden" URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
+if(URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
+    set(URIPARSER_EXTRA_COMPILE_FLAGS "${URIPARSER_EXTRA_COMPILE_FLAGS} -fvisibility=hidden")
+endif()
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${URIPARSER_EXTRA_COMPILE_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${URIPARSER_EXTRA_COMPILE_FLAGS}")
+
+#
 # config.h
 #
 check_symbol_exists(wprintf wchar.h HAVE_WPRINTF)
@@ -105,9 +119,7 @@ set(API_HEADER_FILES
     include/uriparser/Uri.h
     include/uriparser/UriIp4.h
 )
-
-add_library(uriparser
-    ${API_HEADER_FILES}
+set(LIBRARY_CODE_FILES
     src/UriCommon.c
     src/UriCommon.h
     src/UriCompare.c
@@ -130,6 +142,11 @@ add_library(uriparser
     src/UriShorten.c
 )
 
+add_library(uriparser
+    ${API_HEADER_FILES}
+    ${LIBRARY_CODE_FILES}
+)
+
 if(NOT MSVC)
     math(EXPR URIPARSER_SO_CURRENT_MINUS_AGE "${URIPARSER_SO_CURRENT} - ${URIPARSER_SO_AGE}")
     set_property(TARGET uriparser PROPERTY VERSION ${URIPARSER_SO_CURRENT_MINUS_AGE}.${URIPARSER_SO_AGE}.${URIPARSER_SO_REVISION})
@@ -143,11 +160,18 @@ set_property(
         PUBLIC_HEADER "${API_HEADER_FILES}"
 )
 
+target_compile_definitions(uriparser PRIVATE URI_LIBRARY_BUILD)
+if (NOT BUILD_SHARED_LIBS)
+    target_compile_definitions(uriparser PUBLIC URI_STATIC_BUILD)
+endif()
 if(NOT URIPARSER_BUILD_CHAR)
-    target_compile_definitions(uriparser PUBLIC -DURI_NO_ANSI)
+    target_compile_definitions(uriparser PUBLIC URI_NO_ANSI)
 endif()
 if(NOT URIPARSER_BUILD_WCHAR_T)
-    target_compile_definitions(uriparser PUBLIC -DURI_NO_UNICODE)
+    target_compile_definitions(uriparser PUBLIC URI_NO_UNICODE)
+endif()
+if(URIPARSER_COMPILER_SUPPORTS_VISIBILITY)
+    target_compile_definitions(uriparser PRIVATE URI_VISIBILITY)
 endif()
 
 target_include_directories(uriparser
@@ -224,7 +248,14 @@ if(URIPARSER_BUILD_TESTS)
         test/MemoryManagerSuite.cpp
         test/test.cpp
         test/VersionSuite.cpp
+
+        # These library code files have non-public symbols that the test suite
+        # needs to link to, so they appear here as well:
+        ${API_HEADER_FILES}
+        ${LIBRARY_CODE_FILES}
     )
+
+    target_compile_definitions(testrunner PRIVATE URI_STATIC_BUILD)
 
     if(MSVC)
         target_compile_definitions(testrunner PRIVATE -D_CRT_SECURE_NO_WARNINGS)
@@ -235,11 +266,11 @@ if(URIPARSER_BUILD_TESTS)
     )
 
     target_include_directories(testrunner PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}  # for config.h
     )
 
     target_link_libraries(testrunner PUBLIC
-        uriparser
         ${GTEST_BOTH_LIBRARIES}
     )
 
@@ -362,6 +393,7 @@ message("=======================================================================
 message("")
 message("Configuration")
 message("  Prefix ............... ${CMAKE_INSTALL_PREFIX}")
+message("  Shared libraries ..... ${BUILD_SHARED_LIBS}")
 message("  Code for char * ...... ${URIPARSER_BUILD_CHAR}")
 message("  Code for wchar_t * ... ${URIPARSER_BUILD_WCHAR_T}")
 message("  Tools ................ ${URIPARSER_BUILD_TOOLS}")
