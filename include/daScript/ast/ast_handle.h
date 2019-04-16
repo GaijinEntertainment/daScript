@@ -341,6 +341,13 @@ namespace das
                 ss << "." << fieldName << " /*undefined */";
             }
         }
+        virtual void aotVisitGetFieldPtr ( TextWriter & ss, const string & fieldName ) override {
+            if ( fieldName=="length" ) {
+                ss << "->size()";
+            } else {
+                ss << "." << fieldName << " /*undefined */";
+            }
+        }
         virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & ) const override {
             return make_shared<TypeDecl>(*vecType);
         }
