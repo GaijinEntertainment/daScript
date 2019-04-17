@@ -46,6 +46,30 @@ bool compile ( const string & fn, const string & mainInc, const string & registe
                 }
                 return true;
             },"*");
+            // sample
+#if 0
+            for (const auto & st : program->thisModule->structuresInOrder) {
+                mainTw << " // structure " << st->name << "\n";
+                for (const auto & fl : st->fields) {
+                    mainTw << " //     " << describeCppType(fl.type,true) << " " << fl.name << ";";
+                    if (fl.annotation.arguments.size()) {
+                        mainTw << " // ";
+                        for (const auto & arg : fl.annotation.arguments) {
+                            mainTw << " " << arg.name << "=";
+                            switch (arg.type) {
+                            case Type::tInt:    mainTw << arg.iValue; break;
+                            case Type::tFloat:  mainTw << arg.fValue; break;
+                            case Type::tBool:   mainTw << (arg.bValue ? "true" : "false"); break;
+                            case Type::tString: mainTw << arg.sValue; break;
+                            default:    mainTw << "??"; break;
+                            }
+                        }
+                    }
+                    mainTw << "\n";
+                }
+            }
+#endif
+            // AOT actual
             program->aotCpp(ctx, mainTw);
             program->registerAotCpp(registerTw, ctx, false);
             // and save

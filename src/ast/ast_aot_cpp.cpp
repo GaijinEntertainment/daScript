@@ -77,7 +77,7 @@ namespace das {
         return g_cppCTypeTable.find(t);
     }
 
-    string describeCppType ( const TypeDeclPtr & type, bool substituteRef = false, bool skipRef = false, bool skipConst = false ) {
+    string describeCppType ( const TypeDeclPtr & type, bool substituteRef, bool skipRef, bool skipConst ) {
         TextWriter stream;
         auto baseType = type->baseType;
         if ( !skipConst ) {

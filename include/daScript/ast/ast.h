@@ -335,7 +335,9 @@ namespace das
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
 
-        //      [annotation (value,value,...,value)]
+    string describeCppType(const TypeDeclPtr & type, bool substituteRef = false, bool skipRef = false, bool skipConst = false);
+
+    //      [annotation (value,value,...,value)]
     //  or  [annotation (key=value,key,value,...,key=value)]
     struct AnnotationArgument {
         Type    type;       // only tInt, tFloat, tBool, and tString are allowed

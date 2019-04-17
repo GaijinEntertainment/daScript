@@ -2,6 +2,11 @@
 
 require UnitTest
 
+[checkRange]
+struct Foo
+    [min=0,max=3] a:int = 1
+    [min=10,max=20] b:int = 15
+
 struct TestObjectFooNative
     fooData : int
 
