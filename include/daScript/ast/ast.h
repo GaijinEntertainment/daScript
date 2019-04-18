@@ -1390,6 +1390,9 @@ namespace das
         ExpressionPtr   cond, if_true, if_false;
     };
 
+    struct MakeFieldDecl;
+    typedef shared_ptr<MakeFieldDecl>   MakeFieldDeclPtr;
+
     struct MakeFieldDecl : enable_shared_from_this<MakeFieldDecl> {
         LineInfo        at;
         string          name;
@@ -1398,10 +1401,22 @@ namespace das
         MakeFieldDecl () = default;
         MakeFieldDecl ( const LineInfo & a, const string & n, const ExpressionPtr & e, bool mv )
             : at(a), name(n), value(e), moveSemantic(mv) {}
+        MakeFieldDeclPtr clone() const;
     };
-    typedef shared_ptr<MakeFieldDecl>   MakeFieldDeclPtr;
+
     typedef vector<MakeFieldDeclPtr>    MakeStruct;
     typedef shared_ptr<MakeStruct>      MakeStructPtr;
+
+    struct ExprNamedCall : Expression {
+        ExprNamedCall () = default;
+        ExprNamedCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        string      name;
+        MakeStruct  arguments;
+        bool        argumentsFailedToInfer = false;
+    };
 
     struct ExprMakeLocal : Expression {
         ExprMakeLocal() = default;
@@ -1822,6 +1837,9 @@ namespace das
         // NEW
         virtual void preVisitNewArg ( ExprNew * call, Expression * arg, bool last ) {}
         virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) { return arg->shared_from_this(); }
+        // NAMED CALL
+        virtual void preVisitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg, bool last ) {}
+        virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg , bool last ) { return arg->shared_from_this(); }
         // CALL
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) {}
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) { return arg->shared_from_this(); }
@@ -1932,6 +1950,7 @@ namespace das
         VISIT_EXPR(ExprMakeLambda)
         VISIT_EXPR(ExprTypeInfo)
         VISIT_EXPR(ExprCall)
+        VISIT_EXPR(ExprNamedCall)
         VISIT_EXPR(ExprIfThenElse)
         VISIT_EXPR(ExprWith)
         VISIT_EXPR(ExprWhile)

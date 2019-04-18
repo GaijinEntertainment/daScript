@@ -1671,6 +1671,11 @@ namespace das
         return pCall;
     }
 
+    SimNode * ExprNamedCall::simulate (Context & context) const {
+        DAS_ASSERTF(false, "we should not be here. named call should be promoted to regular call");
+        return nullptr;
+    }
+
     bool Program::simulate ( Context & context, TextWriter & logs ) {
         context.thisProgram = this;
         if ( auto optHeap = options.find("heap",Type::tInt) ) {

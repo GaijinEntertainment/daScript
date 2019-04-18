@@ -366,6 +366,23 @@ namespace das {
             ss << ")";
             return Visitor::visit(c);
         }
+    // named call
+        virtual void preVisit ( ExprNamedCall * call ) override {
+            Visitor::preVisit(call);
+            ss << call->name << "([";
+        }
+        virtual void preVisitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg, bool last ) override {
+            Visitor::preVisitNamedCallArg(call, arg, last);
+            ss << arg->name << (arg->moveSemantic ? "<-" : "=" );
+        }
+        virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg, bool last ) override {
+            if ( !last ) ss << ",";
+            return Visitor::visitNamedCallArg(call, arg, last);
+        }
+        virtual ExpressionPtr visit ( ExprNamedCall * c ) override {
+            ss << "])";
+            return Visitor::visit(c);
+        }
     // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);

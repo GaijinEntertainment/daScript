@@ -1179,7 +1179,39 @@ namespace das {
         return cexpr;
     }
 
+    // named call
+
+    ExpressionPtr ExprNamedCall::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto & arg : arguments ) {
+            vis.preVisitNamedCallArg(this, arg.get(), arg==arguments.back());
+            arg->value = arg->value->visit(vis);
+            arg = vis.visitNamedCallArg(this, arg.get(), arg==arguments.back());
+        }
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprNamedCall::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprNamedCall>(expr);
+        Expression::clone(cexpr);
+        cexpr->name = name;
+        cexpr->arguments.reserve(arguments.size());
+        for ( auto & arg : arguments ) {
+            cexpr->arguments.push_back(arg->clone());
+        }
+        return cexpr;
+    }
+
     // make structure
+
+    MakeFieldDeclPtr MakeFieldDecl::clone() const {
+        auto md = make_shared<MakeFieldDecl>();
+        md->at = at;
+        md->moveSemantic = moveSemantic;
+        md->name = name;
+        md->value = value->clone();
+        return md;
+    }
 
     ExpressionPtr ExprMakeStructure::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeStructure>(expr);

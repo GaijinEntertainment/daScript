@@ -344,6 +344,40 @@ namespace das {
             return true;
         }
 
+        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock ) const {
+            if ( pFn->arguments.size() < arguments.size() ) {
+                return false;
+            }
+            size_t fnArgIndex = 0;
+            for ( size_t ai = 0; ai != arguments.size(); ++ai ) {
+                auto & arg = arguments[ai];
+                for ( ;; ) {
+                    if ( fnArgIndex >= pFn->arguments.size() ) {    // out of source arguments. done
+                        return false;
+                    }
+                    auto & fnArg = pFn->arguments[fnArgIndex];
+                    if ( fnArg->name == arg->name ) {               // found it, name matches
+                        break;
+                    }
+                    if ( !fnArg->init ) {                           // can't skip - no default value
+                        return false;
+                    }
+                    fnArgIndex ++;
+                }
+                if (!isMatchingArgument(pFn, pFn->arguments[fnArgIndex]->type, arg->value->type,inferAuto,inferBlock)) {
+                    return false;
+                }
+                fnArgIndex ++;
+            }
+            while ( fnArgIndex < pFn->arguments.size() ) {
+                if ( !pFn->arguments[fnArgIndex]->init ) {
+                    return false;                                   // tail must be defaults
+                }
+                fnArgIndex ++;
+            }
+            return true;
+        }
+
         string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
             TextWriter ss;
             size_t tot = das::min ( types.size(), pFn->arguments.size() );
@@ -356,6 +390,25 @@ namespace das {
                 }
             }
             return ss.str();
+        }
+
+        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                auto itFnList = mod->functionsByName.find(funcName);
+                if ( itFnList != mod->functionsByName.end() ) {
+                    auto & goodFunctions = itFnList->second;
+                    for ( auto & pFn : goodFunctions ) {
+                        if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
+                            result.push_back(pFn);
+                        }
+                    }
+                }
+                return true;
+            },moduleName);
+            return result;
         }
 
         vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false ) const {
@@ -2202,6 +2255,54 @@ namespace das {
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
             return Visitor::visitLooksLikeCallArg(call, arg, last);
+        }
+    // ExprNamedCall
+        virtual void preVisit ( ExprNamedCall * call ) override {
+            Visitor::preVisit(call);
+            call->argumentsFailedToInfer = false;
+        }
+        virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg , bool last ) override {
+            if ( !arg->value->type ) call->argumentsFailedToInfer = true;
+            return Visitor::visitNamedCallArg(call, arg, last);
+        }
+        virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
+            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            auto functions = findMatchingFunctions(expr->name, expr->arguments, true);
+            if ( functions.size()==0 ) {
+                error("function not found " + expr->name, expr->at, CompilationError::function_not_found);
+            } else if ( functions.size()>1 ) {
+                string candidates = program->describeCandidates(functions);
+                error("too many matching functions " + expr->name + "\n" + candidates,
+                      expr->at, CompilationError::function_not_found);
+            } else {
+                reportGenericInfer();
+                auto pFn = functions.back();
+                auto newCall = make_shared<ExprCall>(expr->at,pFn->name);
+                size_t fnArgIndex = 0;
+                for ( size_t ai = 0; ai != expr->arguments.size(); ++ai ) {
+                    auto & arg = expr->arguments[ai];
+                    for ( ;; ) {
+                        DAS_ASSERTF ( fnArgIndex < pFn->arguments.size(), "somehow matched function which does not match. not enough args" );
+                        auto & fnArg = pFn->arguments[fnArgIndex];
+                        if ( fnArg->name == arg->name ) {
+                            break;
+                        }
+                        DAS_ASSERTF( fnArg->init, "somehow matched function, which does not match. can only skip defaults");
+                        newCall->arguments.push_back(fnArg->init->clone());
+                        fnArgIndex ++;
+                    }
+                    newCall->arguments.push_back(arg->value->clone());
+                    fnArgIndex ++;
+                }
+                while ( fnArgIndex < pFn->arguments.size() ) {
+                    auto & fnArg = pFn->arguments[fnArgIndex];
+                    DAS_ASSERTF( fnArg->init, "somehow matched function, which does not match. tail has to be defaults");
+                    newCall->arguments.push_back(fnArg->init->clone());
+                    fnArgIndex ++;
+                }
+                return newCall;
+            }
+            return Visitor::visit(expr);
         }
     // ExprCall
         virtual void preVisit ( ExprCall * call ) override {

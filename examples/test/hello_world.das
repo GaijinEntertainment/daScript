@@ -1,35 +1,25 @@
-// options log = true
+options log = true, logInferPasses = true
 
 let
     network : string
 
-struct Message
-    cnt : lambda<(arg:int):int>
+def boo()
+    return 0
 
-def send(t:lambda<(arg:int):int>)
-    let msg = [[Message cnt=t]]
-    binary_save(msg) <| $(data)
-        network = data
+def boo(a:int=1;b:int)
+    return a + b
 
-def recv
-    let t : Message
-    binary_load(t, network)
-    return t.cnt
+def boo(a,b,c:int)
+    return a + b + c
 
 [export]
 def test
-    let CNT = 0
-    let counter = lambda() <| $ (extra:int) : int
-        return CNT++ + extra
-    let x = invoke(counter,13)
-    CNT = 100500
-    let y = invoke(counter,13)
-	assert(x==13 & y==14)
-    send(counter)
-    let net_counter = recv()
-    let z = invoke(net_counter,13)
-    assert(z==15)
-    x = invoke(counter,13)
-    assert(x==15)
+    // regular infer
+    let t1 = boo([a=2,b=3])
+    assert(t1==5)
+    let t2 = boo([b=3])
+    assert(t2==4)
+    let t3 = boo([a=1,b=2,c=3])
+    assert(t3==6)
     return true
 

@@ -196,6 +196,7 @@
 %type <pExpression>     expr_type_info
 %type <pExpression>     expr_cast
 %type <pExpression>     expr_block
+%type <pExpression>     expr_named_call
 %type <pExpression>     expression_any
 %type <pExpression>     expr_numeric_const
 %type <pExpression>     string_builder_body
@@ -845,6 +846,16 @@ expr_assign
     |   expr[left] SHREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),">>=", ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
+expr_named_call
+    :   name_in_namespace[name] '(' '[' make_struct_fields[list] ']' ')' {
+        auto nc = new ExprNamedCall(tokAt(@name),*$name);
+        nc->arguments = *$list;
+        delete $list;
+        delete $name;
+        $$ = nc;
+    }
+    ;
+
 /* a->b(args) is short for invoke(a.b, a, args)  */
 expr_method_call
     :   expr[left] RARROW[loc] NAME[method_name] '(' ')' {
@@ -923,6 +934,7 @@ expr
     |   expr_cast[subexpr]                      { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   expr_method_call[subexpr]               { $$ = $subexpr; }
+    |   expr_named_call[subexpr]                { $$ = $subexpr; }
     |   expr_block[subexpr]                     { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg] {
         if ( $fncall->rtti_isCallLikeExpr() ) {
