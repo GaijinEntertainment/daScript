@@ -272,6 +272,22 @@ namespace das {
             return result;
         }
 
+        vector<FunctionPtr> findGenericCandidates ( const string & name, const vector<MakeFieldDeclPtr> & ) const {
+            // TODO: better error reporting
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                auto itFnList = mod->genericsByName.find(funcName);
+                if ( itFnList != mod->genericsByName.end() ) {
+                    auto & goodFunctions = itFnList->second;
+                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+
         vector<FunctionPtr> findGenericCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -421,6 +437,25 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
+                            result.push_back(pFn);
+                        }
+                    }
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+
+        vector<FunctionPtr> findMatchingGenerics ( const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                auto itFnList = mod->genericsByName.find(funcName);
+                if ( itFnList != mod->genericsByName.end() ) {
+                    auto & goodFunctions = itFnList->second;
+                    for ( auto & pFn : goodFunctions ) {
+                        if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
                             result.push_back(pFn);
                         }
                     }
@@ -2257,6 +2292,32 @@ namespace das {
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
     // ExprNamedCall
+        ExpressionPtr demoteCall ( ExprNamedCall * expr, const FunctionPtr & pFn ) {
+            auto newCall = make_shared<ExprCall>(expr->at,pFn->name);
+            size_t fnArgIndex = 0;
+            for ( size_t ai = 0; ai != expr->arguments.size(); ++ai ) {
+                auto & arg = expr->arguments[ai];
+                for ( ;; ) {
+                    DAS_ASSERTF ( fnArgIndex < pFn->arguments.size(), "somehow matched function which does not match. not enough args" );
+                    auto & fnArg = pFn->arguments[fnArgIndex];
+                    if ( fnArg->name == arg->name ) {
+                        break;
+                    }
+                    DAS_ASSERTF( fnArg->init, "somehow matched function, which does not match. can only skip defaults");
+                    newCall->arguments.push_back(fnArg->init->clone());
+                    fnArgIndex ++;
+                }
+                newCall->arguments.push_back(arg->value->clone());
+                fnArgIndex ++;
+            }
+            while ( fnArgIndex < pFn->arguments.size() ) {
+                auto & fnArg = pFn->arguments[fnArgIndex];
+                DAS_ASSERTF( fnArg->init, "somehow matched function, which does not match. tail has to be defaults");
+                newCall->arguments.push_back(fnArg->init->clone());
+                fnArgIndex ++;
+            }
+            return newCall;
+        }
         virtual void preVisit ( ExprNamedCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
@@ -2269,38 +2330,24 @@ namespace das {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             auto functions = findMatchingFunctions(expr->name, expr->arguments, true);
             if ( functions.size()==0 ) {
-                error("function not found " + expr->name, expr->at, CompilationError::function_not_found);
+                auto generics = findMatchingGenerics(expr->name, expr->arguments);
+                if ( generics.size()==1 ) {
+                    reportGenericInfer();
+                    return demoteCall(expr,generics.back());
+                } else if ( generics.size()>0 ) {
+                    error("too many matching generic functions " + expr->name,
+                          expr->at, CompilationError::function_not_found);
+                } else {
+                    error("function not found " + expr->name,
+                          expr->at, CompilationError::function_not_found);
+                }
             } else if ( functions.size()>1 ) {
                 string candidates = program->describeCandidates(functions);
                 error("too many matching functions " + expr->name + "\n" + candidates,
                       expr->at, CompilationError::function_not_found);
             } else {
                 reportGenericInfer();
-                auto pFn = functions.back();
-                auto newCall = make_shared<ExprCall>(expr->at,pFn->name);
-                size_t fnArgIndex = 0;
-                for ( size_t ai = 0; ai != expr->arguments.size(); ++ai ) {
-                    auto & arg = expr->arguments[ai];
-                    for ( ;; ) {
-                        DAS_ASSERTF ( fnArgIndex < pFn->arguments.size(), "somehow matched function which does not match. not enough args" );
-                        auto & fnArg = pFn->arguments[fnArgIndex];
-                        if ( fnArg->name == arg->name ) {
-                            break;
-                        }
-                        DAS_ASSERTF( fnArg->init, "somehow matched function, which does not match. can only skip defaults");
-                        newCall->arguments.push_back(fnArg->init->clone());
-                        fnArgIndex ++;
-                    }
-                    newCall->arguments.push_back(arg->value->clone());
-                    fnArgIndex ++;
-                }
-                while ( fnArgIndex < pFn->arguments.size() ) {
-                    auto & fnArg = pFn->arguments[fnArgIndex];
-                    DAS_ASSERTF( fnArg->init, "somehow matched function, which does not match. tail has to be defaults");
-                    newCall->arguments.push_back(fnArg->init->clone());
-                    fnArgIndex ++;
-                }
-                return newCall;
+                return demoteCall(expr,functions.back());
             }
             return Visitor::visit(expr);
         }

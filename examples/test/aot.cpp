@@ -130,6 +130,9 @@ namespace das {
         namespace test_module {
             #include "unit_tests/module.das.main.inc"
         }
+        namespace test_named_call {
+            #include "unit_tests/named_call.das.main.inc"
+        }
         namespace test_new_and_init {
             #include "unit_tests/new_and_init.das.main.inc"
         }
@@ -306,6 +309,9 @@ namespace das {
             }
             {   using namespace test_module;
                 #include "unit_tests/module.das.register.inc"
+            }
+            {   using namespace test_named_call;
+                #include "unit_tests/named_call.das.register.inc"
             }
             {   using namespace test_new_and_init;
                 #include "unit_tests/new_and_init.das.register.inc"

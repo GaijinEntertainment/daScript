@@ -34,3 +34,4 @@ def test
     test_generic_infer()
     return true
 
+
