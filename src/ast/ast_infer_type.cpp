@@ -272,6 +272,21 @@ namespace das {
             return result;
         }
 
+        vector<FunctionPtr> findCandidates ( const string & name, const vector<MakeFieldDeclPtr> & ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                auto itFnList = mod->functionsByName.find(funcName);
+                if ( itFnList != mod->functionsByName.end() ) {
+                    auto & goodFunctions = itFnList->second;
+                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+
         vector<FunctionPtr> findGenericCandidates ( const string & name, const vector<MakeFieldDeclPtr> & ) const {
             // TODO: better error reporting
             string moduleName, funcName;
@@ -394,15 +409,69 @@ namespace das {
             return true;
         }
 
+        string describeMismatchingFunction(const FunctionPtr & pFn, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock) const {
+            if ( pFn->arguments.size() < arguments.size() ) {
+                return "\t\ttoo many arguments\n";
+            }
+            TextWriter ss;
+            size_t fnArgIndex = 0;
+            for ( size_t ai = 0; ai != arguments.size(); ++ai ) {
+                auto & arg = arguments[ai];
+                for ( ;; ) {
+                    if ( fnArgIndex >= pFn->arguments.size() ) {
+                        auto it = find_if ( pFn->arguments.begin(), pFn->arguments.end(), [&]( const VariablePtr & varg){
+                            return varg->name == arg->name;
+                        });
+                        if ( it != pFn->arguments.end() ) {
+                            ss << "\t\tcan't match argument " << arg->name << ", its submitted out of order\n";
+                        } else {
+                            ss << "\t\tcan't match argument " << arg->name << ", out of function arguments\n";
+                        }
+                        return ss.str();
+                    }
+                    auto & fnArg = pFn->arguments[fnArgIndex];
+                    if ( fnArg->name == arg->name ) {
+                        break;
+                    }
+                    if ( !fnArg->init ) {
+                        ss << "\t\twhile looking for argument " << arg->name << ", can't skip function argument " << fnArg->name << " because it has no default value\n";
+                        return ss.str();
+                    }
+                    fnArgIndex ++;
+                }
+                if (!isMatchingArgument(pFn, pFn->arguments[fnArgIndex]->type, arg->value->type,inferAuto,inferBlock)) {
+                    ss << "\t\tinvalid argument " << arg->name << ", expecting ("
+                        << pFn->arguments[fnArgIndex]->type->describe() << ") passing (" << arg->value->type->describe() << ")\n";
+                    return ss.str();
+                }
+                fnArgIndex ++;
+            }
+            while ( fnArgIndex < pFn->arguments.size() ) {
+                if ( !pFn->arguments[fnArgIndex]->init ) {
+                    ss << "\t\tmissing default value for function argument " << pFn->arguments[fnArgIndex]->name << "\n";
+                    return ss.str();
+                }
+                fnArgIndex ++;
+            }
+            return ss.str();
+        }
+
         string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
             TextWriter ss;
             size_t tot = das::min ( types.size(), pFn->arguments.size() );
-            for (size_t ai = 0; ai != tot; ++ai) {
+            size_t ai;
+            for (ai = 0; ai != tot; ++ai) {
                 auto & arg = pFn->arguments[ai];
                 auto & passType = types[ai];
                 if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
-                    ss << "\ninvalid argument " << arg->name << ", expecting ("
-                        << arg->type->describe() << ") passing (" << passType->describe() << ")";
+                    ss << "\t\tinvalid argument " << arg->name << ", expecting ("
+                        << arg->type->describe() << ") passing (" << passType->describe() << ")\n";
+                }
+            }
+            for ( ; ai!= pFn->arguments.size(); ++ai ) {
+                auto & arg = pFn->arguments[ai];
+                if ( !arg->init ) {
+                    ss << "\t\tmissing argument " << arg->name << "\n";
                 }
             }
             return ss.str();
@@ -485,17 +554,45 @@ namespace das {
         }
 
         void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
-            const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks ) {
-            if (candidateFunctions.size() == 1) {
-                auto missFn = candidateFunctions.back();
-                auto problems = describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
-                error(extra + "\ncandidate function:\n\t"
-                    + missFn->describe() + problems, at, CompilationError::function_not_found);
+            const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks, bool reportDetails ) {
+            TextWriter ss;
+            ss << extra;
+            if ( candidateFunctions.size() > 1 ) {
+                ss << "\ncandidates:\n";
+            } else if ( candidateFunctions.size()==1 ) {
+                ss << "\ncandidate functoin:\n";
             }
-            else {
-                string candidates = program->describeCandidates(candidateFunctions);
-                error(extra + "\n" + candidates, at, CompilationError::function_not_found);
+            for ( auto & missFn : candidateFunctions ) {
+                ss << "\t";
+                if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
+                    ss << missFn->module->name << "::";
+                ss << missFn->describe() << "\n";
+                if ( reportDetails ) {
+                    ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
+                }
             }
+            error(ss.str(), at, CompilationError::function_not_found);
+        }
+
+        void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
+                                    const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlocks, bool reportDetails ) {
+            TextWriter ss;
+            ss << extra;
+            if ( candidateFunctions.size() > 1 ) {
+                ss << "\ncandidates:\n";
+            } else if ( candidateFunctions.size()==1 ) {
+                ss << "\ncandidate functoin:\n";
+            }
+            for ( auto & missFn : candidateFunctions ) {
+                ss << "\t";
+                if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
+                    ss << missFn->module->name << "::";
+                ss << missFn->describe() << "\n";
+                if ( reportDetails ) {
+                    ss << describeMismatchingFunction(missFn, arguments, inferAuto, inferBlocks);
+                }
+            }
+            error(ss.str(), at, CompilationError::function_not_found);
         }
 
         bool hasUserConstructor ( const string & sna ) const {
@@ -2335,16 +2432,18 @@ namespace das {
                     reportGenericInfer();
                     return demoteCall(expr,generics.back());
                 } else if ( generics.size()>0 ) {
-                    error("too many matching generic functions " + expr->name,
-                          expr->at, CompilationError::function_not_found);
+                    reportFunctionNotFound("too many matching generic functions " + expr->name,
+                                           expr->at, findGenericCandidates(expr->name, expr->arguments), expr->arguments, true, true, false);
                 } else {
-                    error("function not found " + expr->name,
-                          expr->at, CompilationError::function_not_found);
+                    auto can1 = findCandidates(expr->name, expr->arguments);
+                    auto can2 = findGenericCandidates(expr->name, expr->arguments);
+                    can1.insert(can1.end(), can2.begin(), can2.end());
+                    reportFunctionNotFound("no matching function or generic " + expr->name,
+                                           expr->at, can1, expr->arguments, false, true, true);
                 }
             } else if ( functions.size()>1 ) {
-                string candidates = program->describeCandidates(functions);
-                error("too many matching functions " + expr->name + "\n" + candidates,
-                      expr->at, CompilationError::function_not_found);
+                reportFunctionNotFound("too many matching function " + expr->name,
+                                       expr->at, findCandidates(expr->name, expr->arguments), expr->arguments, false, true, false);
             } else {
                 reportGenericInfer();
                 return demoteCall(expr,functions.back());
@@ -2399,11 +2498,11 @@ namespace das {
                         auto realFn = program->findFunction(clone->getMangledName());
                         vector<FunctionPtr> candidates = { realFn };
                         reportFunctionNotFound("no matching generic function " + expr->describe(),
-                                               expr->at, candidates, types, true, true);
+                                               expr->at, candidates, types, true, true, true);
                     }
                 } else if ( generics.size()>0 ) {
                     reportFunctionNotFound("too many matching generic functions " + expr->describe(),
-                                           expr->at, findGenericCandidates(expr->name, types), types, true, true);
+                                           expr->at, findGenericCandidates(expr->name, types), types, true, true, false);
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
@@ -2411,14 +2510,16 @@ namespace das {
                             reportGenericInfer();
                         }
                     } else {
-                        reportFunctionNotFound("no matching function " + expr->describe(),
-                                               expr->at, findCandidates(expr->name, types), types, false, true);
+                        auto can1 = findCandidates(expr->name, types);
+                        auto can2 = findGenericCandidates(expr->name, types);
+                        can1.insert(can1.end(), can2.begin(), can2.end());
+                        reportFunctionNotFound("no matching function or generic function " + expr->describe(),
+                                               expr->at, can1, types, false, true, true);
                     }
                 }
             } else if ( functions.size()>1 ) {
-                string candidates = program->describeCandidates(functions);
-                error("too many matching functions " + expr->describe() + "\n" + candidates,
-                      expr->at, CompilationError::function_not_found);
+                reportFunctionNotFound("too many matching functions " + expr->describe(),
+                                       expr->at, findCandidates(expr->name, types), types, true, true, false);
             } else {
                 auto funcC = functions[0];
                 expr->type = make_shared<TypeDecl>(*funcC->result);

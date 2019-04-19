@@ -34,3 +34,40 @@ def test
     test_generic_infer()
     return true
 
+/*
+boo()
+30304: no matching function or generic function boo (  )
+candidates:
+ boo ( a : int; b : int ) : int
+    missing argument b
+ boo ( a : int; b : int; c : int ) : int
+    missing argument a
+    missing argument b
+    missing argument c
+
+boo(1,2.0)
+30304: no matching function or generic function boo ( int, float )
+candidates:
+ boo ( a : int; b : int ) : int
+    invalid argument b, expecting (int) passing (float)
+ boo ( a : int; b : int; c : int ) : int
+    invalid argument b, expecting (int) passing (float)
+    missing argument c
+
+boo([b=3.0])
+30304: no matching function or generic boo
+candidates:
+ boo ( a : int; b : int ) : int
+    invalid argument b, expecting (int) passing (float)
+ boo ( a : int; b : int; c : int ) : int
+    while looking for argument b, can't skip function argument a because it has no default value
+
+boo([b=3,a=2])
+30304: no matching function or generic boo
+candidates:
+ boo ( a : int; b : int ) : int
+    can't match argument a, its submitted out of order
+ boo ( a : int; b : int; c : int ) : int
+    while looking for argument b, can't skip function argument a because it has no default value
+*/
+
