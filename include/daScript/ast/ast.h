@@ -1537,6 +1537,7 @@ namespace das
             InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
         };
         vector<InferHistory> inferStack;
+        Function * fromGeneric = nullptr;
         uint64_t hash = 0;
     };
 

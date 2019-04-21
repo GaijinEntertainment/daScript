@@ -2423,30 +2423,36 @@ namespace das {
             if ( !arg->value->type ) call->argumentsFailedToInfer = true;
             return Visitor::visitNamedCallArg(call, arg, last);
         }
+        virtual void reportMissing ( ExprNamedCall * expr, const string & msg, bool reportDetails ) {
+            auto can1 = findCandidates(expr->name, expr->arguments);
+            auto can2 = findGenericCandidates(expr->name, expr->arguments);
+            can1.insert(can1.end(), can2.begin(), can2.end());
+            reportFunctionNotFound(msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails);
+        }
         virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             auto functions = findMatchingFunctions(expr->name, expr->arguments, true);
-            if ( functions.size()==0 ) {
-                auto generics = findMatchingGenerics(expr->name, expr->arguments);
+            auto generics = findMatchingGenerics(expr->name, expr->arguments);
+            if ( generics.size()>1 || functions.size()>1 ) {
+                reportMissing(expr, "too many matching functions or generics ", false);
+            } else if ( functions.size()==0 ) {
                 if ( generics.size()==1 ) {
                     reportGenericInfer();
                     return demoteCall(expr,generics.back());
-                } else if ( generics.size()>0 ) {
-                    reportFunctionNotFound("too many matching generic functions " + expr->name,
-                                           expr->at, findGenericCandidates(expr->name, expr->arguments), expr->arguments, true, true, false);
                 } else {
-                    auto can1 = findCandidates(expr->name, expr->arguments);
-                    auto can2 = findGenericCandidates(expr->name, expr->arguments);
-                    can1.insert(can1.end(), can2.begin(), can2.end());
-                    reportFunctionNotFound("no matching function or generic " + expr->name,
-                                           expr->at, can1, expr->arguments, false, true, true);
+                    reportMissing(expr, "no matching functions or generics ", true);
                 }
-            } else if ( functions.size()>1 ) {
-                reportFunctionNotFound("too many matching function " + expr->name,
-                                       expr->at, findCandidates(expr->name, expr->arguments), expr->arguments, false, true, false);
             } else {
+                auto fun = functions.back();
+                if ( generics.size()==1 ) {
+                    auto gen = generics.back();
+                    if ( fun->fromGeneric != gen.get() ) {
+                        reportMissing(expr, "too many matching functions or generics ", false);
+                        return Visitor::visit(expr);
+                    }
+                }
                 reportGenericInfer();
-                return demoteCall(expr,functions.back());
+                return demoteCall(expr,fun);
             }
             return Visitor::visit(expr);
         }
@@ -2459,6 +2465,12 @@ namespace das {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
             return Visitor::visitCallArg(call, arg, last);
         }
+        virtual void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types, const string & msg, bool reportDetails ) {
+            auto can1 = findCandidates(expr->name, types);
+            auto can2 = findGenericCandidates(expr->name, types);
+            can1.insert(can1.end(), can2.begin(), can2.end());
+            reportFunctionNotFound(msg + expr->describe(), expr->at, can1, types, false, true, reportDetails);
+        }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
             vector<TypeDeclPtr> types;
@@ -2470,12 +2482,14 @@ namespace das {
                 types.push_back(ar->type);
             }
             auto functions = findMatchingFunctions(expr->name, types, true);
-            if ( functions.size()==0 ) {
-                // ok, time to find us a good generic
-                auto generics = findMatchingGenerics(expr->name, types);
+            auto generics = findMatchingGenerics(expr->name, types);
+            if ( functions.size()>1 || generics.size()>1 ) {
+                reportMissing(expr, types, "too many matching functions or generics ", false);
+            } else if ( functions.size()==0 ) {
                 if ( generics.size()==1 ) {
-                    auto oneGeneric = generics[0];
+                    auto oneGeneric = generics.back();
                     auto clone = oneGeneric->clone();
+                    clone->fromGeneric = oneGeneric.get();
                     clone->inferStack.emplace_back(expr->at, func);
                     clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());
                     for ( size_t sz = 0; sz != types.size(); ++sz ) {
@@ -2500,9 +2514,6 @@ namespace das {
                         reportFunctionNotFound("no matching generic function " + expr->describe(),
                                                expr->at, candidates, types, true, true, true);
                     }
-                } else if ( generics.size()>0 ) {
-                    reportFunctionNotFound("too many matching generic functions " + expr->describe(),
-                                           expr->at, findGenericCandidates(expr->name, types), types, true, true, false);
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
@@ -2510,18 +2521,19 @@ namespace das {
                             reportGenericInfer();
                         }
                     } else {
-                        auto can1 = findCandidates(expr->name, types);
-                        auto can2 = findGenericCandidates(expr->name, types);
-                        can1.insert(can1.end(), can2.begin(), can2.end());
-                        reportFunctionNotFound("no matching function or generic function " + expr->describe(),
-                                               expr->at, can1, types, false, true, true);
+                        reportMissing(expr, types, "no matching functions or generics ", true);
                     }
                 }
-            } else if ( functions.size()>1 ) {
-                reportFunctionNotFound("too many matching functions " + expr->describe(),
-                                       expr->at, findCandidates(expr->name, types), types, true, true, false);
             } else {
-                auto funcC = functions[0];
+                DAS_ASSERT(functions.size()==1);
+                auto funcC = functions.back();
+                if ( generics.size()==1 ) {
+                    auto gen = generics.back();
+                    if ( funcC->fromGeneric != gen.get() ) {
+                        reportMissing(expr, types, "too many matching functions or generics ", false);
+                        return nullptr;
+                    }
+                }
                 expr->type = make_shared<TypeDecl>(*funcC->result);
                 // infer FORWARD types
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
