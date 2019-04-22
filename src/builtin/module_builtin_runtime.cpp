@@ -55,6 +55,14 @@ namespace das
         };
     };
 
+    struct UnsafeOpFunctionAnnotation : MarkFunctionAnnotation {
+        UnsafeOpFunctionAnnotation() : MarkFunctionAnnotation("unsafeoperation") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->unsafeOperation = true;
+            return true;
+        };
+    };
+
     struct UnsafeFunctionAnnotation : MarkFunctionAnnotation {
         UnsafeFunctionAnnotation() : MarkFunctionAnnotation("unsafe") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -139,6 +147,7 @@ namespace das
         addAnnotation(make_shared<SideEffectsFunctionAnnotation>());
         addAnnotation(make_shared<RunAtCompileTimeFunctionAnnotation>());
         addAnnotation(make_shared<UnsafeFunctionAnnotation>());
+        addAnnotation(make_shared<UnsafeOpFunctionAnnotation>());
         addAnnotation(make_shared<NoAotFunctionAnnotation>());
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");

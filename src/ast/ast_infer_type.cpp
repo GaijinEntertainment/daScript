@@ -1855,7 +1855,9 @@ namespace das {
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
                 // lets try to fold it
-                if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
+                if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe ) {
+                    error("unsafe operator " + expr->name + " requires [unsafe]", expr->at, CompilationError::unsafe);
+                } else if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
                     if ( auto se = getConstExpr(expr->subexpr.get()) ) {
                         reportGenericInfer();
                         expr->subexpr = se;
@@ -1893,7 +1895,9 @@ namespace das {
                 if ( !expr->func->arguments[1]->type->isRef() )
                     expr->right = Expression::autoDereference(expr->right);
                 // lets try to fold it
-                if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
+                if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe ) {
+                    error("unsafe operator " + expr->name + " requires [unsafe]", expr->at, CompilationError::unsafe);
+                } else if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
                     auto lcc = getConstExpr(expr->left.get());
                     auto rcc = getConstExpr(expr->right.get());
                     if ( lcc && rcc ) {
@@ -2598,7 +2602,9 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             expr->func = inferFunctionCall(expr).get();
-            if (enableInferTimeFolding && expr->func && isConstExprFunc(expr->func)) {
+            if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe ) {
+                error("unsafe call " + expr->name + " requires [unsafe]", expr->at, CompilationError::unsafe);
+            } else if (enableInferTimeFolding && expr->func && isConstExprFunc(expr->func)) {
                 vector<ExpressionPtr> cargs; cargs.reserve(expr->arguments.size());
                 for (auto & arg : expr->arguments) {
                     if ( auto carg = getConstExpr(arg.get()) ) {

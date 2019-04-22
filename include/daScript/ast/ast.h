@@ -1447,12 +1447,12 @@ namespace das
 
     enum class SideEffects : uint32_t {
         none =              0
-    ,   userScenario =      (1<<0)
-    ,   modifyExternal =    (1<<1)
-    ,   modifyArgument =    (1<<2)
-    ,   accessGlobal =      (1<<3)
-    ,   invoke =            (1<<4)
-
+    ,   unsafe =            (1<<0)
+    ,   userScenario =      (1<<1)
+    ,   modifyExternal =    (1<<2)
+    ,   modifyArgument =    (1<<3)
+    ,   accessGlobal =      (1<<4)
+    ,   invoke =            (1<<5)
     ,   inferedSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke)
     };
 
@@ -1474,7 +1474,14 @@ namespace das
         }
         string describe() const;
         virtual FunctionPtr visit(Visitor & vis);
-        FunctionPtr setSideEffects ( SideEffects seFlags ) { sideEffectFlags = (uint32_t) seFlags; return shared_from_this(); }
+        FunctionPtr setSideEffects ( SideEffects seFlags ) {
+            sideEffectFlags = uint32_t(seFlags) & ~uint32_t(SideEffects::unsafe);
+            if ( uint32_t(seFlags) & uint32_t(SideEffects::unsafe) ) {
+                unsafeOperation = true;
+            }
+            return shared_from_this();
+        }
+
         bool isGeneric() const;
         FunctionPtr clone() const;
         string getLocationExtra() const;
@@ -1506,6 +1513,7 @@ namespace das
                 bool    knownSideEffects : 1;
                 bool    hasToRunAtCompileTime : 1;
                 bool    unsafe : 1;
+                bool    unsafeOperation : 1;
                 bool    hasMakeBlock : 1;
                 bool    noAot : 1;
             };
