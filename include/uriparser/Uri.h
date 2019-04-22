@@ -1,4 +1,4 @@
-/* 561572cef718ad662595da3d4a1436cd3c2526234593c4c86e82ba08bfd292d8 (0.9.1+)
+/* d8ad60cf1b0e82c34c1c2201431d8da32aecb7b7d5ad8c4573fb4ecf0f2100e9 (0.9.2+)
  *
  * uriparser - RFC 3986 URI parsing library
  *

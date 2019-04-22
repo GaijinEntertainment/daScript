@@ -2,7 +2,7 @@ NOTE: uriparser is looking for help with a few things:
       https://github.com/uriparser/uriparser/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
-2019-xx-xx -- 0.x.x
+2019-04-22 -- 0.9.2
 
   * Fixed: Add missing extern "C" wrapper to UriIp4.h for use from C++
   * Fixed: Linking error for symbol defaultMemoryManager from mixing C and C++
