@@ -23,7 +23,7 @@ NOTE: uriparser is looking for help with a few things:
       - Richard Hodges
       - Zachary Lund
   * Removed: All Windows-related build systems other than CMake
-  * Soname: TODO
+  * Soname: 1:25:0
 
 2019-01-02 -- 0.9.1
 
