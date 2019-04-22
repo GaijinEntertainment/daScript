@@ -192,6 +192,20 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
+    // variable
+        virtual ExpressionPtr visit ( ExprVar * var ) override {
+            if ( var->r2v ) {
+                auto variable = var->variable;
+                if ( variable && variable->init && variable->type->isConst() && variable->type->isFoldable() ) {
+                    if ( !var->local && !var->argument && !var->block ) {
+                        if ( variable->init->rtti_isConstant() ) {
+                            return variable->init;
+                        }
+                    }
+                }
+            }
+            return Visitor::visit(var);
+        }
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             if (expr->func->sideEffectFlags) {

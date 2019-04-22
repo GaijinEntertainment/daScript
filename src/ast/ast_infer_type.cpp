@@ -554,7 +554,8 @@ namespace das {
         }
 
         void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
-            const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks, bool reportDetails ) {
+            const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks, bool reportDetails,
+                                    CompilationError cerror = CompilationError::function_not_found) {
             TextWriter ss;
             ss << extra;
             if ( candidateFunctions.size() > 1 ) {
@@ -571,11 +572,12 @@ namespace das {
                     ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
                 }
             }
-            error(ss.str(), at, CompilationError::function_not_found);
+            error(ss.str(), at, cerror);
         }
 
         void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
-                                    const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlocks, bool reportDetails ) {
+                                    const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlocks, bool reportDetails ,
+                                    CompilationError cerror = CompilationError::function_not_found) {
             TextWriter ss;
             ss << extra;
             if ( candidateFunctions.size() > 1 ) {
@@ -592,7 +594,7 @@ namespace das {
                     ss << describeMismatchingFunction(missFn, arguments, inferAuto, inferBlocks);
                 }
             }
-            error(ss.str(), at, CompilationError::function_not_found);
+            error(ss.str(), at, cerror);
         }
 
         bool hasUserConstructor ( const string & sna ) const {
@@ -754,7 +756,7 @@ namespace das {
                 error("global variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
-            } else if ( !var->type->isConst() && var->init->type->isConst() ) {
+            } else if ( var->type->isRef() && !var->type->isConst() && var->init->type->isConst() ) {
                 error("global variable initialization type mismatch, const matters "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                       CompilationError::invalid_initialization_type);
@@ -867,6 +869,7 @@ namespace das {
     // const
         virtual ExpressionPtr visit ( ExprConst * c ) override {
             c->type = make_shared<TypeDecl>(c->baseType);
+            c->type->constant = true;
             if ( c->baseType == Type::tEnumeration ) {
                 auto cE = static_cast<ExprConstEnumeration *>(c);
                 c->type->enumType = cE->enumType;
@@ -942,7 +945,7 @@ namespace das {
             } else if ( !seT->firstType->isSameType(*dvT,false,false) ) {
                 error("default value type mismatch in (" + seT->firstType->describe() + ") vs ("
                       + dvT->describe() + ")", expr->at, CompilationError::cant_dereference);
-            } else if ( !seT->isConst() && dvT->isConst() ) {
+            } else if ( seT->isRef() && !seT->isConst() && dvT->isConst() ) {
                 error("default value type mismatch, constant matters in (" + seT->describe() + ") vs ("
                       + dvT->describe() + ")", expr->at, CompilationError::cant_dereference);
             } else {
@@ -1740,6 +1743,19 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprVar
+        vector<VariablePtr> findMatchingVar ( const string & name ) const {
+            string moduleName, varName;
+            splitTypeName(name, moduleName, varName);
+            vector<VariablePtr> result;
+            program->library.foreach([&](Module * mod) -> bool {
+                if ( auto var = mod->findVariable(varName) ) {
+                    result.push_back(var);
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
             expr->variable = nullptr;
@@ -1801,13 +1817,22 @@ namespace das {
                 }
             }
             // global
-            auto var = program->findVariable(expr->name);
-            if ( !var ) {
-                error("can't locate variable " + expr->name, expr->at, CompilationError::variable_not_found);
-            } else {
+            auto vars = findMatchingVar(expr->name);
+            if ( vars.size()==1 ) {
+                auto var = vars.back();
                 expr->variable = var;
                 expr->type = make_shared<TypeDecl>(*var->type);
                 expr->type->ref = true;
+                return Visitor::visit(expr);
+
+            } else if ( vars.size()==0 ) {
+                error("can't locate variable " + expr->name, expr->at, CompilationError::variable_not_found);
+            } else {
+                TextWriter errs;
+                for ( auto & var : vars ) {
+                    errs << "\t" << var->module->name << "::" << var->name << " : " << var->type->describe() << "\n";
+                }
+                error("too many matching variables " + expr->name + ", candidates are:\n" + errs.str(), expr->at, CompilationError::variable_not_found);
             }
             return Visitor::visit(expr);
         }
@@ -1818,9 +1843,8 @@ namespace das {
             vector<TypeDeclPtr> types = { expr->subexpr->type };
             auto functions = findMatchingFunctions(expr->op, types);
             if ( functions.size()==0 ) {
-                string candidates = program->describeCandidates(findCandidates(expr->op,types));
-                error("no matching operator '" + expr->op
-                      + "' with argument (" + expr->subexpr->type->describe() + ")", expr->at, CompilationError::operator_not_found);
+                vector<TypeDeclPtr> types = { expr->subexpr->type };
+                reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
             } else if ( functions.size()>1 ) {
                 string candidates = program->describeCandidates(functions);
                 error("too many matching operators '" + expr->op
@@ -1854,10 +1878,8 @@ namespace das {
             vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
             auto functions = findMatchingFunctions(expr->op, types);
             if ( functions.size()==0 ) {
-                string candidates = program->describeCandidates(findCandidates(expr->op,types));
-                error("no matching operator '" + expr->op
-                      + "' with arguments (" + expr->left->type->describe() + ", " + expr->right->type->describe()
-                      + ")\n" + candidates, expr->at, CompilationError::operator_not_found);
+                vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
+                reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
             } else if ( functions.size()>1 ) {
                 string candidates = program->describeCandidates(functions);
                 error("too many matching operators '" + expr->op
@@ -2423,11 +2445,12 @@ namespace das {
             if ( !arg->value->type ) call->argumentsFailedToInfer = true;
             return Visitor::visitNamedCallArg(call, arg, last);
         }
-        virtual void reportMissing ( ExprNamedCall * expr, const string & msg, bool reportDetails ) {
+        virtual void reportMissing ( ExprNamedCall * expr, const string & msg, bool reportDetails,
+                                    CompilationError cerror = CompilationError::function_not_found) {
             auto can1 = findCandidates(expr->name, expr->arguments);
             auto can2 = findGenericCandidates(expr->name, expr->arguments);
             can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails);
+            reportFunctionNotFound(msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails, cerror);
         }
         virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
@@ -2465,11 +2488,13 @@ namespace das {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
             return Visitor::visitCallArg(call, arg, last);
         }
-        virtual void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types, const string & msg, bool reportDetails ) {
+        virtual void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
+                                    const string & msg, bool reportDetails,
+                                    CompilationError cerror = CompilationError::function_not_found) {
             auto can1 = findCandidates(expr->name, types);
             auto can2 = findGenericCandidates(expr->name, types);
             can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(msg + expr->describe(), expr->at, can1, types, false, true, reportDetails);
+            reportFunctionNotFound(msg + expr->describe(), expr->at, can1, types, false, true, reportDetails, cerror);
         }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer

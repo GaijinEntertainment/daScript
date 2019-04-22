@@ -55,9 +55,9 @@ def test
     if true
         var pa:Foo const?
         var pb:Foo?
-        setFoo(deref(pa))    // no matching function             (30304)
+        setFoo(deref(pa))    // no matching function        (30304)
         setFoo(deref(pb))
-        setFooPtr(pa)   // no matching function             (30304)
+        setFooPtr(pa)        // no matching function         (30304)
         setFooPtr(pb)
     if true
         var a:table<string,int>

@@ -396,7 +396,10 @@ namespace das
         return false;
     }
 
-    bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters, bool constMatters ) const {
+    bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters, bool constMatters, bool topLevel ) const {
+        if ( topLevel && !isRef() ) {
+            constMatters = false;
+        }
         if ( baseType!=decl.baseType ) {
             return false;
         }
@@ -409,7 +412,7 @@ namespace das
         if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
             if ( (firstType && !firstType->isVoid())
                 && (decl.firstType && !decl.firstType->isVoid())
-                && !firstType->isSameType(*decl.firstType) ) {
+                && !firstType->isSameType(*decl.firstType,true,true,false) ) {
                 return false;
             }
         }
@@ -419,15 +422,15 @@ namespace das
             }
         }
         if ( baseType==Type::tArray ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,true,true,false) ) {
                 return false;
             }
         }
         if ( baseType==Type::tTable ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,true,true,false) ) {
                 return false;
             }
-            if ( secondType && decl.secondType && !secondType->isSameType(*decl.secondType) ) {
+            if ( secondType && decl.secondType && !secondType->isSameType(*decl.secondType,true,true,false) ) {
                 return false;
             }
         }

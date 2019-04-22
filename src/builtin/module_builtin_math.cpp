@@ -4,6 +4,7 @@
 
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
+#include "daScript/ast/ast_handle.h"
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/aot_builtin_math.h"
@@ -159,6 +160,10 @@ namespace das {
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();
+
+            // constants
+            addConstant(*this,"PI",(float)M_PI);
+            
             // trigonometry functions
             addFunctionTrig<float>(*this, lib);
             addFunctionTrig<float2>(*this,lib);

@@ -6,8 +6,6 @@ require testProfile
 //ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html
 
 let 
-  PI = 3.141592653589793
-let 
   SOLAR_MASS = 4.*PI*PI
 let
   DAYS_PER_YEAR = 365.24

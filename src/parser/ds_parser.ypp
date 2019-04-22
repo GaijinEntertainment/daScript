@@ -885,7 +885,7 @@ expr_method_call
 
 expr
     :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
-    |   NAME[name]                            { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
+    |   name_in_namespace[name]               { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
     |   expr_numeric_const[nc]                { $$ = $nc; }
     |   string_builder[sb]                    { $$ = $sb; }
     |   make_decl[md]                         { $$ = $md; }

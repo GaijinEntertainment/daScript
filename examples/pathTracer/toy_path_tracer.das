@@ -1,3 +1,4 @@
+// options log=true
 // options logCpp=true
 
 require math
@@ -5,9 +6,6 @@ require PathTracerHelper
 
 // require toy_random
 require random
-
-let
-    PI : float const = 3.14159265358979323846
 
 let
     DO_SAMPLES_PER_PIXEL : int const = 4

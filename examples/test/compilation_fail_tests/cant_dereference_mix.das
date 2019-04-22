@@ -1,4 +1,4 @@
-expect 30501:6    // cant_dereference
+expect 30501:5    // cant_dereference
 
 struct Bar
     c:int
@@ -18,7 +18,5 @@ def test
     debug(d ?? 0)   // can't dereference void pointer
     var e:int?
     debug(e ?? 1.0) // default value type mismatch
-    var f:Foo?
-    var g:Foo const
-    debug(f ?? g)   // const matters
+
 

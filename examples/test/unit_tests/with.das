@@ -1,5 +1,5 @@
 struct Point
-    x, y  = 0
+    x, y : int = 0
 
 [export]
 def test

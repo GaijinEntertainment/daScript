@@ -427,6 +427,20 @@ namespace das
             return context.code->makeNode<SimNode_Ref2Value<OT>>(at, l);
         }
     };
+
+    template <typename TT>
+    void addConstant ( Module & mod, const string & name, const TT & value ) {
+        VariablePtr pVar = make_shared<Variable>();
+        pVar->name = name;
+        pVar->type = make_shared<TypeDecl>((Type)ToBasicType<TT>::type);
+        pVar->type->constant = true;
+        pVar->init = Program::makeConst(LineInfo(),pVar->type,cast<TT>::from(value));
+        pVar->init->type = make_shared<TypeDecl>(*pVar->type);
+        if ( !mod.addVariable(pVar) ) {
+            DAS_FATAL_LOG("addVariable(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
+            DAS_FATAL_ERROR;
+        }
+    }
 }
 
 MAKE_TYPE_FACTORY(das_string, das::string);

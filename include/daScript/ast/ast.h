@@ -61,7 +61,7 @@ namespace das
         TypeDecl(const EnumerationPtr & ep) : baseType(Type::tEnumeration), enumType(ep) {}
         friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
         string getMangledName() const;
-        bool isSameType ( const TypeDecl & decl, bool refMatters = true, bool constMatters = true ) const;
+        bool isSameType ( const TypeDecl & decl, bool refMatters = true, bool constMatters = true, bool topLevel = true ) const;
         bool isIteratorType ( const TypeDecl & decl ) const;
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;
@@ -273,8 +273,8 @@ namespace das
             auto pt = make_shared<TypeDecl>(Type::tPointer);
             if ( !is_void<TT>::value ) {
                 pt->firstType = typeFactory<TT>::make(lib);
-                pt->constant = true;
             }
+            pt->constant = true;
             return pt;
         }
     };
