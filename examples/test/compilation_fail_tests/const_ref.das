@@ -1,13 +1,13 @@
 require UnitTest
 
-expect 30102:2    // invalid_return_type
+expect 30102:1    // invalid_return_type
 expect 30303:5    // operator_not_found
 expect 30304:2    // function_not_found
 expect 30504:6    // cant_write_to_const
 expect 30505:2    // cant_move_to_const
 expect 30507      // cant_copy
 
-def const_iter(a:table<string,int>)
+def const_iter(var a:table<string,int>)
     for k,v in keys(a),values(a)
         k = "foo"       // can't write to constant value    (30504)
         v = 1           // this one okay
@@ -28,61 +28,61 @@ struct Foo
 struct TestObjectFoo
     a:int
 
-def setFoo(f:Foo)
+def setFoo(var f:Foo)
     f.a = 0
 
-def setFooPtr(f:Foo?)
+def setFooPtr(var f:Foo?)
     f.a = 0
 
-def goodPassThrough(a:int?):int const?
+def goodPassThrough(var a:int?):int const?
     return a            // invalid return type              (30102)
 
 def passThrough(a:int? const):int?
-    return a            // invalid return type, const       (30102)
+    return a
 
 def test
     if true
-        let a:array<int> const
+        var a:array<int> const
         a[0] = 5        // can't write to constant value    (30504)
     if true
-        let an:Foo
+        var an:Foo
         an.a = 1
         an.b = 2        // can't write to constant value    (30504)
     if true
-        let ac:Foo const
+        var ac:Foo const
         ac.a = 3        // can't write to constant value    (30504)
         ac.b = 4        // can't write to constant value    (30504)
     if true
-        let pa:Foo const?
-        let pb:Foo?
+        var pa:Foo const?
+        var pb:Foo?
         setFoo(deref(pa))    // no matching function             (30304)
         setFoo(deref(pb))
         setFooPtr(pa)   // no matching function             (30304)
         setFooPtr(pb)
     if true
-        let a:table<string,int>
-        let b:table<string,int> const
+        var a:table<string,int>
+        var b:table<string,int> const
         a["key"]++
         b["key"]++      // no matching operator             (30303)
     if true
-        let a:int?
-        let b:int const?
+        var a:int?
+        var b:int const?
         a = b
     if true
-        let a,b:table<string,int>
-        let c:table<string,int> const
-        let d:int
+        var a,b:table<string,int>
+        var c:table<string,int> const
+        var d:int
         a = b           // this type can't be copied        (30507)
         a <- b
         c <- a          // can't move to constant           (30505)
         c <- d          // can only move same type          (30303)
     if true
-        let a,b:int
+        var a,b:int
         a <- b          
         a = b
     if true
-        let a : ::TestObjectFoo
-        let b : UnitTest::TestObjectFoo
+        var a : ::TestObjectFoo
+        var b : UnitTest::TestObjectFoo
         a = b           // not the same type
 
 

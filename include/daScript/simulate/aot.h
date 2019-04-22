@@ -360,8 +360,8 @@ namespace das {
 
     template <typename TT>
     struct das_iterator<TArray<TT>> {
-        __forceinline das_iterator(TArray<TT> & r) : that(&r) {
-            array_end = (TT *)(r.data + r.size*sizeof(TT));
+        __forceinline das_iterator(const TArray<TT> & r) : that((Array *)&r) {
+            array_end = (TT *)(that->data + that->size*sizeof(TT));
         }
         __forceinline bool first ( Context * __context__, TT * & i ) {
             array_lock(*__context__, *that);
@@ -1074,16 +1074,18 @@ namespace das {
         Iterator * that = nullptr;
     };
 
-    template <typename TK, typename TV>
-    TV * __builtin_table_find ( Context * context, TTable<TK, TV> & tab, const TK & key ) {
+    template <typename TK, typename TV, typename TKey>
+    TV * __builtin_table_find ( Context * context, TTable<TK, TV> & tab, TKey _key ) {
+        TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context,sizeof(TV));
         int index = thh.find(tab, key, hfn);
         return (TV *) ( index!=-1 ? tab.data + index * sizeof(TV) : nullptr );
     }
 
-    template <typename TK, typename TV>
-    bool __builtin_table_erase ( Context * context, TTable<TK,TV> & tab, const TK & key ) {
+    template <typename TK, typename TV, typename TKey>
+    bool __builtin_table_erase ( Context * context, TTable<TK,TV> & tab, TKey _key ) {
+        TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context,sizeof(TV));
         return thh.erase(tab, key, hfn) != -1;

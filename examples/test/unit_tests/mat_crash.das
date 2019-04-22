@@ -2,7 +2,7 @@
 
 [export]
 def test
-    let a,b : float3x4
+    var a,b : float3x4
     identity(a)
     identity(b)
     a = a*b

@@ -113,7 +113,7 @@
 %token  DAS_REQUIRE    DAS_OPERATOR   DAS_ENUM       DAS_FINALLY
 %token  DAS_DELETE     DAS_DEREF      DAS_SCOPE      DAS_TYPEDEF
 %token  DAS_WITH       DAS_CAST       DAS_OVERRIDE   DAS_UPCAST
-%token  DAS_ITERATOR
+%token  DAS_ITERATOR   DAS_VAR
 
 /* basic types */
 %token  DAS_TBOOL       DAS_TVOID       DAS_TSTRING     DAS_TAUTO
@@ -156,6 +156,7 @@
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
+%type <pVarDecl>        function_argument_declaration
 %type <pVarDecl>        structure_variable_declaration
 %type <pVarDecl>        let_variable_declaration
 %type <s>               name_in_namespace
@@ -173,6 +174,7 @@
 %type <b>               copy_or_move
 %type <b>               let_scope
 %type <b>               optional_override
+%type <b>               kwd_let
 
 %type <pEnum>           enum_list
 
@@ -698,8 +700,13 @@ let_scope
     |   DAS_IN DAS_SCOPE  { $$ = true; }
     ;
 
+kwd_let
+    :   DAS_LET  { $$ = true; }
+    |   DAS_VAR  { $$ = false; }
+    ;
+
 expression_let
-    :   DAS_LET[loc] let_scope[inScope] let_variable_declaration[decl] {
+    :   kwd_let[kwd_let] let_scope[inScope] let_variable_declaration[decl] {
         auto pLet = new ExprLet();
         pLet->inScope = $inScope;
         if ( $decl->pTypeDecl ) {
@@ -713,9 +720,14 @@ expression_let
                         pVar->init = $decl->pInit->clone();
                         pVar->move_to_init = $decl->move_to_init;
                     }
+                    if ( $kwd_let ) {
+                        pVar->type->constant = true;
+                    } else {
+                        pVar->type->removeConstant = true;
+                    }
                     pLet->variables.push_back(pVar);
                 } else {
-                    das_yyerror("local variable is already declared " + name,tokAt(@loc),
+                    das_yyerror("local variable is already declared " + name,tokAt(@kwd_let),
                         CompilationError::local_variable_already_declared);
                 }
             }
@@ -1022,9 +1034,14 @@ variable_declaration_list
     |   variable_declaration_list[list] ';' variable_declaration[decl]  { $$ = $list; $list->push_back($decl); }
     ;
 
+function_argument_declaration
+    :   variable_declaration[decl]          { $$ = $decl; $decl->pTypeDecl->constant = true; }
+    |   DAS_VAR variable_declaration[decl]  { $$ = $decl; $decl->pTypeDecl->removeConstant = true; }
+    ;
+
 function_argument_list
-    :   variable_declaration[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
-    |   function_argument_list[list] ';' variable_declaration[decl]     { $$ = $list; $list->push_back($decl); }
+    :   function_argument_declaration[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
+    |   function_argument_list[list] ';' function_argument_declaration[decl]     { $$ = $list; $list->push_back($decl); }
     ;
 
 copy_or_move
@@ -1081,7 +1098,7 @@ let_variable_declaration    /* let x; is prohibited. this one can't have uniniti
     ;
 
 global_let
-    :   DAS_LET '{' struct_variable_declaration_list[list] '}' {
+    :   kwd_let[kwd_let] '{' struct_variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {
@@ -1092,6 +1109,11 @@ global_let
                     if ( pDecl->pInit ) {
                         pVar->init = pDecl->pInit->clone();
                         pVar->move_to_init = pDecl->move_to_init;
+                    }
+                    if ( $kwd_let ) {
+                        pVar->type->constant = true;
+                    } else {
+                        pVar->type->removeConstant = true;
                     }
                     if ( !g_Program->addVariable(pVar) )
                         das_yyerror("global variable is already declared " + name,pDecl->at,

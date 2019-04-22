@@ -1,13 +1,13 @@
 // options log=true,logInferPasses=false,optimize=false
 
-def fold(a:array<auto(numt)>;from:numt)
+def fold(a:array<auto(numt)>;var from:numt)
     for x in a
         from += x
     return from
 
 [export]
 def test:bool
-    let a:array<float>
+    var a:array<float>
     push(a,1.0)
     push(a,2.0)
     push(a,3.0)

@@ -207,15 +207,6 @@ namespace das
     };
 
     template <>
-    struct typeFactory<const Array *> {
-        static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>(Type::tArray);
-            t->constant = true;
-            return t;
-        }
-    };
-
-    template <>
     struct typeFactory<Iterator *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
             auto t = make_shared<TypeDecl>(Type::tIterator);
@@ -224,27 +215,9 @@ namespace das
     };
 
     template <>
-    struct typeFactory<const Iterator *> {
-        static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>(Type::tIterator);
-            t->constant = true;
-            return t;
-        }
-    };
-
-    template <>
     struct typeFactory<Table *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
             auto t = make_shared<TypeDecl>(Type::tTable);
-            return t;
-        }
-    };
-
-    template <>
-    struct typeFactory<const Table *> {
-        static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>(Type::tTable);
-            t->constant = true;
             return t;
         }
     };
@@ -311,6 +284,15 @@ namespace das
         static TypeDeclPtr make(const ModuleLibrary & lib) {
             auto t = typeFactory<TT>::make(lib);
             t->ref = true;
+            t->constant = true;
+            return t;
+        }
+    };
+
+    template <typename TT>
+    struct typeFactory<const TT> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = typeFactory<TT>::make(lib);
             t->constant = true;
             return t;
         }

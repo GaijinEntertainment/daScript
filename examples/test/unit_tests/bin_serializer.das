@@ -1,7 +1,7 @@
 // options log=true, logNodes=true, logStack=true
 
 def make_10
-    let a : array<float>
+    var a : array<float>
     for i in range(0,10)
         a |> push(float(i))
     return <- a
@@ -20,7 +20,7 @@ struct Foo
 [export]
 def test
     let f0 <- Foo()
-    let f1 : Foo
+    var f1 : Foo
     binary_save(f0) <| $(data)
         binary_load(f1, data)
         assert(f1.data_bool==true)

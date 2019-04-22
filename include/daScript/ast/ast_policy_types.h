@@ -43,8 +43,8 @@ namespace  das {
     template <typename TT>
     void addFunctionBasic(Module & mod, const ModuleLibrary & lib) {
         //                                     policy               ret   arg1 arg2    name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Equ<TT>,         bool, TT,  TT>  >("==",     lib, "Equ") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_NotEqu<TT>,      bool, TT,  TT>  >("!=",     lib, "NotEqu") );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Equ<TT>,         bool, const TT,  const TT>  >("==",     lib, "Equ") );
+        mod.addFunction( make_shared<BuiltInFn<Sim_NotEqu<TT>,      bool, const TT,  const TT>  >("!=",     lib, "NotEqu") );
     }
 
     // built-in boolean types

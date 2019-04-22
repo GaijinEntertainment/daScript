@@ -3,9 +3,9 @@ require testProfile
 [sideeffects]
 def tryCatch()
 	let arr:int[1000]
-	let cnt = 0
+	var cnt = 0
 	for j in range (0, 100)
-		let fail = 0
+		var fail = 0
 		for i in range (0, 2000)
 			try
 				cnt += arr[i]

@@ -9,7 +9,7 @@ struct Bar
 
 [sideeffects]
 def test_clone_complex
-    let x, y : array<Bar>
+    var x, y : array<Bar>
     resize(x,2)
     for xx in x
         resize(xx.z,4)
@@ -32,7 +32,7 @@ def test_clone_complex
 
 [sideeffects]
 def test_clone_struct
-    let x, y : Foo
+    var x, y : Foo
     x.a = 5
     resize(x.b,3)
     for t in range(0,3)
@@ -47,7 +47,7 @@ def test_clone_struct
 
 [sideeffects]
 def test_clone_array
-    let x, y : array<int>
+    var x, y : array<int>
     resize(x,3)
     for t in range(0,3)
         x[t] = t
@@ -59,7 +59,7 @@ def test_clone_array
 
 [sideeffects]
 def test_clone_table
-    let x, y : table<int,string>
+    var x, y : table<int,string>
     for t in range(0,3)
         x[t] = string(t)
     y := x

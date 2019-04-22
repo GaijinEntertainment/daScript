@@ -8,8 +8,8 @@ def take_int(b:block<int>):int
 
 def test:bool
     if true
-        let a:int
-        let b:float
+        var a:int
+        var b:float
         take_any({ a++; })
         while true
             take_any() <|

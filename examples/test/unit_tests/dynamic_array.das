@@ -1,12 +1,12 @@
 // options log=true
 
-def pass_array ( arr )
+def pass_array ( var arr )
     push(arr,4)
 
 [export]
 def test
     if true
-        let arr,arr2:array<int>
+        var arr,arr2:array<int>
         let val2 = 2
         assert(length(arr)==0,"array starts at 0 length")
         push(arr,1)
@@ -28,7 +28,7 @@ def test
         arr2 <- arr
         assert(length(arr)==0)
         assert(length(arr2)==4)
-        let index = 0
+        var index = 0
         while index < 4
             arr2[index++]++
         arr <- arr2
@@ -52,7 +52,7 @@ def test
         for t in range(2,4)
             assert(arr[t-2]==t)
         // move while initializing
-        let a:array<int>
+        var a:array<int>
         push(a,1)
         push(a,2)
         let b <- a   

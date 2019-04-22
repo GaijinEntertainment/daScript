@@ -11,7 +11,7 @@ struct Foo
 
 [export]
 def test
-    let f : Foo
+    var f : Foo
     let q : Foo? = new_and_init(f)
     assert(q.x==1 & q.y==2 & q.z==3 & q.w==4)
     return true

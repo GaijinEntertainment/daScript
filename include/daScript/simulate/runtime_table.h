@@ -271,29 +271,29 @@ namespace das
     };
 
     struct TableIterator : Iterator {
-        TableIterator ( Table * tab, uint32_t st ) : table(tab), stride(st) {}
+        TableIterator ( const Table * tab, uint32_t st ) : table(tab), stride(st) {}
         size_t nextValid ( size_t index ) const;
         virtual bool first ( Context & context, char * value ) override;
         virtual bool next  ( Context & context, char * value ) override;
         virtual void close ( Context & context, char * value ) override;
         virtual char * getData () const = 0;
-        Table *     table;
-        uint32_t    stride = 0;
-        char *      table_end = nullptr;
+        const Table *   table;
+        uint32_t        stride = 0;
+        char *          table_end = nullptr;
     };
 
     struct TableKeysIterator : TableIterator {
-        TableKeysIterator ( Table * tab, uint32_t st ) : TableIterator(tab,st) {}
+        TableKeysIterator ( const Table * tab, uint32_t st ) : TableIterator(tab,st) {}
         virtual char * getData ( ) const override;
     };
 
     struct TableValuesIterator : TableIterator {
-        TableValuesIterator ( Table * tab, uint32_t st ) : TableIterator(tab,st) {}
+        TableValuesIterator ( const Table * tab, uint32_t st ) : TableIterator(tab,st) {}
         virtual char * getData ( ) const override;
     };
 
-    Iterator * builtin_table_keys ( Table & tab, int32_t stride, Context * __context__ );
-    Iterator * builtin_table_values ( Table & tab, int32_t stride, Context * __context__ );
+    Iterator * builtin_table_keys ( const Table & tab, int32_t stride, Context * __context__ );
+    Iterator * builtin_table_values ( const Table & tab, int32_t stride, Context * __context__ );
 
     struct SimNode_DeleteTable : SimNode_Delete {
         SimNode_DeleteTable ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t va )

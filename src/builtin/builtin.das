@@ -1,30 +1,30 @@
 options indenting = 2
 // array
 
-def resize(Arr:array<auto(numT)>;newSize:int)
+def resize(var Arr:array<auto(numT)>;newSize:int)
   __builtin_array_resize(Arr,newSize,typeinfo(sizeof type numT))
 
-def reserve(Arr:array<auto(numT)>;newSize:int)
+def reserve(var Arr:array<auto(numT)>;newSize:int)
   __builtin_array_reserve(Arr,newSize,typeinfo(sizeof type numT))
 
-def push(Arr:array<auto(numT)>;value:numT;at:int=-1)
+def push(var Arr:array<auto(numT)>;value:numT;at:int=-1)
   Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] = value
 
-def emplace(Arr:array<auto(numT)>;value:numT;at:int=-1)
+def emplace(var Arr:array<auto(numT)>;value:numT;at:int=-1)
   Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] <- value
 
-def erase(Arr:array<auto(numT)>;at:int)
+def erase(var Arr:array<auto(numT)>;at:int)
   __builtin_array_erase(Arr,at,typeinfo(sizeof type numT))
 
 // table
 
-def find(Tab:table<auto(keyT),auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
+def find(var Tab:table<auto(keyT),auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
   __builtin_table_lock(Tab)
-  let val = __builtin_table_find(Tab,at)
+  var val = __builtin_table_find(Tab,at)
   invoke(blk,val)
   __builtin_table_unlock(Tab)
 
-def erase(Tab:table<auto(keyT),auto(valT)>;at:keyT)
+def erase(var Tab:table<auto(keyT),auto(valT)>;at:keyT)
   return __builtin_table_erase(Tab,at)
 
 options removeUnusedSymbols=false
@@ -36,21 +36,21 @@ def binary_save(obj; subexpr:block<(data:string):void>)
   static_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
   _builtin_binary_save(obj,subexpr)
 
-def binary_load(obj; data:string)
+def binary_load(var obj; data:string)
   static_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
   _builtin_binary_load(obj,data)
 
-def clone(a:array<auto(TT)>;b:array<TT>)
+def clone(var a:array<auto(TT)>;b:array<TT>)
   resize(a,length(b))
   for aV,bV in a,b
     aV := bV
 
-def clone(a:table<auto(KT),auto(VT)>;b:table<KT,VT>)
+def clone(var a:table<auto(KT),auto(VT)>;b:table<KT,VT>)
   clear(a)
   for k,v in keys(b),values(b)
     a[k] := v
 
-def clone(a:das_string;b:string const)
+def clone(var a:das_string;b:string)
   set(a,b)
 
 def keys(a:table<auto(keyT),auto(valT)>) : iterator<keyT & const>

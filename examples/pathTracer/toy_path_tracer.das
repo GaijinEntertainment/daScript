@@ -18,11 +18,11 @@ let
     kMaxT = 1.0e7f
     kMaxDepth = 10
 
-let
+var
     RAND_SEED : int4 
 
 def schlick(cosine,ri:float)
-    let r0 = (1. - ri) / (1. + ri)
+    var r0 = (1. - ri) / (1. + ri)
     r0 = r0 * r0
     return lerp ( r0, 1., pow(1.-cosine,5.))
 
@@ -57,7 +57,7 @@ struct Camera
     lensRadius      : float
 
 def Camera(lookFrom,lookAt,vup:float3;vfov,aspect,aperture,focusDist:float)
-    let that : Camera
+    var that : Camera
     that.lensRadius = aperture / 2.
     let theta = vfov * PI / 180.
     let halfHeight = tan(theta / 2.)
@@ -89,7 +89,7 @@ struct Material
     roughness : float
     ri : float
 
-let
+var
     s_Spheres = [[Sphere[9]
         center = float3(0.,-100.5,-1.), radius = 100.;
         center = float3(2.,0.,-1.),     radius = 0.5;
@@ -115,17 +115,17 @@ let
         mtype = Type Lambert,    albedo = float3(0.8, 0.6, 0.2), emissive = float3(30,25,15),  roughness = 0.,  ri = 0.
     ]]
 
-def hitSpheres(r:Ray const;tMin,tMax:float;outHit:Hit)
-    let hitT = tMax
-    let id = -1
-    let i = 0
+def hitSpheres(r:Ray const;tMin,tMax:float;var outHit:Hit)
+    var hitT = tMax
+    var id = -1
+    var i = 0
     for sph in s_Spheres
         let co = sph.center - r.orig
         let nb = dot(co,r.dir)
         let discr = mad(nb,nb, sph.radius2 - lengthSq(co))
         if discr > 0.
             let discrSq = sqrt(discr)
-            let t = nb - discrSq
+            var t = nb - discrSq
             if t<=tMin
                 t = nb + discrSq
             if t>tMin & t<hitT
@@ -139,11 +139,11 @@ def hitSpheres(r:Ray const;tMin,tMax:float;outHit:Hit)
         t = hitT]]
     return id
 
-def hitWorld(r:Ray const;tMin,tMax:float;outHit:Hit;outID:int&)
+def hitWorld(r:Ray const;tMin,tMax:float;var outHit:Hit;var outID:int&)
     outID = hitSpheres(r,tMin,tMax,outHit)
     return outID != -1
 
-def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; scattered:Ray; outLightE:float3&; inoutRayCount:int&)
+def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&; var scattered:Ray; var outLightE:float3&; var inoutRayCount:int&)
     outLightE = float3(0)
     if mat.mtype==Type Lambert
         let target = rec.pos + rec.normal + randomUnitVector(RAND_SEED)
@@ -157,11 +157,11 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         let eps = randomFloat4(RAND_SEED)
         let cosA = mad(eps.x,cosAMax,1.) - eps.x
         let sinA = sqrt ( 1. - cosA*cosA )
-        let sinPhi, cosPhi : float
+        var sinPhi, cosPhi : float
         sincos(2. * PI * eps.y, sinPhi, cosPhi)
         let l = su*(cosPhi*sinA) + sv*(sinPhi*sinA) + sw*cosA
-        let lightHit : Hit
-        let hitID = 0
+        var lightHit : Hit
+        var hitID = 0
         ++inoutRayCount
         let ray = [[Ray orig=rec.pos, dir=l]]
         if hitWorld(ray,kMinT,kMaxT,lightHit,hitID) & hitID==LIGHT_SPHERE_ID
@@ -175,8 +175,8 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         return dot(scattered.dir,rec.normal) > 0.
     elif mat.mtype == Type Dielectric
         attenuation = float3(1)
-        let refr : float3
-        let reflProb : float
+        var refr : float3
+        var reflProb : float
         if dot(r_in.dir,rec.normal)>0.
             if refract(r_in.dir,-rec.normal,mat.ri,refr)
                 reflProb = schlick(mat.ri * dot(r_in.dir, rec.normal),mat.ri)
@@ -197,16 +197,16 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; attenuation:float3&; sc
         return false
     return true
 
-def trace(r:Ray;depth:int;inoutRayCount:int&;doMaterialE:bool = true)
-    let rec : Hit
-    let id = 0
+def trace(r:Ray;depth:int;var inoutRayCount:int&;var doMaterialE:bool = true)
+    var rec : Hit
+    var id = 0
     ++inoutRayCount
     if hitWorld(r,kMinT,kMaxT,rec,id)
-        let scattered : Ray
-        let attenuation : float3
-        let lightE : float3
+        var scattered : Ray
+        var attenuation : float3
+        var lightE : float3
         let mat : Material & = s_SphereMats[id]
-        let matE = mat.emissive
+        var matE = mat.emissive
         if depth<kMaxDepth & scatter(mat,r,rec,attenuation,scattered,lightE,inoutRayCount)
             if !doMaterialE
                 matE = float3(0)
@@ -218,15 +218,15 @@ def trace(r:Ray;depth:int;inoutRayCount:int&;doMaterialE:bool = true)
         let t = mad(r.dir,0.5,float3(1.))
         return  lerp(0.3*float3(1.), 0.3*float3(0.5, 0.7, 1.0), t)
 
-def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;backbuffer:array<float3>;cam:Camera)
+def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array<float3>;cam:Camera)
     let invWH = float(1) / float2(screenWidth, screenHeight)
     let lerpFac = float3(float(frameCount) / float(frameCount + 1))
-    let rayCount = 0
-    let backbufferIdx = ymin * screenWidth
+    var rayCount = 0
+    var backbufferIdx = ymin * screenWidth
     for y in range(ymin,ymax)
 		RAND_SEED = randomSeed(y*117 + frameCount*13)
         for x in range(0,screenWidth)
-            let col = float3(0)
+            var col = float3(0)
             for s in range(0,DO_SAMPLES_PER_PIXEL)
                 let uv = (float2(x,y) + randomFloat4(RAND_SEED).xy) * invWH
                 col += trace(getRay(cam, uv.x, uv.y), 0, rayCount)
@@ -235,8 +235,8 @@ def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;backbuffer:array<flo
             backbufferIdx ++
     return rayCount
 
-def draw(time:float;frameCount,screenWidth,screenHeight,ymin,ymax:int;backbuffer:array<float3>;outRayCount:int&)
-    let rayCount = 0
+def draw(time:float;frameCount,screenWidth,screenHeight,ymin,ymax:int;var backbuffer:array<float3>;var outRayCount:int&)
+    var rayCount = 0
     let lookfrom = float3(0,2,3)
     let lookat = float3(0)
     let distToFocus = 3.
@@ -251,9 +251,9 @@ def prepare
         sph.iRadius = 1. / sph.radius
 
 [export]
-def job(backbuffer:array<float3>;frameCount,width,height,ymin,ymax:int)
+def job(var backbuffer:array<float3>;frameCount,width,height,ymin,ymax:int)
     prepare()
-    let totalRayCount = 0
+    var totalRayCount = 0
     draw(0., frameCount, width, height, ymin, ymax, backbuffer, totalRayCount)
 	return totalRayCount
 	
@@ -264,14 +264,14 @@ def test
     let width = 320
     let height = 240
     let kFrameCount = 16
-    let backbuffer : array<float3>
+    var backbuffer : array<float3>
     resize(backbuffer,width*height)
-    let s = 0.
-    let totalRayCount = 0
+    var s = 0.
+    var totalRayCount = 0
     print("\ntracing...\n")
     let sw0 = getClock()
     for i in range(0,kFrameCount)
-        let rayCount = 0
+        var rayCount = 0
         draw(s, i, width, height, 0, height, backbuffer, rayCount)
         totalRayCount += rayCount
         let sw1 = getClock()

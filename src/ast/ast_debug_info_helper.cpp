@@ -105,6 +105,8 @@ namespace das {
             info->flags |= TypeInfo::flag_canCopy;
         if (type->isPod())
             info->flags |= TypeInfo::flag_isPod;
+        if (type->isConst())
+            info->flags |= TypeInfo::flag_isConst;
         if (type->isRawPod())
             info->flags |= TypeInfo::flag_isRawPod;
         if ( type->firstType ) {

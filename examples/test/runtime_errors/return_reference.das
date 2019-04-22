@@ -3,7 +3,7 @@
 
 [sideeffects]
 def ret_unsafe_ref : int &
-    let t = 2
+    var t = 2
     return t
 
 [export]

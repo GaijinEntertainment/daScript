@@ -8,7 +8,7 @@ struct Fields
 
 [export,noaot]
 def testFields(x:Fields?):int
-    let t = 0
+    var t = 0
     t += x?.a ?? 0
     t += x?.b ?? 0
     t += x?.c ?? 0

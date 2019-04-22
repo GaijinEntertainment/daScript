@@ -10,7 +10,7 @@ def isprime(n)
 
 [sideeffects]
 def primes(n)
-    let count = 0
+    var count = 0
     for i in range(2, n+1)
         if (isprime(i))
             ++count
@@ -18,7 +18,7 @@ def primes(n)
 
 [sideeffects]
 def primesI(n)
-    let count = 0
+    var count = 0
     for i in range(2, n+1)
 		count ++
 		for j in range(2,i)
@@ -29,15 +29,15 @@ def primesI(n)
 
 [export]
 def test()
-	let f1 = 0
+	var f1 = 0
     profile(20,"primes loop") <|
         f1 = primes(14000)
 	assert(f1==1652)
-	let f2 = 0
+	var f2 = 0
     profile(20,"primes loop, inline") <|
         f2 = primesI(14000)
 	assert(f2==1652)
-	let f3 = 0
+	var f3 = 0
     profile(20,"primes loop C++") <|
         f3 = testProfile::testPrimes(14000)
 	assert(f3==1652)

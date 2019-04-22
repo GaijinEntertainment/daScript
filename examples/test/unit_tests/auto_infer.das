@@ -24,8 +24,8 @@ def test
     let b = a
     let c : auto const = b
     // pointer
-    let pFoo : Foo? = new Foo
-    let pFooI : auto? = pFoo
+    var pFoo : Foo? = new Foo
+    var pFooI : auto? = pFoo
     pFooI.bar = 1
     pFoo = pFooI
     assert(pFoo.bar==1)

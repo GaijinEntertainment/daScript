@@ -1,7 +1,7 @@
 [export]
 def test : bool
-    let tab:table<string,int>
-    let i,del:int
+    var tab:table<string,int>
+    var i,del:int
     let total:int=32
     assert(!erase(tab,"0"))
     i = 0
@@ -25,17 +25,17 @@ def test : bool
     // debug(tab)
     i = 0
     while i < total
-        find(tab,string(i)) <| $(pValue:int?)
+        find(tab,string(i)) <| $(var pValue:int?)
             if pValue!=null
                 assert(deref(pValue)==i)
             else
                 assert(i%7==0)
         i ++
     if true
-        let j,k:int=0
+        var j,k:int=0
         i = 0
         while i < total
-            find(tab,string(i)) <| $(pVal:int?)
+            find(tab,string(i)) <| $(var pVal:int?)
                 j+= pVal ?? 0
             if i%7!=0
                 k +=i
@@ -44,10 +44,10 @@ def test : bool
             i ++
         assert(j==k)
     if true
-        let j,k,zero:int=0
+        var j,k,zero:int=0
         i = 0
         while i < total
-            find(tab,string(i)) <| $(pVal:int?)
+            find(tab,string(i)) <| $(var pVal:int?)
                 j += pVal ?? zero
             if i%7!=0
                 k +=i
@@ -65,7 +65,7 @@ def test : bool
         assert(tab[string(i)]==i++)
     assert(length(tab)==total)
     // debug(tab)
-    let cnt = 0
+    var cnt = 0
     for k,v in keys(tab),values(tab)
         // debug(k,"key=")
         // debug(v,"value=")

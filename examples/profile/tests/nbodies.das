@@ -17,7 +17,7 @@ struct body
   pad:float
   v:float3
   mass:float
-let 
+var
   bodies = [[body
             /*sun*/
               x=float3(0,0,0), v=float3(0,0,0), mass = SOLAR_MASS;
@@ -42,17 +42,17 @@ let
   nbodies = 5
 
 def offset_momentum()
-  let px:float3
+  var px:float3
   for b in bodies
     px -= b.v * b.mass
   bodies[0].v = px / SOLAR_MASS
 
 def advance()
-  let i = 0
+  var i = 0
   for b in bodies
     ++i
     for j in range(i, nbodies)
-      let b2:body& = bodies[j]
+      var b2:body& = bodies[j]
       let dx = b.x - b2.x
       let inv_distance = invLength(dx)
       let mag = inv_distance * inv_distance * inv_distance
@@ -61,8 +61,8 @@ def advance()
     b.x += b.v
 
 def energy():float
-  let e = 0.0
-  let i = 0
+  var e = 0.0
+  var i = 0
   for b in bodies
     e += 0.5 * b.mass * lengthSq(b.v)
     ++i

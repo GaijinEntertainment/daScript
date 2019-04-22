@@ -3,32 +3,32 @@
 require testProfile
 
 [es (pass="ks")]
-def update(pos:float3&;vel:float3 const&)   // all by ref
+def update(var pos:float3&;vel:float3 const&)   // all by ref
     pos += vel
 
 // note, when optimization off won't compile, since float3(...) is not a const, but a function
 [es (pass="ks2")]
-def update2(pos:float3&;vel:float3 const = float3(1.0f,2.0f,3.0f))   // deref .
+def update2(var pos:float3&;vel:float3 const = float3(1.0f,2.0f,3.0f))   // deref .
     pos += vel
 
 [es (pass="ks3")]
-def update3(pos:float3&;vel:float3 const &;dt:float = 1.0f)
+def update3(var pos:float3&;vel:float3 const &;dt:float = 1.0f)
     pos += vel * dt
 
 def queryOne(dt:float=1.0f)
-    testProfile::queryEs() <| $ [es] (pos:float3&;vel:float3 const)
+    testProfile::queryEs() <| $ [es] (var pos:float3&;vel:float3 const)
         pos += vel * dt
 
 def queryTwo(dt:float=0.5f)
-    testProfile::queryEs() <| $ [es] (pos:float3&;vel:float3 const;defT:float=0.5f)
+    testProfile::queryEs() <| $ [es] (var pos:float3&;vel:float3 const;defT:float=0.5f)
         pos += vel * (defT + dt)
 
 def queryThree()
-    let count = 0
+    var count = 0
     try
-        testProfile::queryEs() <| $ [es] (pos:float3& const)
+        testProfile::queryEs() <| $ [es] (var pos:float3& const)
             let position = pos
-            testProfile::queryEs() <| $ [es] (pos:float3& const)
+            testProfile::queryEs() <| $ [es] (var pos:float3& const)
                 if position==pos
                     count ++
                     if count==100

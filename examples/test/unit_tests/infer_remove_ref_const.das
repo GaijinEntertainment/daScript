@@ -17,7 +17,7 @@ def aliasLogTNoRef(x:auto(numT);y:numT delete &)
     return typeinfo(typename type passT)
 
 def aliasLogTNoRefNoConst(x:auto(numT);y:numT delete const&)
-    let z : auto(passT) = y
+    var z : auto(passT) = y
     return typeinfo(typename type passT)
 
 [export]

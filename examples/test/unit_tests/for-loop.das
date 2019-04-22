@@ -2,8 +2,8 @@
 def test:bool
     // 1 variable
     if true
-        let a:int[10]
-        let i:int=0
+        var a:int[10]
+        var i:int=0
         for l in a
             l = i
             i++
@@ -14,8 +14,8 @@ def test:bool
             i++
     // 1 variable array
     if true
-        let a:array<int>
-        let i:int=0
+        var a:array<int>
+        var i:int=0
         resize(a,13)
         for l in a
             l = i++
@@ -26,8 +26,8 @@ def test:bool
             i++
     // 2 variable, array
     if true
-        let a,b:int[10]
-        let i:int=0
+        var a,b:int[10]
+        var i:int=0
         for l,r in a,b
             r = i*2-5
             l = i++
@@ -44,9 +44,9 @@ def test:bool
         assert(i==5)
     // 2 variable, hybrid
     if true
-        let a:array<int>
-        let b:int[10]
-        let i:int=0
+        var a:array<int>
+        var b:int[10]
+        var i:int=0
         resize(a,4)
         for l,r in a,b
             assert(i<4)
@@ -66,14 +66,14 @@ def test:bool
         assert(i==4)
     // 1 variable, range
     if true
-        let i:int=0
+        var i:int=0
         for a in range(0,10)
             assert(a==i++)
         assert(i==10)
     // 2 variable, range hybrid
     if true
-        let b:int[10]
-        let i:int=0
+        var b:int[10]
+        var i:int=0
         for l,r in range(0,10),b    // note, this one is optimized out
             r = i++*2-5
         assert(i==10)

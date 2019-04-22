@@ -1,14 +1,14 @@
 // options printRef = true, printVarAccess = true, log = true// , logOptimizationPasses = true
 
 def strcat(a,b)
-	let c = a
+	var c = a
 	c += b					// this will not prevent folding
     return c
 
 def make_name(x)
     return strcat("hello_",x)
 
-let
+var
     g_cond = true
 
 def make_another_name(x)
@@ -27,15 +27,15 @@ struct Foo
 	a : int = 19
 	b : float = 20.
 
-def up_foo(a)
+def up_foo(var a)
 	a.a ++
 
 def name_foo()
-	let t = Foo()
+	var t = Foo()
 	up_foo(t)
 	return "{t}"		// this will fold
 
-def stil_not_writing(a:string&;b:string&)
+def stil_not_writing(var a:string&;b:string&)
     assert(a=="blah")
     assert(b=="_global_ok")
     a = "it"
@@ -51,7 +51,7 @@ def test
 	assert("{w}"=="[[ 20; 20]]")
     let g = make_g_name("touch_global")
     assert("{g}"=="touch_global_global_ok")
-    let T = "blah"
+    var T = "blah"
     stil_not_writing(T,g_name)
     assert(T=="it")
     let tt = "_global_ok"

@@ -12,7 +12,7 @@ def test
     assert(!(fn!=@add))
     let qq : function
     assert(qq==null)
-	let failed = false
+	var failed = false
 	try
 		let fn2 : function<(a,b:int):int>
 		let t2 = invoke(fn2, 1, 2)

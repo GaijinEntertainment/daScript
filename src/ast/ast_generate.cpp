@@ -53,6 +53,7 @@ namespace das {
         auto varB = make_shared<Variable>();
         varB->name = "b";
         varB->type = make_shared<TypeDecl>(str->shared_from_this());
+        varB->type->constant = true;
         varB->at = str->at;
         auto fn = make_shared<Function>();
         fn->name = "clone";

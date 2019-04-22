@@ -1,29 +1,29 @@
 // options plot=true,plotFile="../../test.dot"
 // options log=true, optimize=false
 
-def make_test_array(a:array<int>;extra:int=0)
-    let i=0
+def make_test_array(var a:array<int>;extra:int=0)
+    var i=0
     resize(a,10)
     for x in a
         x = i++ + extra
 
 def verify_test_array(a:array<int>;extra:int=0)
     assert(length(a)==10)
-    let i=0
+    var i=0
     for x in a
         assert(x==(extra+i++))
 
-def pass_array ( arr:array<int> )
+def pass_array ( var arr:array<int> )
     push(arr,4)
 
-def verifyIntArray(a:array<int>;s,c,tail:int)
+def verifyIntArray(a:array<int>;var s:int;c,tail:int)
     for t in range(0,c)
         assert(a[t]==s++)
     for t in range(c,c+tail)
         assert(a[t]==0)
 
 def testIntArray
-    let arr,arr2:array<int>
+    var arr,arr2:array<int>
     let val2 = 2
     assert(length(arr)==0,"array starts at 0 length")
     push(arr,1)
@@ -50,7 +50,7 @@ def testIntArray
     arr2 <- arr
     assert(length(arr)==0)
     assert(length(arr2)==4)
-    let index = 0
+    var index = 0
     while index < 4
         arr2[index++]++
     verifyIntArray(arr2,2,4,0)
@@ -76,7 +76,7 @@ def testIntArray
 [export]
 def test:bool
     if true
-        let a:array<int>
+        var a:array<int>
         make_test_array(a)
         verify_test_array(a)
         make_test_array(a,13)
@@ -90,8 +90,8 @@ def test:bool
             a <- b
         verify_test_array(a)
     if true
-        let a,b:array<int>
-        let i = 0
+        var a,b:array<int>
+        var i = 0
         resize(a,10)
         resize(b,10)
         for l,r in a,b
@@ -111,8 +111,8 @@ def test:bool
                 i++
         assert(i==5)
     if true
-        let a:array<int>[10]
-        let i = 0
+        var a:array<int>[10]
+        var i = 0
         for b in a
             make_test_array(b,i++)
         i = 0

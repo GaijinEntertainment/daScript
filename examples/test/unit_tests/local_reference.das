@@ -1,11 +1,11 @@
 [export]
 def test
-    let a : int = 1
-    let b : int& = a
+    var a : int = 1
+    var b : int& = a
     b = 2
     assert(a==2)
-    let c : array<int>
-    let d : array<int> & = c
+    var c : array<int>
+    var d : array<int> & = c
     push(c,1)
     push(c,2)
     push(d,3)

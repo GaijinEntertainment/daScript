@@ -7,7 +7,7 @@ def madd(a,b;c:int)
     return a*b+c
 
 def join(a:array<auto>)
-    let t = 0
+    var t = 0
     for x in a
         t += x              // 30303: no matching operator '+=' with arguments (int&, float&)
     return t

@@ -1,27 +1,27 @@
 // options log = true
 
-let
+var
     network : string
 
 struct Message
     cnt : lambda<(arg:int):int>
 
 def send(t:lambda<(arg:int):int>)
-    let msg = [[Message cnt=t]]
+    var msg = [[Message cnt=t]]
     binary_save(msg) <| $(data)
         network = data
 
 def recv
-    let t : Message
+    var t : Message
     binary_load(t, network)
     return t.cnt
 
 [export]
 def test
-    let CNT = 0
+    var CNT = 0
     let counter = lambda() <| $ (extra:int) : int
         return CNT++ + extra
-    let x = invoke(counter,13)
+    var x = invoke(counter,13)
     CNT = 100500
     let y = invoke(counter,13)
 	assert(x==13 & y==14)

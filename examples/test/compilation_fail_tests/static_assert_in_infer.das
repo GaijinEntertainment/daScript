@@ -2,14 +2,14 @@
 
 expect 40100
 
-def fold(a:array<auto(numt)>;from:numt)
+def fold(a:array<auto(numt)>;var from:numt)
     for x in a
         from += x
     static_assert(typeinfo(sizeof type numt)==4,"only works for small types")
     return from
 
 def join(a:array<auto(numt)>)
-    let b = numt(0)
+    var b = numt(0)
     return fold(a,b)
 
 def test(msg)

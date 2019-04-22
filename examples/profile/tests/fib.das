@@ -10,8 +10,8 @@ def fibR(n)
 
 [sideeffects]
 def fibI(n)
-    let last = 0
-    let cur = 1
+    var last = 0
+    var cur = 1
     for i in range(0, n-1)
         let tmp = cur
         cur += last
@@ -20,19 +20,19 @@ def fibI(n)
 
 [export]
 def test()
-	let f1 = 0
+	var f1 = 0
     profile(20,"fibbonacci loop") <|
         f1 = fibI(6511134)
 	assert(f1==1781508648)
-	let f3 = 0
+	var f3 = 0
     profile(20,"fibbonacci recursive") <|
         f3 = fibR(31)
 	assert(f3==1346269)
-	let f4 = 0
+	var f4 = 0
     profile(20,"fibbonacci loop c++") <|
         f4 = testProfile::testFibI(6511134)
 	assert(f4==1781508648)
-	let f5 = 0
+	var f5 = 0
     profile(20,"fibbonacci recursive c++") <|
         f5 = testProfile::testFibR(31)
 	assert(f5==1346269)

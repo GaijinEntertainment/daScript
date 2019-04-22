@@ -5,7 +5,7 @@ struct Foo
     i : int = 5
     a : array<int>
 
-let
+var
     g : Foo? = new Foo()	
 
 [export]

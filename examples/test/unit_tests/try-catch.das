@@ -2,7 +2,7 @@
 
 [export]
 def test:bool
-	let a = 1
+	var a = 1
     let b:int?
     try
         a = deref(b)

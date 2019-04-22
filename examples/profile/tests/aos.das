@@ -3,62 +3,62 @@ require testProfile
 struct NObject
     position, velocity : float3
 
-let
+var
     nobjects:NObject[10000]
 
-def update(a:NObject)
+def update(var a:NObject)
     a.position+=a.velocity
 
-def testSim(objects:NObject[10000])
+def testSim(var objects:NObject[10000])
     for obj in objects
         update(obj)
 
-def testSimI(objects:NObject[10000])
+def testSimI(var objects:NObject[10000])
     for obj in objects
         obj.position += obj.velocity
 
 [export]
-def ks_update(pos:float3 &;vel:float3)
+def ks_update(var pos:float3 &;vel:float3)
     pos += vel
 
 [export]
-def update(a:Object)
+def update(var a:Object)
     a.position+=a.velocity
 
-def testSim(objects:ObjectArray)
+def testSim(var objects:ObjectArray)
     for obj in objects
         update(obj)
 
-def testSimI(objects:ObjectArray)
+def testSimI(var objects:ObjectArray)
     for obj in objects
         obj.position += obj.velocity
 
-def testInterop(objects:ObjectArray)
+def testInterop(var objects:ObjectArray)
     for obj in objects
         interopUpdate(obj)
 
-def initObj(i:int;a:Object)
+def initObj(var i:int;var a:Object)
     a.position=float3(i++,i+1,i+2)
     a.velocity=float3(1.0,2.0,3.0)
 
-def initObj(i:int;a:NObject)
+def initObj(var i:int;var a:NObject)
     a.position=float3(i++,i+1,i+2)
     a.velocity=float3(1.0,2.0,3.0)
 
-def init(objects:ObjectArray)
-    let index = 0
+def init(var objects:ObjectArray)
+    var index = 0
     for obj in objects
         initObj(index++,obj)
     assert(index==objects.length)
 
-def init(objects:NObject[10000])
-    let index = 0
+def init(var objects:NObject[10000])
+    var index = 0
     for obj in objects
         initObj(index++,obj)
     assert(index==10000)
 
 def verify(total:int;objects:ObjectArray)
-    let i = 0
+    var i = 0
     let t = float(total)
     for obj in objects
         let apos = float3(i++,i+1,i+2)
@@ -67,7 +67,7 @@ def verify(total:int;objects:ObjectArray)
         assert(obj.position==npos)
 
 def verify(total:int;objects:NObject[10000])
-    let i = 0
+    var i = 0
     let t = float(total)
     for obj in objects
         let apos = float3(i++,i+1,i+2)
@@ -76,7 +76,7 @@ def verify(total:int;objects:NObject[10000])
         assert(obj.position==npos)
 
 [export]
-def test(objects:ObjectArray)
+def test(var objects:ObjectArray)
     // verify
     init(nobjects)
     testSim(nobjects)

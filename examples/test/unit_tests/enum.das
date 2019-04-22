@@ -15,7 +15,7 @@ def test
     assert ( int(Numbers ten)==10 )
     let t : Numbers
     assert ( t == Numbers zero )
-    let q = Numbers one
+    var q = Numbers one
     assert ( int(q)==1 )
     assert ( q == Numbers one )
     assert ( t != q )

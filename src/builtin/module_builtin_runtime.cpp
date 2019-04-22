@@ -152,7 +152,7 @@ namespace das
         addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth", SideEffects::modifyExternal);
         // binary serializer
         addInterop<_builtin_binary_load,void,vec4f,char *>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgument);
-        addInterop<_builtin_binary_save,void,vec4f,Block>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal);
+        addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal);
         // function-like expresions
         addCall<ExprAssert>         ("assert");
         addCall<ExprStaticAssert>   ("static_assert");

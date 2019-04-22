@@ -1,6 +1,6 @@
 // options log=true
 
-let
+var
     g_var_i:int=1
     g_var_f:float=3.14
     g_var_s:string="blah"
@@ -17,9 +17,9 @@ def test_global_var
     assert(g_var_s == "blah_blah")
 
 def test_local_var
-    let l_var_i:int=1
-    let l_var_f:float=3.14
-    let l_var_s:string="blah"
+    var l_var_i:int=1
+    var l_var_f:float=3.14
+    var l_var_s:string="blah"
     assert(l_var_i==1)
     l_var_i = l_var_i + 1
     assert(l_var_i==2)
@@ -30,7 +30,7 @@ def test_local_var
     l_var_s += "_blah"
     assert(l_var_s == "blah_blah")
 
-def test_arg(a_var_i:int=1;a_var_f:float=3.14;a_var_s:string="blah")
+def test_arg(var a_var_i:int=1;var a_var_f:float=3.14;var a_var_s:string="blah")
     assert(a_var_i==1)
     a_var_i = a_var_i + 1
     assert(a_var_i==2)
@@ -41,11 +41,11 @@ def test_arg(a_var_i:int=1;a_var_f:float=3.14;a_var_s:string="blah")
     a_var_s += "_blah"
     assert(a_var_s == "blah_blah")
 
-def test_block_invoke(b:block<(b_var_i:int;b_var_f:float;b_var_s:string):void>)
+def test_block_invoke(b:block<(var b_var_i:int;var b_var_f:float;var b_var_s:string):void>)
     invoke(b,1,3.14,"blah")
 
 def test_block_var
-    test_block_invoke() <| $ (b_var_i:int;b_var_f:float;b_var_s:string)
+    test_block_invoke() <| $ (var b_var_i:int;var b_var_f:float;var b_var_s:string)
         assert(b_var_i==1)
         b_var_i = b_var_i + 1
         assert(b_var_i==2)

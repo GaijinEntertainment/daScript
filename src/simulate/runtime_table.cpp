@@ -38,7 +38,7 @@ namespace das
 
     bool TableIterator::first ( Context & context, char * _value ) {
         char ** value = (char **)_value;
-        table_lock(context, *table);
+        table_lock(context, *(Table *)table);
         size_t index = nextValid(0);
         char * data    = getData();
         *value         = data + index * stride;
@@ -59,7 +59,7 @@ namespace das
     void TableIterator::close ( Context & context, char * _value ) {
         char ** value = (char **) _value;
         *value = nullptr;
-        table_unlock(context, *table);
+        table_unlock(context, *(Table *)table);
     }
 
     // keys and values
@@ -72,13 +72,13 @@ namespace das
         return table->data;
     }
 
-    Iterator * builtin_table_keys ( Table & tab, int32_t stride, Context * __context__ ) {
+    Iterator * builtin_table_keys ( const Table & tab, int32_t stride, Context * __context__ ) {
         char * iter = __context__->heap.allocate(sizeof(TableKeysIterator));
         new (iter) TableKeysIterator(&tab, stride);
         return (Iterator *) iter;
     }
 
-    Iterator * builtin_table_values ( Table & tab, int32_t stride, Context * __context__ ) {
+    Iterator * builtin_table_values ( const Table & tab, int32_t stride, Context * __context__ ) {
         char * iter = __context__->heap.allocate(sizeof(TableKeysIterator));
         new (iter) TableValuesIterator(&tab, stride);
         return (Iterator *) iter;

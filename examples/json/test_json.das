@@ -19,14 +19,14 @@ struct Bar
     m : float4x4
 
 def test_write
-    let t <- Bar()
+    var t <- Bar()
     t.f = Foo()
     push(t.t,1.2)
     push(t.t,1.3)
     t.k["foo"] = 1
     t.k["bar"] = 2
     t.m[1][1] = 1.
-    writeToJson(t) <| $ ( root )
+    writeToJson(t) <| $ ( var root )
         print("writeToJson = {root}\n")
         let q : Bar
         readFromJson(q, root)
@@ -35,7 +35,7 @@ def test_write
 
 def test_parse
     let json_text = "\{ \"hello\": \"world\", \"t\": true , \"f\": false, \"n\": null, \"i\": 123, \"pi\": 3.1416, \"a\": [1, 2, 3, 4] \}"
-    readJson(json_text) <| $ ( root, error )
+    readJson(json_text) <| $ ( var root; error )
         // general navigation
         print("{root}\n")
         assert(root.is_object)

@@ -1140,7 +1140,7 @@ namespace das {
             auto containerType = expr->arguments[0]->type;
             auto valueType = expr->arguments[1]->type;
             if ( containerType->isGoodTableType() ) {
-                if ( !containerType->firstType->isSameType(*valueType,false) )
+                if ( !containerType->firstType->isSameType(*valueType,false,false) )
                     error("key must be of the same type as table<key,...>", expr->at, CompilationError::invalid_argument_type);
                 expr->type = make_shared<TypeDecl>(Type::tBool);
             } else {
@@ -1161,7 +1161,7 @@ namespace das {
             auto containerType = expr->arguments[0]->type;
             auto valueType = expr->arguments[1]->type;
             if ( containerType->isGoodTableType() ) {
-                if ( !containerType->firstType->isSameType(*valueType,false) )
+                if ( !containerType->firstType->isSameType(*valueType,false,false) )
                     error("key must be of the same type as table<key,...>", expr->at, CompilationError::invalid_argument_type);
                 expr->type = make_shared<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_shared<TypeDecl>(*containerType->secondType);
@@ -1846,7 +1846,7 @@ namespace das {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
             if ( expr->left->type->isPointer() && expr->right->type->isPointer() )
-                if ( !expr->left->type->isSameType(*expr->right->type,false) )
+                if ( !expr->left->type->isSameType(*expr->right->type,false,false) )
                     error("operations on incompatible pointers are prohibited", expr->at);
             if ( expr->left->type->isEnum() && expr->right->type->isEnum() )
                 if ( !expr->left->type->isSameType(*expr->right->type,false,false) )
@@ -2048,7 +2048,7 @@ namespace das {
                               + resType->describe() + ") vs (" + expr->subexpr->type->describe() + ")",
                               expr->at, CompilationError::invalid_return_type);
                     }
-                    if ( !resType->isConst() && expr->subexpr->type->isConst() ) {
+                    if ( resType->isRef() && !resType->isConst() && expr->subexpr->type->isConst() ) {
                         error("incompatible return type, constant matters. expecting "
                               + resType->describe() + ") vs (" + expr->subexpr->type->describe() + ")",
                               expr->at, CompilationError::invalid_return_type);

@@ -6,7 +6,7 @@ struct Foo
     i : int = 5
     a : array<int>
 
-let
+var
     g : Foo = new Foo()	// 30113: global variable initialization type mismatch, Foo = Foo?
 
 [export]

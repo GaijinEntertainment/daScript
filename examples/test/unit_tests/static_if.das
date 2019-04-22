@@ -5,7 +5,7 @@ struct Bar
     c, d : int
 
 [sideeffects]
-def setA(obj,val)
+def setA(var obj;val)
     if typeinfo(has_field<a> obj)
         obj.a = val
 
@@ -14,8 +14,8 @@ let
 
 [export]
 def test
-    let f : Foo
-    let b : Bar
+    var f : Foo
+    var b : Bar
     setA(f,1)
     setA(b,2)
     if canQQ

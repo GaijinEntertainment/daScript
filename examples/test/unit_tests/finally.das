@@ -2,9 +2,8 @@
 
 [sideeffects]
 def test_if_finally
-    let t : int[10]
-    let count = 0
-    let inin = 0
+    var t : int[10]
+    var count = 0
     for x in range(0,10)
         t[x] = x+1
         if x==5
@@ -17,8 +16,8 @@ def test_if_finally
 
 [sideeffects]
 def test_for_finally
-    let t : int[10]
-    let count = 0
+    var t : int[10]
+    var count = 0
     for x in range(0,10)
         let uno = one()
         t[x] = x+uno
@@ -30,7 +29,7 @@ def test_for_finally
     assert(count==1 & t[9]==13)
     return true
 
-let
+var
     ONE = 1
 
 [sideeffects]
@@ -41,9 +40,9 @@ def one
 
 [sideeffects]
 def test_while_finally
-    let t : int[10]
-    let count = 0
-    let x = 0
+    var t : int[10]
+    var count = 0
+    var x = 0
     while x != 10
         let uno = one()
         t[x] = x+uno
@@ -56,7 +55,7 @@ def test_while_finally
     assert(count==1 & t[9]==13)
     return true
 
-let
+var
     glob = 0
     glob_count = 0
 
@@ -74,7 +73,7 @@ def test_func_finally()
 
 [sideeffects]
 def test_block_finally()
-    let t = 0
+    var t = 0
     invoke() <| $() { t=1; } finally { t=2; }
     assert(t==2)
 

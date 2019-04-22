@@ -10,22 +10,22 @@ struct FooVision
     f3d : Foo3D
     color : float4
 
-def setFooGeneric(foo,x,y)
+def setFooGeneric(var foo;x,y)
     foo.x = x
     foo.y = y
 
-def setFoo(foo:Foo;x,y:int)
+def setFoo(var foo:Foo;x,y:int)
     foo.x = x
     foo.y = y
 
-def setFooPtr(foo:Foo?;x,y:int)
+def setFooPtr(var foo:Foo?;x,y:int)
     foo.x = x
     foo.y = y
 
 [sideeffects]
 def test_struct
-    let f : Foo
-    let f3d : Foo3D
+    var f : Foo
+    var f3d : Foo3D
     assert(f.x==0 & f.y==0)
     assert(f3d.x==0 & f3d.y==0)
     setFooGeneric(f,1,2)
@@ -38,15 +38,15 @@ def test_struct
     assert(f3d.x==3 & f3d.y==4)
     (cast<Foo> f3d).y = 5
     assert(f3d.y==5)
-    let fv : FooVision
+    var fv : FooVision
     (cast<Foo> fv.f3d).y = 13
     assert((cast<Foo> fv.f3d).y==13)
     return true
 
 [sideeffects]
 def test_ptr
-    let f = new Foo
-    let f3d = new Foo3D
+    var f = new Foo
+    var f3d = new Foo3D
     assert(f.x==0 & f.y==0)
     assert(f3d.x==0 & f3d.y==0)
     setFooGeneric(f,1,2)
@@ -59,7 +59,7 @@ def test_ptr
     assert(f3d.x==3 & f3d.y==4)
     (cast<Foo?> f3d).y = 5
     assert(f3d.y==5)
-    let fv = new FooVision
+    var fv = new FooVision
     (cast<Foo> fv.f3d).y = 13
     assert((cast<Foo> fv.f3d).y==13)
 

@@ -6,14 +6,14 @@ def twice(b:block)
     invoke(b)
 
 def twice_good(b:block<int>):int
-    let t = 0
+    var t = 0
     t += invoke(b)
     t += invoke(b)
     return t
 
 [sideeffects]
 def crapOnStack
-    let a:int[20]
+    var a:int[20]
     for b in a
         b = 13
 
@@ -40,14 +40,14 @@ def func4(b:block)
 def badd(ext:int;b:block<(arg:int):int>) : int
     return invoke(b,ext)
 
-def radd(ext:int&;b:block<(arg:int&):int>):int
+def radd(var ext:int&;b:block<(var arg:int&):int>):int
     return invoke(b,ext)
 
 [export]
 def test:bool
     if true
-        let a = 0
-        let b = 0
+        var a = 0
+        var b = 0
         twice({ a++; })
         assert(a==2)
         b = twice_good() <| { return a++; }
@@ -59,8 +59,8 @@ def test:bool
         assert(a==8)
         assert(b==(7+8))
     if true
-        let x = 0
-        let y = 0
+        var x = 0
+        var y = 0
         func1() <|
             x += 1
             y += 2
@@ -72,8 +72,8 @@ def test:bool
                 y += 4
         assert(x==3 & y==9)
     if true
-        let v1 = 1
-        let res = badd(1000,$(a1:int):int{ return v1++ + a1; })
+        var v1 = 1
+        var res = badd(1000,$(a1:int):int{ return v1++ + a1; })
         assert(res==1001)
         res = badd(1000) <| $(a1:int):int{ return v1 + a1; }
         assert(res==1002)
@@ -86,7 +86,7 @@ def test:bool
             return badd(2000,$(a3:int):int { return a3 + a2 + v1; })
         assert(res==3004)
         v1 = 3
-        res = radd(v1) <| $(a:int&):int
+        res = radd(v1) <| $(var a:int&):int
             return a++
         assert(res==3 & v1==4)
     return true

@@ -2,7 +2,7 @@ struct Foo
     bar : int
 
 def newFoo
-    let t : Foo
+    var t : Foo
     t.bar = 1
     return t
 
@@ -12,15 +12,15 @@ def newFooB(b:block<Foo>)
 def addBar(a,b:Foo)
     return a.bar + b.bar
 
-def makeSequence(base:auto(numT)delete &;max)
-    let a : array<numT>
+def makeSequence(var base:auto(numT)delete &;max)
+    var a : array<numT>
     resize(a, max+1-base)
     for t in a
         t = base++
     return <- a
 
 def joinSequences(l:array<auto(numT)>;r:array<numT>)
-    let a : array<numT>
+    var a : array<numT>
     reserve(a, length(l) + length(r))
     for t in l
         push(a, t)
@@ -36,8 +36,8 @@ def test
     // copy on return
     let t = addBar(newFoo(),newFoo())
     assert(t==2)
-    let tt = addBar(newFooB({ let T : Foo; T.bar = 1; return T; }),
-        newFooB({ let T : Foo; T.bar = 1; return T; }))
+    let tt = addBar(newFooB({ var T : Foo; T.bar = 1; return T; }),
+        newFooB({ var T : Foo; T.bar = 1; return T; }))
     assert(tt==2)
     // move on return
     let z <- joinSequences(makeSequence(0,4),makeSequence(5,9))

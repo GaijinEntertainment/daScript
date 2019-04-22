@@ -12,7 +12,7 @@ def funV(v:int3):int3
 [export]
 def test
 	// REGULAR V
-	let v = int3(1,2,3)
+	var v = int3(1,2,3)
 	assert(v==int3(1,2,3))
 	assert(v.x==1 & v.y==2 & v.z==3)
 	assert(v.xy==int2(1,2) & v.yz==int2(2,3) & v.zx==int2(3,1))
@@ -33,7 +33,7 @@ def test
 	v.xyz = int3(11,22,33)
 	assert(v.xyz==int3(11,22,33))
 	// V in the structure
-	let fv = Foo()
+	var fv = Foo()
 	assert(fv.v==int3(1,2,3))
 	assert(fv.v.x==1 & fv.v.y==2 & fv.v.z==3)
 	assert(fv.v.xy==int2(1,2) & fv.v.yz==int2(2,3) & fv.v.zx==int2(3,1))

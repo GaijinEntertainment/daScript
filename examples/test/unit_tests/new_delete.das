@@ -6,7 +6,7 @@ struct SomethingSmall
 
 [unsafe]
 def test_delete_array
-    let a : array<int> [5]
+    var a : array<int> [5]
     let w0 = heap_bytes_allocated()
     for t in range(0,5)
         resize(a[t],10)
@@ -19,7 +19,7 @@ def test_delete_array
 
 [unsafe]
 def test_delete_table
-    let a : table<int,int>
+    var a : table<int,int>
     let w0 = heap_bytes_allocated()
     a[0] = 1
     a[1] = 2
@@ -31,7 +31,7 @@ def test_delete_table
 
 [unsafe]
 def test_delete_struct
-    let a : SomethingSmall?
+    var a : SomethingSmall?
     let w0 = heap_bytes_allocated()
     a = new SomethingSmall
     let w1 = heap_bytes_allocated()
@@ -43,7 +43,7 @@ def test_delete_struct
 [unsafe]
 def test_delete_struct_array
     let w0 = heap_bytes_allocated()
-    let a = new SomethingSmall[10]
+    var a = new SomethingSmall[10]
     let w1 = heap_bytes_allocated()
     delete a
     let w2 = heap_bytes_allocated()
@@ -53,22 +53,22 @@ def test_delete_struct_array
 
 [unsafe]
 def test_delete_handle
-    let a : TestObjectFoo?
+    var a : TestObjectFoo?
     a = new TestObjectFoo
     delete a
     assert(a==null)
 
 [unsafe]
 def test_delete_handle_array
-    let a  = new TestObjectFoo[10]
+    var a  = new TestObjectFoo[10]
     delete a
     for pA in a
         assert(pA==null)
 
 [sideeffects,unsafe]
 def da_inscope(x)
-    let in scope a = new SomethingSmall[10]
-    let in scope b = new SomethingSmall
+    var in scope a = new SomethingSmall[10]
+    var in scope b = new SomethingSmall
     b.a = x
     for pA in a
         pA.a = x
@@ -82,7 +82,7 @@ def test_delete_struct_array_in_scope
 [sideeffects,unsafe]
 def test_delete_string()
     let w0 = heap_bytes_allocated()
-    let a = "{deref(getPtr())}"
+    var a = "{deref(getPtr())}"
     // assert(a=="0")
     delete a
     let w1 = heap_bytes_allocated()
@@ -92,7 +92,7 @@ def test_delete_string()
 [sideeffects,unsafe]
 def test_delete_string_array()
     let w0 = heap_bytes_allocated()
-    let a = [[string[3] "{deref(getPtr())}_1"; "{deref(getPtr())}_2"; "{deref(getPtr())}_3"]]
+    var a = [[string[3] "{deref(getPtr())}_1"; "{deref(getPtr())}_2"; "{deref(getPtr())}_3"]]
     delete a
     let w1 = heap_bytes_allocated()
     assert(w0==w1)

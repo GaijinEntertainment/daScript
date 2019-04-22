@@ -23,7 +23,7 @@ def pass123
     return make123()
 
 def make456
-    let a : int[3]
+    var a : int[3]
     a[0] = 4
     a[1] = 5
     a[2] = 6
@@ -43,7 +43,7 @@ def test
     assert(a0[0]==4 & a0[1]==5 & a0[2]==6)
     //  Optimization - call cmres to be passed directly to call
     //      CallAndCopyOrMove (GetLocal a1)
-    let a1 : int[3]
+    var a1 : int[3]
     a1 = make456()
     assert(a1[0]==4 & a1[1]==5 & a1[2]==6)
     //  this tests invoke in inv123
@@ -59,7 +59,7 @@ def test
     //      InitLocalRef
     //      SetLocalValueRefOff 1
     //      SetLocalValueRefOff 2
-    let f1 : Foo
+    var f1 : Foo
     f1 = [[Foo x=1, y=2]]                   // stack ptr to hold &f1
     assert(f1.x==1 & f1.y==2)
     //  Optimization - call CMRES to be passed directly to call
@@ -70,7 +70,7 @@ def test
     //  Optimization - call CMRES ref to be passed directly to call
     //      InitLocalRef
     //      CallAndCopyOrMove (GetLocalRefOff offset_of_a)
-    let f4 : Foo
+    var f4 : Foo
     f4 = [[Foo a = pass123()]]              // stack ptr to hold &f4
     assert(f4.a[0]==1 & f4.a[1]==2 & f4.a[2]==3)
     // Optimization - invoke CMRES ref to be passed directly to invoke
@@ -80,7 +80,7 @@ def test
     // Optimization - invoke CMRES ref
     //      InitLocal
     //      InvokeAndCopyOrMove (GetLocal f6)
-    let f6 : Foo
+    var f6 : Foo
     f6 = invoke() <| $()
         return [[ Foo x=1, y=2, a=inv123() ]]
     assert(f6.x==1 & f6.y==2 & f6.a[0]==1 & f6.a[1]==2 & f6.a[2]==3)

@@ -409,7 +409,7 @@ namespace das {
         }
     };
 
-    void readJson ( char * str, Block * block, Context * context ) {
+    void readJson ( char * str, const Block & block, Context * context ) {
         rapidjson::Document doc;
         vec4f args[2];
         if ( doc.Parse(str).HasParseError() ) {
@@ -419,7 +419,7 @@ namespace das {
             args[0] = cast<char *>::from((char *)&doc);
             args[1] = v_zero();
         }
-        context->invoke(*block, args, nullptr);
+        context->invoke(block, args, nullptr);
     }
 
     void json_set_i ( JsValue * rv, int32_t iv, Context * context ) {
@@ -816,8 +816,8 @@ namespace das {
             addAnnotation(make_shared<JsValueTypeAnnotation>());
             // functionality
             addExtern<DAS_BIND_FUN(readJson)>(*this,lib,"_builtin_parse_json",SideEffects::modifyExternal);
-            addInterop<_builtin_save_json,void,vec4f,Block>(*this, lib, "_builtin_save_json",SideEffects::modifyExternal);
-            addInterop<_builtin_load_json,void,vec4f,JsValue*>(*this, lib, "readFromJson",SideEffects::modifyExternal);
+            addInterop<_builtin_save_json,void,vec4f,const Block>(*this, lib, "_builtin_save_json",SideEffects::modifyExternal);
+            addInterop<_builtin_load_json,void,vec4f,const JsValue*>(*this, lib, "readFromJson",SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(json_set_i)>(*this,lib,"set",SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(json_set_f)>(*this,lib,"set",SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(json_set_b)>(*this,lib,"set",SideEffects::modifyExternal);

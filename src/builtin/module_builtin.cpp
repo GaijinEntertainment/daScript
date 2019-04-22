@@ -183,11 +183,11 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addFunctionBasic<void *>(*this,lib);
         // function
         addFunctionBasic<Func>(*this,lib);
-        addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,Func,void *>>("==",lib,"",false) );
-        addFunction( make_shared<BuiltInFn<Sim_NEqFunPtr,bool,Func,void *>>("!=",lib,"",false) );
+        addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,Func,const void *>>("==",lib,"",false) );
+        addFunction( make_shared<BuiltInFn<Sim_NEqFunPtr,bool,Func,const void *>>("!=",lib,"",false) );
         // lambda
-        addFunction( make_shared<BuiltInFn<Sim_EqLambdaPtr, bool,Lambda,void *>>("==",lib,"",false) );
-        addFunction( make_shared<BuiltInFn<Sim_NEqLambdaPtr,bool,Lambda,void *>>("!=",lib,"",false) );
+        addFunction( make_shared<BuiltInFn<Sim_EqLambdaPtr, bool,Lambda,const void *>>("==",lib,"",false) );
+        addFunction( make_shared<BuiltInFn<Sim_NEqLambdaPtr,bool,Lambda,const void *>>("!=",lib,"",false) );
         // int32
         addFunctionBasic<int32_t>(*this,lib);
         addFunctionNumericWithMod<int32_t>(*this,lib);

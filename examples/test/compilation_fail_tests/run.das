@@ -1,6 +1,6 @@
 expect 40101
 
-let
+var
     g = 5
 
 [run]

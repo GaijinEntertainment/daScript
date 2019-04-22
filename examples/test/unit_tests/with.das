@@ -3,7 +3,7 @@ struct Point
 
 [export]
 def test
-    let p = Point()
+    var p = Point()
     with p
         x = 1
         y = 2

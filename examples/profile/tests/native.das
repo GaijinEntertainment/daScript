@@ -4,14 +4,14 @@ require testProfile
 
 [sideeffects]
 def testAdds()
-    let count = 0
+    var count = 0
     for i in range(0, 10000000)
         count = AddOne(count)
     return count
 
 [export]
 def test()
-	let count = 0
+	var count = 0
     profile(20,"native loop") <|
         count = testAdds()
 	assert(10000000==count)

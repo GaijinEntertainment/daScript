@@ -16,10 +16,10 @@ struct TestObjectBarNative
 
 [sideeffects]
 def test_native
-    let a:TestObjectFooNative?
-    let b:TestObjectBarNative?
-    let idummy:int
-    let fdummy:float
+    var a:TestObjectFooNative?
+    var b:TestObjectBarNative?
+    var idummy:int
+    var fdummy:float
     a?.fooData ?? idummy = 1
     assert(idummy==1)
     a = new TestObjectFooNative
@@ -38,10 +38,10 @@ def test_native
 
 [sideeffects]
 def test_handled
-    let a:TestObjectFoo?
-    let b:TestObjectBar?
-    let idummy:int
-    let fdummy:float
+    var a:TestObjectFoo?
+    var b:TestObjectBar?
+    var idummy:int
+    var fdummy:float
     a?.fooData ?? idummy = 1
     assert(idummy==1)
     a = new TestObjectFoo

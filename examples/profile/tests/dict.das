@@ -7,7 +7,7 @@ options heap=8388608
 
 require testProfile
 
-def makeRandomSequence(src:array<string>)
+def makeRandomSequence(var src:array<string>)
     let n = 500000
     let mod = uint(n)
     resize(src,n)
@@ -15,17 +15,17 @@ def makeRandomSequence(src:array<string>)
         let num = (271828183u ^ uint(i*119))%mod
         src[i] = "{num}"
 
-def dict(tab:table<string,int>; src:array<string>)
+def dict(var tab:table<string,int>; src:array<string>)
     clear(tab)
-    let maxOcc = 0
+    var maxOcc = 0
     for s in src
         maxOcc = max(++tab[s],maxOcc)
     return maxOcc
 
 [export]
 def test
-    let tab : table<string,int>
-    let src : array<string>
+    var tab : table<string,int>
+    var src : array<string>
     makeRandomSequence(src)
 	profile(20,"dictionary") <|
         dict(tab,src)

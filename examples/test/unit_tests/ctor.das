@@ -10,7 +10,7 @@ struct Bar
     i : int
 
 def Bar
-    let b : Bar
+    var b : Bar
     b.i = 13
     return b
 

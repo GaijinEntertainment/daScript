@@ -77,12 +77,34 @@ namespace das {
         return g_cppCTypeTable.find(t);
     }
 
+    bool isConstRedundantForCpp ( const TypeDeclPtr & type ) {
+        if ( type->dim.size() ) return false;
+        if ( type->isVectorType() ) return true;
+        switch ( type->baseType ) {
+            case Type::tBool:
+            case Type::tInt64:
+            case Type::tUInt64:
+            case Type::tInt:
+            case Type::tUInt:
+            case Type::tFloat:
+            case Type::tDouble:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     string describeCppType ( const TypeDeclPtr & type, bool substituteRef, bool skipRef, bool skipConst ) {
         TextWriter stream;
         auto baseType = type->baseType;
-        if ( !skipConst ) {
-            if ( type->constant ) {
-                stream << "const ";     // TODO: do we skip it alltogether?
+        if ( isConstRedundantForCpp(type) ) {
+            skipConst = true;
+        }
+        if ( baseType != Type::tPointer ) {
+            if ( !skipConst ) {
+                if ( type->constant ) {
+                    stream << "const ";     // TODO: do we skip it alltogether?
+                }
             }
         }
         if ( type->dim.size() ) {
@@ -169,6 +191,13 @@ namespace das {
                 stream << " &";
             } else {
                 stream << " *";
+            }
+        }
+        if ( baseType == Type::tPointer ) {
+            if ( !skipConst ) {
+                if ( type->constant ) {
+                    stream << "const ";     // TODO: do we skip it alltogether?
+                }
             }
         }
         return stream.str();
@@ -369,6 +398,15 @@ namespace das {
             ss << "vec4f /*" << describeCppType(vtype,substituteRef) << "*/";
         } else {
             ss << describeCppType(vtype,substituteRef,false);
+        }
+    }
+
+    void describeVarLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, bool substituteRef = true ) {
+        if ( isLocalVec(vtype) ) {
+            if ( vtype->constant ) ss << "const ";
+            ss << "vec4f /*" << describeCppType(vtype,substituteRef) << "*/";
+        } else {
+            ss << describeCppType(vtype,substituteRef,false,true);
         }
     }
 
@@ -619,7 +657,7 @@ namespace das {
             ss << string(tab,'\t');
             if ( !var->used ) ss << "/* ";
             ss << (var->init ? "das_global" : "das_global_zero");
-            ss << "<" << describeCppType(var->type,false,true)
+            ss << "<" << describeCppType(var->type,false,true,true)
                 << "," << int32_t(var->stackTop) << ">(__context__)";
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
@@ -691,7 +729,7 @@ namespace das {
             auto & vars = collector.variables[block];
             for ( auto & var : vars ) {
                 ss << string(tab,'\t');
-                describeLocalCppType(ss, var->type);
+                describeVarLocalCppType(ss, var->type);
                 ss << " " << collector.getVarName(var) << ";\n";
             }
         }
@@ -741,7 +779,7 @@ namespace das {
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
             if ( !collector.isMoved(var) ) {
-                describeLocalCppType(ss, var->type);
+                describeVarLocalCppType(ss, var->type);
                 ss << " ";
             }
             ss << collector.getVarName(var);
@@ -989,7 +1027,7 @@ namespace das {
             } else if ( var->local || var->block || var->argument ) {
                 ss << collector.getVarName(var->variable);
             } else {
-                ss << "das_global<" << describeCppType(var->variable->type,false,true)
+                ss << "das_global<" << describeCppType(var->variable->type,false,true,true) 
                     << "," << int32_t(var->variable->stackTop) << ">(__context__) /*" << var->name << "*/";
             }
             return Visitor::visit(var);

@@ -1,10 +1,10 @@
 [export]
 def test
-    let a1,a2:clock
-    let dt:float
+    var a1,a2:clock
+    var dt:float
     a1 = getClock()
     for z in range(0,3) // nada on my laptop
-        let a,b:int[3]
+        var a,b:int[3]
         for x,y in a,b
             x += y
     a2 = getClock()

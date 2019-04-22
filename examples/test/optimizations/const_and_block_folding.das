@@ -18,7 +18,7 @@ def var_op3_arg_two_plus_two(cond:bool) : int
     return (cc ? x : y) + 2
 
 def test_dead_code(X:int):int
-    let x : int = X
+    var x : int = X
     while x < 5
         x ++
         break
