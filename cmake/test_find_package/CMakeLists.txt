@@ -40,9 +40,9 @@ project(test-find-package VERSION 1.0)
 
 
 # Cover version mismatch
-find_package(uriparser 1 CONFIG QUIET)
+find_package(uriparser 9999 CONFIG QUIET)
 if (uriparser_FOUND)
-    message(SEND_ERROR "Was not expecting for find uriparser 1.x.x")
+    message(SEND_ERROR "Was not expecting for find uriparser 9999.x.x")
 endif()
 
 
