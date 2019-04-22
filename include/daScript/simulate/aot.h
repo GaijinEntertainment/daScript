@@ -29,7 +29,7 @@ namespace das {
 
     template <typename TT, typename QQ>
     __forceinline void das_copy ( TT & a, QQ b ) {
-        a = b;
+        a = (TT) b;
     }
 
     template <typename TT, int offset>

@@ -151,7 +151,6 @@
 %type <pTypeDecl>       auto_type_declaration
 %type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
-%type <pVarDeclList>    variable_declaration_list
 %type <pVarDeclList>    struct_variable_declaration_list
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
@@ -706,7 +705,7 @@ kwd_let
     ;
 
 expression_let
-    :   kwd_let[kwd_let] let_scope[inScope] let_variable_declaration[decl] {
+    :   kwd_let let_scope[inScope] let_variable_declaration[decl] {
         auto pLet = new ExprLet();
         pLet->inScope = $inScope;
         if ( $decl->pTypeDecl ) {
@@ -1029,11 +1028,6 @@ struct_variable_declaration_list
     }
     ;
 
-variable_declaration_list
-    :   variable_declaration[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
-    |   variable_declaration_list[list] ';' variable_declaration[decl]  { $$ = $list; $list->push_back($decl); }
-    ;
-
 function_argument_declaration
     :   variable_declaration[decl]          { $$ = $decl; $decl->pTypeDecl->constant = true; }
     |   DAS_VAR variable_declaration[decl]  { $$ = $decl; $decl->pTypeDecl->removeConstant = true; }
@@ -1098,7 +1092,7 @@ let_variable_declaration    /* let x; is prohibited. this one can't have uniniti
     ;
 
 global_let
-    :   kwd_let[kwd_let] '{' struct_variable_declaration_list[list] '}' {
+    :   kwd_let '{' struct_variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {

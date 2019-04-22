@@ -104,9 +104,9 @@ namespace das
 
     bool FixedArrayIterator::next  ( Context & , char * _value )  {
         char ** value = (char **) _value;
-        char * data = *value + stride;
-        *value = data;
-        return data != fixed_array_end;
+        char * dataV = *value + stride;
+        *value = dataV;
+        return dataV != fixed_array_end;
     }
 
     void FixedArrayIterator::close ( Context &, char * _value )  {

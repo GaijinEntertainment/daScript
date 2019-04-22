@@ -1671,7 +1671,7 @@ namespace das
         return pCall;
     }
 
-    SimNode * ExprNamedCall::simulate (Context & context) const {
+    SimNode * ExprNamedCall::simulate (Context &) const {
         DAS_ASSERTF(false, "we should not be here. named call should be promoted to regular call");
         return nullptr;
     }
