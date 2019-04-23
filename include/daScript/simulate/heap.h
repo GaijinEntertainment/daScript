@@ -57,6 +57,10 @@ namespace das {
             return stackSize;
         }
 
+        __forceinline bool empty() {
+            return stackTop == (stack + stackSize);
+        }
+
         __forceinline void reset() {
             evalTop = stackTop = stack + stackSize;
         }

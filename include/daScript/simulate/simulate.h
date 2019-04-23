@@ -142,6 +142,7 @@ namespace das
         }
 
         __forceinline void restart( ) {
+            DAS_ASSERTF(stack.empty(),"can't reset context during the simulation");
             stopFlags = 0;
             exception = nullptr;
             stack.reset();
