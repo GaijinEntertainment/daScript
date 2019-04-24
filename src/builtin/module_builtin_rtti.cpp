@@ -64,36 +64,30 @@ namespace das {
         DebugInfoIterator  ( ST * ar ) : info(ar) {}
         virtual bool first ( Context &, char * _value ) override {
             VT ** value = (VT **) _value;
-            if ( info->count ) {
-                *value      = info->fields[0];
+            data = info->fields;
+            data_end = info->fields + info->count;
+            if ( data != data_end ) {
+                *value = *data;
                 return true;
             } else {
-                *value      = nullptr;
                 return false;
             }
         }
         virtual bool next  ( Context &, char * _value ) override {
-            // note - this iterator is N^2, but that way we can return field itself,
-            // not pointer to pointer to field
             VT ** value = (VT **) _value;
-            uint32_t idx = 0;
-            for ( ; idx != info->count; ++idx ) {
-                if ( info->fields[idx]==*value ) {
-                    idx ++;
-                    if ( idx != info->count ) {
-                        * value = info->fields[idx];
-                        return true;
-                    } else {
-                        return false;
-                    }
-                }
+            if ( ++data != data_end ) {
+                *value = *data;
+                return true;
+            } else {
+                return false;
             }
-            return false;
         }
         virtual void close ( Context &, char * _value ) override {
             VT ** value = (VT **) _value;
             *value = nullptr;
         }
+        VT ** data;
+        VT ** data_end;
         ST * info;
     };
 
