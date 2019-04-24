@@ -197,6 +197,11 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(offset)>("offset");
             addFieldEx ( "annotation_arguments", "annotation_arguments",
                         offsetof(VarInfo, annotation_arguments), makeType<const AnnotationArguments *>(ml) );
+            // default values
+            addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
+            addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
+            addField<DAS_BIND_MANAGED_FIELD(iValue)>("iValue");
+            addField<DAS_BIND_MANAGED_FIELD(fValue)>("fValue");
         }
     };
 

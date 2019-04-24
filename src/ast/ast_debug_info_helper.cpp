@@ -137,6 +137,20 @@ namespace das {
         } else {
             vi->annotation_arguments = nullptr;
         }
+        if ( rtti && var.init && var.init->constexpression ) {
+            if ( var.init->rtti_isStringConstant() ) {
+                auto sval = static_pointer_cast<ExprConstString>(var.init);
+                char * txt = debugInfo->allocateName(sval->text);
+                vi->value = cast<char *>::from(txt);
+            } else if ( var.init->rtti_isConstant() ) {
+                auto cval = static_pointer_cast<ExprConst>(var.init);
+                vi->value = cval->value;
+            } else {
+                vi->value = v_zero();
+            }
+        } else {
+            vi->value = v_zero();
+        }
         vmn2v[mangledName] = vi;
         return vi;
     }

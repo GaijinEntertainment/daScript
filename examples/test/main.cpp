@@ -210,13 +210,14 @@ int main() {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_UnitTest);
+    NEED_MODULE(Module_Rtti);
 #if 0 // Debug this one test
     compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/cant_dereference_mix.das",true);
     Module::Shutdown();
     return 0;
 #endif
 #if 0 // Debug this one test
-    #define TEST_NAME   "examples/test/unit_tests/with.das"
+    #define TEST_NAME   "examples/test/hello_world.das"
     unit_test(TEST_PATH TEST_NAME,false);
     unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();

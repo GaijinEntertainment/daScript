@@ -39,7 +39,16 @@ def test_annotations
                 elif arg.basicType==Type tBool
                     print("{arg.bValue}")
             print("] ")
-        print("{field.name}\n")
+        print("{field.name} = ")
+        if field.basicType==Type tInt
+            print("{field.iValue}")
+        elif field.basicType==Type tFloat
+            print("{field.fValue}")
+        elif field.basicType==Type tString
+            print("\"{field.sValue}\"")
+        elif field.basicType==Type tBool
+            print("{field.bValue}")
+        print("\n")
 
 
 [sideeffects]
