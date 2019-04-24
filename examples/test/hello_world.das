@@ -7,6 +7,7 @@ require rtti
 struct Foo
     [min=0,max=3] a : int = 2
     [bArg=true, sArg="text", fArg=2.3] b : float[3]
+    s : string = "blah blah"
 
 enum BooHoo
     boo = 1
@@ -102,8 +103,8 @@ def test_functions()
 
 [export]
 def test
-    // test_structs()
-    // test_enums()
-    // test_functions()
+    test_structs()
+    test_enums()
+    test_functions()
     test_annotations()
     return true

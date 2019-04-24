@@ -140,8 +140,7 @@ namespace das {
         if ( rtti && var.init && var.init->constexpression ) {
             if ( var.init->rtti_isStringConstant() ) {
                 auto sval = static_pointer_cast<ExprConstString>(var.init);
-                char * txt = debugInfo->allocateName(sval->text);
-                vi->value = cast<char *>::from(txt);
+                vi->sValue = debugInfo->allocateName(sval->text);
             } else if ( var.init->rtti_isConstant() ) {
                 auto cval = static_pointer_cast<ExprConst>(var.init);
                 vi->value = cval->value;
