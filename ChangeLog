@@ -2,6 +2,12 @@ NOTE: uriparser is looking for help with a few things:
       https://github.com/uriparser/uriparser/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
+20xx-xx-xx -- x.x.x
+
+  * Changed: MinGW: Add library version suffix to DLL name
+      Thanks to Sandro Mani for the patch! (GitHub #63, #64)
+  * Soname: TODO
+
 2019-04-22 -- 0.9.2
 
   * Fixed: Add missing extern "C" wrapper to UriIp4.h for use from C++
