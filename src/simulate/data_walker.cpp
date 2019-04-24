@@ -24,8 +24,8 @@ namespace das {
     void DataWalker::walk_struct ( char * ps, StructInfo * si ) {
         beforeStructure(ps, si);
         if ( cancel ) return;
-        for ( uint32_t i=0; i!=si->fieldsSize; ++i ) {
-            bool last = i==(si->fieldsSize-1);
+        for ( uint32_t i=0; i!=si->count; ++i ) {
+            bool last = i==(si->count-1);
             VarInfo * vi = si->fields[i];
             char * pf = ps + vi->offset;
             beforeStructureField(ps, si, pf, vi, last);

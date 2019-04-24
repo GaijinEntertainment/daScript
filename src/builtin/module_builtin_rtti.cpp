@@ -41,88 +41,68 @@ namespace das {
         }
     };
 
-    /*
-    struct EnumInfo {
-        EnumValueInfo **    values;
-    };
-    */
-
-    struct EnumInfoAnnotation : ManagedStructureAnnotation <EnumInfo,false> {
-        EnumInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("EnumInfo", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(totalValues)>("totalValues");
-            addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
-        }
-    };
-
-    /*
-     struct StructInfo {
-     VarInfo **  fields;
-     };
-     */
-
-    struct StructInfoAnnotation : ManagedStructureAnnotation <StructInfo,false> {
-        StructInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("StructInfo", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(fieldsSize)>("fieldsSize");
-            addField<DAS_BIND_MANAGED_FIELD(size)>("size");
-            addField<DAS_BIND_MANAGED_FIELD(initializer)>("initializer");
-            addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
-        }
-        void init () {
-            fieldType = makeType<VarInfo>(*mlib);
-        }
-        struct SimNode_AtSIField : SimNode_At {
-            DAS_PTR_NODE;
-            SimNode_AtSIField ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
+    template <typename ST>
+    struct SimNode_DebugInfoAtField : SimNode_At {
+        DAS_PTR_NODE;
+        SimNode_DebugInfoAtField ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
             : SimNode_At(at, rv, idx, 0, ofs, 0) {}
-            __forceinline char * compute ( Context & context ) {
-                auto pValue = (StructInfo *) value->evalPtr(context);
-                uint32_t idx = cast<uint32_t>::to(index->eval(context));
-                if ( idx >= pValue->fieldsSize ) {
-                    context.throw_error_at(debugInfo,"StructInfo field index out of range");
-                    return nullptr;
-                } else {
-                    return ((char *)(pValue->fields[idx])) + offset;
-                }
+        __forceinline char * compute ( Context & context ) {
+            auto pValue = (ST *) value->evalPtr(context);
+            uint32_t idx = cast<uint32_t>::to(index->eval(context));
+            if ( idx >= pValue->count ) {
+                context.throw_error_at(debugInfo,"field index out of range");
+                return nullptr;
+            } else {
+                return ((char *)(pValue->fields[idx])) + offset;
             }
-        };
-        struct SIIterator : Iterator {
-            SIIterator  ( StructInfo * ar ) : info(ar) {}
-            virtual bool first ( Context &, char * _value ) override {
-                VarInfo ** value = (VarInfo **) _value;
-                if ( info->fieldsSize ) {
-                    *value      = info->fields[0];
-                    return true;
-                } else {
-                    *value      = nullptr;
-                    return false;
-                }
-            }
-            virtual bool next  ( Context &, char * _value ) override {
-                // note - this iterator is N^2, but that way we can return field itself,
-                // not pointer to pointer to field
-                VarInfo ** value = (VarInfo **) _value;
-                uint32_t idx = 0;
-                for ( ; idx != info->fieldsSize; ++idx ) {
-                    if ( info->fields[idx]==*value ) {
-                        idx ++;
-                        if ( idx != info->fieldsSize ) {
-                            * value = info->fields[idx];
-                            return true;
-                        } else {
-                            return false;
-                        }
-                    }
-                }
+        }
+    };
+
+    template <typename VT, typename ST>
+    struct DebugInfoIterator : Iterator {
+        DebugInfoIterator  ( ST * ar ) : info(ar) {}
+        virtual bool first ( Context &, char * _value ) override {
+            VT ** value = (VT **) _value;
+            if ( info->count ) {
+                *value      = info->fields[0];
+                return true;
+            } else {
+                *value      = nullptr;
                 return false;
             }
-            virtual void close ( Context &, char * _value ) override {
-                VarInfo ** value = (VarInfo **) _value;
-                *value = nullptr;
+        }
+        virtual bool next  ( Context &, char * _value ) override {
+            // note - this iterator is N^2, but that way we can return field itself,
+            // not pointer to pointer to field
+            VT ** value = (VT **) _value;
+            uint32_t idx = 0;
+            for ( ; idx != info->count; ++idx ) {
+                if ( info->fields[idx]==*value ) {
+                    idx ++;
+                    if ( idx != info->count ) {
+                        * value = info->fields[idx];
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
             }
-            StructInfo * info;
-        };
+            return false;
+        }
+        virtual void close ( Context &, char * _value ) override {
+            VT ** value = (VT **) _value;
+            *value = nullptr;
+        }
+        ST * info;
+    };
+
+    template <typename VT, typename ST>
+    struct DebugInfoAnnotation : ManagedStructureAnnotation <ST,false> {
+        DebugInfoAnnotation(const string & st, ModuleLibrary & ml)
+            : ManagedStructureAnnotation<ST,false> (st,ml) {
+            using ManagedType = ST;
+            this->template addField<DAS_BIND_MANAGED_FIELD(count)>("count");
+        }
         virtual bool isIndexable ( const TypeDeclPtr & indexType ) const override {
             return indexType->isIndex();
         }
@@ -131,10 +111,10 @@ namespace das {
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
-            return context.code->makeNode<SimNode_AtSIField>(at,
-                                                               rv->simulate(context),
-                                                               idx->simulate(context),
-                                                               ofs);
+            return context.code->makeNode<SimNode_DebugInfoAtField<ST>>(at,
+                                                                                rv->simulate(context),
+                                                                                idx->simulate(context),
+                                                                                ofs);
         }
         virtual bool isIterable ( ) const override {
             return true;
@@ -144,9 +124,29 @@ namespace das {
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, const ExpressionPtr & src ) const override {
             auto rv = src->simulate(context);
-            return context.code->makeNode<SimNode_AnyIterator<StructInfo,SIIterator>>(at, rv);
+            return context.code->makeNode<SimNode_AnyIterator<ST,DebugInfoIterator<VT,ST>>>(at, rv);
         }
         TypeDeclPtr fieldType;
+    };
+
+    struct EnumInfoAnnotation : DebugInfoAnnotation<EnumValueInfo,EnumInfo> {
+        EnumInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("EnumInfo", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
+            fieldType = makeType<EnumValueInfo>(*mlib);
+        }
+    };
+
+    struct StructInfoAnnotation : DebugInfoAnnotation<VarInfo,StructInfo> {
+        StructInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("StructInfo", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(size)>("size");
+            addField<DAS_BIND_MANAGED_FIELD(initializer)>("initializer");
+            addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
+        }
+        void init () {
+            fieldType = makeType<VarInfo>(*mlib);
+        }
     };
 
     template <typename TT>
@@ -215,21 +215,18 @@ namespace das {
 
     class Module_Rtti : public Module {
     public:
-
         template <typename RecAnn>
         void initRecAnnotation ( const shared_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
             rec->mlib = &lib;
             rec->init();
             rec->mlib = nullptr;
         }
-
         template <typename RecAnn>
         void addRecAnnotation ( ModuleLibrary & lib ) {
             auto rec = make_shared<RecAnn>(lib);
             addAnnotation(rec);
             initRecAnnotation(rec, lib);
         }
-
         Module_Rtti() : Module("rtti") {
             ModuleLibrary lib;
             lib.addModule(this);

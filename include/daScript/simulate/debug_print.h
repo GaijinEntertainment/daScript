@@ -219,9 +219,9 @@ namespace das {
             ss << "block 0x" << HEX << intptr_t(pa->body) << DEC;
         }
         virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) override {
-            for ( uint32_t t=0; t!=info->totalValues; ++t ) {
-                if ( value == info->values[t]->value ) {
-                    ss << info->values[t]->name;
+            for ( uint32_t t=0; t!=info->count; ++t ) {
+                if ( value == info->fields[t]->value ) {
+                    ss << info->fields[t]->name;
                     return;
                 }
             }

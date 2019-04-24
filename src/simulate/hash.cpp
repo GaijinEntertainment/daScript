@@ -86,23 +86,23 @@ namespace das
 
     void hash_value ( HashBlock & block, StructInfo * si ) {
         block.write(si->name);
-        for ( uint32_t i=0; i!=si->fieldsSize; ++i ) {
+        for ( uint32_t i=0; i!=si->count; ++i ) {
             auto vi = si->fields[i];
             block.write(vi->name);
             block.write(&vi->offset, sizeof(uint32_t));
         }
-        block.write(&si->fieldsSize, sizeof(uint32_t));
+        block.write(&si->count, sizeof(uint32_t));
         block.write(&si->size, sizeof(uint32_t));
     }
 
     void hash_value ( HashBlock & block, EnumInfo * ei ) {
         block.write(ei->name);
-        for ( uint32_t i=0; i!=ei->totalValues; ++i ) {
-            auto ev = ei->values[i];
+        for ( uint32_t i=0; i!=ei->count; ++i ) {
+            auto ev = ei->fields[i];
             block.write(ev->name);
             block.write(&ev->value, sizeof(int32_t));
         }
-        block.write(&ei->totalValues, sizeof(uint32_t));
+        block.write(&ei->count, sizeof(uint32_t));
     }
 
     void hash_value ( HashBlock & block, TypeInfo * info ) {

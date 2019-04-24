@@ -142,7 +142,7 @@ namespace das
     struct StructInfo {
         char *      name;
         VarInfo **  fields;
-        uint32_t    fieldsSize;
+        uint32_t    count;
         uint32_t    size;
         int32_t     initializer;
         uint32_t    hash;
@@ -155,8 +155,8 @@ namespace das
 
     struct EnumInfo {
         char *              name;
-        EnumValueInfo **    values;
-        uint32_t            totalValues;
+        EnumValueInfo **    fields;
+        uint32_t            count;
         uint32_t            hash;
     };
 

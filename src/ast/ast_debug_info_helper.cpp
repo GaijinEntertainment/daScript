@@ -10,13 +10,13 @@ namespace das {
         if ( it!=emn2e.end() ) return it->second;
         EnumInfo * eni = debugInfo->makeNode<EnumInfo>();
         eni->name = debugInfo->allocateName(en.name);
-        eni->totalValues = uint32_t(en.list.size());
-        eni->values = (EnumValueInfo **) debugInfo->allocate(sizeof(EnumValueInfo *) * eni->totalValues);
+        eni->count = uint32_t(en.list.size());
+        eni->fields = (EnumValueInfo **) debugInfo->allocate(sizeof(EnumValueInfo *) * eni->count);
         uint32_t i = 0;
         for ( auto & ev : en.list ) {
-            eni->values[i] = (EnumValueInfo *) debugInfo->allocate(sizeof(EnumValueInfo));
-            eni->values[i]->name = debugInfo->allocateName(ev.first);
-            eni->values[i]->value = ev.second;
+            eni->fields[i] = (EnumValueInfo *) debugInfo->allocate(sizeof(EnumValueInfo));
+            eni->fields[i]->name = debugInfo->allocateName(ev.first);
+            eni->fields[i]->value = ev.second;
             i ++;
         }
         eni->hash = hash_value(eni);
@@ -48,10 +48,10 @@ namespace das {
         if ( it!=smn2s.end() ) return it->second;
         StructInfo * sti = debugInfo->makeNode<StructInfo>();
         sti->name = debugInfo->allocateName(st.name);
-        sti->fieldsSize = (uint32_t) st.fields.size();
+        sti->count = (uint32_t) st.fields.size();
         sti->size = st.getSizeOf();
-        sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->fieldsSize );
-        for ( uint32_t i=0; i!=sti->fieldsSize; ++i ) {
+        sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
+        for ( uint32_t i=0; i!=sti->count; ++i ) {
             auto & var = st.fields[i];
             VarInfo * vi = makeVariableDebugInfo(st, var);
             sti->fields[i] = vi;

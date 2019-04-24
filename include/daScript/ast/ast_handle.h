@@ -213,16 +213,16 @@ namespace das
                 sti = debugInfo->template makeNode<StructInfo>();
                 sti->name = debugInfo->allocateName(name);
                 // count fields
-                sti->fieldsSize = 0;
+                sti->count = 0;
                 for ( auto & fi : fields ) {
                     auto & var = fi.second;
                     if ( var.offset != -1U ) {
-                        sti->fieldsSize ++;
+                        sti->count ++;
                     }
                 }
                 // and allocate
                 sti->size = (uint32_t) getSizeOf();
-                sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->fieldsSize );
+                sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
                 int i = 0;
                 for ( auto & fi : fields ) {
                     auto & var = fi.second;
