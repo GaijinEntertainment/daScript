@@ -31,10 +31,10 @@ namespace das {
         FuncInfo * fni = debugInfo->makeNode<FuncInfo>();
         fni->name = debugInfo->allocateName(fn.name);
         fni->stackSize = fn.totalStackSize;
-        fni->argsSize = (uint32_t) fn.arguments.size();
-        fni->args = (VarInfo **) debugInfo->allocate(sizeof(VarInfo *) * fni->argsSize);
-        for ( uint32_t i=0; i!=fni->argsSize; ++i ) {
-            fni->args[i] = makeVariableDebugInfo(*fn.arguments[i]);
+        fni->count = (uint32_t) fn.arguments.size();
+        fni->fields = (VarInfo **) debugInfo->allocate(sizeof(VarInfo *) * fni->count);
+        for ( uint32_t i=0; i!=fni->count; ++i ) {
+            fni->fields[i] = makeVariableDebugInfo(*fn.arguments[i]);
         }
         fni->result = makeTypeInfo(nullptr, fn.result);
         fni->hash = hash_value(fni);

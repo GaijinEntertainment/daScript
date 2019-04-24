@@ -162,6 +162,12 @@ namespace das
         __forceinline SimFunction * getFunction ( int index ) const {
             return (index>=0 && index<totalFunctions) ? functions + index : nullptr;
         }
+        __forceinline int32_t getTotalFunctions() const {
+            return totalFunctions;
+        }
+        __forceinline int32_t getTotalVariables() const {
+            return totalVariables;
+        }
 
         SimFunction * findFunction ( const char * name ) const;
         int findVariable ( const char * name ) const;

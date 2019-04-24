@@ -451,10 +451,10 @@ namespace das
                 ssw << pp->info->name << "(sp=" << (stack.top() - sp) << ")\n";
             }
             if ( args ) {
-                for ( uint32_t i = 0; i != pp->info->argsSize; ++i ) {
-                    ssw << "\t" << pp->info->args[i]->name
-                        << " : " << debug_type(pp->info->args[i])
-                        << " = \t" << debug_value(pp->arguments[i], pp->info->args[i], PrintFlags::stackwalker) << "\n";
+                for ( uint32_t i = 0; i != pp->info->count; ++i ) {
+                    ssw << "\t" << pp->info->fields[i]->name
+                        << " : " << debug_type(pp->info->fields[i])
+                        << " = \t" << debug_value(pp->arguments[i], pp->info->fields[i], PrintFlags::stackwalker) << "\n";
                 }
             }
             sp += pp->info->stackSize;

@@ -162,8 +162,8 @@ namespace das
 
     struct FuncInfo {
         char *      name;
-        VarInfo **  args;
-        uint32_t    argsSize;
+        VarInfo **  fields;
+        uint32_t    count;
         uint32_t    stackSize;
         TypeInfo *  result;
         uint32_t    hash;

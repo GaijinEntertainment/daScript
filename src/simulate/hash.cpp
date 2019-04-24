@@ -75,11 +75,11 @@ namespace das
 
     void hash_value ( HashBlock & block,FuncInfo * fi ) {
         block.write(fi->name);
-        for ( uint32_t i=0; i!=fi->argsSize; ++i ) {
-            auto ar = fi->args[i];
+        for ( uint32_t i=0; i!=fi->count; ++i ) {
+            auto ar = fi->fields[i];
             hash_value(block,ar);
         }
-        block.write(&fi->argsSize, sizeof(uint32_t));
+        block.write(&fi->count, sizeof(uint32_t));
         block.write(&fi->stackSize, sizeof(uint32_t));
         hash_value(block,fi->result);
     }

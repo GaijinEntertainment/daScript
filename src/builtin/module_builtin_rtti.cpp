@@ -26,6 +26,7 @@ namespace das {
     MAKE_TYPE_FACTORY(EnumValueInfo,EnumValueInfo)
     MAKE_TYPE_FACTORY(TypeInfo,TypeInfo)
     MAKE_TYPE_FACTORY(VarInfo,VarInfo)
+    MAKE_TYPE_FACTORY(FuncInfo,FuncInfo)
 
     struct TypeAnnotationAnnotation : ManagedStructureAnnotation <TypeAnnotation,false> {
         TypeAnnotationAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TypeAnnotation", ml) {
@@ -134,6 +135,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             fieldType = makeType<EnumValueInfo>(*mlib);
+            fieldType->ref = true;
         }
     };
 
@@ -146,6 +148,7 @@ namespace das {
         }
         void init () {
             fieldType = makeType<VarInfo>(*mlib);
+            fieldType->ref = true;
         }
     };
 
@@ -154,7 +157,7 @@ namespace das {
         ManagedTypeInfoAnnotation ( const string & st, ModuleLibrary & ml )
             : ManagedStructureAnnotation<TT,false> (st, ml) {
             using ManagedType = TT;
-            this->addFieldEx ( "type", "type", offsetof(TypeInfo, type), makeType<Type_DasProxy>(ml) );
+            this->addFieldEx ( "basicType", "type", offsetof(TypeInfo, type), makeType<Type_DasProxy>(ml) );
             this->template addField<DAS_BIND_MANAGED_FIELD(annotation_or_name)>("annotation_or_name");
             this->template addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
             this->template addField<DAS_BIND_MANAGED_FIELD(dimSize)>("dimSize");
@@ -188,6 +191,17 @@ namespace das {
         }
     };
 
+    struct FuncInfoAnnotation : DebugInfoAnnotation<VarInfo,FuncInfo> {
+        FuncInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("FuncInfo", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(stackSize)>("stackSize");
+            addField<DAS_BIND_MANAGED_FIELD(result)>("result");
+            addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
+            fieldType = makeType<VarInfo>(*mlib);
+            fieldType->ref = true;
+        }
+    };
+
     vec4f rtti_getTypeInfo ( Context & , SimNode_CallBase * call, vec4f * ) {
         DAS_ASSERTF(call->types[0], "missing type info somehow");
         return cast<TypeInfo *>::from(call->types[0]);
@@ -213,6 +227,33 @@ namespace das {
         return rtti_getDim(ti, index, context);
     }
 
+    int32_t rtti_contextTotalFunctions ( Context * context ) {
+        return context->getTotalFunctions();
+    }
+
+    int32_t rtti_contextTotalVariables ( Context * context ) {
+        return context->getTotalVariables();
+    }
+
+    vec4f rtti_contextFunctionInfo ( Context & context, SimNode_CallBase *, vec4f * args ) {
+        int32_t tf = context.getTotalFunctions();
+        int32_t index = cast<int32_t>::to(args[0]);
+        if ( index<0 || index>=tf ) {
+            context.throw_error("function index out of range");
+        }
+        FuncInfo * fi = context.getFunction(index)->debugInfo;
+        return cast<FuncInfo *>::from(fi);
+    }
+
+    vec4f rtti_contextVariableInfo ( Context & context, SimNode_CallBase *, vec4f * args ) {
+        int32_t tf = context.getTotalVariables();
+        int32_t index = cast<int32_t>::to(args[0]);
+        if ( index<0 || index>=tf ) {
+            context.throw_error("variable index out of range");
+        }
+        return cast<VarInfo *>::from(context.getVariableInfo(index));
+    }
+
     class Module_Rtti : public Module {
     public:
         template <typename RecAnn>
@@ -231,18 +272,27 @@ namespace das {
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();
+            // type annotations
             addEnumeration(make_shared<EnumerationType>());
             addAnnotation(make_shared<TypeAnnotationAnnotation>(lib));
             addAnnotation(make_shared<EnumValueInfoAnnotation>(lib));
             addAnnotation(make_shared<EnumInfoAnnotation>(lib));
-            auto sia = make_shared<StructInfoAnnotation>(lib);
+            auto sia = make_shared<StructInfoAnnotation>(lib);              // this is type forward decl
             addAnnotation(sia);
             addRecAnnotation<TypeInfoAnnotation>(lib);
             addRecAnnotation<VarInfoAnnotation>(lib);
             initRecAnnotation(sia, lib);
-            addInterop<rtti_getTypeInfo,const TypeInfo &,vec4f>(*this, lib, "getTypeInfo", SideEffects::none);
-            addExtern<DAS_BIND_FUN(rtti_getDimTypeInfo)>(*this, lib, "getDim", SideEffects::none);
-            addExtern<DAS_BIND_FUN(rtti_getDimVarInfo)>(*this, lib, "getDim", SideEffects::none);
+            addAnnotation(make_shared<FuncInfoAnnotation>(lib));
+            // functions
+            //      all the stuff is only resolved after debug info is built
+            //      hence SideEffects::modifyExternal is essencial for it to not be optimized out
+            addInterop<rtti_getTypeInfo,const TypeInfo &,vec4f>(*this, lib, "getTypeInfo", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_getDimTypeInfo)>(*this, lib, "getDim", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_getDimVarInfo)>(*this, lib, "getDim", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_contextTotalFunctions)>(*this, lib, "getTotalFunctions", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_contextTotalVariables)>(*this, lib, "getTotalVariables", SideEffects::modifyExternal);
+            addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "getFunctionInfo", SideEffects::modifyExternal);
+            addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "getVariableInfo", SideEffects::modifyExternal);
         }
     };
 }
