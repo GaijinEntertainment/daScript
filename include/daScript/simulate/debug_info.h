@@ -118,8 +118,9 @@ namespace das
     TypeAnnotation * resolveAnnotation ( TypeInfo * info );
 
     struct VarInfo : TypeInfo {
-        char *      name;
-        uint32_t    offset;
+        char *                      name;
+        uint32_t                    offset;
+        void *                      annotation_arguments = nullptr;
         VarInfo() = default;
         VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name, 
                 TypeInfo * _firstType, TypeInfo * _secondType, uint32_t _dimSize, uint32_t * _dim, uint32_t _flags,

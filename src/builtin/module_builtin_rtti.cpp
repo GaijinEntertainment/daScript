@@ -27,11 +27,24 @@ namespace das {
     MAKE_TYPE_FACTORY(TypeInfo,TypeInfo)
     MAKE_TYPE_FACTORY(VarInfo,VarInfo)
     MAKE_TYPE_FACTORY(FuncInfo,FuncInfo)
+    MAKE_TYPE_FACTORY(AnnotationArgument,AnnotationArgument)
+    MAKE_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
+
+    struct AnnotationArgumentAnnotation : ManagedStructureAnnotation <AnnotationArgument,false> {
+        AnnotationArgumentAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("AnnotationArgument", ml) {
+            addFieldEx ( "basicType", "type", offsetof(AnnotationArgument, type), makeType<Type_DasProxy>(ml) );
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
+            addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
+            addField<DAS_BIND_MANAGED_FIELD(iValue)>("iValue");
+            addField<DAS_BIND_MANAGED_FIELD(fValue)>("fValue");
+        }
+    };
 
     struct TypeAnnotationAnnotation : ManagedStructureAnnotation <TypeAnnotation,false> {
         TypeAnnotationAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TypeAnnotation", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(name)>("cppName");
+            addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
         }
     };
 
@@ -182,6 +195,8 @@ namespace das {
         VarInfoAnnotation(ModuleLibrary & ml) : ManagedTypeInfoAnnotation ("VarInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(offset)>("offset");
+            addFieldEx ( "annotation_arguments", "annotation_arguments",
+                        offsetof(VarInfo, annotation_arguments), makeType<const AnnotationArguments *>(ml) );
         }
     };
 
@@ -268,6 +283,8 @@ namespace das {
             lib.addBuiltInModule();
             // type annotations
             addEnumeration(make_shared<EnumerationType>());
+            addAnnotation(make_shared<AnnotationArgumentAnnotation>(lib));
+            addAnnotation(make_shared<ManagedVectorAnnotation<AnnotationArgument>>("AnnotationArguments",lib));
             addAnnotation(make_shared<TypeAnnotationAnnotation>(lib));
             addAnnotation(make_shared<EnumValueInfoAnnotation>(lib));
             addAnnotation(make_shared<EnumInfoAnnotation>(lib));

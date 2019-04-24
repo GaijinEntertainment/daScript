@@ -132,6 +132,11 @@ namespace das {
         makeTypeInfo(vi, var.type);
         vi->name = debugInfo->allocateName(var.name);
         vi->offset = var.offset;
+        if ( rtti && !var.annotation.arguments.empty() ) {
+            vi->annotation_arguments = (void *) &var.annotation.arguments;
+        } else {
+            vi->annotation_arguments = nullptr;
+        }
         vmn2v[mangledName] = vi;
         return vi;
     }

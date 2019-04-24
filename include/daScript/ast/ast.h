@@ -344,10 +344,12 @@ namespace das
             : type(Type::tFloat), name(n), fValue(f) {}
     };
 
+    typedef vector<AnnotationArgument> AnnotationArguments;
+
     struct AnnotationArgumentList {
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getOption(const string & name, bool def = false) const;
-        vector<AnnotationArgument>  arguments;
+       AnnotationArguments  arguments;
     };
 
     struct Annotation : BasicAnnotation, enable_shared_from_this<Annotation> {
@@ -1665,6 +1667,7 @@ namespace das
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
+        bool                            rtti = false;
     protected:
         map<string,StructInfo *>        smn2s;
         map<string,TypeInfo *>          tmn2t;

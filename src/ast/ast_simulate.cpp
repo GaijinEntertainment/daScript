@@ -1682,6 +1682,7 @@ namespace das
             context.heap.setInitialSize( uint32_t(optHeap->iValue) );
         }
         DebugInfoHelper helper(context.debugInfo);
+        helper.rtti = options.getOption("rtti",false);
         context.thisHelper = &helper;
         context.globalVariables = (GlobalVariable *) context.code->allocate( totalVariables*sizeof(GlobalVariable) );
         context.globalsSize = 0;

@@ -1,14 +1,46 @@
 // options log = true, logInferPasses = true
 
+options rtti=true
+
 require rtti
 
 struct Foo
-    a : int
-    b : float[3]
+    [min=0,max=3] a : int = 2
+    [bArg=true, sArg="text", fArg=2.3] b : float[3]
 
 enum BooHoo
     boo = 1
     hoo = 2
+
+[sideeffects]
+def test_annotations
+    let t : Foo
+    let info : TypeInfo & = getTypeInfo(t)
+    let sinfo : StructInfo & = deref(info.structType)
+    print("struct {sinfo.name}\n")
+    for field in sinfo
+        print("\t")
+        var first = true
+        if field.annotation_arguments != null
+            print("[")
+            let args : AnnotationArguments & = deref(field.annotation_arguments)
+            for arg in args
+                if first
+                    first = false
+                else
+                    print(",")
+                print("{arg.name}=")
+                if arg.basicType==Type tInt
+                    print("{arg.iValue}")
+                elif arg.basicType==Type tFloat
+                    print("{arg.fValue}")
+                elif arg.basicType==Type tString
+                    print("\"{arg.sValue}\"")
+                elif arg.basicType==Type tBool
+                    print("{arg.bValue}")
+            print("] ")
+        print("{field.name}\n")
+
 
 [sideeffects]
 def test_structs
@@ -61,7 +93,8 @@ def test_functions()
 
 [export]
 def test
-    test_structs()
-    test_enums()
-    test_functions()
+    // test_structs()
+    // test_enums()
+    // test_functions()
+    test_annotations()
     return true
