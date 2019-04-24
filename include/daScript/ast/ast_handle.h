@@ -312,19 +312,6 @@ namespace das
             VectorType * array;
             char * array_end = nullptr;
         };
-        struct SimNode_VectorIterator : SimNode {
-            SimNode_VectorIterator ( const LineInfo & at, SimNode * s )
-                : SimNode(at), source(s) { }
-            virtual vec4f eval ( Context & context ) override {
-                vec4f ll = source->eval(context);
-                VectorType * array = cast<VectorType *>::to(ll);
-                char * iter = context.heap.allocate(sizeof(VectorIterator));
-                new (iter) VectorIterator(array);
-                return cast<char *>::from(iter);
-            }
-            SimNode *   source;
-
-        };
         ManagedVectorAnnotation(const string & n, ModuleLibrary & lib)
             : TypeAnnotation(n) {
                 vecType = makeType<OT>(lib);
@@ -372,7 +359,7 @@ namespace das
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, const ExpressionPtr & src ) const override {
             auto rv = src->simulate(context);
-            return context.code->makeNode<SimNode_VectorIterator>(at, rv);
+            return context.code->makeNode<SimNode_AnyIterator<VectorType,VectorIterator>>(at, rv);
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context,
                                             const LineInfo & at, const ExpressionPtr & value ) const override {

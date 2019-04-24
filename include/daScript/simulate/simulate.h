@@ -2287,6 +2287,20 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+    template <typename TT, typename IterT>
+    struct SimNode_AnyIterator : SimNode {
+        SimNode_AnyIterator ( const LineInfo & at, SimNode * s )
+            : SimNode(at), source(s) { }
+        virtual vec4f eval ( Context & context ) override {
+            vec4f ll = source->eval(context);
+            TT * array = cast<TT *>::to(ll);
+            char * iter = context.heap.allocate(sizeof(IterT));
+            new (iter) IterT(array);
+            return cast<char *>::from(iter);
+        }
+        SimNode *   source;
+    };
+
     struct SimNode_Op1 : SimNode {
         SimNode_Op1 ( const LineInfo & at ) : SimNode(at) {}
         SimNode * visitOp1 ( SimVisitor & vis, const char * op );

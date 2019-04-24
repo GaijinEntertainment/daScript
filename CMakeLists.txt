@@ -92,6 +92,7 @@ src/builtin/module_builtin_das.cpp
 src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_random.cpp
 src/builtin/module_builtin_string.cpp
+src/builtin/module_builtin_rtti.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das
 )

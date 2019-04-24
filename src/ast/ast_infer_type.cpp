@@ -2342,7 +2342,7 @@ namespace das {
             if ( var->type->isVoid() )
                 error("local variable can't be declared void",
                       var->at, CompilationError::invalid_variable_type);
-            if ( var->type->isHandle() && !var->type->annotation->isLocal() )
+            if ( var->type->isHandle() && !var->type->annotation->isLocal() && !var->type->ref )
                 error("can't have local variable of handled type " + var->type->annotation->name ,
                       var->at, CompilationError::invalid_variable_type);
             if ( !var->type->isAuto() && !var->type->isAlias() ){
@@ -2388,7 +2388,7 @@ namespace das {
                 error("local variable initialization type mismatch. const matters, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
-            } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
+            } else if ( !var->type->ref && !var->init->type->canCopy() && !var->init->type->canMove() ) {
                 error("this local variable can't be initialized at all", var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( !var->type->ref && !var->init->type->canCopy()

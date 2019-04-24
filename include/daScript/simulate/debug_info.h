@@ -2,7 +2,7 @@
 
 namespace das
 {
-    enum Type : uint8_t {
+    enum Type : int32_t {
         none,
         autoinfer,
         alias,
@@ -107,6 +107,12 @@ namespace das
         uint32_t *          dim;
         uint32_t            flags;
         uint32_t            hash;
+        __forceinline bool isRef() const { return flags & flag_ref; }
+        __forceinline bool isRefType() const { return flags & flag_refType; }
+        __forceinline bool canCopy() const { return flags & flag_canCopy; }
+        __forceinline bool isPod() const { return flags & flag_isPod; }
+        __forceinline bool isRawPod() const { return flags & flag_isRawPod; }
+        __forceinline bool isConst() const { return flags & flag_isConst; }
     };
 
     TypeAnnotation * resolveAnnotation ( TypeInfo * info );
