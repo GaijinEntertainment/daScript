@@ -1216,6 +1216,17 @@ namespace das {
                         reportGenericInfer();
                         return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
                     }
+                } else if ( expr->trait=="is_dim" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->dim.size()!=0);
+                } else if ( expr->trait=="dim" ) {
+                    if ( expr->typeexpr->dim.size() ) {
+                        reportGenericInfer();
+                        return make_shared<ExprConstInt>(expr->at, expr->typeexpr->dim.back());
+                    } else {
+                        error("typeinfo(dim non_array) is prohibited, " + expr->typeexpr->describe(),
+                              expr->at,CompilationError::typeinfo_dim);
+                    }
                 } else if ( expr->trait=="typename" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false));
@@ -1253,7 +1264,7 @@ namespace das {
                               + "> ...) is only defined for structures and handled types, "
                                 + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
                     }
-                }else {
+                } else {
                     error("typeinfo(" + expr->trait + " ...) is undefined, " + expr->typeexpr->describe(),
                           expr->at, CompilationError::typeinfo_undefined);
                 }

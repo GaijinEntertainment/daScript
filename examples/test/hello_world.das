@@ -1,6 +1,8 @@
-options log = true // , logInferPasses = true
+// options log = true, logInferPasses = true
 
 def take_arr(a:int[])
+    static_assert(typeinfo(is_dim a))
+    static_assert(typeinfo(dim a)==4)
     var summ = 0
     for x in a
         summ += x

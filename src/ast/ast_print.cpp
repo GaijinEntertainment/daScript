@@ -703,7 +703,13 @@ namespace das {
     // make array
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
-            ss << "[[" << expr->type->describe() << " ";
+            ss << "[[";
+            if ( expr->type ) {
+                ss << expr->type->describe();
+            } else {
+                ss << "/* undefined */";
+            }
+            ss << " ";
         }
         virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override {
             if ( !lastField ) ss << "; ";
