@@ -1843,7 +1843,6 @@ namespace das {
             vector<TypeDeclPtr> types = { expr->subexpr->type };
             auto functions = findMatchingFunctions(expr->op, types);
             if ( functions.size()==0 ) {
-                vector<TypeDeclPtr> types = { expr->subexpr->type };
                 reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
             } else if ( functions.size()>1 ) {
                 string candidates = program->describeCandidates(functions);
@@ -1880,7 +1879,6 @@ namespace das {
             vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
             auto functions = findMatchingFunctions(expr->op, types);
             if ( functions.size()==0 ) {
-                vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
                 reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
             } else if ( functions.size()>1 ) {
                 string candidates = program->describeCandidates(functions);
