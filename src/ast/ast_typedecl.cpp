@@ -43,8 +43,17 @@ namespace das
         if ( autoT->ref && !initT->ref )
             return nullptr;
         // auto[][][] can't be infered from non-array
-        if ( autoT->dim.size() && autoT->dim!=initT->dim )
-            return nullptr;
+        if ( autoT->dim.size() ) {
+            if ( autoT->dim.size()!=initT->dim.size() )
+                return nullptr;
+            for ( size_t di=0; di!=autoT->dim.size(); ++di ) {
+                int32_t aDI = autoT->dim[di];
+                int32_t iDI = initT->dim[di];
+                if ( aDI!=-1 && aDI!=iDI ) {
+                    return nullptr;
+                }
+            }
+        }
         // auto? can't be infered from non-pointer
         if ( autoT->isPointer() && (!initT->isPointer() || !initT->firstType) )
             return nullptr;
@@ -691,6 +700,12 @@ namespace das
 
     bool TypeDecl::isAuto() const {
         // auto is auto.... or auto....?
+        // also dim[] is aito
+        for ( auto di : dim ) {
+            if ( di==-1 ) {
+                return true;
+            }
+        }
         if ( baseType==Type::autoinfer ) {
             return true;
         } else  if ( baseType==Type::tPointer ) {

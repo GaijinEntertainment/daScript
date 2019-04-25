@@ -1442,7 +1442,7 @@ namespace das
         bool fixedArrays = false;
         bool dynamicArrays = false;
         bool rangeBase = false;
-        uint32_t fixedSize = UINT16_MAX;
+        int32_t fixedSize = INT32_MAX;
         for ( auto & src : sources ) {
             if ( !src->type ) continue;
             if ( src->type->isArray() ) {

@@ -120,8 +120,8 @@ namespace das
         TypeAnnotationPtr   annotation;
         TypeDeclPtr         firstType;      // map.first or array, or pointer
         TypeDeclPtr         secondType;     // map.second
-        vector<TypeDeclPtr> argTypes;        // block arguments
-        vector<uint32_t>    dim;
+        vector<TypeDeclPtr> argTypes;       // block arguments
+        vector<int32_t>     dim;
         union {
             struct {
                 bool    ref : 1 ;

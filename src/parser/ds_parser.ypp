@@ -1346,7 +1346,14 @@ type_declaration
     |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   type_declaration[typeDecl] '[' INTEGER[dimSize] ']' {
+        if ( $dimSize<=0 ) {
+            das_yyerror("array dimension can't be 0 or less", tokAt(@dimSize), CompilationError::invalid_type );
+        }
         $typeDecl->dim.push_back($dimSize);
+        $$ = $typeDecl;
+    }
+    |   type_declaration[typeDecl] '[' ']' {
+        $typeDecl->dim.push_back(-1);
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] DAS_CONST {

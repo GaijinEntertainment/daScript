@@ -382,8 +382,8 @@ namespace das {
 
     template <typename TT, uint32_t size>
     struct das_iterator<TDim<TT,size>> {
-        __forceinline das_iterator(TDim<TT,size> & r) : that(&r) {
-            array_end = r.data + size;
+        __forceinline das_iterator(const TDim<TT,size> & r) : that((TDim<TT,size> *)&r) {
+            array_end = that->data + size;
         }
         __forceinline bool first ( Context *, TT * & i ) {
             i = (TT *) that->data;

@@ -76,6 +76,11 @@ namespace das {
             if ( decl->dim.size() && decl->ref ) {
                 error("can't declare an array of references",decl->at,CompilationError::invalid_type);
             }
+            for ( auto di : decl->dim ) {
+                if ( di <=0 ) {
+                    error("array dimension can't be 0 or less",decl->at,CompilationError::invalid_type);
+                }
+            }
             if ( decl->baseType==Type::tVoid ) {
                 if ( decl->dim.size() ) {
                     error("can't declare an array of void",decl->at,CompilationError::invalid_type);
@@ -2633,7 +2638,7 @@ namespace das {
                 error("[[" + expr->makeType->describe() + "]] with non-structure type", expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->dim.size()>1 ) {
                 error("[[" + expr->makeType->describe() + "]] can only initialize single dimension arrays", expr->at, CompilationError::invalid_type);
-            } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=expr->structs.size() ) {
+            } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=int32_t(expr->structs.size()) ) {
                 error("[[" + expr->makeType->describe() + "]] dimension mismatch, provided " +
                       to_string(expr->structs.size()) + " elements", expr->at,
                           CompilationError::invalid_type);
@@ -2716,7 +2721,7 @@ namespace das {
             if ( expr->makeType->dim.size()>1 ) {
                 error("[[" + expr->makeType->describe() + "]] can only initialize single dimension arrays",
                       expr->at, CompilationError::invalid_type);
-            } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=expr->values.size() ) {
+            } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=int32_t(expr->values.size()) ) {
                 error("[[" + expr->makeType->describe() + "]] dimension mismatch, provided " +
                       to_string(expr->values.size()) + " elements", expr->at,
                       CompilationError::invalid_type);

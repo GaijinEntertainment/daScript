@@ -17,12 +17,20 @@ def foobar(b:block<(a:int;b:float):string>)
 def madd(a,b,c)
     return a*b+c
 
+def take_arr(a:int[])   // infer array size
+    var summ = 0
+    for x in a
+        summ += x
+    return summ
+
 [export]
 def test
     // regular array
     let a:int[10]
     let b = a
     let c : auto const = b
+    // array size
+    assert(take_arr([[int[4] 1;2;3;4]])==10)
     // pointer
     var pFoo : Foo? = new Foo
     var pFooI : auto? = pFoo
