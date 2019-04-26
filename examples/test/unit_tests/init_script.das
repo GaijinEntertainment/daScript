@@ -1,5 +1,3 @@
-// options log = true, logCpp=true
-
 var
     value = 0
 
@@ -15,3 +13,5 @@ def c2
 def test
     assert(value==3)
     return true
+
+

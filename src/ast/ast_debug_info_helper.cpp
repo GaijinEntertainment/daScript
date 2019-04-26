@@ -36,6 +36,8 @@ namespace das {
         for ( uint32_t i=0; i!=fni->count; ++i ) {
             fni->fields[i] = makeVariableDebugInfo(*fn.arguments[i]);
         }
+        fni->flags = 0;
+        if ( fn.init ) fni->flags |= FuncInfo::flag_init;
         fni->result = makeTypeInfo(nullptr, fn.result);
         fni->hash = hash_value(fni);
         fmn2f[mangledName] = fni;

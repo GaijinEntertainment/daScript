@@ -81,6 +81,7 @@ namespace das
         }
         block.write(&fi->count, sizeof(uint32_t));
         block.write(&fi->stackSize, sizeof(uint32_t));
+        block.write(&fi->flags, sizeof(uint32_t));
         hash_value(block,fi->result);
     }
 

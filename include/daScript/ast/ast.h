@@ -1509,6 +1509,7 @@ namespace das
                 bool    copyOnReturn : 1;
                 bool    moveOnReturn : 1;
                 bool    exports : 1;
+                bool    init : 1;
                 bool    addr : 1;
                 bool    used : 1;
                 bool    fastCall : 1;

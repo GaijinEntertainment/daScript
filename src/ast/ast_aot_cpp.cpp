@@ -649,6 +649,18 @@ namespace das {
             tab ++;
         }
         virtual void visitGlobalLetBody ( Program * prog ) override {
+            for ( auto & fnI : program->thisModule->functions ) {
+                auto & fn = fnI.second;
+                if ( fn->init ) {
+                    ss << string(tab,'\t');
+                    if ( fn->noAot ) {
+                        ss << "das_invoke_function<void>::invoke(__context__,Func("
+                            << (fn->index+1) << "/* " << fn->name << " */));\n";
+                    } else {
+                        ss << aotFuncName(fn.get()) << "(__context__);\n";
+                    }
+                }
+            }
             tab --;
             ss << "}\n";
             Visitor::visitGlobalLetBody(prog);
@@ -1991,9 +2003,13 @@ namespace das {
         if ( headers ) {
             logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
         }
+        bool funInit = false;
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             if ( fnn[i]->module != thisModule.get() )
                 continue;
+            if ( fnn[i]->init ) {
+                funInit = true;
+            }
             if ( fnn[i]->noAot )
                 continue;
             // SimFunction * fn = context.getFunction(i);
@@ -2007,7 +2023,7 @@ namespace das {
             logs << "<" << describeCppFunc(fnn[i],nullptr,false) << ",";
             logs << aotFuncName(fnn[i]) << ">>();\n\t};\n";
         }
-        if ( context.totalVariables ) {
+        if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
             logs << "\t// [[ init script ]]\n";
             logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";

@@ -169,12 +169,16 @@ namespace das
     };
 
     struct FuncInfo {
+        enum {
+            flag_init = (1<<0)
+        };
         char *      name;
         VarInfo **  fields;
         uint32_t    count;
         uint32_t    stackSize;
         TypeInfo *  result;
         uint32_t    hash;
+        uint32_t    flags;
     };
 
     string das_to_string ( Type t );

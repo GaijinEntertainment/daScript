@@ -411,6 +411,13 @@ namespace das
                     memset ( globals + pv.offset, 0, pv.size );
                 }
             }
+            for ( int j=0; j!=totalFunctions && !stopFlags; ++j ) {
+                auto & pf = functions[j];
+                if ( pf.debugInfo->flags & FuncInfo::flag_init ) {
+                    call(&pf, nullptr, 0);
+                }
+
+            }
         }
         stack.pop(EP,SP);
     }

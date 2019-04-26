@@ -153,3 +153,5 @@ examples/test/unit_tests/clone.das.main.inc
 examples/test/unit_tests/clone.das.register.inc
 examples/test/unit_tests/named_call.das.main.inc
 examples/test/unit_tests/named_call.das.register.inc
+examples/test/unit_tests/init_script.das.main.inc
+examples/test/unit_tests/init_script.das.register.inc

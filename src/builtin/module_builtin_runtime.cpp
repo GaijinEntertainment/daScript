@@ -79,6 +79,25 @@ namespace das
         };
     };
 
+    struct InitFunctionAnnotation : MarkFunctionAnnotation {
+        InitFunctionAnnotation() : MarkFunctionAnnotation("init") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->init = true;
+            return true;
+        };
+        virtual bool finalize(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & errors) override {
+            if ( func->arguments.size() ) {
+                errors += "[init] function can't have any arguments";
+                return false;
+            }
+            if ( !func->result->isVoid() ) {
+                errors += "[init] function can't return value";
+                return false;
+            }
+            return true;
+        }
+    };
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -149,6 +168,7 @@ namespace das
         addAnnotation(make_shared<UnsafeFunctionAnnotation>());
         addAnnotation(make_shared<UnsafeOpFunctionAnnotation>());
         addAnnotation(make_shared<NoAotFunctionAnnotation>());
+        addAnnotation(make_shared<InitFunctionAnnotation>());
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
