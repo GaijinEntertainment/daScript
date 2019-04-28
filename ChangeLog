@@ -2,7 +2,7 @@ NOTE: uriparser is looking for help with a few things:
       https://github.com/uriparser/uriparser/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
-20xx-xx-xx -- x.x.x
+2019-04-28 -- 0.9.3
 
   * Fixed: pkg-config: Fix version line in liburiparser.pc (GitHub #65)
   * Changed: MinGW: Add library version suffix to DLL name

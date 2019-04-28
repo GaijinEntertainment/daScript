@@ -38,7 +38,7 @@ cmake_minimum_required(VERSION 3.3)
 
 project(uriparser
     VERSION
-        0.9.2
+        0.9.3
 )
 
 # See https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
