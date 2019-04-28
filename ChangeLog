@@ -4,6 +4,7 @@ NOTE: uriparser is looking for help with a few things:
 
 20xx-xx-xx -- x.x.x
 
+  * Fixed: pkg-config: Fix version line in liburiparser.pc (GitHub #65)
   * Changed: MinGW: Add library version suffix to DLL name
       Thanks to Sandro Mani for the patch! (GitHub #63, #64)
   * Soname: TODO
