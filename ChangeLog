@@ -2,6 +2,11 @@ NOTE: uriparser is looking for help with a few things:
       https://github.com/uriparser/uriparser/labels/help%20wanted
       If you can help, please get in touch.  Thanks!
 
+20xx-xx-xx -- x.x.x
+
+  * Fixed: testrunner: No longer crashes when compiled with NDEBUG (GitHub #67)
+  * Soname: TODO
+
 2019-04-28 -- 0.9.3
 
   * Fixed: pkg-config: Fix version line in liburiparser.pc (GitHub #65)
