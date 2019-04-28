@@ -7,7 +7,7 @@ NOTE: uriparser is looking for help with a few things:
   * Fixed: pkg-config: Fix version line in liburiparser.pc (GitHub #65)
   * Changed: MinGW: Add library version suffix to DLL name
       Thanks to Sandro Mani for the patch! (GitHub #63, #64)
-  * Soname: TODO
+  * Soname: 1:26:0
 
 2019-04-22 -- 0.9.2
 
