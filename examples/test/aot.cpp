@@ -91,6 +91,9 @@ namespace das {
         namespace test_include {
             #include "unit_tests/include.das.main.inc"
         }
+        namespace test_init_script {
+            #include "unit_tests/init_script.das.main.inc"
+        }
         namespace test_infer_alias_and_alias_ctor {
             #include "unit_tests/infer_alias_and_alias_ctor.das.main.inc"
         }
@@ -270,6 +273,9 @@ namespace das {
             }
             {   using namespace test_include;
                 #include "unit_tests/include.das.register.inc"
+            }
+            {   using namespace test_init_script;
+                #include "unit_tests/init_script.das.register.inc"
             }
             {   using namespace test_infer_alias_and_alias_ctor;
                 #include "unit_tests/infer_alias_and_alias_ctor.das.register.inc"
