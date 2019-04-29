@@ -1,5 +1,6 @@
+// options log=true, logInferPasses=true // logNodes=false
+
 require UnitTest
-// options logNodes=false
 
 struct SomethingSmall
     a, b, c : int
@@ -67,8 +68,8 @@ def test_delete_handle_array
 
 [sideeffects,unsafe]
 def da_inscope(x)
-    var in scope a = new SomethingSmall[10]
     var in scope b = new SomethingSmall
+    var in scope a = new SomethingSmall[10]
     b.a = x
     for pA in a
         pA.a = x

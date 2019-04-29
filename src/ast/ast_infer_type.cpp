@@ -77,8 +77,8 @@ namespace das {
                 error("can't declare an array of references",decl->at,CompilationError::invalid_type);
             }
             for ( auto di : decl->dim ) {
-                if ( di <=0 ) {
-                    error("array dimension can't be 0 or less",decl->at,CompilationError::invalid_type);
+                if ( di<=0 ) {
+                    error("array dimension can't be 0 or less",decl->at,CompilationError::invalid_array_dimension);
                 }
             }
             if ( decl->baseType==Type::tVoid ) {
@@ -638,7 +638,53 @@ namespace das {
             return nullptr;
         }
 
+        bool inferTypeExpr ( TypeDecl * type ) {
+            bool any = false;
+            for ( size_t i=0; i!=type->dim.size(); ++i ) {
+                if ( type->dim[i]==TypeDecl::dimConst ) {
+                    if ( type->dimExpr[i] ) {
+                        if ( auto constExpr = getConstExpr(type->dimExpr[i].get()) ) {
+                            if ( constExpr->type->isIndex() ) {
+                                auto cI = static_pointer_cast<ExprConstInt>(constExpr);
+                                auto dI = cI->getValue();
+                                if ( dI>0) {
+                                    type->dim[i] = dI;
+                                    any = true;
+                                } else {
+                                    error("array dimension can't be 0 or less", type->at, CompilationError::invalid_array_dimension);
+                                }
+                            } else {
+                                error("array dimension must be int32 or uint32", type->at, CompilationError::invalid_array_dimension);
+                            }
+                        } else {
+                            error("array dimension must be constant", type->at, CompilationError::invalid_array_dimension);
+                        }
+                    } else {
+                        error("can't deduce array dimension", type->at, CompilationError::invalid_array_dimension);
+                    }
+                }
+            }
+            if ( type->firstType ) {
+                any |= inferTypeExpr(type->firstType.get());
+            }
+            if ( type->secondType ) {
+                any |= inferTypeExpr(type->secondType.get());
+            }
+            for ( auto & argType : type->argTypes ) {
+                any |= inferTypeExpr(argType.get());
+            }
+            return any;
+        }
+
     protected:
+
+    // type
+        virtual void preVisit ( TypeDecl * type ) override {
+            if ( inferTypeExpr(type) ) {
+                reportGenericInfer();
+            }
+        }
+
     // strcuture
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
@@ -652,6 +698,9 @@ namespace das {
             }
         }
         virtual void visitStructureField ( Structure * st, Structure::FieldDeclaration & decl, bool ) override {
+            if ( decl.type && decl.type->isExprType() ) {
+                return;
+            }
             if ( decl.parentType ) {
                 auto pf = st->parent->findField(decl.name);
                 if ( !pf->type->isAuto() && !pf->type->isAlias() ) {
@@ -772,6 +821,9 @@ namespace das {
             return Visitor::visitGlobalLetInit(var, init);
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
+            if ( var->type && var->type->isExprType() ) {
+                return Visitor::visitGlobalLet(var);;
+            }
             if ( var->type->ref )
                 error("global variable can't be declared a reference", var->at,
                       CompilationError::invalid_variable_type);
@@ -1182,6 +1234,9 @@ namespace das {
         }
     // ExprTypeInfo
         virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
+            if ( expr->typeexpr && expr->typeexpr->isExprType() ) {
+                return Visitor::visit(expr);
+            }
             // check subexpression
             if ( expr->subexpr && expr->subexpr->type ) {
                 expr->typeexpr = make_shared<TypeDecl>(*expr->subexpr->type);
@@ -1390,6 +1445,9 @@ namespace das {
 
         virtual ExpressionPtr visit ( ExprCast * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            if ( expr->castType && expr->castType->isExprType() ) {
+                return Visitor::visit(expr);
+            }
             if ( expr->castType->isAlias() ) {
                 auto aT = inferAlias(expr->castType);
                 if ( aT ) {
@@ -1449,6 +1507,9 @@ namespace das {
             return Visitor::visitNewArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
+            if ( expr->typeexpr && expr->typeexpr->isExprType() ) {
+                return Visitor::visit(expr);
+            }
             // infer
             if ( expr->typeexpr->isAlias() ) {
                 if ( auto aT = findAlias(expr->typeexpr->alias) ) {
@@ -2322,6 +2383,9 @@ namespace das {
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
+            if ( var->type && var->type->isExprType() ) {
+                return;
+            }
             if ( var->type->isAlias() ) {
                 auto aT = inferAlias(var->type);
                 if ( aT ) {
@@ -2350,6 +2414,9 @@ namespace das {
             local.push_back(var);
         }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
+            if ( var->type && var->type->isExprType() ) {
+                return Visitor::visitLet(expr,var,last);
+            }
             if ( var->type->ref && !var->init )
                 error("local reference has to be initialized",
                       var->at, CompilationError::invalid_variable_type);
@@ -2369,11 +2436,6 @@ namespace das {
                 }
             }
             verifyType(var->type);
-            if ( expr->inScope && var->type->canDelete() ) {
-                auto scope = scopes.back();
-                auto del = makeDelete(var);
-                scope->finalList.insert(scope->finalList.begin(), del);
-            }
             return Visitor::visitLet(expr,var,last);
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
@@ -2414,6 +2476,19 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
             if ( expr->inScope ) {
+                for ( auto & var : expr->variables ) {
+                    if ( var->type->isExprType() || var->type->isAuto() || var->type->isAlias() ) {
+                        error("type not ready yet", var->at);
+                        return Visitor::visit(expr);
+                    }
+                }
+                for ( auto & var : expr->variables ) {
+                    if ( var->type->canDelete() ) {
+                        auto scope = scopes.back();
+                        auto del = makeDelete(var);
+                        scope->finalList.insert(scope->finalList.begin(), del);
+                    }
+                }
                 expr->inScope = false;
                 reportGenericInfer();
             }
@@ -2644,6 +2719,9 @@ namespace das {
     // make structure
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             Visitor::preVisit(expr);
+            if ( expr->makeType && expr->makeType->isExprType() ) {
+                return;
+            }
             verifyType(expr->makeType);
             if ( expr->makeType->baseType != Type::tStructure ) {
                 error("[[" + expr->makeType->describe() + "]] with non-structure type", expr->at, CompilationError::invalid_type);
@@ -2679,6 +2757,9 @@ namespace das {
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
         virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+            if ( expr->makeType && expr->makeType->isExprType() ) {
+                return Visitor::visit(expr);
+            }
             // see if we need to fill in missing fields
             if ( expr->useInitializer && expr->makeType->structType ) {
                 for ( auto & stf : expr->makeType->structType->fields  ) {
@@ -2728,6 +2809,9 @@ namespace das {
     // make array
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
+            if ( expr->makeType && expr->makeType->isExprType() ) {
+                return;
+            }
             verifyType(expr->makeType);
             if ( expr->makeType->dim.size()>1 ) {
                 error("[[" + expr->makeType->describe() + "]] can only initialize single dimension arrays",
@@ -2743,7 +2827,10 @@ namespace das {
             expr->recordType->dim.clear();
         }
         virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last ) override {
-            if ( !init->type ) {
+            if ( expr->makeType && expr->makeType->isExprType() ) {
+                return Visitor::visitMakeArrayIndex(expr,index,init,last);
+            }
+            if ( !init->type || !expr->recordType ) {
                 return Visitor::visitMakeArrayIndex(expr,index,init,last);
             }
             if ( !expr->recordType->isSameType(*init->type,false,false) ) {
@@ -2754,6 +2841,9 @@ namespace das {
             return Visitor::visitMakeArrayIndex(expr,index,init,last);
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
+            if ( expr->makeType && expr->makeType->isExprType() ) {
+                return Visitor::visit(expr);
+            }
             auto resT = make_shared<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->values.size());
             if ( resDim!=1 ) {

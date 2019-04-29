@@ -245,6 +245,11 @@ namespace das {
         vis.preVisit(this);
         for ( auto & arg : arguments ) {
             vis.preVisitArgument(this, arg, arg==arguments.back() );
+            if ( arg->type ) {
+                vis.preVisit(arg->type.get());
+                arg->type = arg->type->visit(vis);
+                arg->type = vis.visit(arg->type.get());
+            }
             if ( arg->init ) {
                 vis.preVisitArgumentInit(this, arg, arg->init.get());
                 arg->init = arg->init->visit(vis);
@@ -253,6 +258,11 @@ namespace das {
                 }
             }
             arg = vis.visitArgument(this, arg, arg==arguments.back() );
+        }
+        if ( result ) {
+            vis.preVisit(result.get());
+            result = result->visit(vis);
+            result = vis.visit(result.get());
         }
         vis.preVisitFunctionBody(this, body.get());
         body = body->visit(vis);
@@ -490,6 +500,11 @@ namespace das {
 
     ExpressionPtr ExprTypeInfo::visit(Visitor & vis) {
         vis.preVisit(this);
+        if ( typeexpr ) {
+            vis.preVisit(typeexpr.get());
+            typeexpr = typeexpr->visit(vis);
+            typeexpr = vis.visit(typeexpr.get());
+        }
         if ( subexpr ) {
             subexpr = subexpr->visit(vis);
         }
@@ -538,6 +553,11 @@ namespace das {
 
     ExpressionPtr ExprCast::visit(Visitor & vis) {
         vis.preVisit(this);
+        if ( castType ) {
+            vis.preVisit(castType.get());
+            castType = castType->visit(vis);
+            castType = vis.visit(castType.get());
+        }
         subexpr = subexpr->visit(vis);
         return vis.visit(this);
     }
@@ -562,6 +582,11 @@ namespace das {
 
     ExpressionPtr ExprNew::visit(Visitor & vis) {
         vis.preVisit(this);
+        if ( typeexpr ) {
+            vis.preVisit(typeexpr.get());
+            typeexpr = typeexpr->visit(vis);
+            typeexpr = vis.visit(typeexpr.get());
+        }
         for ( auto & arg : arguments ) {
             vis.preVisitNewArg(this, arg.get(), arg==arguments.back());
             arg = arg->visit(vis);
@@ -631,6 +656,11 @@ namespace das {
         for ( auto it = arguments.begin(); it != arguments.end(); ) {
             auto & arg = *it;
             vis.preVisitBlockArgument(this, arg, arg==arguments.back());
+            if ( arg->type ) {
+                vis.preVisit(arg->type.get());
+                arg->type = arg->type->visit(vis);
+                arg->type = vis.visit(arg->type.get());
+            }
             if ( arg->init ) {
                 vis.preVisitBlockArgumentInit(this, arg, arg->init.get());
                 arg->init = arg->init->visit(vis);
@@ -1088,6 +1118,11 @@ namespace das {
         for ( auto it = variables.begin(); it!=variables.end(); ) {
             auto & var = *it;
             vis.preVisitLet(this, var, var==variables.back());
+            if ( var->type ) {
+                vis.preVisit(var->type.get());
+                var->type = var->type->visit(vis);
+                var->type = vis.visit(var->type.get());
+            }
             if ( var->init ) {
                 vis.preVisitLetInit(this, var, var->init.get());
                 var->init = var->init->visit(vis);
@@ -1238,6 +1273,11 @@ namespace das {
 
     ExpressionPtr ExprMakeStructure::visit(Visitor & vis) {
         vis.preVisit(this);
+        if ( makeType ) {
+            vis.preVisit(makeType.get());
+            makeType = makeType->visit(vis);
+            makeType = vis.visit(makeType.get());
+        }
         for ( int index=0; index != int(structs.size()); ++index ) {
             vis.preVisitMakeStructureIndex(this, index, index==int(structs.size()-1));
             auto & fields = structs[index];
@@ -1270,6 +1310,11 @@ namespace das {
 
     ExpressionPtr ExprMakeArray::visit(Visitor & vis) {
         vis.preVisit(this);
+        if ( makeType ) {
+            vis.preVisit(makeType.get());
+            makeType = makeType->visit(vis);
+            makeType = vis.visit(makeType.get());
+        }
         int index = 0;
         for ( auto it = values.begin(); it != values.end(); ) {
             auto & value = *it;
@@ -1501,6 +1546,11 @@ namespace das {
             vis.preVisit(pst);
             for ( auto & fi : pst->fields ) {
                 vis.preVisitStructureField(pst, fi, &fi==&pst->fields.back());
+                if ( fi.type ) {
+                    vis.preVisit(fi.type.get());
+                    fi.type = fi.type->visit(vis);
+                    fi.type = vis.visit(fi.type.get());
+                }
                 if ( fi.init && vis.canVisitStructureFieldInit(pst) ) {
                     fi.init = fi.init->visit(vis);
                 }
@@ -1515,6 +1565,12 @@ namespace das {
                 ist = pstn;
             }
         }
+        // aliases
+        for ( auto & als : thisModule->aliasTypes ) {
+            vis.preVisit(als.second.get());
+            als.second = als.second->visit(vis);
+            als.second = vis.visit(als.second.get());
+        }
         // real things
         vis.preVisitProgramBody(this);
         // globals
@@ -1522,6 +1578,11 @@ namespace das {
         for ( auto & it : thisModule->globals ) {
             auto & var = it.second;
             vis.preVisitGlobalLet(var);
+            if ( var->type ) {
+                vis.preVisit(var->type.get());
+                var->type = var->type->visit(vis);
+                var->type = vis.visit(var->type.get());
+            }
             if ( var->init ) {
                 vis.preVisitGlobalLetInit(var, var->init.get());
                 var->init = var->init->visit(vis);

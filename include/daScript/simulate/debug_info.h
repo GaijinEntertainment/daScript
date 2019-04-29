@@ -8,6 +8,7 @@ namespace das
         alias,
         fakeContext,
         anyArgument,
+        declType,
         tVoid,
         tBool,
         tInt64,

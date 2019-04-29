@@ -88,6 +88,18 @@ namespace das {
         __forceinline static bool noBracket ( Expression * expr ) {
             return expr->topLevel || expr->bottomLevel || expr->argLevel;
         }
+    // TYPE
+        bool ET = false;
+        virtual void preVisit ( TypeDecl * td ) override {
+            Visitor::preVisit(td);
+            ET = td->isExprType();
+            if ( ET ) ss << "/*[";
+        }
+        virtual TypeDeclPtr visit ( TypeDecl * td ) override {
+            if ( ET ) ss << "]*/";
+            return Visitor::visit(td);
+
+        }
     // enumeration
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);

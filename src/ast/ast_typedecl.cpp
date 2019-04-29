@@ -6,6 +6,42 @@ namespace das
 {
     // auto or generic type conversion
 
+    bool TypeDecl::isExprType() const {
+        for ( auto di : dim ) {
+            if ( di==TypeDecl::dimConst ) {
+                return true;
+            }
+        }
+        if ( firstType && firstType->isExprType() ) return true;
+        if ( secondType && secondType->isExprType() ) return true;
+        for ( auto & arg : argTypes ) {
+            if ( arg->isExprType() ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    TypeDeclPtr TypeDecl::visit ( Visitor & vis ) {
+        for ( size_t i=0; i!=dim.size(); ++i ) {
+            if ( dim[i]==TypeDecl::dimConst ) {
+                if ( dimExpr[i] ) {
+                    dimExpr[i] = dimExpr[i]->visit(vis);
+                }
+            }
+        }
+        if ( firstType ) {
+            firstType = firstType->visit(vis);
+        }
+        if ( secondType ) {
+            secondType = secondType->visit(vis);
+        }
+        for ( auto & argType : argTypes ) {
+            argType = argType->visit(vis);
+        }
+        return shared_from_this();
+    }
+
     void TypeDecl::applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef;
@@ -49,7 +85,7 @@ namespace das
             for ( size_t di=0; di!=autoT->dim.size(); ++di ) {
                 int32_t aDI = autoT->dim[di];
                 int32_t iDI = initT->dim[di];
-                if ( aDI!=-1 && aDI!=iDI ) {
+                if ( aDI!=TypeDecl::dimAuto && aDI!=iDI ) {
                     return nullptr;
                 }
             }
@@ -207,6 +243,14 @@ namespace das
         enumType = decl.enumType;
         annotation = decl.annotation;
         dim = decl.dim;
+        dimExpr.reserve(decl.dimExpr.size());
+        for ( auto & de : decl.dimExpr ) {
+            if ( de ) {
+                dimExpr.push_back(de->clone());
+            } else {
+                dimExpr.push_back(nullptr);
+            }
+        }
         flags = decl.flags;
         alias = decl.alias;
         at = decl.at;
@@ -702,7 +746,7 @@ namespace das
         // auto is auto.... or auto....?
         // also dim[] is aito
         for ( auto di : dim ) {
-            if ( di==-1 ) {
+            if ( di==TypeDecl::dimAuto ) {
                 return true;
             }
         }

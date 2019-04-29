@@ -87,8 +87,11 @@ struct Material
     roughness : float
     ri : float
 
+let
+    TOTAL_SPHERES = 9
+
 var
-    s_Spheres = [[Sphere[9]
+    s_Spheres = [[Sphere[TOTAL_SPHERES]
         center = float3(0.,-100.5,-1.), radius = 100.;
         center = float3(2.,0.,-1.),     radius = 0.5;
         center = float3(0.,0.,-1.),     radius = 0.5;
@@ -101,7 +104,7 @@ var
     ]]
 
 let
-    s_SphereMats = [[Material[9]
+    s_SphereMats = [[Material[TOTAL_SPHERES]
         mtype = Type Lambert,    albedo = float3(0.8, 0.8, 0.8), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
         mtype = Type Lambert,    albedo = float3(0.8, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
         mtype = Type Lambert,    albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;

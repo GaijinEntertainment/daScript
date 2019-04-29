@@ -53,15 +53,21 @@ namespace das
     class ModuleGroup;
 
     struct TypeDecl : enable_shared_from_this<TypeDecl> {
+        enum {
+            dimAuto = -1,
+            dimConst = -2,
+        };
         TypeDecl() = default;
         TypeDecl(const TypeDecl & decl);
         TypeDecl & operator = (const TypeDecl & decl) = delete;
         TypeDecl(Type tt) : baseType(tt) {}
         TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp.get()) {}
         TypeDecl(const EnumerationPtr & ep) : baseType(Type::tEnumeration), enumType(ep) {}
+        TypeDeclPtr visit ( Visitor & vis );
         friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
         string getMangledName() const;
         bool isSameType ( const TypeDecl & decl, bool refMatters = true, bool constMatters = true, bool topLevel = true ) const;
+        bool isExprType() const;
         bool isIteratorType ( const TypeDecl & decl ) const;
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;
@@ -114,14 +120,16 @@ namespace das
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
         Type getRangeBaseType() const;
         const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
-        Type                baseType = Type::tVoid;
-        Structure *         structType = nullptr;
-        EnumerationPtr      enumType;
-        TypeAnnotationPtr   annotation;
-        TypeDeclPtr         firstType;      // map.first or array, or pointer
-        TypeDeclPtr         secondType;     // map.second
-        vector<TypeDeclPtr> argTypes;       // block arguments
-        vector<int32_t>     dim;
+        Type                    baseType = Type::tVoid;
+        Structure *             structType = nullptr;
+        EnumerationPtr          enumType;
+        TypeAnnotationPtr       annotation;
+        ExpressionPtr           declTypeExpr;
+        TypeDeclPtr             firstType;      // map.first or array, or pointer
+        TypeDeclPtr             secondType;     // map.second
+        vector<TypeDeclPtr>     argTypes;       // block arguments
+        vector<int32_t>         dim;
+        vector<ExpressionPtr>   dimExpr;
         union {
             struct {
                 bool    ref : 1 ;
@@ -1141,6 +1149,7 @@ namespace das
         static vector<SimNode *> simulateInit(Context & context, const ExprLet * pLet);
         virtual bool rtti_isLet() const override { return true; }
         vector<VariablePtr>     variables;
+        vector<bool>            inScopeVar;
         bool                    inScope = false;
     };
 
@@ -1778,6 +1787,9 @@ namespace das
         // what do we visit
         virtual bool canVisitFunction ( Function * fun ) { return true; }
         virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }
+        // TYPE
+        virtual void preVisit ( TypeDecl * td ) {}
+        virtual TypeDeclPtr visit ( TypeDecl * td ) { return td->shared_from_this(); }
         // ENUMERATOIN
         virtual void preVisit ( Enumeration * enu ) { }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) { }
