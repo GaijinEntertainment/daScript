@@ -357,7 +357,7 @@ namespace das
         auto left = lE->simulate(context);
         auto right = rE->simulate(context);
         if ( rightType.isHandle() ) {
-            auto resN = rightType.annotation->simulateCopy(context, at, left, right);
+            auto resN = rightType.annotation->simulateCopy(context, at, left, rightType.isRef() ? rightType.annotation->simulateRef2Value(context, at, right) : right);
             if ( !resN ) {
                 context.thisProgram->error("integration error, simulateCopy returned null",
                     at, CompilationError::missing_node );
