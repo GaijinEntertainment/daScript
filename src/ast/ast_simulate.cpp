@@ -82,7 +82,8 @@ namespace das
         // wo standard path
         auto left = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
         if ( rightType.isHandle() ) {
-            auto resN = rightType.annotation->simulateCopy(context, at, left, right);
+            auto resN = rightType.annotation->simulateCopy(context, at, left,
+                (!rightType.isRefType() && rightType.ref) ? rightType.annotation->simulateRef2Value(context, at, right) : right);
             if ( !resN ) {
                 context.thisProgram->error("integration error, simulateCopy returned null",
                                            at, CompilationError::missing_node );
@@ -169,7 +170,8 @@ namespace das
         // wo standard path
         auto left = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
         if ( rightType.isHandle() ) {
-            auto resN = rightType.annotation->simulateCopy(context, at, left, right);
+            auto resN = rightType.annotation->simulateCopy(context, at, left,
+                (!rightType.isRefType() && rightType.ref) ? rightType.annotation->simulateRef2Value(context, at, right) : right);
             if ( !resN ) {
                 context.thisProgram->error("integration error, simulateCopy returned null",
                                            at, CompilationError::missing_node );
@@ -272,7 +274,8 @@ namespace das
         auto left = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
         auto right = rE->simulate(context);
         if ( rightType.isHandle() ) {
-            auto resN = rightType.annotation->simulateCopy(context, at, left, right);
+            auto resN = rightType.annotation->simulateCopy(context, at, left,
+                (!rightType.isRefType() && rightType.ref) ? rightType.annotation->simulateRef2Value(context, at, right) : right);
             if ( !resN ) {
                 context.thisProgram->error("integration error, simulateCopy returned null",
                                            at, CompilationError::missing_node );
@@ -357,7 +360,8 @@ namespace das
         auto left = lE->simulate(context);
         auto right = rE->simulate(context);
         if ( rightType.isHandle() ) {
-            auto resN = rightType.annotation->simulateCopy(context, at, left, rightType.isRef() ? rightType.annotation->simulateRef2Value(context, at, right) : right);
+            auto resN = rightType.annotation->simulateCopy(context, at, left,
+                (!rightType.isRefType() && rightType.ref) ? rightType.annotation->simulateRef2Value(context, at, right) : right);
             if ( !resN ) {
                 context.thisProgram->error("integration error, simulateCopy returned null",
                     at, CompilationError::missing_node );
