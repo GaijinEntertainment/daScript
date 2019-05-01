@@ -39,6 +39,8 @@ cmake_minimum_required(VERSION 3.3)
 project(uriparser
     VERSION
         0.9.3
+    LANGUAGES
+        C
 )
 
 # See https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
@@ -242,6 +244,8 @@ endif()
 # C++ test runner
 #
 if(URIPARSER_BUILD_TESTS)
+    enable_language(CXX)
+
     enable_testing()
 
     find_package(GTest 1.8.0 REQUIRED)
