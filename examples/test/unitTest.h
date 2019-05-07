@@ -17,6 +17,12 @@ struct TestObjectFoo {
     int propAdd13() {
         return fooData + 13;
     }
+    __forceinline bool operator == ( const TestObjectFoo & obj ) const {
+        return fooData == obj.fooData;
+    }
+    __forceinline bool operator != ( const TestObjectFoo & obj ) const {
+        return fooData != obj.fooData;
+    }
 };
 
 struct TestObjectBar {

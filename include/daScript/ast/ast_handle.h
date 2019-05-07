@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/ast/ast.h"
+#include "daScript/simulate/aot.h"
 
 namespace das
 {
@@ -427,6 +428,12 @@ namespace das
             DAS_FATAL_LOG("addVariable(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
             DAS_FATAL_ERROR;
         }
+    }
+
+    template <typename TT>
+    void addEquNeq(Module & mod, const ModuleLibrary & lib) {
+        addExtern<decltype(&das_equ<TT>),  das_equ<TT>> (mod, lib, "==", SideEffects::none, "das_equ");
+        addExtern<decltype(&das_nequ<TT>), das_nequ<TT>>(mod, lib, "!=", SideEffects::none, "das_nequ");
     }
 }
 

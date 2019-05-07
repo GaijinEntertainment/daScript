@@ -61,6 +61,8 @@ def test_handled
     assert(a.propAdd13==20)
     assert(b.getFoo.fooData==7)
     assert(deref(b.getFooPtr).fooData==7)
+    assert(deref(a)==deref(b.fooPtr))
+    assert(!(deref(a)!=deref(b.fooPtr)))
 
 [export]
 def test:bool

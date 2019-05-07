@@ -1,3 +1,4 @@
+#pragma once
 
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/debug_print.h"
@@ -30,6 +31,16 @@ namespace das {
     template <typename TT, typename QQ>
     __forceinline void das_copy ( TT & a, QQ b ) {
         a = (TT) b;
+    }
+
+    template <typename TT>
+    __forceinline bool das_equ ( const TT & a, const TT & b ) {
+        return a == b;
+    }
+
+    template <typename TT>
+    __forceinline bool das_nequ ( const TT & a, const TT & b ) {
+        return a != b;
     }
 
     template <typename TT, int offset>
