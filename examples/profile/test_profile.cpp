@@ -60,36 +60,6 @@ __noinline int AddOne(int a) {
 
 // ES
 
-struct EsAttribute {
-    EsAttribute() = default;
-    EsAttribute ( const string & n, uint32_t sz, bool rf, vec4f d )
-        : def(d), name(n), size(sz), ref(rf) {}
-    vec4f       def = v_zero();
-    string      name;
-    uint32_t    size = 0;
-    bool        ref;
-};
-
-struct EsAttributeTable {
-    vector<EsAttribute> attributes;
-};
-
-struct EsPassAttributeTable  : EsAttributeTable {
-    string  pass;
-    int32_t functionIndex;
-};
-
-struct EsComponent {
-    string      name;
-    void *      data = nullptr;
-    uint32_t    size = 0;
-    uint32_t    stride = 0;
-    bool        boxed = false;
-
-    EsComponent() = default;
-    EsComponent(const string & n, void * d, size_t sz, size_t st, bool bx) :
-        name(n), data(d), size(uint32_t(sz)), stride(uint32_t(st)), boxed(bx) {}
-};
 
 struct EsGroupData : ModuleGroupUserData {
     EsGroupData() : ModuleGroupUserData("es") {
@@ -139,6 +109,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
                            const AnnotationArgumentList &, string & err ) override {
         auto esData = getGroupData(group);
         auto tab = make_unique<EsAttributeTable>();
+        block->aotSkipMakeBlock = true;
         block->annotationData = uint64_t(tab.get());
         buildAttributeTable(*tab, block->arguments, err);
         esData->g_esBlockTable.emplace_back(move(tab));
@@ -275,8 +246,92 @@ uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsCom
     return totalComponents;
 }
 
+string aotEsRunBlockName ( EsAttributeTable * table, const vector<EsComponent> & components ) {
+    TextWriter nw;
+    nw << "__query_es";
+    uint32_t nAttr = (uint32_t) table->attributes.size();
+    for ( uint32_t a=0; a!=nAttr; ++a ) {
+        auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
+            return esc.name == table->attributes[a].name;
+        });
+        nw << "_" << table->attributes[a].name;
+        if ( it != components.end() ) {
+            nw << it->stride;
+            if ( it->boxed ) {
+                nw << "_b";
+            }
+        } else {
+            nw << "_null";
+        }
+        nw << table->attributes[a].size;
+        if ( table->attributes[a].ref ) {
+            nw << "_r";
+        }
+    }
+    return nw.str();
+}
 
-constexpr int g_total = 100000;
+void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsComponent> & components ) {
+    auto fnName = aotEsRunBlockName(table, components);
+    ss << "template<typename BT>\nuint32_t " << fnName << " ( const BT & block, Context * __context )\n{\n";
+    ss << "\tfor ( uint32_t i=0; i != g_total; ++i ) {\n";
+    ss << "\t\tblock(";
+    uint32_t nAttr = (uint32_t) table->attributes.size();
+    for ( uint32_t a=0; a!=nAttr; ++a ) {
+        auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
+            return esc.name == table->attributes[a].name;
+        });
+        if ( a ) ss << ",";
+        if ( it != components.end() ) {
+            ss << "g_" << table->attributes[a].name << "[i]";
+        } else {
+            vec4f def = table->attributes[a].def;
+            if ( table->attributes[a].size==4 ) {
+                ss << v_extract_x(def) << "f";
+            } else {
+                ss << "v_make_vec4f(" << v_extract_x(def) << "f," << v_extract_y(def) << "f,"
+                    << v_extract_z(def) << "f," << v_extract_w(def) << "f)";
+            }
+        }
+    }
+    ss << ");\n";
+    ss << "\t}\n";
+    ss << "}\n\n";
+}
+
+struct QueryEsFunctionAnnotation : FunctionAnnotation {
+    QueryEsFunctionAnnotation() : FunctionAnnotation("query_es") { }
+
+    virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
+        err = "not a block annotation";
+        return false;
+    }
+    virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &,
+                           const AnnotationArgumentList &, string & err ) override {
+        err = "not a block annotation";
+        return false;
+    }
+    virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+        return true;
+    };
+    virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &,
+                           const AnnotationArgumentList &, string & ) override {
+        return true;
+    }
+    virtual string aotName ( ExprCallFunc * call ) override {
+        auto mb = static_pointer_cast<ExprMakeBlock>(call->arguments[0]);
+        auto closure = static_pointer_cast<ExprBlock>(mb->block);
+        EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
+        return aotEsRunBlockName(table, g_components);
+    }
+    virtual void aotPrefix ( TextWriter & ss, ExprCallFunc * call ) override {
+        auto mb = static_pointer_cast<ExprMakeBlock>(call->arguments[0]);
+        auto closure = static_pointer_cast<ExprBlock>(mb->block);
+        EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
+        aotEsRunBlock(ss, table, g_components);
+    }
+};
+
 vector<float3>   g_pos ( g_total );
 vector<float3>   g_vel ( g_total );
 vector<float3 *> g_velBoxed ( g_total );
@@ -632,8 +687,24 @@ public:
         addExtern<DAS_BIND_FUN(updateTest)>(*this,lib,"interopUpdateTest",SideEffects::modifyExternal,"updateTest");
         addExtern<DAS_BIND_FUN(update10000)>(*this,lib,"update10000",SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(update10000ks)>(*this,lib,"update10000ks",SideEffects::modifyExternal);
+
         // es
-        addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs",SideEffects::modifyExternal);
+        initEsComponents();
+
+        // this is custom queryES
+        //  we need to do this manually so that we can add annotations
+        // addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs",SideEffects::modifyExternal);
+
+        auto qes_annotation = make_shared<QueryEsFunctionAnnotation>();
+        addAnnotation(qes_annotation);
+
+        auto queryEsFn = make_shared<ExternalFn<decltype(&queryEs), queryEs, SimNode_ExtFuncCall<decltype(&queryEs), queryEs>, decltype(&queryEs)>>("queryEs",lib,"queryEs");
+        queryEsFn->setSideEffects(SideEffects::modifyExternal);
+        auto qes_decl = make_shared<AnnotationDeclaration>();
+        qes_decl->annotation = qes_annotation;
+        queryEsFn->annotations.push_back(qes_decl);
+        addFunction(queryEsFn);
+
         addExtern<DAS_BIND_FUN(testEsUpdate)>(*this, lib, "testEsUpdate",SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents",SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(verifyEsComponents)>(*this, lib, "verifyEsComponents",SideEffects::modifyExternal);

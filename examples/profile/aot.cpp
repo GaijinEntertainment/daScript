@@ -17,6 +17,18 @@
 #pragma clang diagnostic ignored "-Wunsequenced"
 #endif
 
+// this is how we disable AOT
+#if 0
+
+namespace das {
+    namespace aot {
+        void registerAot ( AotLibrary & ) {
+        }
+    }
+}
+
+#else
+
 namespace das {
     namespace aot {
         namespace profile_dict {
@@ -90,6 +102,8 @@ namespace das {
         }
     }
 }
+
+#endif
 
 #if defined(_MSC_VER)
 #pragma warning(pop)

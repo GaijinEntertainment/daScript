@@ -565,16 +565,17 @@ namespace das {
             helper.rtti = program->options.getOption("rtti",false);
         }
         string str() const {
-            return "\n" + helper.str() + sti.str() + ss.str();
+            return "\n" + helper.str() + sti.str()  + stg.str() + ss.str();
         };
     protected:
-        TextWriter                  ss, sti;
+        TextWriter                  ss, sti, stg;
         int                         lastNewLine = -1;
         int                         tab = 0;
         int                         debugInfoGlobal = 0;
         AotDebugInfoHelper          helper;
         ProgramPtr                  program;
         BlockVariableCollector &    collector;
+        set<string>                 aotPrefix;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -1583,24 +1584,27 @@ namespace das {
         virtual void preVisit ( ExprMakeBlock * expr ) override {
             Visitor::preVisit(expr);
             auto block = static_pointer_cast<ExprBlock>(expr->block);
-            ss << "das_make_block";
-            if ( block->returnType->isRefType() && !block->returnType->ref ) {
-                ss << "_cmres";
-            }
-            ss << "<" << describeCppType(block->returnType);
-            for ( auto & arg : block->arguments ) {
-                ss << "," << describeCppType(arg->type);
-                if ( arg->type->isRefType() && !arg->type->ref ) {
-                    ss << " &";
+            if ( !block->aotSkipMakeBlock ) {
+                ss << "das_make_block";
+                if ( block->returnType->isRefType() && !block->returnType->ref ) {
+                    ss << "_cmres";
                 }
+                ss << "<" << describeCppType(block->returnType);
+                for ( auto & arg : block->arguments ) {
+                    ss << "," << describeCppType(arg->type);
+                    if ( arg->type->isRefType() && !arg->type->ref ) {
+                        ss << " &";
+                    }
+                }
+                ss << ">(__context__," << block->stackTop << ",";
+                if ( block->annotationDataIndex != -1 ) {
+                    ss << "__context__->annotationData[" << block->annotationDataIndex << "u]";
+                } else {
+                    ss << "0";
+                }
+                ss << ",";
             }
-            ss << ">(__context__," << block->stackTop << ",";
-            if ( block->annotationDataIndex != -1 ) {
-                ss << "__context__->annotationData[" << block->annotationDataIndex << "u]";
-            } else {
-                ss << "0";
-            }
-            ss << ",[&](";
+            ss << "[&](";
             int ai = 0;
             for ( auto & arg : block->arguments ) {
                 if (ai++) ss << ", ";
@@ -1617,7 +1621,10 @@ namespace das {
             ss << ")->" << describeCppType(block->returnType);
         }
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
-            ss << ")";
+            auto block = static_pointer_cast<ExprBlock>(expr->block);
+            if ( !block->aotSkipMakeBlock ) {
+                ss << ")";
+            }
             return Visitor::visit(expr);
         }
 
@@ -1761,8 +1768,28 @@ namespace das {
         bool needsArgPass ( const TypeDeclPtr & argType ) const {
             return !argType->constant;
         }
+        bool needsArgPass ( Expression * expr ) const {
+            if ( expr->rtti_isMakeBlock() ) {
+                auto mkblock = static_cast<ExprMakeBlock *>(expr);
+                auto block = static_pointer_cast<ExprBlock>(mkblock->block);
+                if ( block->aotSkipMakeBlock ) {
+                    return false;
+                }
+            }
+            return needsArgPass(expr->type);
+        }
         void CallFunc_preVisit ( ExprCallFunc * call ) {
             Visitor::preVisit(call);
+            string aotName = call->func->getAotName(call);
+            for ( auto & ann : call->func->annotations ) {
+                if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                    auto pAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                    if ( aotPrefix.find(aotName)==aotPrefix.end() ) {
+                        pAnn->aotPrefix(stg, call);
+                        aotPrefix.insert(aotName);
+                    }
+                }
+            }
             if ( call->func->result->aotAlias ) {
                 ss << "das_alias<" << call->func->result->alias << ">::from(";
             }
@@ -1780,11 +1807,7 @@ namespace das {
                     ss << describeCppType(call->func->result);
                     ss << ">::call(&";
                 }
-                if ( bif->cppName.empty() ) {
-                    ss << bif->name;
-                } else {
-                    ss << bif->cppName;
-                }
+                ss << aotName;
                 if ( bif->interopFn ) {
                     uint32_t nArgs = (uint32_t) call->arguments.size();
                     ss << ",__context__,SimNode_AotInterop<" << nArgs << ">(";
@@ -1841,7 +1864,7 @@ namespace das {
                 }
                 ss << ">::from(";
             } else if ( arg->type->isRefType() ) {
-                if ( needsArgPass(argType) ) {
+                if ( needsArgPass(arg) ) {
                     ss << "das_arg<" << describeCppType(argType,false,true) << ">::pass(";
                 }
             } else if (isVecRef(argType)) {
@@ -1863,7 +1886,7 @@ namespace das {
             if ( call->func->interopFn ) {
                 ss << ")";
             } else if ( arg->type->isRefType() ) {
-                if ( needsArgPass(argType) ) {
+                if ( needsArgPass(arg) ) {
                     ss << ")";
                 }
             } else if (isVecRef(argType)) {

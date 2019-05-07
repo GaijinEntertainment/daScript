@@ -473,6 +473,7 @@ namespace das
     };
 
     struct ExprBlock;
+    struct ExprCallFunc;
 
     struct FunctionAnnotation : Annotation {
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
@@ -487,6 +488,8 @@ namespace das
         virtual bool finalize ( ExprBlock * block, ModuleGroup & libGroup,
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
+        virtual string aotName ( ExprCallFunc * call );
+        virtual void aotPrefix ( TextWriter &, ExprCallFunc * ) { }
     };
 
     struct TypeAnnotation : Annotation {
@@ -734,6 +737,7 @@ namespace das
                 bool            inTheLoop : 1;
                 bool            finallyBeforeBody : 1;
                 bool            finallyDisabled : 1;
+                bool            aotSkipMakeBlock : 1;
             };
             uint32_t            blockFlags = 0;
         };
@@ -1496,6 +1500,10 @@ namespace das
         bool isGeneric() const;
         FunctionPtr clone() const;
         string getLocationExtra() const;
+        virtual string getAotBasicName() const {
+            return name;
+        }
+        string getAotName(ExprCallFunc * call) const;
     public:
         AnnotationList      annotations;
         string              name;
@@ -1548,6 +1556,9 @@ namespace das
     class BuiltInFunction : public Function {
     public:
         BuiltInFunction ( const string & fn, const string & fnCpp );
+        virtual string getAotBasicName() const override {
+            return cppName.empty() ? name : cppName;
+        }
     public:
         string cppName;
     };

@@ -10,6 +10,10 @@ namespace das {
         return module ? module->name + "::" + name : name;
     }
 
+    string FunctionAnnotation::aotName ( ExprCallFunc * call ) {
+        return call->func->getAotBasicName();
+    }
+
     // enumeration
 
     string Enumeration::getMangledName() const {
@@ -277,6 +281,16 @@ namespace das {
             }
         }
         return false;
+    }
+
+    string Function::getAotName(ExprCallFunc * call) const {
+        for ( auto & ann : annotations ) {
+            if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                auto pAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                return pAnn->aotName(call);
+            }
+        }
+        return call->func->getAotBasicName();
     }
 
     // built-in function
