@@ -10,6 +10,7 @@
 #include "daScript/simulate/aot_builtin_time.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/bin_serializer.h"
+#include "daScript/simulate/runtime_table.h"
 
 namespace das {
 

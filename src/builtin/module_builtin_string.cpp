@@ -5,8 +5,6 @@
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_handle.h"
 
-#include "daScript/simulate/runtime_array.h"
-
 #include "daScript/simulate/aot_builtin_string.h"
 
 namespace das

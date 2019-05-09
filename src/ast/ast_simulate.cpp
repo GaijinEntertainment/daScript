@@ -4,9 +4,12 @@
 #include "daScript/ast/ast_match.h"
 
 #include "daScript/simulate/runtime_array.h"
-#include "daScript/simulate/runtime_table.h"
+#include "daScript/simulate/runtime_table_nodes.h"
 #include "daScript/simulate/runtime_range.h"
+#include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/hash.h"
+
+#include "daScript/simulate/simulate_nodes.h"
 
 namespace das
 {
@@ -411,6 +414,16 @@ namespace das
         }
     }
 
+    SimNode * Function::makeSimNode ( Context & context ) {
+        if ( copyOnReturn || moveOnReturn ) {
+            return context.code->makeNodeUnroll<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
+        } else if ( fastCall ) {
+            return context.code->makeNodeUnroll<SimNode_FastCall>(int(arguments.size()), at);
+        } else {
+            return context.code->makeNodeUnroll<SimNode_Call>(int(arguments.size()), at);
+        }
+    }
+
     SimNode * Function::simulate (Context & context) const {
         if ( builtIn ) {
             DAS_ASSERTF(0, "can only simulate non built-in function");
@@ -632,6 +645,23 @@ namespace das
         for ( uint32_t i = 0; i != block->total; ++i )
             block->list[i] = simlist[i];
         return block;
+    }
+
+    SimNode * ExprRef2Value::GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {
+        if ( type->isHandle() ) {
+            auto resN = type->annotation->simulateRef2Value(context, at, expr);
+            if ( !resN ) {
+                context.thisProgram->error("integration error, simulateRef2Value returned null",
+                                           at, CompilationError::missing_node );
+            }
+            return resN;
+        } else {
+            if ( type->isRefType() ) {
+                return expr;
+            } else {
+                return context.code->makeValueNode<SimNode_Ref2Value>(type->baseType, at, expr);
+            }
+        }
     }
 
     SimNode * ExprRef2Value::simulate (Context & context) const {

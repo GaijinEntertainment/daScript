@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_print.h"
 #include <stdarg.h>

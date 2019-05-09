@@ -1,8 +1,5 @@
 #pragma once
 
-#include "daScript/simulate/runtime_array.h"
-#include "daScript/simulate/runtime_table.h"
-
 namespace das {
     void builtin_throw ( char * text, Context * context );
     void builtin_print ( char * text, Context * context );

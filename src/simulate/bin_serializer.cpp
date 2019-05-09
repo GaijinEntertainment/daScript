@@ -3,8 +3,6 @@
 #include "daScript/simulate/bin_serializer.h"
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/hash.h"
-#include "daScript/simulate/runtime_array.h"
-#include "daScript/simulate/runtime_table.h"
 
 namespace das {
 

@@ -2,7 +2,6 @@
 
 #include "daScript/simulate/simulate.h"
 #include "daScript/misc/function_traits.h"
-
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das

@@ -3,9 +3,7 @@
 #include "module_builtin.h"
 
 #include "daScript/ast/ast_interop.h"
-
 #include "daScript/simulate/aot_builtin.h"
-
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/bin_serializer.h"

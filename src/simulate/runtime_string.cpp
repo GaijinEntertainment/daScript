@@ -5,7 +5,7 @@
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/simulate/runtime_string_delete.h"
-
+#include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/sim_policy.h"
 
 namespace das

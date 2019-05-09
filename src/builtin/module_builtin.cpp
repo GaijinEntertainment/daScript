@@ -2,11 +2,11 @@
 
 #include "module_builtin.h"
 
+#include "daScript/simulate/simulate_nodes.h"
+#include "daScript/simulate/sim_policy.h"
+
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
-
-#include "daScript/simulate/simulate_visit_op.h"
-#include "daScript/simulate/sim_policy.h"
 
 namespace das
 {

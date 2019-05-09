@@ -293,6 +293,14 @@ namespace das {
         return call->func->getAotBasicName();
     }
 
+    FunctionPtr Function::setSideEffects ( SideEffects seFlags ) {
+        sideEffectFlags = uint32_t(seFlags) & ~uint32_t(SideEffects::unsafe);
+        if ( uint32_t(seFlags) & uint32_t(SideEffects::unsafe) ) {
+            unsafeOperation = true;
+        }
+        return shared_from_this();
+    }
+
     // built-in function
 
     BuiltInFunction::BuiltInFunction ( const string & fn, const string & fnCpp ) {
@@ -342,23 +350,6 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
-    }
-
-    SimNode * ExprRef2Value::GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {
-        if ( type->isHandle() ) {
-            auto resN = type->annotation->simulateRef2Value(context, at, expr);
-            if ( !resN ) {
-                context.thisProgram->error("integration error, simulateRef2Value returned null",
-                                           at, CompilationError::missing_node );
-            }
-            return resN;
-        } else {
-            if ( type->isRefType() ) {
-                return expr;
-            } else {
-                return context.code->makeValueNode<SimNode_Ref2Value>(type->baseType, at, expr);
-            }
-        }
     }
 
     // ExprPtr2Ref

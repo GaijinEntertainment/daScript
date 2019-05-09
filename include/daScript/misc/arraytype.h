@@ -54,12 +54,29 @@ namespace das
         uint32_t    lock;
     };
 
+    class Context;
+
+    void array_lock ( Context & context, Array & arr );
+    void array_unlock ( Context & context, Array & arr );
+    void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride );
+    void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero );
+    void array_clear ( Context & context, Array & arr );
+
     struct Table : Array {
         char *      keys;
         uint32_t *  hashes;
         uint32_t    maxLookups;
         uint32_t    shift;
     };
+
+    void table_clear ( Context & context, Table & arr );
+    void table_lock ( Context & context, Table & arr );
+    void table_unlock ( Context & context, Table & arr );
+
+    struct Iterator;
+
+    Iterator * builtin_table_keys ( const Table & tab, int32_t stride, Context * __context__ );
+    Iterator * builtin_table_values ( const Table & tab, int32_t stride, Context * __context__ );
 
     struct EnumStub {
         int32_t     value;

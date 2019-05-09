@@ -2,10 +2,10 @@
 
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/runtime_range.h"
-#include "daScript/simulate/runtime_table.h"
+#include "daScript/simulate/runtime_table_nodes.h"
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_string_delete.h"
-
+#include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {

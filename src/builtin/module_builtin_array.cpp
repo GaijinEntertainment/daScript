@@ -2,10 +2,9 @@
 
 #include "module_builtin.h"
 
+#include "daScript/simulate/simulate_nodes.h"
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
-
-#include "daScript/simulate/runtime_array.h"
 
 #include "daScript/simulate/aot_builtin.h"
 

@@ -6,13 +6,9 @@
 #include "daScript/misc/arraytype.h"
 #include "daScript/misc/rangetype.h"
 #include "daScript/misc/function_traits.h"
-#include "daScript/simulate/interop.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_info.h"
 #include "daScript/ast/compilation_errors.h"
-#include "daScript/simulate/runtime_table.h"
-#include "daScript/simulate/runtime_array.h"
-#include "daScript/simulate/runtime_string_delete.h"
 
 namespace das
 {
@@ -1480,25 +1476,10 @@ namespace das
         string getMangledName() const;
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
-        virtual SimNode * makeSimNode ( Context & context ) {
-            if ( copyOnReturn || moveOnReturn ) {
-                return context.code->makeNodeUnroll<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
-            } else if ( fastCall ) {
-                return context.code->makeNodeUnroll<SimNode_FastCall>(int(arguments.size()), at);
-            } else {
-                return context.code->makeNodeUnroll<SimNode_Call>(int(arguments.size()), at);
-            }
-        }
+        virtual SimNode * makeSimNode ( Context & context );
         string describe() const;
         virtual FunctionPtr visit(Visitor & vis);
-        FunctionPtr setSideEffects ( SideEffects seFlags ) {
-            sideEffectFlags = uint32_t(seFlags) & ~uint32_t(SideEffects::unsafe);
-            if ( uint32_t(seFlags) & uint32_t(SideEffects::unsafe) ) {
-                unsafeOperation = true;
-            }
-            return shared_from_this();
-        }
-
+        FunctionPtr setSideEffects ( SideEffects seFlags );
         bool isGeneric() const;
         FunctionPtr clone() const;
         string getLocationExtra() const;

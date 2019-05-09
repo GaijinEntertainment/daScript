@@ -1,13 +1,13 @@
 #include "daScript/misc/platform.h"
 
-#include <dag_noise/dag_uint_noise.h>
-
 #include "module_builtin.h"
 
+#include "daScript/simulate/simulate_nodes.h"
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
-
 #include "daScript/simulate/aot_builtin_random.h"
+
+#include <dag_noise/dag_uint_noise.h>
 
 namespace das {
 
