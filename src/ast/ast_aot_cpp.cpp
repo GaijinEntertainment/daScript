@@ -203,6 +203,33 @@ namespace das {
         return stream.str();
     }
 
+    class NoAotMarker : public Visitor {
+    public:
+        NoAotMarker() {}
+    protected:
+        Function * func = nullptr;
+    protected:
+        // type
+        virtual void preVisit ( TypeDecl * type ) override {
+            if ( func && !type->canAot() ) func->noAot = true;
+        }
+        // function
+        virtual void preVisit ( Function * f ) override {
+            func = f;
+            Visitor::preVisit(f);
+        }
+        virtual FunctionPtr visit ( Function * that ) override {
+            auto res = Visitor::visit(that);
+            func = nullptr;
+            return res;
+        }
+        // any expression
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            if ( func && expr->type && !expr->type->canAot() ) func->noAot = true;
+        }
+    };
+
 
     class AotDebugInfoHelper : public DebugInfoHelper {
     public:
@@ -2060,6 +2087,9 @@ namespace das {
     }
 
     void Program::aotCpp ( Context & context, TextWriter & logs ) {
+        // run no-aot marker
+        NoAotMarker marker;
+        visit(marker);
         // compute semantic hash for each used function
         int fni = 0;
         for (auto & pm : library.modules) {

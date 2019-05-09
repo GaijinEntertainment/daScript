@@ -66,6 +66,7 @@ namespace das
         TypeDeclPtr visit ( Visitor & vis );
         friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
         string getMangledName() const;
+        bool canAot() const;
         bool isSameType ( const TypeDecl & decl, bool refMatters = true, bool constMatters = true, bool topLevel = true ) const;
         bool isExprType() const;
         bool isIteratorType ( const TypeDecl & decl ) const;
@@ -500,6 +501,7 @@ namespace das
             p->cppName = cppName;
             return p;
         }
+        virtual bool canAot() const { return true; }
         virtual bool canMove() const { return false; }
         virtual bool canCopy() const { return false; }
         virtual bool canClone() const { return false; }

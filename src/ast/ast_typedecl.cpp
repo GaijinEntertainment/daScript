@@ -320,6 +320,16 @@ namespace das
         }
     }
 
+    bool TypeDecl::canAot() const {
+        if ( annotation && !annotation->canAot() ) return false;
+        if ( firstType && !firstType->canAot() ) return false;
+        if ( secondType && !secondType->canAot() ) return false;
+        for ( auto & arg : argTypes ) {
+            if ( !arg->canAot() ) return false;
+        }
+        return true;
+    }
+
     bool TypeDecl::canMove() const {
         if ( baseType==Type::tHandle )
             return annotation->canMove();
