@@ -1540,7 +1540,7 @@ namespace das {
                     expr->type->firstType->dim.clear();
                     expr->type->dim = expr->typeexpr->dim;
                 } else {
-                    error("can new this type " + expr->typeexpr->describe(),
+                    error("can't new this type " + expr->typeexpr->describe(),
                           expr->at, CompilationError::invalid_new_type);
                 }
             } else {

@@ -229,6 +229,27 @@ ADD_LIBRARY(libDaScriptJson ${JSON_MAIN})
 SETUP_CPP11(libDaScriptJson)
 ADD_DEPENDENCIES(libDaScriptJson libDaScript)
 
+# CURL
+
+SET(CURL_MAIN_SRC
+examples/curl/main.cpp
+examples/curl/module_curl.cpp
+examples/curl/curl.das
+)
+
+FIND_PACKAGE(CURL)
+IF(!CURL_FOUND)
+    MESSAGE(FATAL_ERROR "Could not find the CURL library and development files.")
+ENDIF(CURL_FOUND)
+
+include_directories(include curl)
+include_directories(${CURL_INCLUDE_DIR})
+add_executable(curlTest ${CURL_MAIN_SRC} )
+TARGET_LINK_LIBRARIES(curlTest libDaScript ${CURL_LIBRARIES})
+ADD_DEPENDENCIES(curlTest libDaScript)
+SETUP_CPP11(curlTest)
+
+
 # PathTracer helper
 
 SET(PATH_TRACER_HELPER_MAIN_SRC
