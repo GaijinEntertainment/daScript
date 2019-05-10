@@ -33,6 +33,7 @@ namespace das {
         int32_t * fnIndex = (int32_t *) curl->lambda.capture;
         if (!fnIndex) context->throw_error("invoke null lambda");
         SimFunction * simFunc = context->getFunction(*fnIndex-1);
+        if (!simFunc) context->throw_error("invoke null function");
         vec4f argValues[4] = {
             cast<Lambda>::from(curl->lambda),
             cast<char *>::from((char *)ptr),
