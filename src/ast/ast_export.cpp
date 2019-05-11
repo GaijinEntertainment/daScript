@@ -30,6 +30,14 @@ namespace das {
                 propagateFunctionUse(it->shared_from_this());
             }
         }
+        void markAllVarsUsed( ModuleLibrary & lib ){
+            lib.foreach([&](Module * pm) {
+                for (const auto & it : pm->globals) {
+                    propageteVarUse(it.second);
+                }
+                return true;
+            }, "*");
+        }
         void markUsedFunctions( ModuleLibrary & lib, bool forceAll ){
             lib.foreach([&](Module * pm) {
                 for (const auto & it : pm->functions) {
@@ -199,6 +207,9 @@ namespace das {
         MarkSymbolUse vis(false);
         visit(vis);
         vis.markUsedFunctions(library, forceAll);
+        if (forceAll) {
+            vis.markAllVarsUsed(library);
+        }
         if ( options.getOption("removeUnusedSymbols",true) ) {
             vis.RemoveUnusedSymbols(*thisModule);
         }
