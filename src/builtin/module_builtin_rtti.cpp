@@ -20,17 +20,17 @@ DAS_BASE_BIND_ENUM_98(Type, Type,
     tArray,         tTable,         tBlock
 )
 
-namespace das {
+MAKE_TYPE_FACTORY(TypeAnnotation,TypeAnnotation)
+MAKE_TYPE_FACTORY(StructInfo,StructInfo)
+MAKE_TYPE_FACTORY(EnumInfo,EnumInfo)
+MAKE_TYPE_FACTORY(EnumValueInfo,EnumValueInfo)
+MAKE_TYPE_FACTORY(TypeInfo,TypeInfo)
+MAKE_TYPE_FACTORY(VarInfo,VarInfo)
+MAKE_TYPE_FACTORY(FuncInfo,FuncInfo)
+MAKE_TYPE_FACTORY(AnnotationArgument,AnnotationArgument)
+MAKE_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
 
-    MAKE_TYPE_FACTORY(TypeAnnotation,TypeAnnotation)
-    MAKE_TYPE_FACTORY(StructInfo,StructInfo)
-    MAKE_TYPE_FACTORY(EnumInfo,EnumInfo)
-    MAKE_TYPE_FACTORY(EnumValueInfo,EnumValueInfo)
-    MAKE_TYPE_FACTORY(TypeInfo,TypeInfo)
-    MAKE_TYPE_FACTORY(VarInfo,VarInfo)
-    MAKE_TYPE_FACTORY(FuncInfo,FuncInfo)
-    MAKE_TYPE_FACTORY(AnnotationArgument,AnnotationArgument)
-    MAKE_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
+namespace das {
 
     struct AnnotationArgumentAnnotation : ManagedStructureAnnotation <AnnotationArgument,false> {
         AnnotationArgumentAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("AnnotationArgument", ml) {
