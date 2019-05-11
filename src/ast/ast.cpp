@@ -106,6 +106,19 @@ namespace das {
         return true;
     }
 
+    bool Structure::canAot( set<Structure *> & recAot ) const {
+        for ( const auto & fd : fields ) {
+            if ( !fd.type->canAot(recAot) )
+                return false;
+        }
+        return true;
+    }
+
+    bool Structure::canAot() const {
+        set<Structure *> recAot;
+        return canAot(recAot);
+    }
+
     bool Structure::isPod() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->isPod() )

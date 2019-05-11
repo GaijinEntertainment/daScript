@@ -63,6 +63,7 @@ namespace das
         friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
         string getMangledName() const;
         bool canAot() const;
+        bool canAot( set<Structure *> & recAot ) const;
         bool isSameType ( const TypeDecl & decl, bool refMatters = true, bool constMatters = true, bool topLevel = true ) const;
         bool isExprType() const;
         bool isIteratorType ( const TypeDecl & decl ) const;
@@ -423,6 +424,8 @@ namespace das
         int getAlignOf() const;
         bool canCopy() const;
         bool canClone() const;
+        bool canAot() const;
+        bool canAot( set<Structure *> & recAot ) const;
         bool isPod() const;
         bool isRawPod() const;
         string describe() const { return name; }
@@ -497,7 +500,7 @@ namespace das
             p->cppName = cppName;
             return p;
         }
-        virtual bool canAot() const { return true; }
+        virtual bool canAot(set<Structure *> &) const { return true; }
         virtual bool canMove() const { return false; }
         virtual bool canCopy() const { return false; }
         virtual bool canClone() const { return false; }

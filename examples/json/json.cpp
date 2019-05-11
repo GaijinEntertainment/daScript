@@ -182,7 +182,7 @@ namespace das {
         JsValueTypeAnnotation() : TypeAnnotation ("JsValue") {}
 
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
-        virtual bool canAot() const { return false; }
+        virtual bool canAot(set<Structure *> &) const { return false; }
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
         virtual bool isPod() const override { return false; }

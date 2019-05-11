@@ -321,11 +321,22 @@ namespace das
     }
 
     bool TypeDecl::canAot() const {
-        if ( annotation && !annotation->canAot() ) return false;
-        if ( firstType && !firstType->canAot() ) return false;
-        if ( secondType && !secondType->canAot() ) return false;
+        set<Structure *> recAot;
+        return canAot(recAot);
+    }
+
+    bool TypeDecl::canAot( set<Structure *> & recAot) const {
+        if ( annotation && !annotation->canAot(recAot) ) return false;
+        if ( firstType && !firstType->canAot(recAot) ) return false;
+        if ( secondType && !secondType->canAot(recAot) ) return false;
         for ( auto & arg : argTypes ) {
-            if ( !arg->canAot() ) return false;
+            if ( !arg->canAot(recAot) ) return false;
+        }
+        if ( structType ) {
+            if ( recAot.find(structType)==recAot.end() ) {
+                recAot.insert(structType);
+                return structType->canAot(recAot);
+            }
         }
         return true;
     }
