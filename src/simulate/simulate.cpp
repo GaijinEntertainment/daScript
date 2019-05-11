@@ -575,6 +575,45 @@ namespace das
 #endif
     }
 
+    bool Context::runWithCatch ( function<void()> & subexpr ) {
+        auto aa = abiArg; auto acm = abiCMRES;
+        char * EP, * SP;
+        stack.watermark(EP,SP);
+#if DAS_ENABLE_EXCEPTIONS
+        try {
+            subexpr();
+            return true;
+        } catch ( const dasException & ) {
+            /*
+             to_err("\nunhandled exception\n");
+             if ( exception ) {
+             to_err(exception);
+             to_err("\n");
+             }
+             stackWalk();
+             */
+            abiArg = aa; abiCMRES = acm;
+            stack.pop(EP,SP);
+            return false;
+        }
+#else
+        jmp_buf ev;
+        jmp_buf * JB = throwBuf;
+        throwBuf = &ev;
+        if ( !setjmp(ev) ) {
+            subexpr();
+        } else {
+            abiArg = aa;
+            abiCMRES = acm;
+            stack.pop(EP,SP);
+            throwBuf = JB;
+            return false;
+        }
+        throwBuf = JB;
+        return true;
+#endif
+    }
+
     vec4f Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
         auto aa = abiArg; auto acm = abiCMRES;
         char * EP, * SP;

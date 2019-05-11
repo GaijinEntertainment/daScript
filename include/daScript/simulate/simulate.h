@@ -154,6 +154,7 @@ namespace das
 
         vec4f evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
         vec4f evalWithCatch ( SimNode * node );
+        bool  runWithCatch ( function<void()> & subexpr );
 
         void throw_error ( const char * message );
         void throw_error_ex ( const char * message, ... );
