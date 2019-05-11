@@ -238,17 +238,14 @@ examples/curl/curl.das
 )
 
 FIND_PACKAGE(CURL)
-IF(!CURL_FOUND)
-    MESSAGE(FATAL_ERROR "Could not find the CURL library and development files.")
+IF(CURL_FOUND)
+    include_directories(include curl)
+    include_directories(${CURL_INCLUDE_DIR})
+    add_executable(curlTest ${CURL_MAIN_SRC} )
+    TARGET_LINK_LIBRARIES(curlTest libDaScript ${CURL_LIBRARIES})
+    ADD_DEPENDENCIES(curlTest libDaScript)
+    SETUP_CPP11(curlTest)
 ENDIF(CURL_FOUND)
-
-include_directories(include curl)
-include_directories(${CURL_INCLUDE_DIR})
-add_executable(curlTest ${CURL_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(curlTest libDaScript ${CURL_LIBRARIES})
-ADD_DEPENDENCIES(curlTest libDaScript)
-SETUP_CPP11(curlTest)
-
 
 # PathTracer helper
 
