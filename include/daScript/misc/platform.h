@@ -28,7 +28,9 @@
 #endif
 
 #ifdef _MSC_VER
-#define _USE_MATH_DEFINES
+  #ifndef _USE_MATH_DEFINES
+    #define _USE_MATH_DEFINES 1
+  #endif
 #endif
 #include <math.h>
 
