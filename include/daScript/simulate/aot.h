@@ -44,6 +44,16 @@ namespace das {
         return a != b;
     }
 
+    template <typename TT>
+    __forceinline bool das_equ_val ( TT a, TT b ) {
+        return a == b;
+    }
+
+    template <typename TT>
+    __forceinline bool das_nequ_val ( TT a, TT b ) {
+        return a != b;
+    }
+
     template <typename TT, int offset>
     __forceinline TT & das_global ( Context * __context__ ) {
         return *(TT *)(__context__->globals + offset);
