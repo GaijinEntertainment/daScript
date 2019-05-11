@@ -177,7 +177,7 @@ namespace das {
                         ss << "[modify_external]";
                     }
                     if ( fn->sideEffectFlags & uint32_t(SideEffects::modifyArgument) ) {
-                        ss << "[modify_arugment]";
+                        ss << "[modify_argument]";
                     }
                     if ( fn->sideEffectFlags & uint32_t(SideEffects::accessGlobal) ) {
                         ss << "[access_global]";
