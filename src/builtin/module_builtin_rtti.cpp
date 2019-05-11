@@ -7,19 +7,20 @@
 #include "daScript/simulate/bind_enum.h"
 #include "daScript/simulate/sim_policy.h"
 
-namespace das {
+using namespace das;
+DAS_BASE_BIND_ENUM_98(Type, Type,
+    none,           autoinfer,      alias,          fakeContext,
+    anyArgument,    tVoid,          tBool,          tInt64,
+    tUInt64,        tInt,           tInt2,          tInt3,
+    tInt4,          tUInt,          tUInt2,         tUInt3,
+    tUInt4,         tFloat,         tFloat2,        tFloat3,
+    tFloat4,        tDouble,        tRange,         tURange,
+    tString,        tStructure,     tHandle,        tEnumeration,
+    tPointer,       tFunction,      tLambda,        tIterator,
+    tArray,         tTable,         tBlock
+)
 
-    DAS_BASE_BIND_ENUM_98(Type, Type,
-        none,           autoinfer,      alias,          fakeContext,
-        anyArgument,    tVoid,          tBool,          tInt64,
-        tUInt64,        tInt,           tInt2,          tInt3,
-        tInt4,          tUInt,          tUInt2,         tUInt3,
-        tUInt4,         tFloat,         tFloat2,        tFloat3,
-        tFloat4,        tDouble,        tRange,         tURange,
-        tString,        tStructure,     tHandle,        tEnumeration,
-        tPointer,       tFunction,      tLambda,        tIterator,
-        tArray,         tTable,         tBlock
-    )
+namespace das {
 
     MAKE_TYPE_FACTORY(TypeAnnotation,TypeAnnotation)
     MAKE_TYPE_FACTORY(StructInfo,StructInfo)
