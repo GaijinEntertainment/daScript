@@ -57,11 +57,13 @@ NO_ASAN_INLINE vec4f v_ld(const float *m) { return  *(__m128 *)m; }
 NO_ASAN_INLINE vec4f v_ldu(const float *m) { return *(__m128_u *)m; }
 NO_ASAN_INLINE vec4i v_ld_w(const int *m) { return  *(__m128i *)m; }
 NO_ASAN_INLINE vec4i v_ldu_w(const int *m) { return *(__m128i_u *)m; }
+NO_ASAN_INLINE vec4f v_ld_x(const float *m) { union { float x; vec4f vec; } mm{}; mm.x = *m; return mm.vec; } // load x, zero others
 #else
 NO_ASAN_INLINE vec4f v_ld(const float *m) { return _mm_load_ps(m); }
 NO_ASAN_INLINE vec4f v_ldu(const float *m) { return _mm_loadu_ps(m); }
 NO_ASAN_INLINE vec4i v_ld_w(const int *m) { return  _mm_load_si128((const vec4i*)m); }
 NO_ASAN_INLINE vec4i v_ldu_w(const int *m) { return _mm_loadu_si128((const vec4i*)m); }
+NO_ASAN_INLINE vec4f v_ld_x(const float *m) { return _mm_load_ss(m); } // load x, zero others
 #endif
 
 VECMATH_FINLINE vec4i VECTORCALL v_ldush(const signed short *m)
@@ -90,7 +92,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_make_vec4i(int x, int y, int z, int w)
 { return _mm_setr_epi32(x, y, z, w); }
 
 //VECMATH_FINLINE vec4f VECTORCALL v_perm_mask(){ _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(a), mask)); }
-#define V_SHUFFLE(v, mask) _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v), mask))
+#define V_SHUFFLE(v, mask) _mm_shuffle_ps(v, v, mask)
 #define V_SHUFFLE_REV(v, maskW, maskZ, maskY, maskX) V_SHUFFLE(v, _MM_SHUFFLE(maskW, maskZ, maskY, maskX))
 #define V_SHUFFLE_FWD(v, maskX, maskY, maskZ, maskW) V_SHUFFLE(v, _MM_SHUFFLE(maskW, maskZ, maskY, maskX))
 
@@ -109,13 +111,13 @@ VECMATH_FINLINE vec4f VECTORCALL v_perm_xyzz(vec4f b){ return V_SHUFFLE_FWD(b, 0
 
 
 VECMATH_FINLINE vec4f VECTORCALL v_splat_x(vec4f a)
-  { return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(a), _MM_SHUFFLE(0, 0, 0, 0)));  }
+  { return _mm_shuffle_ps(a, a, _MM_SHUFFLE(0, 0, 0, 0));  }
 VECMATH_FINLINE vec4f VECTORCALL v_splat_y(vec4f a)
-  { return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(a), _MM_SHUFFLE(1, 1, 1, 1)));  }
+  { return _mm_shuffle_ps(a, a, _MM_SHUFFLE(1, 1, 1, 1));  }
 VECMATH_FINLINE vec4f VECTORCALL v_splat_z(vec4f a)
-  { return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(a), _MM_SHUFFLE(2, 2, 2, 2)));  }
+  { return _mm_shuffle_ps(a, a, _MM_SHUFFLE(2, 2, 2, 2));  }
 VECMATH_FINLINE vec4f VECTORCALL v_splat_w(vec4f a)
-  { return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(a), _MM_SHUFFLE(3, 3, 3, 3)));  }
+  { return _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 3, 3, 3));  }
 
 VECMATH_FINLINE vec4i VECTORCALL v_splat_xi(vec4i a) { return _mm_shuffle_epi32(a, _MM_SHUFFLE(0, 0, 0, 0));  }
 VECMATH_FINLINE vec4i VECTORCALL v_splat_yi(vec4i a) { return _mm_shuffle_epi32(a, _MM_SHUFFLE(1, 1, 1, 1));  }
@@ -214,6 +216,11 @@ VECMATH_FINLINE vec4i VECTORCALL v_subi(vec4i a, vec4i b) { return _mm_sub_epi32
 VECMATH_FINLINE vec4i VECTORCALL v_slli(vec4i v, int bits) {return _mm_slli_epi32(v, bits);}
 VECMATH_FINLINE vec4i VECTORCALL v_srli(vec4i v, int bits) {return _mm_srli_epi32(v, bits);}
 VECMATH_FINLINE vec4i VECTORCALL v_srai(vec4i v, int bits) {return _mm_srai_epi32(v, bits);}
+
+VECMATH_FINLINE vec4i VECTORCALL v_sll(vec4i v, int bits) {return _mm_slli_epi32(v, bits);}
+VECMATH_FINLINE vec4i VECTORCALL v_srl(vec4i v, int bits) {return _mm_srli_epi32(v, bits);}
+VECMATH_FINLINE vec4i VECTORCALL v_sra(vec4i v, int bits) {return _mm_srai_epi32(v, bits);}
+
 VECMATH_FINLINE vec4i VECTORCALL v_ori(vec4i a, vec4i b) {return _mm_or_si128(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL v_andi(vec4i a, vec4i b) {return _mm_and_si128(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL v_andnoti(vec4i a, vec4i b) {return _mm_andnot_si128(a, b);}
@@ -919,7 +926,7 @@ VECMATH_FINLINE int VECTORCALL v_extract_wi(vec4i v) {return _mm_cvtsi128_si32(_
 
 VECMATH_FINLINE int64_t VECTORCALL v_extract_xi64 ( vec4i a )
 {
-#if defined(_MSC_VER)//visual studio is not capable of produce reasonable code otherwise!
+#if defined(_MSC_VER) && !defined(__clang__)//visual studio is not capable of produce reasonable code otherwise!
     return a.m128i_i64[0];
 #else
     int64_t t; _mm_storel_epi64((__m128i*)&t, a); return t;

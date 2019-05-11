@@ -28,6 +28,8 @@ NO_ASAN_INLINE vec4i v_ld_w(const int *m);
 //! load vector from unaligned memory
 NO_ASAN_INLINE vec4f v_ldu(const float *m);
 NO_ASAN_INLINE vec4i v_ldu_w(const int *m);
+//! load one 32 bit element, zero others
+NO_ASAN_INLINE vec4f v_ld_x(const float *m);
 //! load unaligned memory and unpacks vector from 4 signed short ints
 VECMATH_FINLINE vec4i VECTORCALL v_ldush(const signed short *m);
 //! load unaligned memory and unpacks vector from 4 unsigned short ints
@@ -196,12 +198,19 @@ VECMATH_FINLINE vec4i VECTORCALL v_addi(vec4i a, vec4i b);
 //! (a - b)
 VECMATH_FINLINE vec4i VECTORCALL v_subi(vec4i a, vec4i b);
 
-//! shift left (unsigned integer)
+//! shift left (unsigned integer). bits is immediate value
 VECMATH_FINLINE vec4i VECTORCALL v_slli(vec4i v, int bits);
-//! shift right (unsigned integer)
+//! shift right (unsigned integer). bits is immediate value
 VECMATH_FINLINE vec4i VECTORCALL v_srli(vec4i v, int bits);
-//! shift right (signed integer)
+//! shift right (signed integer). bits is immediate value
 VECMATH_FINLINE vec4i VECTORCALL v_srai(vec4i v, int bits);
+
+//! shift left (unsigned integer)
+VECMATH_FINLINE vec4i VECTORCALL v_sll(vec4i v, int bits);
+//! shift right (unsigned integer)
+VECMATH_FINLINE vec4i VECTORCALL v_srl(vec4i v, int bits);
+//! shift right (signed integer)
+VECMATH_FINLINE vec4i VECTORCALL v_sra(vec4i v, int bits);
 
 //! a | b (bitwise, integer)
 VECMATH_FINLINE vec4i VECTORCALL v_ori(vec4i a, vec4i b);
