@@ -296,11 +296,11 @@ namespace das {
         }
         __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
             if ( idx>=size ) __context__->throw_error("index out of range");
-            return data[index];
+            return data[idx];
         }
         __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
             if ( idx>=size ) __context__->throw_error("index out of range");
-            return data[index];
+            return data[idx];
         }
     };
 
@@ -335,11 +335,11 @@ namespace das {
         }
         __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
             if ( idx>=size ) __context__->throw_error("index out of range");
-            return ((TT *)data)[index];
+            return ((TT *)data)[idx];
         }
         __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
             if ( idx>=size ) __context__->throw_error("index out of range");
-            return ((TT *)data)[index];
+            return ((TT *)data)[idx];
         }
     };
 
