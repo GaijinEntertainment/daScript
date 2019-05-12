@@ -93,12 +93,16 @@ src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_random.cpp
 src/builtin/module_builtin_string.cpp
 src/builtin/module_builtin_rtti.cpp
+src/builtin/module_builtin_fio.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das
+src/builtin/fio.das.inc
+src/builtin/fio.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 XXD(src/builtin/builtin.das)
+XXD(src/builtin/fio.das)
 
 IF(MSVC)
 set_source_files_properties(src/builtin/module_builtin_vector.cpp PROPERTIES COMPILE_FLAGS /bigobj)
@@ -362,15 +366,15 @@ SET(TEST_MAIN_SRC
 examples/test/main.cpp
 examples/common/fileAccess.h
 examples/test/unitTest.h
+examples/test/aot.h
 examples/test/aot.cpp
+examples/test/aot_1.cpp
+examples/test/aot_2.cpp
+examples/test/aot_3.cpp
+examples/test/aot_4.cpp
 )
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
-
-IF(MSVC)
-set_source_files_properties(examples/test/aot.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-ENDIF()
-
 
 SET(TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/array.das TEST_GENERATED_SRC)
