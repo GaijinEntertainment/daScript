@@ -173,6 +173,8 @@ include/daScript/simulate/aot_builtin_matrix.h
 include/daScript/simulate/aot_builtin_random.h
 include/daScript/simulate/aot_builtin_time.h
 include/daScript/simulate/aot_builtin_string.h
+include/daScript/simulate/aot_builtin_fio.h
+
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)

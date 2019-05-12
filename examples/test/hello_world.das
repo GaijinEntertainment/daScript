@@ -1,13 +1,13 @@
 // options log = true, logCpp=true
 // options logInferPasses=true
 
-let
-    TOTAL = 5
+require fio
 
 [export]
 def test
-    var a : int[TOTAL+3]
-    for t in range(0,TOTAL+3)
-        a[t] = t
-    print("a={a}\n")
+    fopen("test.txt","w") <| $(f:FILE?)
+        if f!=null
+            fprint(f,"hello,world!\n")
+        else
+            print("can't open test.txt")
     return true
