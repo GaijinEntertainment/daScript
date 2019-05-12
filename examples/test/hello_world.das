@@ -5,6 +5,10 @@ require fio
 
 [export]
 def test
+	let testPath = "/usr/lib"
+	let bn = basename(testPath)
+	let dn = dirname(testPath)
+	print("{testPath} is {dn} {bn}\n")
     var st : FStat
     fopen("test.txt","w") <| $(f:FILE?)
         if f!=null

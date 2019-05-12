@@ -12,13 +12,9 @@
 
 #if defined(_MSC_VER)
 
-// TODO:    implement windows version of
-//  dirname
-//  basename
-//
-//  _stat == stat
-
 #include <io.h>
+#include <sys/stat.h>
+#include <direct.h>
 
 #else
 #include <libgen.h>
@@ -74,11 +70,21 @@ namespace das {
         struct stat stats;
         bool        is_valid;
         uint64_t size() const   { return stats.st_size; }
+#if defined(_MSC_VER)
+        Time     atime() const  { return stats.st_atime; }
+        Time     ctime() const  { return stats.st_ctime; }
+        Time     mtime() const  { return stats.st_mtime; }
+        bool     is_reg() const { return stats.st_mode & _S_IFREG; }
+        bool     is_dir() const { return stats.st_mode & _S_IFDIR; }
+
+#else
         Time     atime() const  { return stats.st_atimespec.tv_sec; }
         Time     ctime() const  { return stats.st_ctimespec.tv_sec; }
         Time     mtime() const  { return stats.st_mtimespec.tv_sec; }
         bool     is_reg() const { return S_ISREG(stats.st_mode); }
         bool     is_dir() const { return S_ISDIR(stats.st_mode); }
+
+#endif
     };
 
     struct FStatAnnotation : ManagedStructureAnnotation <FStat,true> {
@@ -125,11 +131,27 @@ namespace das {
 
     char * builtin_dirname ( const char * name, Context * context ) {
         if ( name ) {
+#if defined(_MSC_VER)
+            char full_path[ _MAX_PATH ];
+            char dir[ _MAX_DIR ];
+            char fname[ _MAX_FNAME ];
+            char ext[ _MAX_EXT ];
+            _splitpath(name, full_path, dir, fname, ext);
+            strcat(full_path, dir);
+            uint32_t len = uint32_t(strlen(full_path));
+            if (len) {
+                if (full_path[len - 1] == '/' || full_path[len - 1] == '\\') {
+                    full_path[--len] = 0;
+                }
+            }
+            return context->heap.allocateString(full_path, len);
+#else
             char * tempName = strdup(name);
             char * dirName = dirname(tempName);
             char * result = context->heap.allocateString(dirName, strlen(dirName));
             free(tempName);
             return result;
+#endif
         } else {
             return nullptr;
         }
@@ -137,11 +159,21 @@ namespace das {
 
     char * builtin_basename ( const char * name, Context * context ) {
         if ( name ) {
+#if defined(_MSC_VER)
+            char drive[ _MAX_DRIVE ];
+            char full_path[ _MAX_PATH ];
+            char dir[ _MAX_DIR ];
+            char ext[ _MAX_EXT ];
+            _splitpath(name, drive, dir, full_path, ext);
+            strcat(full_path, ext);
+            return context->heap.allocateString(full_path, uint32_t(strlen(full_path)));
+#else
             char * tempName = strdup(name);
-            char * dirName = dirname(tempName);
+            char * dirName = basename(tempName);
             char * result = context->heap.allocateString(dirName, strlen(dirName));
             free(tempName);
             return result;
+#endif
         } else {
             return nullptr;
         }
@@ -160,10 +192,10 @@ namespace das {
     }
 
      void builtin_dir ( const char * path, const Block & fblk, Context * context ) {
-    #ifdef _MSC_VER
+#if defined(_MSC_VER)
         _finddata_t c_file;
         intptr_t hFile;
-        string findPath = path + "/*";
+        string findPath = string(path) + "/*";
         if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
             do {
                 vec4f args[1];
@@ -172,7 +204,7 @@ namespace das {
             } while (_findnext(hFile, &c_file) == 0);
         }
         _findclose(hFile);
-    #else
+ #else
         DIR *dir;
         struct dirent *ent;
         if ((dir = opendir (path)) != NULL) {
@@ -183,12 +215,16 @@ namespace das {
             }
             closedir (dir);
         }
-    #endif
+ #endif
     }
 
     bool builtin_mkdir ( const char * path ) {
         if ( path ) {
+#if defined(_MSC_VER)
+            return _mkdir(path) == 0;
+#else
             return mkdir(path, ACCESSPERMS) == 0;
+#endif
         } else {
             return false;
         }
