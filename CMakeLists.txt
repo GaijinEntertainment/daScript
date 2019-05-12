@@ -58,7 +58,7 @@ include(GNUInstallDirs)
 #
 option(BUILD_SHARED_LIBS "Build shared libraries (rather than static ones)" ON)
 option(URIPARSER_BUILD_DOCS "Build API documentation (requires Doxygen, Graphviz, and (optional) Qt's qhelpgenerator)" ON)
-option(URIPARSER_BUILD_TESTS "Build test suite (requires GTest >=1.8.1)" ON)
+option(URIPARSER_BUILD_TESTS "Build test suite (requires GTest >=1.8.0)" ON)
 option(URIPARSER_BUILD_TOOLS "Build tools (e.g. CLI \"uriparse\")" ON)
 option(URIPARSER_BUILD_CHAR "Build code supporting data type 'char'" ON)
 option(URIPARSER_BUILD_WCHAR_T "Build code supporting data type 'wchar_t'" ON)
@@ -244,7 +244,7 @@ endif()
 if(URIPARSER_BUILD_TESTS)
     enable_testing()
 
-    find_package(GTest 1.8.1 REQUIRED)
+    find_package(GTest 1.8.0 REQUIRED)
 
     add_executable(testrunner
         test/FourSuite.cpp
