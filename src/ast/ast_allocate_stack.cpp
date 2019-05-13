@@ -372,12 +372,12 @@ namespace das {
             if ( inStruct ) return;
             if ( !expr->doesNotNeedSp ) {
                 auto sz = expr->type->getSizeOf();
-                expr->stackTop = allocateStack(sz);
+                uint32_t cStackTop = allocateStack(sz);
                 if ( log ) {
-                    logs << "\t" << expr->stackTop << "\t" << sz
+                    logs << "\t" << cStackTop << "\t" << sz
                     << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
-                expr->setRefSp(false, false, stackTop, 0);
+                expr->setRefSp(false, false, cStackTop, 0);
                 expr->doesNotNeedInit = false;
             }
         }
