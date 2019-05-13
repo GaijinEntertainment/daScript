@@ -1,5 +1,5 @@
 #include "daScript/daScript.h"
-#include "../common/fileAccess.h"
+#include "../examples/common/fileAccess.h"
 
 using namespace das;
 
@@ -88,9 +88,8 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Random);
-    NEED_MODULE(Module_PathTracerHelper);
-    NEED_MODULE(Module_TestProfile);
-    NEED_MODULE(Module_UnitTest);
+    NEED_MODULE(Module_Rtti);
+    NEED_MODULE(Module_FIO);
     bool compiled = compile(argv[1], argv[2], argv[3]);
     Module::Shutdown();
     return compiled ? 0 : -1;

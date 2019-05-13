@@ -296,6 +296,7 @@ void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsC
     }
     ss << ");\n";
     ss << "\t}\n";
+    ss << "\treturn g_total;\n";
     ss << "}\n\n";
 }
 

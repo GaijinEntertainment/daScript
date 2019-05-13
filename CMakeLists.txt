@@ -185,7 +185,7 @@ include/daScript/das_config.h
 )
 SOURCE_GROUP_FILES("main" MAIN_SRC)
 
-include_directories(include ".")
+include_directories(include)
 ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} 
     ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
@@ -196,12 +196,11 @@ add_dependencies(libDaScript daScriptGenDir)
 # AOT compiler
 
 SET(DASAOT_MAIN_SRC
-examples/dasAot/main.cpp
+utils/dasAot/main.cpp
 examples/common/fileAccess.h
 )
 SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
 
-include_directories(include lexer test)
 add_executable(dasAot ${DASAOT_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest)
 ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest)
@@ -220,6 +219,19 @@ MACRO(DAS_AOT input genList)
     list(APPEND ${genList} ${input_src}.main.inc)
     list(APPEND ${genList} ${input_src}.register.inc)
 ENDMACRO()
+
+# Continues development tool
+
+SET(DASCONTDEV_MAIN_SRC
+utils/dasContDev/main.cpp
+examples/common/fileAccess.h
+)
+SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
+
+add_executable(dasContDev ${DASCONTDEV_MAIN_SRC} )
+TARGET_LINK_LIBRARIES(dasContDev libDaScript)
+ADD_DEPENDENCIES(dasContDev libDaScript)
+SETUP_CPP11(dasContDev)
 
 # JSON
 
@@ -244,7 +256,7 @@ examples/curl/curl.das
 
 FIND_PACKAGE(CURL)
 IF(CURL_FOUND)
-    include_directories(include curl)
+    include_directories(curl)
     include_directories(${CURL_INCLUDE_DIR})
     add_executable(curlTest ${CURL_MAIN_SRC} )
     TARGET_LINK_LIBRARIES(curlTest libDaScript ${CURL_LIBRARIES})
@@ -311,7 +323,6 @@ examples/common/fileAccess.h
 )
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
-include_directories(include lexer test)
 add_executable(daScript ${DASCRIPT_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(daScript libDaScript)
 ADD_DEPENDENCIES(daScript libDaScript)
@@ -440,7 +451,6 @@ DAS_AOT(examples/test/unit_tests/vec_swizzle.das TEST_GENERATED_SRC)
 DAS_AOT(examples/test/unit_tests/with.das TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
-include_directories(include lexer test)
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC})
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest)
@@ -490,7 +500,6 @@ DAS_AOT(examples/profile/tests/annotation.das PROFILE_GENERATED_SRC)
 DAS_AOT(examples/profile/tests/make_struct.das PROFILE_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 
-include_directories(include lexer)
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC})
 TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile)
 ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
