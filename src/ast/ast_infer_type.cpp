@@ -2314,7 +2314,7 @@ namespace das {
             if ( !expr->cond->type ) return Visitor::visit(expr);
             // infer
             if ( !expr->cond->type->isSimpleType(Type::tBool) ) {
-                error("while loop condition must be boolean", expr->at);
+                error("while loop condition must be boolean", expr->at, CompilationError::invalid_loop);
             }
             if ( expr->cond->type->isRef() ) {
                 expr->cond = Expression::autoDereference(expr->cond);
@@ -2330,13 +2330,13 @@ namespace das {
         virtual void preVisitForStack ( ExprFor * expr ) override {
             Visitor::preVisitForStack(expr);
             if ( !expr->iterators.size() ) {
-                error("for loop needs at least one iterator", expr->at);
+                error("for loop needs at least one iterator", expr->at, CompilationError::invalid_loop);
                 return;
             } else if ( expr->iterators.size() != expr->sources.size() ) {
-                error("for loop needs as many iterators as there are sources", expr->at);
+                error("for loop needs as many iterators as there are sources", expr->at, CompilationError::invalid_loop);
                 return;
             } else if ( expr->sources.size()>MAX_FOR_ITERATORS ) {
-                error("for loop has too many sources", expr->at);
+                error("for loop has too many sources", expr->at, CompilationError::invalid_loop);
                 return;
             }
             // iterator variables
@@ -2362,7 +2362,8 @@ namespace das {
                 } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
                     pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIteratorType(src));
                 } else {
-                    error("unsupported iteration type for the loop variable " + pVar->name, expr->at);
+                    error("unsupported iteration type for the loop variable " + pVar->name + ", iterating over " + src->type->describe(), 
+                        expr->at, CompilationError::invalid_iteration_source);
                     return;
                 }
                 pVar->type->constant |= src->type->isConst();
@@ -2846,7 +2847,7 @@ namespace das {
             }
             auto resT = make_shared<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->values.size());
-            if ( resDim!=1 ) {
+            if ( resDim!=1 || expr->makeType->dim.size() ) {
                 resT->dim.resize(1);
                 resT->dim[0] = resDim;
             } else {

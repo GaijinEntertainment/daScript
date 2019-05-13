@@ -152,7 +152,7 @@ namespace das
 
     int getTypeBaseSize ( TypeInfo * info ) {
         if ( info->type==Type::tHandle ) {
-            return Module::resolveAnnotation(info)->getSizeOf();
+            return int(Module::resolveAnnotation(info)->getSizeOf());
         } else if ( info->type==Type::tStructure ) {
             return getStructSize(info->structType);
         } else {
