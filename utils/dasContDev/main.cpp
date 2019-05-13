@@ -6,12 +6,28 @@ using namespace das;
 TextPrinter tout;
 
 #include <sys/stat.h>
-#include <unistd.h>
+
+
+#if defined(_MSC_VER)
+#else
+    #include <unistd.h>
+#endif
 
 void wait_for_file_to_change ( const char * fn ) {
     time_t ft = 0;
     for ( ;; ) {
         struct stat st;
+#if defined(_MSC_VER)
+        if ( !stat(fn,&st) ) {
+            if ( ft==0 ) {
+                ft = st.st_mtime;
+            }
+            if ( ft!=st.st_mtime ) {
+                return;
+            }
+        }
+        _sleep(100);
+#else
         if ( !stat(fn,&st) ) {
             if ( ft==0 ) {
                 ft = st.st_mtimespec.tv_sec;
@@ -21,6 +37,7 @@ void wait_for_file_to_change ( const char * fn ) {
             }
         }
         usleep(100);
+#endif
     }
 }
 

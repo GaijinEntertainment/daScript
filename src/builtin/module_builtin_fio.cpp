@@ -11,7 +11,6 @@
 #include "daScript/simulate/aot_builtin_time.h"
 
 #include <sys/stat.h>
-#include <unistd.h>
 
 #if defined(_MSC_VER)
 
@@ -21,6 +20,7 @@
 #else
 #include <libgen.h>
 #include <dirent.h>
+#include <unistd.h>
 #endif
 
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
@@ -58,7 +58,11 @@ namespace das {
     }
 
     void builtin_sleep ( uint32_t msec ) {
+#if defined(_MSC_VER)
+        _sleep(msec);
+#else
         usleep(msec);
+#endif
     }
 
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
@@ -204,7 +208,7 @@ namespace das {
         string findPath = string(path) + "/*";
         if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
             do {
-                char * fname = context->heap.allocateString(c_file.name, strlen(c_file.name));
+                char * fname = context->heap.allocateString(c_file.name, uint32_t(strlen(c_file.name)));
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };
@@ -217,7 +221,7 @@ namespace das {
         struct dirent *ent;
         if ((dir = opendir (path)) != NULL) {
             while ((ent = readdir (dir)) != NULL) {
-                char * fname = context->heap.allocateString(ent->d_name,strlen(ent->d_name));
+                char * fname = context->heap.allocateString(ent->d_name,uint32_t(strlen(ent->d_name)));
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };
