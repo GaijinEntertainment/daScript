@@ -151,7 +151,13 @@ namespace das
     }
 
     int getTypeBaseSize ( TypeInfo * info ) {
-        return info->type!=Type::tStructure ? getTypeBaseSize(info->type) : getStructSize(info->structType);
+        if ( info->type==Type::tHandle ) {
+            return Module::resolveAnnotation(info)->getSizeOf();
+        } else if ( info->type==Type::tStructure ) {
+            return getStructSize(info->structType);
+        } else {
+            return getTypeBaseSize(info->type);
+        }
     }
 
     int getTypeBaseAlign ( TypeInfo * info ) {

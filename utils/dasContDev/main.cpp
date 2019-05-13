@@ -5,17 +5,26 @@ using namespace das;
 
 TextPrinter tout;
 
-bool saveToFile ( const string & fname, const string & str ) {
-    FILE * f = fopen ( fname.c_str(), "w" );
-    if ( !f ) {
-        tout << "can't open " << fname << "\n";
-        return false;
+#include <sys/stat.h>
+#include <unistd.h>
+
+void wait_for_file_to_change ( const char * fn ) {
+    time_t ft = 0;
+    for ( ;; ) {
+        struct stat st;
+        if ( !stat(fn,&st) ) {
+            if ( ft==0 ) {
+                ft = st.st_mtimespec.tv_sec;
+            }
+            if ( ft!=st.st_mtimespec.tv_sec ) {
+                return;
+            }
+        }
+        usleep(100);
     }
-    fwrite ( str.c_str(), str.length(), 1, f );
-    return true;
 }
 
-bool compile ( const string & fn, const string & mainInc, const string & registerInc ) {
+bool compile_and_run ( const char * fn ) {
     auto access = make_shared<FsFileAccess>();
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
@@ -33,47 +42,17 @@ bool compile ( const string & fn, const string & mainInc, const string & registe
                 }
                 return false;
             }
-            // AOT time
-            TextWriter mainTw, registerTw;
-            // lets comment on required modules
-            program->library.foreach([&](Module * mod){
-                if ( mod->name=="" ) {
-                    // nothing, its main program module. i.e ::
-                } else if ( mod->name=="$" ) {
-                    mainTw << " // require builtin\n";
-                } else {
-                    mainTw << " // require " << mod->name << "\n";
-                }
+            if ( auto fnTest = ctx.findFunction("main") ) {
+                ctx.restart();
+                vec4f args[1] = {
+                    cast<char *>::from(fn)
+                };
+                ctx.eval(fnTest, args);
                 return true;
-            },"*");
-            // sample
-#if 0
-            for (const auto & st : program->thisModule->structuresInOrder) {
-                mainTw << " // structure " << st->name << "\n";
-                for (const auto & fl : st->fields) {
-                    mainTw << " //     " << describeCppType(fl.type,true) << " " << fl.name << ";";
-                    if (fl.annotation.arguments.size()) {
-                        mainTw << " // ";
-                        for (const auto & arg : fl.annotation.arguments) {
-                            mainTw << " " << arg.name << "=";
-                            switch (arg.type) {
-                            case Type::tInt:    mainTw << arg.iValue; break;
-                            case Type::tFloat:  mainTw << arg.fValue; break;
-                            case Type::tBool:   mainTw << (arg.bValue ? "true" : "false"); break;
-                            case Type::tString: mainTw << arg.sValue; break;
-                            default:    mainTw << "??"; break;
-                            }
-                        }
-                    }
-                    mainTw << "\n";
-                }
+            } else {
+                tout << "function 'main' not found\n";
+                return false;
             }
-#endif
-            // AOT actual
-            program->aotCpp(ctx, mainTw);
-            program->registerAotCpp(registerTw, ctx, false);
-            // and save
-            return saveToFile(mainInc, mainTw.str()) && saveToFile(registerInc, registerTw.str());
         }
     } else {
         return false;
@@ -81,8 +60,8 @@ bool compile ( const string & fn, const string & mainInc, const string & registe
 }
 
 int main(int argc, const char * argv[]) {
-    if ( argc!=4 ) {
-        tout << "dasAot [script.das] [script.main.inc] [script.decl.inc] [NAMESPACE]\n";
+    if ( argc!=2 ) {
+        tout << "dasContDev [script.das]\n";
         return -1;
     }
     NEED_MODULE(Module_BuiltIn);
@@ -90,9 +69,13 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_FIO);
-    bool compiled = compile(argv[1], argv[2], argv[3]);
+    for ( ;; ) {
+        if ( !compile_and_run(argv[1]) ) {
+            wait_for_file_to_change(argv[1]);
+        }
+    }
     Module::Shutdown();
-    return compiled ? 0 : -1;
+    return 0;
 }
 
 

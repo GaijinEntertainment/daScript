@@ -10,15 +10,16 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/aot_builtin_time.h"
 
+#include <sys/stat.h>
+#include <unistd.h>
+
 #if defined(_MSC_VER)
 
 #include <io.h>
-#include <sys/stat.h>
 #include <direct.h>
 
 #else
 #include <libgen.h>
-#include <sys/stat.h>
 #include <dirent.h>
 #endif
 
@@ -56,12 +57,17 @@ namespace das {
         return t;
     }
 
+    void builtin_sleep ( uint32_t msec ) {
+        usleep(msec);
+    }
+
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
         addAnnotation(make_shared<TimeAnnotation>());
         addFunctionBasic<Time>(*this,lib);
         addFunctionOrdered<Time>(*this,lib);
         addFunction( make_shared<BuiltInFn<Sim_Sub<Time>,float,Time,Time>>("-",lib,"Sub"));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "getClock", SideEffects::modifyExternal, "builtin_clock");
+        addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep", SideEffects::modifyExternal, "builtin_sleep");
     }
 
     #include "fio.das.inc"
@@ -198,8 +204,10 @@ namespace das {
         string findPath = string(path) + "/*";
         if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
             do {
-                vec4f args[1];
-                args[0] = cast<char *>::from(c_file.name);
+                char * fname = context->heap.allocateString(c_file.name, strlen(c_file.name));
+                vec4f args[1] = {
+                    cast<char *>::from(fname)
+                };
                 context->invoke(fblk, args, nullptr);
             } while (_findnext(hFile, &c_file) == 0);
         }
@@ -209,8 +217,10 @@ namespace das {
         struct dirent *ent;
         if ((dir = opendir (path)) != NULL) {
             while ((ent = readdir (dir)) != NULL) {
-                vec4f args[1];
-                args[0] = cast<char *>::from(ent->d_name);
+                char * fname = context->heap.allocateString(ent->d_name,strlen(ent->d_name));
+                vec4f args[1] = {
+                    cast<char *>::from(fname)
+                };
                 context->invoke(fblk, args, nullptr);
             }
             closedir (dir);
