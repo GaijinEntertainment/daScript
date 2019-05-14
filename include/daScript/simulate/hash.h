@@ -106,7 +106,7 @@ namespace das
             }
             return hh;
         } else {
-            return hash_blockz32((uint8_t *)str);
+            return str ? hash_blockz32((uint8_t *)str) : 16777619;
         }
     }
 

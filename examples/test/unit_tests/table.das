@@ -102,6 +102,11 @@ def test : bool
     assert(key_exists(tab_string, " "))
     erase(tab_string, " ")
     assert(!key_exists(tab_string, " "))
+    tab_string[""] = -2
+    assert(key_exists(tab_string, ""))
+    assert(tab_string[""] == -2)
+    erase(tab_string, "")
+    assert(!key_exists(tab_string, ""))
     
     return true
 
