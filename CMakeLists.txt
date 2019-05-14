@@ -61,6 +61,7 @@ src/ast/ast_print.cpp
 src/ast/ast_aot_cpp.cpp
 src/ast/ast_plot.cpp
 src/ast/ast_infer_type.cpp
+src/ast/ast_lint.cpp
 src/ast/ast_allocate_stack.cpp
 src/ast/ast_const_folding.cpp
 src/ast/ast_block_folding.cpp

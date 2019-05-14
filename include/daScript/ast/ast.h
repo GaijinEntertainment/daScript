@@ -611,6 +611,8 @@ namespace das
         virtual bool rtti_isMakeBlock() const { return false; }
         virtual bool rtti_isMakeLocal() const { return false; }
         virtual bool rtti_isIfThenElse() const { return false; }
+        virtual bool rtti_isFor() const { return false; }
+        virtual bool rtti_isWhile() const { return false; }
         virtual bool rtti_isAddr() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
@@ -1167,6 +1169,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual uint32_t getEvalFlags() const override;
+        virtual bool rtti_isFor() const override { return true; }
         vector<string>          iterators;
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
@@ -1179,6 +1182,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
+        virtual bool rtti_isWhile() const override { return true; }
         virtual ExpressionPtr visit(Visitor & vis) override;
         static void simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Block * blk );
         ExpressionPtr   cond, body;
@@ -1707,6 +1711,7 @@ namespace das
         bool addModule ( const string & name );
         void finalizeAnnotations();
         void inferTypes(TextWriter & logs);
+        void lint();
         bool optimizationRefFolding();
         bool optimizationConstFolding();
         bool optimizationBlockFolding();
