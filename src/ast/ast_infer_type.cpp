@@ -2731,13 +2731,6 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
-    // StringConstnat
-        virtual void preVisit ( ExprConstString * expr ) override {
-            Visitor::preVisit(expr);
-            if ( expr->escError ) {
-                error("invalid escape sequence", expr->at, CompilationError::invalid_escape_sequence);
-            }
-        }
     // StringBuilder
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder *, Expression * expr, bool ) override {
             return Expression::autoDereference(expr->shared_from_this());

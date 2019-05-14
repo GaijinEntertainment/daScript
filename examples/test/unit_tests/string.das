@@ -41,4 +41,6 @@ def test:bool
     recover {}
     assert(to_int("11abc") == 11)
     assert(to_float("11.1abc") == 11.1)
+    let a_slash_slash = "ab\\xy"
+    assert(length(a_slash_slash)==5)
     return true

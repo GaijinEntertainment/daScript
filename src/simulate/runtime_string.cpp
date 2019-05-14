@@ -61,7 +61,10 @@ namespace das
         for( ; str < strEnd; ++str ) {
             if ( *str=='\\' ) {
                 ++str;
-                if ( str == strEnd ) return result; // invalid escape sequence
+                if ( str == strEnd ) {
+                    if ( error ) *error = true;
+                    return result; // invalid escape sequence
+                }
                 switch ( *str ) {
                     case '"':
                     case '/':

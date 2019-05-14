@@ -1127,16 +1127,15 @@ namespace das
 
     struct ExprConstString : ExprConst {
         ExprConstString(const string & str = string())
-            : ExprConst(Type::tString), text(unescapeString(str,&escError)) {}
+            : ExprConst(Type::tString), text(str) {}
         ExprConstString(const LineInfo & a, const string & str = string())
-            : ExprConst(a,Type::tString), text(unescapeString(str,&escError)) {}
+            : ExprConst(a,Type::tString), text(str) {}
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         const string & getValue() const { return text; }
         virtual bool rtti_isStringConstant() const override { return true; }
         string  text;
-        bool    escError;
     };
 
     struct ExprStringBuilder : Expression {

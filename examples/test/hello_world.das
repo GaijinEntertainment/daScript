@@ -1,5 +1,5 @@
 [export]
-def test
-    var tab:table<string, int>
-    tab[""] = -1
-    print("{tab}")
+def test()
+    let a = "ab\\xy"
+    assert(length(a)==5)
+    return true

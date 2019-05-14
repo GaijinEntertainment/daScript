@@ -428,7 +428,6 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->value = value;
         cexpr->text = text;
-        cexpr->escError = escError;
         return cexpr;
     }
 

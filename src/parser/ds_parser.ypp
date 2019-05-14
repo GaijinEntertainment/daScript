@@ -259,7 +259,10 @@ string_builder_body
         $$ = new ExprStringBuilder();
     }
     |   string_builder_body[sb] character_sequence[sconst] {
-        auto sc = make_shared<ExprConstString>(tokAt(@sconst),*$sconst);
+        bool err;
+        auto esconst = unescapeString(*$sconst,&err);
+        if ( err ) das_yyerror("invalid escape sequence",tokAt(@sb), CompilationError::invalid_escape_sequence);
+        auto sc = make_shared<ExprConstString>(tokAt(@sconst),esconst);
         delete $sconst;
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(sc);
         $$ = $sb;
