@@ -53,7 +53,8 @@ namespace das
 
     const char * rts_null = "";
 
-    string unescapeString ( const string & input ) {
+    string unescapeString ( const string & input, bool * error ) {
+        if ( error ) *error = false;
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
         string result;
@@ -71,7 +72,7 @@ namespace das
                     case 'r':   result += '\r';    break;
                     case 't':   result += '\t';    break;
                     case 'u':   DAS_ASSERTF(0, "utf-8 characters not supported yet"); break;
-                    default:    break;  // invalid escape character
+                    default:    result += *str; if ( error ) *error = true; break;  // invalid escape character
                 }
             } else
                 result += *str;

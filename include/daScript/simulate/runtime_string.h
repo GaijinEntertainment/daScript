@@ -7,7 +7,7 @@ namespace das
 {
     class Context;
 
-    string unescapeString ( const string & input );
+    string unescapeString ( const string & input, bool * error );
     string escapeString ( const string & input );
     string to_string_ex ( double dnum );
     string to_string_ex ( float dnum );
