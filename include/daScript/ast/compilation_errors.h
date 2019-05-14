@@ -14,6 +14,7 @@ namespace das
     ,   string_constant_exceeds_line            =   10004
     ,   unexpected_close_comment                =   10005       //  */ out of the bule
     ,   integer_constant_out_of_range           =   10006
+    ,   comment_contains_eof                    =   10007
 
 // parser errors
 

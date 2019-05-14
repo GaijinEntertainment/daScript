@@ -76,6 +76,10 @@
 }
 <c_comment>.                        /* skipping comment body */
 <c_comment>[\r\n]                   /* skipping comment eol */
+<c_comment><<EOF>>             {
+    das_yyerror("end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
+    BEGIN(normal);
+}
 <strb>\"                {
     // assert(nested_sb==0);
     BEGIN(normal);
