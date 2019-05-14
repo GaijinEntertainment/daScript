@@ -246,7 +246,7 @@ program
     ;
 
 character_sequence
-    :                                                       { $$ = new string(); }
+    :   STRING_CHARACTER[char]                              { $$ = new string(); *$$ += $char; }
     |   character_sequence[elem]  STRING_CHARACTER[char]    { $$ = $elem; *$elem += $char; }
     ;
 
@@ -1542,10 +1542,12 @@ void das_checkName(const string & name, const LineInfo &at) {
 }
 
 void das_yyerror(const string & error, const LineInfo & at, CompilationError cerr) {
+    // printf("ERROR %s\n", error.c_str());
     g_Program->error(error,at,cerr);
 }
 
 void das_yyerror(const string & error, CompilationError cerr) {
+    // printf("ERROR %s\n", error.c_str());
     g_Program->error(error,LineInfo(g_FileAccessStack.back(),
         yylloc.first_column,yylloc.first_line),cerr);
 }

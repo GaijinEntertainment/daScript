@@ -87,13 +87,15 @@
     BEGIN(normal);
 	return BEGIN_STRING_EXPR;
 }
-<strb>[\t\r]            {
-    das_yyerror("string constant exceeds line", CompilationError::string_constant_exceeds_file);
-    return LEXER_ERROR;
+<strb>[\t\r\n]            {
+    das_yyerror("string constant exceeds line", CompilationError::string_constant_exceeds_line);
+    BEGIN(normal);
+    return END_STRING;
 }
-<strb>EOF               {
+<strb><<EOF>>             {
     das_yyerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
-    return LEXER_ERROR;
+    BEGIN(normal);
+    return END_STRING;
 }
 <strb>\\[\{\"\}]        {
     das_yylval.ch = yytext[1];

@@ -213,7 +213,7 @@ int main() {
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_FIO);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/cant_dereference_mix.das",true);
+    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/string_slash.das",true);
     Module::Shutdown();
     return 0;
 #endif
