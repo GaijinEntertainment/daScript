@@ -29,8 +29,17 @@ namespace das {
                 wb = true;
                 continue;
             } else if ( src[0]=='/' && src[1]=='*' ) {
-                while ( src < src_end && !(src[0]=='*' && src[1]=='/')  ) {
-                    src ++;
+                int depth = 0;
+                while ( src < src_end ) {
+                    if ( src[0]=='/' && src[1]=='*' ) {
+                        depth ++;
+                        src += 2;
+                    } else if ( src[0]=='*' && src[1]=='/' ) {
+                        if ( --depth==0 ) break;
+                        src += 2;
+                    } else {
+                        src ++;
+                    }
                 }
                 src +=2;
                 wb = true;

@@ -165,7 +165,9 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
     string findPath = path + "/*.das";
     if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
         do {
-            ok = test_fn(path + "/" + c_file.name, useAot) && ok;
+            if ( c_file.name[0]!='_' ) {
+                ok = test_fn(path + "/" + c_file.name, useAot) && ok;
+            }
         } while (_findnext(hFile, &c_file) == 0);
     }
     _findclose(hFile);
@@ -177,7 +179,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
     if ((dir = opendir (path.c_str())) != NULL) {
         while ((ent = readdir (dir)) != NULL) {
             const char * atDas = strstr(ent->d_name,".das");
-            if ( atDas && strcmp(atDas,".das")==0 ) {
+            if ( atDas && strcmp(atDas,".das")==0 && ent->d_name[0]!='_' ) {
                 ok = test_fn(path + "/" + ent->d_name, useAot) && ok;
             }
         }
@@ -213,7 +215,7 @@ int main() {
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_FIO);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/comment_eof.das",true);
+    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/test_require_comment.das",true);
     Module::Shutdown();
     return 0;
 #endif
