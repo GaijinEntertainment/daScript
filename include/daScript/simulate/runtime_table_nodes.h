@@ -92,6 +92,24 @@ namespace das
         }
     };
 
+    template <typename KeyType>
+    struct SimNode_KeyExists : SimNode_Table {
+        DAS_BOOL_NODE;
+        SimNode_KeyExists(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
+            : SimNode_Table(at,t,k,vts) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitTable(vis,"KeyExists");
+        }
+        __forceinline bool compute(Context & context) {
+            Table * tab = (Table *)tabExpr->evalPtr(context);
+            vec4f xkey = keyExpr->eval(context);
+            KeyType key = cast<KeyType>::to(xkey);
+            auto hfn = hash_function(context, key);
+            TableHash<KeyType> thh(&context,valueTypeSize);
+            return thh.find(*tab, key, hfn) != -1;
+        }
+    };
+
     struct TableIterator : Iterator {
         TableIterator ( const Table * tab, uint32_t st ) : table(tab), stride(st) {}
         size_t nextValid ( size_t index ) const;

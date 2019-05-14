@@ -797,6 +797,19 @@ namespace das
         }
     }
 
+    SimNode * ExprKeyExists::simulate (Context & context) const {
+        auto cont = arguments[0]->simulate(context);
+        auto val = arguments[1]->simulate(context);
+        if ( arguments[0]->type->isGoodTableType() ) {
+            uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
+            return context.code->makeValueNode<SimNode_KeyExists>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
+        } else {
+            DAS_ASSERTF(0, "we should not even be here. find can only accept tables. infer type should have failed.");
+            context.thisProgram->error("internal compilation error, generating find for non-table type", at);
+            return nullptr;
+        }
+    }
+
     SimNode * ExprTypeInfo::simulate (Context & context) const {
         DAS_ASSERTF(0, "we should not even be here. typeinfo should resolve to const during infer pass.");
         context.thisProgram->error("internal compilation error, generating typeinfo(...)", at);
