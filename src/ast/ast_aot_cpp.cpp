@@ -1670,6 +1670,8 @@ namespace das {
                 ss << "__builtin_table_erase(__context__,";
             } else if (call->name == "find") {
                 ss << "__builtin_table_find(__context__,";
+            } else if (call->name == "key_exists") {
+                ss << "__builtin_table_key_exists(__context__,";
             } else if (call->name == "keys") {
                 ss << "__builtin_table_keys(__context__,";
             } else if (call->name == "values") {
