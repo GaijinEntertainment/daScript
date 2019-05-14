@@ -1232,6 +1232,28 @@ namespace das {
             valueType->constant = true;
             return Visitor::visit(expr);
         }
+    // ExprKeyExists
+        virtual ExpressionPtr visit ( ExprKeyExists * expr ) override {
+            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->arguments.size()!=2 ) {
+                error("keyExists(table,key)", expr->at, CompilationError::invalid_argument_count);
+                return Visitor::visit(expr);
+            }
+            // infer
+            expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
+            auto containerType = expr->arguments[0]->type;
+            auto valueType = expr->arguments[1]->type;
+            if ( containerType->isGoodTableType() ) {
+                if ( !containerType->firstType->isSameType(*valueType,false,false) )
+                    error("key must be of the same type as table<key,...>", expr->at, CompilationError::invalid_argument_type);
+                expr->type = make_shared<TypeDecl>(Type::tBool);
+            } else {
+                error("first argument must be fully qualified table", expr->at, CompilationError::invalid_argument_type);
+            }
+            containerType->constant = true;
+            valueType->constant = true;
+            return Visitor::visit(expr);
+        }
     // ExprTypeInfo
         virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
             if ( expr->typeexpr && expr->typeexpr->isExprType() ) {

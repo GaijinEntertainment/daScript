@@ -1309,6 +1309,13 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
     };
 
+    struct ExprKeyExists : ExprLikeCall<ExprKeyExists> {
+        ExprKeyExists() = default;
+        ExprKeyExists ( const LineInfo & a, const string & ) : ExprLikeCall<ExprKeyExists>(a, "key_exists") {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+
     struct ExprTypeInfo : Expression {
         ExprTypeInfo () = default;
         ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s, const string & stt="" )
@@ -1913,6 +1920,7 @@ namespace das
         VISIT_EXPR(ExprInvoke)
         VISIT_EXPR(ExprErase)
         VISIT_EXPR(ExprFind)
+        VISIT_EXPR(ExprKeyExists)
         VISIT_EXPR(ExprAscend)
         VISIT_EXPR(ExprCast)
         VISIT_EXPR(ExprNew)

@@ -515,6 +515,14 @@ namespace das {
         return cexpr;
     }
 
+    // ExprKeyExists
+
+    ExpressionPtr ExprKeyExists::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprKeyExists>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+
     // ExprTypeInfo
 
     ExpressionPtr ExprTypeInfo::visit(Visitor & vis) {

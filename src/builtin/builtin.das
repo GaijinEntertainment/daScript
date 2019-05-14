@@ -27,6 +27,9 @@ def find(var Tab:table<auto(keyT),auto(valT)>;at:keyT;blk:block<(var p:valT?):vo
 def erase(var Tab:table<auto(keyT),auto(valT)>;at:keyT)
   return __builtin_table_erase(Tab,at)
 
+def key_exists(var Tab:table<auto(keyT),auto(valT)>;at:keyT):bool
+  return __builtin_table_key_exists(Tab,at)
+
 options removeUnusedSymbols=false
 
 def peek ( src:das_string; subexpr:block<(root:string):void> ) 

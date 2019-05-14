@@ -74,6 +74,35 @@ def test : bool
     assert(cnt==total)
     assert(erase(tab,"1"))
     assert(!erase(tab,"-1"))
+
+    
+    var tab_bool:table<bool, int>
+    assert(!key_exists(tab_bool, false))
+    assert(!key_exists(tab_bool, true))
+    tab_bool[true] = 0
+    assert(key_exists(tab_bool, true))
+    tab_bool[false] = -1
+    assert(key_exists(tab_bool, false))
+
+    var tab_int:table<int, int>
+    assert(!key_exists(tab_int, -1))
+    tab_int[-1] = -1
+    assert(key_exists(tab_int, -1))
+    erase(tab_int, -1)
+    assert(!key_exists(tab_int, -1))
+
+    var tab_string:table<string, int>
+    assert(!key_exists(tab_string, "---"))
+    tab_string["---"] = -1
+    assert(key_exists(tab_string, "---"))
+    erase(tab_string, "---")
+    assert(!key_exists(tab_string, "---"))
+    assert(!key_exists(tab_string, " "))
+    tab_string[" "] = -1
+    assert(key_exists(tab_string, " "))
+    erase(tab_string, " ")
+    assert(!key_exists(tab_string, " "))
+    
     return true
 
 

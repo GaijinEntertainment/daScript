@@ -197,6 +197,7 @@ namespace das
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprFind>("__builtin_table_find");
+        addCall<ExprKeyExists>("__builtin_table_key_exists");
         // blocks
         addCall<ExprInvoke>("invoke");
         // profile
