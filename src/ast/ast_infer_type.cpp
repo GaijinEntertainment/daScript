@@ -761,7 +761,7 @@ namespace das {
                     }
                 }
             }
-            if ( !decl.type->isAuto() ) {
+            if ( !decl.type->isAuto() && !decl.type->isAlias() ) {
                 auto fa = decl.type->getAlignOf() - 1;
                 fieldOffset = (fieldOffset + fa) & ~fa;
                 decl.offset = int(fieldOffset);
