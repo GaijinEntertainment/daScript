@@ -5,20 +5,19 @@ require rtti
 
 def process(fname:string)
 	print("processing {fname}\n")
-    fopen(fname,"rb") <| $(f:FILE?)
+    fopen(fname,"rb") <| $(f)
         if f!=null
             let text = fread(f)
-            rttiCompile(fname,text) <| $(ok:bool;program:RttiProgram;issues:das_string)
+            rttiCompile(fname,text) <| $(ok,program,issues)
                 if ok
-                    rttiProgramForEachStructure(program) <| $(info:StructInfo)
+                    rttiProgramForEachStructure(program) <| $(info)
                         print("struct {info.name}\n")
                         for field in info
                             print("\t{field.name} : {field.basicType} ")
                             if field.annotation_arguments != null
                                 print("[")
                                 var first = true
-                                let args : AnnotationArguments & = deref(field.annotation_arguments)
-                                for arg in args
+                                for arg in deref(field.annotation_arguments)
                                     if first
                                         first = false
                                     else
