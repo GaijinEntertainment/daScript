@@ -144,7 +144,7 @@ namespace das
 
     // TypeDecl
 
-    string TypeDecl::describe ( bool extra ) const {
+    string TypeDecl::describe ( bool extra, bool contracts ) const {
         TextWriter stream;
         if ( baseType==Type::alias ) {
             stream << alias;
@@ -218,16 +218,23 @@ namespace das
         }
         if ( constant ) {
             stream << " const";
-        } else if ( removeConstant ) {
-            stream << " !const";
-        }
+        } 
         for ( auto d : dim ) {
             stream << "[" << d << "]";
         }
         if ( ref ) {
             stream << "&";
-        } else if ( removeRef ) {
-            stream << "!&";
+        } 
+        if (contracts) {
+            if (removeConstant || removeRef) {
+                stream << " delete ";
+                if (removeConstant) {
+                    stream << "const";
+                }
+                if (removeRef) {
+                    stream << "&";
+                }
+            }
         }
         return stream.str();
     }

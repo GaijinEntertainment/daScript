@@ -89,7 +89,7 @@ namespace das
         int getAlignOf() const;
         int getBaseSizeOf() const;
         int getStride() const;
-        string describe ( bool extra = true ) const;
+        string describe ( bool extra = true, bool contracts = true ) const;
         bool canCopy() const;
         bool canMove() const;
         bool canClone() const;

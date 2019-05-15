@@ -1306,7 +1306,10 @@ namespace das {
                     }
                 } else if ( expr->trait=="typename" ) {
                     reportGenericInfer();
-                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false));
+                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false,false));
+                } else if ( expr->trait=="fulltypename" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false,true));
                 } else if ( expr->trait=="is_pod" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPod());
