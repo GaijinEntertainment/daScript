@@ -1,5 +1,3 @@
-options logCpp = true
-
 [sideeffects]
 def div_by_zero(num:auto(numT))
     var ex = false
@@ -41,3 +39,4 @@ def test()
     assert(div_by_zero(1.0lf)==1.0lf)
     assert(mod_by_zero(1.0lf)==1.0lf)
     return true
+

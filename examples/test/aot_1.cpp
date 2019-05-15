@@ -52,6 +52,9 @@ namespace das {
         namespace test_dasstring {
            #include "unit_tests/das_string.das.main.inc"
         }
+        namespace test_div_by_zero {
+            #include "unit_tests/div_by_zero.das.main.inc"
+        }
         namespace test_deref_ptr_fun {
             #include "unit_tests/deref_ptr_fun.das.main.inc"
         }
@@ -105,6 +108,9 @@ namespace das {
             }
             {   using namespace test_dasstring;
                 #include "unit_tests/das_string.das.register.inc"
+            }
+            {   using namespace test_div_by_zero;
+                #include "unit_tests/div_by_zero.das.register.inc"
             }
             {   using namespace test_deref_ptr_fun;
                 #include "unit_tests/deref_ptr_fun.das.register.inc"

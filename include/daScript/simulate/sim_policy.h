@@ -38,9 +38,15 @@ namespace  das {
         static __forceinline TT Dec ( TT & x, Context & ) { return --x; }
         static __forceinline TT IncPost ( TT & x, Context & ) { return x++; }
         static __forceinline TT DecPost ( TT & x, Context & ) { return x--; }
-        static __forceinline TT Div ( TT a, TT b, Context & ) { return a / b; }
+        static __forceinline TT Div ( TT a, TT b, Context & context ) {
+            if ( b==0 ) context.throw_error("division by zero");
+            return a / b;
+        }
         static __forceinline TT Mul ( TT a, TT b, Context & ) { return a * b; }
-        static __forceinline void SetDiv  ( TT & a, TT b, Context & ) { a /= b; }
+        static __forceinline void SetDiv  ( TT & a, TT b, Context & context ) {
+            if ( b==0 ) context.throw_error("division by zero");
+            a /= b;
+        }
         static __forceinline void SetMul  ( TT & a, TT b, Context & ) { a *= b; }
     };
 
@@ -56,7 +62,10 @@ namespace  das {
 
     template <typename TT>
     struct SimPolicy_Bin : SimPolicy_Type<TT> {
-        static __forceinline TT Mod ( TT a, TT b, Context & ) { return a % b; }
+        static __forceinline TT Mod ( TT a, TT b, Context & context ) {
+            if ( b==0 ) context.throw_error("division by zero in modulo");
+            return a % b;
+        }
         static __forceinline TT BinNot ( TT x, Context & ) { return ~x; }
         static __forceinline TT BinAnd ( TT a, TT b, Context & ) { return a & b; }
         static __forceinline TT BinOr  ( TT a, TT b, Context & ) { return a | b; }
@@ -68,7 +77,10 @@ namespace  das {
         static __forceinline void SetBinXor ( TT & a, TT b, Context & ) { a ^= b; }
         static __forceinline void SetBinShl ( TT & a, TT b, Context & ) { a <<= b; }
         static __forceinline void SetBinShr ( TT & a, TT b, Context & ) { a >>= b; }
-        static __forceinline void SetMod    ( TT & a, TT b, Context & ) { a %= b; }
+        static __forceinline void SetMod    ( TT & a, TT b, Context & context ) {
+            if ( b==0 ) context.throw_error("division by zero in modulo");
+            a %= b;
+        }
     };
 
     template <typename TT>
@@ -84,13 +96,25 @@ namespace  das {
     struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t>, SimPolicy_MathTT<int64_t> {};
 
     struct SimPolicy_Float : SimPolicy_Type<float> {
-        static __forceinline float Mod ( float a, float b, Context & ) { return fmod(a,b); }
-        static __forceinline float & SetMod ( float & a, float b, Context & ) { return a = fmod(a,b); }
+        static __forceinline float Mod ( float a, float b, Context & context ) {
+            if ( b==0.0f ) context.throw_error("division by zero in modulo");
+            return fmod(a,b);
+        }
+        static __forceinline void SetMod ( float & a, float b, Context & context ) {
+            if ( b==0.0f ) context.throw_error("division by zero in modulo");
+            a = fmod(a,b);
+        }
     };
 
     struct SimPolicy_Double : SimPolicy_Type<double>, SimPolicy_MathTT<double> {
-        static __forceinline double Mod ( double a, double b, Context & ) { return fmod(a,b); }
-        static __forceinline double & SetMod ( double & a, double b, Context & ) { return a = fmod(a,b); }
+        static __forceinline double Mod ( double a, double b, Context & context ) {
+            if ( b==0.0 ) context.throw_error("division by zero in modulo");
+            return fmod(a,b);
+        }
+        static __forceinline void SetMod ( double & a, double b, Context & context ) {
+            if ( b==0.0 ) context.throw_error("division by zero in modulo");
+            a = fmod(a,b);
+        }
     };
 
     struct SimPolicy_Pointer : SimPolicy_CoreType<void *> {

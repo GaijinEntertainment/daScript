@@ -218,13 +218,13 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addFunctionBit<uint64_t>(*this,lib);
         // float
         addFunctionBasic<float>(*this,lib);
-        addFunctionNumeric<float>(*this,lib);
+        addFunctionNumericWithMod<float>(*this,lib);
         addFunctionIncDec<float>(*this,lib);
         addFunctionOrdered<float>(*this,lib);
         ADD_NUMERIC_CASTS(float, float)
         // double
         addFunctionBasic<double>(*this,lib);
-        addFunctionNumeric<double>(*this,lib);
+        addFunctionNumericWithMod<double>(*this,lib);
         addFunctionIncDec<double>(*this,lib);
         addFunctionOrdered<double>(*this,lib);
         ADD_NUMERIC_CASTS(double, double)
