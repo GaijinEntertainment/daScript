@@ -14,6 +14,11 @@ struct TestEvent
 	s:string
 	m3x4:float3x4
 	m4x4:float4x4
+	ev:SomeEvent
+	ai:int[2]
+	aai:int[3][4]
+
+
 
 
 

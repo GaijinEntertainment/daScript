@@ -37,20 +37,45 @@ tupleCompatibility << "  template<> const "<< cppType << " &" << "get<" << field
 */
 
 def cppBaseTypeName(bt)
-	if bt==Type tFloat3
+	if bt==Type tInt
+		return "int32_t"
+	elif bt==Type tInt2
+		return "int2"
+	elif bt==Type tInt3
+		return "int3"
+	elif bt==Type tInt4
+		return "int4"
+	elif bt==Type tUInt
+		return "uint32_t"
+	elif bt==Type tFloat
+		return "float"
+	elif bt==Type tFloat2
+		return "float2"
+	elif bt==Type tFloat3
 		return "float3"
+	elif bt==Type tFloat4
+		return "float4"
+	elif bt==Type tString
+		return "string"
 	else
 		return "/*undefined*/"
 
-def cppTypeName(info)
-//	debug(info,"info=\n")
-	var res = cppBaseTypeName(info.basicType)
-/*
-	if info.dimSize !=0 
-		for index in range(0,info.dimSize)
-			let d = rtti_getDim(info,index)
+def cppTypeDim(info)
+	var res = ""
+	if info.dimSize !=0u 
+		for index in range(0,int(info.dimSize))
+			let d = getDim(info,index)
 			res += "[{d}]"
-*/
+	return res
+
+def cppTypeName(info)
+	var res = info.isConst ? "const " : ""
+	if info.basicType==Type tHandle
+		res += string(info.annotation_or_name.name)
+	elif info.basicType==Type tStructure
+		res += info.structType.name
+	else
+		res += cppBaseTypeName(info.basicType)
 	return res
 
 def processStructInfo(info)
@@ -75,12 +100,12 @@ def processStructInfo(info)
 		print("{field.name}(_{field.name})");
 	print(" \{\};\n");
 	for field in info
-		print("\t{cppTypeName(field)} {field.name};\n")
+		print("\t{cppTypeName(field)} {field.name}{cppTypeDim(field)};\n")
 	print("\ttemplate<int n, class T> const T& get();\n");
 	var count = 0
 	for field in info
-		print("\ttemplate<> {cppTypeName(field)} & get<{count++}>() \{ return {field.name}; \};\n");
-	print("\};\n")
+		print("\ttemplate<> {cppTypeName(field)}{cppTypeDim(field)} & get<{count++}>() \{ return {field.name}; \};\n");
+	print("\};\n\n")
 
 def process(fname:string)
 	print("processing {fname}\n")

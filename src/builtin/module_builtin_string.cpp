@@ -178,7 +178,7 @@ namespace das
     }
 
     char * to_das_string(const string & str, Context * ctx) {
-        return ctx->heap.allocateName(str);
+        return ctx->heap.allocateString(str);
     }
 
     void set_das_string(string & str, const char * bs) {
