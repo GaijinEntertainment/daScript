@@ -78,34 +78,34 @@ def cppTypeName(info)
 		res += cppBaseTypeName(info.basicType)
 	return res
 
-def processStructInfo(info)
-	print("class {info.name} : public Event \{\n")
-	print("public:\n")
-	print("\t{info.name}(")
+def processStructInfo(file,info)
+	fprint(file,"class {info.name} : public Event \{\n")
+	fprint(file,"public:\n")
+	fprint(file,"\t{info.name}(")
 	var first = true
 	for field in info
 		if first
 			first = false
 		else
-			print(", ")
-		print("{cppTypeName(field)} _{field.name}");
-	print(") : Event(ECS_HASH(\"{info.name}\")),\n")
+			fprint(file,", ")
+		fprint(file,"{cppTypeName(field)} _{field.name}");
+	fprint(file,") : Event(ECS_HASH(\"{info.name}\")),\n")
 	first = true
 	for field in info
 		if first
-			print("\t\t")
+			fprint(file,"\t\t")
 			first = false
 		else
-			print(",")
-		print("{field.name}(_{field.name})");
-	print(" \{\};\n");
+			fprint(file,",")
+		fprint(file,"{field.name}(_{field.name})");
+	fprint(file," \{\};\n");
 	for field in info
-		print("\t{cppTypeName(field)} {field.name}{cppTypeDim(field)};\n")
-	print("\ttemplate<int n, class T> const T& get();\n");
+		fprint(file,"\t{cppTypeName(field)} {field.name}{cppTypeDim(field)};\n")
+	fprint(file,"\ttemplate<int n, class T> const T& get();\n");
 	var count = 0
 	for field in info
-		print("\ttemplate<> {cppTypeName(field)}{cppTypeDim(field)} & get<{count++}>() \{ return {field.name}; \};\n");
-	print("\};\n\n")
+		fprint(file,"\ttemplate<> {cppTypeName(field)}{cppTypeDim(field)} & get<{count++}>() \{ return {field.name}; \};\n");
+	fprint(file,"\};\n\n")
 
 def process(fname:string)
 	print("processing {fname}\n")
@@ -115,7 +115,7 @@ def process(fname:string)
             rttiCompile(fname,text) <| $(ok,program,issues)
                 if ok
                     rttiProgramForEachStructure(program) <| $(info)
-						processStructInfo(info)
+						processStructInfo(fstdout(),info)
                 else
                     print("{fname} failed to compile\n{issues}\n")
         else

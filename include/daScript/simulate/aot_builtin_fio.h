@@ -15,4 +15,7 @@ namespace das {
     bool builtin_stat ( const char * filename, FStat & fs );
     void builtin_dir ( const char * path, const Block & fblk, Context * context );
     bool builtin_mkdir ( const char * path );
+    FILE * builtin_stdin();
+    FILE * builtin_stdout();
+    FILE * builtin_stderr();
 }

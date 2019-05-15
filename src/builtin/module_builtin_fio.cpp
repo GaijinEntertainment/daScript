@@ -139,6 +139,18 @@ namespace das {
         fclose((FILE *)f);
     }
 
+    FILE * builtin_stdin() {
+        return stdin;
+    }
+
+    FILE * builtin_stdout() {
+        return stdout;
+    }
+
+    FILE * builtin_stderr() {
+        return stderr;
+    }
+
     char * builtin_fread ( const FILE * _f, Context * context ) {
         FILE * f = (FILE *) _f;
         auto pos = ftell(f);
@@ -278,6 +290,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_stat)>(*this, lib, "stat", SideEffects::modifyExternal, "builtin_stat");
             addExtern<DAS_BIND_FUN(builtin_dir)>(*this, lib, "builtin_dir", SideEffects::modifyExternal, "builtin_dir");
             addExtern<DAS_BIND_FUN(builtin_mkdir)>(*this, lib, "mkdir", SideEffects::modifyExternal, "builtin_mkdir");
+            addExtern<DAS_BIND_FUN(builtin_stdin)>(*this, lib, "fstdin", SideEffects::modifyExternal, "builtin_stdin");
+            addExtern<DAS_BIND_FUN(builtin_stdout)>(*this, lib, "fstdout", SideEffects::modifyExternal, "builtin_stdout");
+            addExtern<DAS_BIND_FUN(builtin_stderr)>(*this, lib, "fstderr", SideEffects::modifyExternal, "builtin_stderr");
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, fio_das_len);
         }
