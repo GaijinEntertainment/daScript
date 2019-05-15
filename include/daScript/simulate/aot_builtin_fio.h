@@ -8,6 +8,7 @@ namespace das {
     FILE * builtin_fopen  ( const char * name, const char * mode );
     void builtin_fclose ( const FILE * f );
     void builtin_fprint ( const FILE * f, const char * text );
+    char * builtin_fread ( const FILE * _f, Context * context );
     char * builtin_dirname ( const char * name, Context * context );
     char * builtin_basename ( const char * name, Context * context );
     bool builtin_fstat ( const FILE * f, FStat & fs );

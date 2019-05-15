@@ -1,6 +1,44 @@
 // options logNodes=true, logStack=true
 
 require fio
+require rtti
+
+def process(fname:string)
+	print("processing {fname}\n")
+    fopen(fname,"rb") <| $(f:FILE?)
+        if f!=null
+            let text = fread(f)
+            rttiCompile(fname,text) <| $(ok:bool;program:RttiProgram;issues:das_string)
+                if ok
+                    rttiProgramForEachStructure(program) <| $(info:StructInfo)
+                        print("struct {info.name}\n")
+                        for field in info
+                            print("\t{field.name} : {field.basicType} ")
+                            if field.annotation_arguments != null
+                                print("[")
+                                var first = true
+                                let args : AnnotationArguments & = deref(field.annotation_arguments)
+                                for arg in args
+                                    if first
+                                        first = false
+                                    else
+                                        print(",")
+                                    print("{arg.name}=")
+                                    if arg.basicType==Type tInt
+                                        print("{arg.iValue}")
+                                    elif arg.basicType==Type tFloat
+                                        print("{arg.fValue}")
+                                    elif arg.basicType==Type tString
+                                        print("\"{arg.sValue}\"")
+                                    elif arg.basicType==Type tBool
+                                        print("{arg.bValue}")
+                                print("] ")
+                            print("\n")
+                else
+                    print("{fname} failed to compile\n{issues}\n")
+        else
+            print("can't open {fname}\n")
+
 
 [export]
 def main(fn:string)
@@ -18,7 +56,7 @@ def main(fn:string)
                     let tmt = ttab[fname]
                     if (tmt!=fmt)
                         ttab[fname] = fmt
-                        print("processing {fname}\n")
+                        process(fileName)
             else
                 print("can't stat {fileName}\n")
 		sleep(1000u)

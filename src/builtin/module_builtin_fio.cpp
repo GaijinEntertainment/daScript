@@ -139,6 +139,20 @@ namespace das {
         fclose((FILE *)f);
     }
 
+    char * builtin_fread ( const FILE * _f, Context * context ) {
+        FILE * f = (FILE *) _f;
+        auto pos = ftell(f);
+        fseek(f, 0, SEEK_END);
+        auto tail = ftell(f);
+        uint32_t len = uint32_t(tail - pos);
+        auto buf = new char[len];
+        fseek(f, pos, SEEK_SET);
+        fread(buf, 1, len, f);
+        char * res = context->heap.allocateString(buf, len);
+        delete [] buf;
+        return res;
+    }
+
     char * builtin_dirname ( const char * name, Context * context ) {
         if ( name ) {
 #if defined(_MSC_VER)
@@ -257,6 +271,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_fopen)>(*this, lib, "fopen", SideEffects::modifyExternal, "builtin_fopen");
             addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose", SideEffects::modifyExternal, "builtin_fclose");
             addExtern<DAS_BIND_FUN(builtin_fprint)>(*this, lib, "fprint", SideEffects::modifyExternal, "builtin_fprint");
+            addExtern<DAS_BIND_FUN(builtin_fread)>(*this, lib, "fread", SideEffects::modifyExternal, "builtin_fread");
             addExtern<DAS_BIND_FUN(builtin_dirname)>(*this, lib, "dirname", SideEffects::none, "builtin_dirname");
             addExtern<DAS_BIND_FUN(builtin_basename)>(*this, lib, "basename", SideEffects::none, "builtin_basename");
             addExtern<DAS_BIND_FUN(builtin_fstat)>(*this, lib, "fstat", SideEffects::modifyExternal, "builtin_fstat");

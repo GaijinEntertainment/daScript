@@ -32,6 +32,17 @@ MAKE_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
 
 namespace das {
 
+    struct RttiProgram {
+        ProgramPtr      program;
+    };
+
+    struct RttiProgramAnnotation : ManagedStructureAnnotation <RttiProgram,false> {
+        RttiProgramAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RttiProgram", ml) {
+        }
+    };
+
+    MAKE_TYPE_FACTORY(RttiProgram,RttiProgram)
+
     struct AnnotationArgumentAnnotation : ManagedStructureAnnotation <AnnotationArgument,false> {
         AnnotationArgumentAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("AnnotationArgument", ml) {
             addFieldEx ( "basicType", "type", offsetof(AnnotationArgument, type), makeType<Type_DasProxy>(ml) );
@@ -270,6 +281,57 @@ namespace das {
         return cast<VarInfo *>::from(context.getVariableInfo(index));
     }
 
+    void rtti_builtin_compile ( char * modName, char * str, const Block & block, Context * context ) {
+        TextWriter issues;
+        uint32_t str_len = stringLengthSafe(*context, str);
+        auto access = make_shared<FileAccess>();
+        auto fileInfo = make_unique<FileInfo>((char *) str, uint32_t(str_len));
+        access->setFileInfo(modName, move(fileInfo));
+        ModuleGroup dummyLibGroup;
+        auto program = parseDaScript(modName, access, issues, dummyLibGroup, true);
+        if ( program ) {
+            if (program->failed()) {
+                for (auto & err : program->errors) {
+                    issues << reportError(err.at, err.what, err.cerr);
+                }
+                string istr = issues.str();
+                vec4f args[3] = {
+                    cast<bool>::from(false),
+                    cast<char *>::from(nullptr),
+                    cast<string *>::from(&istr)
+                };
+                context->invoke(block, args, nullptr);
+            } else {
+                RttiProgram rtp;
+                rtp.program = program;
+                string istr = issues.str();
+                vec4f args[3] = {
+                    cast<bool>::from(true),
+                    cast<RttiProgram *>::from(&rtp),
+                    cast<string *>::from(&istr)
+                };
+                context->invoke(block, args, nullptr);
+            }
+        } else {
+            context->throw_error("rtti_compile internal error, something went wrong");
+        }
+    }
+
+    void rtti_builtin_program_for_each_structure ( const RttiProgram & prog, const Block & block, Context * context ) {
+        DebugInfoHelper helper;
+        helper.rtti = true;
+        for ( auto & it : prog.program->thisModule->structures ) {
+            auto structName = it.first;
+            StructInfo * info = helper.makeStructureDebugInfo(*it.second);
+            vec4f args[1] = {
+                cast<StructInfo *>::from(info)
+            };
+            context->invoke(block, args, nullptr);
+        }
+    }
+
+    #include "rtti.das.inc"
+
     class Module_Rtti : public Module {
     public:
         template <typename RecAnn>
@@ -289,6 +351,7 @@ namespace das {
             lib.addModule(this);
             lib.addBuiltInModule();
             // type annotations
+            addAnnotation(make_shared<RttiProgramAnnotation>(lib));
             addEnumeration(make_shared<EnumerationType>());
             addAnnotation(make_shared<AnnotationArgumentAnnotation>(lib));
             addAnnotation(make_shared<ManagedVectorAnnotation<AnnotationArgument>>("AnnotationArguments",lib));
@@ -311,6 +374,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_contextTotalVariables)>(*this, lib, "getTotalVariables", SideEffects::modifyExternal);
             addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "getFunctionInfo", SideEffects::modifyExternal);
             addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "getVariableInfo", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "rtti_builtin_compile", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_structure)>(*this, lib, "rtti_builtin_program_for_each_structure", SideEffects::modifyExternal);
+            // add builtin module
+            compileBuiltinModule("rtti.das",rtti_das, rtti_das_len);
         }
     };
 }

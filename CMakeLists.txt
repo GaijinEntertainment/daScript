@@ -98,11 +98,14 @@ src/builtin/builtin.das.inc
 src/builtin/builtin.das
 src/builtin/fio.das.inc
 src/builtin/fio.das
+src/builtin/rtti.das.inc
+src/builtin/rtti.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 XXD(src/builtin/builtin.das)
 XXD(src/builtin/fio.das)
+XXD(src/builtin/rtti.das)
 
 IF(MSVC)
 set_source_files_properties(src/builtin/module_builtin_vector.cpp PROPERTIES COMPILE_FLAGS /bigobj)
