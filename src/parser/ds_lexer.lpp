@@ -225,6 +225,7 @@
 <normal>"iterator"                                      return DAS_ITERATOR;
 <normal>"in"                                            return DAS_IN;
 <normal>"deref"                                         return DAS_DEREF;
+<normal>"addr"                                          return DAS_ADDR;
 <normal>"scope"                                         return DAS_SCOPE;
 <normal>"null"                                          return DAS_NULL;
 <normal>"return"                                        return DAS_RETURN;

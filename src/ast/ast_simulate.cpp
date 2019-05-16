@@ -678,6 +678,10 @@ namespace das
         return context.code->makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
     }
 
+    SimNode * ExprRef2Ptr::simulate (Context & context) const {
+        return subexpr->simulate(context);
+    }
+
     SimNode * ExprNullCoalescing::simulate (Context & context) const {
         if ( type->ref ) {
             return context.code->makeNode<SimNode_NullCoalescingRef>(at,subexpr->simulate(context),defaultValue->simulate(context));

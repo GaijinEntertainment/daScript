@@ -365,6 +365,21 @@ namespace das {
         return cexpr;
     }
 
+    // ExprRef2Ptr
+
+    ExpressionPtr ExprRef2Ptr::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprRef2Ptr::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprRef2Ptr>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
+
     // ExprPtr2Ref
 
     ExpressionPtr ExprPtr2Ref::visit(Visitor & vis) {

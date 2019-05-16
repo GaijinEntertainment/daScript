@@ -556,6 +556,15 @@ namespace das {
             ss << ")";
             return Visitor::visit(ptr2ref);
         }
+     // ref2ptr
+        virtual void preVisit ( ExprRef2Ptr * ptr2ref ) override {
+            Visitor::preVisit(ptr2ref);
+            ss << "addr(";
+        }
+        virtual ExpressionPtr visit ( ExprRef2Ptr * ptr2ref ) override {
+            ss << ")";
+            return Visitor::visit(ptr2ref);
+        }
     // delete
         virtual void preVisit ( ExprDelete * edel ) override {
             Visitor::preVisit(edel);

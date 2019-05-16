@@ -598,6 +598,8 @@ namespace das
         virtual bool rtti_isWith() const { return false; }
         virtual bool rtti_isVar() const { return false; }
         virtual bool rtti_isR2V() const { return false; }
+        virtual bool rtti_isRef2Ptr() const { return false; }
+        virtual bool rtti_isPtr2Ref() const { return false; }
         virtual bool rtti_isCast() const { return false; }
         virtual bool rtti_isField() const { return false; }
         virtual bool rtti_isSwizzle() const { return false; }
@@ -649,12 +651,23 @@ namespace das
         ExpressionPtr   subexpr;
     };
 
+    struct ExprRef2Ptr : Expression {
+        ExprRef2Ptr () = default;
+        ExprRef2Ptr ( const LineInfo & a, const ExpressionPtr & s ) : Expression(a), subexpr(s) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isRef2Ptr() const override { return true; }
+        ExpressionPtr   subexpr;
+    };
+
     struct ExprPtr2Ref : Expression {
         ExprPtr2Ref () = default;
         ExprPtr2Ref ( const LineInfo & a, const ExpressionPtr & s ) : Expression(a), subexpr(s) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isPtr2Ref() const override { return true; }
         ExpressionPtr   subexpr;
     };
 
@@ -1910,6 +1923,7 @@ namespace das
         virtual ExpressionPtr visit ( ExprType * that ) { return visitExpression(that); }
         // all visitable expressions
         VISIT_EXPR(ExprRef2Value)
+        VISIT_EXPR(ExprRef2Ptr)
         VISIT_EXPR(ExprPtr2Ref)
         VISIT_EXPR(ExprAddr)
         VISIT_EXPR(ExprNullCoalescing)

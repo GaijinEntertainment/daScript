@@ -113,7 +113,7 @@
 %token  DAS_REQUIRE    DAS_OPERATOR   DAS_ENUM       DAS_FINALLY
 %token  DAS_DELETE     DAS_DEREF      DAS_SCOPE      DAS_TYPEDEF
 %token  DAS_WITH       DAS_CAST       DAS_OVERRIDE   DAS_UPCAST
-%token  DAS_ITERATOR   DAS_VAR
+%token  DAS_ITERATOR   DAS_VAR		  DAS_ADDR
 
 /* basic types */
 %token  DAS_TBOOL       DAS_TVOID       DAS_TSTRING     DAS_TAUTO
@@ -938,6 +938,7 @@ expr
             $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),das_to_string($type)),$arguments);
         }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
+	|   DAS_ADDR[loc] '(' expr[subexpr] ')'       { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_TLAMBDA[loc] '(' ')'                   { $$ = new ExprMakeLambda(tokAt(@loc)); }
     |   DAS_TLAMBDA[loc] '(' expr[subexpr] ')'     { $$ = new ExprMakeLambda(tokAt(@loc), ExpressionPtr($subexpr)); }
     |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }

@@ -1454,6 +1454,15 @@ namespace das {
             ss << ")";
             return Visitor::visit(ptr2ref);
         }
+     // ref2ptr
+        virtual void preVisit ( ExprRef2Ptr * ref2ptr ) override {
+            Visitor::preVisit(ref2ptr);
+            ss << "das_ref(__context__,";
+        }
+        virtual ExpressionPtr visit ( ExprRef2Ptr * ref2ptr ) override {
+            ss << ")";
+            return Visitor::visit(ref2ptr);
+        }
     // addr
         virtual void preVisit ( ExprAddr * expr ) override {
             if (expr->func) {

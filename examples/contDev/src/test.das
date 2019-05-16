@@ -1,3 +1,4 @@
+/*
 struct SomeEvent
 	pos,vel:float3
 
@@ -17,7 +18,7 @@ struct TestEvent
 	ev:SomeEvent
 	ai:int[2]
 	aai:int[3][4]
-
+*/
 
 
 

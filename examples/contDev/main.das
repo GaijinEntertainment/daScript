@@ -3,38 +3,21 @@
 require fio
 require rtti
 
-/*
-                        print("struct {info.name}\n")
-                        for field in info
-                            print("\t{field.name} : {field.basicType} ")
-                            if field.annotation_arguments != null
-                                print("[")
-                                var first = true
-                                for arg in deref(field.annotation_arguments)
-                                    if first
-                                        first = false
-                                    else
-                                        print(",")
-                                    print("{arg.name}=")
-                                    if arg.basicType==Type tInt
-                                        print("{arg.iValue}")
-                                    elif arg.basicType==Type tFloat
-                                        print("{arg.fValue}")
-                                    elif arg.basicType==Type tString
-                                        print("\"{arg.sValue}\"")
-                                    elif arg.basicType==Type tBool
-                                        print("{arg.bValue}")
-                                print("] ")
-                            print("\n")
+[unsafe]
+def findArg(field,argName,argType)  : AnnotationArgument const? const
+	if field.annotation_arguments != null
+		for arg in deref(field.annotation_arguments)
+			if string(arg.name)==argName
+				if arg.basicType==argType
+					return addr(arg)
+				else
+					print("error: {field.name} {argName} argument must be {argType}\n")
+	return null
 
-*/
 
-/*
-tupleCompatibility << "  template<> const "<< cppType << " &" << "get<" << field << ">() {return "<<fl.name<<";}\n";
-                    string flArgName = fl.name +"_";
-                    constructorArgs << "    " << (field!=0 ? "," : " ") << " const " << cppType << "& " << flArgName << "\n";
-                    constructorBody << "    " << (field!=0 ? "," : " ") << fl.name << "(" << flArgName << ")\n";
-*/
+def cppTypeAttr(field) : string
+	let arg = findArg(field,"cppType",Type tString)
+	return arg!=null ? string(arg.sValue) : ""
 
 def cppBaseTypeName(bt)
 	if bt==Type tInt
@@ -62,23 +45,39 @@ def cppBaseTypeName(bt)
 
 def cppTypeDim(info)
 	var res = ""
-	if info.dimSize !=0u 
+	if info.dimSize !=0u
 		for index in range(0,int(info.dimSize))
 			let d = getDim(info,index)
-			res += "[{d}]"
+  			res += "[{d}]"
 	return res
 
 def cppTypeName(info)
-	var res = info.isConst ? "const " : ""
-	if info.basicType==Type tHandle
-		res += string(info.annotation_or_name.name)
-	elif info.basicType==Type tStructure
-		res += info.structType.name
-	else
-		res += cppBaseTypeName(info.basicType)
+	var res = cppTypeAttr(info)
+	if res == ""
+		res = info.isConst ? "const " : ""
+		if info.basicType==Type tHandle
+			res += string(info.annotation_or_name.name)
+		elif info.basicType==Type tStructure
+			res += info.structType.name
+		else
+			res += cppBaseTypeName(info.basicType)
 	return res
 
-def processStructInfo(file,info)
+def generateSquirrelBinding(file,info)
+	fprint(file,"\{\n")
+    fprint(file,"\tSqrat::DerivedClass<{info.name}, ecs::Event> sqEvent(vm, \"{info.name}\");\n")
+    fprint(file,"\tsqEvent\n")
+    fprint(file,"\t\t.Ctor<Sqrat::Object>()\n")
+    fprint(file,"\t\t.Ctor<Sqrat::Object, Sqrat::Object>()\n")
+	for field in info
+		fprint(file,"\t\t.Var(\"{field.name}\", &{info.name}::{field.name})\n")
+    // fprint(file,"\t\t.Var(\"data\", &ecs::SQEvent::data)\n")
+    fprint(file,"\t;\n")
+    fprint(file,"\teventsBinding.emplace_back(\"{info.name}\", Sqrat::Object(sqEvent.GetObject(), vm));\n")
+	fprint(file,"}\n\n")
+
+
+def generateCppEvent(file,info)
 	fprint(file,"class {info.name} : public Event \{\n")
 	fprint(file,"public:\n")
 	fprint(file,"\t{info.name}(")
@@ -89,11 +88,11 @@ def processStructInfo(file,info)
 		else
 			fprint(file,", ")
 		fprint(file,"{cppTypeName(field)} _{field.name}");
-	fprint(file,") : Event(ECS_HASH(\"{info.name}\")),\n")
+	fprint(file,")\n\t\t: Event(ECS_HASH(\"{info.name}\")),\n")
 	first = true
 	for field in info
 		if first
-			fprint(file,"\t\t")
+			fprint(file,"\t\t\t")
 			first = false
 		else
 			fprint(file,",")
@@ -115,7 +114,8 @@ def process(fname:string)
             rttiCompile(fname,text) <| $(ok,program,issues)
                 if ok
                     rttiProgramForEachStructure(program) <| $(info)
-						processStructInfo(fstdout(),info)
+						generateCppEvent(fstdout(),info)
+						generateSquirrelBinding(fstdout(),info)
                 else
                     print("{fname} failed to compile\n{issues}\n")
         else
@@ -133,12 +133,12 @@ def main(fn:string)
             let fileName = atdir + "/" + fname
             var st : FStat
             if stat(fileName,st)
-                if st.is_reg
-                    let fmt = st.mtime
-                    let tmt = ttab[fname]
-                    if (tmt!=fmt)
-                        ttab[fname] = fmt
-                        process(fileName)
+				if st.is_reg
+                	let fmt = st.mtime
+                	let tmt = ttab[fname]
+                	if (tmt!=fmt)
+                    	ttab[fname] = fmt
+                    	process(fileName)
             else
                 print("can't stat {fileName}\n")
 		sleep(1000u)

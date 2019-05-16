@@ -142,6 +142,12 @@ namespace das {
             } else if ( expr->rtti_isCast() ) {
                 auto ca = (ExprCast *) expr;
                 propagateRead(ca->subexpr.get());
+            } else if ( expr->rtti_isRef2Ptr() ) {
+                auto rr = (ExprRef2Ptr *)expr;
+                propagateRead(rr->subexpr.get());
+            } else if ( expr->rtti_isPtr2Ref() ) {
+                auto rr = (ExprPtr2Ref *)expr;
+                propagateRead(rr->subexpr.get());
             }
             // TODO:
             //  propagate read to call or expr-like-call???
@@ -177,6 +183,12 @@ namespace das {
             } else if ( expr->rtti_isCast() ) {
                 auto ca = (ExprCast *) expr;
                 propagateWrite(ca->subexpr.get());
+            } else if ( expr->rtti_isRef2Ptr() ) {
+                auto rr = (ExprRef2Ptr *)expr;
+                propagateWrite(rr->subexpr.get());
+            } else if ( expr->rtti_isPtr2Ref() ) {
+                auto rr = (ExprPtr2Ref *)expr;
+                propagateWrite(rr->subexpr.get());
             }
             // TODO:
             //  propagate write to call or expr-like-call???

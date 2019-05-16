@@ -988,6 +988,24 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
+    // ExprRef2Ptr
+        virtual ExpressionPtr visit ( ExprRef2Ptr * expr ) override {
+            if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            // infer
+            if ( !expr->subexpr->type->isRef() ) {
+                error("can only make a pointer of of a reference", expr->at, CompilationError::cant_dereference);
+            } else {
+                if ( func && !func->unsafe ) {
+                    error("address of reference requires [unsafe]", expr->at,
+                        CompilationError::unsafe);
+                }
+                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
+                expr->type->firstType->ref = false;
+                expr->type->constant |= expr->subexpr->type->constant;
+            }
+            return Visitor::visit(expr);
+        }
     // ExprNullCoalescing
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
             if ( !expr->subexpr->type | !expr->defaultValue->type ) return Visitor::visit(expr);
