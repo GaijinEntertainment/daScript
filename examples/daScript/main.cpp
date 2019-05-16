@@ -34,7 +34,7 @@ void print_help() {
 
 int main(int argc, const char * argv[]) {
     if ( argc<=1 ) {
-        tout << "dasContDev [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
+        tout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
         return -1;
     }
     vector<string> files;
