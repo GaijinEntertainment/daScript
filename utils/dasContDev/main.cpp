@@ -30,9 +30,9 @@ void wait_for_file_to_change ( const char * fn ) {
 #else
         if ( !stat(fn,&st) ) {
             if ( ft==0 ) {
-                ft = st.st_mtimespec.tv_sec;
+                ft = st.st_mtime;
             }
-            if ( ft!=st.st_mtimespec.tv_sec ) {
+            if ( ft!=st.st_mtime ) {
                 return;
             }
         }
@@ -76,6 +76,8 @@ bool compile_and_run ( const char * fn ) {
     }
 }
 
+void require_project_specific_modules();//link time resolved dependencies
+
 int main(int argc, const char * argv[]) {
     if ( argc!=2 ) {
         tout << "dasContDev [script.das]\n";
@@ -86,6 +88,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_FIO);
+    require_project_specific_modules();
     for ( ;; ) {
         if ( !compile_and_run(argv[1]) ) {
             wait_for_file_to_change(argv[1]);
