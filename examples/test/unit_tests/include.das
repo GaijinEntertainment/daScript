@@ -2,9 +2,9 @@
 // blah
 // inlcuding that in include_file.inc
 
-include include_file.inc
+include include_file.inc.das
 
-include include_file.inc
+include include_file.inc.das
 
 [export]
 def test
