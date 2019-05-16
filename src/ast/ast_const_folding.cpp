@@ -437,7 +437,7 @@ namespace das {
             // concatinate all constant strings, which are close together
             shared_ptr<ExprConstString> str;
             for ( auto it = expr->elements.begin(); it != expr->elements.end(); ) {
-                const auto & elem = *it;
+                auto & elem = *it;
                 if ( elem->rtti_isStringConstant() ) {
                     auto selem = static_pointer_cast<ExprConstString>(elem);
                     if ( str ) {
@@ -445,7 +445,8 @@ namespace das {
                         it = expr->elements.erase(it);
                         reportFolding();
                     } else {
-                        str = selem;
+                        str = static_pointer_cast<ExprConstString>(selem->clone(nullptr));
+                        elem = str;
                         ++ it;
                     }
                 } else {

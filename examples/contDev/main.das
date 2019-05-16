@@ -1,7 +1,16 @@
 // options logNodes=true, logStack=true
 
+options log=true
+
 require fio
 require rtti
+
+let
+	INDENT = "  "
+
+let
+	EVENTS_HEADER_FILE = "./coreEvents.h"
+	EVENTS_CPP_FILE = "./coreEvents.cpp"
 
 [unsafe]
 def findArg(field,argName,argType)  : AnnotationArgument const? const
@@ -64,23 +73,33 @@ def cppTypeName(info)
 	return res
 
 def generateSquirrelBinding(file,info)
-	fprint(file,"\{\n")
-    fprint(file,"\tSqrat::DerivedClass<{info.name}, ecs::Event> sqEvent(vm, \"{info.name}\");\n")
-    fprint(file,"\tsqEvent\n")
-    fprint(file,"\t\t.Ctor<Sqrat::Object>()\n")
-    fprint(file,"\t\t.Ctor<Sqrat::Object, Sqrat::Object>()\n")
+	let argsN = int(info.count)
+	fprint(file,"{INDENT}\{\n")
+    fprint(file,"{INDENT}{INDENT}Sqrat::DerivedClass<{info.name}, ecs::Event> sqEvent(vm, \"{info.name}\");\n")
+    fprint(file,"{INDENT}{INDENT}sqEvent\n")
+    fprint(file,"{INDENT}{INDENT}{INDENT}.Ctor<Sqrat::Object>()\n")
+    fprint(file,"{INDENT}{INDENT}{INDENT}.Ctor<Sqrat::Object, Sqrat::Object>()\n")
+    fprint(file,"{INDENT}{INDENT}{INDENT}.SquirrelFunc(\"_get\", das_evt_get<First>, 2, \"xi\")\n")
+    fprint(file,"{INDENT}{INDENT}{INDENT}.SquirrelFunc(\"_in\", das_evt_in<{argsN}>, 2, \"xi\")\n")
+    fprint(file,"{INDENT}{INDENT}{INDENT}.GlobalFunc(\"len\", das_evt_len<{argsN}>)\n")
+    fprint(file,"{INDENT}{INDENT}{INDENT}.SquirrelFunc(\"_nexti\", das_evt_nexti<{argsN}>, 2, \"xi|o\")\n")
 	for field in info
-		fprint(file,"\t\t.Var(\"{field.name}\", &{info.name}::{field.name})\n")
-    // fprint(file,"\t\t.Var(\"data\", &ecs::SQEvent::data)\n")
-    fprint(file,"\t;\n")
-    fprint(file,"\teventsBinding.emplace_back(\"{info.name}\", Sqrat::Object(sqEvent.GetObject(), vm));\n")
-	fprint(file,"}\n\n")
+		fprint(file,"{INDENT}{INDENT}{INDENT}.Var(\"{field.name}\", &{info.name}::{field.name})\n")
+    // fprint(file,"{INDENT}{INDENT}.Var(\"data\", &ecs::SQEvent::data)\n")
+    fprint(file,"{INDENT}{INDENT};\n")
+    fprint(file,"{INDENT}{INDENT}eventsBinding.emplace_back(\"{info.name}\", Sqrat::Object(sqEvent.GetObject(), vm));\n")
+	fprint(file,"{INDENT}}\n\n")
 
 
 def generateCppEvent(file,info)
-	fprint(file,"class {info.name} : public Event \{\n")
+	fprint(file,"class {info.name} : public Event\n")
+	fprint(file,"\{\n")
 	fprint(file,"public:\n")
-	fprint(file,"\t{info.name}(")
+	fprint(file,"{INDENT}enum\n")
+	fprint(file,"{INDENT}\{\n")
+	fprint(file,"{INDENT}{INDENT}NUMBER_OF_FIELDS = {int(info.count)}\n")
+	fprint(file,"{INDENT}\};\n")
+	fprint(file,"{INDENT}{info.name}(")
 	var first = true
 	for field in info
 		if first
@@ -88,25 +107,25 @@ def generateCppEvent(file,info)
 		else
 			fprint(file,", ")
 		fprint(file,"{cppTypeName(field)} _{field.name}");
-	fprint(file,")\n\t\t: Event(ECS_HASH(\"{info.name}\")),\n")
+	fprint(file,")\n{INDENT}{INDENT}: Event(ECS_HASH(\"{info.name}\")),\n")
 	first = true
 	for field in info
 		if first
-			fprint(file,"\t\t\t")
+			fprint(file,"{INDENT}{INDENT}{INDENT}")
 			first = false
 		else
 			fprint(file,",")
 		fprint(file,"{field.name}(_{field.name})");
-	fprint(file," \{\};\n");
+	fprint(file,"\n{INDENT}\{\n{INDENT}\};\n");
 	for field in info
-		fprint(file,"\t{cppTypeName(field)} {field.name}{cppTypeDim(field)};\n")
-	fprint(file,"\ttemplate<int n, class T> const T& get();\n");
+		fprint(file,"{INDENT}{cppTypeName(field)} {field.name}{cppTypeDim(field)};\n")
+	fprint(file,"{INDENT}template<int n, class T> const T& get();\n");
 	var count = 0
 	for field in info
-		fprint(file,"\ttemplate<> {cppTypeName(field)}{cppTypeDim(field)} & get<{count++}>() \{ return {field.name}; \};\n");
+		fprint(file,"{INDENT}template<> {cppTypeName(field)}{cppTypeDim(field)} & get<{count++}>() \{ return {field.name}; \};\n");
 	fprint(file,"\};\n\n")
 
-def process(fname:string)
+def process(fname:string;hf,cppf:FILE?)
 	print("processing {fname}\n")
     fopen(fname,"rb") <| $(f)
         if f!=null
@@ -114,13 +133,59 @@ def process(fname:string)
             rttiCompile(fname,text) <| $(ok,program,issues)
                 if ok
                     rttiProgramForEachStructure(program) <| $(info)
-						generateCppEvent(fstdout(),info)
-						generateSquirrelBinding(fstdout(),info)
+						generateCppEvent(hf,info)
+						generateSquirrelBinding(cppf,info)
                 else
                     print("{fname} failed to compile\n{issues}\n")
         else
             print("can't open {fname}\n")
 
+def generate(atdir)
+	var fh, fcpp : FILE?
+	fh = fopen(EVENTS_HEADER_FILE,"wb")
+	if fh==null
+		print("can't open {EVENTS_HEADER_FILE}\n")
+		return
+	fcpp = fopen(EVENTS_CPP_FILE,"wb")
+	if fcpp==null
+		print("can't open {EVENTS_CPP_FILE}\n")	
+		return
+	
+	// coreEvents.h header
+	fprint(fh,"#ifndef _DAGOR_GAMELIB_DAECS_CORE_COREEVENTS_H_\n")
+	fprint(fh,"#define _DAGOR_GAMELIB_DAECS_CORE_COREEVENTS_H_\n")
+	fprint(fh,"#pragma once\n\n")
+	fprint(fh,"namespace ecs\n")
+	fprint(fh,"\{\n\n")
+
+	// coreEvents.cpp header
+	fprint(fcpp,"#include <daECS/core/coreEvents.h>\n")
+	fprint(fcpp,"#include <ecs/scripts/sqBindEvent.h>\n")
+	fprint(fcpp,"\nnamespace ecs\n")
+	fprint(fcpp,"\{\n\n")
+	fprint(fcpp,"void ecs_register_sq_das_binding(HSQUIRRELVM vm)\n\{\n")
+	fprint(fcpp,"{INDENT}ecs::sq::EventsBindingType eventsBinding;\n\n")
+	
+   	dir(atdir) <| $ (fname)
+		let fileName = atdir + "/" + fname
+		var st : FStat
+		if stat(fileName,st)
+			if st.is_reg
+				process(fileName,fh,fcpp)
+
+	// coreEvent.h footer
+	fprint(fh,"void ecs_register_sq_das_binding(HSQUIRRELVM vm);\n\n");
+	fprint(fh,"}\n\n")
+	fprint(fh,"#endif\n\n")
+
+	// coreEvents.cpp footer
+	fprint(fcpp,"}\n\n}\n\n")
+	fprint(fcpp,"#endif\n\n")
+
+
+finally
+	fclose(fh)
+	fclose(fcpp)
 
 [export]
 def main(fn:string)
@@ -129,6 +194,7 @@ def main(fn:string)
 	let main_time = stat(fn).mtime
     var ttab : table<string,clock>
 	while stat(fn).mtime == main_time
+		var any = false
         dir(atdir) <| $ (fname)
             let fileName = atdir + "/" + fname
             var st : FStat
@@ -138,9 +204,12 @@ def main(fn:string)
                 	let tmt = ttab[fname]
                 	if (tmt!=fmt)
                     	ttab[fname] = fmt
-                    	process(fileName)
+                    	process(fileName,fstdout(),fstdout())
+						any = true
             else
                 print("can't stat {fileName}\n")
+		if any
+			generate(atdir)
 		sleep(1000u)
 	print("ok\n")
 	return true
