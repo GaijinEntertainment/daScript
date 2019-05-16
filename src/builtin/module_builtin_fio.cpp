@@ -10,19 +10,6 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/aot_builtin_time.h"
 
-#include <sys/stat.h>
-
-#if defined(_MSC_VER)
-
-#include <io.h>
-#include <direct.h>
-
-#else
-#include <libgen.h>
-#include <dirent.h>
-#include <unistd.h>
-#endif
-
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
 
 namespace das {
@@ -57,25 +44,33 @@ namespace das {
         return t;
     }
 
-    void builtin_sleep ( uint32_t msec ) {
-#if defined(_MSC_VER)
-        _sleep(msec);
-#else
-        usleep(msec);
-#endif
-    }
-
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
         addAnnotation(make_shared<TimeAnnotation>());
         addFunctionBasic<Time>(*this,lib);
         addFunctionOrdered<Time>(*this,lib);
         addFunction( make_shared<BuiltInFn<Sim_Sub<Time>,float,Time,Time>>("-",lib,"Sub"));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "getClock", SideEffects::modifyExternal, "builtin_clock");
-        addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep", SideEffects::modifyExternal, "builtin_sleep");
     }
+}
 
-    #include "fio.das.inc"
 
+
+#if !DAS_NO_FILEIO
+
+#include <sys/stat.h>
+
+#if defined(_MSC_VER)
+
+#include <io.h>
+#include <direct.h>
+
+#else
+#include <libgen.h>
+#include <dirent.h>
+#include <unistd.h>
+#endif
+
+namespace das {
     struct FStat {
         struct stat stats;
         bool        is_valid;
@@ -96,6 +91,22 @@ namespace das {
 
 #endif
     };
+}
+
+
+MAKE_TYPE_FACTORY(FStat, das::FStat)
+MAKE_TYPE_FACTORY(FILE,FILE)
+
+namespace das {
+    void builtin_sleep ( uint32_t msec ) {
+#if defined(_MSC_VER)
+        _sleep(msec);
+#else
+        usleep(msec);
+#endif
+    }
+
+    #include "fio.das.inc"
 
     struct FStatAnnotation : ManagedStructureAnnotation <FStat,true> {
         FStatAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FStat", ml) {
@@ -112,14 +123,11 @@ namespace das {
         virtual bool isLocal() const override { return true; }
     };
 
-    MAKE_TYPE_FACTORY(FStat,FStat)
-
     struct FileAnnotation : ManagedStructureAnnotation <FILE,false> {
         FileAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FILE", ml) {
         }
     };
 
-    MAKE_TYPE_FACTORY(FILE,FILE)
 
     void builtin_fprint ( const FILE * f, const char * text ) {
         if ( text ) {
@@ -293,6 +301,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_stdin)>(*this, lib, "fstdin", SideEffects::modifyExternal, "builtin_stdin");
             addExtern<DAS_BIND_FUN(builtin_stdout)>(*this, lib, "fstdout", SideEffects::modifyExternal, "builtin_stdout");
             addExtern<DAS_BIND_FUN(builtin_stderr)>(*this, lib, "fstderr", SideEffects::modifyExternal, "builtin_stderr");
+            addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep", SideEffects::modifyExternal, "builtin_sleep");
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, fio_das_len);
         }
@@ -300,3 +309,5 @@ namespace das {
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_FIO,das);
+
+#endif
