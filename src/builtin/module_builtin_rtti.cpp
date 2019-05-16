@@ -19,6 +19,11 @@ DAS_BASE_BIND_ENUM_98(Type, Type,
     tPointer,       tFunction,      tLambda,        tIterator,
     tArray,         tTable,         tBlock
 )
+namespace das {
+    struct RttiProgram {
+        ProgramPtr      program;
+    };
+}
 
 MAKE_TYPE_FACTORY(TypeAnnotation,TypeAnnotation)
 MAKE_TYPE_FACTORY(StructInfo,StructInfo)
@@ -29,19 +34,14 @@ MAKE_TYPE_FACTORY(VarInfo,VarInfo)
 MAKE_TYPE_FACTORY(FuncInfo,FuncInfo)
 MAKE_TYPE_FACTORY(AnnotationArgument,AnnotationArgument)
 MAKE_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
+MAKE_TYPE_FACTORY(RttiProgram,RttiProgram)
 
 namespace das {
-
-    struct RttiProgram {
-        ProgramPtr      program;
-    };
 
     struct RttiProgramAnnotation : ManagedStructureAnnotation <RttiProgram,false> {
         RttiProgramAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RttiProgram", ml) {
         }
     };
-
-    MAKE_TYPE_FACTORY(RttiProgram,RttiProgram)
 
     struct AnnotationArgumentAnnotation : ManagedStructureAnnotation <AnnotationArgument,false> {
         AnnotationArgumentAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("AnnotationArgument", ml) {

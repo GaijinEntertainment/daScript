@@ -83,9 +83,9 @@ namespace das {
         bool     is_dir() const { return stats.st_mode & _S_IFDIR; }
 
 #else
-        Time     atime() const  { return stats.st_atimespec.tv_sec; }
-        Time     ctime() const  { return stats.st_ctimespec.tv_sec; }
-        Time     mtime() const  { return stats.st_mtimespec.tv_sec; }
+        Time     atime() const  { return stats.st_atime; }
+        Time     ctime() const  { return stats.st_ctime; }
+        Time     mtime() const  { return stats.st_mtime; }
         bool     is_reg() const { return S_ISREG(stats.st_mode); }
         bool     is_dir() const { return S_ISDIR(stats.st_mode); }
 
@@ -167,8 +167,9 @@ namespace das {
         uint32_t len = uint32_t(tail - pos);
         auto buf = new char[len];
         fseek(f, pos, SEEK_SET);
-        fread(buf, 1, len, f);
-        char * res = context->heap.allocateString(buf, len);
+        char * res = nullptr;
+        if (fread(buf, 1, len, f) == len)
+          res = context->heap.allocateString(buf, len);
         delete [] buf;
         return res;
     }
