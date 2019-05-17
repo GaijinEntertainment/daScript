@@ -239,6 +239,7 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float,Context *>>      ("string",lib,"das_lexical_cast",false) );
         // VECTOR & MATRIX TYPES
         addVectorTypes(lib);
+        addVectorCtor(lib);
         addMatrixTypes(lib);
         // ARRAYS
         addArrayTypes(lib);

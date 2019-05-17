@@ -10,6 +10,7 @@ namespace das {
         void addString(ModuleLibrary & lib);
         void addRuntime(ModuleLibrary & lib);
         void addVectorTypes(ModuleLibrary & lib);
+        void addVectorCtor(ModuleLibrary & lib);
         void addMatrixTypes(ModuleLibrary & lib);
         void addArrayTypes(ModuleLibrary & lib);
         void addTime(ModuleLibrary & lib);

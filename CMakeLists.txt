@@ -87,6 +87,7 @@ src/builtin/module_builtin.h
 src/builtin/module_builtin.cpp
 src/builtin/module_builtin_runtime.cpp
 src/builtin/module_builtin_vector.cpp
+src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_matrix.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_das.cpp
