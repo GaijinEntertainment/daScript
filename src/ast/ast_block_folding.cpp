@@ -84,7 +84,7 @@ namespace das {
         void collect ( vector<ExpressionPtr> & list, vector<ExpressionPtr> & blockList ) {
             for ( auto & expr : blockList ) {
                 if ( !expr ) continue;
-                if ( expr->rtti_isBreak() || expr->rtti_isReturn() ) {
+                if ( expr->rtti_isBreak() || expr->rtti_isReturn() || expr->rtti_isContinue() ) {
                     list.push_back(expr);
                     break;
                 }
@@ -185,12 +185,12 @@ namespace das {
             /*
             if ( cond )
                 ...
-                break or return
+                break or return or continue
             b
                 =>
             if ( cond )
                 ...
-                break or return
+                break or return or continue
             else
                 b
             */
@@ -205,7 +205,7 @@ namespace das {
                                     auto tb = static_pointer_cast<ExprBlock>(ite->if_true);
                                     if ( tb->list.size() ) {
                                         auto lastE = tb->list.back();
-                                        if (lastE->rtti_isReturn() || lastE->rtti_isBreak()) {
+                                        if (lastE->rtti_isReturn() || lastE->rtti_isBreak() || lastE->rtti_isContinue()) {
                                             vector<ExpressionPtr> tail;
                                             tail.insert(tail.begin(), block->list.begin() + i + 1, block->list.end());
                                             auto fb = make_shared<ExprBlock>();

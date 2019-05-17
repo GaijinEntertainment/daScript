@@ -686,6 +686,11 @@ namespace das {
             Visitor::preVisit(that);
             ss << "break";
         }
+    // continue
+        virtual void preVisit ( ExprContinue * that ) override {
+            Visitor::preVisit(that);
+            ss << "continue";
+        }
     // typeinfo
         virtual void preVisit ( ExprTypeInfo * expr ) override {
             Visitor::preVisit(expr);

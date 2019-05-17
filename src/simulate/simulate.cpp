@@ -146,7 +146,7 @@ namespace das
                 context.abiArg = aa;
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
-                context.stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
                 catch_block->eval(context);
             }
         #else
@@ -160,7 +160,7 @@ namespace das
                 context.abiArg = aa;
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
-                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
                 context.exception = nullptr;
                 catch_block->eval(context);
             }
@@ -232,6 +232,7 @@ namespace das
         while ( cond->evalBool(context) && !context.stopFlags ) {
             for (SimNode ** __restrict body = list; body!=tail; ++body) {
                 (*body)->eval(context);
+                context.stopFlags &= ~EvalFlags::stopForContinue;
                 if (context.stopFlags) goto loopend;
             }
         }

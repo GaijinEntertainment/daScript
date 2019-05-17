@@ -1064,6 +1064,11 @@ namespace das {
             Visitor::preVisit(that);
             ss << "break";
         }
+    // continue
+        virtual void preVisit ( ExprContinue * that ) override {
+            Visitor::preVisit(that);
+            ss << "continue";
+        }
     // var
         virtual ExpressionPtr visit ( ExprVar * var ) override {
             if ( var->local && var->variable->type->ref ) {

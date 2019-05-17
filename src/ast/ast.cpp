@@ -1056,6 +1056,19 @@ namespace das {
         return cexpr;
     }
 
+    // ExprContinue
+
+    ExpressionPtr ExprContinue::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprContinue::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprContinue>(expr);
+        Expression::clone(cexpr);
+        return cexpr;
+    }
+
     // ExprIfThenElse
 
     ExpressionPtr ExprIfThenElse::visit(Visitor & vis) {
@@ -1123,7 +1136,7 @@ namespace das {
     }
 
     uint32_t ExprWhile::getEvalFlags() const {
-        return body->getEvalFlags() & ~EvalFlags::stopForBreak;
+        return body->getEvalFlags() & ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
     }
 
     // ExprFor
@@ -1167,7 +1180,7 @@ namespace das {
     }
 
     uint32_t ExprFor::getEvalFlags() const {
-        return subexpr->getEvalFlags() & ~EvalFlags::stopForBreak;
+        return subexpr->getEvalFlags() & ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
     }
 
     // ExprLet

@@ -344,6 +344,12 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_Continue::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Continue);
+        V_END();
+    }
+
     SimNode * SimNode_Ptr2Ref::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(Ptr2Ref);

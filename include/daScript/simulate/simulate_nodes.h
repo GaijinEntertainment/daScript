@@ -296,7 +296,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto aa = context.abiArg;
             context.abiArg = argValues;
             auto res = fnPtr->code->eval(context);
-            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
             context.abiArg = aa;
             return res;
         }
@@ -307,7 +307,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 auto aa = context.abiArg;                                                       \
                 context.abiArg = argValues;                                                     \
                 auto res = EvalTT<CTYPE>::eval(context, fnPtr->code);                           \
-                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);     \
+                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue); \
                 context.abiArg = aa;                                                            \
                 return res;                                                                     \
         }
@@ -1129,6 +1129,16 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+    // CONTINUE
+    struct SimNode_Continue : SimNode {
+        SimNode_Continue ( const LineInfo & at ) : SimNode(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            context.stopFlags |= EvalFlags::stopForContinue;
+            return v_zero();
+        }
+    };
+
     // DEREFERENCE
     template <typename TT>
     struct SimNode_Ref2Value : SimNode {      // &value -> value
@@ -1739,6 +1749,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 }
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
+                    context.stopFlags &= ~EvalFlags::stopForContinue;
                     if (context.stopFlags) goto loopend;
                 }
                 for ( int t=0; t!=totalCount; ++t ){
@@ -1793,6 +1804,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 *pi = ph;
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
+                    context.stopFlags &= ~EvalFlags::stopForContinue;
                     if (context.stopFlags) goto loopend;
                 }
                 if ( !sources->next(context, (char *)&ph) ) goto loopend;

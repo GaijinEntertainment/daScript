@@ -297,6 +297,7 @@ namespace das
         virtual bool rtti_isLet() const { return false; }
         virtual bool rtti_isReturn() const { return false; }
         virtual bool rtti_isBreak() const { return false; }
+        virtual bool rtti_isContinue() const { return false; }
         virtual bool rtti_isBlock() const { return false; }
         virtual bool rtti_isWith() const { return false; }
         virtual bool rtti_isVar() const { return false; }

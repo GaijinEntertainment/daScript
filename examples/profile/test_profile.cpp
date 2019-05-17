@@ -187,7 +187,7 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
                 }
             }
             code->eval(context);
-            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
             if ( context.getException() ) {
                 // TODO: report exception here??
                 return;
@@ -240,7 +240,7 @@ uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsCom
                 }
             }
             code->eval(context);
-            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
             if ( context.getException() ) {
                 // TODO: report exception here??
                 return;

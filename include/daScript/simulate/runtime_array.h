@@ -122,6 +122,7 @@ namespace das
                 }
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
+                    context.stopFlags &= ~EvalFlags::stopForContinue;
                     if (context.stopFlags) goto loopend;
                 }
             }
@@ -172,6 +173,7 @@ namespace das
                 ph += stride;
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
+                    context.stopFlags &= ~EvalFlags::stopForContinue;
                     if (context.stopFlags) goto loopend;
                 }
             }
@@ -210,6 +212,7 @@ namespace das
                     ph[t] += strides[t];
                 }
                 body->eval(context);
+                context.stopFlags &= ~EvalFlags::stopForContinue;
             }
             for ( int t=0; t!=totalCount; ++t ) {
                 array_unlock(context, *pha[t]);
@@ -256,6 +259,7 @@ namespace das
                 *pi = ph;
                 ph += stride;
                 body->eval(context);
+                context.stopFlags &= ~EvalFlags::stopForContinue;
             }
             evalFinal(context);
             array_unlock(context, *pha);
@@ -288,6 +292,7 @@ namespace das
                 }
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
+                    context.stopFlags &= ~EvalFlags::stopForContinue;
                     if (context.stopFlags) goto loopend;
                 }
             }
@@ -329,6 +334,7 @@ namespace das
                 ph += stride;
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
+                    context.stopFlags &= ~EvalFlags::stopForContinue;
                     if (context.stopFlags) goto loopend;
                 }
             }
@@ -362,6 +368,7 @@ namespace das
                     ph[t] += strides[t];
                 }
                 body->eval(context);
+                context.stopFlags &= ~EvalFlags::stopForContinue;
             }
             evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
@@ -399,6 +406,7 @@ namespace das
                 *pi = ph;
                 ph += stride;
                 body->eval(context);
+                context.stopFlags &= ~EvalFlags::stopForContinue;
             }
             evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;

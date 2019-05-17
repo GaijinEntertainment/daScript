@@ -359,6 +359,16 @@ namespace das
         virtual bool rtti_isBreak() const override { return true; }
     };
 
+    struct ExprContinue : Expression {
+        ExprContinue() = default;
+        ExprContinue ( const LineInfo & a ) : Expression(a) {}
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForContinue; }
+        virtual bool rtti_isContinue() const override { return true; }
+    };
+
     struct ExprFakeContext : ExprConstT<void *, ExprFakeContext> {
         ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) {}
         ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) {}

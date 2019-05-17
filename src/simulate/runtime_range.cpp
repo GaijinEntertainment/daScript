@@ -39,6 +39,7 @@ namespace das
             *pi = i;
             for (SimNode ** __restrict body = list; body!=tail; ++body) {
                 (*body)->eval(context);
+                context.stopFlags &= ~EvalFlags::stopForContinue;
                 if (context.stopFlags) goto loopend;
             }
         }
@@ -61,7 +62,7 @@ namespace das
             }
         }
         evalFinal(context);
-        context.stopFlags &= ~EvalFlags::stopForBreak;
+        context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
 
@@ -73,22 +74,22 @@ namespace das
         auto i = r.from;
         SimNode * __restrict pbody = list[0];
         while ( count>=4 ) {
-            *pi=i++; pbody->eval(context); if ( context.stopFlags ) goto done;
-            *pi=i++; pbody->eval(context); if ( context.stopFlags ) goto done;
-            *pi=i++; pbody->eval(context); if ( context.stopFlags ) goto done;
-            *pi=i++; pbody->eval(context); if ( context.stopFlags ) goto done;
+            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
+            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
+            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
+            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
             count -= 4;
         }
         if ( count & 2 ) {
-            *pi=i++; pbody->eval(context); if ( context.stopFlags ) goto done;
-            *pi=i++; pbody->eval(context); if ( context.stopFlags ) goto done;
+            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
+            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
         }
         if ( count & 1 ) {
-            *pi=i++; pbody->eval(context); if ( context.stopFlags ) goto done;
+            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
         }
     done:;
         evalFinal(context);
-        context.stopFlags &= ~EvalFlags::stopForBreak;
+        context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
 
@@ -114,7 +115,7 @@ namespace das
             *pi=i++; pbody->eval(context);
         }
         evalFinal(context);
-        context.stopFlags &= ~EvalFlags::stopForBreak;
+        context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
 }

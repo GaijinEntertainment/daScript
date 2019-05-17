@@ -1,5 +1,3 @@
-options log = true
-
 [sideeffects]
 def test_while_continue()
     var x = 0
@@ -37,3 +35,4 @@ def test()
     test_for_continue()
     test_complex_for_continue()
     return true
+

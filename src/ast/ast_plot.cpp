@@ -511,6 +511,11 @@ namespace das {
             Visitor::preVisit(that);
             label(that, "break", "shape=Msquare");
         }
+        // break
+        virtual void preVisit(ExprContinue * that) override {
+            Visitor::preVisit(that);
+            label(that, "continue", "shape=Msquare");
+        }
         // make block
         virtual void preVisit(ExprMakeBlock * that) override {
             Visitor::preVisit(that);

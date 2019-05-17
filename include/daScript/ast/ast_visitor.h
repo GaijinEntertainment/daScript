@@ -167,6 +167,7 @@ namespace das {
         VISIT_EXPR(ExprTryCatch)
         VISIT_EXPR(ExprReturn)
         VISIT_EXPR(ExprBreak)
+        VISIT_EXPR(ExprContinue)
         VISIT_EXPR(ExprConst)
         VISIT_EXPR(ExprFakeContext)
         VISIT_EXPR(ExprConstPtr)

@@ -1431,6 +1431,10 @@ namespace das
         return context.code->makeNode<SimNode_Break>(at);
     }
 
+    SimNode * ExprContinue::simulate (Context & context) const {
+        return context.code->makeNode<SimNode_Continue>(at);
+    }
+
     SimNode * ExprIfThenElse::simulate (Context & context) const {
         ExpressionPtr zeroCond;
         bool condIfZero = false;

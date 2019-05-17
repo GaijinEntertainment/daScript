@@ -1752,6 +1752,10 @@ namespace das {
                         error("captured block can't 'break' outside of the block",
                               block->at, CompilationError::invalid_block);
                     }
+                    if ( flags & EvalFlags::stopForContinue ) {
+                        error("captured block can't 'continue' outside of the block",
+                              block->at, CompilationError::invalid_block);
+                    }
                 }
                 if ( !block->hasReturn && block->type->isAuto() ) {
                     block->returnType = make_shared<TypeDecl>(Type::tVoid);
@@ -2260,6 +2264,12 @@ namespace das {
         virtual ExpressionPtr visit ( ExprBreak * expr ) override {
             if ( !loop.size() )
                 error("'break' without a loop", expr->at);
+            return Visitor::visit(expr);
+        }
+    // ExprContinue
+        virtual ExpressionPtr visit ( ExprContinue * expr ) override {
+            if ( !loop.size() )
+                error("'continue' without a loop", expr->at);
             return Visitor::visit(expr);
         }
     // ExprIfThenElse

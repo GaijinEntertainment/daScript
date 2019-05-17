@@ -114,7 +114,7 @@
 %token  DAS_REQUIRE    DAS_OPERATOR   DAS_ENUM       DAS_FINALLY
 %token  DAS_DELETE     DAS_DEREF      DAS_SCOPE      DAS_TYPEDEF
 %token  DAS_WITH       DAS_CAST       DAS_OVERRIDE   DAS_UPCAST
-%token  DAS_ITERATOR   DAS_VAR		  DAS_ADDR
+%token  DAS_ITERATOR   DAS_VAR		  DAS_ADDR       DAS_CONTINUE
 
 /* basic types */
 %token  DAS_TBOOL       DAS_TVOID       DAS_TSTRING     DAS_TAUTO
@@ -188,6 +188,7 @@
 %type <pExpression>     expression_while_loop
 %type <pExpression>     expression_for_loop
 %type <pExpression>     expression_break
+%type <pExpression>     expression_continue
 %type <pExpression>     expression_delete
 %type <pExpression>     expression_return
 %type <pExpression>     expression_else
@@ -606,6 +607,7 @@ expression_any
     |   expression_with[subexpr]            { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
     |   expression_break[subexpr] ';'       { $$ = $subexpr; }
+    |   expression_continue[subexpr] ';'    { $$ = $subexpr; }
     |   expression_return[subexpr] ';'      { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
@@ -676,6 +678,10 @@ expr_new
 
 expression_break
     :   DAS_BREAK[loc] { $$ = new ExprBreak(tokAt(@loc)); }
+    ;
+
+expression_continue
+    :   DAS_CONTINUE[loc] { $$ = new ExprContinue(tokAt(@loc)); }
     ;
 
 expression_return

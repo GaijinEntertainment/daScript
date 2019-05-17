@@ -216,6 +216,7 @@
 <normal>"function"                                      return DAS_TFUNCTION;
 <normal>"lambda"                                        return DAS_TLAMBDA;
 <normal>"const"                                         return DAS_CONST;
+<normal>"continue"                                      return DAS_CONTINUE;
 <normal>"cast"                                          return DAS_CAST;
 <normal>"upcast"                                        return DAS_UPCAST;
 <normal>"override"                                      return DAS_OVERRIDE;

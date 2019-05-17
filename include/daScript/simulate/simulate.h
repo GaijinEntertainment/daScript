@@ -87,6 +87,7 @@ namespace das
     enum EvalFlags : uint32_t {
         stopForBreak        = 1 << 0
     ,   stopForReturn       = 1 << 1
+    ,   stopForContinue     = 1 << 2
     };
 
 #if DAS_ENABLE_EXCEPTIONS
@@ -210,7 +211,7 @@ namespace das
 #endif
             // CALL
             fn->code->eval(*this);
-            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
             // POP
             abiArg = aa;
             stack.pop(EP, SP);
@@ -235,7 +236,7 @@ namespace das
 #endif
             // CALL
             fn->code->eval(*this);
-            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
             // POP
             abiArg = aa; abiCMRES = acm;
             stack.pop(EP, SP);
@@ -313,7 +314,7 @@ namespace das
     #endif
             // CALL
             when(fn->code);
-            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak);
+            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
             // POP
             abiArg = aa; abiCMRES = acm;
             stack.pop(EP,SP);
