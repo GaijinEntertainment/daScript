@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_visitor.h"
 #include "daScript/simulate/interop.h"
 
 namespace das
