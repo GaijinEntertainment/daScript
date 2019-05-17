@@ -1,4 +1,8 @@
+#include "daScript/misc/platform.h"
+
 #include "test_profile.h"
+
+#include "daScript/daScript.h"
 
 using namespace das;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "daScript/daScript.h"
+#include "daScript/simulate/simulate.h"
 
 struct Object {
     das::float3   pos;  

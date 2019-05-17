@@ -1,3 +1,5 @@
+#include "daScript/misc/platform.h"
+
 #include "unitTest.h"
 #include "module_unitTest.h"
 
