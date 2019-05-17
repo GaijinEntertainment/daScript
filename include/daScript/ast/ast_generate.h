@@ -25,6 +25,7 @@ namespace das {
     /*
         a->b(args) is short for invoke(a.b, a, args)
      */
+    struct ExprInvoke;
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b );
 
     /*

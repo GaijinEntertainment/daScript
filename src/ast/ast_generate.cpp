@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_expressions.h"
 
 namespace das {
 

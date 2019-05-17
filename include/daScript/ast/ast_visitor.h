@@ -1,6 +1,7 @@
 #pragma once
 
-#include "ast.h"
+#include "daScript/ast/ast.h"
+#include "daScript/ast/ast_expressions.h"
 
 namespace das {
     

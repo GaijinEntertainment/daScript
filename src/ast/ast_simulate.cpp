@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_match.h"
+#include "daScript/ast/ast_expressions.h"
 
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_table_nodes.h"
