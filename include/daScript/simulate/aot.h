@@ -1,16 +1,16 @@
 #pragma once
 
+#include "daScript/misc/function_traits.h"
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/aot_builtin.h"
-#include "daScript/simulate/aot_builtin_math.h"
 #include "daScript/simulate/aot_builtin_matrix.h"
-#include "daScript/simulate/aot_builtin_random.h"
 #include "daScript/simulate/aot_builtin_time.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/bin_serializer.h"
 #include "daScript/simulate/runtime_table.h"
+#include "daScript/simulate/interop.h"
 
 namespace das {
 

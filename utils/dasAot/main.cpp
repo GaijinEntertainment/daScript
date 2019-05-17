@@ -37,8 +37,11 @@ bool compile ( const string & fn, const string & cppFn ) {
             // AOT time
             TextWriter tw;
             // header
-            tw << "#include \"daScript/daScript.h\"\n";
+            tw << "#include \"daScript/misc/platform.h\"\n\n";
+
+            tw << "#include \"daScript/simulate/simulate.h\"\n";
             tw << "#include \"daScript/simulate/aot.h\"\n";
+            tw << "#include \"daScript/simulate/aot_library.h\"\n";
             tw << "\n";
             // lets comment on required modules
             program->library.foreach([&](Module * mod){

@@ -4,6 +4,10 @@
 
 namespace das
 {
+    TypeDeclPtr makeHandleType(const ModuleLibrary & library, const char * typeName) {
+        return library.makeHandleType(typeName);
+    }
+
     // auto or generic type conversion
 
     bool TypeDecl::isExprType() const {

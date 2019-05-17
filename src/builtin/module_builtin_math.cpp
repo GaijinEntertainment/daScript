@@ -270,6 +270,9 @@ namespace das {
             addFunctionCommonConversion<int3, float3>(*this,lib);
             addFunctionCommonConversion<int4, float4>(*this,lib);
         }
+        virtual void aotRequire ( TextWriter & tw ) const override {
+            tw << "#include \"daScript/simulate/aot_builtin_math.h\"\n";
+        }
     };
 }
 

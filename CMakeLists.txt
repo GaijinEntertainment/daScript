@@ -71,6 +71,7 @@ src/ast/ast_export.cpp
 src/ast/ast_parse.cpp
 src/ast/ast_debug_info_helper.cpp
 include/daScript/ast/compilation_errors.h
+include/daScript/ast/ast_typedecl.h
 include/daScript/ast/ast.h
 include/daScript/ast/ast_generate.h
 include/daScript/ast/ast_match.h
@@ -171,6 +172,7 @@ include/daScript/simulate/bind_enum.h
 include/daScript/simulate/bin_serializer.h
 src/simulate/bin_serializer.cpp
 include/daScript/simulate/aot.h
+include/daScript/simulate/aot_library.h
 include/daScript/simulate/aot_builtin.h
 include/daScript/simulate/aot_builtin_math.h
 include/daScript/simulate/aot_builtin_matrix.h

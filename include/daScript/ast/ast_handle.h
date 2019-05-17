@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/ast/ast.h"
+#include "daScript/simulate/interop.h"
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/simulate_nodes.h"
 

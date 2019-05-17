@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/misc/type_name.h"
+#include "daScript/ast/ast_typedecl.h"
 
 namespace das {
 

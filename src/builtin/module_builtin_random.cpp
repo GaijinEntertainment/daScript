@@ -27,6 +27,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(randomInUnitSphere)>(*this, lib, "randomInUnitSphere", SideEffects::modifyArgument);
             addExtern<DAS_BIND_FUN(randomInUnitDisk  )>(*this, lib, "randomInUnitDisk",   SideEffects::modifyArgument);
         }
+        virtual void aotRequire ( TextWriter & tw ) const override {
+            tw << "#include \"daScript/simulate/aot_builtin_random.h\"\n";
+        }
     };
 }
 

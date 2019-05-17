@@ -306,6 +306,9 @@ namespace das {
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, fio_das_len);
         }
+        virtual void aotRequire ( TextWriter & tw ) const override {
+            tw << "#include \"daScript/simulate/aot_fio.h\"\n";
+        }
     };
 }
 

@@ -11,7 +11,8 @@ def test : bool
     // debug(tab)
     i = 0
     while i!=total
-        assert(tab[string(i)]==i++)
+        assert(tab[string(i)]==i)
+        i++
     assert(length(tab)==total)
     // debug(tab)
     i = 0
@@ -62,7 +63,8 @@ def test : bool
     // debug(tab)
     i = 0
     while i!=total
-        assert(tab[string(i)]==i++)
+        assert(tab[string(i)]==i)
+        i++
     assert(length(tab)==total)
     // debug(tab)
     var cnt = 0
