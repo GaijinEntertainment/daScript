@@ -85,6 +85,7 @@ SOURCE_GROUP_FILES("ast" AST_SRC)
 SET(BUILTIN_SRC
 src/builtin/module_builtin.h
 src/builtin/module_builtin.cpp
+src/builtin/module_builtin_misc_types.cpp
 src/builtin/module_builtin_runtime.cpp
 src/builtin/module_builtin_vector.cpp
 src/builtin/module_builtin_vector_ctor.cpp

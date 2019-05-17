@@ -14,6 +14,7 @@ namespace das {
         void addMatrixTypes(ModuleLibrary & lib);
         void addArrayTypes(ModuleLibrary & lib);
         void addTime(ModuleLibrary & lib);
+        void addMiscTypes(ModuleLibrary & lib);
         bool appendCompiledFunctions();
     };
 }
