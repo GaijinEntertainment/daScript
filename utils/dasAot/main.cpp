@@ -6,6 +6,7 @@ using namespace das;
 TextPrinter tout;
 
 bool saveToFile ( const string & fname, const string & str ) {
+    printf("saving to %s\n", fname.c_str());
     FILE * f = fopen ( fname.c_str(), "w" );
     if ( !f ) {
         tout << "can't open " << fname << "\n";
@@ -15,7 +16,7 @@ bool saveToFile ( const string & fname, const string & str ) {
     return true;
 }
 
-bool compile ( const string & fn, const string & mainInc, const string & registerInc ) {
+bool compile ( const string & fn, const string & cppFn ) {
     auto access = make_shared<FsFileAccess>();
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
@@ -34,46 +35,60 @@ bool compile ( const string & fn, const string & mainInc, const string & registe
                 return false;
             }
             // AOT time
-            TextWriter mainTw, registerTw;
+            TextWriter tw;
+            // header
+            tw << "#include \"daScript/daScript.h\"\n";
+            tw << "#include \"daScript/simulate/aot.h\"\n";
+            tw << "\n";
             // lets comment on required modules
             program->library.foreach([&](Module * mod){
                 if ( mod->name=="" ) {
                     // nothing, its main program module. i.e ::
-                } else if ( mod->name=="$" ) {
-                    mainTw << " // require builtin\n";
                 } else {
-                    mainTw << " // require " << mod->name << "\n";
+                    if ( mod->name=="$" ) {
+                        tw << " // require builtin\n";
+                    } else {
+                        tw << " // require " << mod->name << "\n";
+                    }
+                    mod->aotRequire(tw);
                 }
                 return true;
             },"*");
-            // sample
-#if 0
-            for (const auto & st : program->thisModule->structuresInOrder) {
-                mainTw << " // structure " << st->name << "\n";
-                for (const auto & fl : st->fields) {
-                    mainTw << " //     " << describeCppType(fl.type,true) << " " << fl.name << ";";
-                    if (fl.annotation.arguments.size()) {
-                        mainTw << " // ";
-                        for (const auto & arg : fl.annotation.arguments) {
-                            mainTw << " " << arg.name << "=";
-                            switch (arg.type) {
-                            case Type::tInt:    mainTw << arg.iValue; break;
-                            case Type::tFloat:  mainTw << arg.fValue; break;
-                            case Type::tBool:   mainTw << (arg.bValue ? "true" : "false"); break;
-                            case Type::tString: mainTw << arg.sValue; break;
-                            default:    mainTw << "??"; break;
-                            }
-                        }
-                    }
-                    mainTw << "\n";
-                }
-            }
-#endif
+            tw << "\n";
+            tw << "#if defined(_MSC_VER)\n";
+            tw << "#pragma warning(push)\n";
+            tw << "#pragma warning(disable:4100)   // unreferenced formal parameter\n";
+            tw << "#pragma warning(disable:4189)   // local variable is initialized but not referenced\n";
+            tw << "#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data\n";
+            tw << "#elif defined(__clang__)\n";
+            tw << "#pragma clang diagnostic push\n";
+            tw << "#pragma clang diagnostic ignored \"-Wunused-parameter\"\n";
+            tw << "#pragma clang diagnostic ignored \"-Wwritable-strings\"\n";
+            tw << "#pragma clang diagnostic ignored \"-Wunused-variable\"\n";
+            tw << "#pragma clang diagnostic ignored \"-Wunsequenced\"\n";
+            tw << "#pragma clang diagnostic ignored \"-Wunused-function\"\n";
+            tw << "#endif\n";
+            tw << "\n";
+            tw << "namespace das {\n";
+            tw << "namespace {\n"; // anonymous
             // AOT actual
-            program->aotCpp(ctx, mainTw);
-            program->registerAotCpp(registerTw, ctx, false);
+            program->aotCpp(ctx, tw);
+            // list STUFF
+            tw << "struct AotList_impl : AotListBase {\n";
+            tw << "\tvirtual void registerAotFunctions ( AotLibrary & aotLib ) override {\n";
+            program->registerAotCpp(tw, ctx, false);
+            tw << "\t};\n";
+            tw << "};\n";
+            tw << "AotList_impl impl;\n";
+            tw << "}\n";
+            tw << "}\n";
+            tw << "#if defined(_MSC_VER)\n";
+            tw << "#pragma warning(pop)\n";
+            tw << "#elif defined(__clang__)\n";
+            tw << "#pragma clang diagnostic pop\n";
+            tw << "#endif\n";
             // and save
-            return saveToFile(mainInc, mainTw.str()) && saveToFile(registerInc, registerTw.str());
+            return saveToFile(cppFn, tw.str());
         }
     } else {
         return false;
@@ -81,8 +96,8 @@ bool compile ( const string & fn, const string & mainInc, const string & registe
 }
 
 int main(int argc, const char * argv[]) {
-    if ( argc!=4 ) {
-        tout << "dasAot [script.das] [script.main.inc] [script.decl.inc] [NAMESPACE]\n";
+    if ( argc!=3 ) {
+        tout << "dasAot [script.das] [script.das.src]\n";
         return -1;
     }
     NEED_MODULE(Module_BuiltIn);
@@ -91,7 +106,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_PathTracerHelper);
     NEED_MODULE(Module_TestProfile);
     NEED_MODULE(Module_UnitTest);
-    bool compiled = compile(argv[1], argv[2], argv[3]);
+    bool compiled = compile(argv[1], argv[2]);
     Module::Shutdown();
     return compiled ? 0 : -1;
 }

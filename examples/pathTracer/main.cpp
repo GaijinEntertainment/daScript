@@ -11,14 +11,6 @@ using namespace das;
 
 #define USE_AOT 1
 
-#if USE_AOT
-namespace das {
-    namespace aot {
-        void registerAot ( AotLibrary & aotLib );
-    }
-}
-#endif
-
 TextPrinter tout;
 
 extern "C" int64_t ref_time_ticks();
@@ -51,7 +43,7 @@ bool unit_test ( const string & fn ) {
 #if USE_AOT
             // now, what we get to do is to link AOT
             AotLibrary aotLib;
-            das::aot::registerAot(aotLib);
+            AotListBase::registerAot(aotLib);
             program->linkCppAot(ctx, aotLib, tout);
 #endif
 #if 1

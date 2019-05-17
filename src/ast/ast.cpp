@@ -3,7 +3,24 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
-    
+
+    // AOT
+
+    AotListBase * AotListBase::head = nullptr;
+
+    AotListBase::AotListBase() {
+        tail = head;
+        head = this;
+    }
+
+    void AotListBase::registerAot ( AotLibrary & lib ) {
+        auto it = head;
+        while ( it ) {
+            it->registerAotFunctions(lib);
+            it = it->tail;
+        }
+    }
+
     // annotations
 
     string Annotation::getMangledName() const {

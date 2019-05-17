@@ -2076,8 +2076,8 @@ namespace das {
                 continue;
             // SimFunction * fn = context.getFunction(i);
             uint64_t semH = fnn[i]->hash;
-            logs << "\t// " << aotFuncName(fnn[i]) << "\n";
-            logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
+            logs << "\t\t// " << aotFuncName(fnn[i]) << "\n";
+            logs << "\t\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
             if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
                 logs << "CMRES";
@@ -2087,11 +2087,11 @@ namespace das {
         }
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
-            logs << "\t// [[ init script ]]\n";
-            logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
+            logs << "\t\t// [[ init script ]]\n";
+            logs << "\t\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
             logs << "<void (Context *),";
-            logs << "__init_script>>();\n\t};\n";
+            logs << "__init_script>>();\n\t\t};\n";
         }
         if ( headers ) {
             logs << "}\n";

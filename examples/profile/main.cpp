@@ -4,12 +4,6 @@
 using namespace das;
 #include "test_profile.h"
 
-namespace das {
-    namespace aot {
-        void registerAot ( AotLibrary & aotLib );
-    }
-}
-
 TextPrinter tout;
 
 bool unit_test ( const string & fn, bool useAOT ) {
@@ -35,7 +29,7 @@ bool unit_test ( const string & fn, bool useAOT ) {
             // now, what we get to do is to link AOT
             if ( useAOT ) {
                 AotLibrary aotLib;
-                das::aot::registerAot(aotLib);
+                AotListBase::registerAot(aotLib);
                 program->linkCppAot(ctx, aotLib, tout);
             }
             // vector of 10000 objects

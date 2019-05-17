@@ -215,14 +215,23 @@ MACRO(DAS_AOT input genList)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
     get_filename_component(input_name ${input} NAME)
+    set(out_dir ${input_dir}/_aot_generated)
+    set(out_src ${out_dir}/${input_name}.cpp)
+    file(MAKE_DIRECTORY ${out_dir})
 	ADD_CUSTOM_COMMAND(
 		DEPENDS ${input_src}
         DEPENDS dasAot
-		OUTPUT ${input_src}.main.inc ${input_src}.register.inc
-        COMMAND dasAot ${input_src} ${input_src}.main.inc ${input_src}.register.inc
-		COMMENT "AOT precompiling ${input_src} absolute")
-    list(APPEND ${genList} ${input_src}.main.inc)
-    list(APPEND ${genList} ${input_src}.register.inc)
+        OUTPUT  ${out_src}
+        COMMENT "AOT precompiling ${input_src} -> ${out_src}"
+        COMMAND dasAot ${input_src} ${out_src}
+    )
+    list(APPEND ${genList} ${out_src})
+ENDMACRO()
+
+MACRO(DAS_AOT_DIR inFiles genList)
+    FOREACH(inF ${inFiles})
+        DAS_AOT(${inF} ${genList})
+    ENDFOREACH()
 ENDMACRO()
 
 # Continues development tool
@@ -261,11 +270,10 @@ examples/curl/curl.das
 
 FIND_PACKAGE(CURL)
 IF(CURL_FOUND)
-    include_directories(curl)
-    include_directories(${CURL_INCLUDE_DIR})
     add_executable(curlTest ${CURL_MAIN_SRC} )
     TARGET_LINK_LIBRARIES(curlTest libDaScript ${CURL_LIBRARIES})
     ADD_DEPENDENCIES(curlTest libDaScript)
+    TARGET_INCLUDE_DIRECTORIES(curlTest PUBLIC ${CURL_INCLUDE_DIR})
     SETUP_CPP11(curlTest)
 ENDIF(CURL_FOUND)
 
@@ -288,7 +296,6 @@ examples/common/fileAccess.h
 examples/pathTracer/path_tracer_helper.h
 examples/pathTracer/toy_random.das
 examples/pathTracer/toy_path_tracer.das
-examples/pathTracer/aot.cpp
 )
 SOURCE_GROUP_FILES("source" PATH_TRACER_MAIN_SRC)
 
@@ -296,13 +303,13 @@ SET(PATH_TRACER_GEN_SRC)
 DAS_AOT(examples/pathTracer/toy_path_tracer.das PATH_TRACER_GEN_SRC)
 SOURCE_GROUP_FILES("generated" PATH_TRACER_GEN_SRC)
 
-include_directories(include pathTracer)
 add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} ${PATH_TRACER_GEN_SRC})
 TARGET_LINK_LIBRARIES(pathTracer libDaScript libPathTracerHelper)
 IF (UNIX)
   TARGET_LINK_LIBRARIES(pathTracer pthread)
 ENDIF()
 ADD_DEPENDENCIES(pathTracer libDaScript libPathTracerHelper)
+TARGET_INCLUDE_DIRECTORIES(pathTracer PUBLIC examples/pathTracer)
 SETUP_CPP11(pathTracer)
 
 # JSON Example
@@ -313,11 +320,10 @@ examples/common/fileAccess.h
 examples/json/test.das
 examples/json/test_json.das
 )
-
-include_directories(include json)
 add_executable(jsonTest ${JSON_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(jsonTest libDaScript libDaScriptJson)
 ADD_DEPENDENCIES(jsonTest libDaScript libDaScriptJson)
+TARGET_INCLUDE_DIRECTORIES(pathTracer PUBLIC json)
 SETUP_CPP11(jsonTest)
 
 # Stand alone command line compiler
@@ -383,84 +389,19 @@ SET(TEST_MAIN_SRC
 examples/test/main.cpp
 examples/common/fileAccess.h
 examples/test/unitTest.h
-examples/test/aot.h
-examples/test/aot.cpp
-examples/test/aot_1.cpp
-examples/test/aot_2.cpp
-examples/test/aot_3.cpp
-examples/test/aot_4.cpp
 )
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
 SET(TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/array.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/auto_infer.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/bin_serializer.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/block.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/block_access_function_arg.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/cast.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/clone.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/copy_and_move_on_return.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/ctor.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/das_string.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/div_by_zero.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/deref_ptr_fun.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/dynamic_array.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/enum.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/finally.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/foo_bar.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/for-loop.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/func_addr.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/global.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/handle.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/include.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/infer_alias_and_alias_ctor.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/infer_alias_argument.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/infer_remove_ref_const.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/init_script.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/int2_crash.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/int_types.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/lambda.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/local_reference.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/make_local.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/mat_crash.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/mat_ctors.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/math.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/method_semantic.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/module.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/named_call.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/new_and_init.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/new_delete.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/new_with_init.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/operator_overload.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/operators.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/override.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/return_reference.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/rpipe.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/static_if.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/string.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/string_builder.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/struct.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/structure_annotation.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/swizze.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/table.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/test_bool_if.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/time.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/try-catch.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/typeAlias.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/typename.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/types.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/vec_ctors.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/vec_index.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/vec_swizzle.das TEST_GENERATED_SRC)
-DAS_AOT(examples/test/unit_tests/with.das TEST_GENERATED_SRC)
+DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC})
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest)
 ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest)
+TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
 
 # Profile module
@@ -487,26 +428,16 @@ SET(PROFILE_MAIN_SRC
 examples/profile/main.cpp
 examples/common/fileAccess.h
 examples/profile/test_profile.h
-examples/profile/aot.cpp
 )
 list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("source" PROFILE_MAIN_SRC)
 
 SET(PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/dict.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/exp.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/fib.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/native.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/nbodies.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/particles.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/primes.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/aos.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/panic.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/annotation.das PROFILE_GENERATED_SRC)
-DAS_AOT(examples/profile/tests/make_struct.das PROFILE_GENERATED_SRC)
+DAS_AOT_DIR("${PROFILE_SRC}" PROFILE_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC})
+TARGET_INCLUDE_DIRECTORIES(daScriptProfile PUBLIC examples/profile)
 TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile)
 ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
 SETUP_CPP11(daScriptProfile)

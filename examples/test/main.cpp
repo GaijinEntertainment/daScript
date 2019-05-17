@@ -3,12 +3,6 @@
 
 using namespace das;
 
-namespace das {
-    namespace aot {
-        void registerAot ( AotLibrary & aotLib );
-    }
-}
-
 bool g_reportCompilationFailErrors = false;
 
 TextPrinter tout;
@@ -85,7 +79,7 @@ bool unit_test ( const string & fn, bool useAot ) {
             if ( useAot ) {
                 // now, what we get to do is to link AOT
                 AotLibrary aotLib;
-                das::aot::registerAot(aotLib);
+                AotListBase::registerAot(aotLib);
                 program->linkCppAot(ctx, aotLib, tout);
             }
             if ( auto fnTest = ctx.findFunction("test") ) {
@@ -135,7 +129,7 @@ bool exception_test ( const string & fn, bool useAot ) {
             if ( useAot ) {
                 // now, what we get to do is to link AOT
                 AotLibrary aotLib;
-                das::aot::registerAot(aotLib);
+                AotListBase::registerAot(aotLib);
                 program->linkCppAot(ctx, aotLib, tout);
             }
             if ( auto fnTest = ctx.findFunction("test") ) {

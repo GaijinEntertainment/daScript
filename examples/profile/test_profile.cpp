@@ -721,6 +721,9 @@ public:
         addExtern<DAS_BIND_FUN(testNBodiesInit)>(*this, lib, "testNBodiesInit",SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(testNBodies)>(*this, lib, "testNBodies",SideEffects::modifyExternal);
     }
+    virtual void aotRequire ( TextWriter & tw ) const override {
+        tw << "#include \"test_profile.h\"\n";
+    }
 };
 
 REGISTER_MODULE(Module_TestProfile);

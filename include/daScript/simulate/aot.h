@@ -575,7 +575,7 @@ namespace das {
     }
 
     template <typename TT>
-    __forceinline TT * das_ref ( Context * __context__, const TT & ref ) {
+    __forceinline TT * das_ref ( Context *, const TT & ref ) {
         return &const_cast<TT &>(ref);
     }
 

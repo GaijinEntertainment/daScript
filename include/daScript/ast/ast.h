@@ -1586,6 +1586,7 @@ namespace das
         Module ( const string & n = "" );
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
+        virtual void aotRequire ( TextWriter & ) const {}
         bool addAlias ( const TypeDeclPtr & at, bool canFail = false );
         bool addVariable ( const VariablePtr & var, bool canFail = false );
         bool addStructure ( const StructurePtr & st, bool canFail = false );
@@ -1710,6 +1711,14 @@ namespace das
     // this is how we make node
     typedef function<SimNode * (Context &)> AotFactory;
     typedef map<uint64_t,AotFactory> AotLibrary;
+
+    struct AotListBase {
+        AotListBase();
+        static void registerAot ( AotLibrary & lib );
+        virtual void registerAotFunctions ( AotLibrary & lib ) = 0;
+        AotListBase * tail = nullptr;
+        static AotListBase * head;
+    };
 
     class Program : public enable_shared_from_this<Program> {
     public:
