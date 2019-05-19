@@ -1722,9 +1722,13 @@ namespace das {
                 TypeInfo * info = helper.makeTypeInfo(nullptr, argType);
                 ss << "das_debug(__context__,&" << helper.typeInfoName(info) << ",__FILE__,__LINE__,";
                 ss << "cast<" << describeCppType(argType) << ">::from(";
-            } else if (call->name == "assert") {
-                if ( call->arguments.size()==1 ) ss << "DAS_ASSERT((";
-                else ss << "DAS_ASSERTF((";
+            } else if (call->name == "assert" || call->name=="verify") {
+                auto ea = static_cast<ExprAssert *>(call);
+                if ( call->arguments.size()==1 ) {
+                    ss << (ea->isVerify ? "DAS_VERIFY" : "DAS_ASSERT") << "((";
+                } else {
+                    ss << (ea->isVerify ? "DAS_VERIFYF" : "DAS_ASSERTF") << "((";
+                }
             } else if (call->name == "erase") {
                 ss << "__builtin_table_erase(__context__,";
             } else if (call->name == "find") {
@@ -1787,7 +1791,7 @@ namespace das {
                 }
             }
             if ( !last ) {
-                if (call->name == "assert" || call->name=="debug") {
+                if (call->name == "assert" || call->name=="verify" || call->name=="debug") {
                     ss << "),(";
                 } else {
                     ss << ",";
@@ -1796,7 +1800,7 @@ namespace das {
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprLooksLikeCall * call ) override {
-            if ( call->name=="assert" || call->name=="debug" ) {
+            if ( call->name=="assert" || call->name=="verify" || call->name=="debug" ) {
                 ss << "))"; 
             } else {
                 ss << ")";

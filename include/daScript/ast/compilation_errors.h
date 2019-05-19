@@ -114,6 +114,7 @@ namespace das
     ,   run_failed                              =   40101       //  [run]def fn; ..... fn(nonconst)
 
     ,   not_all_paths_return_value              =   40200       // def a() { if true return 1; }
+    ,   assert_with_side_effects                =   40201       // assert(i++)
 
     ,   too_many_infer_passes                   =   41000
 

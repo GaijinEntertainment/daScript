@@ -21,22 +21,22 @@ def mod_by_zero(num:auto(numT))
 [export]
 def test()
     // int
-    assert(div_by_zero(1)==1)
-    assert(mod_by_zero(1)==1)
+    verify(div_by_zero(1)==1)
+    verify(mod_by_zero(1)==1)
     // uint
-    assert(div_by_zero(1u)==1u)
-    assert(mod_by_zero(1u)==1u)
+    verify(div_by_zero(1u)==1u)
+    verify(mod_by_zero(1u)==1u)
     // int64
-    assert(div_by_zero(1l)==1l)
-    assert(mod_by_zero(1l)==1l)
+    verify(div_by_zero(1l)==1l)
+    verify(mod_by_zero(1l)==1l)
     // uint64
-    assert(div_by_zero(1ul)==1ul)
-    assert(mod_by_zero(1ul)==1ul)
+    verify(div_by_zero(1ul)==1ul)
+    verify(mod_by_zero(1ul)==1ul)
     // float
-    assert(div_by_zero(1.0f)==1.0f)
-    assert(mod_by_zero(1.0f)==1.0f)
+    verify(div_by_zero(1.0f)==1.0f)
+    verify(mod_by_zero(1.0f)==1.0f)
     // double
-    assert(div_by_zero(1.0lf)==1.0lf)
-    assert(mod_by_zero(1.0lf)==1.0lf)
+    verify(div_by_zero(1.0lf)==1.0lf)
+    verify(mod_by_zero(1.0lf)==1.0lf)
     return true
 

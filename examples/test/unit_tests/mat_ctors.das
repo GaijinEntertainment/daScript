@@ -16,7 +16,7 @@ def verifySequence(mat:auto(mat))
     var t = 1.0
     for y in range(0,row)
         for x in range(0,col)
-            assert(mat[y][x]==t++)
+            verify(mat[y][x]==t++)
 
 def verifyRows(mat:auto(mat))
     let v : auto(vec) = mat[0]

@@ -55,6 +55,11 @@ namespace das {
             Visitor::preVisit(expr);
             expr->noSideEffects = !expr->write;
         }
+    // null-coalescing
+        virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
+            expr->noSideEffects = expr->subexpr->noSideEffects && expr->defaultValue->noSideEffects;
+            return Visitor::visit(expr);
+        }
     // at
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
@@ -83,6 +88,45 @@ namespace das {
                     expr->noSideEffects &= arg->noSideEffects;
                 }
             }
+            return Visitor::visit(expr);
+        }
+    // looks like call
+        /*
+        virtual ExpressionPtr visit ( ExprLooksLikeCall * expr ) override {
+            if ( expr->noSideEffects ) {
+                for ( auto & arg : expr->arguments ) {
+                    expr->noSideEffects &= arg->noSideEffects;
+                }
+            }
+            return Visitor::visit(expr);
+        }
+        */
+    // string-builder
+        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
+            expr->noSideEffects = true;
+            for ( auto & arg : expr->elements ) {
+                expr->noSideEffects &= arg->noSideEffects;
+            }
+            return Visitor::visit(expr);
+        }
+    // addr
+        virtual ExpressionPtr visit ( ExprAddr * expr ) override {
+            expr->noSideEffects = true;
+            return Visitor::visit(expr);
+        }
+    // ref2value
+        virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
+            expr->noSideEffects = expr->subexpr->noSideEffects;
+            return Visitor::visit(expr);
+        }
+    // ptr2ref
+        virtual ExpressionPtr visit ( ExprPtr2Ref * expr ) override {
+            expr->noSideEffects = expr->subexpr->noSideEffects;
+            return Visitor::visit(expr);
+        }
+    // ref2ptr
+        virtual ExpressionPtr visit ( ExprRef2Ptr * expr ) override {
+            expr->noSideEffects = expr->subexpr->noSideEffects;
             return Visitor::visit(expr);
         }
     };
@@ -577,11 +621,15 @@ namespace das {
 
     // program
 
-    bool Program::optimizationConstFolding() {
+    void Program::checkSideEffects() {
         SetSideEffectVisitor sse;
         visit(sse);
         NoSideEffectVisitor nse;
         visit(nse);
+    }
+
+    bool Program::optimizationConstFolding() {
+        checkSideEffects();
         ConstFolding cfe(shared_from_this());
         visit(cfe);
         bool any = cfe.didAnything();

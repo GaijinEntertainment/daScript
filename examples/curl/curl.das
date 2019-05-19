@@ -1,4 +1,4 @@
-options log=true
+// options log=true
 
 require libCurl
 

@@ -145,8 +145,8 @@ namespace das {
             return program;
         } else {
             program->inferTypes(logs);
-            program->lint();
             if ( !program->failed() ) {
+                program->lint();
                 if (program->options.getOption("optimize", true)) {
                     program->optimize(logs);
                 } else {

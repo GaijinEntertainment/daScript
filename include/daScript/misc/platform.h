@@ -65,13 +65,27 @@ inline void das_aligned_free16(void *ptr) {return delete[] (vec4f*)ptr; }
 #define DAS_FATAL_ERROR { assert(0 && "fatal error"); exit(-1); }
 #endif
 
-
 #ifndef DAS_ASSERT
-#define DAS_ASSERT(a)   assert(a)
+    #define DAS_ASSERT(a)   assert(a)
+#endif
+
+#ifndef DAS_VERIFY
+    #ifdef NDEBUG
+        #define DAS_VERIFY(a)   (a)
+    #else
+        #define DAS_VERIFY(a)   assert(a)
+    #endif
 #endif
 
 #ifndef DAS_ASSERTF
-#define DAS_ASSERTF(a, msg, ...)   assert(a && msg)
+    #define DAS_ASSERTF(a, msg, ...)   assert(a && msg)
 #endif
 
+#ifndef DAS_VERIFYF
+    #ifdef NDEBUG
+        #define DAS_VERIFYF(a, msg, ...)    (a)
+    #else
+        #define DAS_VERIFYF(a, msg, ...)   assert(a && msg)
+    #endif
+#endif
 

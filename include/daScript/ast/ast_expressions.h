@@ -591,10 +591,12 @@ namespace das
     };
 
     struct ExprAssert : ExprLikeCall<ExprAssert> {
-        ExprAssert () = default;
-        ExprAssert ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprAssert>(a,name) {}
+        ExprAssert ( ) = default;
+        ExprAssert ( const LineInfo & a, const string & name, bool isV )
+            : ExprLikeCall<ExprAssert>(a,name) { isVerify = isV; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        bool isVerify = false;
     };
 
     struct ExprStaticAssert : ExprLikeCall<ExprStaticAssert> {

@@ -25,7 +25,7 @@ def expLoopUV(n)
 		sumV += exp(rcp_est(float4(i*16)+float4(1,2,3,4)))
     return sumV.x + sumV.y + sumV.z + sumV.w
 
-def verify(f)
+def verifyExp(f)
 	let t = 1e+06
 	let eps = 10.
 	let q = abs(f-t)
@@ -36,17 +36,17 @@ def test()
 	var f1 = 0.
     profile(20,"exp loop") <|
         f1 = expLoop(1000000)
-	verify(f1)
+	verifyExp(f1)
 	var f2 = 0.
     profile(20,"exp loop, unrolled") <|
         f2 = expLoopU(1000000)
-	verify(f2)
+	verifyExp(f2)
 	var f3 = 0.
     profile(20,"exp loop, unrolled and vectorized") <|
         f3 = expLoopUV(1000000)
-	verify(f3)
+	verifyExp(f3)
 	var f4 = 0.
     profile(20,"c++ exp loop") <|
         f4 = testProfile::testExpLoop(1000000)
-	verify(f4)
+	verifyExp(f4)
     return true

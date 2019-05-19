@@ -10,6 +10,6 @@ def test
         let e1 = addValue(1) <| $ (extraBlock:int) : int
             return extraBlock + CNT
         return CNT++ + e1
-    assert(invoke(counter,0)==1)
+    verify(invoke(counter,0)==1)
     return true
 

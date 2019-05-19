@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_visitor.h"
 
 namespace das {
 
@@ -37,16 +38,40 @@ namespace das {
         return false;
     }
 
+    class LintVisitor : public Visitor {
+    public:
+        LintVisitor ( const ProgramPtr & prog ) : program(prog) {}
+        void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
+            program->error(err,at,cerr);
+        }
+    protected:
+        virtual void preVisit ( ExprAssert * expr ) {
+            if ( !expr->isVerify && !expr->arguments[0]->noSideEffects ) {
+                error("assert expressions can't have side-effects (use verify instead)", expr->at,
+                      CompilationError::assert_with_side_effects);
+            }
+        }
+    protected:
+        ProgramPtr program;
+    };
+
     void Program::lint() {
         if (!options.getOption("lint", true)) {
             return;
         }
+        TextWriter logs;
+        buildAccessFlags(logs);
+        checkSideEffects();
+        // lint it
+        LintVisitor lintV(shared_from_this());
+        visit(lintV);
         // all control paths return something
         for ( auto & fnT : thisModule->functions ) {
             auto fn = fnT.second;
             if ( !fn->result->isVoid() && !fn->result->isAuto() ) {
                 if ( !exprReturns(fn->body) ) {
-                    error("not all control paths return value", fn->at, CompilationError::not_all_paths_return_value);
+                    error("not all control paths return value", fn->at,
+                          CompilationError::not_all_paths_return_value);
                 }
             }
         }

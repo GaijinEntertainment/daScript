@@ -35,7 +35,7 @@ def test:bool
         i = 0
         for l,r in a,b
             assert(r==i*2-5)
-            assert(l==i++)
+            verify(l==i++)
         i = 0
         for l,r in a,b
             if l>r
@@ -56,7 +56,7 @@ def test:bool
         i = 0
         for l,r in a,b
             assert(r==i*2-5)
-            assert(l==i++)
+            verify(l==i++)
         assert(i==4)
         i = 0
         for l,r in a,b
@@ -68,7 +68,7 @@ def test:bool
     if true
         var i:int=0
         for a in range(0,10)
-            assert(a==i++)
+            verify(a==i++)
         assert(i==10)
     // 2 variable, range hybrid
     if true
@@ -80,7 +80,7 @@ def test:bool
         i = 0
         for l,r in range(0,10),b
             assert(r==i*2-5)
-            assert(l==i++)
+            verify(l==i++)
         i = 0
         for l,r in range(0,10),b
             if l>r

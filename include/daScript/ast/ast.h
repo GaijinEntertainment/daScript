@@ -502,14 +502,14 @@ namespace das
         static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
         virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}
     public:
-        template <typename TT>
-        __forceinline void addCall ( const string & fnName ) {
+        template <typename TT, typename ...TARG>
+        __forceinline void addCall ( const string & fnName, TARG ...args ) {
             if ( callThis.find(fnName)!=callThis.end() ) {
                 DAS_FATAL_LOG("addCall(%s) failed. duplicate call\n", fnName.c_str());
                 DAS_FATAL_ERROR;
             }
-            callThis[fnName] = [fnName](const LineInfo & at) {
-                return new TT(at, fnName);
+            callThis[fnName] = [fnName,args...](const LineInfo & at) {
+                return new TT(at, fnName, args...);
             };
         }
     public:
@@ -623,6 +623,7 @@ namespace das
         void finalizeAnnotations();
         void inferTypes(TextWriter & logs);
         void lint();
+        void checkSideEffects();
         bool optimizationRefFolding();
         bool optimizationConstFolding();
         bool optimizationBlockFolding();

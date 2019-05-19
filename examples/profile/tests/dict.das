@@ -31,6 +31,6 @@ def test
         dict(tab,src)
     profile(20,"c++ dictionary") <|
         testProfile::testDict(src)
-    assert(heap_depth()==1)
+    verify(heap_depth()==1)
     return true
 

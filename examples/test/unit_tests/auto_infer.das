@@ -30,7 +30,7 @@ def test
     let b = a
     let c : auto const = b
     // array size
-    assert(take_arr([[int[4] 1;2;3;4]])==10)
+    verify(take_arr([[int[4] 1;2;3;4]])==10)
     // pointer
     var pFoo : Foo? = new Foo
     var pFooI : auto? = pFoo

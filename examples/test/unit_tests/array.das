@@ -11,14 +11,14 @@ def verify_test_array(a:array<int>;extra:int=0)
     assert(length(a)==10)
     var i=0
     for x in a
-        assert(x==(extra+i++))
+        verify(x==(extra+i++))
 
 def pass_array ( var arr:array<int> )
     push(arr,4)
 
 def verifyIntArray(a:array<int>;var s:int;c,tail:int)
     for t in range(0,c)
-        assert(a[t]==s++)
+        verify(a[t]==s++)
     for t in range(c,c+tail)
         assert(a[t]==0)
 

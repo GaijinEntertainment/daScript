@@ -477,6 +477,7 @@ namespace das {
     ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprAssert>(expr);
         ExprLooksLikeCall::clone(cexpr);
+        cexpr->isVerify = isVerify;
         return cexpr;
     }
 

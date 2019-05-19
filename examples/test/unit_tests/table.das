@@ -3,7 +3,7 @@ def test : bool
     var tab:table<string,int>
     var i,del:int
     let total:int=32
-    assert(!erase(tab,"0"))
+    verify(!erase(tab,"0"))
     i = 0
     while i!=total
         tab[string(i)] = i++
@@ -18,8 +18,8 @@ def test : bool
     i = 0
     del = 0
     while i < total
-        assert(erase(tab,string(i)))
-        assert(!erase(tab,string(i)))
+        verify(erase(tab,string(i)))
+        verify(!erase(tab,string(i)))
         del ++
         i += 7
     assert(length(tab)==total-del)
@@ -74,8 +74,8 @@ def test : bool
         assert(k==string(v))
         cnt ++
     assert(cnt==total)
-    assert(erase(tab,"1"))
-    assert(!erase(tab,"-1"))
+    verify(erase(tab,"1"))
+    verify(!erase(tab,"-1"))
 
     
     var tab_bool:table<bool, int>

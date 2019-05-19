@@ -57,7 +57,7 @@ def init(var objects:NObject[10000])
         initObj(index++,obj)
     assert(index==10000)
 
-def verify(total:int;objects:ObjectArray)
+def verifyObj(total:int;objects:ObjectArray)
     var i = 0
     let t = float(total)
     for obj in objects
@@ -66,7 +66,7 @@ def verify(total:int;objects:ObjectArray)
         let npos = apos + avel*t
         assert(obj.position==npos)
 
-def verify(total:int;objects:NObject[10000])
+def verifyObj(total:int;objects:NObject[10000])
     var i = 0
     let t = float(total)
     for obj in objects
@@ -77,31 +77,31 @@ def verify(total:int;objects:NObject[10000])
 
 [export]
 def test(var objects:ObjectArray)
-    // verify
+    // verifyObj
     init(nobjects)
     testSim(nobjects)
-    verify(1,nobjects)
+    verifyObj(1,nobjects)
     init(nobjects)
     testSimI(nobjects)
-    verify(1,nobjects)
+    verifyObj(1,nobjects)
     init(objects)
     testSim(objects)
-    verify(1,objects)
+    verifyObj(1,objects)
     init(objects)
     testSimI(objects)
-    verify(1,objects)
+    verifyObj(1,objects)
     init(objects)
     interopUpdateTest(objects)
-    verify(1,objects)
+    verifyObj(1,objects)
     init(objects)
     testInterop(objects)
-    verify(1,objects)
+    verifyObj(1,objects)
     init(objects)
     update10000(objects)
-    verify(1,objects)
+    verifyObj(1,objects)
     init(objects)
     update10000ks(objects)
-    verify(1,objects)
+    verifyObj(1,objects)
     // profile
     let simTN = profile(20,"native basic version") <|
         for i in range(0,1000)

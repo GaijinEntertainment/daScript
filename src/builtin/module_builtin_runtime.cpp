@@ -181,7 +181,8 @@ namespace das
         addInterop<_builtin_binary_load,void,vec4f,char *>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgument);
         addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal);
         // function-like expresions
-        addCall<ExprAssert>         ("assert");
+        addCall<ExprAssert>         ("assert",false);
+        addCall<ExprAssert>         ("verify",true);
         addCall<ExprStaticAssert>   ("static_assert");
         addCall<ExprDebug>          ("debug");
         // hash
