@@ -531,30 +531,51 @@ namespace das {
             renameVariable(var.get());
         }
     // let
+        ExprBlock * getCurrentBlock() const {
+            ExprBlock * block = nullptr;
+            for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+                ExprBlock * pb = *it;
+                if (pb->isClosure) {
+                    block = pb;
+                    break;
+                }
+                if (!(pb->inTheLoop && pb->finalList.size())) {
+                    block = pb;
+                    break;
+                }
+            }
+            return block;
+        }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
             if (stack.back()->finalList.size()) {    // only move from the block with finally
-                ExprBlock * block = nullptr;
-                for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
-                    ExprBlock * pb = *it;
-                    if (pb->isClosure) {
-                        block = pb;
-                        break;
-                    }
-                    if (!(pb->inTheLoop && pb->finalList.size())) {
-                        block = pb;
-                        break;
-                    }
-                }
+                ExprBlock * block = getCurrentBlock();
+                DAS_ASSERT(block && "internal error. let expression without block");
                 variables[block].push_back(var.get());
                 moved.insert(var.get());
             }
             renameVariable(var.get());
         }
-
+    // make array
+        virtual void preVisit ( ExprMakeArray * expr ) override {
+            if ( auto block = getCurrentBlock() ) {
+                if ( expr->needTempSrc ) {
+                    localTemps[block].push_back(expr);
+                }
+            }
+        }
+    // make structure
+        virtual void preVisit ( ExprMakeStructure * expr ) override {
+            if ( auto block = getCurrentBlock() ) {
+                if ( expr->needTempSrc ) {
+                    localTemps[block].push_back(expr);
+                }
+            }
+        }
     public:
-        vector<ExprBlock *>                 stack;
-        map<ExprBlock *,vector<Variable *>> variables;
+        vector<ExprBlock *>                         stack;
+        map<ExprBlock *,vector<Variable *>>         variables;
+        map<ExprBlock *,vector<ExprMakeLocal *>>    localTemps;
     protected:
         map<Variable *,string>              rename;
         set<Variable *>                     moved;
@@ -762,6 +783,9 @@ namespace das {
             return Visitor::visit(fn);
         }
     // block
+        string makeLocalTempName ( ExprMakeLocal * expr ) const {
+            return "_temp_make_local_" + to_string(expr->at.line) + "_" + to_string(expr->stackTop);
+        }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
             block->finallyBeforeBody = true;
@@ -774,6 +798,13 @@ namespace das {
                 ss << string(tab,'\t');
                 describeVarLocalCppType(ss, var->type);
                 ss << " " << collector.getVarName(var) << ";\n";
+            }
+            // pre-declare locals
+            auto & temps = collector.localTemps[block];
+            for ( auto & tmp : temps ) {
+                ss << string(tab,'\t');
+                describeVarLocalCppType(ss, tmp->type);
+                ss << " " << makeLocalTempName(tmp) << ";\n";
             }
         }
         virtual void preVisitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override {
@@ -1572,14 +1603,20 @@ namespace das {
         }
     // make structure
         string mksName ( ExprMakeStructure * expr ) const {
-            return "__mks_" + to_string(expr->at.line);
+            if ( !expr->needTempSrc ) {
+                return "__mks_" + to_string(expr->at.line);
+            } else {
+                return makeLocalTempName(expr);
+            }
         }
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             Visitor::preVisit(expr);
-            ss << "(([&]() -> " << describeCppType(expr->type,false,true) << " {\n";
+            ss << "(([&]() -> " << describeCppType(expr->type,false,true) << (expr->needTempSrc ? "&" : "") << " {\n";
             tab ++;
-            ss << string(tab,'\t')<< describeCppType(expr->type,false,true) << " " << mksName(expr)
-                << "; das_zero(" << mksName(expr) << ");\n";
+            if ( !expr->needTempSrc ) {
+                ss << string(tab,'\t') << describeCppType(expr->type,false,true) << " " << mksName(expr) << ";\n";
+            }
+            ss << string(tab,'\t') << "das_zero(" << mksName(expr) << ");\n";
 
         }
         virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
@@ -1600,14 +1637,20 @@ namespace das {
         }
     // make array
         string mkaName ( ExprMakeArray * expr ) const {
-            return "__mka_" + to_string(expr->at.line);
+            if ( !expr->needTempSrc ) {
+                return "__mka_" + to_string(expr->at.line);
+            } else {
+                return makeLocalTempName(expr);
+            }
         }
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
-            ss << "(([&]() -> " << describeCppType(expr->type,false,true) << " {\n";
+            ss << "(([&]() -> " << describeCppType(expr->type,false,true) << (expr->needTempSrc ? "&" : "") << " {\n";
             tab ++;
-            ss << string(tab,'\t')<< describeCppType(expr->type,false,true) << " " << mkaName(expr)
-                << "; das_zero(" << mkaName(expr) << ");\n";
+            if ( !expr->needTempSrc ) {
+                ss << string(tab,'\t') << describeCppType(expr->type,false,true) << " " << mkaName(expr) << ";\n";
+            }
+            ss << string(tab,'\t') << "das_zero(" << mkaName(expr) << ");\n";
         }
         virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override {
             Visitor::preVisitMakeArrayIndex(expr, index, init, lastField);

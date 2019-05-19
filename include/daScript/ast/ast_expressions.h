@@ -787,6 +787,7 @@ namespace das
         virtual bool rtti_isMakeLocal() const override { return true; }
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off );
         virtual vector<SimNode *> simulateLocal ( Context & /*context*/ ) const;
+        TypeDeclPtr                 makeType;
         uint32_t                    stackTop = 0;
         uint32_t                    extraOffset = 0;
         union {
@@ -795,6 +796,7 @@ namespace das
                 bool    useCMRES;
                 bool    doesNotNeedSp;
                 bool    doesNotNeedInit;
+                bool    needTempSrc;
             };
             uint32_t makeFlags = 0;
         };
@@ -808,7 +810,6 @@ namespace das
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
-        TypeDeclPtr                 makeType;
         vector<MakeStructPtr>       structs;
         bool                        useInitializer;
     };
@@ -821,7 +822,6 @@ namespace das
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
-        TypeDeclPtr                 makeType;
         TypeDeclPtr                 recordType;
         vector<ExpressionPtr>       values;
     };

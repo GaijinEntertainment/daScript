@@ -286,6 +286,12 @@ namespace das {
                         << "\tfor " << var->name << ", line " << var->at.line << "\n";
                 }
             }
+            for ( auto & src : expr->sources ) {
+                if ( src->rtti_isMakeLocal() ) {
+                    auto mkl = static_pointer_cast<ExprMakeLocal>(src);
+                    mkl->needTempSrc = true;
+                }
+            }
         }
     // ExprLet
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
