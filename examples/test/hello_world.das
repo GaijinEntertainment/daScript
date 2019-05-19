@@ -1,8 +1,7 @@
-options logNodes=true, logCpp=true, logStack=true
+options log = true
 
 [export]
 def test:bool
-    for x in [[int[2] 1;1]]
-        assert(x == 1)
+    var i : int = i + 1
     return true
 
