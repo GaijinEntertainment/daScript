@@ -1,16 +1,28 @@
+@ECHO OFF
+
 SET SRC_DIR=C:\Users\Boris\Work\yzg
 SET DEST_DIR=E:\Dagor4\Prog\1stPartyLibs\daScript
+SET PATCH_DIR=%SRC_DIR%\patch
+
+echo create patch
+call make_empty_folder.bat %PATCH_DIR%
+xcopy %DEST_DIR%\jamfile.* %PATCH_DIR% /S > NUL
+If %ERRORLEVEL% NEQ 0	ECHO CREATE PATCH %1 FAILED
 
 echo syncing examples
 call make_empty_folder.bat %DEST_DIR%\examples
 call sync_folder.bat %SRC_DIR%\examples %DEST_DIR%\examples
+call remove_folder.bat %DEST_DIR%\examples\json
+call remove_folder.bat %DEST_DIR%\examples\profile\tests\angelscript
+call remove_folder.bat %DEST_DIR%\examples\profile\tests\squirrel
+call remove_folder.bat %DEST_DIR%\examples\profile\tests\lua
 
 echo syncing generated
 call make_empty_folder.bat %DEST_DIR%\generated
 call sync_folder.bat %SRC_DIR%\generated %DEST_DIR%\generated
 
 echo syncing utils
-call make_empty_folder.bat"%DEST_DIR%\utils
+call make_empty_folder.bat %DEST_DIR%\utils
 call sync_folder.bat %SRC_DIR%\utils %DEST_DIR%\utils
 
 echo syncing include
@@ -24,4 +36,8 @@ call make_empty_folder.bat %DEST_DIR%\src
 call sync_folder.bat %SRC_DIR%\src %DEST_DIR%\src
 
 echo applying patch
-xcopy %DEST_DIR%\patch %DEST_DIR% /D /I /E /F /Y /H /R
+xcopy %PATCH_DIR% %DEST_DIR% /D /I /E /F /Y /H /R > NUL
+If %ERRORLEVEL% NEQ 0	ECHO APPLY PATCH FAILED
+
+echo removing patch
+call remove_folder.bat %PATCH_DIR%
