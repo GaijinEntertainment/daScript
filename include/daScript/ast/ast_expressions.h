@@ -827,5 +827,16 @@ namespace das
         TypeDeclPtr                 recordType;
         vector<ExpressionPtr>       values;
     };
+
+    struct ExprArrayComprehension : Expression {
+        ExprArrayComprehension() = default;
+        ExprArrayComprehension ( const LineInfo & at ) : Expression(at) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        ExpressionPtr   exprFor;
+        ExpressionPtr   exprWhere;
+        ExpressionPtr   subexpr;
+    };
 }
 

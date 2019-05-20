@@ -728,6 +728,12 @@ namespace das
         return nullptr;
     }
 
+    SimNode * ExprArrayComprehension::simulate (Context & context) const {
+        DAS_ASSERTF(0, "we should not be here ever, ExprArrayComprehension should completly fold during type inference.");
+        context.thisProgram->error("internal compilation error, generating node for ExprArrayComprehension", at);
+        return nullptr;
+    }
+
     SimNode * ExprMakeBlock::simulate (Context & context) const {
         uint32_t argSp = static_pointer_cast<ExprBlock>(block)->stackTop;
         return context.code->makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp,stackTop);

@@ -131,6 +131,9 @@ namespace das {
         virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) {
             return init->shared_from_this();
         }
+        // ARRAY COMPREHENSION
+        virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) {}
+        virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) {}
         // EXPRESSIONS
 #define VISIT_EXPR(ExprType) \
         virtual void preVisit ( ExprType * that ) { preVisitExpression(that); } \
@@ -202,6 +205,7 @@ namespace das {
         VISIT_EXPR(ExprWhile)
         VISIT_EXPR(ExprMakeStructure)
         VISIT_EXPR(ExprMakeArray)
+        VISIT_EXPR(ExprArrayComprehension)
 #undef VISIT_EXPR
     };
 #if defined(_MSC_VER)

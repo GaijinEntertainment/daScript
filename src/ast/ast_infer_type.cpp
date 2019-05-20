@@ -2466,7 +2466,9 @@ namespace das {
                 error("local variable " + var->name + " is shadowed by with expression at line " + to_string(eW->at.line),
                       var->at, CompilationError::variable_not_found);
             }
-            local.push_back(var);
+            if ( !var->init ) {
+                local.push_back(var);
+            }
         }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             if ( var->type && var->type->isExprType() ) {
@@ -2494,7 +2496,10 @@ namespace das {
             return Visitor::visitLet(expr,var,last);
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
-            if ( !var->init->type ) return Visitor::visitLetInit(expr, var, init);
+            local.push_back(var);
+            if ( !var->init->type ) {
+                return Visitor::visitLetInit(expr, var, init);
+            }
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferAutoType(var->type, var->init->type);
                 if ( !varT ) {
@@ -2909,6 +2914,25 @@ namespace das {
             }
             expr->type = resT;
             verifyType(expr->type);
+            return Visitor::visit(expr);
+        }
+    // array comprehension
+        virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override {
+            Visitor::preVisitArrayComprehensionSubexpr(expr, subexpr);
+            pushVarStack();
+            auto eFor = static_cast<ExprFor *>(expr->exprFor.get());
+            preVisitForStack(eFor);
+        }
+        virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) override {
+            Visitor::preVisitArrayComprehensionWhere(expr, where);
+        }
+        virtual ExpressionPtr visit ( ExprArrayComprehension * expr ) override {
+            popVarStack();
+            if ( expr->subexpr->type ) {
+                auto pAC = generateComprehension(expr);
+                reportGenericInfer();
+                return pAC;
+            }
             return Visitor::visit(expr);
         }
     };

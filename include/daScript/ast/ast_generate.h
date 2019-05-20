@@ -48,5 +48,17 @@ namespace das {
          [[__lambda_at_line_xxx THIS=@__lambda_function_at_line_xxx; ba1=ba1; ba2=ba2; ... ]]
      */
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const set<VariablePtr> & capt );
+
+    /*
+         array comprehension [[ for x in src; x_expr; where x_expr ]]
+         invoke() <| $()
+             let temp : Array<expr->subexpr->type>
+             for .....
+                 if where ....
+                     push(temp, subexpr)
+             return temp
+    */
+    struct ExprArrayComprehension;
+    ExpressionPtr generateComprehension ( ExprArrayComprehension * expr );
 }
 

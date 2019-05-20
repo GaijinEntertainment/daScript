@@ -217,7 +217,7 @@ int main() {
 #if 0 // Debug this one test
     #define TEST_NAME   "examples/test/hello_world.das"
     unit_test(TEST_PATH TEST_NAME,false);
-    unit_test(TEST_PATH TEST_NAME,true);
+    //unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();
     return 0;
 #endif
