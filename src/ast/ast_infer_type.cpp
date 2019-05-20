@@ -2916,6 +2916,25 @@ namespace das {
             verifyType(expr->type);
             return Visitor::visit(expr);
         }
+    // array comprehension
+        virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override {
+            Visitor::preVisitArrayComprehensionSubexpr(expr, subexpr);
+            pushVarStack();
+            auto eFor = static_cast<ExprFor *>(expr->exprFor.get());
+            preVisitForStack(eFor);
+        }
+        virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) override {
+            Visitor::preVisitArrayComprehensionWhere(expr, where);
+        }
+        virtual ExpressionPtr visit ( ExprArrayComprehension * expr ) override {
+            popVarStack();
+            if ( expr->subexpr->type ) {
+                auto pAC = generateComprehension(expr);
+                reportGenericInfer();
+                return pAC;
+            }
+            return Visitor::visit(expr);
+        }
     };
 
     // program

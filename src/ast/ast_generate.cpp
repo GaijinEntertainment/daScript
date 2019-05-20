@@ -5,6 +5,76 @@
 
 namespace das {
 
+    // array comprehension
+    //  invoke( $()
+    //      let temp : Array<expr->subexpr->type>
+    //      for .....
+    //          if where ....
+    //              push(temp, subexpr)
+    //      return temp
+    ExpressionPtr generateComprehension ( ExprArrayComprehension * expr ) {
+        auto compName = "__acomp_" + to_string(expr->at.line);
+        auto pClosure = make_shared<ExprBlock>();
+        pClosure->at = expr->subexpr->at;
+        pClosure->returnType = make_shared<TypeDecl>(Type::autoinfer);
+        // temp : Array<expr->subexpr->type>
+        auto pVar = make_shared<Variable>();
+        pVar->at = expr->at;
+        pVar->name = compName;
+        pVar->type = make_shared<TypeDecl>(Type::tArray);
+        pVar->type->constant = false;
+        pVar->type->removeConstant = true;
+        pVar->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
+        pVar->type->firstType->ref = false;
+        // let temp
+        auto pLet = make_shared<ExprLet>();
+        pLet->at = expr->at;
+        pLet->variables.push_back(pVar);
+        pClosure->list.push_back(pLet);
+        // push(temp, subexpr)
+        auto pPushVal = make_shared<ExprVar>();
+        pPushVal->at = expr->at;
+        pPushVal->name = compName;
+        auto pPush = make_shared<ExprCall>();
+        pPush->at = expr->at;
+        pPush->name = "push";
+        pPush->arguments.push_back(pPushVal);
+        pPush->arguments.push_back(expr->subexpr->clone());
+        // for ...
+        auto pForBlock = make_shared<ExprBlock>();
+        pForBlock->at = expr->at;
+        pForBlock->inTheLoop = true;
+        if ( expr->exprWhere ) {
+            // for .... if where ... push
+            auto pIf = make_shared<ExprIfThenElse>();
+            pIf->at = expr->at;
+            pIf->cond = expr->exprWhere->clone();
+            pIf->if_true = pPush;
+            pForBlock->list.push_back(pIf);
+        } else {
+            // for .... push
+            pForBlock->list.push_back(pPush);
+        }
+        auto pFor = static_pointer_cast<ExprFor>(expr->exprFor->clone());
+      pFor->subexpr = pForBlock;
+        pClosure->list.push_back(pFor);
+        // return temp
+        auto pVal = make_shared<ExprVar>();
+        pVal->at = expr->at;
+        pVal->name = compName;
+        auto pRet = make_shared<ExprReturn>();
+        pRet->at = expr->at;
+        pRet->subexpr = pVal;
+        pRet->moveSemantics = true;
+        pClosure->list.push_back(pRet);
+        // make block
+        auto pMakeBlock = make_shared<ExprMakeBlock>(expr->at,pClosure);
+        // invoke
+        auto pInvoke = make_shared<ExprInvoke>(expr->at, "invoke");
+        pInvoke->arguments.push_back(pMakeBlock);
+        return pInvoke;
+    }
+
     /* a->b(args) is short for invoke(a.b, cast<auto> a, args)  */
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b ) {
         auto pInvoke = new ExprInvoke(at, "invoke");

@@ -190,7 +190,7 @@
 }
 
 <normal>"include"                                       BEGIN(include);
-<normal>"for"                                           das_need_oxford_comma = false; return DAS_FOR;
+<normal>"for"                                           /* das_need_oxford_comma = false; */ return DAS_FOR;
 <normal>"while"                                         das_need_oxford_comma = false; return DAS_WHILE;
 <normal>"if"                                            das_need_oxford_comma = false; return DAS_IF;
 <normal>"elif"                                          das_need_oxford_comma = false; return DAS_ELIF;
@@ -217,6 +217,7 @@
 <normal>"lambda"                                        return DAS_TLAMBDA;
 <normal>"const"                                         return DAS_CONST;
 <normal>"continue"                                      return DAS_CONTINUE;
+<normal>"where"                                         return DAS_WHERE;
 <normal>"cast"                                          return DAS_CAST;
 <normal>"upcast"                                        return DAS_UPCAST;
 <normal>"override"                                      return DAS_OVERRIDE;

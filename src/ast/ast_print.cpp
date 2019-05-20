@@ -65,6 +65,12 @@ namespace das {
                 expr->subexpr->argLevel = true;
             }
         }
+    // ExprArrayComprehension
+        virtual void preVisit ( ExprArrayComprehension * expr ) override {
+            Visitor::preVisit(expr);
+            expr->subexpr->argLevel = true;
+            if ( expr->exprWhere ) expr->exprWhere->argLevel = true;
+        }
     };
 
     class Printer : public Visitor {
@@ -743,6 +749,23 @@ namespace das {
             return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
+            ss << "]]";
+            return Visitor::visit(expr);
+        }
+    // array comprehension
+        virtual void preVisit ( ExprArrayComprehension * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "[[";
+        }
+        virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override {
+            Visitor::preVisitArrayComprehensionSubexpr(expr, subexpr);
+            ss << "; ";
+        }
+        virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) override {
+            Visitor::preVisitArrayComprehensionWhere(expr, where);
+            ss << "; where ";
+        }
+        virtual ExpressionPtr visit ( ExprArrayComprehension * expr ) override {
             ss << "]]";
             return Visitor::visit(expr);
         }

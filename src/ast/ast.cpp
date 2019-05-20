@@ -1154,8 +1154,10 @@ namespace das {
             src = vis.visitForSource(this, src.get(), src==sources.back());
         }
         vis.preVisitForStack(this);
-        vis.preVisitForBody(this, subexpr.get());
-        subexpr = subexpr->visit(vis);
+        if ( subexpr ) {
+            vis.preVisitForBody(this, subexpr.get());
+            subexpr = subexpr->visit(vis);
+        }
         return vis.visit(this);
     }
 
@@ -1167,7 +1169,9 @@ namespace das {
             cexpr->sources.push_back(src->clone());
         for ( auto & var : iteratorVariables )
             cexpr->iteratorVariables.push_back(var->clone());
-        cexpr->subexpr = subexpr->clone();
+        if ( subexpr ) {
+            cexpr->subexpr = subexpr->clone();
+        }
         return cexpr;
     }
 
@@ -1368,7 +1372,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    // make structure
+    // make array
 
     ExpressionPtr ExprMakeArray::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeArray>(expr);
@@ -1398,6 +1402,31 @@ namespace das {
             }
             if ( value ) ++it; else it = values.erase(it);
             index ++;
+        }
+        return vis.visit(this);
+    }
+
+    // array comprehension
+
+    ExpressionPtr ExprArrayComprehension::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprArrayComprehension>(expr);
+        Expression::clone(cexpr);
+        cexpr->exprFor = exprFor->clone();
+        cexpr->subexpr = subexpr->clone();
+        if ( exprWhere ) {
+            cexpr->exprWhere = exprWhere->clone();
+        }
+        return cexpr;
+    }
+
+    ExpressionPtr ExprArrayComprehension::visit(Visitor & vis) {
+        vis.preVisit(this);
+        exprFor = exprFor->visit(vis);
+        vis.preVisitArrayComprehensionSubexpr(this, subexpr.get());
+        subexpr = subexpr->visit(vis);
+        if ( exprWhere ) {
+            vis.preVisitArrayComprehensionWhere(this, exprWhere.get());
+            exprWhere = exprWhere->visit(vis);
         }
         return vis.visit(this);
     }
