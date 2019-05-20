@@ -229,6 +229,17 @@ namespace das {
             Visitor::preVisitExpression(expr);
             if ( func && expr->type && !expr->type->canAot() ) func->noAot = true;
         }
+        // looks like call
+        virtual void preVisit ( ExprLooksLikeCall * call ) override {
+            Visitor::preVisit(call);
+            if ( call->name=="invoke" ) {
+                if ( call->arguments.size() && call->arguments[0]->rtti_isMakeBlock() ) {
+                    auto mkb = static_pointer_cast<ExprMakeBlock>(call->arguments[0]);
+                    auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+                    blk->aotSkipMakeBlock = true;
+                }
+            }
+        }
     };
 
 
@@ -1771,7 +1782,7 @@ namespace das {
             if ( call->name=="invoke" ) {
                 auto argType = arg->type;
                 if ( arg->type->isRefType() ) {
-                    if ( needsArgPass(argType) ) {
+                    if ( needsArgPass(arg) ) {
                         ss << "das_arg<" << describeCppType(argType,false,true) << ">::pass(";
                     }
                 } else if (isVecRef(argType)) {
@@ -1783,7 +1794,7 @@ namespace das {
             if ( call->name=="invoke" ) {
                 auto argType = arg->type;
                 if ( arg->type->isRefType() ) {
-                    if ( needsArgPass(argType) ) {
+                    if ( needsArgPass(arg) ) {
                         ss << ")";
                     }
                 } else if (isVecRef(argType)) {

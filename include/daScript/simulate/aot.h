@@ -929,6 +929,10 @@ namespace das {
             __context__->invoke(blk, arguments, &result);
             return result;
         }
+        template <typename BLK, typename ...ArgType>
+        static __forceinline ResType invoke_cmres ( Context *, const BLK & blk, ArgType ...arg ) {
+            return blk(arg...);
+        }
     };
 
     template <>
@@ -940,6 +944,10 @@ namespace das {
         static __forceinline void invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             __context__->invoke(blk, arguments, nullptr);
+        }
+        template <typename BLK, typename ...ArgType>
+        static __forceinline void invoke ( Context *, const BLK & blk, ArgType ...arg ) {
+            return blk(arg...);
         }
     };
 

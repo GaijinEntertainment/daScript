@@ -45,11 +45,15 @@ namespace das {
         pForBlock->at = expr->at;
         pForBlock->inTheLoop = true;
         if ( expr->exprWhere ) {
+            // push block
+            auto pPushBlock = make_shared<ExprBlock>();
+            pPushBlock->at = expr->at;
+            pPushBlock->list.push_back(pPush);
             // for .... if where ... push
             auto pIf = make_shared<ExprIfThenElse>();
             pIf->at = expr->at;
             pIf->cond = expr->exprWhere->clone();
-            pIf->if_true = pPush;
+            pIf->if_true = pPushBlock;
             pForBlock->list.push_back(pIf);
         } else {
             // for .... push
