@@ -450,9 +450,14 @@ namespace das {
                     } else {
                         if ( expr->type->isFoldable() && !expr->variable->access_init ) {
                             reportFolding();
-                            auto exprV = Program::makeConst(expr->at, expr->type, v_zero());
-                            exprV->type = make_shared<TypeDecl>(*expr->type);
-                            return exprV;
+                            if ( expr->type->baseType==Type::tString ) {
+                                auto exprV = make_shared<ExprConstString>(expr->at);
+                                return exprV;
+                            } else {
+                                auto exprV = Program::makeConst(expr->at, expr->type, v_zero());
+                                exprV->type = make_shared<TypeDecl>(*expr->type);
+                                return exprV;
+                            }
                         }
                     }
                 }
