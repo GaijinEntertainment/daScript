@@ -1,16 +1,10 @@
 // options logNodes=true, logStack=true
 
-options log=true
-
 require fio
 require rtti
 
 let
 	INDENT = "  "
-
-let
-	EVENTS_HEADER_FILE = "./coreEvents.h"
-	EVENTS_CPP_FILE = "./coreEvents.cpp"
 
 [unsafe]
 def findArg(field,argName,argType)  : AnnotationArgument const? const
@@ -95,10 +89,7 @@ def generateCppEvent(file,info)
 	fprint(file,"class {info.name} : public Event\n")
 	fprint(file,"\{\n")
 	fprint(file,"public:\n")
-	fprint(file,"{INDENT}enum\n")
-	fprint(file,"{INDENT}\{\n")
-	fprint(file,"{INDENT}{INDENT}NUMBER_OF_FIELDS = {int(info.count)}\n")
-	fprint(file,"{INDENT}\};\n")
+	fprint(file,"{INDENT}enum \{NUMBER_OF_FIELDS = {int(info.count)}\};\n")
 	fprint(file,"{INDENT}{info.name}(")
 	var first = true
 	for field in info
@@ -142,6 +133,10 @@ def process(fname:string;hf,cppf:FILE?)
 
 def generate(atdir)
 	var fh, fcpp : FILE?
+	let eventListName = basename(atdir)
+    let EVENTS_HEADER_FILE = "./{eventListName}.h"
+    let EVENTS_CPP_FILE = "./{eventListName}.cpp"
+
 	fh = fopen(EVENTS_HEADER_FILE,"wb")
 	if fh==null
 		print("can't open {EVENTS_HEADER_FILE}\n")
@@ -150,20 +145,19 @@ def generate(atdir)
 	if fcpp==null
 		print("can't open {EVENTS_CPP_FILE}\n")	
 		return
-	
 	// coreEvents.h header
-	fprint(fh,"#ifndef _DAGOR_GAMELIB_DAECS_CORE_COREEVENTS_H_\n")
-	fprint(fh,"#define _DAGOR_GAMELIB_DAECS_CORE_COREEVENTS_H_\n")
+	fprint(fh,"#ifndef _DAGOR_GAMELIB_DAECS_CORE_{toupper(eventListName)}_H_\n")
+	fprint(fh,"#define _DAGOR_GAMELIB_DAECS_CORE_{toupper(eventListName)}_H_\n")
 	fprint(fh,"#pragma once\n\n")
 	fprint(fh,"namespace ecs\n")
 	fprint(fh,"\{\n\n")
 
 	// coreEvents.cpp header
-	fprint(fcpp,"#include <daECS/core/coreEvents.h>\n")
+	fprint(fcpp,"#include <daECS/core/event.h>\n")
 	fprint(fcpp,"#include <ecs/scripts/sqBindEvent.h>\n")
 	fprint(fcpp,"\nnamespace ecs\n")
 	fprint(fcpp,"\{\n\n")
-	fprint(fcpp,"void ecs_register_sq_das_binding(HSQUIRRELVM vm)\n\{\n")
+	fprint(fcpp,"void ecs_register_sq_das_binding_{eventListName}(HSQUIRRELVM vm)\n\{\n")
 	fprint(fcpp,"{INDENT}ecs::sq::EventsBindingType eventsBinding;\n\n")
 	
    	dir(atdir) <| $ (fname)
@@ -174,7 +168,7 @@ def generate(atdir)
 				process(fileName,fh,fcpp)
 
 	// coreEvent.h footer
-	fprint(fh,"void ecs_register_sq_das_binding(HSQUIRRELVM vm);\n\n");
+	fprint(fh,"void ecs_register_sq_das_binding_{eventListName}(HSQUIRRELVM vm);\n\n");
 	fprint(fh,"}\n\n")
 	fprint(fh,"#endif\n\n")
 

@@ -1,11 +1,11 @@
 struct EventComponentChanged
-	name:string
+	[cppType="const char*"] name:string
 	flags:uint
 	[cppType="component_t"] hash:uint
 	[cppType="component_index_t"] index:uint
 
 struct EventAnyComponentChanged
-	name:string
+	[cppType="const char*"] name:string
 	flags:uint
 	[cppType="component_t"] hash:uint
 	[cppType="component_index_t"] index:uint
