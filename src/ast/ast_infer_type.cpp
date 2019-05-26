@@ -1274,17 +1274,30 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprTypeInfo
+        bool isFullyResolvedType(const TypeDeclPtr & ptr) {
+            if (!ptr) return false;
+            if (ptr->baseType == Type::tStructure) {
+                for (auto & fld : ptr->structType->fields) {
+                    if (!isFullyResolvedType(fld.type) ) return false;
+                }
+            }
+            if (ptr->firstType && !isFullyResolvedType(ptr->firstType)) return false;
+            if (ptr->secondType && !isFullyResolvedType(ptr->secondType)) return false;
+            for (auto & argT : ptr->argTypes) {
+                if (argT && !isFullyResolvedType(argT)) return false;
+            }
+            return true;
+        }
         virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
             if ( expr->typeexpr && expr->typeexpr->isExprType() ) {
                 return Visitor::visit(expr);
             }
-            // check subexpression
             if ( expr->subexpr && expr->subexpr->type ) {
                 expr->typeexpr = make_shared<TypeDecl>(*expr->subexpr->type);
             }
             // verify
-            if ( !expr->typeexpr ) {
-                error("typeinfo(...) can't be infered", expr->at, CompilationError::type_not_found);
+            if ( !isFullyResolvedType(expr->typeexpr) ) {
+                error("typeinfo(" + (expr->typeexpr ? expr->typeexpr->describe() : "...") + ") can't be infered", expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
             auto nErrors = program->errors.size();
@@ -1296,11 +1309,13 @@ namespace das {
                 } else {
                     error("udefined type " + expr->typeexpr->describe(),
                           expr->at, CompilationError::type_not_found);
+                    return Visitor::visit(expr);
                 }
             }
             if ( expr->typeexpr->isAuto() ) {
                 error("typeinfo(... auto) is undefined, " + expr->typeexpr->describe(),
                       expr->at, CompilationError::typeinfo_auto);
+                return Visitor::visit(expr);
             }
             verifyType(expr->typeexpr);
             if ( nErrors==program->errors.size() ) {

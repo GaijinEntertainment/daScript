@@ -260,6 +260,15 @@ namespace das {
                 return false;
             }
             // ok, now let's rip content
+            for (auto & at : program->thisModule->aliasTypes) {
+                addAlias(at.second);
+            }
+            for (auto & en : program->thisModule->enumerations) {
+                addEnumeration(en.second);
+            }
+            for (auto & st : program->thisModule->structures) {
+                addStructure(st.second);
+            }
             for (auto & gen : program->thisModule->generics) {
                 addGeneric(gen.second);
             }

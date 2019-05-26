@@ -1,16 +1,26 @@
-// options logInferPasses = true
+options indenting = 2
+
+require fio
+
+struct FooBar
+  x:int
+  y:float
 
 [export]
-def test:bool
-    let q <- [[ for x in range(0,10); x*x ]]
-    for y,qV in range(0,10),q
-        verify(y*y==qV)
-    // print("q={q}\n")
-    let t <- [[ for x in range(0,10); x*x; where (x & 1)==0 ]]
-    var count = 0
-    for z in range(0,10)
-        if (z & 1)==0
-            verify(t[count++]==z*z)
-    // print("t={t}\n")
-    return true
-
+def test
+  // save and load
+  print("saving ftest.bin_save\n")
+  fopen("ftest.bin_save","wb") <| $(file)
+    if file!=null
+      fsave(file,[[FooBar x=1,y=1.0]])
+    else
+      panic("can't open ftest.bin for writing")
+  print("loading ftest.bin_save\n")      
+  fopen("ftest.bin_save","rb") <| $(file)
+    if file!=null
+      var tfb : FooBar
+      fload(file,tfb)
+      assert(tfb.x==1 & tfb.y==1.0)
+    else
+      panic("can't open ftest.bin_save for reading")  
+  return true
