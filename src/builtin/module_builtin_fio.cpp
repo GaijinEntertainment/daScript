@@ -359,7 +359,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_stderr)>(*this, lib, "fstderr", SideEffects::modifyExternal, "builtin_stderr");
             addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep", SideEffects::modifyExternal, "builtin_sleep");
             // add builtin module
-            compileBuiltinModule("fio.das",fio_das, fio_das_len);
+            compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
         }
         virtual void aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_fio.h\"\n";

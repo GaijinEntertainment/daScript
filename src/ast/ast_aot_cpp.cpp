@@ -358,6 +358,7 @@ namespace das {
             ss << info->count << ", ";
             ss << info->size << ", ";
             ss << info->initializer << ", ";
+            ss << "nullptr, ";  // annotation list
             ss << "0x" << HEX << info->hash << DEC;
         }
 
