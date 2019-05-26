@@ -154,7 +154,7 @@ namespace das
         uint32_t    count;
         uint32_t    size;
         int32_t     initializer;
-        void *      annotation_list = nullptr;
+        void *      annotation_list;
         uint32_t    hash;
     };
 
