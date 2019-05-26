@@ -67,7 +67,7 @@ struct CheckRange : StructureAnnotation {
         bool ok = true;
         if (!args.getOption("disable", false)) {
             for (auto & fd : st->fields) {
-                if (fd.type->isSimpleType(Type::tInt) && fd.annotation.arguments.size()) {
+                if (fd.type->isSimpleType(Type::tInt) && fd.annotation.size()) {
                     int32_t val = 0;
                     int32_t minVal = INT32_MIN;
                     int32_t maxVal = INT32_MAX;

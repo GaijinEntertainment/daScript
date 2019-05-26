@@ -3019,9 +3019,9 @@ yyreduce:
   case 18:
 #line 299 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
     {
-		if ( g_Program->options.arguments.size() ) {
-			g_Program->options.arguments.insert ( g_Program->options.arguments.begin(),
-                (yyvsp[0].aaList)->arguments.begin(), (yyvsp[0].aaList)->arguments.end() );
+		if ( g_Program->options.size() ) {
+			g_Program->options.insert ( g_Program->options.begin(),
+                (yyvsp[0].aaList)->begin(), (yyvsp[0].aaList)->end() );
 		} else {
 			swap ( g_Program->options, *(yyvsp[0].aaList) );
 		}
@@ -3174,7 +3174,7 @@ yyreduce:
 #line 413 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.aaList) = new AnnotationArgumentList();
-        (yyval.aaList)->arguments.push_back(*(yyvsp[0].aa));
+        (yyval.aaList)->push_back(*(yyvsp[0].aa));
         delete (yyvsp[0].aa);
     }
 #line 3181 "/Users/borisbatkin/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1660  */
@@ -3184,7 +3184,7 @@ yyreduce:
 #line 418 "src/parser/ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.aaList) = (yyvsp[-2].aaList);
-            (yyval.aaList)->arguments.push_back(*(yyvsp[0].aa));
+            (yyval.aaList)->push_back(*(yyvsp[0].aa));
             delete (yyvsp[0].aa);
     }
 #line 3191 "/Users/borisbatkin/Work/yzg/generated/ds_parser.cpp" /* yacc.c:1660  */

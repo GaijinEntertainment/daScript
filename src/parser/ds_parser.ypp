@@ -297,9 +297,9 @@ string_builder
 
 options_declaration
 	:	DAS_OPTIONS	annotation_argument_list[list] {
-		if ( g_Program->options.arguments.size() ) {
-			g_Program->options.arguments.insert ( g_Program->options.arguments.begin(),
-                $list->arguments.begin(), $list->arguments.end() );
+		if ( g_Program->options.size() ) {
+			g_Program->options.insert ( g_Program->options.begin(),
+                $list->begin(), $list->end() );
 		} else {
 			swap ( g_Program->options, *$list );
 		}
@@ -412,12 +412,12 @@ annotation_argument
 annotation_argument_list
     :   annotation_argument[arg]  {
         $$ = new AnnotationArgumentList();
-        $$->arguments.push_back(*$arg);
+        $$->push_back(*$arg);
         delete $arg;
     }
     |   annotation_argument_list[argL] ',' annotation_argument[arg] {
             $$ = $argL;
-            $$->arguments.push_back(*$arg);
+            $$->push_back(*$arg);
             delete $arg;
     }
     ;

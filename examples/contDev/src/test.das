@@ -21,5 +21,6 @@ struct TestEvent
 */
 
 
-
+[comment (sValue="hello,world",iValue=5,fValue=2.0,bValue=true)]
+struct Dummy {}
 

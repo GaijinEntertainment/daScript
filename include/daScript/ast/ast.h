@@ -55,10 +55,9 @@ namespace das
 
     typedef vector<AnnotationArgument> AnnotationArguments;
 
-    struct AnnotationArgumentList {
+    struct AnnotationArgumentList : AnnotationArguments {
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getOption(const string & name, bool def = false) const;
-       AnnotationArguments  arguments;
     };
 
     struct Annotation : BasicAnnotation, enable_shared_from_this<Annotation> {

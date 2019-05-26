@@ -124,10 +124,10 @@ namespace das {
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
             ss << "\t";
-            if ( decl.annotation.arguments.size() ) {
+            if ( decl.annotation.size() ) {
                 ss << "[";
                 int ai = 0;
-                for ( auto & arg : decl.annotation.arguments ) {
+                for ( auto & arg : decl.annotation ) {
                     if ( ai++ ) ss << ",";
                     ss << arg.name << "=";
                     switch ( arg.type ) {

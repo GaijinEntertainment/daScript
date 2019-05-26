@@ -66,6 +66,11 @@ namespace das {
                 sti->initializer = fn->index;
             }
         }
+        if ( rtti ) {
+            sti->annotation_list = (void *) &st.annotations;
+        } else {
+            sti->annotation_list = nullptr;
+        }
         sti->hash = hash_value(sti);
         smn2s[mangledName] = sti;
         return sti;
@@ -136,8 +141,8 @@ namespace das {
         makeTypeInfo(vi, var.type);
         vi->name = debugInfo->allocateName(var.name);
         vi->offset = var.offset;
-        if ( rtti && !var.annotation.arguments.empty() ) {
-            vi->annotation_arguments = (void *) &var.annotation.arguments;
+        if ( rtti && !var.annotation.empty() ) {
+            vi->annotation_arguments = (void *) &var.annotation;
         } else {
             vi->annotation_arguments = nullptr;
         }

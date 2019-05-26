@@ -96,6 +96,19 @@ namespace das
         }
     };
 
+    // totally dummy annotation, needed for comments
+    struct CommentAnnotation : StructureAnnotation {
+        CommentAnnotation() : StructureAnnotation("comment") {}
+        virtual bool touch(const StructurePtr &, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            return true;
+        }
+        virtual bool look ( const StructurePtr &, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            return true;
+        }
+    };
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -160,6 +173,7 @@ namespace das
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
+        addAnnotation(make_shared<CommentAnnotation>());
         addAnnotation(make_shared<ExportFunctionAnnotation>());
         addAnnotation(make_shared<SideEffectsFunctionAnnotation>());
         addAnnotation(make_shared<RunAtCompileTimeFunctionAnnotation>());

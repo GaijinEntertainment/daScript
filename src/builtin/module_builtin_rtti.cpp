@@ -25,6 +25,7 @@ namespace das {
     };
 }
 
+MAKE_TYPE_FACTORY(Annotation,Annotation)
 MAKE_TYPE_FACTORY(TypeAnnotation,TypeAnnotation)
 MAKE_TYPE_FACTORY(StructInfo,StructInfo)
 MAKE_TYPE_FACTORY(EnumInfo,EnumInfo)
@@ -58,6 +59,12 @@ namespace das {
         TypeAnnotationAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TypeAnnotation", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
+        }
+    };
+
+    struct AnnotationAnnotation : ManagedStructureAnnotation <Annotation,false> {
+        AnnotationAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Annotation", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
 
@@ -330,6 +337,19 @@ namespace das {
         }
     }
 
+    void rtti_builtin_structure_for_each_annotation ( const StructInfo & info, const Block & block, Context * context ) {
+        if ( info.annotation_list ) {
+            auto al = (const AnnotationList *) info.annotation_list;
+            for ( const auto & adp : *al ) {
+                vec4f args[2] = {
+                    cast<Annotation *>::from(adp->annotation.get()),
+                    cast<AnnotationArgumentList *>::from(&adp->arguments)
+                };
+                context->invoke(block, args, nullptr);
+            }
+        }
+    }
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -355,6 +375,7 @@ namespace das {
             addEnumeration(make_shared<EnumerationType>());
             addAnnotation(make_shared<AnnotationArgumentAnnotation>(lib));
             addAnnotation(make_shared<ManagedVectorAnnotation<AnnotationArgument>>("AnnotationArguments",lib));
+            addAnnotation(make_shared<AnnotationAnnotation>(lib));
             addAnnotation(make_shared<TypeAnnotationAnnotation>(lib));
             addAnnotation(make_shared<EnumValueInfoAnnotation>(lib));
             addAnnotation(make_shared<EnumInfoAnnotation>(lib));
@@ -376,6 +397,7 @@ namespace das {
             addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "getVariableInfo", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "rtti_builtin_compile", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_structure)>(*this, lib, "rtti_builtin_program_for_each_structure", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", SideEffects::modifyExternal);
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
         }

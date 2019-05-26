@@ -65,6 +65,21 @@ def cppTypeName(info)
 		else
 			res += cppBaseTypeName(info.basicType)
 	return res
+	
+def dumpAnnotations(file,info)
+	rttiStructureForEachAnnotation(info) <| $(ann,annArg)
+		fprint(file,"// struct {info.name} annotation {ann.name}\n")
+		for arg in annArg
+			fprint(file,"{INDENT}// {arg.name} = ")
+			if arg.basicType==Type tInt
+				fprint(file,"{arg.iValue}")
+			elif arg.basicType==Type tFloat
+				fprint(file,"{arg.fValue}")
+			elif arg.basicType==Type tBool
+				fprint(file,"{arg.bValue}")
+			elif arg.basicType==Type tString
+				fprint(file,"{arg.sValue}")
+			fprint(file,"\n")
 
 def generateSquirrelBinding(file,info)
 	let argsN = int(info.count)
@@ -124,6 +139,7 @@ def process(fname:string;hf,cppf:FILE?)
             rttiCompile(fname,text) <| $(ok,program,issues)
                 if ok
                     rttiProgramForEachStructure(program) <| $(info)
+						dumpAnnotations(hf,info)
 						generateCppEvent(hf,info)
 						generateSquirrelBinding(cppf,info)
                 else

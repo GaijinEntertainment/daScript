@@ -6,3 +6,6 @@ def rttiCompile(mod_name,text:string;subexpr:block<(ok:bool;prog:RttiProgram;iss
 def rttiProgramForEachStructure(prog:RttiProgram;subexpr:block<(info:StructInfo):void>)
     rtti_builtin_program_for_each_structure(prog,subexpr)
 
+def rttiStructureForEachAnnotation(st:StructInfo;subexpr:block<(ann:Annotation;args:AnnotationArguments):void>)
+    rtti_builtin_structure_for_each_annotation(st,subexpr)
+
