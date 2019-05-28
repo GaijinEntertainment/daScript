@@ -1,6 +1,3 @@
-// options logInferPasses = true
-options logCpp=true
-
 [export,unsafe]
 def test:bool
     let t = [[ int 1; 2; 3; 4; 5 ]]

@@ -274,6 +274,22 @@ namespace das {
         }
     };
 
+    template <typename TT>
+    struct das_index<TT *> {
+        static __forceinline TT & at ( TT * value, int32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline const TT & at ( const TT * value, int32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline TT & at ( TT * value, uint32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline const TT & at ( const TT * value, uint32_t index, Context * ) {
+            return value[index];
+        }
+    };
+
     template <typename TT, uint32_t size>
     struct TDim {
         enum { capacity = size };

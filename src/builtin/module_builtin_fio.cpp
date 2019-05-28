@@ -204,23 +204,18 @@ namespace das {
         StringHeader * header = (StringHeader *) temp; 
         char * buf = (char *) (header + 1);  
         header->hash = 0;
-        header->length = len;  
-        if ( fread(buf, 1, len, fp)<0 )
-        {
-            free(temp);
-            temp = nullptr;
-        } 
-        else 
-        {
-            buf[len] = 0;
-        }
+        header->length = len;
         vec4f bargs[1];
-        bargs[0] = cast<char *>::from(buf);
-        context.invoke(*block, bargs, nullptr);
-        if ( temp )
-        {
-            free(temp);
+        int rlen = fread(buf, 1, len, fp);
+        if ( rlen != len ) {
+            bargs[0] = v_zero();
+            context.invoke(*block, bargs, nullptr);
+        }  else {
+            buf[rlen] = 0;
+            bargs[0] = cast<char *>::from(buf);
+            context.invoke(*block, bargs, nullptr);
         }
+        free(temp);
         return v_zero();
     }
 

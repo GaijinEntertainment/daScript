@@ -947,6 +947,16 @@ namespace das
             } else {
                 return context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride, extraOffset);
             }
+        } else if ( subexpr->type->isPointer() ) {
+            uint32_t range = 0xffffffff;
+            uint32_t stride = subexpr->type->firstType->getSizeOf();
+            auto prv = subexpr->simulate(context);
+            auto pidx = index->simulate(context);
+            if ( r2vType!=Type::none ) {
+                return context.code->makeValueNode<SimNode_AtR2V>(r2vType, at, prv, pidx, stride, extraOffset, range);
+            } else {
+                return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, extraOffset, range);
+            }
         } else {
             uint32_t range = subexpr->type->dim.back();
             uint32_t stride = subexpr->type->getStride();
