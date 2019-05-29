@@ -1,6 +1,3 @@
-// options logInferPasses = true
-// options logCpp=true
-
 struct Storage
     i8 : int8
     ui8 : uint8
@@ -20,4 +17,5 @@ def test:bool
     q.i8 = i8
     assert(int(q.i8)==1)
     return true
+
 

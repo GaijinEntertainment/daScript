@@ -41,8 +41,12 @@ namespace das {
         auto ce = static_pointer_cast<ExprConst>(expr);
         switch ( ce->baseType ) {
             case Type::tInt:        return int64_t ( cast<int32_t>::to(ce->value) ) == value;
+            case Type::tInt8:       return int64_t ( cast<int8_t>::to(ce->value) ) == value;
+            case Type::tInt16:      return int64_t ( cast<int16_t>::to(ce->value) ) == value;
             case Type::tInt64:      return cast<int64_t>::to(ce->value) == value;
             case Type::tUInt:       return int64_t ( cast<uint32_t>::to(ce->value) ) == value;
+            case Type::tUInt8:      return int64_t ( cast<uint8_t>::to(ce->value) ) == value;
+            case Type::tUInt16:     return int64_t ( cast<uint16_t>::to(ce->value) ) == value;
             case Type::tUInt64:     return int64_t ( cast<uint64_t>::to(ce->value) ) == value;
             default:                return false;
         }
@@ -53,6 +57,8 @@ namespace das {
         auto ce = static_pointer_cast<ExprConst>(expr);
         switch ( ce->baseType ) {
             case Type::tInt:        return int64_t ( cast<int32_t>::to(ce->value) ) == value;
+            case Type::tInt8:       return int64_t ( cast<int8_t>::to(ce->value) ) == value;
+            case Type::tInt16:      return int64_t ( cast<int16_t>::to(ce->value) ) == value;
             case Type::tInt64:      return cast<int64_t>::to(ce->value) == value;
             default:                return false;
         }
@@ -63,6 +69,8 @@ namespace das {
         auto ce = static_pointer_cast<ExprConst>(expr);
         switch ( ce->baseType ) {
             case Type::tUInt:       return uint64_t ( cast<uint32_t>::to(ce->value) ) == value;
+            case Type::tUInt8:      return uint64_t ( cast<uint8_t>::to(ce->value) ) == value;
+            case Type::tUInt16:     return uint64_t ( cast<uint16_t>::to(ce->value) ) == value;
             case Type::tUInt64:     return cast<uint64_t>::to(ce->value) == value;
             default:                return false;
         }

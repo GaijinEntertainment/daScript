@@ -129,6 +129,10 @@ namespace das {
     template<> struct ToBasicType<bool>         { enum { type = Type::tBool }; };
     template<> struct ToBasicType<int64_t>      { enum { type = Type::tInt64 }; };
     template<> struct ToBasicType<uint64_t>     { enum { type = Type::tUInt64 }; };
+    template<> struct ToBasicType<int8_t>       { enum { type = Type::tInt8 }; };
+    template<> struct ToBasicType<uint8_t>      { enum { type = Type::tUInt8 }; };
+    template<> struct ToBasicType<int16_t>      { enum { type = Type::tInt16 }; };
+    template<> struct ToBasicType<uint16_t>     { enum { type = Type::tUInt16 }; };
     template<> struct ToBasicType<int32_t>      { enum { type = Type::tInt }; };
     template<> struct ToBasicType<uint32_t>     { enum { type = Type::tUInt }; };
     template<> struct ToBasicType<float>        { enum { type = Type::tFloat }; };

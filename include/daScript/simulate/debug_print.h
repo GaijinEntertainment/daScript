@@ -138,6 +138,18 @@ namespace das {
         virtual void Bool ( bool & b ) override {
             ss << (b ? "true" : "false");
         }
+        virtual void Int8 ( int8_t & i ) override {
+            ss << int32_t(i);
+        }
+        virtual void UInt8 ( uint8_t & ui ) override {
+            ss << "0x" << HEX << uint32_t(ui) << DEC;
+        }
+        virtual void Int16 ( int16_t & i ) override {
+            ss << int32_t(i);
+        }
+        virtual void UInt16 ( uint16_t & ui ) override {
+            ss << "0x" << HEX << uint32_t(ui) << DEC;
+        }
         virtual void Int64 ( int64_t & i ) override {
             ss << i;
             if ( int(flags) & int(PrintFlags::typeQualifiers) ) {

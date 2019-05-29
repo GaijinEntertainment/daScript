@@ -131,6 +131,18 @@ namespace das {
         virtual void Bool ( bool & data ) override {
             serialize(data);
         }
+        virtual void Int8 ( int8_t & data ) override {
+            serialize(data);
+        }
+        virtual void UInt8 ( uint8_t & data ) override {
+            serialize(data);
+        }
+        virtual void Int16 ( int16_t & data ) override {
+            serialize(data);
+        }
+        virtual void UInt16 ( uint16_t & data ) override {
+            serialize(data);
+        }
         virtual void Int64 ( int64_t & data ) override {
             serialize(data);
         }

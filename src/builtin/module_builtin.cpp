@@ -68,6 +68,10 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,double>,CTYPE,double>>(#TYPE,lib,#CTYPE,false) );        \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int32_t>,CTYPE,int32_t>>(#TYPE,lib,#CTYPE,false) );      \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib,#CTYPE,false) );    \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int8_t>,CTYPE,int8_t>>(#TYPE,lib,#CTYPE,false) );      \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint8_t>,CTYPE,uint8_t>>(#TYPE,lib,#CTYPE,false) );    \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int16_t>,CTYPE,int16_t>>(#TYPE,lib,#CTYPE,false) );      \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint16_t>,CTYPE,uint16_t>>(#TYPE,lib,#CTYPE,false) );    \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int64_t>,CTYPE,int64_t>>(#TYPE,lib,#CTYPE,false) );      \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint64_t>,CTYPE,uint64_t>>(#TYPE,lib,#CTYPE,false) );
 
@@ -79,6 +83,11 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addFunctionBoolean<bool>(*this,lib);
         // pointer
         addFunctionBasic<void *>(*this,lib);
+        // storage
+        ADD_NUMERIC_CASTS(int8, int8_t);
+        ADD_NUMERIC_CASTS(int16, int16_t);
+        ADD_NUMERIC_CASTS(uint8, uint8_t);
+        ADD_NUMERIC_CASTS(uint16, uint16_t);
         // int32
         addFunctionBasic<int32_t>(*this,lib);
         addFunctionNumericWithMod<int32_t>(*this,lib);

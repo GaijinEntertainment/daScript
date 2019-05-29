@@ -243,11 +243,15 @@
 <normal>"void"                                          return DAS_TVOID;
 <normal>"string"                                        return DAS_TSTRING;
 <normal>"int"                                           return DAS_TINT;
+<normal>"int8"                                          return DAS_TINT8;
+<normal>"int16"                                         return DAS_TINT16;
 <normal>"int64"                                         return DAS_TINT64;
 <normal>"int2"                                          return DAS_TINT2;
 <normal>"int3"                                          return DAS_TINT3;
 <normal>"int4"                                          return DAS_TINT4;
 <normal>"uint"                                          return DAS_TUINT;
+<normal>"uint8"                                         return DAS_TUINT8;
+<normal>"uint16"                                        return DAS_TUINT16;
 <normal>"uint64"                                        return DAS_TUINT64;
 <normal>"uint2"                                         return DAS_TUINT2;
 <normal>"uint3"                                         return DAS_TUINT3;

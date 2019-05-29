@@ -147,6 +147,10 @@ namespace das {
         SimNode * makeValueNode(Type baseType, Params... args) {
             switch (baseType) {
             case Type::tBool:           return makeNode<NodeType<bool>>(args...);
+            case Type::tInt8:           return makeNode<NodeType<int8_t>>(args...);
+            case Type::tUInt8:          return makeNode<NodeType<uint8_t>>(args...);
+            case Type::tInt16:          return makeNode<NodeType<int16_t>>(args...);
+            case Type::tUInt16:         return makeNode<NodeType<uint16_t>>(args...);
             case Type::tInt64:          return makeNode<NodeType<int64_t>>(args...);
             case Type::tUInt64:         return makeNode<NodeType<uint64_t>>(args...);
             case Type::tEnumeration:    return makeNode<NodeType<int32_t>>(args...);

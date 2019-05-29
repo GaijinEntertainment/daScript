@@ -124,6 +124,7 @@
 %token  DAS_TFLOAT      DAS_TFLOAT2     DAS_TFLOAT3     DAS_TFLOAT4
 %token  DAS_TRANGE      DAS_TURANGE     DAS_TBLOCK      DAS_TINT64
 %token  DAS_TUINT64     DAS_TDOUBLE	    DAS_TFUNCTION   DAS_TLAMBDA
+%token  DAS_TINT8       DAS_TUINT8      DAS_TINT16      DAS_TUINT16
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -1312,11 +1313,15 @@ basic_type_declaration
     :   DAS_TBOOL       { $$ = Type::tBool; }
     |   DAS_TSTRING     { $$ = Type::tString; }
     |   DAS_TINT        { $$ = Type::tInt; }
+    |   DAS_TINT8       { $$ = Type::tInt8; }
+    |   DAS_TINT16      { $$ = Type::tInt16; }
     |   DAS_TINT64      { $$ = Type::tInt64; }
     |   DAS_TINT2       { $$ = Type::tInt2; }
     |   DAS_TINT3       { $$ = Type::tInt3; }
     |   DAS_TINT4       { $$ = Type::tInt4; }
     |   DAS_TUINT       { $$ = Type::tUInt; }
+    |   DAS_TUINT8      { $$ = Type::tUInt8; }
+    |   DAS_TUINT16     { $$ = Type::tUInt16; }
     |   DAS_TUINT64     { $$ = Type::tUInt64; }
     |   DAS_TUINT2      { $$ = Type::tUInt2; }
     |   DAS_TUINT3      { $$ = Type::tUInt3; }

@@ -127,6 +127,10 @@ namespace das {
         } else {
             switch ( info->type ) {
                 case Type::tBool:       Bool(*((bool *)pa)); break;
+                case Type::tInt8:       Int8(*((int8_t *)pa)); break;
+                case Type::tUInt8:      UInt8(*((uint8_t *)pa)); break;
+                case Type::tInt16:      Int16(*((int16_t *)pa)); break;
+                case Type::tUInt16:     UInt16(*((uint16_t *)pa)); break;
                 case Type::tInt64:      Int64(*((int64_t *)pa)); break;
                 case Type::tUInt64:     UInt64(*((uint64_t *)pa)); break;
                 case Type::tString:     String(*((char **)pa)); break;          // TODO: verify!!!

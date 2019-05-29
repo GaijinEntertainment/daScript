@@ -89,6 +89,30 @@ namespace das
     };
 
     template <>
+    struct cast <int8_t> {
+        static __forceinline int8_t to ( vec4f x )             { return int8_t(v_extract_xi(v_cast_vec4i(x))); }
+        static __forceinline vec4f from ( int8_t x )           { return v_cast_vec4f(v_splatsi(x)); }
+    };
+
+    template <>
+    struct cast <uint8_t> {
+        static __forceinline uint8_t to ( vec4f x )            { return uint8_t(v_extract_xi(v_cast_vec4i(x))); }
+        static __forceinline vec4f from ( uint8_t x )          { return v_cast_vec4f(v_splatsi(x)); }
+    };
+
+    template <>
+    struct cast <int16_t> {
+        static __forceinline int16_t to ( vec4f x )            { return int16_t(v_extract_xi(v_cast_vec4i(x))); }
+        static __forceinline vec4f from ( int16_t x )          { return v_cast_vec4f(v_splatsi(x)); }
+    };
+
+    template <>
+    struct cast <uint16_t> {
+        static __forceinline uint16_t to ( vec4f x )           { return uint16_t(v_extract_xi(v_cast_vec4i(x))); }
+        static __forceinline vec4f from ( uint16_t x )         { return v_cast_vec4f(v_splatsi(x)); }
+    };
+
+    template <>
     struct cast <int32_t> {
         static __forceinline int32_t to ( vec4f x )            { return v_extract_xi(v_cast_vec4i(x)); }
         static __forceinline vec4f from ( int32_t x )          { return v_cast_vec4f(v_splatsi(x)); }

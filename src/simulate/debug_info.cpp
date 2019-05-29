@@ -16,6 +16,10 @@ namespace das
         {   Type::anyArgument,  "any"  },
         {   Type::tVoid,        "void"  },
         {   Type::tBool,        "bool"  },
+        {   Type::tInt8,        "int8"  },
+        {   Type::tUInt8,       "uint8"  },
+        {   Type::tInt16,       "int16"  },
+        {   Type::tUInt16,      "uint16"  },
         {   Type::tInt64,       "int64"  },
         {   Type::tUInt64,      "uint64"  },
         {   Type::tString,      "string" },
@@ -60,6 +64,10 @@ namespace das
                                 return sizeof(void *);
             case tString:       return sizeof(char *);
             case tBool:         return sizeof(bool);            static_assert(sizeof(bool)==1,"4 byte bool");
+            case tInt8:         return sizeof(int8_t);
+            case tUInt8:        return sizeof(uint8_t);
+            case tInt16:        return sizeof(int16_t);
+            case tUInt16:       return sizeof(uint16_t);
             case tInt64:        return sizeof(int64_t);
             case tUInt64:       return sizeof(uint64_t);
             case tEnumeration:  return sizeof(int32_t);
@@ -99,6 +107,10 @@ namespace das
                                 return alignof(void *);
             case tString:       return alignof(char *);
             case tBool:         return alignof(bool);            static_assert(alignof(bool)==1,"4 byte bool");
+            case tInt8:         return alignof(int8_t);
+            case tUInt8:        return alignof(uint8_t);
+            case tInt16:        return alignof(int16_t);
+            case tUInt16:       return alignof(uint16_t);
             case tInt64:        return alignof(int64_t);
             case tUInt64:       return alignof(uint64_t);
             case tEnumeration:  return alignof(int32_t);

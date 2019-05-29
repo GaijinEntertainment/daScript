@@ -15,6 +15,10 @@ namespace das {
         {   Type::tStructure,   "tStructure" },
         {   Type::tPointer,     "tPointer" },
         {   Type::tBool,        "tBool"  },
+        {   Type::tInt8,        "tInt8"  },
+        {   Type::tUInt8,       "tUInt8"  },
+        {   Type::tInt16,       "tInt16"  },
+        {   Type::tUInt16,      "tUInt16"  },
         {   Type::tInt64,       "tInt64"  },
         {   Type::tUInt64,      "tUInt64"  },
         {   Type::tString,      "tString" },
@@ -47,6 +51,10 @@ namespace das {
     Enum<Type> g_cppTypeTable = {
         {   Type::tVoid,        "void"     },
         {   Type::tBool,        "bool"     },
+        {   Type::tInt8,        "int8_t"   },
+        {   Type::tUInt8,       "uint8_t"  },
+        {   Type::tInt16,       "int16_t"  },
+        {   Type::tUInt16,      "uint16_t" },
         {   Type::tInt64,       "int64_t"  },
         {   Type::tUInt64,      "uint64_t" },
         {   Type::tString,      "char *"   },
@@ -83,6 +91,10 @@ namespace das {
         if ( type->isVectorType() ) return true;
         switch ( type->baseType ) {
             case Type::tBool:
+            case Type::tInt8:
+            case Type::tUInt8:
+            case Type::tInt16:
+            case Type::tUInt16:
             case Type::tInt64:
             case Type::tUInt64:
             case Type::tInt:

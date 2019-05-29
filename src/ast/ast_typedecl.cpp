@@ -861,6 +861,10 @@ namespace das
             return false;
         switch ( baseType ) {
             // case Type::tBool:
+            case Type::tInt8:
+            case Type::tUInt8:
+            case Type::tInt16:
+            case Type::tUInt16:
             case Type::tInt64:
             case Type::tUInt64:
             case Type::tInt:
@@ -924,6 +928,10 @@ namespace das
             return true;
         switch ( baseType ) {
             case Type::tBool:
+            case Type::tInt8:
+            case Type::tUInt8:
+            case Type::tInt16:
+            case Type::tUInt16:
             case Type::tInt64:
             case Type::tUInt64:
             case Type::tInt:
@@ -945,6 +953,12 @@ namespace das
             case Type::tVoid:
             case Type::tEnumeration:
             case Type::tBool:
+                /*
+            case Type::tInt8:
+            case Type::tUInt8:
+            case Type::tInt16:
+            case Type::tUInt16:
+                 */
             case Type::tInt64:
             case Type::tUInt64:
             case Type::tInt:

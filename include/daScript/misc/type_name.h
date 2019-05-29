@@ -11,6 +11,10 @@ namespace das {
     
     template <> struct typeName<int32_t>  { static string name() { return "int"; } };
     template <> struct typeName<uint32_t> { static string name() { return "uint"; } };
+    template <> struct typeName<int8_t>   { static string name() { return "int8"; } };
+    template <> struct typeName<uint8_t>  { static string name() { return "uint8"; } };
+    template <> struct typeName<int16_t>  { static string name() { return "int16"; } };
+    template <> struct typeName<uint16_t> { static string name() { return "uint16"; } };
     template <> struct typeName<int64_t>  { static string name() { return "int64"; } };
     template <> struct typeName<uint64_t> { static string name() { return "uint64"; } };
     template <> struct typeName<bool>     { static string name() { return "bool"; } };

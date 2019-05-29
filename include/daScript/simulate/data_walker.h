@@ -53,6 +53,10 @@ namespace das {
     // types
         virtual void Null ( TypeInfo * ti ) {}
         virtual void Bool ( bool & ) {}
+        virtual void Int8 ( int8_t & ) {}
+        virtual void UInt8 ( uint8_t & ) {}
+        virtual void Int16 ( int16_t & ) {}
+        virtual void UInt16 ( uint16_t & ) {}
         virtual void Int64 ( int64_t & ) {}
         virtual void UInt64 ( uint64_t & ) {}
         virtual void String ( char * & ) {}
