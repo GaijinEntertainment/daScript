@@ -62,11 +62,14 @@ namespace das {
         bool isEnum() const;
         bool isHandle() const;
         bool isStructure() const;
+        bool isTuple() const;
         int getSizeOf() const;
         int getCountOf() const;
         int getAlignOf() const;
         int getBaseSizeOf() const;
         int getStride() const;
+        int getTupleSize() const;
+        int getTupleAlign() const;
         string describe ( bool extra = true, bool contracts = true ) const;
         bool canCopy() const;
         bool canMove() const;
@@ -156,6 +159,7 @@ namespace das {
     template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
     template<> struct ToBasicType<Func>         { enum { type = Type::tFunction }; };
     template<> struct ToBasicType<Lambda>       { enum { type = Type::tLambda }; };
+    template<> struct ToBasicType<Tuple>        { enum { type = Type::tTuple }; };
     template<> struct ToBasicType<Context *>    { enum { type = Type::fakeContext }; };
     template<> struct ToBasicType<vec4f>        { enum { type = Type::anyArgument }; };
 

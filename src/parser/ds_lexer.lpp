@@ -215,6 +215,7 @@
 <normal>"block"                                         return DAS_TBLOCK;
 <normal>"function"                                      return DAS_TFUNCTION;
 <normal>"lambda"                                        return DAS_TLAMBDA;
+<normal>"tuple"                                         return DAS_TTUPLE;
 <normal>"const"                                         return DAS_CONST;
 <normal>"continue"                                      return DAS_CONTINUE;
 <normal>"where"                                         return DAS_WHERE;

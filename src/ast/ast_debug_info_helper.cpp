@@ -128,6 +128,17 @@ namespace das {
         } else {
             info->secondType = nullptr;
         }
+        if ( type->baseType==Type::tTuple ) {   // todo: other types?
+            info->argCount = uint32_t(type->argTypes.size());
+            if ( info->argCount ) {
+                info->argTypes = (TypeInfo **) debugInfo->allocate(sizeof(TypeInfo *) * info->argCount );
+                for ( uint32_t i=0; i!=info->argCount; ++i ) {
+                    info->argTypes[i] = makeTypeInfo(nullptr, type->argTypes[i]);
+                }
+            } else {
+                info->argTypes = nullptr;
+            }
+        }
         info->hash = hash_value(info);
         debugInfo->lookup[info->hash] = info;
         return info;

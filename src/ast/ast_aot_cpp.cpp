@@ -45,6 +45,7 @@ namespace das {
         {   Type::tBlock,       "tBlock"},
         {   Type::tFunction,    "tFunction"},
         {   Type::tLambda,      "tLambda"},
+        {   Type::tTuple,       "tTuple"},
         {   Type::tHandle,      "tHandle"}
     };
 
@@ -75,7 +76,8 @@ namespace das {
         {   Type::tURange,      "urange"   },
         {   Type::tBlock,       "Block"    },
         {   Type::tFunction,    "Func"     },
-        {   Type::tLambda,      "Lambda"   }
+        {   Type::tLambda,      "Lambda"   },
+        {   Type::tTuple,       "Tuple"    }
     };
 
     string das_to_cppString ( Type t ) {
@@ -151,6 +153,18 @@ namespace das {
             } else {
                 stream << "Table";
             }
+        } else if ( baseType==Type::tTuple ) {
+            stream << "TTuple<";
+            bool first = true;
+            for ( const auto & arg : type->argTypes ) {
+                if ( first ) {
+                    first = false;
+                } else {
+                    stream << ",";
+                }
+                stream << describeCppType(arg);
+            }
+            stream << ">";
         } else if ( baseType==Type::tStructure ) {
             if ( type->structType ) {
                 stream << "struct " << type->structType->name;
@@ -191,7 +205,7 @@ namespace das {
                 }
             }
             stream << "*/";
-        }  else {
+        } else {
             stream << das_to_cppString(baseType);
         }
         if ( type->dim.size() ) {
@@ -423,6 +437,11 @@ namespace das {
             } else {
                 ss << "nullptr";
             }
+
+            // TODO: implement typeinfo 'argTypes'
+            ss << ", nullptr";
+            ss << ", " << info->argCount;
+
             ss << ", " << info->dimSize;
             ss << ", ";
             if ( info->dimSize ) {

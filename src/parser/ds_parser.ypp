@@ -16,9 +16,9 @@
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
             : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
         virtual ~VariableDeclaration () {
-            delete pNameList;
+            if ( pNameList ) delete pNameList;
             delete pTypeDecl;
-            delete pInit;
+            if ( pInit ) delete pInit;
             if ( annotation ) delete annotation;
         }
         LineInfo                at;
@@ -125,6 +125,7 @@
 %token  DAS_TRANGE      DAS_TURANGE     DAS_TBLOCK      DAS_TINT64
 %token  DAS_TUINT64     DAS_TDOUBLE	    DAS_TFUNCTION   DAS_TLAMBDA
 %token  DAS_TINT8       DAS_TUINT8      DAS_TINT16      DAS_TUINT16
+%token  DAS_TTUPLE
 
 /* operators */
 %token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
@@ -161,6 +162,8 @@
 %type <pVarDecl>        function_argument_declaration
 %type <pVarDecl>        structure_variable_declaration
 %type <pVarDecl>        let_variable_declaration
+%type <pVarDecl>        tuple_type
+%type <pVarDeclList>    tuple_type_list
 %type <s>               name_in_namespace
 %type <s>               annotation_declaration_name
 %type <s>               function_name
@@ -1053,6 +1056,17 @@ function_argument_list
     |   function_argument_list[list] ';' function_argument_declaration[decl]     { $$ = $list; $list->push_back($decl); }
     ;
 
+tuple_type
+    :   type_declaration [typeDecl] {
+        $$ = new VariableDeclaration(tokAt(@typeDecl),nullptr,$typeDecl,nullptr);
+    }
+    ;
+
+tuple_type_list
+    :   tuple_type[decl]                               { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
+    |   tuple_type_list[list] ';' tuple_type[decl]     { $$ = $list; $list->push_back($decl); }
+    ;
+
 copy_or_move
     :   '='         { $$ = false; }
     |   LARROW      { $$ = true; }
@@ -1483,6 +1497,12 @@ type_declaration
             deleteVariableDeclarationList($list);
         }
     }
+    |   DAS_TTUPLE[loc] '<' tuple_type_list[list] '>' {
+        $$ = new TypeDecl(Type::tTuple);
+        $$->at = tokAt(@loc);
+        varDeclToTypeDecl($$, $list);
+        deleteVariableDeclarationList($list);
+    }
     ;
 
 make_decl
@@ -1645,7 +1665,8 @@ Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
 void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list ) {
     for ( auto pDecl : *list ) {
         if ( pDecl->pTypeDecl ) {
-            for ( size_t ai=0; ai!= pDecl->pNameList->size(); ++ai ) {
+            int count = pDecl->pNameList ? int(pDecl->pNameList->size()) : 1;
+            for ( int ai=0; ai!=count; ++ai ) {
                 auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                 if ( pDecl->pInit ) {
                     das_yyerror("can't have default values in type declaration",

@@ -124,6 +124,10 @@ namespace das
         if ( info->secondType ) {
             hash_value(block, info->secondType);
         }
+        block.write(&info->argCount, sizeof(uint32_t));
+        for ( uint32_t i=0; i!=info->argCount; ++i ) {
+            hash_value(block, info->argTypes[i]);
+        }
         block.write(&info->dimSize, sizeof(uint32_t));
         block.write(info->dim, info->dimSize*sizeof(uint32_t));
         block.write(&info->flags, sizeof(uint32_t));

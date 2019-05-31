@@ -57,7 +57,8 @@ namespace das
         } else if ( autoT->baseType==Type::tTable ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
             applyAutoContracts(TT->secondType, autoT->secondType);
-        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction || autoT->baseType==Type::tLambda ) {
+        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction ||
+                   autoT->baseType==Type::tLambda || autoT->baseType==Type::tTuple ) {
             if ( TT->firstType ) {
                 applyAutoContracts(TT->firstType, autoT->firstType);
             }
@@ -104,7 +105,8 @@ namespace das
         if ( autoT->baseType==Type::tTable && (initT->baseType!=Type::tTable || !initT->firstType || !initT->secondType) )
             return nullptr;
         // block has to match block, function to function, lambda to lambda
-        if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction || autoT->baseType==Type::tLambda ) {
+        if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction
+            || autoT->baseType==Type::tLambda || autoT->baseType==Type::tTuple ) {
             if ( initT->baseType!=autoT->baseType )
                 return nullptr;
             if ( (autoT->firstType!=nullptr) != (initT->firstType!=nullptr) )   // both do or don't have return type
@@ -131,7 +133,8 @@ namespace das
             if ( !TT->firstType->isWorkhorseType() ) return nullptr;            // table key has to be hashable too
             TT->secondType = inferAutoType(autoT->secondType, initT->secondType);
             if ( !TT->secondType ) return nullptr;
-        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction || autoT->baseType==Type::tLambda ) {
+        } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction
+                   || autoT->baseType==Type::tLambda || autoT->baseType==Type::tTuple ) {
             // if it's a block or function, infer argument and return types
             if ( autoT->firstType ) {
                 TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
@@ -214,7 +217,18 @@ namespace das
                 stream << firstType->describe(extra);
             }
             stream << ">";
-        }  else {
+        } else if ( baseType==Type::tTuple ) {
+            stream << das_to_string(baseType) << "<";
+            if ( argTypes.size() ) {
+                for ( const auto & arg : argTypes ) {
+                    stream << arg->describe(extra);
+                    if ( arg != argTypes.back() ) {
+                        stream << ";";
+                    }
+                }
+            }
+            stream << ">";
+        } else {
             stream << das_to_string(baseType);
         }
         if ( extra && baseType!=Type::autoinfer && baseType!=Type::alias && !alias.empty() ) {
@@ -295,13 +309,14 @@ namespace das
                 }
             }
             return secondType ? secondType->findAlias(name,allowAuto) : nullptr;
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction
+                   || baseType==Type::tLambda || baseType==Type::tTuple ) {
             for ( auto & arg : argTypes ) {
                 if ( auto att = arg->findAlias(name,allowAuto) ) {
                     return att;
                 }
             }
-            return firstType->findAlias(name,allowAuto);
+            return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
         } else {
             return nullptr;
         }
@@ -388,6 +403,13 @@ namespace das
             return structType->isPod();
         if ( baseType==Type::tHandle )
             return annotation->isPod();
+        if ( baseType==Type::tTuple ) {
+            for ( auto & arg : argTypes ) {
+                if ( !arg->isPod() ) {
+                    return false;
+                }
+            }
+        }
         return true;
     }
 
@@ -401,6 +423,13 @@ namespace das
             return annotation->isRawPod();
         if ( baseType==Type::tPointer )
             return false;
+        if ( baseType==Type::tTuple ) {
+            for ( auto & arg : argTypes ) {
+                if ( !arg->isRawPod() ) {
+                    return false;
+                }
+            }
+        }
         return true;
     }
 
@@ -443,7 +472,7 @@ namespace das
             if ( firstType ) {
                 ss << "#" << firstType->getMangledName();
             }
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
             ss << "#" << das_to_string(baseType);
             for ( auto & arg : argTypes ) {
                 ss << "#" << arg->getMangledName();
@@ -519,7 +548,7 @@ namespace das
                 return false;
             }
         }
-        if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
+        if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
                 return false;
             }
@@ -763,7 +792,7 @@ namespace das
             if ( secondType )
                 any |= secondType->isAlias();
             return any;
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
             bool any = false;
             if ( firstType )
                 any |= firstType->isAlias();
@@ -797,7 +826,7 @@ namespace das
             if ( secondType )
                 any |= secondType->isAuto();
             return any;
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
             bool any = false;
             if ( firstType )
                 any |= firstType->isAuto();
@@ -842,6 +871,10 @@ namespace das
 
     bool TypeDecl::isStructure() const {
         return (baseType==Type::tStructure) && (dim.size()==0);
+    }
+
+    bool TypeDecl::isTuple() const {
+        return (baseType==Type::tTuple) && (dim.size()==0);
     }
 
     bool TypeDecl::isSimpleType() const {
@@ -1022,25 +1055,59 @@ namespace das
         if ( baseType==Type::tHandle ) {
             return annotation->isRefType();
         }
-        return baseType==Type::tStructure || baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tBlock || dim.size();
+        return baseType==Type::tTuple || baseType==Type::tStructure || baseType==Type::tArray
+                || baseType==Type::tTable || baseType==Type::tBlock
+                || dim.size();
     }
 
     bool TypeDecl::isIndex() const {
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
     }
 
+    int TypeDecl::getTupleSize() const {
+        DAS_ASSERT(baseType==Type::tTuple);
+        int size = 0;
+        for ( const auto & argT : argTypes ) {
+            int al = argT->getAlignOf() - 1;
+            size = (size + al) & ~al;
+            size += argT->getSizeOf();
+        }
+        int al = getTupleAlign() - 1;
+        size = (size + al) & ~al;
+        return size;
+    }
+
+    int TypeDecl::getTupleAlign() const {
+        DAS_ASSERT(baseType==Type::tTuple);
+        int align = 1;
+        for ( const auto & argT : argTypes ) {
+            align = das::max ( argT->getAlignOf(), align );
+        }
+        return align;
+    }
+
     int TypeDecl::getBaseSizeOf() const {
         if ( baseType==Type::tHandle ) {
             return int(annotation->getSizeOf());
+        } else if ( baseType==Type::tStructure ) {
+            return structType->getSizeOf();
+        } else if ( baseType==Type::tTuple ) {
+            return getTupleSize();
+        } else {
+           return getTypeBaseSize(baseType);
         }
-        return baseType==Type::tStructure ? structType->getSizeOf() : getTypeBaseSize(baseType);
     }
 
     int TypeDecl::getAlignOf() const {
         if ( baseType==Type::tHandle ) {
             return int(annotation->getAlignOf());
+        } else if ( baseType==Type::tStructure ) {
+            return structType->getAlignOf();
+        } else if ( baseType==Type::tTuple ) {
+            return getTupleAlign();
+        } else {
+            return getTypeBaseAlign(baseType);
         }
-        return baseType==Type::tStructure ? structType->getAlignOf() : getTypeBaseAlign(baseType);
     }
 
     int TypeDecl::getCountOf() const {

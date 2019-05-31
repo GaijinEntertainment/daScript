@@ -45,7 +45,8 @@ namespace das
         {   Type::tURange,      "urange"},
         {   Type::tBlock,       "block"},
         {   Type::tFunction,    "function"},
-        {   Type::tLambda,      "lambda"}
+        {   Type::tLambda,      "lambda"},
+        {   Type::tTuple,       "tuple"},
     };
 
     string das_to_string ( Type t ) {
@@ -93,6 +94,7 @@ namespace das
             case tBlock:        return sizeof(Block);
             case tFunction:     return sizeof(Func);
             case tLambda:       return sizeof(Lambda);
+            case tTuple:        return 0;
             default:
                 DAS_ASSERTF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
                 return 0;
@@ -136,6 +138,7 @@ namespace das
             case tBlock:        return alignof(Block);
             case tFunction:     return alignof(Func);
             case tLambda:       return alignof(Lambda);
+            case tTuple:        return 1;
             default:
                 DAS_ASSERTF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
                 return 0;
@@ -162,18 +165,49 @@ namespace das
         return size;
     }
 
+    int getTupleAlign ( TypeInfo * info ) {
+        int al = 0;
+        for ( uint32_t i=0; i!=info->argCount; ++i ) {
+            al = das::max ( al, getTypeAlign(info->argTypes[i]) );
+        }
+        return al;
+    }
+
+    int getTupleSize ( TypeInfo * info ) {
+        int size = 0;
+        for ( uint32_t i=0; i!=info->argCount; ++i ) {
+            int al = getTypeAlign(info->argTypes[i]) - 1;
+            size = (size + al) & ~al;
+            size += getTypeSize(info->argTypes[i]);
+        }
+        int al = getTupleAlign(info) - 1;
+        size = (size + al) & ~al;
+        return size;
+    }
+
     int getTypeBaseSize ( TypeInfo * info ) {
         if ( info->type==Type::tHandle ) {
             return int(Module::resolveAnnotation(info)->getSizeOf());
         } else if ( info->type==Type::tStructure ) {
             return getStructSize(info->structType);
+        } else if ( info->type==Type::tTuple ) {
+            return getTupleSize(info);
         } else {
             return getTypeBaseSize(info->type);
         }
     }
 
     int getTypeBaseAlign ( TypeInfo * info ) {
-        return info->type!=Type::tStructure ? getTypeBaseAlign(info->type) : getStructAlign(info->structType);
+
+        if ( info->type==Type::tHandle ) {
+            return int(Module::resolveAnnotation(info)->getAlignOf());
+        } else if ( info->type==Type::tStructure ) {
+            return getStructAlign(info->structType);
+        } else if ( info->type==Type::tTuple ) {
+            return getTupleAlign(info);
+        } else {
+            return getTypeBaseAlign(info->type);
+        }
     }
 
     int getDimSize ( TypeInfo * info ) {

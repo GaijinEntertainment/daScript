@@ -57,6 +57,27 @@ namespace das {
             if ( !last )
                 ss << ";";
         }
+
+        virtual void beforeTuple ( char * ps, TypeInfo * ) override {
+            ss << "[[";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << "tuple";
+            }
+            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+                ss << " at 0x" << HEX << intptr_t(ps) << DEC;
+            }
+        }
+        virtual void afterTuple ( char *, TypeInfo * ) override {
+            ss << "]]";
+        }
+        virtual void beforeTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool ) override {
+            ss << " ";
+        }
+        virtual void afterTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool last ) override {
+            if ( !last )
+                ss << ";";
+        }
+
         virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
             ss << " ";
         }

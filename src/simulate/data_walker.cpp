@@ -38,6 +38,27 @@ namespace das {
         afterStructure(ps, si);
     }
 
+    void DataWalker::walk_tuple ( char * ps, TypeInfo * ti ) {
+        beforeTuple(ps, ti);
+        if ( cancel ) return;
+        int fieldOffset = 0;
+        for ( uint32_t i=0; i!=ti->argCount; ++i ) {
+            bool last = i==(ti->argCount-1);
+            TypeInfo * vi = ti->argTypes[i];
+            auto fa = getTypeAlign(vi) - 1;
+            fieldOffset = (fieldOffset + fa) & ~fa;
+            char * pf = ps + fieldOffset;
+            beforeTupleEntry(ps, ti, pf, vi, last);
+            if ( cancel ) return;
+            walk(pf, vi);
+            if ( cancel ) return;
+            afterTupleEntry(ps, ti, pf, vi, last);
+            if ( cancel ) return;
+            fieldOffset += getTypeSize(vi);
+        }
+        afterTuple(ps, ti);
+    }
+
     void DataWalker::walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {
         char * pe = pa;
         beforeArrayData(pa, stride, count, ti);
@@ -163,6 +184,7 @@ namespace das {
                     afterPtr(pa, info);
                     break;
                 case Type::tStructure:  walk_struct(pa, info->structType); break;
+                case Type::tTuple:      walk_tuple(pa, info); break;
                 case Type::tBlock:      WalkBlock((Block *)pa); break;
                 case Type::tFunction:   WalkFunction((Func *)pa); break;
                 case Type::tLambda:     WalkLambda((Lambda *)pa); break;

@@ -47,6 +47,10 @@ namespace das
     };
     static_assert(sizeof(Lambda)==sizeof(void *), "has to be castable");
 
+    struct Tuple {
+        Tuple() = default;
+    };
+
     struct Array {
         char *      data;
         uint32_t    size;

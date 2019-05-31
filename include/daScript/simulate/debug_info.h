@@ -42,7 +42,8 @@ namespace das
         tIterator,
         tArray,
         tTable,
-        tBlock
+        tBlock,
+        tTuple
     };
 
     struct StructInfo;
@@ -108,6 +109,8 @@ namespace das
         TypeAnnotation *    annotation_or_name;
         TypeInfo *          firstType;      // map  from, or array
         TypeInfo *          secondType;     // map  to
+        TypeInfo **         argTypes;
+        uint32_t            argCount;
         uint32_t            dimSize;
         uint32_t *          dim;
         uint32_t            flags;
@@ -135,7 +138,8 @@ namespace das
         char *          sValue = nullptr;
         VarInfo() = default;
         VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name, 
-                TypeInfo * _firstType, TypeInfo * _secondType, uint32_t _dimSize, uint32_t * _dim, uint32_t _flags,
+                TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, uint32_t _argCount,
+                uint32_t _dimSize, uint32_t * _dim, uint32_t _flags,
                 uint32_t _hash, const char * _name, uint32_t _offset ) {
                 type               = _type;
                 structType         = _structType;
@@ -143,6 +147,8 @@ namespace das
                 annotation_or_name = _annotation_or_name;
                 firstType          = _firstType;
                 secondType         = _secondType;
+                argTypes           = _argTypes;
+                argCount           = _argCount;
                 dimSize            = _dimSize;
                 dim                = _dim;
                 flags              = _flags;
