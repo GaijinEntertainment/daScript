@@ -115,7 +115,7 @@
 %token  DAS_DELETE     DAS_DEREF      DAS_SCOPE      DAS_TYPEDEF
 %token  DAS_WITH       DAS_CAST       DAS_OVERRIDE   DAS_UPCAST
 %token  DAS_ITERATOR   DAS_VAR		  DAS_ADDR       DAS_CONTINUE
-%token  DAS_WHERE
+%token  DAS_WHERE      DAS_REINTERPRET
 
 /* basic types */
 %token  DAS_TBOOL       DAS_TVOID       DAS_TSTRING     DAS_TAUTO
@@ -758,7 +758,14 @@ expr_cast
         $$ = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
     }
     |   DAS_UPCAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
-        $$ = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl), true);
+        auto pCast = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
+        pCast->upcast = true;
+        $$ = pCast;
+    }
+    |   DAS_REINTERPRET[loc] '<' type_declaration[decl] '>' expr[subexpr] {
+        auto pCast = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
+        pCast->reinterpret = true;
+        $$ = pCast;
     }
     ;
 

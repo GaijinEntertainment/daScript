@@ -63,9 +63,25 @@ def test_ptr
     (cast<Foo> fv.f3d).y = 13
     assert((cast<Foo> fv.f3d).y==13)
 
+struct Int2Float
+    iv:uint
+    fv:float
+
+struct Float2Int
+    fv:float
+    iv:uint
+
+[sideeffects,unsafe]
+def test_reinterpret()
+    let f2i = [[Int2Float iv=0x3f400000,fv=1.0]]
+    let i2f = reinterpret<Float2Int>(f2i)
+    assert(i2f.fv==0.75 & i2f.iv==0x3f800000)
+    return true
+
 [export]
 def test
     test_struct()
     test_ptr()
+    test_reinterpret()
     return true
 

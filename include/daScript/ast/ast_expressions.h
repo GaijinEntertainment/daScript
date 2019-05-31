@@ -707,8 +707,8 @@ namespace das
 
     struct ExprCast : Expression {
         ExprCast() = default;
-        ExprCast( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & ct, bool uc = false )
-            : Expression(a), subexpr(se), castType(ct), upcast(uc) {}
+        ExprCast( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & ct )
+            : Expression(a), subexpr(se), castType(ct) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -716,7 +716,13 @@ namespace das
         virtual bool rtti_isCast() const override { return true; }
         ExpressionPtr   subexpr;
         TypeDeclPtr     castType;
-        bool            upcast = false;
+        union {
+            struct {
+                bool            upcast : 1;
+                bool            reinterpret : 1;
+            };
+            uint32_t castFlags = 0;
+        };
     };
 
     struct ExprNew : ExprCallFunc {

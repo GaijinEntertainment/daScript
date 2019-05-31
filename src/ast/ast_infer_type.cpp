@@ -1527,16 +1527,24 @@ namespace das {
                 reportGenericInfer();
                 return expr->subexpr;
             }
-            if ( expr->castType->isGoodBlockType() ||  expr->castType->isGoodFunctionType() || expr->castType->isGoodLambdaType() ) {
+            if ( expr->reinterpret ) {
+                expr->type = make_shared<TypeDecl>(*expr->castType);
+                expr->type->ref = expr->subexpr->type->ref;
+
+            } else if ( expr->castType->isGoodBlockType() ||  expr->castType->isGoodFunctionType() || expr->castType->isGoodLambdaType() ) {
                 expr->type = castFunc(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
             } else {
                 expr->type = castStruct(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
             }
-            if ( expr->upcast && func && !func->unsafe ) {
-                error("upcast requires [unsafe]", expr->at, CompilationError::unsafe);
+            if ( (expr->upcast || expr->reinterpret) && func && !func->unsafe ) {
+                error("cast requires [unsafe]", expr->at, CompilationError::unsafe);
             }
             if ( expr->type ) {
                 verifyType(expr->type);
+            } else {
+                error("can't cast (" + expr->subexpr->type->describe() + ") to (" + expr->castType->describe() + ")",
+                      expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
             }
             return Visitor::visit(expr);
         }
