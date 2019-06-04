@@ -166,7 +166,7 @@ namespace das {
                 field->write = true;
                 propagateWrite(field->value.get());
             } else if ( expr->rtti_isSwizzle() ) {
-                auto swiz = (ExprField *) expr;
+                auto swiz = (ExprSwizzle *) expr;
                 swiz->write = true;
                 propagateWrite(swiz->value.get());
             }else if ( expr->rtti_isAt() ) {

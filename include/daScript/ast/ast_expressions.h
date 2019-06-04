@@ -155,9 +155,11 @@ namespace das
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isField() const override { return true; }
+        int tupleFieldIndex() const;
         ExpressionPtr   value;
         string          name;
         const Structure::FieldDeclaration * field = nullptr;
+        int             tupleIndex = -1;
         TypeAnnotationPtr annotation;
         union {
             struct {

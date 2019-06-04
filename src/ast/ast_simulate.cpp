@@ -1122,7 +1122,7 @@ namespace das
     }
 
     SimNode * ExprField::simulate (Context & context) const {
-        if ( !field ) {
+        if ( !field  && tupleIndex==-1 ) {
             if ( r2v ) {
                 auto resN = annotation->simulateGetFieldR2V(name, context, at, value);
                 if ( !resN ) {
@@ -1144,25 +1144,36 @@ namespace das
     }
 
     SimNode * ExprField::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
-        if ( !field ) {
+        if ( !field && tupleIndex==-1 ) {
             return nullptr;
         }
+        int fieldOffset = -1;
+        if ( tupleIndex != - 1 ) {
+            if ( value->type->isPointer() ) {
+                fieldOffset = value->type->firstType->getTupleFieldOffset(tupleIndex);
+            } else {
+                fieldOffset = value->type->getTupleFieldOffset(tupleIndex);
+            }
+        } else {
+            fieldOffset = field->offset;
+        }
+        DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
         if (value->type->isPointer()) {
             auto simV = value->simulate(context);
             if ( r2vType!=Type::none ) {
-                return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType, at, simV, field->offset + extraOffset);
+                return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType, at, simV, fieldOffset + extraOffset);
             } else {
-                return context.code->makeNode<SimNode_PtrFieldDeref>(at, simV, field->offset + extraOffset);
+                return context.code->makeNode<SimNode_PtrFieldDeref>(at, simV, fieldOffset + extraOffset);
             }
         } else {
-            if ( auto chain = value->trySimulate(context, extraOffset + field->offset, r2vType) ) {
+            if ( auto chain = value->trySimulate(context, extraOffset + fieldOffset, r2vType) ) {
                 return chain;
             }
             auto simV = value->simulate(context);
             if ( r2vType!=Type::none ) {
-                return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType, at, simV, extraOffset + field->offset);
+                return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType, at, simV, extraOffset + fieldOffset);
             } else {
-                return context.code->makeNode<SimNode_FieldDeref>(at, simV, extraOffset + field->offset);
+                return context.code->makeNode<SimNode_FieldDeref>(at, simV, extraOffset + fieldOffset);
             }
         }
     }

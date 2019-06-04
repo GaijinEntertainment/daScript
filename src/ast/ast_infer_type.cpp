@@ -1836,9 +1836,6 @@ namespace das {
             if ( valT->isVectorType() ) {
                 reportGenericInfer();
                 return make_shared<ExprSwizzle>(expr->at,expr->value,expr->name);
-            } else if ( valT->isArray() ) {
-                error("can't get a field of an array", expr->at, CompilationError::cant_get_field);
-                return Visitor::visit(expr);
             } else if ( valT->isHandle() ) {
                 expr->annotation = valT->annotation;
                 expr->type = expr->annotation->makeFieldType(expr->name);
@@ -1846,18 +1843,40 @@ namespace das {
                 expr->field = valT->structType->findField(expr->name);
             } else if ( valT->isPointer() ) {
                 expr->value = Expression::autoDereference(expr->value);
-                if ( valT->firstType->baseType==Type::tStructure ) {
+                if ( valT->firstType->isStructure() ) {
                     expr->field = valT->firstType->structType->findField(expr->name);
                 } else if ( valT->firstType->isHandle() ) {
                     expr->annotation = valT->firstType->annotation;
                     expr->type = expr->annotation->makeFieldType(expr->name);
+                } else if ( valT->firstType->isGoodTupleType() ) {
+                    int index = expr->tupleFieldIndex();
+                    if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
+                        error("can't get tuple field", expr->at, CompilationError::cant_get_field);
+                        return Visitor::visit(expr);
+                    }
+                    expr->tupleIndex = index;
                 }
+            } else if ( valT->isGoodTupleType() ) {
+                int index = expr->tupleFieldIndex();
+                if ( index==-1 || index>=int(valT->argTypes.size()) ) {
+                    error("can't get tuple field", expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
+                expr->tupleIndex = index;
+            } else {
+                error("can't get field of " + expr->value->type->describe(), expr->at, CompilationError::cant_get_field);
+                return Visitor::visit(expr);
             }
             // handle
             if ( expr->field ) {
                 expr->type = make_shared<TypeDecl>(*expr->field->type);
                 expr->type->ref = true;
                 expr->type->constant |= valT->constant;
+            } else if ( expr->tupleIndex!=-1 ) {
+                auto tupleT = valT->isPointer() ? valT->firstType : valT;
+                expr->type = make_shared<TypeDecl>(*tupleT->argTypes[expr->tupleIndex]);
+                expr->type->ref = true;
+                expr->type->constant |= tupleT->constant;
             } else if ( !expr->type ) {
                 error("field " + expr->name + " not found", expr->at, CompilationError::cant_get_field);
             } else {

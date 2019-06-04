@@ -54,6 +54,7 @@ namespace das {
         bool isGoodBlockType() const;
         bool isGoodFunctionType() const;
         bool isGoodLambdaType() const;
+        bool isGoodTupleType() const;
         bool isVoid() const;
         bool isRef() const;
         bool isRefType() const;
@@ -70,6 +71,7 @@ namespace das {
         int getStride() const;
         int getTupleSize() const;
         int getTupleAlign() const;
+        int getTupleFieldOffset ( int index ) const;
         string describe ( bool extra = true, bool contracts = true ) const;
         bool canCopy() const;
         bool canMove() const;

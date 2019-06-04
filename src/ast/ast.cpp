@@ -825,7 +825,17 @@ namespace das {
         cexpr->name = name;
         cexpr->value = value->clone();
         cexpr->field = field;
+        cexpr->tupleIndex = tupleIndex;
         return cexpr;
+    }
+
+    int ExprField::tupleFieldIndex() const {
+        int index = 0;
+        if ( sscanf(name.c_str(),"_%i",&index)==1 ) {
+            return index;
+        } else {
+            return -1;
+        }
     }
 
     // ExprSafeField

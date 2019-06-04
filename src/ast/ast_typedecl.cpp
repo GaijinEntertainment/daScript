@@ -744,6 +744,10 @@ namespace das
         return baseType==Type::tArray && dim.size()==0 && firstType;
     }
 
+    bool TypeDecl::isGoodTupleType() const {
+        return baseType==Type::tTuple && dim.size()==0;
+    }
+
     bool TypeDecl::isGoodTableType() const {
         return baseType==Type::tTable && dim.size()==0 && firstType && secondType;
     }
@@ -1062,6 +1066,23 @@ namespace das
 
     bool TypeDecl::isIndex() const {
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
+    }
+
+    int TypeDecl::getTupleFieldOffset ( int index ) const {
+        DAS_ASSERT(baseType==Type::tTuple);
+        DAS_ASSERT(index>=0 && index<int(argTypes.size()));
+        int size = 0, idx = 0;
+        for ( const auto & argT : argTypes ) {
+            if ( idx==index ) {
+                return size;
+            }
+            int al = argT->getAlignOf() - 1;
+            size = (size + al) & ~al;
+            size += argT->getSizeOf();
+            idx ++;
+        }
+        DAS_ASSERT(0 && "we should not even be here. field index out of range somehow???");
+        return -1;
     }
 
     int TypeDecl::getTupleSize() const {
