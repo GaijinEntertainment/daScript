@@ -1320,13 +1320,8 @@ namespace das {
             verifyType(expr->typeexpr);
             if ( nErrors==program->errors.size() ) {
                 if ( expr->trait=="sizeof" ) {
-                    if ( expr->typeexpr->ref ) {
-                        error("typeinfo(sizeof ref) is prohibited, " + expr->typeexpr->describe(),
-                              expr->at,CompilationError::typeinfo_reference);
-                    } else {
-                        reportGenericInfer();
-                        return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
-                    }
+                    reportGenericInfer();
+                    return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
                 } else if ( expr->trait=="is_dim" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->dim.size()!=0);

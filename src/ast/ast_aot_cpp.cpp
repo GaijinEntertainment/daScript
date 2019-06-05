@@ -154,15 +154,9 @@ namespace das {
                 stream << "Table";
             }
         } else if ( baseType==Type::tTuple ) {
-            stream << "TTuple<";
-            bool first = true;
+            stream << "TTuple<" << int(type->getSizeOf());
             for ( const auto & arg : type->argTypes ) {
-                if ( first ) {
-                    first = false;
-                } else {
-                    stream << ",";
-                }
-                stream << describeCppType(arg);
+                stream << "," << describeCppType(arg);
             }
             stream << ">";
         } else if ( baseType==Type::tStructure ) {
@@ -1158,7 +1152,7 @@ namespace das {
     // null coaelescing
         virtual void preVisit ( ExprNullCoalescing * nc ) override {
             Visitor::preVisit(nc);
-            ss << "das_null_coalescing<" << describeCppType(nc->defaultValue->type) << ">::get(";
+            ss << "das_null_coalescing<" << describeCppType(nc->defaultValue->type,false,false,true) << ">::get(";
         }
         virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * nc, Expression * expr ) override {
             Visitor::preVisitNullCoaelescingDefault(nc,expr);
@@ -1172,14 +1166,18 @@ namespace das {
         virtual void preVisit ( ExprSafeField * field ) override {
             Visitor::preVisit(field);
             ss << "das_safe_navigation";
+            auto vtype = field->value->type->firstType;
+            if ( vtype->isGoodTupleType() ) ss << "_tuple";
             if ( field->skipQQ ) ss << "_ptr";
-            ss << "<" << describeCppType(field->value->type->firstType) << ",";
+            ss << "<";
+            if ( !vtype->isGoodTupleType() ) {
+                ss << describeCppType(field->value->type->firstType) << ",";
+            }
             if ( field->skipQQ ) {
                 ss << describeCppType(field->type);
             } else {
                 ss << describeCppType(field->type->firstType);
             }
-            auto vtype = field->value->type->firstType;
             if ( vtype->isHandle() ) {
                 ss << ",&";
                 if ( vtype->annotation->cppName.empty() ) {
@@ -1187,10 +1185,14 @@ namespace das {
                 } else {
                     ss << vtype->annotation->cppName;
                 }
+            } else if ( vtype->isGoodTupleType() ) {
+                ss << ", " << vtype->getTupleFieldOffset(field->tupleIndex) <<  ">::get(";
             } else {
                 ss << ",&" << vtype->structType->name;
             }
-            ss << "::" << field->name <<  ">::get(";
+            if ( !vtype->isGoodTupleType() ) {
+                ss << "::" << field->name <<  ">::get(";
+            }
             /*
             if ( field->value->type->isHandle() ) {
                 field->value->type->annotation->aotPreVisitGetField(ss, field->name);
@@ -1208,22 +1210,38 @@ namespace das {
     // field
         virtual void preVisit ( ExprField * field ) override {
             Visitor::preVisit(field);
-            if ( field->value->type->isHandle() ) {
+            if ( field->value->type->isTuple() ) {
+                ss << "das_get_tuple_field<"
+                    << describeCppType(field->value->type->argTypes[field->tupleIndex])
+                    << ","
+                    << field->value->type->getTupleFieldOffset(field->tupleIndex)
+                    << ">::get(";
+            } else if ( field->value->type->isHandle() ) {
                 field->value->type->annotation->aotPreVisitGetField(ss, field->name);
             } else if ( field->value->type->baseType==Type::tPointer ) {
                 if ( field->value->type->firstType->isHandle() ) {
                     field->value->type->firstType->annotation->aotPreVisitGetFieldPtr(ss, field->name);
+                } else if ( field->value->type->firstType->isTuple() ) {
+                    ss << "das_get_tuple_field_ptr<"
+                        << describeCppType(field->value->type->firstType->argTypes[field->tupleIndex])
+                        << ","
+                        << field->value->type->firstType->getTupleFieldOffset(field->tupleIndex)
+                        << ">::get(";
                 }
             }
         }
         virtual ExpressionPtr visit ( ExprField * field ) override {
-            if ( field->value->type->isHandle() ) {
+            if ( field->value->type->isTuple() ) {
+                ss << ")";
+            } else if ( field->value->type->isHandle() ) {
                 field->value->type->annotation->aotVisitGetField(ss, field->name);
                 ss << " /*" << field->name << "*/";
             } else if ( field->value->type->baseType==Type::tPointer ) {
                 if ( field->value->type->firstType->isHandle() ) {
                     field->value->type->firstType->annotation->aotVisitGetFieldPtr(ss, field->name);
                     ss << " /*" << field->name << "*/";
+                } else if ( field->value->type->firstType->isTuple() ) {
+                    ss << ")";
                 } else {
                     ss << "->" << field->name;
                 }

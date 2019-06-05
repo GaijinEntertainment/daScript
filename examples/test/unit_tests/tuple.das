@@ -1,6 +1,3 @@
-// options logInferPasses = true
-options logCpp=true
-
 [export,unsafe]
 def test:bool
     var t : tuple < int; float; string >
@@ -26,5 +23,4 @@ def test:bool
     assert(qq?._1 ?? 0.0==2.0)
     delete qq
     return true
-
 

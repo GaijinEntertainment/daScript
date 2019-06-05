@@ -71,7 +71,7 @@ namespace das {
         StringWriter & operator << (double v)               { return write(fixed ? "%.17f" : "%g", v); }
         StringWriter & operator << (char * v)               { return write((const char*)v); }
         StringWriter & operator << (const char * v)         { return write(v); }
-        StringWriter & operator << (const string & v)       { return writeStr(v.c_str(), v.length()); }
+        StringWriter & operator << (const string & v)       { return v.length() ? writeStr(v.c_str(), v.length()) : *this; }
     protected:
         bool hex = false;
         bool fixed = false;

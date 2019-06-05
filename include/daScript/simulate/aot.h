@@ -384,6 +384,39 @@ namespace das {
         }
     };
 
+    template <int tupleSize, typename ...TA>
+    struct TTuple : Tuple {
+        char data[tupleSize];
+    };
+
+    template <typename TT, int offset>
+    struct das_get_tuple_field {
+        static __forceinline TT & get ( const Tuple & t ) {
+            char * data = (char *) &t;
+            return *(TT *)(data + offset);
+        }
+    };
+
+    template <typename TT, int offset>
+    struct das_get_tuple_field_ptr {
+        static __forceinline TT & get ( const Tuple * t ) {
+            char * data = (char *) t;
+            return *(TT *)(data + offset);
+        }
+    };
+
+    template <typename RR, int offset>
+    struct das_safe_navigation_tuple {
+        static __forceinline RR * get ( const Tuple * ptr ) {
+            if ( ptr ) {
+                char * data = (char *) ptr;
+                return (RR *)(data + offset);
+            } else {
+                return nullptr;
+            }
+        }
+    };
+
     template <typename TT>
     struct das_iterator;
 
