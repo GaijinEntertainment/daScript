@@ -9,4 +9,9 @@ def test:bool
     recover
         a = 13
     assert(a==13)
+    try
+        panic("now panic")
+    recover
+        a = 14
+    assert(a==14)
 	return true
