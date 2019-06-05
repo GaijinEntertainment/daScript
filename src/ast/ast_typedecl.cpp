@@ -334,7 +334,9 @@ namespace das
                 return firstType->annotation->canDeletePtr();
             } else if ( firstType->baseType==Type::tStructure ) {
                 return true;
-            } else {
+            } else if ( firstType->baseType==Type::tTuple ) {
+                return true;
+            }else {
                 return false;
             }
         } else if ( baseType==Type::tArray || baseType==Type::tTable ) {

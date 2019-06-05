@@ -841,6 +841,9 @@ namespace das
             if ( subexpr->type->firstType->baseType==Type::tStructure ) {
                 auto structSize = subexpr->type->firstType->getSizeOf();
                 return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize);
+            } else if ( subexpr->type->firstType->baseType==Type::tTuple ) {
+                auto structSize = subexpr->type->firstType->getSizeOf();
+                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize);
             } else {
                 auto ann = subexpr->type->firstType->annotation;
                 assert(ann->canDeletePtr() && "has to be able to delete ptr");
@@ -1179,6 +1182,15 @@ namespace das
     }
 
     SimNode * ExprSafeField::simulate (Context & context) const {
+        int fieldOffset = -1;
+        if ( !annotation ) {
+            if ( tupleIndex != - 1 ) {
+                fieldOffset = value->type->firstType->getTupleFieldOffset(tupleIndex);
+            } else {
+                fieldOffset = field->offset;
+            }
+            DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
+        }
         if ( skipQQ ) {
             if ( annotation ) {
                 auto resN = annotation->simulateSafeGetFieldPtr(name, context, at, value);
@@ -1188,7 +1200,7 @@ namespace das
                 }
                 return resN;
             } else {
-                auto resN = context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),field->offset);
+                auto resN = context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),fieldOffset);
                 if ( !resN ) {
                     context.thisProgram->error("integration error, simulateSafeFieldDerefPtr returned null",
                                                at, CompilationError::missing_node );
@@ -1204,7 +1216,7 @@ namespace das
                 }
                 return resN;
             } else {
-                return context.code->makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),field->offset);
+                return context.code->makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),fieldOffset);
             }
         }
     }

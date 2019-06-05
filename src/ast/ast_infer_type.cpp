@@ -1610,12 +1610,18 @@ namespace das {
                     error("can't new this type " + expr->typeexpr->describe(),
                           expr->at, CompilationError::invalid_new_type);
                 }
+            } else if ( expr->typeexpr->baseType==Type::tTuple ) {
+                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
+                expr->type->firstType->dim.clear();
+                expr->type->dim = expr->typeexpr->dim;
+                expr->name = expr->typeexpr->getMangledName();
             } else {
-                error("can only new structures or handled types " + expr->typeexpr->describe(),
+                error("can only new tuples, structures or handled types, not " + expr->typeexpr->describe(),
                       expr->at, CompilationError::invalid_new_type);
             }
             if ( expr->initializer && expr->name.empty() ) {
-                error("only native structures can have initializers " + expr->typeexpr->describe(),
+                error("only native structures can have initializers, not " + expr->typeexpr->describe(),
                       expr->at, CompilationError::invalid_new_type);
             }
             if ( expr->type && expr->initializer && !expr->name.empty() ) {
@@ -1890,7 +1896,7 @@ namespace das {
             // infer
             auto valT = expr->value->type;
             if ( !valT->isPointer() || !valT->firstType ) {
-                error("can only safe dereference a pointer to a structure or handle " + valT->describe(),
+                error("can only safe dereference a pointer to a tupe, a structure or a handle " + valT->describe(),
                       expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
@@ -1909,8 +1915,16 @@ namespace das {
                     error("can't safe get field " + expr->name, expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
+            } else if ( valT->firstType->isGoodTupleType() ) {
+                int index = expr->tupleFieldIndex();
+                if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
+                    error("can't get tuple field", expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
+                expr->tupleIndex = index;
+                expr->type = make_shared<TypeDecl>(*valT->firstType->argTypes[expr->tupleIndex]);
             } else {
-                error("can only safe dereference a pointer to a structure or a handle " + valT->describe(),
+                error("can only safe dereference a pointer to a tuple, a structure or a handle " + valT->describe(),
                       expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
