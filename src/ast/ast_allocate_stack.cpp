@@ -388,6 +388,21 @@ namespace das {
                 expr->doesNotNeedInit = false;
             }
         }
+    // ExprMakeTuple
+        virtual void preVisit ( ExprMakeTuple * expr ) override {
+            Visitor::preVisit(expr);
+            if ( inStruct ) return;
+            if ( !expr->doesNotNeedSp ) {
+                auto sz = expr->type->getSizeOf();
+                uint32_t cStackTop = allocateStack(sz);
+                if ( log ) {
+                    logs << "\t" << cStackTop << "\t" << sz
+                    << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
+                }
+                expr->setRefSp(false, false, cStackTop, 0);
+                expr->doesNotNeedInit = false;
+            }
+        }
     // New
         virtual void preVisit ( ExprNew * expr ) override {
             Visitor::preVisit(expr);

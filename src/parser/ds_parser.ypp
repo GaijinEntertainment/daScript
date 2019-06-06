@@ -213,6 +213,7 @@
 %type <pMakeStruct>     make_struct_fields
 %type <pExpression>     make_struct_decl
 %type <pExpression>     make_struct_dim
+%type <pExpression>     make_tuple
 %type <pExpression>     make_dim
 %type <pExpression>     make_dim_decl
 %type <pExpression>     array_comprehension_where
@@ -1560,13 +1561,30 @@ make_struct_decl
     }
     ;
 
-make_dim
+make_tuple
     :   expr[val] {
+        $$ = $val;
+    }
+    |   make_tuple[mkt] ',' expr[val] {
+        ExprMakeTuple * mt;
+        if ( $mkt->rtti_isMakeTuple() ) {
+            mt = static_cast<ExprMakeTuple *>($mkt);
+        } else {
+            mt = new ExprMakeTuple(tokAt(@mkt));
+            mt->values.push_back(ExpressionPtr($mkt));
+        }
+        mt->values.push_back(ExpressionPtr($val));
+        $$ = mt;
+    }
+    ;
+
+make_dim
+    :   make_tuple[val] {
         auto mka = new ExprMakeArray();
         mka->values.push_back(ExpressionPtr($val));
         $$ = mka;
     }
-    |   make_dim[mka] ';' expr[val] {
+    |   make_dim[mka] ';' make_tuple[val] {
         ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
         $$ = $mka;
     }

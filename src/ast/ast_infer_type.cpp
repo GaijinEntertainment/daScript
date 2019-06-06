@@ -139,6 +139,13 @@ namespace das {
                     }
                     verifyType(argType);
                 }
+            } else if ( decl->baseType==Type::tTuple ) {
+                for ( auto & argType : decl->argTypes ) {
+                    if ( argType->ref ) {
+                        error("tuple element can't be ref", argType->at,CompilationError::invalid_type);
+                    }
+                    verifyType(argType);
+                }
             }
         }
 
@@ -2931,6 +2938,29 @@ namespace das {
             verifyType(expr->type);
             return Visitor::visit(expr);
         }
+    // make tuple
+        virtual void preVisit ( ExprMakeTuple * expr ) override {
+            Visitor::preVisit(expr);
+            expr->makeType.reset();
+        }
+        virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
+            for ( auto & val : expr->values ) {
+                if ( !val->type || val->type->isAuto() || val->type->isAlias() ) {
+                    error("not fully defined tuple element type", expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                }
+            }
+            expr->makeType = make_shared<TypeDecl>(Type::tTuple);
+            for ( auto & val : expr->values ) {
+                auto valT = make_shared<TypeDecl>(*val->type);
+                valT->ref = false;
+                valT->constant = false;
+                expr->makeType->argTypes.push_back(valT);
+            }
+            expr->type = make_shared<TypeDecl>(*expr->makeType);
+            verifyType(expr->type);
+            return Visitor::visit(expr);
+        }
     // make array
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
@@ -2975,7 +3005,9 @@ namespace das {
                 resT->dim.resize(1);
                 resT->dim[0] = resDim;
             } else {
-                resT->dim.clear();
+                DAS_ASSERT(expr->values.size()==1);
+                reportGenericInfer();
+                return expr->values[0];
             }
             expr->type = resT;
             verifyType(expr->type);

@@ -836,6 +836,17 @@ namespace das
         vector<ExpressionPtr>       values;
     };
 
+    struct ExprMakeTuple : ExprMakeArray {
+        ExprMakeTuple() = default;
+        ExprMakeTuple ( const LineInfo & at ) : ExprMakeArray(at) {}
+        virtual bool rtti_isMakeTuple() const override { return true; }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
+    };
+
     struct ExprArrayComprehension : Expression {
         ExprArrayComprehension() = default;
         ExprArrayComprehension ( const LineInfo & at ) : Expression(at) {}

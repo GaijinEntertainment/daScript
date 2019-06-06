@@ -733,6 +733,25 @@ namespace das {
             ss << "]]";
             return Visitor::visit(expr);
         }
+    // make tuple
+        virtual void preVisit ( ExprMakeTuple * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "[[";
+            if ( expr->type ) {
+                ss << expr->type->describe();
+            } else {
+                ss << "/* undefined */";
+            }
+            ss << " ";
+        }
+        virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
+            if ( !lastField ) ss << ",";
+            return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+        }
+        virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
+            ss << "]]";
+            return Visitor::visit(expr);
+        }
     // make array
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);

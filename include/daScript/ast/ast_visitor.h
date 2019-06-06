@@ -131,6 +131,11 @@ namespace das {
         virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) {
             return init->shared_from_this();
         }
+        // MAKE TUPLE
+        virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastIndex ) {}
+        virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) {
+            return init->shared_from_this();
+        }
         // ARRAY COMPREHENSION
         virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) {}
         virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) {}
@@ -205,6 +210,7 @@ namespace das {
         VISIT_EXPR(ExprWhile)
         VISIT_EXPR(ExprMakeStructure)
         VISIT_EXPR(ExprMakeArray)
+        VISIT_EXPR(ExprMakeTuple)
         VISIT_EXPR(ExprArrayComprehension)
 #undef VISIT_EXPR
     };

@@ -1,3 +1,5 @@
+// options logCpp=true
+
 [export,unsafe]
 def test:bool
     var t : tuple < int; float; string >
@@ -22,5 +24,11 @@ def test:bool
     assert(qq?._0 ?? 0==1)
     assert(qq?._1 ?? 0.0==2.0)
     delete qq
+    // make tuple
+    let mkt = [[ tuple<int;float> 1, 2.0]]
+    assert(mkt._0==1 & mkt._1==2.0)
+    let mkta = [[ tuple<int;float> 1, 2.0; 3, 4.0]]
+    assert(mkta[0]._0==1 & mkta[0]._1==2.0)
+    assert(mkta[1]._0==3 & mkta[1]._1==4.0)
     return true
 

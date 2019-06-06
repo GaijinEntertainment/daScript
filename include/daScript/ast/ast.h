@@ -315,6 +315,7 @@ namespace das
         virtual bool rtti_isValues() const { return false; }
         virtual bool rtti_isMakeBlock() const { return false; }
         virtual bool rtti_isMakeLocal() const { return false; }
+        virtual bool rtti_isMakeTuple() const { return false; }
         virtual bool rtti_isIfThenElse() const { return false; }
         virtual bool rtti_isFor() const { return false; }
         virtual bool rtti_isWhile() const { return false; }

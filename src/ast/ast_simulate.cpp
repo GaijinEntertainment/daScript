@@ -568,6 +568,8 @@ namespace das
         return block;
     }
 
+    // make array
+
     void ExprMakeArray::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
         ExprMakeLocal::setRefSp(ref, cmres, sp, off);
         int total = int(values.size());
@@ -647,6 +649,90 @@ namespace das
             block->list[i] = simlist[i];
         return block;
     }
+
+    // make tuple
+
+    void ExprMakeTuple::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
+        ExprMakeLocal::setRefSp(ref, cmres, sp, off);
+        int total = int(values.size());
+        for ( int index=0; index != total; ++index ) {
+            auto & val = values[index];
+            if ( val->rtti_isMakeLocal() ) {
+                uint32_t offset =  extraOffset + makeType->getTupleFieldOffset(index);
+                auto mkl = static_pointer_cast<ExprMakeLocal>(val);
+                mkl->setRefSp(ref, cmres, sp, offset);
+            } else if ( val->rtti_isCall() ) {
+                auto cll = static_pointer_cast<ExprCall>(val);
+                if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                    cll->doesNotNeedSp = true;
+                }
+            } else if ( val->rtti_isInvoke() ) {
+                auto cll = static_pointer_cast<ExprInvoke>(val);
+                if ( cll->isCopyOrMove() ) {
+                    cll->doesNotNeedSp = true;
+                }
+            }
+        }
+    }
+
+    vector<SimNode *> ExprMakeTuple::simulateLocal (Context & context) const {
+        vector<SimNode *> simlist;
+        // init with 0
+        int total = int(values.size());
+        if ( !doesNotNeedInit ) {
+            uint32_t sizeOf = makeType->getSizeOf();
+            SimNode * init0;
+            if ( useCMRES ) {
+                init0 = context.code->makeNode<SimNode_InitLocalCMRes>(at,extraOffset,sizeOf);
+            } else if ( useStackRef ) {
+                init0 = context.code->makeNode<SimNode_InitLocalRef>(at,stackTop,extraOffset,sizeOf);
+            } else {
+                init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,sizeOf);
+            }
+            simlist.push_back(init0);
+        }
+        for ( int index=0; index != total; ++index ) {
+            auto & val = values[index];
+            uint32_t offset = extraOffset + makeType->getTupleFieldOffset(index);
+            SimNode * cpy;
+            if ( val->rtti_isMakeLocal() ) {
+                // so what happens here, is we ask it for the generated commands and append it to this list only
+                auto mkl = static_pointer_cast<ExprMakeLocal>(val);
+                auto lsim = mkl->simulateLocal(context);
+                simlist.insert(simlist.end(), lsim.begin(), lsim.end());
+                continue;
+            } else if ( useCMRES ) {
+                cpy = makeLocalCMResCopy(at,context,offset,val);
+            } else if ( useStackRef ) {
+                cpy = makeLocalRefCopy(at,context,stackTop,offset,val);
+            } else {
+                cpy = makeLocalCopy(at,context,stackTop+offset,val);
+            }
+            if ( !cpy ) {
+                context.thisProgram->error("internal compilation error, can't generate array initialization", at);
+            }
+            simlist.push_back(cpy);
+        }
+        return simlist;
+    }
+
+
+    SimNode * ExprMakeTuple::simulate (Context & context) const {
+        SimNode_Block * block;
+        if ( useCMRES ) {
+            block = context.code->makeNode<SimNode_MakeLocalCMRes>(at);
+        } else {
+            block = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
+        }
+        auto simlist = simulateLocal(context);
+        block->total = int(simlist.size());
+        block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
+        for ( uint32_t i = 0; i != block->total; ++i )
+            block->list[i] = simlist[i];
+        return block;
+    }
+
+    // r2v
 
     SimNode * ExprRef2Value::GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {
         if ( type->isHandle() ) {

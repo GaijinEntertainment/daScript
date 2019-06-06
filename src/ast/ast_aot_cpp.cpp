@@ -154,7 +154,7 @@ namespace das {
                 stream << "Table";
             }
         } else if ( baseType==Type::tTuple ) {
-            stream << "TTuple<" << int(type->getSizeOf());
+            stream << "TTuple<" << int(type->getTupleSize());
             for ( const auto & arg : type->argTypes ) {
                 stream << "," << describeCppType(arg);
             }
@@ -595,6 +595,14 @@ namespace das {
         }
     // make array
         virtual void preVisit ( ExprMakeArray * expr ) override {
+            if ( auto block = getCurrentBlock() ) {
+                if ( expr->needTempSrc ) {
+                    localTemps[block].push_back(expr);
+                }
+            }
+        }
+    // make tuple
+        virtual void preVisit ( ExprMakeTuple * expr ) override {
             if ( auto block = getCurrentBlock() ) {
                 if ( expr->needTempSrc ) {
                     localTemps[block].push_back(expr);
@@ -1723,6 +1731,41 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
             ss << string(tab,'\t') << "return " << mkaName(expr)<< ";\n";
+            tab --;
+            ss << string(tab,'\t') << "})())";
+            return Visitor::visit(expr);
+        }
+   // make tuple
+        string mktName ( ExprMakeTuple * expr ) const {
+            if ( !expr->needTempSrc ) {
+                return "__mkt_" + to_string(expr->at.line);
+            } else {
+                return makeLocalTempName(expr);
+            }
+        }
+        virtual void preVisit ( ExprMakeTuple * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "(([&]() -> " << describeCppType(expr->type,false,true) << (expr->needTempSrc ? "&" : "") << " {\n";
+            tab ++;
+            if ( !expr->needTempSrc ) {
+                ss << string(tab,'\t') << describeCppType(expr->type,false,true) << " " << mktName(expr) << ";\n";
+            }
+            ss << string(tab,'\t') << "das_zero(" << mktName(expr) << ");\n";
+        }
+        virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
+            Visitor::preVisitMakeArrayIndex(expr, index, init, lastField);
+            ss << string(tab,'\t') << "das_get_tuple_field<"
+                << describeCppType(expr->makeType->argTypes[index])
+                << ","
+                << expr->makeType->getTupleFieldOffset(index)
+                << ">::get(" << mktName(expr) << ") = ";
+        }
+        virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
+            ss << ";\n";
+            return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+        }
+        virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
+            ss << string(tab,'\t') << "return " << mktName(expr)<< ";\n";
             tab --;
             ss << string(tab,'\t') << "})())";
             return Visitor::visit(expr);

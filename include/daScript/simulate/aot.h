@@ -386,6 +386,14 @@ namespace das {
 
     template <int tupleSize, typename ...TA>
     struct TTuple : Tuple {
+        TTuple() = default;
+        TTuple(TTuple & arr) { moveT(arr); }
+        TTuple(TTuple && arr ) { moveT(arr); }
+        TTuple & operator = ( TTuple & arr ) { moveT(arr); return *this; }
+        TTuple & operator = ( TTuple && arr ) { moveT(arr); return *this; }
+        __forceinline void moveT ( Tuple & arr ) {
+            memcpy ( data, &arr, tupleSize );
+        }
         char data[tupleSize];
     };
 

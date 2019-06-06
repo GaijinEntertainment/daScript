@@ -1416,6 +1416,43 @@ namespace das {
         return vis.visit(this);
     }
 
+    // make tuple
+
+    ExpressionPtr ExprMakeTuple::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMakeTuple>(expr);
+        ExprMakeLocal::clone(cexpr);
+        cexpr->values.reserve ( values.size() );
+        for ( auto & val : values ) {
+            cexpr->values.push_back(val->clone());
+        }
+        if ( makeType ) {
+            cexpr->makeType = make_shared<TypeDecl>(*makeType);
+        }
+        return cexpr;
+    }
+
+    ExpressionPtr ExprMakeTuple::visit(Visitor & vis) {
+        vis.preVisit(this);
+        if ( makeType ) {
+            vis.preVisit(makeType.get());
+            makeType = makeType->visit(vis);
+            makeType = vis.visit(makeType.get());
+        }
+        int index = 0;
+        for ( auto it = values.begin(); it != values.end(); ) {
+            auto & value = *it;
+            vis.preVisitMakeTupleIndex(this, index, value.get(), index==int(values.size()-1));
+            value = value->visit(vis);
+            if ( value ) {
+                value = vis.visitMakeTupleIndex(this, index, value.get(), index==int(values.size()-1));
+            }
+            if ( value ) ++it; else it = values.erase(it);
+            index ++;
+        }
+        return vis.visit(this);
+    }
+
+
     // array comprehension
 
     ExpressionPtr ExprArrayComprehension::clone( const ExpressionPtr & expr ) const {
