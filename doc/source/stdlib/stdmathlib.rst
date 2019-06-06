@@ -14,6 +14,22 @@ All functions and symbols are in "math" module, use require to get access to it.
 Common Symbols
 +++++++++++++++
 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+all numerics (uint*, int*, float*, double)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. js:function:: min(x, y)
+
+    returns the minimum of `x` and `y`
+
+.. js:function:: max(x, y)
+
+    returns the minimum of `x` and `y`
+
+^^^^^^^^^^^^^^^^^^^^^^^^
+float* and double
+^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. js:function:: abs(x)
 
     returns the absolute value of `x` as same time
@@ -80,7 +96,7 @@ Common Symbols
 
 .. js:function:: ceil(x)
 
-    returns a value representing the smallest integer (type is still float) that is greater than or equal to `x`
+    returns a float value representing the smallest integer (type is still float) that is greater than or equal to `x`
 
 .. js:function:: floor(x)
 
@@ -94,6 +110,9 @@ Common Symbols
 
     returns a clamped to [0..1] inclusive range `x`
 
+^^^^^^^^^^^^^^^^^^^^^^^^
+float* only
+^^^^^^^^^^^^^^^^^^^^^^^^
 .. js:function:: atan2_est(x,y)
 
     returns the faster approximation of arctangent of  `x/y` - float only
@@ -101,6 +120,22 @@ Common Symbols
 .. js:function:: rcp_est(x)
 
     returns the fast approximation 1/x of `x` - float only
+
+.. js:function:: ceili(x)
+
+    returns a value representing the smallest integer (integer type!) that is greater than or equal to `x`
+
+.. js:function:: floori(x)
+
+    returns a integer value representing the largest integer that is less than or equal to `x`
+
+.. js:function:: roundi(x)
+
+    returns a integer value representing the integer that is closest to `x`
+
+.. js:function:: trunci(x)
+
+    returns a integer value representing the float without fraction part of `x`
 
 
 +++++++++++++++++
@@ -128,40 +163,88 @@ Noise functions
 Vector functions
 +++++++++++++++++
 
+^^^^^^^^^^^^^^^^^^^^^^^^
 float2, float3, float4:
+^^^^^^^^^^^^^^^^^^^^^^^^
 
-length - magnitude
-lengthSq - squared magnitude
-invLength - inverse magnitude
-invLengthSq - inverse squared magnitude
-distance - distance between arguments
-distanceSq - squared distance between arguments
-invDistance - inverse distance between arguments
-invDistanceSq - inverse squared distance between arguments
-dot - dot product between arguments
-normalize - returns normalized argument
+.. js:function:: length(x)
 
+    returns a non-negative value representing magnitude of `x`
+
+.. js:function:: lengthSq(x)
+
+    returns a non-negative value representing squared magnitude of `x`
+
+.. js:function:: invLength(x)
+
+    returns a non-negative value representing 1/magnitude of `x`
+
+.. js:function:: invLengthSq(x)
+
+    returns a non-negative value representing 1/squared magnitude of `x`
+
+.. js:function:: distance(x, y)
+
+    returns a non-negative value representing distance between `x` and `y`
+
+.. js:function:: distanceSq(x)
+
+    returns a non-negative value representing squared distance between `x` and `y`
+
+.. js:function:: invDistance(x, y)
+
+    returns a non-negative value representing 1/distance between `x` and `y`
+
+.. js:function:: invDistanceSq(x)
+
+    returns a non-negative value representing 1/squared distance between `x` and `y`
+
+.. js:function:: dot(x, y)
+
+    returns scalar representating dot product between `x` and `y`
+
+.. js:function:: normalize(x)
+
+    returns normalized `x`
+
+^^^^^^^^^^^^
 float3 only:
-cross - cross product (only float3).
-reflect - reflection, same as :: 
+^^^^^^^^^^^^
 
-    def reflect(v,n:float3)
-        return v - 2. * dot(v, n) * n
+.. js:function:: cross(x, y)
 
-refract - refraction, same as ::
-    
-    def refract(v,n:float3;nint:float;outRefracted:float3&)
-        let dt = dot(v,n)
-        let discr = 1. - nint*nint*(1.-dt*dt)
-        if discr > 0.
-            outRefracted = nint*(v-n*dt)-n*sqrt(discr)
-            return true
-        return false
+    returns vector representating cross product between `x` and `y`
+.. js:function:: reflect(v, n)
+
+    returns vector representating reflection of `x` from `n` same as ::
+
+        def reflect(v,n:float3)
+            return v - 2. * dot(v, n) * n
+
+.. js:function:: refract(v, n)
+
+    returns vector representating reflection of `x` from `n` same as ::
+
+        def refract(v,n:float3;nint:float;outRefracted:float3&)
+            let dt = dot(v,n)
+            let discr = 1. - nint*nint*(1.-dt*dt)
+            if discr > 0.
+                outRefracted = nint*(v-n*dt)-n*sqrt(discr)
+                return true
+            return false
 
 +++++++++++++++++
 lerp/madd/clamp
 +++++++++++++++++
 
-lerp(t, a, b)   a + (b-a)*t
-madd(a, b, c)   a*b + c 
-clamp(t, a, b)  min(max(t,a), b)
+.. js:function:: lerp(a, b, t)
+
+    returns vector or scalar representating `a` + (`b` - `a`) * `t`
+
+.. js:function:: madd(a, b, c)
+
+    returns vector or scalar representating `a` * `b` + `c`
+
+.. js:function:: clamp(t, a, b)
+
+    returns vector or scalar representating min(max(`t`, `a`), `b`)
