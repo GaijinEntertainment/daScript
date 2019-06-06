@@ -1301,6 +1301,7 @@ namespace das {
             }
             if ( expr->subexpr && expr->subexpr->type ) {
                 expr->typeexpr = make_shared<TypeDecl>(*expr->subexpr->type);
+                expr->typeexpr->ref = false;
             }
             // verify
             if ( !isFullyResolvedType(expr->typeexpr) ) {
@@ -2967,6 +2968,9 @@ namespace das {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return;
             }
+            if ( expr->makeType && expr->makeType->isAuto() ) {
+                return;
+            }
             verifyType(expr->makeType);
             if ( expr->makeType->dim.size()>1 ) {
                 error("[[" + expr->makeType->describe() + "]] can only initialize single dimension arrays",
@@ -2985,7 +2989,28 @@ namespace das {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return Visitor::visitMakeArrayIndex(expr,index,init,last);
             }
-            if ( !init->type || !expr->recordType ) {
+            if ( !expr->recordType ) {
+                if ( index==0 ) {
+                    if ( init->type ) {
+                        auto mkt = TypeDecl::inferAutoType(expr->makeType, init->type);
+                        if ( !mkt ) {
+                            error("array type can't be infered, "
+                                  + expr->makeType->describe() + " = " + init->type->describe(),
+                                  init->at, CompilationError::invalid_array_type );
+                        } else {
+                            mkt->constant = false;
+                            TypeDecl::applyAutoContracts(mkt, init->type);
+                            expr->makeType = mkt;
+                            reportGenericInfer();
+                            return Visitor::visitMakeArrayIndex(expr,index,init,last);
+                        }
+                    } else {
+                        error("can't infer array auto type, first element type is undefined", init->at,
+                              CompilationError::invalid_array_type );
+                    }
+                }
+            }
+            if ( !init->type|| !expr->recordType ) {
                 return Visitor::visitMakeArrayIndex(expr,index,init,last);
             }
             if ( !expr->recordType->isSameType(*init->type,false,false) ) {
@@ -2997,6 +3022,9 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
             if ( expr->makeType && expr->makeType->isExprType() ) {
+                return Visitor::visit(expr);
+            }
+            if ( !expr->recordType ) {
                 return Visitor::visit(expr);
             }
             auto resT = make_shared<TypeDecl>(*expr->makeType);

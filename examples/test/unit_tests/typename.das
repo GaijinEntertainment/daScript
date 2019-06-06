@@ -23,7 +23,7 @@ def test:bool
     var x : auto(numT)  = 3
     assert(typeinfo(typename type numT)=="int")
     assert(testInfT(3)=="int")
-    assert(testVarRefT(3)=="int&")
+    assert(testVarRefT(3)=="int")
     assert(testVarValT(3)=="int")
     var y : table<string,int>
     assert(tabTypes(y)=="string:int")
