@@ -266,16 +266,18 @@ namespace das
     }
 
     bool LineInfo::operator < ( const LineInfo & info ) const {
-        if ( fileInfo && info.fileInfo && fileInfo->name<info.fileInfo->name ) return true;
+        if ( fileInfo && info.fileInfo && fileInfo->name != info.fileInfo->name)
+            return fileInfo->name<info.fileInfo->name;
         return (line==info.line) ? column<info.column : line<info.line;
     }
     bool LineInfo::operator == ( const LineInfo & info ) const {
-        if ( fileInfo && info.fileInfo && fileInfo->name==info.fileInfo->name ) return false;
+        if ( ((bool)fileInfo) != ((bool)info.fileInfo))
+          return false;
+        if ( fileInfo && fileInfo->name!=info.fileInfo->name ) return false;
         return line==info.line && column==info.column;
     }
     bool LineInfo::operator != ( const LineInfo & info ) const {
-        if ( fileInfo && info.fileInfo && fileInfo->name!=info.fileInfo->name ) return true;
-        return line!=info.line || column!=info.column;
+        return !(*this == info);
     }
 
     FileInfoPtr FileAccess::letGoOfFileInfo ( const string & fileName ) {
