@@ -203,6 +203,9 @@ namespace das
     int getTypeSize ( TypeInfo * info );
     int getTypeAlign ( TypeInfo * info );
 
+    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, bool refMatters, bool constMatters, bool topLevel );
+    bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS );
+
     enum class PrintFlags : uint32_t {
         none =                  0
     ,   escapeString =          (1<<0)

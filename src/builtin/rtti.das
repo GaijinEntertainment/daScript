@@ -9,3 +9,11 @@ def rttiProgramForEachStructure(prog:RttiProgram;subexpr:block<(info:StructInfo)
 def rttiStructureForEachAnnotation(st:StructInfo;subexpr:block<(ann:Annotation;args:AnnotationArguments):void>)
     rtti_builtin_structure_for_each_annotation(st,subexpr)
 
+[unsafe]
+def isSameType( a,b:TypeInfo; refMatters:bool=true; constMatters:bool=true; topLevel:bool=true )
+    return builtin_isSameType(reinterpret<TypeInfo? const>(a),reinterpret<TypeInfo? const>(b),refMatters,constMatters,topLevel)
+
+[unsafe]
+def isCompatibleCast( a,b:StructInfo )
+    return builtin_isCompatibleCast(reinterpret<StructInfo? const>(a),reinterpret<StructInfo? const>(b))
+

@@ -228,6 +228,108 @@ namespace das
         return getTypeBaseAlign(info);
     }
 
+    bool isVoid ( const TypeInfo * THIS ) {
+        return (THIS->type==Type::tVoid) && (THIS->dimSize==0);
+    }
+
+    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, bool refMatters, bool constMatters, bool topLevel ) {
+        if ( topLevel && THIS->isRef() ) {
+            constMatters = false;
+        }
+        if ( THIS->type != decl->type ) {
+            return false;
+        }
+        if ( THIS->type==Type::tHandle &&
+                Module::resolveAnnotation((TypeInfo *)THIS)!=Module::resolveAnnotation((TypeInfo *)decl) ) {
+            return false;
+
+        }
+        if ( THIS->type==Type::tStructure && THIS->structType!=decl->structType ) {
+            return false;
+        }
+        if ( THIS->type==Type::tPointer || THIS->type==Type::tIterator ) {
+            if ( (THIS->firstType && !isVoid(THIS->firstType))
+                && (decl->firstType && !isVoid(decl->firstType))
+                && !isSameType(THIS->firstType, decl->firstType, true, true, false) ) {
+                return false;
+            }
+
+        }
+        if ( THIS->type==Type::tEnumeration ) {
+            if ( THIS->enumType && decl->enumType && THIS->enumType!=decl->enumType ) {
+                return false;
+            }
+        }
+        if ( THIS->type==Type::tArray ) {
+            if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType, true, true, false) ) {
+                return false;
+            }
+        }
+        if ( THIS->type==Type::tTable ) {
+            if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType, true, true, false) ) {
+                return false;
+            }
+            if ( THIS->secondType && decl->secondType && !isSameType(THIS->secondType, decl->secondType, true, true, false) ) {
+                return false;
+            }
+        }
+        if ( THIS->type==Type::tBlock || THIS->type==Type::tFunction
+            || THIS->type==Type::tLambda || THIS->type==Type::tTuple ) {
+            if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType, true, true, false) ) {
+                return false;
+            }
+            if ( THIS->firstType || THIS->argCount) {    // if not any block or any function
+                if ( THIS->argCount != decl->argCount ) {
+                    return false;
+                }
+                for ( uint32_t i=0; i != THIS->argCount; ++i ) {
+                    auto arg = THIS->argTypes[i];
+                    auto declArg = decl->argTypes[i];
+                    if ( !isSameType(arg,declArg,true,true,true) ) {
+                        return false;
+                    }
+                }
+            }
+        }
+        if ( THIS->dimSize != decl->dimSize ) {
+            return false;
+        } else if ( THIS->dim ) {
+            for ( uint32_t i=0; i!=THIS->dimSize; ++i ) {
+                if ( THIS->dim[i] != decl->dim[i] ) {
+                    return false;
+                }
+            }
+        }
+        if ( refMatters ) {
+            if ( THIS->isRef() != decl->isRef() ) {
+                return false;
+            }
+        }
+        if ( constMatters ) {
+            if ( THIS->isConst() != decl->isConst() ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS ) {
+        if ( castS->count < THIS->count ) {
+            return false;
+        }
+        for ( uint32_t i=0; i!=THIS->count; ++i ) {
+            VarInfo * fd = THIS->fields[i];
+            VarInfo * cfd = castS->fields[i];
+            if ( strcmp(fd->name,cfd->name)!=0 ) {
+                return false;
+            }
+            if ( !isSameType(fd,cfd,true,true,true) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     string debug_type ( TypeInfo * info ) {
         TextWriter stream;
         if ( info->type==Type::tHandle ) {

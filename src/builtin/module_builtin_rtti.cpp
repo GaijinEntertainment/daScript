@@ -399,6 +399,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "rtti_builtin_compile", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_structure)>(*this, lib, "rtti_builtin_program_for_each_structure", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_isSameType", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_isCompatibleCast", SideEffects::modifyExternal);
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
         }
