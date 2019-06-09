@@ -1,8 +1,4 @@
-//require baseCoreEvent//not working!
-struct BaseCoreEvent
-    [skipCpp=true] vtbl__:uint?
-    [skipCpp=true] eventName:string
-    [skipCpp=true] eventType:uint
+require baseCoreEvent
 
 struct EventComponentChanged : BaseCoreEvent
 	[cppType="const_string"] name:string
