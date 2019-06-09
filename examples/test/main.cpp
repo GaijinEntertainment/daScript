@@ -1,5 +1,11 @@
 #include "daScript/daScript.h"
-#include "../common/fileAccess.h"
+#include "daScript/simulate/fs_file_info.h"
+
+#ifdef _MSC_VER
+#include <io.h>
+#else
+#include <dirent.h>
+#endif
 
 using namespace das;
 

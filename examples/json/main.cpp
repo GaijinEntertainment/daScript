@@ -1,5 +1,5 @@
 #include "daScript/daScript.h"
-#include "../common/fileAccess.h"
+#include "daScript/simulate/fs_file_info.h"
 
 using namespace std;
 using namespace das;

@@ -1,26 +1,21 @@
-#pragma once
-#ifdef _MSC_VER
-    #include <io.h>
-#else
-    #include <dirent.h>
-#endif
+#include "daScript/misc/platform.h"
 
-class FsFileInfo : public das::FileInfo {
-public:
-    virtual ~FsFileInfo() { 
+#include "daScript/simulate/fs_file_info.h"
+
+namespace das {
+#if !DAS_NO_FILEIO
+    FsFileInfo::~FsFileInfo() {
         freeSourceData();
     }
-private:
-    virtual void freeSourceData() override {
+
+    void FsFileInfo::freeSourceData() {
         if ( source ) {
             das_aligned_free16((void*)source);
             source = nullptr;
         }
     }
-};
 
-class FsFileAccess : public das::FileAccess {
-    virtual das::FileInfo * getNewFileInfo(const das::string & fileName) override {
+    das::FileInfo * FsFileAccess::getNewFileInfo(const das::string & fileName) {
         if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
             auto info = das::make_unique<FsFileInfo>();
             fseek(ff,0,SEEK_END);
@@ -34,4 +29,6 @@ class FsFileAccess : public das::FileAccess {
         }
         return nullptr;
     }
-};
+#endif
+}
+
