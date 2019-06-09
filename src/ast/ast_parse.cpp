@@ -178,7 +178,7 @@ namespace das {
         }
     }
 
-    ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup ) {
+    ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll ) {
         vector<string> req, missing;
         if ( getPrerequisits(fileName, access, req, missing, libGroup) ) {
             reverse(req.begin(), req.end());
@@ -201,7 +201,7 @@ namespace das {
                     }, "*");
                 }
             }
-            return parseDaScript(fileName, access, logs, libGroup);
+            return parseDaScript(fileName, access, logs, libGroup, exportAll);
         } else {
             auto program = make_shared<Program>();
             program->thisModuleGroup = &libGroup;

@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/bind_enum.h"
 #include "daScript/simulate/sim_policy.h"
+#include "daScript/simulate/fs_file_info.h"
 
 using namespace das;
 DAS_BASE_BIND_ENUM_98(Type, Type,
@@ -351,6 +352,43 @@ namespace das {
         }
     }
 
+#if !DAS_NO_FILEIO
+
+    void rtti_builtin_compile_file ( char * modName, const Block & block, Context * context ) {
+        TextWriter issues;
+        auto access = make_shared<FsFileAccess>();
+        ModuleGroup dummyLibGroup;
+        auto program = compileDaScript(modName, access, issues, dummyLibGroup, true);
+        if ( program ) {
+            if (program->failed()) {
+                for (auto & err : program->errors) {
+                    issues << reportError(err.at, err.what, err.cerr);
+                }
+                string istr = issues.str();
+                vec4f args[3] = {
+                    cast<bool>::from(false),
+                    cast<char *>::from(nullptr),
+                    cast<string *>::from(&istr)
+                };
+                context->invoke(block, args, nullptr);
+            } else {
+                RttiProgram rtp;
+                rtp.program = program;
+                string istr = issues.str();
+                vec4f args[3] = {
+                    cast<bool>::from(true),
+                    cast<RttiProgram *>::from(&rtp),
+                    cast<string *>::from(&istr)
+                };
+                context->invoke(block, args, nullptr);
+            }
+        } else {
+            context->throw_error("rtti_compile internal error, something went wrong");
+        }
+    }
+
+#endif
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -397,6 +435,9 @@ namespace das {
             addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "getFunctionInfo", SideEffects::modifyExternal);
             addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "getVariableInfo", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "rtti_builtin_compile", SideEffects::modifyExternal);
+#if !DAS_NO_FILEIO
+            addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "rtti_builtin_compile_file", SideEffects::modifyExternal);
+#endif
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_structure)>(*this, lib, "rtti_builtin_program_for_each_structure", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_isSameType", SideEffects::modifyExternal);

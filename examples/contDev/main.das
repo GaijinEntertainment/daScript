@@ -179,19 +179,14 @@ def generateCppEvent(file,info)
 
 def process(fname:string;hf,cppf:FILE?)
 	print("processing {fname}\n")
-    fopen(fname,"rb") <| $(f)
-        if f!=null
-            let text = fread(f)
-            rttiCompile(fname,text) <| $(ok,program,issues)
-                if ok
-                    rttiProgramForEachStructure(program) <| $(info)
-						dumpAnnotations(hf,info)
-						generateCppEvent(hf,info)
-						generateSquirrelBinding(cppf,info)
-                else
-                    print("{fname} failed to compile\n{issues}\n")
+    rttiCompileFile(fname) <| $(ok,program,issues)
+        if ok
+            rttiProgramForEachStructure(program) <| $(info)
+				dumpAnnotations(hf,info)
+				generateCppEvent(hf,info)
+				generateSquirrelBinding(cppf,info)
         else
-            print("can't open {fname}\n")
+            print("{fname} failed to compile\n{issues}\n")
 
 def generate(atdir)
 	var fh, fcpp : FILE?
