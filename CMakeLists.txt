@@ -185,7 +185,8 @@ include/daScript/simulate/aot_builtin_random.h
 include/daScript/simulate/aot_builtin_time.h
 include/daScript/simulate/aot_builtin_string.h
 include/daScript/simulate/aot_builtin_fio.h
-
+include/daScript/simulate/fs_file_info.h
+src/simulate/fs_file_info.cpp
 )
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
@@ -209,7 +210,6 @@ add_dependencies(libDaScript daScriptGenDir)
 
 SET(DASAOT_MAIN_SRC
 utils/dasAot/main.cpp
-examples/common/fileAccess.h
 )
 SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
 
@@ -245,7 +245,6 @@ ENDMACRO()
 
 SET(DASCONTDEV_MAIN_SRC
 utils/dasContDev/main.cpp
-examples/common/fileAccess.h
 )
 SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
 
@@ -299,7 +298,6 @@ ADD_DEPENDENCIES(libPathTracerHelper libDaScript)
 
 SET(PATH_TRACER_MAIN_SRC
 examples/pathTracer/main.cpp
-examples/common/fileAccess.h
 examples/pathTracer/path_tracer_helper.h
 examples/pathTracer/toy_random.das
 examples/pathTracer/toy_path_tracer.das
@@ -323,7 +321,6 @@ SETUP_CPP11(pathTracer)
 
 SET(JSON_MAIN_SRC
 examples/json/main.cpp
-examples/common/fileAccess.h
 examples/json/test.das
 examples/json/test_json.das
 )
@@ -337,7 +334,6 @@ SETUP_CPP11(jsonTest)
 
 SET(DASCRIPT_MAIN_SRC
 examples/daScript/main.cpp
-examples/common/fileAccess.h
 )
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
@@ -394,7 +390,6 @@ SOURCE_GROUP_FILES("examples/test/mix" MIX_TEST_SRC)
 
 SET(TEST_MAIN_SRC
 examples/test/main.cpp
-examples/common/fileAccess.h
 examples/test/unitTest.h
 )
 list(SORT TEST_MAIN_SRC)
@@ -433,7 +428,6 @@ SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
 examples/profile/main.cpp
-examples/common/fileAccess.h
 examples/profile/test_profile.h
 )
 list(SORT PROFILE_MAIN_SRC)

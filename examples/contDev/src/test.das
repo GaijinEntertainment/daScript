@@ -1,3 +1,8 @@
+//require baseCoreEvent//not working!
+struct BaseCoreEvent
+    [skipCpp=true] vtbl__:uint?
+    [skipCpp=true] eventName:string
+    [skipCpp=true] eventType:uint
 /*
 struct SomeEvent
 	pos,vel:float3

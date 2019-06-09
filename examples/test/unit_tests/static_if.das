@@ -20,7 +20,6 @@ def test
     setA(f,1)
     setA(b,2)
     assert(f.a == 1)
-    assert(b.a == 2)
     if canQQ
         broken = badly  // this will be compiled out, so as long as there are no syntax errors...
     if 2 + 2 == 4

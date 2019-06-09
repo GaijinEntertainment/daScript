@@ -1221,6 +1221,7 @@ structure_name
                 pStruct = structs.back()->clone();
                 pStruct->name = *$name;
                 pStruct->parent = structs.back().get();
+                pStruct->annotations.clear();
             } else if ( structs.size()==0 ) {
                 das_yyerror("parent structure not found"+*$parent,tokAt(@parent),
                     CompilationError::structure_not_found);
