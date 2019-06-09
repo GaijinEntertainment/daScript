@@ -113,16 +113,16 @@ def generateCppEvent(file,info)
 		else
 			fprint(file,", ")
 		fprint(file,"{cppTypeName(field)} _{field.name}");
-	fprint(file,")\n{INDENT}{INDENT}: Event(ECS_HASH(\"{info.name}\")),\n")
+	fprint(file,")\n{INDENT}{INDENT}: Event(ECS_HASH(\"{info.name}\"))\n")
 	first = true
 	for field in info
 		if first
 			fprint(file,"{INDENT}{INDENT}{INDENT}")
 			first = false
-		else
-			fprint(file,",")
-		fprint(file,"{field.name}(_{field.name})");
-	fprint(file,"\n{INDENT}\{\n{INDENT}\};\n");
+		fprint(file,",{field.name}(_{field.name})");
+	if !first
+		fprint(file,"\n")
+	fprint(file,"{INDENT}\{\n{INDENT}\};\n");
 	for field in info
 		fprint(file,"{INDENT}{cppTypeName(field)} {field.name}{cppTypeDim(field)};\n")
 	fprint(file,"{INDENT}template<int n, class T> const T& get();\n");
