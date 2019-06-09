@@ -22,9 +22,21 @@ def cppTypeAttr(field) : string
 	let arg = findArg(field,"cppType",Type tString)
 	return arg!=null ? string(arg.sValue) : ""
 
+def isBaseCoreAttr(field)
+	let arg = findArg(field,"skipCpp",Type tBool)
+	return arg!=null
+
 def cppBaseTypeName(bt)
 	if bt==Type tInt
 		return "int32_t"
+	elif bt==Type tInt8
+		return "int8_t"
+	elif bt==Type tInt16
+		return "int16_t"
+	elif bt==Type tUInt8
+		return "uint8_t"
+	elif bt==Type tUInt16
+		return "uint16_t"
 	elif bt==Type tInt2
 		return "int2"
 	elif bt==Type tInt3
@@ -43,6 +55,8 @@ def cppBaseTypeName(bt)
 		return "float4"
 	elif bt==Type tString
 		return "string"
+	elif bt==Type tPointer
+		return "void*"
 	else
 		return "/*undefined*/"
 
@@ -82,7 +96,9 @@ def dumpAnnotations(file,info)
 			fprint(file,"\n")
 
 def generateSquirrelBinding(file,info)
-	let argsN = int(info.count)
+    if info.name  == "BaseCoreEvent"
+        return
+	let argsN = "{info.name}::NUMBER_OF_FIELDS"
 	fprint(file,"{INDENT}\{\n")
     fprint(file,"{INDENT}{INDENT}Sqrat::DerivedClass<{info.name}, ecs::Event> sqEvent(vm, \"{info.name}\");\n")
     fprint(file,"{INDENT}{INDENT}sqEvent\n")
@@ -93,6 +109,8 @@ def generateSquirrelBinding(file,info)
     fprint(file,"{INDENT}{INDENT}{INDENT}.GlobalFunc(\"len\", das_evt_len<{argsN}>)\n")
     fprint(file,"{INDENT}{INDENT}{INDENT}.SquirrelFunc(\"_nexti\", das_evt_nexti<{argsN}>, 2, \"xi|o\")\n")
 	for field in info
+	    if isBaseCoreAttr(field)
+	        continue
 		fprint(file,"{INDENT}{INDENT}{INDENT}.Var(\"{field.name}\", &{info.name}::{field.name})\n")
     // fprint(file,"{INDENT}{INDENT}.Var(\"data\", &ecs::SQEvent::data)\n")
     fprint(file,"{INDENT}{INDENT};\n")
@@ -100,35 +118,63 @@ def generateSquirrelBinding(file,info)
 	fprint(file,"{INDENT}}\n\n")
 
 
+def printArguments(file,info,prefix)
+	var cArg = 0
+	for field in info
+		cArg++
+	    if isBaseCoreAttr(field)
+	        continue
+  		fprint(file,"{INDENT}{INDENT}{INDENT}{field.name}(eastl::move({prefix}{field.name}))")
+        if cArg != int(info.count)
+    		fprint(file, ",\n")
+
 def generateCppEvent(file,info)
-	fprint(file,"class {info.name} : public Event\n")
+    if info.name  == "BaseCoreEvent"
+        return
+	fprint(file,"class {info.name} final: public Event\n")
 	fprint(file,"\{\n")
 	fprint(file,"public:\n")
-	fprint(file,"{INDENT}enum \{NUMBER_OF_FIELDS = {int(info.count)}\};\n")
+	var argCount = 0
+	for field in info
+	    if !isBaseCoreAttr(field)
+	        argCount++
+	fprint(file,"{INDENT}enum \{NUMBER_OF_FIELDS = {int(argCount)}\};\n")
 	fprint(file,"{INDENT}{info.name}(")
 	var first = true
 	for field in info
+	    if isBaseCoreAttr(field)
+	        continue
 		if first
 			first = false
 		else
 			fprint(file,", ")
-		fprint(file,"{cppTypeName(field)} _{field.name}");
-	fprint(file,")\n{INDENT}{INDENT}: Event(ECS_HASH(\"{info.name}\")),\n")
-	first = true
+		fprint(file,"{cppTypeName(field)} &&_{field.name}");
+	fprint(file,")\n{INDENT}{INDENT}: Event(ECS_HASH(\"{info.name}\"))")
+  	if argCount != 0
+    	fprint(file,",\n")
+    	printArguments(file, info, "_")
+    	fprint(file,"\n{INDENT}\{}\n");
+    else
+    	fprint(file,"\{\}\n");
 	for field in info
-		if first
-			fprint(file,"{INDENT}{INDENT}{INDENT}")
-			first = false
-		else
-			fprint(file,",")
-		fprint(file,"{field.name}(_{field.name})");
-	fprint(file,"\n{INDENT}\{\n{INDENT}\};\n");
-	for field in info
+	    if isBaseCoreAttr(field)
+	        continue
 		fprint(file,"{INDENT}{cppTypeName(field)} {field.name}{cppTypeDim(field)};\n")
-	fprint(file,"{INDENT}template<int n, class T> const T& get();\n");
-	var count = 0
-	for field in info
-		fprint(file,"{INDENT}template<> {cppTypeName(field)}{cppTypeDim(field)} & get<{count++}>() \{ return {field.name}; \};\n");
+  	if argCount != 0
+    	fprint(file,"{INDENT}Event *moveHeap()&& override\n{INDENT}\{\n{INDENT}{INDENT}return new {info.name}(\n");
+    	printArguments(file, info, "")
+    	fprint(file,"\n{INDENT}{INDENT});\n{INDENT}\}\n")
+    	fprint(file,"{INDENT}template<int n, class T> const T& get() const;\n");
+    	var count = 0
+    	for field in info
+    	    if isBaseCoreAttr(field)
+    	        continue
+    		fprint(file,"{INDENT}template<> const {cppTypeName(field)}{cppTypeDim(field)} & get<{count++}>() const \{ return {field.name}; \};\n");
+    else	
+    	fprint(file,"{INDENT}Event *moveHeap()&& override\{return new {info.name};\}\n");
+	
+	//fprint(file,"{INDENT}{INDENT}{INDENT}eastl::move(*this)");
+
 	fprint(file,"\};\n\n")
 
 def process(fname:string;hf,cppf:FILE?)
@@ -165,6 +211,7 @@ def generate(atdir)
 	fprint(fh,"#ifndef _DAGOR_GAMELIB_DAECS_CORE_{toupper(eventListName)}_H_\n")
 	fprint(fh,"#define _DAGOR_GAMELIB_DAECS_CORE_{toupper(eventListName)}_H_\n")
 	fprint(fh,"#pragma once\n\n")
+	fprint(fh,"#include <daECS/core/event.h>\n\n")
 	fprint(fh,"namespace ecs\n")
 	fprint(fh,"\{\n\n")
 
