@@ -39,6 +39,8 @@ cmake_minimum_required(VERSION 3.3)
 project(uriparser
     VERSION
         0.9.3
+    LANGUAGES
+        C
 )
 
 # See https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
@@ -74,19 +76,16 @@ if(URIPARSER_BUILD_TOOLS AND NOT URIPARSER_BUILD_CHAR)
     message(SEND_ERROR "URIPARSER_BUILD_TOOLS=ON requires URIPARSER_BUILD_CHAR=ON.")
 endif()
 
+macro(uriparser_apply_msvc_runtime_to ref)
+    string(REGEX REPLACE "/M[DT]d?" ${URIPARSER_MSVC_RUNTIME} ${ref} "${${ref}}")
+endmacro()
+
 if(MSVC AND URIPARSER_MSVC_RUNTIME)
-    set(_refs
-        CMAKE_CXX_FLAGS
-        CMAKE_CXX_FLAGS_DEBUG
-        CMAKE_CXX_FLAGS_RELEASE
-        CMAKE_C_FLAGS
-        CMAKE_C_FLAGS_DEBUG
-        CMAKE_C_FLAGS_RELEASE
-    )
-    foreach(_ref ${_refs})
-        string(REGEX REPLACE "/M[DT]d?" ${URIPARSER_MSVC_RUNTIME} ${_ref} "${${_ref}}")
-    endforeach()
+    uriparser_apply_msvc_runtime_to(CMAKE_C_FLAGS)
+    uriparser_apply_msvc_runtime_to(CMAKE_C_FLAGS_DEBUG)
+    uriparser_apply_msvc_runtime_to(CMAKE_C_FLAGS_RELEASE)
 endif()
+
 
 #
 # Compiler checks
@@ -242,6 +241,14 @@ endif()
 # C++ test runner
 #
 if(URIPARSER_BUILD_TESTS)
+    enable_language(CXX)
+
+    if(MSVC AND URIPARSER_MSVC_RUNTIME)
+        uriparser_apply_msvc_runtime_to(CMAKE_CXX_FLAGS)
+        uriparser_apply_msvc_runtime_to(CMAKE_CXX_FLAGS_DEBUG)
+        uriparser_apply_msvc_runtime_to(CMAKE_CXX_FLAGS_RELEASE)
+    endif()
+
     enable_testing()
 
     find_package(GTest 1.8.0 REQUIRED)
