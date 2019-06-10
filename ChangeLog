@@ -7,6 +7,8 @@ NOTE: uriparser is looking for help with a few things:
   * Fixed: testrunner: No longer crashes when compiled with NDEBUG (GitHub #67)
   * Fixed: CMake: Support GTest 1.8.0 (GitHub #68)
       Thanks to Ryan Schmidt for the related report!
+  * Improved: Make -DURIPARSER_BUILD_TESTS=OFF unlock compilation without
+      a C++ compiler; thanks to Fabrice Fontaine for the patch! (GitHub #69)
   * Soname: TODO
 
 2019-04-28 -- 0.9.3
