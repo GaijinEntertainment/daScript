@@ -387,6 +387,10 @@ namespace das {
         }
     }
 
+#else
+    void rtti_builtin_compile_file ( char *, const Block &, Context * context ) {
+        context->throw_error("not supported with DAS_NO_FILEIO");
+    }
 #endif
 
     #include "rtti.das.inc"
@@ -435,9 +439,7 @@ namespace das {
             addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "getFunctionInfo", SideEffects::modifyExternal);
             addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "getVariableInfo", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "rtti_builtin_compile", SideEffects::modifyExternal);
-#if !DAS_NO_FILEIO
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "rtti_builtin_compile_file", SideEffects::modifyExternal);
-#endif
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_structure)>(*this, lib, "rtti_builtin_program_for_each_structure", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_isSameType", SideEffects::modifyExternal);
