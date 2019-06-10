@@ -80,7 +80,7 @@ Consider the following example ::
 
     def setSomeField(var obj;val)
         if typeinfo(has_field<someField> obj)
-            if typeinfo(typename obj.someField) == typeinfo(typename val)
+            if typeinfo(typename obj.someField) == typeinfo(typename type val delete const)
                 obj.someField = val
 
 this function will set someField in provided argument *if* it is a struct with someField member, and more over, someField is of the same type as val!
