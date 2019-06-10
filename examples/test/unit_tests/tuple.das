@@ -3,7 +3,7 @@
 [export,unsafe]
 def test:bool
     var t : tuple < int; float; string >
-    assert(typeinfo(sizeof t)==16)
+    assert(typeinfo(sizeof t)==16 | typeinfo(sizeof t)==12)	// 64 or 32 bit
     t._0 = 1
     t._1 = 2.0
     t._2 = "3"
