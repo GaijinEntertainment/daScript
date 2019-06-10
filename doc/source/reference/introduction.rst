@@ -80,10 +80,11 @@ Consider the following example ::
 
     def setSomeField(var obj;val)
         if typeinfo(has_field<someField> obj)
-            if typeinfo(typename obj.someField) == typeinfo(typename type val delete const)
-                obj.someField = val
+              obj.someField = val
 
-this function will set someField in provided argument *if* it is a struct with someField member, and more over, someField is of the same type as val!
+this function will set someField in provided argument *if* it is a struct with someField member.
+
+For more info see :ref:`Generic programming <generic_programming>`).
 
 ++++++++++++++++++++++++++++++++++++
 Features
@@ -99,4 +100,5 @@ It's (not)full list of features includes:
 * generics
 * semantic indenting
 * ECS-friendly interop
+* easy-to-extend type system
 * etc, etc

@@ -15,3 +15,5 @@
    language/structs.rst
    language/constants_and_enumerations.rst
    language/builtin_functions.rst
+   language/string_builder.rst
+   language/generic_programming.rst

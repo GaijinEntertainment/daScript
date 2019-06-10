@@ -56,12 +56,12 @@ An enum declaration introduces a new enumeration into the program.
 Enumeration values can only be integers. No expression are allowed. It is not required to assign specific value to enum::
 
     enum Numbers
-        zero  //will be 0
-        one   //will be 1
-        two     //will be 2
-        ten = 10
+        zero     //will be 0
+        one      //will be 1
+        two      //will be 2
+        ten = 10 //will be 10, as written
 
-An enum name itself is strong type.
+An enum name itself is strong type, and all enum values are of this type.
 An enum value can be addressed as 'enum name' followed by exact enumeration ::
 
     let one : Numbers = Numbers one
