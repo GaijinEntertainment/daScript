@@ -211,7 +211,7 @@ namespace das
 #endif
             // CALL
             fn->code->eval(*this);
-            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+            stopFlags = 0;
             // POP
             abiArg = aa;
             stack.pop(EP, SP);
@@ -236,7 +236,7 @@ namespace das
 #endif
             // CALL
             fn->code->eval(*this);
-            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+            stopFlags = 0;
             // POP
             abiArg = aa; abiCMRES = acm;
             stack.pop(EP, SP);
@@ -314,7 +314,7 @@ namespace das
     #endif
             // CALL
             when(fn->code);
-            stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+            stopFlags = 0;
             // POP
             abiArg = aa; abiCMRES = acm;
             stack.pop(EP,SP);

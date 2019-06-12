@@ -1101,7 +1101,7 @@ namespace das {
             __context__->abiArg = aa;
             __context__->abiCMRES = acm;
             __context__->stack.pop(EP,SP);
-            __context__->stopFlags &= ~(EvalFlags::stopForThrow | EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+            __context__->stopFlags = 0;
             catch_block();
         }
 #else
@@ -1115,7 +1115,7 @@ namespace das {
             __context__->abiArg = aa;
             __context__->abiCMRES = acm;
             __context__->stack.pop(EP,SP);
-            __context__->stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+            __context__->stopFlags = 0;
             __context__->exception = nullptr;
             catch_block();
         }

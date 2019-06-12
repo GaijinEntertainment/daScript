@@ -146,7 +146,7 @@ namespace das
                 context.abiArg = aa;
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
-                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+                context.stopFlags = 0;
                 catch_block->eval(context);
             }
         #else
@@ -160,7 +160,7 @@ namespace das
                 context.abiArg = aa;
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
-                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+                context.stopFlags = 0;
                 context.exception = nullptr;
                 catch_block->eval(context);
             }
