@@ -32,6 +32,8 @@ void print_help() {
     tout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
 }
 
+void require_project_specific_modules();//link time resolved dependencies
+
 int main(int argc, const char * argv[]) {
     if ( argc<=1 ) {
         tout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
@@ -66,6 +68,9 @@ int main(int argc, const char * argv[]) {
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
+    NEED_MODULE(Module_Random);
+    NEED_MODULE(Module_Rtti);
+    require_project_specific_modules();
     // compile and run
     for ( const auto & fn : files ) {
         compile_and_run(fn, mainName, outputProgramCode);

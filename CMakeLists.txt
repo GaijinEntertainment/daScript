@@ -249,8 +249,8 @@ utils/dasContDev/main.cpp
 SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
 
 add_executable(dasContDev ${DASCONTDEV_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(dasContDev libDaScript)
-ADD_DEPENDENCIES(dasContDev libDaScript)
+TARGET_LINK_LIBRARIES(dasContDev libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest)
+ADD_DEPENDENCIES(dasContDev libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest)
 SETUP_CPP11(dasContDev)
 
 # JSON
@@ -338,8 +338,8 @@ examples/daScript/main.cpp
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
 add_executable(daScript ${DASCRIPT_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(daScript libDaScript)
-ADD_DEPENDENCIES(daScript libDaScript)
+TARGET_LINK_LIBRARIES(daScript libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest)
+ADD_DEPENDENCIES(daScript libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest)
 SETUP_CPP11(daScript)
 
 # Test module

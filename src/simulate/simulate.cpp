@@ -394,6 +394,7 @@ namespace das
     }
 
     void Context::runInitScript ( void ) {
+        DAS_ASSERTF(insideContext==0,"can't run init script on the locked context");
         char * EP, *SP;
         if(!stack.push(globalInitStackSize,EP,SP)) {
             throw_error("stack overflow in the initialization script");

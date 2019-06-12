@@ -144,9 +144,18 @@ namespace das
 
         __forceinline void restart( ) {
             DAS_ASSERTF(stack.empty(),"can't reset context during the simulation");
+            DAS_ASSERTF(insideContext==0,"can't reset locked context");
             stopFlags = 0;
             exception = nullptr;
             stack.reset();
+        }
+
+        __forceinline void lock() {
+            insideContext ++;
+        }
+
+        __forceinline void unlock() {
+            insideContext --;
         }
 
         __forceinline vec4f eval ( const SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
@@ -332,6 +341,7 @@ namespace das
         shared_ptr<NodeAllocator>       code;
         shared_ptr<DebugInfoAllocator>  debugInfo;
         StackAllocator                  stack;
+        uint32_t                        insideContext = 0;
     public:
         vec4f *         abiArg;
         void *          abiCMRES;

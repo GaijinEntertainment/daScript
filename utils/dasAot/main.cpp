@@ -98,6 +98,8 @@ bool compile ( const string & fn, const string & cppFn ) {
     }
 }
 
+void require_project_specific_modules();//link time resolved dependencies
+
 int main(int argc, const char * argv[]) {
     if ( argc!=3 ) {
         tout << "dasAot [script.das] [script.das.src]\n";
@@ -106,9 +108,8 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Random);
-    NEED_MODULE(Module_PathTracerHelper);
-    NEED_MODULE(Module_TestProfile);
-    NEED_MODULE(Module_UnitTest);
+    NEED_MODULE(Module_Rtti);
+    require_project_specific_modules();
     bool compiled = compile(argv[1], argv[2]);
     Module::Shutdown();
     return compiled ? 0 : -1;
