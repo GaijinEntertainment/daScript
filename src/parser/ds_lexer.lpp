@@ -91,11 +91,6 @@
     BEGIN(normal);
 	return BEGIN_STRING_EXPR;
 }
-<strb>[\t\r\n]            {
-    das_yyerror("string constant exceeds line", CompilationError::string_constant_exceeds_line);
-    BEGIN(normal);
-    return END_STRING;
-}
 <strb><<EOF>>             {
     das_yyerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
@@ -103,6 +98,11 @@
 }
 <strb>\\[\{\"\}]        {
     das_yylval.ch = yytext[1];
+    return STRING_CHARACTER;
+}
+<strb>[\r]              /* do exactly nothing */
+<strb>[\n\t]              {
+    das_yylval.ch = *yytext;
     return STRING_CHARACTER;
 }
 <strb>.                 {

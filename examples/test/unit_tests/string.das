@@ -43,4 +43,7 @@ def test:bool
     assert(to_float("11.1abc") == 11.1)
     let a_slash_slash = "ab\\xy"
     assert(length(a_slash_slash)==5)
+    let mls = "this is
+multi line string"
+    assert(mls=="this is\nmulti line string")
     return true
