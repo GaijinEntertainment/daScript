@@ -150,12 +150,19 @@ namespace das
             stack.reset();
         }
 
-        __forceinline void lock() {
-            insideContext ++;
+        __forceinline uint32_t tryRestartAndLock() {
+            if (insideContext == 0) {
+                restart();
+            }
+            return lock();
         }
 
-        __forceinline void unlock() {
-            insideContext --;
+        __forceinline uint32_t lock() {
+            return insideContext ++;
+        }
+
+        __forceinline uint32_t unlock() {
+            return insideContext --;
         }
 
         __forceinline vec4f eval ( const SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
