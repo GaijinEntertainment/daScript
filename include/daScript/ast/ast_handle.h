@@ -58,8 +58,8 @@ namespace das
             uint32_t    offset;
             function<SimNode * (FactoryNodeType,Context &,const LineInfo &, const ExpressionPtr &)>   factory;
         };
-        ManagedStructureAnnotation (const string & n, ModuleLibrary & ml )
-            : TypeAnnotation(n), mlib(&ml) { }
+        ManagedStructureAnnotation (const string & n, ModuleLibrary & ml, const string & cpn = "" )
+            : TypeAnnotation(n,cpn), mlib(&ml) { }
         virtual void seal( Module * m ) override {
             TypeAnnotation::seal(m);
             mlib = nullptr;
@@ -249,8 +249,8 @@ namespace das
     template <typename OT>
     struct ManagedStructureAnnotation<OT,true> : ManagedStructureAnnotation<OT,false> {
         typedef OT ManagedType;
-        ManagedStructureAnnotation (const string & n, ModuleLibrary & ml )
-            : ManagedStructureAnnotation<OT,false>(n,ml) { }
+        ManagedStructureAnnotation (const string & n, ModuleLibrary & ml, const string & cpn = "" )
+            : ManagedStructureAnnotation<OT,false>(n,ml,cpn) { }
         virtual bool canNew() const override { return true; }
         virtual bool canDeletePtr() const override { return true; }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
