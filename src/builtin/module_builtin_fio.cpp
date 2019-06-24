@@ -206,7 +206,7 @@ namespace das {
         header->hash = 0;
         header->length = len;
         vec4f bargs[1];
-        int rlen = fread(buf, 1, len, fp);
+        int32_t rlen = int32_t(fread(buf, 1, len, fp));
         if ( rlen != len ) {
             bargs[0] = v_zero();
             context.invoke(*block, bargs, nullptr);
