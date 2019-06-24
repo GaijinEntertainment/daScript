@@ -1677,35 +1677,42 @@ namespace das {
         }
     }
 
+    StructurePtr Program::visitStructure(Visitor & vis, Structure * pst) {
+        vis.preVisit(pst);
+        for ( auto & fi : pst->fields ) {
+            vis.preVisitStructureField(pst, fi, &fi==&pst->fields.back());
+            if ( fi.type ) {
+                vis.preVisit(fi.type.get());
+                fi.type = fi.type->visit(vis);
+                fi.type = vis.visit(fi.type.get());
+            }
+            if ( fi.init && vis.canVisitStructureFieldInit(pst) ) {
+                fi.init = fi.init->visit(vis);
+            }
+            vis.visitStructureField(pst, fi, &fi==&pst->fields.back());
+        }
+        return vis.visit(pst);
+    }
+
+    EnumerationPtr Program::visitEnumeration(Visitor & vis, Enumeration * penum) {
+        vis.preVisit(penum);
+        size_t count = 0;
+        size_t total = penum->list.size();
+        for ( auto & itf : penum->list ) {
+            vis.preVisitEnumerationValue(penum, itf.first, itf.second, count++==total);
+        }
+        return vis.visit(penum);
+    }
+
     void Program::visit(Visitor & vis, bool visitGenerics ) {
         // enumerations
         for ( auto & ite : thisModule->enumerations ) {
-            auto penum = ite.second.get();
-            vis.preVisit(penum);
-            size_t count = 0;
-            size_t total = penum->list.size();
-            for ( auto & itf : penum->list ) {
-                vis.preVisitEnumerationValue(penum, itf.first, itf.second, count++==total);
-            }
-            ite.second = vis.visit(penum);
+            ite.second = visitEnumeration(vis, ite.second.get());
         }
         // structures
         for ( auto & ist : thisModule->structuresInOrder ) {
             Structure * pst = ist.get();
-            vis.preVisit(pst);
-            for ( auto & fi : pst->fields ) {
-                vis.preVisitStructureField(pst, fi, &fi==&pst->fields.back());
-                if ( fi.type ) {
-                    vis.preVisit(fi.type.get());
-                    fi.type = fi.type->visit(vis);
-                    fi.type = vis.visit(fi.type.get());
-                }
-                if ( fi.init && vis.canVisitStructureFieldInit(pst) ) {
-                    fi.init = fi.init->visit(vis);
-                }
-                vis.visitStructureField(pst, fi, &fi==&pst->fields.back());
-            }
-            StructurePtr pstn = vis.visit(pst);
+            StructurePtr pstn = visitStructure(vis, pst);
             if ( pstn.get() != pst ) {
                 assert(pstn->name==pst->name);
                 auto istm = thisModule->structures.find(pst->name);

@@ -1,6 +1,3 @@
-// options logInferPasses = true
-// options log = true
-
 require fio
 
 struct Foo
@@ -25,5 +22,4 @@ def test:bool
     assert(loaded)
     assert(foo0.a==foo1.a & foo0.b==foo1.b)
     return true
-
 

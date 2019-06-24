@@ -644,6 +644,8 @@ namespace das
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
+        StructurePtr visitStructure(Visitor & vis, Structure *);
+        EnumerationPtr visitEnumeration(Visitor & vis, Enumeration *);
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs );

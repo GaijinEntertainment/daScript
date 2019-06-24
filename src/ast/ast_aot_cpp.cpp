@@ -80,6 +80,16 @@ namespace das {
         {   Type::tTuple,       "Tuple"    }
     };
 
+    string aotModuleName ( Module * pm  ) {
+        if ( pm->name.empty() ) {
+            return "";
+        } else if ( pm->name=="$" ) {
+            return "_builtin_";
+        } else {
+            return pm->name;
+        }
+    }
+
     string das_to_cppString ( Type t ) {
         return g_cppTypeTable.find(t);
     }
@@ -161,7 +171,11 @@ namespace das {
             stream << ">";
         } else if ( baseType==Type::tStructure ) {
             if ( type->structType ) {
-                stream << "struct " << type->structType->name;
+                if ( type->structType->module->name.empty() ) {
+                    stream << "struct " << type->structType->name;
+                } else {
+                    stream << "struct " << aotModuleName(type->structType->module) << "::" << type->structType->name;
+                }
             } else {
                 stream << "/* unspecified structure */";
             }
@@ -173,7 +187,11 @@ namespace das {
             }
         } else if ( baseType==Type::tEnumeration ) {
             if ( type->enumType ) {
-                stream << "/*enum*/ " << type->enumType->name;
+                if ( type->enumType->module->name.empty() ) {
+                    stream << "/*enum*/ " << type->enumType->name;
+                } else {
+                    stream << "/*enum*/ " << aotModuleName(type->enumType->module) << "::" << type->enumType->name;
+                }
             } else {
                 stream << "/* unspecified enumeration */";
             }
@@ -661,8 +679,9 @@ namespace das {
         string str() const {
             return "\n" + helper.str() + sti.str()  + stg.str() + ss.str();
         };
-    protected:
+    public:
         TextWriter                  ss, sti, stg;
+    protected:
         int                         lastNewLine = -1;
         int                         tab = 0;
         int                         debugInfoGlobal = 0;
@@ -681,7 +700,7 @@ namespace das {
         __forceinline static bool noBracket ( Expression * expr ) {
             return expr->topLevel || expr->bottomLevel || expr->argLevel;
         }
-    protected:
+    public:
     // enumeration
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
@@ -2275,6 +2294,21 @@ namespace das {
         BlockVariableCollector collector;
         visit(collector);
         CppAot aotVisitor(shared_from_this(),collector);
+        // pre visit all enumerations and structures for each dependency
+        for ( auto & pm : library.modules ) {
+            if ( pm == thisModule.get() ) {
+                continue;
+            }
+            aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
+            for ( auto & ite : pm->enumerations ) {
+                visitEnumeration(aotVisitor, ite.second.get());
+            }
+            for ( auto & its : pm->structures ) {
+                visitStructure(aotVisitor, its.second.get());
+            }
+            aotVisitor.ss << "\n}; // " << pm->name << "\n";
+        }
+        // now to the main body
         visit(aotVisitor);
         logs << aotVisitor.str();
     }
