@@ -6,5 +6,5 @@ class Module_UnitTest : public Module {
 public:
     Module_UnitTest();
     void addEnumTest(ModuleLibrary &);
-    virtual void aotRequire ( TextWriter & tw ) const override;
+    virtual bool aotRequire ( TextWriter & tw ) const override;
 };

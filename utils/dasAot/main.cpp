@@ -36,6 +36,7 @@ bool compile ( const string & fn, const string & cppFn ) {
             }
             // AOT time
             TextWriter tw;
+            bool noAot = program->options.getOption("noaot",false);
             // header
             tw << "#include \"daScript/misc/platform.h\"\n\n";
 
@@ -53,7 +54,10 @@ bool compile ( const string & fn, const string & cppFn ) {
                     } else {
                         tw << " // require " << mod->name << "\n";
                     }
-                    mod->aotRequire(tw);
+                    if ( !mod->aotRequire(tw) ) {
+                        tw << "  // AOT disabled due to this module\n";
+                        noAot = true;
+                    }
                 }
                 return true;
             },"*");
@@ -91,7 +95,16 @@ bool compile ( const string & fn, const string & cppFn ) {
             tw << "#pragma clang diagnostic pop\n";
             tw << "#endif\n";
             // and save
-            return saveToFile(cppFn, tw.str());
+            if ( noAot ) {
+                TextWriter noTw;
+                noTw << "// AOT disabled due to module requirements\n";
+                noTw << "#if 0\n\n";
+                noTw << tw.str();
+                noTw << "\n#endif\n";
+                return saveToFile(cppFn, noTw.str());
+            } else {
+                return saveToFile(cppFn, tw.str());
+            }
         }
     } else {
         return false;

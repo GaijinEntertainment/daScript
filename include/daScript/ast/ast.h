@@ -480,7 +480,7 @@ namespace das
         Module ( const string & n = "" );
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
-        virtual void aotRequire ( TextWriter & ) const {}
+        virtual bool aotRequire ( TextWriter & ) const { return true; }
         bool addAlias ( const TypeDeclPtr & at, bool canFail = false );
         bool addVariable ( const VariablePtr & var, bool canFail = false );
         bool addStructure ( const StructurePtr & st, bool canFail = false );

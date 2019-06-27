@@ -1,5 +1,6 @@
 // options plot=true,plotFile="../../test.dot"
 // options log=true, optimize=false
+// options noaot=true
 
 def make_test_array(var a:array<int>;extra:int=0)
     var i=0

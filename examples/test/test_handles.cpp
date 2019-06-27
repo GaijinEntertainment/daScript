@@ -291,8 +291,9 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(getPtr)>(*this, lib, "getPtr", SideEffects::modifyExternal);
 }
 
-void Module_UnitTest::aotRequire ( TextWriter & tw ) const {
+bool Module_UnitTest::aotRequire ( TextWriter & tw ) const {
     tw << "#include \"unitTest.h\"\n";
+    return true;
 }
 
 REGISTER_MODULE(Module_UnitTest);
