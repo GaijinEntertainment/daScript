@@ -259,7 +259,9 @@ namespace das {
 
     string Function::getMangledName() const {
         TextWriter ss;
-        // TODO: module name?
+        if ( module && !module->name.empty() ) {
+            ss << "@" << module->name << "::";
+        }
         ss << name;
         for ( auto & arg : arguments ) {
             ss << " " << arg->type->getMangledName();

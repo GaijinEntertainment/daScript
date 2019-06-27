@@ -440,6 +440,7 @@ namespace das
                 bool    unsafeOperation : 1;
                 bool    hasMakeBlock : 1;
                 bool    noAot : 1;
+                bool    aotHybrid : 1;
             };
             uint32_t flags = 0;
         };
@@ -650,6 +651,7 @@ namespace das
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
+        void buildMNLookup ( Context & context, TextWriter & logs );
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {

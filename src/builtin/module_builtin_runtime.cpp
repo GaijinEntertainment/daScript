@@ -109,6 +109,14 @@ namespace das
         }
     };
 
+    struct HybridFunctionAnnotation : MarkFunctionAnnotation {
+        HybridFunctionAnnotation() : MarkFunctionAnnotation("hybrid") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->aotHybrid = true;
+            return true;
+        };
+    };
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -181,6 +189,7 @@ namespace das
         addAnnotation(make_shared<UnsafeOpFunctionAnnotation>());
         addAnnotation(make_shared<NoAotFunctionAnnotation>());
         addAnnotation(make_shared<InitFunctionAnnotation>());
+        addAnnotation(make_shared<HybridFunctionAnnotation>());
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");

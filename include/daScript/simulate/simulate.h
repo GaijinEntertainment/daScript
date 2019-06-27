@@ -45,6 +45,7 @@ namespace das
 
     struct SimFunction {
         char *      name;
+        char *      mangledName;
         SimNode *   code;
         FuncInfo *  debugInfo;
         uint32_t    stackSize;
@@ -188,15 +189,13 @@ namespace das
             return totalVariables;
         }
 
-        // TOOD:
-        //  this needs to be massively optimized (cuckoo hash?)
-        __forceinline int fnIdxByMangledName ( uint32_t mnh, int index = -1 ) const {
-            if ( index>=0 && index<totalFunctions ) {
-                if ( functions[index].mangledNameHash==mnh ) {
-                    return index + 1;
-                }
-            }
-            for ( index=0; index!=totalFunctions; ++index ) {
+        __forceinline int fnIdxByMangledName ( uint32_t mnh ) const {
+            uint32_t idx = rotl_c(mnh, tabMnRot) & tabMnMask;
+            return tabMnLookup[idx];
+        }
+
+        __forceinline int findIdxByMangledName ( uint32_t mnh ) const {
+            for ( int index=0; index!=totalFunctions; ++index ) {
                 if ( functions[index].mangledNameHash==mnh ) {
                     return index + 1;
                 }
@@ -383,6 +382,10 @@ namespace das
         int totalVariables = 0;
         int totalFunctions = 0;
         SimNode * aotInitScript = nullptr;
+    public:
+        uint32_t *  tabMnLookup = nullptr;
+        uint32_t    tabMnMask = 0;
+        uint32_t    tabMnRot = 0;
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;

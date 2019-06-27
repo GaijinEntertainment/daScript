@@ -1857,6 +1857,58 @@ namespace das
         return nullptr;
     }
 
+    void Program::buildMNLookup ( Context & context, TextWriter & logs ) {
+        vector<uint32_t> tab;
+        // lets run verificatoin
+        for ( int i=0; i!=context.totalFunctions; ++i ) {
+            auto mnh = context.functions[i].mangledNameHash;
+            for ( int j=i+1; j!=context.totalFunctions; ++j ) {
+                if ( context.functions[j].mangledNameHash==mnh ) {
+                    error("internal compiler error. mangled name hash collision "
+                          + string(context.functions[i].mangledName) + " vs "
+                          + string(context.functions[j].mangledName), LineInfo());
+                    return;
+                }
+            }
+        }
+        // now, lets build this table
+        for ( int ts = 4; ; ts *= 2 ) {
+            if ( ts<context.totalFunctions ) {
+                continue;
+            }
+            uint32_t tab_mask = ts - 1;
+            tab.resize(ts);
+            for ( uint32_t tab_rot=0; tab_rot!=32; ++tab_rot ) {
+                fill(tab.begin(), tab.end(), 0);
+                bool failed = false;
+                for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
+                    uint32_t mnh = context.functions[fni].mangledNameHash;
+                    uint32_t idx = rotl_c(mnh,tab_rot) & tab_mask;
+                    if ( tab[idx]==0 ) {
+                        tab[idx] = fni + 1;
+                    } else {
+                        failed = true;
+                        break;
+                    }
+                }
+                if ( !failed ) {
+                    if ( options.getOption("logMNHash",false) ) {
+                        logs
+                            << "totalFunctions: " << context.totalFunctions << "\n"
+                            << "tabMnLookup:" << ts << "\n"
+                            << "tabMnMask:" << tab_mask << "\n"
+                            << "tabMnRot:" << tab_rot << "\n";
+                    }
+                    context.tabMnMask = tab_mask;
+                    context.tabMnRot = tab_rot;
+                    context.tabMnLookup = (uint32_t *) context.code->allocate(ts * sizeof(uint32_t));
+                    memcpy ( context.tabMnLookup, tab.data(), ts * sizeof(uint32_t));
+                    return;
+                }
+            }
+        }
+    }
+
     bool Program::simulate ( Context & context, TextWriter & logs ) {
         context.thisProgram = this;
         if ( auto optHeap = options.find("heap",Type::tInt) ) {
@@ -1891,11 +1943,12 @@ namespace das
                 if (pfun->index < 0 || !pfun->used)
                     continue;
                 auto & gfun = context.functions[pfun->index];
+                auto mangledName = pfun->getMangledName();
                 gfun.name = context.code->allocateName(pfun->name);
+                gfun.mangledName = context.code->allocateName(mangledName);
                 gfun.code = pfun->simulate(context);
                 gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
                 gfun.stackSize = pfun->totalStackSize;
-                auto mangledName = pfun->getMangledName();
                 gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
             }
         }
@@ -1916,6 +1969,7 @@ namespace das
             }
         }
         context.globalInitStackSize = globalInitStackSize;
+        buildMNLookup(context, logs);
         context.simEnd();
         context.restart();
         context.runInitScript();

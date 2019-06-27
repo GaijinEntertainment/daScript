@@ -772,7 +772,7 @@ namespace das {
                         auto mangledName = fn->getMangledName();
                         uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
                         ss << "das_invoke_function<void>::invoke(__context__,Func(__context__->fnIdxByMangledName(/*"
-                            << mangledName << "*/ " << hash << "u," << fn->index << ")));\n";
+                            << mangledName << "*/ " << hash << "u)));\n";
                     } else {
                         ss << aotFuncName(fn.get()) << "(__context__);\n";
                     }
@@ -1596,7 +1596,7 @@ namespace das {
             if (expr->func) {
                 auto mangledName = expr->func->getMangledName();
                 uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
-                ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u," << expr->func->index << "))";
+                ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u))";
             } else {
                 ss << "Func(0 /*nullptr*/)";
             }
@@ -1982,6 +1982,7 @@ namespace das {
         bool isHybridCall ( Function * func ) {
             if ( func->builtIn ) return false;
             if ( func->noAot ) return true;
+            if ( func->aotHybrid ) return true;
             if ( func->module == program->thisModule.get() ) return false;
             return true;
         }
@@ -2046,7 +2047,7 @@ namespace das {
                     }
                     auto mangledName = call->func->getMangledName();
                     uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
-                    if ( call->arguments.size()>1 ) {
+                    if ( call->arguments.size()>=1 ) {
                         ss << "<";
                         for ( const auto & arg : call->arguments ) {
                             ss << describeCppType(arg->type);
@@ -2058,10 +2059,10 @@ namespace das {
                             }
                         }
                         ss << ">(__context__,";
-                        ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u," << call->func->index << ")),";
+                        ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u)),";
                     } else {
                         ss << "(__context__,";
-                        ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u," << call->func->index << "))";
+                        ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u))";
                     }
                 } else {
                     ss << aotFuncName(call->func) << "(__context__";

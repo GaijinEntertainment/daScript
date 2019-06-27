@@ -381,6 +381,10 @@ namespace das
         // functoins
         functions = ctx.functions;
         totalFunctions = ctx.totalFunctions;
+        // mangled name table
+        tabMnLookup = ctx.tabMnLookup;
+        tabMnMask = ctx.tabMnMask;
+        tabMnRot = ctx.tabMnRot;
         // now, make it good to go
         restart();
         runInitScript();
