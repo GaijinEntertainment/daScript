@@ -4,6 +4,7 @@
 #include "daScript/ast/ast_visitor.h"
 
 #include "daScript/misc/enums.h"
+#include "daScript/simulate/hash.h"
 
 namespace das {
 
@@ -768,8 +769,10 @@ namespace das {
                 if ( fn->init ) {
                     ss << string(tab,'\t');
                     if ( fn->noAot ) {
-                        ss << "das_invoke_function<void>::invoke(__context__,Func("
-                            << (fn->index+1) << "/* " << fn->name << " */));\n";
+                        auto mangledName = fn->getMangledName();
+                        uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
+                        ss << "das_invoke_function<void>::invoke(__context__,Func(__context__->fnIdxByMangledName(/*"
+                            << mangledName << "*/ " << hash << "u," << fn->index << ")));\n";
                     } else {
                         ss << aotFuncName(fn.get()) << "(__context__);\n";
                     }
@@ -1591,7 +1594,9 @@ namespace das {
     // addr
         virtual void preVisit ( ExprAddr * expr ) override {
             if (expr->func) {
-                ss << "Func(" << (expr->func->index + 1) << ")";
+                auto mangledName = expr->func->getMangledName();
+                uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
+                ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u," << expr->func->index << "))";
             } else {
                 ss << "Func(0 /*nullptr*/)";
             }
@@ -2039,6 +2044,8 @@ namespace das {
                     if ( call->func->result->isRefType() && !call->func->result->ref ) {
                         ss << "_cmres";
                     }
+                    auto mangledName = call->func->getMangledName();
+                    uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
                     if ( call->arguments.size()>1 ) {
                         ss << "<";
                         for ( const auto & arg : call->arguments ) {
@@ -2051,10 +2058,10 @@ namespace das {
                             }
                         }
                         ss << ">(__context__,";
-                        ss << "Func(" << (call->func->index+1) << "/* " << call->name << " */),";
+                        ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u," << call->func->index << ")),";
                     } else {
                         ss << "(__context__,";
-                        ss << "Func(" << (call->func->index+1) << "/* " << call->name << " */)";
+                        ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u," << call->func->index << "))";
                     }
                 } else {
                     ss << aotFuncName(call->func) << "(__context__";

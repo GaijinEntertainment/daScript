@@ -46,8 +46,9 @@ namespace das
     struct SimFunction {
         char *      name;
         SimNode *   code;
-        uint32_t    stackSize;
         FuncInfo *  debugInfo;
+        uint32_t    stackSize;
+        uint32_t    mangledNameHash;
     };
 
     struct SimNode {
@@ -185,6 +186,22 @@ namespace das
         }
         __forceinline int32_t getTotalVariables() const {
             return totalVariables;
+        }
+
+        // TOOD:
+        //  this needs to be massively optimized (cuckoo hash?)
+        __forceinline int fnIdxByMangledName ( uint32_t mnh, int index = -1 ) const {
+            if ( index>=0 && index<totalFunctions ) {
+                if ( functions[index].mangledNameHash==mnh ) {
+                    return index + 1;
+                }
+            }
+            for ( index=0; index!=totalFunctions; ++index ) {
+                if ( functions[index].mangledNameHash==mnh ) {
+                    return index + 1;
+                }
+            }
+            return 0;
         }
 
         SimFunction * findFunction ( const char * name ) const;

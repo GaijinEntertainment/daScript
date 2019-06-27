@@ -1893,8 +1893,10 @@ namespace das
                 auto & gfun = context.functions[pfun->index];
                 gfun.name = context.code->allocateName(pfun->name);
                 gfun.code = pfun->simulate(context);
-                gfun.stackSize = pfun->totalStackSize;
                 gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
+                gfun.stackSize = pfun->totalStackSize;
+                auto mangledName = pfun->getMangledName();
+                gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
             }
         }
         for (auto & pm : library.modules ) {
