@@ -35,6 +35,10 @@ echo syncing src
 call make_empty_folder.bat %DEST_DIR%\src
 call sync_folder.bat %SRC_DIR%\src %DEST_DIR%\src
 
+echo syncing doc
+call make_empty_folder.bat %DEST_DIR%\doc
+call sync_folder.bat %SRC_DIR%\doc %DEST_DIR%\doc
+
 echo applying patch
 xcopy %PATCH_DIR% %DEST_DIR% /D /I /E /F /Y /H /R > NUL
 If %ERRORLEVEL% NEQ 0	ECHO APPLY PATCH FAILED
