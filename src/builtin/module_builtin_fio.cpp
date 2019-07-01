@@ -174,35 +174,35 @@ namespace das {
         return res;
     }
 
-    vec4f builtin_read ( Context &, SimNode_CallBase * call, vec4f * args ) 
+    vec4f builtin_read ( Context &, SimNode_CallBase * call, vec4f * args )
     {
         DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType() || call->types[1]->type==Type::tString);
         auto fp = cast<FILE *>::to(args[0]);
         auto buf = cast<void *>::to(args[1]);
-        auto len = cast<int32_t>::to(args[2]); 
+        auto len = cast<int32_t>::to(args[2]);
         int32_t res = (int32_t) fread(buf,1,len,fp);
         return cast<int32_t>::from(res);
     }
 
-    vec4f builtin_write ( Context &, SimNode_CallBase * call, vec4f * args ) 
+    vec4f builtin_write ( Context &, SimNode_CallBase * call, vec4f * args )
     {
         DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType() || call->types[1]->type==Type::tString);
         auto fp = cast<FILE *>::to(args[0]);
         auto buf = cast<void *>::to(args[1]);
-        auto len = cast<int32_t>::to(args[2]); 
+        auto len = cast<int32_t>::to(args[2]);
         int32_t res = (int32_t) fwrite(buf,1,len,fp);
         return cast<int32_t>::from(res);
     }
 
     // loads(file,block<data>)
-    vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args ) 
+    vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args )
     {
         auto fp = cast<FILE *>::to(args[0]);
         int32_t len = cast<int32_t>::to(args[1]);
-        Block * block = cast<Block *>::to(args[2]);    
+        Block * block = cast<Block *>::to(args[2]);
         void * temp = malloc(len + 1 + sizeof(StringHeader));
-        StringHeader * header = (StringHeader *) temp; 
-        char * buf = (char *) (header + 1);  
+        StringHeader * header = (StringHeader *) temp;
+        char * buf = (char *) (header + 1);
         header->hash = 0;
         header->length = len;
         vec4f bargs[1];
@@ -342,7 +342,7 @@ namespace das {
             // builtin file functions
             addInterop<builtin_read,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_read",SideEffects::modifyExternal, "builtin_read");
             addInterop<builtin_write,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_write",SideEffects::modifyExternal, "builtin_write");
-            addInterop<builtin_load,void,const FILE*,int32_t,const Block &>(*this, lib, "_builtin_load",das::SideEffects::modifyExternal, "builtin_load");   
+            addInterop<builtin_load,void,const FILE*,int32_t,const Block &>(*this, lib, "_builtin_load",das::SideEffects::modifyExternal, "builtin_load");
             addExtern<DAS_BIND_FUN(builtin_dirname)>(*this, lib, "dirname", SideEffects::none, "builtin_dirname");
             addExtern<DAS_BIND_FUN(builtin_basename)>(*this, lib, "basename", SideEffects::none, "builtin_basename");
             addExtern<DAS_BIND_FUN(builtin_fstat)>(*this, lib, "fstat", SideEffects::modifyExternal, "builtin_fstat");
