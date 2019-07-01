@@ -1811,8 +1811,8 @@ namespace das {
                     }
                 }
                 ss << ">(__context__," << block->stackTop << ",";
-                if ( block->annotationDataIndex != -1 ) {
-                    ss << "__context__->annotationData[" << block->annotationDataIndex << "u]";
+                if ( block->annotationDataSid != 0 ) {
+                    ss << "__context__->adBySid(" << block->annotationDataSid << "u)";
                 } else {
                     ss << "0";
                 }

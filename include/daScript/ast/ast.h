@@ -525,6 +525,7 @@ namespace das
         map<string, FunctionPtr>                generics;           // mangled name 2 generic name
         map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
         mutable map<string, ExprCallFactory>    callThis;
+        map<uint32_t, uint64_t>                 annotationData;
         string  name;
         bool    builtIn = false;
     private:
@@ -652,6 +653,7 @@ namespace das
         void aotCpp ( Context & context, TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
         void buildMNLookup ( Context & context, TextWriter & logs );
+        void buildADLookup ( Context & context, TextWriter & logs );
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {
@@ -675,7 +677,6 @@ namespace das
         vector<Error>               errors;
         bool                        failToCompile = false;
         uint32_t                    globalInitStackSize = 0;
-        vector<uint64_t>            annotationData;
     public:
         map<CompilationError,int>   expectErrors;
     public:

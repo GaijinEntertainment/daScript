@@ -189,6 +189,11 @@ namespace das
             return totalVariables;
         }
 
+        __forceinline uint64_t adBySid ( uint32_t sid ) const {
+            uint32_t idx = rotl_c(sid, tabAdRot) & tabAdMask;
+            return tabAdLookup[idx];
+        }
+
         __forceinline int fnIdxByMangledName ( uint32_t mnh ) const {
             uint32_t idx = rotl_c(mnh, tabMnRot) & tabMnMask;
             return tabMnLookup[idx];
@@ -386,6 +391,10 @@ namespace das
         uint32_t *  tabMnLookup = nullptr;
         uint32_t    tabMnMask = 0;
         uint32_t    tabMnRot = 0;
+    public:
+        uint64_t *  tabAdLookup = nullptr;
+        uint32_t    tabAdMask = 0;
+        uint32_t    tabAdRot = 0;
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;

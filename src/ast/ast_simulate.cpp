@@ -12,6 +12,8 @@
 
 #include "daScript/simulate/simulate_nodes.h"
 
+#include "daScript/misc/lookup1.h"
+
 namespace das
 {
     // common for move and copy
@@ -1858,53 +1860,46 @@ namespace das
     }
 
     void Program::buildMNLookup ( Context & context, TextWriter & logs ) {
-        vector<uint32_t> tab;
-        // lets run verificatoin
+        map<uint32_t, uint32_t> htab;
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             auto mnh = context.functions[i].mangledNameHash;
-            for ( int j=i+1; j!=context.totalFunctions; ++j ) {
-                if ( context.functions[j].mangledNameHash==mnh ) {
-                    error("internal compiler error. mangled name hash collision "
-                          + string(context.functions[i].mangledName) + " vs "
-                          + string(context.functions[j].mangledName), LineInfo());
-                    return;
-                }
+            if ( htab[mnh] ) {
+                error("internal compiler error. mangled name hash collision "
+                      + string(context.functions[i].mangledName), LineInfo());
+                return;
+            }
+            htab[mnh] = i + 1;
+        }
+        auto tab = buildLookup(htab, context.tabMnMask, context.tabMnRot);
+        uint32_t ts = uint32_t(tab.size());
+        if ( options.getOption("logMNHash",false) ) {
+            logs
+                << "totalFunctions: " << context.totalFunctions << "\n"
+                << "tabMnLookup:" << ts << "\n"
+                << "tabMnMask:" << context.tabMnMask << "\n"
+                << "tabMnRot:" << context.tabMnRot << "\n";
+        }
+        context.tabMnLookup = (uint32_t *) context.code->allocate(ts * sizeof(uint32_t));
+        memcpy ( context.tabMnLookup, tab.data(), ts * sizeof(uint32_t));
+    }
+
+    void Program::buildADLookup ( Context & context, TextWriter & logs ) {
+        map<uint32_t,uint64_t>  tabAd;
+        for (auto & pm : library.modules ) {
+            for(auto s2d : pm->annotationData ) {
+                tabAd[s2d.first] = s2d.second;
             }
         }
-        // now, lets build this table
-        for ( int ts = 4; ; ts *= 2 ) {
-            if ( ts<context.totalFunctions ) {
-                continue;
-            }
-            uint32_t tab_mask = ts - 1;
-            tab.resize(ts);
-            for ( uint32_t tab_rot=0; tab_rot!=32; ++tab_rot ) {
-                fill(tab.begin(), tab.end(), 0);
-                bool failed = false;
-                for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
-                    uint32_t mnh = context.functions[fni].mangledNameHash;
-                    uint32_t idx = rotl_c(mnh,tab_rot) & tab_mask;
-                    if ( tab[idx]==0 ) {
-                        tab[idx] = fni + 1;
-                    } else {
-                        failed = true;
-                        break;
-                    }
-                }
-                if ( !failed ) {
-                    if ( options.getOption("logMNHash",false) ) {
-                        logs
-                            << "totalFunctions: " << context.totalFunctions << "\n"
-                            << "tabMnLookup:" << ts << "\n"
-                            << "tabMnMask:" << tab_mask << "\n"
-                            << "tabMnRot:" << tab_rot << "\n";
-                    }
-                    context.tabMnMask = tab_mask;
-                    context.tabMnRot = tab_rot;
-                    context.tabMnLookup = (uint32_t *) context.code->allocate(ts * sizeof(uint32_t));
-                    memcpy ( context.tabMnLookup, tab.data(), ts * sizeof(uint32_t));
-                    return;
-                }
+        if ( tabAd.size() ) {
+            auto tab = buildLookup(tabAd, context.tabAdMask, context.tabAdRot);
+            uint32_t ts = uint32_t(tab.size());
+            context.tabAdLookup = (uint64_t *) context.code->allocate(ts * sizeof(uint64_t));
+            memcpy ( context.tabAdLookup, tab.data(), ts * sizeof(uint64_t));
+            if ( options.getOption("logAdHash",false) ) {
+                logs
+                << "tabAdLookup:" << ts << "\n"
+                << "tabAdMask:" << context.tabAdMask << "\n"
+                << "tabAdRot:" << context.tabAdRot << "\n";
             }
         }
     }
@@ -1961,15 +1956,10 @@ namespace das
                 gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
             }
         }
-        if ( annotationData.size() ) {
-            uint32_t ads = (uint32_t) (annotationData.size() * sizeof(uint64_t));
-            uint64_t * pads = context.annotationData = (uint64_t*) context.code->allocate(ads);
-            for ( auto ann : annotationData ) {
-                *pads++ = ann;
-            }
-        }
+        //
         context.globalInitStackSize = globalInitStackSize;
         buildMNLookup(context, logs);
+        buildADLookup(context, logs);
         context.simEnd();
         context.restart();
         context.runInitScript();

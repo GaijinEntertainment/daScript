@@ -385,6 +385,10 @@ namespace das
         tabMnLookup = ctx.tabMnLookup;
         tabMnMask = ctx.tabMnMask;
         tabMnRot = ctx.tabMnRot;
+        // annotation data table
+        tabAdLookup = ctx.tabAdLookup;
+        tabAdMask = ctx.tabAdMask;
+        tabAdRot = ctx.tabAdRot;
         // now, make it good to go
         restart();
         runInitScript();
