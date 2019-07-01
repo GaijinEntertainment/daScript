@@ -685,6 +685,21 @@ namespace das {
 
     // ExprBlock
 
+    string ExprBlock::getMangledName(bool includeName, bool includeResult) const {
+        TextWriter ss;
+        if ( includeResult ) {
+            ss << returnType->getMangledName();
+        }
+        for ( auto & arg : arguments ) {
+            if ( includeName ) {
+                ss << " " << arg->name << ":" << arg->type->getMangledName();
+            } else {
+                ss << " " << arg->type->getMangledName();
+            }
+        }
+        return ss.str();
+    }
+
     TypeDeclPtr ExprBlock::makeBlockType () const {
         auto eT = make_shared<TypeDecl>(Type::tBlock);
         if ( type ) {

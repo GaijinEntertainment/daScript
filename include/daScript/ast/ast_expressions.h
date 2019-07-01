@@ -97,6 +97,7 @@ namespace das
         vector<SimNode *> collectExpressions ( Context & context, const vector<ExpressionPtr> & list ) const;
         void simulateFinal ( Context & context, SimNode_Final * sim ) const;
         void simulateBlock ( Context & context, SimNode_Block * sim ) const;
+        string getMangledName(bool includeName = false, bool includeResult = false) const;
         TypeDeclPtr makeBlockType () const;
         vector<ExpressionPtr>   list;
         vector<ExpressionPtr>   finalList;
@@ -105,7 +106,7 @@ namespace das
         uint32_t                stackTop = 0;
         AnnotationList          annotations;
         uint64_t                annotationData = 0;         // to be filled with annotation
-        int32_t                 annotationDataIndex = -1;
+        uint32_t                annotationDataSid = 0;      // to be filled with annotation
         union {
             struct {
                 bool            isClosure : 1;

@@ -3,6 +3,8 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 
+#include "daScript/misc/lookup1.h"
+
 namespace das
 {
     class FinAnnotationVisitor : public Visitor {
@@ -11,7 +13,7 @@ namespace das
             program = prog;
         }
     protected:
-        ProgramPtr          program;
+        ProgramPtr              program;
     protected:
         virtual void preVisit ( Structure * var ) override { 
             Visitor::preVisit(var);
@@ -45,16 +47,19 @@ namespace das
                         program->error("can't finalize annotation\n" + err, block->at, CompilationError::invalid_annotation);
                     }
                 }
-                block->annotationDataIndex = (int32_t) program->annotationData.size();
-                program->annotationData.push_back(block->annotationData);
-            } else {
-                block->annotationDataIndex = -1;
+                if ( block->annotationDataSid || block->annotationData ) {
+                    if ( block->annotationDataSid && block->annotationData ) {
+                        program->thisModule->annotationData[block->annotationDataSid] = block->annotationData;
+                    } else {
+                        program->error("internal error. both annotationData and Sid must be provided",
+                                       block->at, CompilationError::invalid_annotation);
+                    }
+                }
             }
         }
     };
 
     void Program::finalizeAnnotations() {
-        annotationData.clear();
         FinAnnotationVisitor fin(shared_from_this());
         visit(fin);
     }

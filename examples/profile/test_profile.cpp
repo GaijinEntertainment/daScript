@@ -4,6 +4,8 @@
 
 #include "daScript/daScript.h"
 
+#define FAST_PATH_ANNOTATION    1
+
 using namespace das;
 
 #ifndef _MSC_VER
@@ -113,8 +115,12 @@ struct EsFunctionAnnotation : FunctionAnnotation {
                            const AnnotationArgumentList &, string & err ) override {
         auto esData = getGroupData(group);
         auto tab = make_unique<EsAttributeTable>();
+#if FAST_PATH_ANNOTATION
         block->aotSkipMakeBlock = true;
+#endif
         block->annotationData = uint64_t(tab.get());
+        auto mangledName = block->getMangledName(true,true);
+        block->annotationDataSid = hash_blockz32((uint8_t *)mangledName.c_str());
         buildAttributeTable(*tab, block->arguments, err);
         esData->g_esBlockTable.emplace_back(move(tab));
         return err.empty();
@@ -705,10 +711,13 @@ public:
 
         auto queryEsFn = make_shared<ExternalFn<decltype(&queryEs), queryEs, SimNode_ExtFuncCall<decltype(&queryEs), queryEs>, decltype(&queryEs)>>("queryEs",lib,"queryEs");
         queryEsFn->setSideEffects(SideEffects::modifyExternal);
+#if FAST_PATH_ANNOTATION
         auto qes_decl = make_shared<AnnotationDeclaration>();
         qes_decl->annotation = qes_annotation;
         queryEsFn->annotations.push_back(qes_decl);
+#endif
         addFunction(queryEsFn);
+
 
         addExtern<DAS_BIND_FUN(testEsUpdate)>(*this, lib, "testEsUpdate",SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents",SideEffects::modifyExternal);
