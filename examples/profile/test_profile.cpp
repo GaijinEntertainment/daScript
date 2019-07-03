@@ -5,6 +5,7 @@
 #include "daScript/daScript.h"
 
 #define FAST_PATH_ANNOTATION    1
+#define FUNC_TO_QUERY           1
 
 using namespace das;
 
@@ -125,12 +126,39 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         esData->g_esBlockTable.emplace_back(move(tab));
         return err.empty();
     }
-    virtual bool apply ( const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
+    virtual bool apply ( const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string & err ) override {
         if ( func->arguments.empty() ) {
             err = "function needs arguments";
             return false;
         }
         func->exports = true;
+#if FUNC_TO_QUERY
+        // we are transforming function into query-call here
+        // def funName // note, no more arguments
+        //    testProfile::queryEs() <| $( clone of function arguments )
+        //        clone of functoin body
+        auto cle = make_shared<ExprCall>(func->at, "testProfile::queryEs");
+        auto blk = make_shared<ExprBlock>();
+        blk->at = func->at;
+        blk->isClosure = true;
+        for ( auto & arg : func->arguments ) {
+            auto carg = arg->clone();
+            blk->arguments.push_back(carg);
+        }
+        blk->returnType = make_shared<TypeDecl>(Type::tVoid);
+        auto ann = make_shared<AnnotationDeclaration>();
+        ann->annotation = shared_from_this();
+        ann->arguments = args;
+        blk->annotations.push_back(ann);
+        blk->list.push_back(func->body->clone());
+        auto mkb = make_shared<ExprMakeBlock>(func->at, blk);
+        cle->arguments.push_back(mkb);
+        auto cleb = make_shared<ExprBlock>();
+        cleb->at = func->at;
+        cleb->list.push_back(cle);
+        func->body = cleb;
+        func->arguments.clear();
+#endif
         return true;
     };
     virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group, const AnnotationArgumentList & args,
@@ -156,6 +184,9 @@ struct EsFunctionAnnotation : FunctionAnnotation {
 
 bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
     auto functionPtr = context.getFunction(table.functionIndex);
+#if FUNC_TO_QUERY
+    context.call(functionPtr, nullptr, 0);
+#else
     vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
     context.callEx(functionPtr, _args, nullptr, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
@@ -200,6 +231,7 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
             }
         }
     });
+#endif
     return true;
 }
 
@@ -297,10 +329,11 @@ void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsC
         } else {
             vec4f def = table->attributes[a].def;
             if ( table->attributes[a].size==4 ) {
-                ss << v_extract_x(def) << "f";
+                ss << to_string_ex(v_extract_x(def)) << "f";
             } else {
-                ss << "v_make_vec4f(" << v_extract_x(def) << "f," << v_extract_y(def) << "f,"
-                    << v_extract_z(def) << "f," << v_extract_w(def) << "f)";
+                ss << "v_make_vec4f("
+                    << to_string_ex(v_extract_x(def)) << "f," << to_string_ex(v_extract_y(def)) << "f,"
+                    << to_string_ex(v_extract_z(def)) << "f," << to_string_ex(v_extract_w(def)) << "f)";
             }
         }
     }

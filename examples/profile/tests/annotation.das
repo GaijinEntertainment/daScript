@@ -1,4 +1,4 @@
-// options logCpp=true
+// options log=true, logCpp=true
 
 require testProfile
 
