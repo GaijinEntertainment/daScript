@@ -1,0 +1,217 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"><head>
+    <meta content="en-us" http-equiv="Content-Language">
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+    <meta content="en" name="language">
+    <meta content="daScript is high-performance strong statically typed scripting language designed to be data oriented in C++ environment." name="description">
+    <meta content="game development, programming language, programming, scripting, development, open source" name="keywords">
+    <meta content="width=device-width" name="viewport">
+    <title>daScript - The High Performance Scripting Language</title>
+    <link href="doc/_static/daScript.ico" rel="icon" type="image/x-icon">
+    <link href="files/style.css" rel="stylesheet" type="text/css">
+<script charset="utf-8" src="files/button.js"></script></head>
+<body class="body">
+    <div id="menu" style="padding: 2px;">
+        <table>
+        <tbody><tr>
+        <td>
+        <img src="doc/_static/daScript.ico">
+         </td>
+        
+        <td>
+        <!-- <img class="daScript" height="34" src="images/daScript.gif" width="56" />&nbsp;&nbsp;&nbsp; -->
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        
+        <a href="#overview">Overview</a>&nbsp;&nbsp;&nbsp;&nbsp;
+        <a href="#look">What does it look like?</a>&nbsp;&nbsp;&nbsp;&nbsp;
+        <a href="#download">Download</a>&nbsp;&nbsp;&nbsp;&nbsp; 
+        <a href="#devstate">Development State</a>&nbsp;&nbsp;&nbsp;&nbsp;
+        <a href="#work">Work in Progress</a>&nbsp;&nbsp;&nbsp;&nbsp; 
+        <a href="#documentation">Documentation</a>&nbsp;&nbsp;&nbsp;&nbsp; 
+        <a href="https://github.com/GaijinEntertainment/daScript/wiki">Wiki</a>
+		</td>
+        </tr>
+        
+        </tbody></table>
+    </div>
+    <br>
+    <div style="height: 60px">
+    </div>
+    <br>
+    <table style="width: 90%;" cellspacing="0" cellpadding="0">
+        <tbody><tr>
+            <td style="width: 400px;">
+                <img src="doc/_static/daScript.png" style="height: 193px; width: 655px" width="400" height="133">
+            </td>
+            <td valign="top">
+                <span class="labels">
+                    
+                    News</span><br>
+                <span class="newsupdate">15 July 2019: <b>daScript initial version</b> has been released, check it out.</span>
+            </td>
+        </tr>
+    </tbody></table>
+    <div style="height: 20px">
+    </div>
+    <br>
+    <table style="width: 90%">
+        <tbody><tr>
+            <td valign="top">
+                <img src="files/spacer.gif" width="131" height="60">
+            </td>
+            <td>
+                <span class="bigwords">daScript is high-performance,
+                <strong>statically strong typed</strong> scripting language,
+                designed to be <strong>high-performance</strong> as embeddable
+                ‘scripting’ language for C++ real-time applications like <strong>games</strong>.</span>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <img src="files/spacer.gif" width="131" height="100">
+            </td>
+            <td>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                &nbsp;
+            </td>
+            <!--------------------------------------------------------------------------------------------------- -->
+            <!--------------------------------------------------------------------------------------------------- -->
+            <!--------------------------------------------------------------------------------------------------- -->
+            <td>
+                <span id="#overview" class="labels">Overview</span><br>
+                <p>
+                    daScript is high-performance statically strong typed scripting language, designed to be high-performance as embeddable ‘scripting’ language for real-time applications (like games).
+                    daScript offers a wide range of features like:</p>
+                <ul>
+                    <li>Open Source <a href="https://opensource.org/licenses/BSD-3-Clause">BSD licence</a>
+                     </li><li>strong static typing
+                     </li><li>Ruby-like blocks
+                     </li><li>semantic indenting
+                     </li><li>lexical scoping
+                     </li><li>High performance interpretation
+                     </li><li>Ahead-of-Time compilation (optimization for release build)
+                     </li><li>generators
+                     </li><li>generics and type inference
+                     </li><li>optional types (i.e. pointers)
+                     </li><li>Native HW friendly POD types
+                     </li><li>C++ friendly and high-performant interop
+                     </li><li>manual memory managment
+                     </li><li>fast and easy-to-reset execution memory context, allowing semi-automatic burst free memory management (still no GC)
+                     </li><li>extendable type and function system
+					 <li>powerful embedding api <ul>
+						<li>eg. functions can be defined by scripts or in C</li>
+						<li>eg. objects can fully exist in the Context or be bound to native code</li>
+						<li>and more</li>
+        				</ul>
+					
+				</ul>
+                <p>
+                    daScript is inspired by languages like Python in terms of it's explictness and readability; while it is designed to be extremely fast</p>
+                <p>
+                    <br>
+                    <!--------------------------------------------------------------------------------------------------- -->
+                    <!--------------------------------------------------------------------------------------------------- -->
+                    <!--------------------------------------------------------------------------------------------------- -->
+                   <span id="look" class="labels">What Does it look like?</span><br>
+                    daScript's syntax is similar to (Typed) Python.
+but the language has a very static and strong typed nature like ML or Ziglang...
+                    <br>
+                    <br>
+<div class="snippets"><div class="snippets"><pre><span></span><span class="k">def</span> <span class="nf">fibR</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+   <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">)</span>
+       <span class="k">return</span> <span class="n">n</span>
+   <span class="k">else</span>
+       <span class="k">return</span> <span class="n">fibR</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">fibR</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">fibI</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+   <span class="n">var</span> <span class="n">last</span> <span class="o">=</span> <span class="mi">0</span>
+   <span class="n">var</span> <span class="n">cur</span> <span class="o">=</span> <span class="mi">1</span>
+   <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+       <span class="n">let</span> <span class="n">tmp</span> <span class="o">=</span> <span class="n">cur</span>
+       <span class="n">cur</span> <span class="o">+=</span> <span class="n">last</span>
+       <span class="n">last</span> <span class="o">=</span> <span class="n">tmp</span>
+   <span class="k">return</span> <span class="n">cur</span>
+</pre></div>
+</div>
+</div>
+    <br>
+    <!--------------------------------------------------------------------------------------------------- -->
+    <!--------------------------------------------------------------------------------------------------- -->
+    <!--------------------------------------------------------------------------------------------------- -->
+    <span id="devstate" class="labels">Development state</span><br>
+    <ul>
+        The current release is initial 0.1. The language is used in Gaijin Entertainment projects in production.
+        <br>
+        The project has been compiled and run on Windows(x86 &amp; x64),
+        Linux(x64), Mac OS X, Xbox One, PlayStation4, Nintendo Switch, iOS and Android.<br>
+        Has been tested with the following compilers with C++11 support:
+        <blockquote dir="ltr" style="margin-right: 0px">
+            <p>
+                MS Visual C++ 15.0 and 17.0(x86 &amp; x64)<br>
+				Linux gcc<br>
+				LLVM 7, 8, 9<br>
+            </p>
+        </blockquote>
+        <br>
+        <p>
+            The documentation has to be improved.<br>
+        </p>
+        <p>
+            In order to compile, it requires C++11 support.
+        </p>
+    </ul>
+
+    <br>
+    <!--------------------------------------------------------------------------------------------------- -->
+    <!--------------------------------------------------------------------------------------------------- -->
+    <!--------------------------------------------------------------------------------------------------- -->
+    <span id="work" class="labels">Work in Progress</span><br>
+    <p></p><ul>
+            <li>Interpetation optimizations
+            </li><li>AOT optimizations
+            </li><li>Additional and embedding documentation</li>
+            <li>Generators/coroutines:</li>
+            <li>Pattern matching/variants:</li>
+        </ul>
+        <p>
+        </p>
+        <br>
+        <!--------------------------------------------------------------------------------------------------- -->
+        <!--------------------------------------------------------------------------------------------------- -->
+        <!--------------------------------------------------------------------------------------------------- -->
+        <span id="documentation" class="labels">Documentation</span><br>
+        <h4>daScript 0.1</h4>
+        <p>
+            Online <a href="doc/index.html">daScript 0.1 reference manual and Standard Libraries manual</a>
+        </p>
+        <p>
+            Offline Reference Manual (<a href="doc/dascript.pdf">PDF</a>)<br>
+            Offline Standard Libraries Manual (<a href="doc/dascriptstdlib.pdf">PDF</a>)
+        </p>
+        <br>
+        <br>
+
+        <!--------------------------------------------------------------------------------------------------- -->
+        <!--------------------------------------------------------------------------------------------------- -->
+        <!--------------------------------------------------------------------------------------------------- -->
+        <span id="download" class="labels">Download</span><br>
+        
+        <h4>GitHub Repository</h4>
+        <p>
+           daScript's GitHub repository is <a href="https://github.com/GaijinEntertainment/daScript">here</a>
+        </p>
+ 
+        <br>
+        </li></ul></td> </tr> </tbody></table>
+        <div id="line">
+        </div>
+        <br>
+        <p class="copyright">
+            Copyright ©2019 <a href="https://gaijin.net">Gaijin Entertainment</a>| All Rights Reserved.</p>
+		<p>
+
+
+</body></html>
