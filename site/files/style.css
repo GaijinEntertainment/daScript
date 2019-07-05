@@ -1,0 +1,77 @@
+﻿.body {
+	background-color: #ffffff;
+	font-size:medium;
+	margin: 0;
+	text-align: left;
+	font-family: "Lucida Sans", Tahoma, Verdana, Geneva, Helvetica, sans-serif;
+	/* background: #FFFFFF url('images/bkground.gif') ; */
+}
+
+#menu{
+	background-color:maroon;
+	font-size:medium;
+	font-weight:bold;
+	text-align:left;
+    vertical-align:middle;
+}
+
+#menu a:visited		{ text-decoration: none; color: white}
+#menu a:link		{ text-decoration: none; color: white}
+#menu a:hover 		{ text-decoration: none; color: #cd8c58}
+
+#donation { font-size:x-small;color:orange;text-align:center;}
+
+.newsupdate {
+	font-family:"Tahoma", Helvetica, sans-serif;
+	font-size: 130%;
+	color:black;
+}
+
+.bigwords{
+	font-size: 180%;
+	line-height: 120%;
+	color:gray;
+	text-align:left;
+	/*word-spacing:0px;*/
+}
+
+a { text-decoration: none; color: Navy}
+a:hover 		{ text-decoration: none; color: #cd8c58}
+
+
+.labels { 
+	font-family:"Lucida Sans", Times, serif;
+	font-size: 200%;
+	font-style:italic;
+	font-weight: bold;
+	color: #cd8c58;
+	line-height: 130%;
+}
+
+.snippets {
+	border:thin;
+	border-style:dashed;
+	border-color:maroon;
+	border-spacing:10px;
+	background-color: #ebebeb;
+	font-size:medium;
+	font-family:"Tahoma", Helvetica, sans-serif;
+}
+
+.copyright {
+	text-align: center;
+	color:gray;
+}
+#line{
+	background-color:Black;
+	width:100%;
+	height:1px;
+	float:left;
+}
+
+.whitened
+ {
+   color: #FFFFFF;
+}
+
+

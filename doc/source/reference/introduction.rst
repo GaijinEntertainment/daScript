@@ -60,8 +60,8 @@ Mandatory fibonacci samples ::
            return fibR(n - 1) + fibR(n - 2)
 
     def fibI(n)
-       let last = 0
-       let cur = 1
+       var last = 0
+       var cur = 1
        for i in range(0, n-1)
            let tmp = cur
            cur += last
