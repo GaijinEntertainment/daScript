@@ -10,7 +10,7 @@ struct Foo
 [export]
 def test:bool
     var saved = false
-    var loaded = false
+    var loaded = #13,44,"hello_world.das"# false // change false to falsee to see the effect
     let foo0 = Foo()
     fopen("test.bin","wb") <| $(f)
         if f!=null

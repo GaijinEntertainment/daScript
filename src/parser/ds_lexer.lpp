@@ -59,6 +59,28 @@
 
 %%
 
+<indent,normal>\#[0-9]+,[0-9]+,\"[^\"]+\"\# {
+    string txt = yytext;
+    int lRow, lCol;
+    char lFile[256];
+    if ( sscanf ( yytext, "#%i,%i,\"%255s\"#", &lRow, &lCol, lFile )==3 ) {
+        lFile[strlen(lFile)-2] = 0;
+        auto cfi = g_FileAccessStack.back();
+        string incFileName = g_Access->getIncludeFileName(cfi->name,lFile);
+        auto info = g_Access->getFileInfo(incFileName);
+        if ( !info ) {
+            das_yyerror("can't open "+incFileName);
+        } else {
+            g_FileAccessStack.pop_back();
+            g_FileAccessStack.push_back(info);
+            yylineno = lRow;
+            das_yycolumn = lCol;
+        }
+    } else {
+        das_yyerror ("can't process line directive " + string(yytext),
+            CompilationError::invalid_line_directive); return LEXER_ERROR;
+    }
+}
 <indent>"*/"                        das_yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 <indent>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = false;
 <normal>"*/"                        das_yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
