@@ -26,6 +26,7 @@
         <a href="#look">What does it look like?</a>&nbsp;&nbsp;&nbsp;&nbsp;
         <a href="#download">Download</a>&nbsp;&nbsp;&nbsp;&nbsp; 
         <a href="#devstate">Development State</a>&nbsp;&nbsp;&nbsp;&nbsp;
+        <a href="#performance">Performance</a>&nbsp;&nbsp;&nbsp;&nbsp;
         <a href="#work">Work in Progress</a>&nbsp;&nbsp;&nbsp;&nbsp; 
         <a href="#documentation">Documentation</a>&nbsp;&nbsp;&nbsp;&nbsp; 
         <a href="https://github.com/GaijinEntertainment/daScript/wiki">Wiki</a>
@@ -91,18 +92,21 @@
                      </li><li>Ruby-like blocks
                      </li><li>semantic indenting
                      </li><li>lexical scoping
-                     </li><li>High performance interpretation
+                     </li><li>high performance interpretation
                      </li><li>Ahead-of-Time compilation (optimization for release build)
                      </li><li>generators
                      </li><li>generics and type inference
                      </li><li>optional types (i.e. pointers)
-                     </li><li>Native HW friendly POD types
+                     </li><li>native HW friendly POD types
                      </li><li>C++ friendly and high-performant interop
                      </li><li>manual memory managment
-                     </li><li>fast and easy-to-reset execution memory context, allowing semi-automatic burst free memory management (still no GC)
+                     </li><li>fast and easy-to-reset execution context, allowing automatic burst free memory management for stored procedures
+                             <br>
+                             No memory leaks with no GC/reference counting cost.
                      </li><li>extendable type and function system
+                     </li><li>cheap multi-threading support - explicit separation of execution context and code context.
 					 <li>powerful embedding api <ul>
-						<li>eg. functions can be defined by scripts or in C</li>
+						<li>eg. functions can be defined by scripts or in C++</li>
 						<li>eg. objects can fully exist in the Context or be bound to native code</li>
 						<li>and more</li>
         				</ul>
@@ -162,6 +166,36 @@ but the language has a very static and strong typed nature like ML or Ziglang...
         <p>
             In order to compile, it requires C++11 support.
         </p>
+    </ul>
+
+    <br>
+    <!--------------------------------------------------------------------------------------------------- -->
+    <!--------------------------------------------------------------------------------------------------- -->
+    <!--------------------------------------------------------------------------------------------------- -->
+    <span id="performance" class="labels">Performance</span><br>
+    <ul>
+        <br>
+          As interpreted language it typically beats everything, including blazing fast <b>LuaJit</b>.
+        <br>
+          Especially it shines in interop with C++ functions, which allows easy and nice experience to integrate new functions and types.
+        <br>
+          The total overhead over C++ of data oriented processing in interpretation is close to C++ in Debug mode (see Particles sample).
+        <br>
+        <br>
+<iframe frameborder="0" scrolling="no" width="1100" height="250" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQxwlQklQkAgZKQLyhV6fY-Peknok6Xafitg3AuP7IARmnFGmPxCXFcNa5no5Mhp-eNGpYdZWKtfToY/pubhtml?gid=1640974160&amp;single=true&amp;widget=false&amp;headers=false&amp;chrome=false"></iframe>
+        <br>
+          As compiled Ahead-of-Time language it is also much faster then both LuaJit and Chrome JS (both having extremely performant Just-in-Time).
+        <br>
+          It is almost on par with C++ (msvc with all optimizations), usually within 10% of difference, and sometimes can even beat it!
+        <br>
+          It is worth noting that unlike Just-in-Time, Ahead-of-Time compilation can be used on any platform, including those with signed binaries executables (such as iOS or consoles).
+        <br>
+        <br>
+<iframe frameborder="0" scrolling="no" width="1100" height="250" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQxwlQklQkAgZKQLyhV6fY-Peknok6Xafitg3AuP7IARmnFGmPxCXFcNa5no5Mhp-eNGpYdZWKtfToY/pubhtml?gid=59293637&amp;single=true&amp;widget=false&amp;headers=false&amp;chrome=false&amp;"></iframe>
+        <br>
+          All times are in <b>milliseconds</b>, all results are measured as best-out-of-20 runs on Intel I5.
+        <br>
+          All samples for all languages in comparison are available in <a href="https://github.com/GaijinEntertainment/daScript/tree/master/examples/profile/tests">GitHub</a>
     </ul>
 
     <br>
