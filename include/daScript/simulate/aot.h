@@ -843,7 +843,7 @@ namespace das {
     struct das_make_block : Block, SimNode_ClosureBlock {
         typedef function < resType ( argType... ) > BlockFn;
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+                : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
@@ -865,7 +865,7 @@ namespace das {
     struct das_make_block<resType> : Block, SimNode_ClosureBlock {
         typedef function < resType () > BlockFn;
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-            : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
@@ -881,7 +881,7 @@ namespace das {
     struct das_make_block<void> : Block, SimNode_ClosureBlock {
         typedef function < void () > BlockFn;
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-            : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
@@ -898,7 +898,7 @@ namespace das {
     struct das_make_block<void,argType...> : Block, SimNode_ClosureBlock {
         typedef function < void ( argType... ) > BlockFn;
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-                : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+                : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
@@ -921,7 +921,7 @@ namespace das {
     struct das_make_block_cmres : Block, SimNode_ClosureBlock {
         typedef function < resType ( argType... ) > BlockFn;
         __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-            : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
@@ -945,7 +945,7 @@ namespace das {
     struct das_make_block_cmres<resType> : Block, SimNode_ClosureBlock {
         typedef function < resType () > BlockFn;
         __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
-            : SimNode_ClosureBlock(LineInfo(),false,ann), blockFunction(func) {
+            : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;

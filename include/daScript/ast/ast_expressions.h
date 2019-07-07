@@ -139,6 +139,7 @@ namespace das
                 bool        local : 1;
                 bool        argument : 1;
                 bool        block : 1;
+                bool        thisBlock : 1;
                 bool        r2v  : 1;       // built-in ref2value   (read-only)
                 bool        r2cr : 1;       // built-in ref2contref (read-only, but stay ref)
                 bool        write : 1;

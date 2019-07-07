@@ -237,6 +237,20 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_GetThisBlockArgument::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetThisBlockArgument);
+        V_ARG(index);
+        V_END();
+    }
+
+    SimNode * SimNode_GetThisBlockArgumentRef::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetThisBlockArgumentRef);
+        V_ARG(index);
+        V_END();
+    }
+
     SimNode * SimNode_GetGlobal::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetGlobal);

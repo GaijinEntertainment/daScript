@@ -50,6 +50,12 @@ namespace das
         FuncInfo *  debugInfo;
         uint32_t    stackSize;
         uint32_t    mangledNameHash;
+        union {
+            uint32_t    flags;
+            struct {
+                bool    aot : 1;
+            };
+        };
     };
 
     struct SimNode {
@@ -222,6 +228,10 @@ namespace das
             return abiArg;
         }
 
+        __forceinline vec4f * abiThisBlockArguments() {
+            return abiThisBlockArg;
+        }
+
         __forceinline vec4f & abiResult() {
             return result;
         }
@@ -287,6 +297,7 @@ namespace das
 #endif
         __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
             char * EP, *SP;
+            vec4f * TBA;
             stack.invoke(block.stackOffset, EP, SP);
             BlockArguments * __restrict ba = nullptr;
             BlockArguments saveArguments;
@@ -295,6 +306,8 @@ namespace das
                 saveArguments = *ba;
                 ba->arguments = args;
                 ba->copyOrMoveResult = (char *) cmres;
+                TBA = abiThisBlockArg;
+                abiThisBlockArg = args;
             }
             vec4f * __restrict saveFunctionArguments = abiArg;
             abiArg = block.functionArguments;
@@ -302,35 +315,17 @@ namespace das
             abiArg = saveFunctionArguments;
             if ( ba ) {
                 *ba = saveArguments;
+                abiThisBlockArg = TBA;
             }
             stack.pop(EP, SP);
             return block_result;
         }
-
-        template <typename Fn>
-        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when) {
-            char * EP, *SP;
-            stack.invoke(block.stackOffset,EP,SP);
-            BlockArguments * ba = nullptr;
-            BlockArguments saveArguments;
-            if ( block.argumentsOffset ) {
-                ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
-                saveArguments = *ba;
-                ba->arguments = args;
-                ba->copyOrMoveResult = (char *) cmres;
-            }
-            vec4f * __restrict saveFunctionArguments = abiArg;
-            abiArg = block.functionArguments;
-            when(block.body);
-            abiArg = saveFunctionArguments;
-            if ( ba ) {
-                *ba = saveArguments;
-            }
-            return result;
-        }
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+
+        template <typename Fn>
+        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when);
 
         template <typename Fn>
         vec4f callEx(const SimFunction * fn, vec4f *args, void * cmres, int line, Fn && when) {
@@ -371,6 +366,7 @@ namespace das
         StackAllocator                  stack;
         uint32_t                        insideContext = 0;
     public:
+        vec4f *         abiThisBlockArg;
         vec4f *         abiArg;
         void *          abiCMRES;
     public:
@@ -529,13 +525,57 @@ return cast<CTYPE>::to(eval(context));                  \
     };
 
     struct SimNode_ClosureBlock : SimNode_Block {
-        SimNode_ClosureBlock ( const LineInfo & at, bool nr, uint64_t ad )
-        : SimNode_Block(at), needResult(nr), annotationData(ad) {}
+        SimNode_ClosureBlock ( const LineInfo & at, bool nr, bool c0, uint64_t ad )
+            : SimNode_Block(at), annotationData(ad), flags(0) {
+                this->needResult = nr;
+                this->code0 = c0;
+            }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
-        bool needResult = false;
         uint64_t annotationData = 0;
+        union {
+            uint32_t flags;
+            struct {
+                bool needResult : 1;
+                bool code0 : 1;
+            };
+        };
     };
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4701)
+#pragma warning(disable:4324)
+#endif
+    template <typename Fn>
+    vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when) {
+        char * EP, *SP;
+        vec4f * TBA;
+        stack.invoke(block.stackOffset,EP,SP);
+        BlockArguments * ba = nullptr;
+        BlockArguments saveArguments;
+        if ( block.argumentsOffset ) {
+            ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
+            saveArguments = *ba;
+            ba->arguments = args;
+            ba->copyOrMoveResult = (char *) cmres;
+            TBA = abiThisBlockArg;
+            abiThisBlockArg = args;
+        }
+        vec4f * __restrict saveFunctionArguments = abiArg;
+        abiArg = block.functionArguments;
+        SimNode_ClosureBlock * cb = (SimNode_ClosureBlock *) block.body;
+        when(cb->code0 ? cb->list[0] : block.body);
+        abiArg = saveFunctionArguments;
+        if ( ba ) {
+            *ba = saveArguments;
+            abiThisBlockArg = TBA;
+        }
+        return result;
+    }
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 }
 
 #include "daScript/simulate/simulate_visit_op_undef.h"

@@ -996,6 +996,50 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+    // THIS BLOCK VARIABLE "GET"
+    struct SimNode_GetThisBlockArgument : SimNode {
+        SimNode_GetThisBlockArgument ( const LineInfo & at, int32_t i )
+            : SimNode(at), index(i) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            return context.abiThisBlockArguments()[index];
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return cast<CTYPE>::to(context.abiThisBlockArguments()[index]);  \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+        int32_t index;
+    };
+
+    template <typename TT>
+    struct SimNode_GetThisBlockArgumentR2V : SimNode_GetThisBlockArgument {
+        SimNode_GetThisBlockArgumentR2V ( const LineInfo & at, int32_t i )
+            : SimNode_GetThisBlockArgument(at,i) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            TT * pR = cast<TT *>::to(context.abiThisBlockArguments()[index]);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                               \
+        virtual CTYPE eval##TYPE ( Context & context ) override {           \
+            return * cast<CTYPE *>::to(context.abiThisBlockArguments()[index]);      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
+    struct SimNode_GetThisBlockArgumentRef : SimNode_GetThisBlockArgument {
+        DAS_PTR_NODE;
+        SimNode_GetThisBlockArgumentRef(const LineInfo & at, int32_t i)
+            : SimNode_GetThisBlockArgument(at,i) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute(Context & context) {
+            return (char *)(&context.abiThisBlockArguments()[index]);
+        }
+    };
+
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode {
         DAS_PTR_NODE;

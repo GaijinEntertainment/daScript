@@ -1159,8 +1159,14 @@ namespace das
         vector<SimNode *> simlist = collectExpressions(context, list);
         // TODO: what if list size is 0?
         if ( simlist.size()!=1 || isClosure || finalList.size() ) {
-            auto block = isClosure ? context.code->makeNode<SimNode_ClosureBlock>(at, type!=nullptr && type->baseType!=Type::tVoid, annotationData)
-                : context.code->makeNode<SimNode_Block>(at);
+            SimNode_Block * block;
+            if ( isClosure ) {
+                bool needResult = type!=nullptr && type->baseType!=Type::tVoid;
+                bool C0 = !needResult && simlist.size()==1 && finalList.size()==0;
+                block = context.code->makeNode<SimNode_ClosureBlock>(at, needResult, C0, annotationData);
+            } else {
+                block = context.code->makeNode<SimNode_Block>(at);
+            }
             block->total = int(simlist.size());
             if ( block->total ) {
                 block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
@@ -1371,16 +1377,32 @@ namespace das
             auto blk = pBlock.lock();
             if (variable->type->isRef()) {
                 if (r2v && !type->isRefType()) {
-                    return context.code->makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
+                    if ( thisBlock ) {
+                        return context.code->makeValueNode<SimNode_GetThisBlockArgumentR2V>(type->baseType, at, argumentIndex);
+                    } else {
+                        return context.code->makeValueNode<SimNode_GetBlockArgumentR2V>(type->baseType, at, argumentIndex, blk->stackTop);
+                    }
                 } else {
-                    return context.code->makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+                    if ( thisBlock ) {
+                        return context.code->makeNode<SimNode_GetThisBlockArgument>(at, argumentIndex);
+                    } else {
+                        return context.code->makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+                    }
                 }
             } else {
                 if (r2v && !type->isRefType()) {
-                    return context.code->makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+                    if ( thisBlock ) {
+                        return context.code->makeNode<SimNode_GetThisBlockArgument>(at, argumentIndex);
+                    } else {
+                        return context.code->makeNode<SimNode_GetBlockArgument>(at, argumentIndex, blk->stackTop);
+                    }
                 }
                 else {
-                    return context.code->makeNode<SimNode_GetBlockArgumentRef>(at, argumentIndex, blk->stackTop);
+                    if ( thisBlock ) {
+                        return context.code->makeNode<SimNode_GetThisBlockArgumentRef>(at, argumentIndex);
+                    } else {
+                        return context.code->makeNode<SimNode_GetBlockArgumentRef>(at, argumentIndex, blk->stackTop);
+                    }
                 }
             }
         } else if ( local ) {
@@ -1945,6 +1967,7 @@ namespace das
                 gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
                 gfun.stackSize = pfun->totalStackSize;
                 gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
+                gfun.flags = 0;
             }
         }
         for (auto & pm : library.modules ) {
@@ -2006,6 +2029,7 @@ namespace das
                 auto it = aotLib.find(semHash);
                 if ( it != aotLib.end() ) {
                     fn.code = (it->second)(context);
+                    fn.aot = true;
                     if ( logIt ) logs << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";
                 } else {
                     if ( logIt ) logs << "NOT FOUND " << fn.name << " AOT=0x" << HEX << semHash << DEC << "\n";

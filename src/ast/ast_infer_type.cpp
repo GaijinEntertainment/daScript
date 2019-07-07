@@ -1989,6 +1989,9 @@ namespace das {
                         expr->variable = arg;
                         expr->argumentIndex = argumentIndex;
                         expr->block = true;
+                        if ( blocks.rbegin() == it ) {
+                            expr->thisBlock = true;
+                        }
                         expr->type = make_shared<TypeDecl>(*arg->type);
                         if (!expr->type->isRefType())
                             expr->type->ref = true;
