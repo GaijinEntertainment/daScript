@@ -7,11 +7,11 @@ dist: xenial
 addons:
   apt:
     sources:
-    # Clang 7:
-      - llvm-toolchain-trusty-7
+    # Clang 8:
+      - llvm-toolchain-xenial-8
       - ubuntu-toolchain-r-test
     packages:
-      - clang-7
+      - clang-8
       - cmake
       - lzip
     # Documentation:
@@ -59,8 +59,8 @@ script:
         -Wdeprecated
         -Werror=deprecated
 
-        -DCMAKE_C_COMPILER=clang-7
-        -DCMAKE_CXX_COMPILER=clang++-7
+        -DCMAKE_C_COMPILER=clang-8
+        -DCMAKE_CXX_COMPILER=clang++-8
         -DCMAKE_C_FLAGS="${CFLAGS}"
         -DCMAKE_CXX_FLAGS="${CXXFLAGS}"
         -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS}"
