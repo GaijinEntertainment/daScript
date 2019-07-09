@@ -297,7 +297,7 @@ namespace das
 #endif
         __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
             char * EP, *SP;
-            vec4f * TBA;
+            vec4f * TBA = nullptr;
             stack.invoke(block.stackOffset, EP, SP);
             BlockArguments * __restrict ba = nullptr;
             BlockArguments saveArguments;
@@ -550,7 +550,7 @@ return cast<CTYPE>::to(eval(context));                  \
     template <typename Fn>
     vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when) {
         char * EP, *SP;
-        vec4f * TBA;
+        vec4f * TBA = nullptr;
         stack.invoke(block.stackOffset,EP,SP);
         BlockArguments * ba = nullptr;
         BlockArguments saveArguments;

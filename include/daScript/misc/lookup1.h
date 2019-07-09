@@ -9,7 +9,7 @@ namespace das {
             if ( ts<a2b.size() ) {
                 continue;
             }
-            tab_mask = ts - 1;
+            tab_mask = uint32_t(ts - 1);
             tab.resize(ts);
             for ( tab_rot=0; tab_rot!=32; ++tab_rot ) {
                 fill(tab.begin(), tab.end(), 0);
