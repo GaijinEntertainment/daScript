@@ -14,12 +14,17 @@ namespace das {
     class RefFolding : public OptVisitor {
     protected:
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
+            if (expr->type->baseType == Type::tHandle) {
+                return Visitor::visit(expr);
+            }
             if ( expr->subexpr->rtti_isCast() ) {
                 reportFolding();
                 auto ecast = static_pointer_cast<ExprCast>(expr->subexpr);
                 auto nr2v = make_shared<ExprRef2Value>();
                 nr2v->at = expr->at;
                 nr2v->subexpr = ecast->subexpr;
+                nr2v->type = make_shared<TypeDecl>(*nr2v->subexpr->type);
+                nr2v->type->ref = false;
                 ecast->subexpr = nr2v;
                 ecast->type->ref = false;
                 return ecast;
