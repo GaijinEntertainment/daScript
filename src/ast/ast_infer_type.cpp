@@ -865,8 +865,13 @@ namespace das {
             }
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
-            if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, true, false) ) {
-                error("function argument default value type mismatch", arg->init->at);
+            if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, false, false) ) {
+                error("function argument default value type mismatch (" + arg->type->describe() 
+                    + ") vs (" + arg->init->type->describe() + ")", arg->init->at);
+            }
+            if (arg->init->type && arg->type->ref && !arg->init->type->ref ) {
+                error("function argument default value type mismatch (" + arg->type->describe()
+                    + ") vs (" + arg->init->type->describe() + "), reference matters", arg->init->at);
             }
             return Visitor::visitArgumentInit(f, arg, that);
         }
