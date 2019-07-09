@@ -160,7 +160,8 @@ if "%1" == "latex" (
 if "%1" == "latexpdf" (
     %SPHINXBUILD% -b latex %ALLSPHINXOPTS% %BUILDDIR%/latex
     cd %BUILDDIR%/latex
-    make all-pdf
+    pdflatex dascript.tex
+    pdflatex dascriptstdlib.tex
     cd %~dp0
     echo.
     echo.Build finished; the PDF files are in %BUILDDIR%/latex.
