@@ -21,6 +21,7 @@ bool compile ( const string & fn, const string & cppFn ) {
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
         if ( program->failed() ) {
+            tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
                 tout << reportError(err.at, err.what, err.cerr );
             }
@@ -107,6 +108,7 @@ bool compile ( const string & fn, const string & cppFn ) {
             }
         }
     } else {
+        tout << "failed to compile\n";
         return false;
     }
 }
