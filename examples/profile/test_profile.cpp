@@ -735,22 +735,15 @@ public:
         // es
         initEsComponents();
 
-        // this is custom queryES
-        //  we need to do this manually so that we can add annotations
-        // addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs",SideEffects::modifyExternal);
-
         auto qes_annotation = make_shared<QueryEsFunctionAnnotation>();
         addAnnotation(qes_annotation);
 
-        auto queryEsFn = make_shared<ExternalFn<decltype(&queryEs), queryEs, SimNode_ExtFuncCall<decltype(&queryEs), queryEs>, decltype(&queryEs)>>("queryEs",lib,"queryEs");
-        queryEsFn->setSideEffects(SideEffects::modifyExternal);
+        auto queryEsFn = addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs",SideEffects::modifyExternal);
 #if FAST_PATH_ANNOTATION
         auto qes_decl = make_shared<AnnotationDeclaration>();
         qes_decl->annotation = qes_annotation;
         queryEsFn->annotations.push_back(qes_decl);
 #endif
-        addFunction(queryEsFn);
-
 
         addExtern<DAS_BIND_FUN(testEsUpdate)>(*this, lib, "testEsUpdate",SideEffects::modifyExternal);
         addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents",SideEffects::modifyExternal);

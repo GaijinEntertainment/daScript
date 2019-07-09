@@ -98,30 +98,39 @@ namespace das
     };
 
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
-    __forceinline void addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
+    inline auto addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                   const string & cppName = string()) {
-        if ( !mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>, FuncT>>(name,lib,cppName)->setSideEffects(seFlags)) ) {
+        auto fnX = make_shared<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncT>>(name, lib, cppName);
+        fnX->setSideEffects(seFlags);
+        if ( !mod.addFunction(fnX) ) {
             DAS_FATAL_LOG("addExtern(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
             DAS_FATAL_ERROR;
         }
+        return fnX;
     }
 
     template <typename FuncArgT, typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
-    __forceinline void addExternEx ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
+    inline auto addExternEx ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                   const string & cppName = string()) {
-        if ( !mod.addFunction(make_shared<ExternalFn<FuncT,fn, SimNodeT<FuncT,fn>, FuncArgT>>(name,lib,cppName)->setSideEffects(seFlags)) ) {
+        auto fnX = make_shared<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncArgT>>(name, lib, cppName);
+        fnX->setSideEffects(seFlags);
+        if ( !mod.addFunction(fnX) ) {
             DAS_FATAL_LOG("addExternEx(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
             DAS_FATAL_ERROR;
         }
+        return fnX;
     }
 
     template <InteropFunction func, typename RetT, typename ...Args>
-    __forceinline void addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
+    inline auto addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                    const string & cppName = string() ) {
-        if ( !mod.addFunction(make_shared<InteropFn<func,RetT,Args...>>(name,lib,cppName)->setSideEffects(seFlags)) ) {
+        auto fnX = make_shared<InteropFn<func, RetT, Args...>>(name, lib, cppName);
+        fnX->setSideEffects(seFlags);
+        if ( !mod.addFunction(fnX) ) {
             DAS_FATAL_LOG("addInterop(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
             DAS_FATAL_ERROR;
         }
+        return fnX;
     }
 }
 
