@@ -224,9 +224,9 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 _stdauthor = r'Anton Yudintsev'
 latex_documents = [
-    ('reference/index', 'reference.tex',
+    ('reference/index', 'dascript.tex',
      'daScript Reference Manual', _stdauthor, 'manual'),
-     ('stdlib/index', 'stdlib.tex',
+     ('stdlib/index', 'dascriptstdlib.tex',
      'daScript Standard Library', _stdauthor, 'manual'),
 ]
 
