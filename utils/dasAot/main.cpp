@@ -68,6 +68,7 @@ bool compile ( const string & fn, const string & cppFn ) {
             tw << "#pragma warning(disable:4100)   // unreferenced formal parameter\n";
             tw << "#pragma warning(disable:4189)   // local variable is initialized but not referenced\n";
             tw << "#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data\n";
+            tw << "#pragma warning(disable:4114)   // same qualifier more than once\n";
             tw << "#elif defined(__clang__)\n";
             tw << "#pragma clang diagnostic push\n";
             tw << "#pragma clang diagnostic ignored \"-Wunused-parameter\"\n";

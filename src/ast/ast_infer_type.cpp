@@ -1784,9 +1784,13 @@ namespace das {
                     reportGenericInfer();
                 }
             }
-            if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, true, false) ) {
-                error("block argument default value type mismatch", arg->init->at,
-                  CompilationError::invalid_argument_type);
+            if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, false, false) ) {
+                error("block argument default value type mismatch (" + arg->type->describe() 
+                    + ") vs (" + arg->init->type->describe() + ")", arg->init->at);
+            }
+            if (arg->init->type && arg->type->ref && !arg->init->type->ref ) {
+                error("block argument default value type mismatch (" + arg->type->describe()
+                    + ") vs (" + arg->init->type->describe() + "), reference matters", arg->init->at);
             }
             return Visitor::visitBlockArgumentInit(block, arg, that);
         }

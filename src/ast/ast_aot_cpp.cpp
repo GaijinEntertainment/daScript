@@ -876,10 +876,10 @@ namespace das {
         }
         virtual void preVisitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override {
             Visitor::preVisitBlockArgumentInit(block, var, init);
-            ss << " /* ";
+            ss << "\n#if 0\n";
         }
         virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override { 
-            ss << " */ ";
+            ss << "\n#endif\n";
             return Visitor::visitBlockArgumentInit(block, var, init);
         }
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
