@@ -1,4 +1,4 @@
-expect 31101, 31102:9, 30304:2, 30102:2, 30103, 30106
+expect 31101, 31102:9, 30304:2, 30102:2, 30106
 
 let
     a:auto                      // 31101, can't infer, need initializer
@@ -29,7 +29,6 @@ def test3
                                         // 31102: type can't be infered, auto?, returns int
     blk() <| $(a:auto?=3):int           // 30304: no matching function (blk block<(auto?):int>)
                                         // 31102: block argument initialization type can't be infered, auto? = int
-                                        // 30103: block argument default value type mismatch
         return a                        // 30102: incompatible return type, expecting int vs auto?
     let tab : table<string,int>
     let tabI : table<auto,float> = tab  // 31102: local variable initialization type can't be infered
