@@ -878,7 +878,7 @@ namespace das {
             Visitor::preVisitBlockArgumentInit(block, var, init);
             ss << "\n#if 0\n";
         }
-        virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override { 
+        virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override {
             ss << "\n#endif\n";
             return Visitor::visitBlockArgumentInit(block, var, init);
         }
@@ -1174,7 +1174,7 @@ namespace das {
             } else if ( var->local || var->block || var->argument ) {
                 ss << collector.getVarName(var->variable);
             } else {
-                ss << "das_global<" << describeCppType(var->variable->type,false,true,true) 
+                ss << "das_global<" << describeCppType(var->variable->type,false,true,true)
                     << "," << int32_t(var->variable->stackTop) << ">(__context__) /*" << var->name << "*/";
             }
             return Visitor::visit(var);
@@ -1630,7 +1630,7 @@ namespace das {
                 info = helper.makeTypeInfo(nullptr, expr->subexpr->type);
             }
             if ( expr->ascType ) {
-                ss << "das_ascend<" << describeCppType(expr->type,false,true,true) << "," 
+                ss << "das_ascend<" << describeCppType(expr->type,false,true,true) << ","
                     << describeCppType(expr->subexpr->type,false,true,true) << ">::make(__context__,";
                 if ( info ) {
                     ss << "&" << helper.typeInfoName(info) << ",";
@@ -1929,7 +1929,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprLooksLikeCall * call ) override {
             if ( call->name=="assert" || call->name=="verify" || call->name=="debug" ) {
-                ss << "))"; 
+                ss << "))";
             } else {
                 ss << ")";
             }

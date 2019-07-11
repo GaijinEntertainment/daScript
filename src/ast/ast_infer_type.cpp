@@ -866,7 +866,7 @@ namespace das {
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
             if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, false, false) ) {
-                error("function argument default value type mismatch (" + arg->type->describe() 
+                error("function argument default value type mismatch (" + arg->type->describe()
                     + ") vs (" + arg->init->type->describe() + ")", arg->init->at);
             }
             if (arg->init->type && arg->type->ref && !arg->init->type->ref ) {
@@ -1785,7 +1785,7 @@ namespace das {
                 }
             }
             if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, false, false) ) {
-                error("block argument default value type mismatch (" + arg->type->describe() 
+                error("block argument default value type mismatch (" + arg->type->describe()
                     + ") vs (" + arg->init->type->describe() + ")", arg->init->at);
             }
             if (arg->init->type && arg->type->ref && !arg->init->type->ref ) {
@@ -2501,7 +2501,7 @@ namespace das {
                 } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
                     pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIteratorType(src));
                 } else {
-                    error("unsupported iteration type for the loop variable " + pVar->name + ", iterating over " + src->type->describe(), 
+                    error("unsupported iteration type for the loop variable " + pVar->name + ", iterating over " + src->type->describe(),
                         expr->at, CompilationError::invalid_iteration_source);
                     return;
                 }
