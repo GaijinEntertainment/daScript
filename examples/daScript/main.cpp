@@ -29,14 +29,14 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
 }
 
 void print_help() {
-    tout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
+    tout << "daScript scriptName1 {scriptName2} .. {-main mainFnName} {-log}\n";
 }
 
 void require_project_specific_modules();//link time resolved dependencies
 
 int main(int argc, const char * argv[]) {
     if ( argc<=1 ) {
-        tout << "daScript [scriptName1] {scriptName2} .. {-main mainFnName} {-log}\n";
+        print_help();
         return -1;
     }
     vector<string> files;
@@ -44,26 +44,31 @@ int main(int argc, const char * argv[]) {
     bool outputProgramCode = false;
     for ( int i=1; i < argc;  ) {
         if ( argv[i][0]=='-' ) {
-            if ( i+1 >= argc ) {
-                print_help();
-                return -1;
-            } else {
-                string cmd(argv[i]+1);
-                if ( cmd=="main" ) {
-                    mainName = argv[i+1];
-                    i += 2;
-                } else if ( cmd=="log" ) {
-                    outputProgramCode = true;
-                    i ++;
-                } else {
+            string cmd(argv[i]+1);
+            if ( cmd=="main" ) {
+                if (i+1 > argc)
+                {
                     print_help();
                     return -1;
                 }
+                mainName = argv[i+1];
+                i += 2;
+            } else if ( cmd=="log" ) {
+                outputProgramCode = true;
+                i ++;
+            } else {
+                print_help();
+                return -1;
             }
         } else {
             files.push_back(argv[i]);
             i ++;
         }
+    }
+    if (files.empty())
+    {
+        print_help();
+        return -1;
     }
     // register modules
     NEED_MODULE(Module_BuiltIn);

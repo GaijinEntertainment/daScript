@@ -8,6 +8,7 @@
     <meta content="width=device-width" name="viewport">
     <title>daScript - The High Performance Scripting Language</title>
     <link href="doc/_static/daScript.ico" rel="icon" type="image/x-icon">
+    <link href="http://fonts.googleapis.com/css?family=Source+Sans+Pro:400,700,400italic,700italic|Source+Code+Pro:400|Lato:400|Sanchez:400italic,400" rel="stylesheet" type="text/css">
     <link href="files/style.css" rel="stylesheet" type="text/css">
 <script charset="utf-8" src="files/button.js"></script></head>
 <body class="body">
@@ -42,7 +43,7 @@
     <table style="width: 90%;" cellspacing="0" cellpadding="0">
         <tbody><tr>
             <td style="width: 400px;">
-                <img src="doc/_static/daScript.png" style="height: 193px; width: 655px" width="400" height="133">
+                <img src="doc/_static/daScript.png" style="height: 193px;" width="400" height="133">
             </td>
             <td valign="top">
                 <span class="labels">
@@ -63,7 +64,7 @@
             <td>
                 <span class="bigwords">daScript is high-level,
                 <strong>statically strong typed</strong> scripting language,
-                designed to be <strong>high-performant</strong> as embeddable
+                designed to be <strong>fast</strong> as embeddable
                 ‘scripting’ language for C++ real-time applications like <strong>games</strong>.</span>
             </td>
         </tr>
@@ -84,10 +85,28 @@
             <td>
                 <span id="#overview" class="labels">Overview</span><br>
                 <p>
-                    daScript is high-performance statically strong typed scripting language, designed to be high-performance as embeddable ‘scripting’ language for real-time applications (like games).
-                    daScript offers a wide range of features like:</p>
+                    daScript is high-performance statically strong typed scripting language, designed to be data-oriented embeddable ‘scripting’ language for real-time applications (like games or backend servers).
+                </p>
+                <p>daScript is:
+                </p>
                 <ul>
-                    <li>Open Source <a href="https://opensource.org/licenses/BSD-3-Clause">BSD licence</a>
+                  <li>
+                    <b>Extremely blazingly fast</b>. daScript can be compared with compiled or JiT languages even in interpreter mode, always faster than dynamic interpreted scripting languages like Lua.
+                    In AOT it is usually faster than C++ and beats best JiT VMs (V8 or LuaJit). You will never need to rewrite daScript code to C++ to optimize your application!
+                  </li>
+                  <li>
+                    <b>Safe</b>. It is static typed languages with all it's benefits (most of Lua\JS errors that will break application in runtime won't even compile), but due to generics and type inference it is easy and fluid. Safety is the next key pillar of daScript design, so in many cases it is safier than languages like C++ or Java.
+                  </li>
+
+                  <li>
+                    <b>Real embedded scripting language</b>. It has no dependecies (you only need C++11 compiler), super easy-to-use and safe interop (all embedded scripting languages supposed to call native code).
+                  </li>
+                </ul>
+                <p>
+                    daScript offers a wide range of features like:
+                </p>
+                <ul>
+                    <li>amazing performance
                      </li><li>strong static typing
                      </li><li>Ruby-like blocks
                      </li><li>semantic indenting
@@ -98,13 +117,14 @@
                      </li><li>generics and type inference
                      </li><li>optional types (i.e. pointers)
                      </li><li>native HW friendly POD types
-                     </li><li>C++ friendly and high-performant interop
+                     </li><li>C++ friendly and fast interop
                      </li><li>manual memory managment
                      </li><li>fast and easy-to-reset execution context, allowing automatic burst free memory management for stored procedures
                              <br>
                              No memory leaks with no GC/reference counting cost.
                      </li><li>extendable type and function system
                      </li><li>cheap multi-threading support - explicit separation of execution context and code context.
+                     </li><li>Open Source <a href="https://opensource.org/licenses/BSD-3-Clause">BSD licence</a>
 					 <li>powerful embedding api <ul>
 						<li>eg. functions can be defined by scripts or in C++</li>
 						<li>eg. objects can fully exist in the Context or be bound to native code</li>
@@ -184,7 +204,7 @@ but the language has a static strong typed nature like ML or Ziglang, and it's P
         <br>
 <iframe frameborder="0" scrolling="no" width="1100" height="250" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQxwlQklQkAgZKQLyhV6fY-Peknok6Xafitg3AuP7IARmnFGmPxCXFcNa5no5Mhp-eNGpYdZWKtfToY/pubhtml?gid=1640974160&amp;single=true&amp;widget=false&amp;headers=false&amp;chrome=false"></iframe>
         <br>
-          As compiled Ahead-of-Time language it is also much faster then both LuaJit and Chrome JS (both having extremely performant Just-in-Time).
+          As compiled Ahead-of-Time language it is also much faster then both LuaJit and Chrome JS (both having extremely fast Just-in-Time).
         <br>
           It is almost on par with C++ (msvc with all optimizations), usually within 10% of difference, and sometimes can even beat it!
         <br>
