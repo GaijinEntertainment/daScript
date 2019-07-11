@@ -1,9 +1,9 @@
 ﻿.body {
 	background-color: #ffffff;
-	font-size:medium;
+  color: #333333;
 	margin: 0;
 	text-align: left;
-	font-family: "Lucida Sans", Tahoma, Verdana, Geneva, Helvetica, sans-serif;
+  font: 16px/25px "Source Sans Pro", georgia, serif;
 	/* background: #FFFFFF url('images/bkground.gif') ; */
 }
 
@@ -28,34 +28,35 @@
 }
 
 .bigwords{
-	font-size: 180%;
-	line-height: 120%;
-	color:gray;
 	text-align:left;
 	/*word-spacing:0px;*/
 }
 
-a { text-decoration: none; color: Navy}
-a:hover 		{ text-decoration: none; color: #cd8c58}
+a {
+  color: #3399cc;
+  text-decoration: none;
+  transition: color 0.2s, text-shadow 0.2s;
+  outline: none;
+}
+a:hover 		{
+  color: #143352;
+}
 
 
 .labels { 
-	font-family:"Lucida Sans", Times, serif;
-	font-size: 200%;
-	font-style:italic;
-	font-weight: bold;
-	color: #cd8c58;
-	line-height: 130%;
+  font: 400 26px "Lato", helvetica, arial, sans-serif;
+  letter-spacing: 1px;
+  height: 8em;
+  color: #3399cc;
 }
 
 .snippets {
-	border:thin;
-	border-style:dashed;
-	border-color:maroon;
-	border-spacing:10px;
-	background-color: #ebebeb;
-	font-size:medium;
-	font-family:"Tahoma", Helvetica, sans-serif;
+  color: #3d4d5c;
+  font: 13px "Source Code Pro", Menlo, Monaco, Consolas, monospace;
+  background: #fcfcfc;
+  border-radius: 2px;
+  border: dashed 1px #dae2e7;
+  padding: 5px;
 }
 
 .copyright {
