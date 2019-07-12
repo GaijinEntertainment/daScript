@@ -118,6 +118,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         auto tab = make_unique<EsAttributeTable>();
 #if FAST_PATH_ANNOTATION
         block->aotSkipMakeBlock = true;
+        block->aotDoNotSkipAnnotationData = true;
 #endif
         block->annotationData = uint64_t(tab.get());
         auto mangledName = block->getMangledName(true,true);
@@ -315,7 +316,7 @@ string aotEsRunBlockName ( EsAttributeTable * table, const vector<EsComponent> &
 
 void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsComponent> & components ) {
     auto fnName = aotEsRunBlockName(table, components);
-    ss << "template<typename BT>\nuint32_t " << fnName << " ( const BT & block, Context * __context )\n{\n";
+    ss << "template<typename BT>\nuint32_t " << fnName << " ( uint64_t /*annotationData*/, const BT & block, Context * __context )\n{\n";
     ss << "\tfor ( uint32_t i=0; i != g_total; ++i ) {\n";
     ss << "\t\tblock(";
     uint32_t nAttr = (uint32_t) table->attributes.size();

@@ -117,6 +117,7 @@ namespace das
                 bool            finallyBeforeBody : 1;
                 bool            finallyDisabled : 1;
                 bool            aotSkipMakeBlock : 1;
+                bool            aotDoNotSkipAnnotationData : 1;
             };
             uint32_t            blockFlags = 0;
         };

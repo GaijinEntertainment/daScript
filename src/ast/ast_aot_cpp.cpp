@@ -1811,6 +1811,8 @@ namespace das {
                     }
                 }
                 ss << ">(__context__," << block->stackTop << ",";
+            }
+            if ( !block->aotSkipMakeBlock || block->aotDoNotSkipAnnotationData ) {
                 if ( block->annotationDataSid != 0 ) {
                     ss << "__context__->adBySid(" << block->annotationDataSid << "u)";
                 } else {
