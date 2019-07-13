@@ -38,8 +38,14 @@ MAKE_TYPE_FACTORY(FuncInfo,FuncInfo)
 MAKE_TYPE_FACTORY(AnnotationArgument,AnnotationArgument)
 MAKE_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
 MAKE_TYPE_FACTORY(RttiProgram,RttiProgram)
+MAKE_TYPE_FACTORY(RttiModule,Module)
 
 namespace das {
+
+    struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
+        ModuleAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RttiModule", ml) {
+        }
+    };
 
     struct RttiProgramAnnotation : ManagedStructureAnnotation <RttiProgram,false> {
         RttiProgramAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RttiProgram", ml) {
@@ -326,10 +332,39 @@ namespace das {
         }
     }
 
-    void rtti_builtin_program_for_each_structure ( const RttiProgram & prog, const Block & block, Context * context ) {
+    const Module * rtti_get_this_module ( const RttiProgram & prog ) {
+        return prog.program->thisModule.get();
+    }
+
+    const Module * rtti_get_builtin_module ( const char * name ) {
+        return Module::require(name);
+    }
+
+    void rtti_builtin_program_for_each_module ( const RttiProgram & prog, const Block & block, Context * context ) {
+        prog.program->library.foreach([&](Module * pm) -> bool {
+            vec4f args[1] = { cast<Module *>::from(pm) };
+            context->invoke(block, args, nullptr);
+            return true;
+        }, "*");
+    }
+
+    void rtti_builtin_module_for_each_enumeration ( const Module * module, const Block & block, Context * context ) {
         DebugInfoHelper helper;
         helper.rtti = true;
-        for ( auto & it : prog.program->thisModule->structures ) {
+        for ( auto & it : module->enumerations ) {
+            auto structName = it.first;
+            EnumInfo * info = helper.makeEnumDebugInfo(*it.second);
+            vec4f args[1] = {
+                cast<EnumInfo *>::from(info)
+            };
+            context->invoke(block, args, nullptr);
+        }
+    }
+
+    void rtti_builtin_module_for_each_structure ( const Module * module, const Block & block, Context * context ) {
+        DebugInfoHelper helper;
+        helper.rtti = true;
+        for ( auto & it : module->structures ) {
             auto structName = it.first;
             StructInfo * info = helper.makeStructureDebugInfo(*it.second);
             vec4f args[1] = {
@@ -349,6 +384,32 @@ namespace das {
                 };
                 context->invoke(block, args, nullptr);
             }
+        }
+    }
+
+    void rtti_builtin_module_for_each_function ( const Module * module, const Block & block, Context * context ) {
+        DebugInfoHelper helper;
+        helper.rtti = true;
+        for ( auto & it : module->functions ) {
+            auto funcName = it.first;
+            FuncInfo * info = helper.makeFunctionDebugInfo(*it.second);
+            vec4f args[1] = {
+                cast<FuncInfo *>::from(info)
+            };
+            context->invoke(block, args, nullptr);
+        }
+    }
+
+    void rtti_builtin_module_for_each_generic ( const Module * module, const Block & block, Context * context ) {
+        DebugInfoHelper helper;
+        helper.rtti = true;
+        for ( auto & it : module->generics ) {
+            auto funcName = it.first;
+            FuncInfo * info = helper.makeFunctionDebugInfo(*it.second);
+            vec4f args[1] = {
+                cast<FuncInfo *>::from(info)
+            };
+            context->invoke(block, args, nullptr);
         }
     }
 
@@ -414,6 +475,7 @@ namespace das {
             lib.addModule(this);
             lib.addBuiltInModule();
             // type annotations
+            addAnnotation(make_shared<ModuleAnnotation>(lib));
             addAnnotation(make_shared<RttiProgramAnnotation>(lib));
             addEnumeration(make_shared<EnumerationType>());
             addAnnotation(make_shared<AnnotationArgumentAnnotation>(lib));
@@ -440,7 +502,13 @@ namespace das {
             addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "getVariableInfo", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "rtti_builtin_compile", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "rtti_builtin_compile_file", SideEffects::modifyExternal);
-            addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_structure)>(*this, lib, "rtti_builtin_program_for_each_structure", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_get_this_module)>(*this, lib, "rttiGetThisModule", SideEffects::modifyExternal);\
+            addExtern<DAS_BIND_FUN(rtti_get_builtin_module)>(*this, lib, "rttiGetModule", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "rtti_builtin_program_for_each_module", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_structure)>(*this, lib, "rtti_builtin_module_for_each_structure", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "rtti_builtin_module_for_each_enumeration", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_function)>(*this, lib, "rtti_builtin_module_for_each_function", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_generic)>(*this, lib, "rtti_builtin_module_for_each_generic", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_isSameType", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_isCompatibleCast", SideEffects::modifyExternal);
